@@ -7,7 +7,7 @@ import { parsePullKey, pullRequestRef } from "./PullRequest.ts";
 import { connected } from "./Repos.ts";
 
 /** Thread keys are `<session>` or `<session>::<thread>` — the session
- *  part names the machine (and thus the one worktree on it). */
+ *  part names the machine (and thus the one tree on it). */
 export const sessionOf = (key: string): string => {
   const at = key.indexOf("::");
   return at < 0 ? key : key.slice(0, at);
@@ -52,7 +52,7 @@ export interface SessionTree {
  *   baked tree, as is.
  *
  * Resolved lazily and memoized per session: the charter's stance reads
- * it for its prose, the sandbox wrapper (`SandboxCheckout`) for the
+ * it for its prose, the sandbox router (`WorkspaceRouter`) for the
  * converge — one GitHub call between them, and NEITHER at INIT unless
  * the stance asks.
  */

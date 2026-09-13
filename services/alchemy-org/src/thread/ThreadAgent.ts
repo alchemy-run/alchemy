@@ -1,6 +1,5 @@
 import * as AI from "alchemy/AI";
-import * as Git from "alchemy/Git";
-import type * as GitHub from "alchemy/GitHub";
+import * as GitHub from "alchemy/GitHub";
 import * as PersistentRef from "alchemy/PersistentRef";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -15,14 +14,20 @@ import { BadRef, makeEntityLookup } from "../github/Entity.ts";
 import { connected, nameOf, primary } from "../github/Repos.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
 import { models } from "../platform/Model.ts";
+import { WorkspaceAgent } from "../sandbox/WorkspaceAgent.ts";
 import { Message } from "./Message.ts";
-import { THREAD_TERM } from "./Terms.ts";
 import {
-  pullWorktreeKey,
-  type Assignment,
-  type Subagent,
-  type ThreadState,
-  type Turn,
+  THREAD_TERM,
+  WORKSPACE_TERM,
+  pullWorkspaceName,
+  workspaceKey,
+} from "./Terms.ts";
+import type {
+  Assignment,
+  Subagent,
+  ThreadState,
+  ThreadWorkspace,
+  Turn,
 } from "./Threads.ts";
 
 /** The thread agent's session term — `/attach/Thread/<id>`. */
@@ -36,9 +41,10 @@ export { THREAD_TERM } from "./Terms.ts";
  *
  * The state is everything AROUND the conversation — the channel
  * messages placed into it, the issues and pulls assigned to it (with
- * the worktree each pull gets on the thread's one machine), the
- * engineers it kicked off, the meta the rail shows (name, title,
- * status, turn, model). It lives in a `PersistentRef` on the session
+ * the workspace each pull gets), the WORKSPACES it owns (each its own
+ * machine with the repo checked out; every agent of the thread works
+ * across all of them), the engineers it kicked off, the meta the rail
+ * shows (name, title, status, turn, model). It lives in a `PersistentRef` on the session
  * (Durable Object storage on Cloudflare); every mutation is a method
  * that rewrites it, PUSHES the fresh state to whoever is attached
  * (`/thread/:id` — it is small, push it whole) and projects the
@@ -97,10 +103,10 @@ export interface ThreadApi {
   readonly noteEvent: (
     event: GitHub.RepositoryEvent,
   ) => Effect.Effect<ThreadState>;
-  /** Record a worktree on an assigned pull request. */
-  readonly setWorktree: (
+  /** Record a workspace (by name) on an assigned pull request. */
+  readonly setWorkspace: (
     ref: string,
-    worktree: string,
+    workspace: string,
   ) => Effect.Effect<ThreadState>;
   /**
    * STOP an engineer: the off switch. Its session settles (the round
@@ -140,14 +146,14 @@ export interface ThreadApi {
   readonly reopen: () => Effect.Effect<ThreadState>;
   /**
    * Everything UNDER the thread, gone — the part of a delete that runs
-   * inside the thread (its machine is still up): every engineer and
-   * every session descended from it (machines spared — they shared
-   * this one), the pull requests' worktrees, the channel projections
-   * (directory row, `ref → thread` ownership, placed tags). The state
-   * is wiped last. The session itself is the caller's to destroy
-   * afterwards — an object cannot erase itself from inside a method.
-   * Answers the last state; `undefined` when the thread never
-   * existed. Idempotent.
+   * inside the thread: every engineer and every session descended from
+   * it (they own no machines — their calls route to workspaces), then
+   * every WORKSPACE (checkout released, session removed machine and
+   * all), then the channel projections (directory row, `ref → thread`
+   * ownership, placed tags). The state is wiped last. The session
+   * itself is the caller's to destroy afterwards — an object cannot
+   * erase itself from inside a method. Answers the last state;
+   * `undefined` when the thread never existed. Idempotent.
    */
   readonly teardown: () => Effect.Effect<ThreadState | undefined>;
 }
@@ -194,10 +200,16 @@ const brief = AI.Thing("brief", S.String)`
   to avoid. Where it works is the pull argument, not prose.`;
 
 const pull = AI.Thing("pull", S.optionalKey(S.String))`
-  The assigned pull request — "owner/repo#N" — whose worktree the
-  engineer is rooted in. Omit only for work that belongs to no pull
-  request yet (the engineer then starts in the machine's default tree
-  and opens a new pull request).`;
+  The assigned pull request — "owner/repo#N" — whose workspace becomes
+  the engineer's DEFAULT (made if need be). Use workspace instead to
+  hand it an existing workspace by name; omit both only for work that
+  needs no tree yet.`;
+
+const wsOfSpawn = AI.Thing("workspace", S.optionalKey(S.String))`
+  An EXISTING workspace's name (from the workspace tool / read_state) —
+  the engineer's DEFAULT workspace: where its relative paths, shell,
+  and commits land. Any agent still reaches every sibling workspace as
+  "@<name>/<path>".`;
 
 const cardTitle = AI.Thing("title", S.String)`
   The card's one-line headline — what the operator reads in the channel.`;
@@ -208,11 +220,18 @@ const text = AI.Thing("text", S.String)`
 const why = AI.Thing("why", S.String)`
   One or two sentences of justification the operator can check.`;
 
-const path = AI.Thing("path", S.String)`
-  The worktree's absolute path on this thread's machine.`;
+const wsName = AI.Thing("name", S.String)`
+  The workspace's thread-local name ("pr-832", "scratch") — how every
+  agent addresses it in paths ("@<name>/<path>") and how spawn hands it
+  to an engineer. Letters, digits, dots, dashes, underscores.`;
+
+const wsRef = AI.Thing("ref", S.optionalKey(S.String))`
+  An assigned pull request — "owner/repo#N" — to base the workspace on:
+  its head branch, fetched fresh, named "pr-N". Omit for a scratch
+  workspace on the repository's default state (name required then).`;
 
 const branch = AI.Thing("branch", S.String)`
-  The branch the worktree has checked out.`;
+  The branch the workspace's tree has checked out.`;
 
 const agentKey = AI.Thing("agent", S.String)`
   The subagent's session key — its address for attach/terminal.`;
@@ -234,7 +253,13 @@ const state = AI.Thing(
         kind: S.Literals(["issue", "pull"]),
         state: S.String,
         title: S.String,
-        worktree: S.optionalKey(S.String),
+        workspace: S.optionalKey(S.String),
+      }),
+    ),
+    workspaces: S.Array(
+      S.Struct({
+        name: S.String,
+        branch: S.String,
       }),
     ),
     agents: S.Array(
@@ -242,14 +267,15 @@ const state = AI.Thing(
         key: S.String,
         kind: S.String,
         brief: S.String,
-        cwd: S.optionalKey(S.String),
+        workspace: S.optionalKey(S.String),
         state: S.Literals(["running", "done", "failed", "stopped"]),
       }),
     ),
   }),
 )`
   This thread's full state: meta (name, title, status, whose turn), the
-  issues and pulls assigned to it (with their worktrees), and its subagents.`;
+  issues and pulls assigned to it, its workspaces (name + branch), and
+  its subagents (with their default workspaces).`;
 
 /* ── declared failures ──────────────────────────────────────────── */
 
@@ -274,7 +300,7 @@ export const ThreadAgentLive = ThreadAgent.make(
     const channel = yield* Channel;
     const sessions = yield* AI.Sessions;
     const sessionRepo = yield* SessionRepo;
-    const checkouts = yield* Git.Checkouts;
+    const workspaces = yield* WorkspaceAgent;
     const engineer = yield* Engineer;
     const getModel = yield* models;
     // an assignment is VERIFIED against GitHub, never taken on the model's word
@@ -296,9 +322,13 @@ export const ThreadAgentLive = ThreadAgent.make(
       () => null,
     );
 
+    /** Rows written before workspaces existed read as having none. */
+    const normalize = (found: ThreadState): ThreadState =>
+      found.workspaces === undefined ? { ...found, workspaces: [] } : found;
+
     const current = Effect.gen(function* () {
       const found = yield* threadState;
-      if (found !== null) return found;
+      if (found !== null) return normalize(found);
       const id = yield* self;
       return yield* Effect.die(`thread ${id}: the state was never created`);
     });
@@ -352,14 +382,17 @@ export const ThreadAgentLive = ThreadAgent.make(
     const deleteAgent = Effect.fn(function* (key: string) {
       const agent = yield* subagent(key);
       if (agent === undefined) return undefined;
-      // the thread's machine is shared — it stays
+      // engineers own no machine — their calls route to workspaces,
+      // which outlive them
       yield* engineer.at(key).destroy({ machine: false });
       return yield* commit((b) => ({
         ...b,
         agents: b.agents.filter((a) => a.key !== key),
       }));
     });
-    const snapshot = Effect.map(threadState, (found) => found ?? undefined);
+    const snapshot = Effect.map(threadState, (found) =>
+      found === null ? undefined : normalize(found),
+    );
 
     // ── the METHODS — checked against the contract by `make` where
     // the object below names them; the frame in `R` is the driver's
@@ -379,6 +412,7 @@ export const ThreadAgentLive = ThreadAgent.make(
           createdAt: now,
           updatedAt: now,
           assigned: [],
+          workspaces: [],
           agents: [],
           members: [],
         });
@@ -419,9 +453,9 @@ export const ThreadAgentLive = ThreadAgent.make(
             const kept = assigned[at]!;
             assigned[at] = {
               ...row,
-              ...(kept.worktree === undefined
+              ...(kept.workspace === undefined
                 ? {}
-                : { worktree: kept.worktree }),
+                : { workspace: kept.workspace }),
             };
           } else {
             assigned.push(row);
@@ -481,12 +515,22 @@ export const ThreadAgentLive = ThreadAgent.make(
       );
     };
 
-    const setWorktree = (ref: string, worktree: string) =>
+    const setWorkspace = (ref: string, workspace: string) =>
       commit((b) => ({
         ...b,
         assigned: b.assigned.map((e) =>
-          e.ref === ref ? { ...e, worktree } : e,
+          e.ref === ref ? { ...e, workspace } : e,
         ),
+      }));
+
+    /** Record a workspace in the state (idempotent by name). */
+    const upsertWorkspace = (row: ThreadWorkspace) =>
+      commit((b) => ({
+        ...b,
+        workspaces: [
+          ...b.workspaces.filter((w) => w.name !== row.name),
+          row,
+        ].sort((x, y) => x.name.localeCompare(y.name)),
       }));
 
     const switchAgents = Effect.fn(function* (
@@ -605,36 +649,45 @@ export const ThreadAgentLive = ThreadAgent.make(
           frontier.push(row.id);
         }
       }
-      // machines spared: they shared this thread's, which the
-      // caller takes down with the thread's own session
+      // the engineers own no machines — their calls route to the
+      // workspaces, which go below with THEIR machines
       yield* Effect.forEach(
         descendants.values(),
         ({ term, key }) => sessions.remove(term, key, { machine: false }),
         { discard: true, concurrency: 8 },
       );
-      // 2. the pull requests' worktrees on this machine — git
-      // over the thread's own sandbox, from inside the thread
+      // 2. the WORKSPACES — each one's checkout released (a dev
+      // worktree is dropped; a MicroVM's disk goes with the machine),
+      // then its session removed MACHINE AND ALL (each workspace owns
+      // one). Contained per workspace: one refusing must not keep the
+      // rest alive.
       yield* Effect.forEach(
-        before.assigned.flatMap((entity) => {
-          const parsed = parseEntityRef(entity.ref);
-          return entity.worktree === undefined ||
-            entity.worktree === "." ||
-            entity.worktree === "" ||
-            parsed === undefined
-            ? []
-            : [pullWorktreeKey(id, parsed.number)];
-        }),
-        (key) =>
-          checkouts
-            .release(key)
-            .pipe(
-              Effect.catch((error) =>
-                Effect.logWarning(
-                  `deleting thread '${id}': dropping worktree '${key}' failed (contained): ${error.message}`,
+        normalize(before).workspaces,
+        (ws) =>
+          Effect.gen(function* () {
+            const key = workspaceKey(id, ws.name);
+            yield* workspaces
+              .at(key)
+              .release()
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning(
+                    `deleting thread '${id}': releasing workspace '${ws.name}' failed (contained): ${String(error)}`,
+                  ),
                 ),
-              ),
-            ),
-        { discard: true },
+              );
+            yield* sessions
+              .remove(WORKSPACE_TERM, key, { machine: true })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(
+                    `deleting thread '${id}': removing workspace session '${ws.name}'`,
+                    cause,
+                  ),
+                ),
+              );
+          }),
+        { discard: true, concurrency: 4 },
       );
       // 3. the channel projections (directoryRemove also frees
       // every attachment the thread held), then the state
@@ -672,10 +725,41 @@ export const ThreadAgentLive = ThreadAgent.make(
       }),
     );
 
-    /** The thread's worktree for an assigned pull request — made or
-     *  found (`Git.Checkouts.checkout` is idempotent on the key),
-     *  recorded on the assignment, answered with its key. */
-    const ensureWorktree = Effect.fn(function* (ref: string) {
+    /** Provision one workspace (its own machine + tree) and record it.
+     *  Idempotent by name (`WorkspaceAgent.provision` converges). */
+    const provisionWorkspace = Effect.fn(function* (options: {
+      readonly name: string;
+      readonly remote: string;
+      readonly ref?: string;
+      readonly fresh?: boolean;
+    }) {
+      if (!/^[a-zA-Z0-9._-]+$/.test(options.name)) {
+        return yield* Effect.fail(
+          new BadRef({
+            message: `'${options.name}' is not a workspace name — letters, digits, dots, dashes, underscores`,
+          }),
+        );
+      }
+      const id = yield* self;
+      const made = yield* workspaces
+        .at(workspaceKey(id, options.name))
+        .provision({
+          remote: options.remote,
+          ...(options.ref !== undefined ? { ref: options.ref } : {}),
+          ...(options.fresh !== undefined ? { fresh: options.fresh } : {}),
+        })
+        .pipe(
+          Effect.mapError(
+            (message) => new CheckoutFailed({ message: String(message) }),
+          ),
+        );
+      yield* upsertWorkspace({ name: made.name, branch: made.branch });
+      return made;
+    });
+
+    /** The thread's workspace for an assigned pull request — made or
+     *  found, recorded on the assignment, answered with its name. */
+    const ensurePullWorkspace = Effect.fn(function* (ref: string) {
       const parsed = parseEntityRef(ref);
       if (parsed === undefined) {
         return yield* Effect.fail(
@@ -700,68 +784,119 @@ export const ThreadAgentLive = ThreadAgent.make(
           }),
         );
       }
-      const key = pullWorktreeKey(yield* self, parsed.number);
-      const checkout = yield* checkouts
-        .checkout({
-          key,
-          remote: tree.remote,
-          ref: tree.pull.ref,
-          fresh: true,
-        })
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new CheckoutFailed({
-                message:
-                  error._tag === "Git.GitError" ? error.stderr : String(error),
-              }),
-          ),
-        );
-      yield* setWorktree(ref, checkout.path);
-      return { key, path: checkout.path, branch: checkout.branch };
+      const made = yield* provisionWorkspace({
+        name: pullWorkspaceName(parsed.number),
+        remote: tree.remote.url,
+        ref: tree.pull.ref,
+        fresh: true,
+      });
+      yield* setWorkspace(ref, made.name);
+      return made;
     });
 
-    const worktree = yield* AI.Tool("worktree")`
-      Ensure a WORKTREE for pull request ${ref} on this thread's
-      machine — its head branch, fetched fresh, checked out as its own
-      tree. Answers ${AI.out(path, branch)}. Engineers are placed in
-      it by the spawn tool's pull argument, not by telling them the path.
-      Fails with ${BadRef} for a ref that is not a pull request of a
-      connected repository, ${NotAssigned} when it is not assigned
-      here, ${CheckoutFailed} when git refuses.`(
-      Effect.fn(function* (p: { ref: string }) {
-        const made = yield* ensureWorktree(p.ref);
-        return { path: made.path, branch: made.branch };
+    const workspace = yield* AI.Tool("workspace")`
+      Ensure a WORKSPACE — an isolated machine of this thread with the
+      repository checked out, ready to be worked on. With ${wsRef}: the
+      pull request's head branch, fetched fresh, named "pr-N". Without:
+      a scratch workspace named ${wsName} on the repository's default
+      state. Answers ${AI.out(wsName, branch)}. Every agent of this
+      thread reaches every workspace ("@<name>/<path>" in any path);
+      an engineer is given its DEFAULT one by the spawn tool's pull or
+      workspace argument. Fails with ${BadRef} for a ref that is not a
+      pull request of a connected repository, ${NotAssigned} when it is
+      not assigned here, ${CheckoutFailed} when git refuses.`(
+      Effect.fn(function* (p: { ref?: string; name?: string }) {
+        if (p.ref !== undefined) {
+          const made = yield* ensurePullWorkspace(p.ref);
+          return { name: made.name, branch: made.branch };
+        }
+        if (p.name === undefined) {
+          return yield* Effect.fail(
+            new BadRef({ message: "a workspace needs a ref or a name" }),
+          );
+        }
+        const made = yield* provisionWorkspace({
+          name: p.name,
+          remote: GitHub.remote(primary).url,
+        });
+        return { name: made.name, branch: made.branch };
+      }),
+    );
+
+    const dropWorkspace = yield* AI.Tool("drop_workspace")`
+      Drop the workspace named ${wsName} — its tree and its machine.
+      Work committed and pushed survives on GitHub; anything else in
+      the tree is gone. Engineers whose default it was lose their
+      footing — stop or re-point them first. Fails with
+      ${CheckoutFailed} when the release refuses.`(
+      Effect.fn(function* (p: { name: string }) {
+        const id = yield* self;
+        const key = workspaceKey(id, p.name);
+        yield* workspaces
+          .at(key)
+          .release()
+          .pipe(
+            Effect.mapError(
+              (message) => new CheckoutFailed({ message: String(message) }),
+            ),
+          );
+        yield* sessions.remove(WORKSPACE_TERM, key, { machine: true });
+        yield* commit((b) => ({
+          ...b,
+          workspaces: b.workspaces.filter((w) => w.name !== p.name),
+          assigned: b.assigned.map((e) =>
+            e.workspace === p.name
+              ? (({ workspace: _ws, ...rest }) => rest)(e)
+              : e,
+          ),
+        }));
       }),
     );
 
     const spawn = yield* AI.Tool("spawn")`
-      Kick off an ENGINEER with ${brief} — its own session on this
-      thread's machine, full editor, push and pull-request tools that
-      act on GitHub directly. When the work belongs to one pull
-      request, name it as ${pull}: the engineer's shell, file tools,
-      and terminal are then ROOTED in that pull request's worktree
-      (made if need be) and it cannot reach any other tree — never
-      rely on the brief to keep it there. The call returns when the
-      engineer settles — answers ${AI.out(agentKey, report)}; you stay
-      the point of contact, and the engineer can ${Message} you (and
-      its siblings) while it works. Fails with ${BadRef} for a ${pull}
-      that is not a pull request of a connected repository,
-      ${NotAssigned} when it is not assigned here, ${CheckoutFailed}
-      when git refuses its worktree.`(
-      Effect.fn(function* (p: { brief: string; pull?: string }) {
+      Kick off an ENGINEER with ${brief} — its own session, full
+      editor, push and pull-request tools that act on GitHub directly.
+      Give it a DEFAULT workspace: ${pull} (the pull request's
+      workspace, made if need be) or ${wsOfSpawn} (an existing one by
+      name) — its shell and relative paths land there, and it still
+      reaches every sibling workspace as "@<name>/<path>"; the whole
+      team works across one bag of workspaces and can ${Message} each
+      other. Without either, the engineer has no tree until you or it
+      names one. The call returns when the engineer settles — answers
+      ${AI.out(agentKey, report)}; you stay the point of contact.
+      Fails with ${BadRef} for a ${pull} that is not a pull request of
+      a connected repository (or an unknown ${wsOfSpawn}),
+      ${NotAssigned} when the pull is not assigned here,
+      ${CheckoutFailed} when git refuses its workspace.`(
+      Effect.fn(function* (p: {
+        brief: string;
+        pull?: string;
+        workspace?: string;
+      }) {
         const id = yield* self;
         const session = { term: THREAD_TERM, key: id };
         const key = `${id}::e-${shortId()}`;
         const startedAt = Date.now();
-        const pick = (yield* current).model;
-        const tree =
-          p.pull === undefined ? undefined : yield* ensureWorktree(p.pull);
+        const found = yield* current;
+        const pick = found.model;
+        let name: string | undefined;
+        if (p.pull !== undefined) {
+          name = (yield* ensurePullWorkspace(p.pull)).name;
+        } else if (p.workspace !== undefined) {
+          if (!found.workspaces.some((w) => w.name === p.workspace)) {
+            return yield* Effect.fail(
+              new BadRef({
+                message: `no workspace named '${p.workspace}' — the workspace tool creates them`,
+              }),
+            );
+          }
+          name = p.workspace;
+        }
         yield* upsertAgent({
           key,
           kind: "engineer",
           brief: p.brief,
-          ...(tree === undefined ? {} : { cwd: tree.path }),
+          ...(name === undefined ? {} : { workspace: name }),
           state: "running",
           startedAt,
         });
@@ -781,12 +916,11 @@ export const ThreadAgentLive = ThreadAgent.make(
         if (pick !== undefined) {
           yield* engineer.at(key).setModel(pick);
         }
-        // …and its TREE the same way: the key of this thread's worktree
-        // for the pull request, so its first tool call is already
-        // rooted there (sandbox/SandboxCheckout.ts) — the engineer
-        // never sees the machine's root
-        if (tree !== undefined) {
-          yield* engineer.at(key).setTree(tree.key);
+        // …and its DEFAULT WORKSPACE the same way, so its first tool
+        // call already lands there (sandbox/WorkspaceRouter.ts) — an
+        // engineer with no workspace has no tree at all, never a root
+        if (name !== undefined) {
+          yield* engineer.at(key).setWorkspace(name);
         }
         // `parent: session` from inside this round puts the engineer
         // under the thread's supervision: the operator stopping the
@@ -878,11 +1012,14 @@ export const ThreadAgentLive = ThreadAgent.make(
             status: found.status,
             turn: found.turn,
             assigned: found.assigned,
+            workspaces: found.workspaces,
             agents: found.agents.map((a) => ({
               key: a.key,
               kind: a.kind,
               brief: a.brief,
-              ...(a.cwd === undefined ? {} : { cwd: a.cwd }),
+              ...(a.workspace === undefined
+                ? {}
+                : { workspace: a.workspace }),
               state: a.state,
             })),
           },
@@ -907,7 +1044,7 @@ export const ThreadAgentLive = ThreadAgent.make(
       assign: assignEntities,
       unassign: unassignEntity,
       noteEvent,
-      setWorktree,
+      setWorkspace,
       agentStop: stopAgent,
       agentResume: resumeAgent,
       agentDelete: deleteAgent,
@@ -936,19 +1073,23 @@ export const ThreadAgentLive = ThreadAgent.make(
         were assigned, spawned, and were told all happened here,
         including what the channel assigned on your behalf
         ("[assigned] …" messages). ${readState} answers the current
-        state (what is assigned, worktrees, subagents) when you need a
+        state (what is assigned, workspaces, subagents) when you need a
         snapshot.
 
-        Your machine is one sandbox for the whole thread. Each pull
-        request you govern gets its OWN worktree (${worktree}), and an
-        engineer is placed in one by ${spawn}'s pull argument — its
-        shell and tools are rooted there and cannot reach another
-        tree. ${spawn} runs the engineer to completion and hands you
-        its report; while it works, it can ${Message} you, and you
-        can ${Message} it or any engineer of this thread by name (the
-        engineers are named in the "[message from …]" lines and in
-        ${readState}). A message arrives in the recipient's own
-        conversation. ${assign} and ${unassign} change what you govern
+        Your team works in WORKSPACES — each an isolated machine with
+        the repository checked out (${workspace} makes one per pull
+        request you govern, or a scratch one by name; ${dropWorkspace}
+        retires one). All agents of this thread share the whole bag:
+        any path can address any workspace as "@<name>/<path>", and an
+        engineer's pull/workspace argument only sets its DEFAULT — where
+        its relative paths and shell land. You have no machine of your
+        own: name a workspace when you need to touch files. ${spawn}
+        runs an engineer to completion and hands you its report; while
+        it works, it can ${Message} you, and you can ${Message} it or
+        any engineer of this thread by name (the engineers are named in
+        the "[message from …]" lines and in ${readState}). A message
+        arrives in the recipient's own conversation. ${assign} and
+        ${unassign} change what you govern
         — the moment an engineer reports a pull request it opened,
         ${assign} it: an unassigned pull has no review tab and its
         GitHub events route nowhere. ${postCard} is the one way to

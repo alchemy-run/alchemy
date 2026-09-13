@@ -12,12 +12,12 @@ import type { ChangedFile } from "../../ui/lib/diff.ts";
 import {
   CHANNEL_PATH,
   reviewPath,
-  terminalPath,
+  workspacePath,
   threadPath,
 } from "../../ui/lib/routes.ts";
 
 export { expect };
-export { CHANNEL_PATH, reviewPath, terminalPath, threadPath };
+export { CHANNEL_PATH, reviewPath, workspacePath, threadPath };
 
 /** The wall clock every `ui` test runs under — relative timestamps
  *  are computed against this, never against now. */
@@ -211,8 +211,8 @@ export class FakeApi {
   /** Every `DELETE /api/threads/:id`, in order. */
   deletedThreads: string[] = [];
   /** When set, thread DELETEs answer only once this resolves — the
-   *  real server tears down agents, worktrees, and the machine before
-   *  answering, and the row stays in the directory until then. */
+   *  real server tears down agents and workspaces (machines and all)
+   *  before answering, and the row stays in the directory until then. */
   private threadDeleteGate: Promise<void> | undefined;
   /** Hold every thread DELETE open; returns the release. */
   holdThreadDelete(): () => void {
@@ -287,6 +287,7 @@ export class FakeApi {
       agents: [],
       members: [],
       ...partial,
+      workspaces: partial.workspaces ?? [],
     };
     this.threads = { ...this.threads, [state.id]: state };
     this.directory = [
@@ -1078,6 +1079,9 @@ export class FakeApi {
 export class FakeTerminal {
   /** Every socket that sent `open`, keyed by the URL's pty id. */
   opened: string[] = [];
+  /** The socket PATHS that sent `open` (`/terminal/<term>/<key>`) —
+   *  which session's machine each terminal addressed. */
+  sockets: string[] = [];
   /** Keystrokes received, decoded, per pty id. */
   typed: Record<string, string> = {};
   /** Set to make `open` FAIL the way the DO bridge reports a machine
@@ -1104,6 +1108,7 @@ export class FakeTerminal {
         const frame = JSON.parse(message) as { t: string };
         if (frame.t === "open") {
           this.opened.push(ptyId);
+          this.sockets.push(new URL(url).pathname);
           ws.send(
             JSON.stringify({ t: "status", message: "resuming the machine" }),
           );

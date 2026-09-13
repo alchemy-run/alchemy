@@ -1,8 +1,10 @@
 /**
  * A THREAD's page — the conversation IS the thread (the agent
  * session's chat), with the task's state in a right pane: the GitHub
- * issues and pulls assigned to it (each pull opens its review), the subagents,
- * the worktrees. Terminals open on the thread's one machine.
+ * issues and pulls assigned to it (each pull opens its review), the
+ * subagents, the WORKSPACES. Clicking a workspace opens a terminal
+ * INTO it — each workspace is its own machine with the repo checked
+ * out, and its terminal is a tab like any review or agent.
  */
 
 import { ChatView, timeAgo } from "@/components/chat";
@@ -37,13 +39,13 @@ import {
   resumeAgent,
   stopAgent,
   threadSessionId,
+  workspaceSessionId,
 } from "@/lib/channel";
 import type { ThreadTab } from "@/lib/routes";
 import { useSelection } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 import {
   Bot,
-  Check,
   ChevronDown,
   CircleDot,
   Crown,
@@ -57,7 +59,6 @@ import {
   GitPullRequestClosed,
   MessageSquare,
   Play,
-  Plus,
   Square,
   SquareArrowOutUpRight,
   SquareTerminal,
@@ -106,56 +107,35 @@ const entityIcon = (kind: "issue" | "pull", state: string) => {
   return <GitPullRequestArrow className="size-3.5 text-moss" />;
 };
 
-/** The short name of a worktree: the part after the thread's own slug
- *  (`<thread>--pr-1521` → `pr-1521`), else the directory's name. Every
- *  tree on a thread shares the slug, so it says nothing here. */
-const worktreeName = (path: string): string => {
-  const base = path.replace(/\/+$/, "").split("/").pop() ?? path;
-  const cut = base.lastIndexOf("--");
-  return cut === -1 ? base : base.slice(cut + 2);
-};
-
-/** An entity's worktree, as a chip: the short name, the full path on
- *  hover, the path on the clipboard on click — so a long path never
- *  decides the row's layout. */
-const WorktreeChip = ({
-  path,
+/** A workspace, as a chip: its name; clicking opens a TERMINAL into
+ *  it (the workspace is its own machine — the terminal is its door). */
+const WorkspaceChip = ({
+  name,
+  onOpen,
   className,
 }: {
-  path: string;
+  name: string;
+  onOpen: (name: string) => void;
   className?: string;
-}) => {
-  const [copied, setCopied] = useState(false);
-  const copy = useCallback(() => {
-    void navigator.clipboard
-      ?.writeText(path)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
-      })
-      .catch(() => {});
-  }, [path]);
-  return (
-    <Hint label={copied ? "Copied" : `${path}\nClick to copy the path`}>
-      <button
-        type="button"
-        onClick={copy}
-        aria-label={`copy worktree path ${path}`}
-        className={cn(
-          "flex min-w-0 cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground",
-          className ?? "ml-auto max-w-[60%]",
-        )}
-      >
-        {copied ? (
-          <Check className="size-3 shrink-0 text-moss" />
-        ) : (
-          <FolderGit2 className="size-3 shrink-0" />
-        )}
-        <span className="truncate">{worktreeName(path)}</span>
-      </button>
-    </Hint>
-  );
-};
+}) => (
+  <Hint label={`Workspace "${name}" — click to open a terminal in it`}>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen(name);
+      }}
+      aria-label={`open workspace ${name} terminal`}
+      className={cn(
+        "flex min-w-0 cursor-pointer items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground",
+        className ?? "ml-auto max-w-[60%]",
+      )}
+    >
+      <FolderGit2 className="size-3 shrink-0" />
+      <span className="truncate">{name}</span>
+    </button>
+  </Hint>
+);
 
 const AGENT_DOT: Record<string, string> = {
   running: "bg-moss animate-pulse",
@@ -169,7 +149,7 @@ const AGENT_DOT: Record<string, string> = {
  * is in it (so a folded section — or one too long to read — still
  * answers "how much?"), and a body that scrolls INSIDE a bounded
  * height. A thread with twenty pulls assigned must not push its
- * worktrees and agents off the bottom of the pane.
+ * workspaces and agents off the bottom of the pane.
  */
 const Section = ({
   title,
@@ -288,6 +268,7 @@ const ThreadPane = ({
   onOpenReview,
   onOpenAgent,
   onOpenManager,
+  onOpenWorkspace,
   agentActions,
   onClose,
   onReopen,
@@ -302,6 +283,8 @@ const ThreadPane = ({
   onOpenReview: (owner: string, repo: string, number: number) => void;
   onOpenAgent: (key: string) => void;
   onOpenManager: () => void;
+  /** Open a terminal INTO the named workspace (its own tab). */
+  onOpenWorkspace: (name: string) => void;
   agentActions: AgentActions;
   onClose: () => void;
   /** Reopen a closed thread — the operator picking it back up. */
@@ -318,32 +301,46 @@ const ThreadPane = ({
   );
   const pick = useSelection(order, { onDelete: agentActions.remove });
   const [menuKeys, setMenuKeys] = useState<ReadonlyArray<string>>([]);
-  // the WORKTREES on the thread's machine: one per pull request the
-  // manager made a tree for, each with the engineers rooted in it
-  const worktrees = useMemo(() => {
-    const byPath = new Map<
+  // the thread's WORKSPACES — each its own machine with the repo
+  // checked out; annotated with the pulls they carry and the engineers
+  // whose default they are
+  const workspaces = useMemo(() => {
+    const byName = new Map<
       string,
-      { path: string; refs: Array<string>; agents: Array<Subagent> }
+      {
+        name: string;
+        branch: string | undefined;
+        refs: Array<string>;
+        agents: Array<Subagent>;
+      }
     >();
-    const row = (path: string) => {
-      const found = byPath.get(path);
+    const row = (name: string) => {
+      const found = byName.get(name);
       if (found !== undefined) return found;
-      const made = { path, refs: [], agents: [] };
-      byPath.set(path, made);
+      const made = {
+        name,
+        branch: undefined as string | undefined,
+        refs: [],
+        agents: [],
+      };
+      byName.set(name, made);
       return made;
     };
+    for (const ws of state.workspaces ?? []) {
+      row(ws.name).branch = ws.branch;
+    }
     for (const entity of state.assigned) {
-      if (entity.worktree !== undefined && entity.worktree !== "") {
-        row(entity.worktree).refs.push(entity.ref);
+      if (entity.workspace !== undefined && entity.workspace !== "") {
+        row(entity.workspace).refs.push(entity.ref);
       }
     }
     for (const agent of state.agents) {
-      if (agent.cwd !== undefined && agent.cwd !== "") {
-        row(agent.cwd).agents.push(agent);
+      if (agent.workspace !== undefined && agent.workspace !== "") {
+        row(agent.workspace).agents.push(agent);
       }
     }
-    return [...byPath.values()];
-  }, [state.assigned, state.agents]);
+    return [...byName.values()];
+  }, [state.workspaces, state.assigned, state.agents]);
   const menuRows = state.agents.filter((agent) => menuKeys.includes(agent.key));
   const running = menuRows.filter((agent) => agent.state === "running");
   const settled = menuRows.filter((agent) => agent.state !== "running");
@@ -622,9 +619,12 @@ const ThreadPane = ({
                   {parsed === undefined ? entity.ref : `#${parsed.number}`}
                 </a>
                 <span className="shrink-0">{entity.state}</span>
-                {entity.worktree !== undefined && (
+                {entity.workspace !== undefined && (
                   <span onClick={(event) => event.stopPropagation()}>
-                    <WorktreeChip path={entity.worktree} />
+                    <WorkspaceChip
+                      name={entity.workspace}
+                      onOpen={onOpenWorkspace}
+                    />
                   </span>
                 )}
               </div>
@@ -633,34 +633,43 @@ const ThreadPane = ({
         })}
       </Section>
       <Section
-        title="Worktrees"
+        title="Workspaces"
         summary={
-          worktrees.length === 0
+          workspaces.length === 0
             ? undefined
-            : countOf(worktrees.length, "worktree")
+            : countOf(workspaces.length, "workspace")
         }
       >
-        {worktrees.length === 0 && (
+        {workspaces.length === 0 && (
           <div className="text-xs text-muted-foreground">
-            No worktrees yet — the manager makes one per pull request it puts an
-            engineer on.
+            No workspaces yet — the manager makes one per pull request (or by
+            name) with its workspace tool; each is an isolated machine with
+            the repo checked out.
           </div>
         )}
-        {worktrees.map((tree) => (
+        {workspaces.map((ws) => (
           <div
-            key={tree.path}
-            data-worktree={tree.path}
-            className="flex flex-col gap-0.5 rounded-md px-1 py-1"
+            key={ws.name}
+            data-workspace={ws.name}
+            role="button"
+            tabIndex={0}
+            aria-label={`open workspace ${ws.name} terminal`}
+            title={`Workspace "${ws.name}" — click to open a terminal in it`}
+            onClick={() => onOpenWorkspace(ws.name)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpenWorkspace(ws.name);
+              }
+            }}
+            className="flex cursor-pointer flex-col gap-0.5 rounded-md px-1 py-1 hover:bg-accent/60"
           >
             <div className="flex min-w-0 items-center gap-1.5">
-              <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
-              <span
-                className="min-w-0 flex-1 truncate font-mono text-[12px]"
-                title={tree.path}
-              >
-                {worktreeName(tree.path)}
+              <SquareTerminal className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
+                {ws.name}
               </span>
-              {tree.refs.map((ref) => {
+              {ws.refs.map((ref) => {
                 const parsed = parseEntityRef(ref);
                 return (
                   <a
@@ -669,27 +678,32 @@ const ThreadPane = ({
                     target="_blank"
                     rel="noreferrer"
                     title={ref}
+                    onClick={(event) => event.stopPropagation()}
                     className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
                   >
                     {parsed === undefined ? ref : `#${parsed.number}`}
                   </a>
                 );
               })}
-              <WorktreeChip path={tree.path} className="max-w-[40%]" />
             </div>
-            <div
-              className="truncate pl-5 font-mono text-[10px] text-muted-foreground/70"
-              title={tree.path}
-            >
-              {tree.path}
-            </div>
-            {tree.agents.length > 0 && (
+            {ws.branch !== undefined && (
+              <div
+                className="truncate pl-5 font-mono text-[10px] text-muted-foreground/70"
+                title={`on branch ${ws.branch}`}
+              >
+                {ws.branch}
+              </div>
+            )}
+            {ws.agents.length > 0 && (
               <div className="flex flex-wrap items-center gap-1 pl-5 text-[11px] text-muted-foreground">
-                {tree.agents.map((agent) => (
+                {ws.agents.map((agent) => (
                   <button
                     key={agent.key}
                     type="button"
-                    onClick={() => onOpenAgent(agent.key)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenAgent(agent.key);
+                    }}
                     title={agent.brief}
                     className="flex cursor-pointer items-center gap-1 rounded hover:text-foreground"
                   >
@@ -723,7 +737,7 @@ const ThreadPane = ({
             size="sm"
             variant="outline"
             onClick={onReopen}
-            title="Reopen the thread — the task is back on; its agents and worktrees are as it left them"
+            title="Reopen the thread — the task is back on; its agents and workspaces are as it left them"
             className="text-muted-foreground"
           >
             Reopen thread
@@ -737,7 +751,7 @@ const ThreadPane = ({
           aria-busy={deleting || undefined}
           title={
             deleting
-              ? "Deleting — stopping its agents, dropping its worktrees, erasing its machine…"
+              ? "Deleting — stopping its agents, dropping its workspaces and their machines…"
               : "Delete the thread — its conversation, subagents, and machine are erased; the channel keeps its rows"
           }
           className="text-muted-foreground hover:text-destructive"
@@ -813,17 +827,19 @@ const AGENT_STATE_LABEL: Record<string, string> = {
 
 /** The strip above a subagent's transcript — the basic controls: what
  *  kind of agent, where it stands, stop/resume/delete, its model, and
- *  the worktree it is rooted in. The brief is the transcript's first
+ *  the workspace it defaults to. The brief is the transcript's first
  *  message, so it is not repeated here. The subagent may be missing
  *  for a moment while the thread's state catches up to a fresh spawn. */
 const AgentHeader = ({
   agentKey,
   agent,
   actions,
+  onOpenWorkspace,
 }: {
   agentKey: string;
   agent: Subagent | undefined;
   actions: AgentActions;
+  onOpenWorkspace: (name: string) => void;
 }) => {
   const busy = actions.busy.has(agentKey);
   const running = agent?.state === "running";
@@ -852,8 +868,12 @@ const AgentHeader = ({
             </span>
           </span>
         )}
-        {agent?.cwd !== undefined && (
-          <WorktreeChip path={agent.cwd} className="max-w-[40%]" />
+        {agent?.workspace !== undefined && (
+          <WorkspaceChip
+            name={agent.workspace}
+            onOpen={onOpenWorkspace}
+            className="max-w-[40%]"
+          />
         )}
         {agent !== undefined && (
           <span
@@ -916,7 +936,7 @@ const tabKey = (tab: ThreadTab): string =>
       ? `agent:${tab.key}`
       : tab.kind === "review"
         ? `review:${tab.owner}/${tab.repo}#${tab.number}`
-        : `pty:${tab.pty}`;
+        : `ws:${tab.name}`;
 
 /** One tab in the strip — browser-style: click to activate, × to
  *  close (the manager's has none; it is permanent). */
@@ -986,10 +1006,7 @@ export const ThreadView = ({
   missing = false,
   tab,
   active,
-  terminals,
   onTab,
-  onNewTerminal,
-  onCloseTerminal,
   onCloseThread,
   onReopenThread,
   deleting,
@@ -1002,16 +1019,12 @@ export const ThreadView = ({
   missing?: boolean;
   tab: ThreadTab;
   active: boolean;
-  /** The ptys the operator opened on this thread's machine. */
-  terminals: ReadonlyArray<string>;
   onTab: (tab: ThreadTab) => void;
-  onNewTerminal: () => void;
-  onCloseTerminal: (pty: string) => void;
   onCloseThread: () => void;
   /** Reopen a closed thread — the pane's button posts it. */
   onReopenThread: () => void;
   /** The thread's DELETE is in flight — the server is stopping its
-   *  agents, dropping its worktrees, and erasing its machine. */
+   *  agents and dropping its workspaces (machines and all). */
   deleting: boolean;
   onDeleteThread: () => void;
 }) => {
@@ -1021,25 +1034,31 @@ export const ThreadView = ({
   const openSubagent = agents.find((agent) => agent.key === openAgent);
 
   // BROWSER-STYLE TABS: the manager's conversation is the permanent
-  // first tab; every agent or review OPENED stays a tab until its ×
-  // (a deep link seeds one); terminals ride the `terminals` list the
-  // same way. The sidebar names the thread — the strip owns the top.
+  // first tab; every agent, review, or WORKSPACE TERMINAL opened stays
+  // a tab until its × (a deep link seeds one). The sidebar names the
+  // thread — the strip owns the top.
   const [opened, setOpened] = useState<ReadonlyArray<ThreadTab>>([]);
   useEffect(() => {
-    if (tab.kind !== "agent" && tab.kind !== "review") return;
+    if (tab.kind === "chat") return;
     setOpened((current) =>
       current.some((entry) => tabKey(entry) === tabKey(tab))
         ? current
         : [...current, tab],
     );
   }, [tab]);
-  // an agent DELETED under its tab takes the tab with it
+  // an agent DELETED (or a workspace DROPPED) under its tab takes the
+  // tab with it
   useEffect(() => {
     if (state === undefined) return;
     const alive = new Set(state.agents.map((agent) => agent.key));
+    const trees = new Set((state.workspaces ?? []).map((ws) => ws.name));
     setOpened((current) => {
-      const next = current.filter(
-        (entry) => entry.kind !== "agent" || alive.has(entry.key),
+      const next = current.filter((entry) =>
+        entry.kind === "agent"
+          ? alive.has(entry.key)
+          : entry.kind === "workspace"
+            ? trees.has(entry.name)
+            : true,
       );
       return next.length === current.length ? current : next;
     });
@@ -1175,8 +1194,8 @@ export const ThreadView = ({
     <div className="flex min-h-0 flex-1 flex-col">
       {/* the TAB STRIP — browser-style, left-aligned: the manager's
           permanent tab, then one tab per opened agent, review, and
-          terminal, each held until its ×. No thread title here — the
-          sidebar's selected row names it. */}
+          workspace terminal, each held until its ×. No thread title
+          here — the sidebar's selected row names it. */}
       <div
         role="tablist"
         aria-label="Open views"
@@ -1230,36 +1249,25 @@ export const ThreadView = ({
               }
               dataReviewTab={`${entry.owner}/${entry.repo}#${entry.number}`}
             />
+          ) : entry.kind === "workspace" ? (
+            <TabChip
+              key={tabKey(entry)}
+              active={tab.kind === "workspace" && tab.name === entry.name}
+              onOpen={() => onTab(entry)}
+              onClose={() => closeTab(entry)}
+              closeLabel={`close workspace ${entry.name}`}
+              icon={SquareTerminal}
+              label={entry.name}
+              title={`A terminal in the "${entry.name}" workspace — its own machine`}
+            />
           ) : null,
         )}
-        {terminals.map((pty) => (
-          <TabChip
-            key={`pty:${pty}`}
-            active={tab.kind === "terminal" && tab.pty === pty}
-            onOpen={() => onTab({ kind: "terminal", pty })}
-            onClose={() => onCloseTerminal(pty)}
-            closeLabel={`close terminal ${pty}`}
-            icon={SquareTerminal}
-            label={pty.slice(0, 6)}
-            title="A terminal on this thread's machine"
-          />
-        ))}
         <div className="ml-auto flex shrink-0 items-center gap-1 self-center pl-2 pb-1">
           {state?.status === "closed" && (
             <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0 text-[10px] text-muted-foreground">
               closed
             </span>
           )}
-          <Hint label="New terminal on this thread's machine">
-            <button
-              type="button"
-              onClick={onNewTerminal}
-              aria-label="new terminal"
-              className="flex h-7 cursor-pointer items-center rounded-md border border-transparent px-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-            >
-              <Plus className="size-3.5" />
-            </button>
-          </Hint>
           <Hint
             label={
               paneOpen
@@ -1296,7 +1304,7 @@ export const ThreadView = ({
             <span className="font-medium text-foreground">
               Deleting this thread
             </span>{" "}
-            — stopping its agents, dropping its worktrees, erasing its machine…
+            — stopping its agents, dropping its workspaces and their machines…
           </span>
         </div>
       )}
@@ -1349,6 +1357,9 @@ export const ThreadView = ({
                   agentKey={openAgent}
                   agent={openSubagent}
                   actions={agentActions}
+                  onOpenWorkspace={(name) =>
+                    onTab({ kind: "workspace", name })
+                  }
                 />
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   {/* the prompt is live while the agent is: a settled
@@ -1363,21 +1374,39 @@ export const ThreadView = ({
                 </div>
               </div>
             )}
-            {terminals.map((pty) => (
-              <div
-                key={pty}
-                className={cn(
-                  "flex min-h-0 min-w-0 flex-1 flex-col",
-                  (tab.kind !== "terminal" || tab.pty !== pty) && "hidden",
-                )}
-              >
-                <GhosttyTerminal
-                  sessionId={sessionId}
-                  ptyId={pty}
-                  active={active && tab.kind === "terminal" && tab.pty === pty}
-                />
-              </div>
-            ))}
+            {/* every opened workspace terminal stays MOUNTED behind its
+                tab — switching away must not drop the shell. A deep
+                link's terminal renders before the effect above has
+                added it to `opened`, like the reviews. */}
+            {(() => {
+              const entries = opened.filter(
+                (entry): entry is Extract<ThreadTab, { kind: "workspace" }> =>
+                  entry.kind === "workspace",
+              );
+              return tab.kind === "workspace" &&
+                !entries.some((entry) => entry.name === tab.name)
+                ? [...entries, tab]
+                : entries;
+            })().map((entry) => (
+                <div
+                  key={tabKey(entry)}
+                  className={cn(
+                    "flex min-h-0 min-w-0 flex-1 flex-col",
+                    !(tab.kind === "workspace" && tab.name === entry.name) &&
+                      "hidden",
+                  )}
+                >
+                  <GhosttyTerminal
+                    sessionId={workspaceSessionId(id, entry.name)}
+                    ptyId="main"
+                    active={
+                      active &&
+                      tab.kind === "workspace" &&
+                      tab.name === entry.name
+                    }
+                  />
+                </div>
+              ))}
             {(state !== undefined || missing) && paneOpen && (
                 <Rail
                   label="Thread state"
@@ -1395,6 +1424,9 @@ export const ThreadView = ({
                       }
                       onOpenAgent={(key) => onTab({ kind: "agent", key })}
                       onOpenManager={() => onTab({ kind: "chat" })}
+                      onOpenWorkspace={(name) =>
+                        onTab({ kind: "workspace", name })
+                      }
                       agentActions={agentActions}
                       onClose={onCloseThread}
                       onReopen={onReopenThread}

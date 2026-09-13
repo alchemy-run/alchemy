@@ -416,7 +416,7 @@ interface ThreadStateAnswer {
     readonly kind?: string;
     readonly state?: string;
     readonly title?: string;
-    readonly worktree?: string;
+    readonly workspace?: string;
   }>;
   readonly agents?: ReadonlyArray<{
     readonly key?: string;
@@ -488,12 +488,12 @@ const ThreadStateBody = ({ state }: { state: ThreadStateAnswer }) => {
                 <span className="min-w-0 flex-1 truncate">
                   {entity.title ?? ""}
                 </span>
-                {entity.worktree && (
+                {entity.workspace && (
                   <span
-                    title={entity.worktree}
+                    title={`workspace ${entity.workspace}`}
                     className="shrink-0 font-mono text-[10px] text-muted-foreground"
                   >
-                    {entity.worktree.split("/").pop()}
+                    {entity.workspace}
                   </span>
                 )}
               </li>
@@ -576,8 +576,12 @@ const THREAD: {
     input: { ref: string; thread?: string },
     output: string | undefined,
   ) => ToolCallView;
-  worktree: (
-    input: { ref: string },
+  workspace: (
+    input: { ref?: string; name?: string },
+    output: string | undefined,
+  ) => ToolCallView;
+  drop_workspace: (
+    input: { name: string },
     output: string | undefined,
   ) => ToolCallView;
   read_state: (input: unknown, output: string | undefined) => ToolCallView;
@@ -638,19 +642,34 @@ const THREAD: {
     summary: output === undefined ? undefined : summarize(output),
   }),
 
-  worktree: (input, output) => {
+  workspace: (input, output) => {
     const record = parseRecord(output);
     return {
       icon: FolderTree,
-      title: (
-        <>
-          Worktree for <Ref value={input.ref} />
-        </>
-      ),
+      title:
+        input.ref !== undefined ? (
+          <>
+            Workspace for <Ref value={input.ref} />
+          </>
+        ) : (
+          <>
+            Workspace <span className="font-mono">{input.name ?? ""}</span>
+          </>
+        ),
       summary:
-        record === undefined ? undefined : `${record.path} (${record.branch})`,
+        record === undefined ? undefined : `${record.name} (${record.branch})`,
     };
   },
+
+  drop_workspace: (input, output) => ({
+    icon: FolderTree,
+    title: (
+      <>
+        Drop workspace <span className="font-mono">{input.name}</span>
+      </>
+    ),
+    summary: output === undefined ? undefined : summarize(output),
+  }),
 
   read_state: (_input, output) => {
     const state = parseThreadState(output);
@@ -1540,8 +1559,8 @@ export const MIN_TOOL_RUN = 3;
 /** One line for a run of `n` calls — the verb in the run's tense.
  *  Tools not named here fold under a generic count. */
 const RUN_LABELS: Record<string, (n: number, running: boolean) => string> = {
-  worktree: (n, running) =>
-    `${running ? "Creating" : "Created"} ${n} worktrees`,
+  workspace: (n, running) =>
+    `${running ? "Creating" : "Created"} ${n} workspaces`,
   assign: (n, running) => `${running ? "Assigning" : "Assigned"} ${n} refs`,
   unassign: (n, running) =>
     `${running ? "Unassigning" : "Unassigned"} ${n} refs`,
@@ -1589,8 +1608,8 @@ export interface ToolRunProps {
 }
 
 /**
- * A RUN of one tool — `worktree` five times in a row — folded into one
- * line ("Created 5 worktrees") that opens into the calls' own cards.
+ * A RUN of one tool — `workspace` five times in a row — folded into one
+ * line ("Created 5 workspaces") that opens into the calls' own cards.
  * The headline carries the run's state: how many are still running,
  * how many failed. A run with a failure opens by default, as a single
  * failed card does — the failure is the story.

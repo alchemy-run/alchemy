@@ -68,14 +68,23 @@ export interface Assignment {
   readonly kind: "issue" | "pull";
   readonly state: string;
   readonly title: string;
-  readonly worktree?: string;
+  /** The thread-local NAME of the pull's workspace (`pr-832`). */
+  readonly workspace?: string;
+}
+
+/** A WORKSPACE of the thread — an isolated machine with the repo
+ *  checked out; clicking one opens ITS terminal. */
+export interface ThreadWorkspace {
+  readonly name: string;
+  readonly branch: string;
 }
 
 export interface Subagent {
   readonly key: string;
   readonly kind: "engineer";
   readonly brief: string;
-  readonly cwd?: string;
+  /** The engineer's DEFAULT workspace (a name in `workspaces`). */
+  readonly workspace?: string;
   readonly state: "running" | "done" | "failed" | "stopped";
   readonly startedAt: number;
   readonly settledAt?: number;
@@ -93,6 +102,7 @@ export interface ThreadState {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly assigned: ReadonlyArray<Assignment>;
+  readonly workspaces: ReadonlyArray<ThreadWorkspace>;
   readonly agents: ReadonlyArray<Subagent>;
   readonly members: ReadonlyArray<string>;
 }
@@ -110,6 +120,13 @@ export const ENGINEER_TERM = "Engineer";
 
 export const engineerSessionId = (key: string): string =>
   `${ENGINEER_TERM}:${key}`;
+
+/** A workspace's session term — its terminal socket is
+ *  `/terminal/Workspace/<thread>::ws-<name>`. */
+export const WORKSPACE_TERM = "Workspace";
+
+export const workspaceSessionId = (threadId: string, name: string): string =>
+  `${WORKSPACE_TERM}:${threadId}::ws-${name}`;
 
 /* ── entity refs ──────────────────────────────────────────────────── */
 

@@ -909,8 +909,10 @@ export const routes = Effect.gen(function* () {
     }),
   );
 
-  /** Run one command on a session's machine — REPL-grade, not a PTY
-   *  (the PTY rides the `/terminal` socket). */
+  /** Run one command in a session's WORKSPACE — REPL-grade, not a PTY
+   *  (the PTY rides the `/terminal` socket). The cwd names the
+   *  workspace (`@<name>` or `@<name>/sub`); the phantom session frame
+   *  carries no default workspace, so a bare cwd fails closed. */
   const sessionExec = HttpRouter.add(
     "POST",
     "/api/sessions/:id/exec",

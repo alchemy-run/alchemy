@@ -33,6 +33,13 @@ export interface ServeSandboxOptions {
    * @default "127.0.0.1"
    */
   readonly hostname?: string;
+  /**
+   * Extra RPC verbs served alongside the sandbox's own (`serveRpc`
+   * shape) — a host extends the machine with domain verbs (workspace
+   * provisioning is the case). A same-named verb overrides the
+   * sandbox's.
+   */
+  readonly extend?: Record<string, unknown>;
 }
 
 /**
@@ -67,7 +74,7 @@ export const serveSandbox = Effect.fn(function* (options: ServeSandboxOptions) {
     const pty = yield* makeSandboxPty;
     const server = yield* HttpServer;
     const handler = serveRpc(
-      { ...sandbox, ...pty },
+      { ...sandbox, ...pty, ...options.extend },
       HttpServerResponse.json({ ok: true, root: options.root }),
     );
     // the bind is the only thing that can fail here; once listening

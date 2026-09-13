@@ -13,7 +13,7 @@
  * implementations against the live `alchemy-run/test-alchemy` sandbox
  * repo and needs `GITHUB_TOKEN`:
  *
- *   doppler run -p alchemy-v2 -c dev -- bun test test/worktree.test.ts
+ *   doppler run -p alchemy-v2 -c dev -- bun test test/checkouts-sandbox.test.ts
  */
 import { BunServices } from "@effect/platform-bun";
 import { expect, test } from "bun:test";

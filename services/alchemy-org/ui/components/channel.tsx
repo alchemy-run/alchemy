@@ -2,23 +2,21 @@
  * The CHANNEL — the operator's one conversation with the channel
  * agent: their messages, its replies, and the cards (thread
  * questions, staged APPROVALS the operator decides inline). GitHub's
- * event stream rides a dockable rail at the right — context, never
- * the conversation. The data arrives streamed (lib/cursor.ts); this
- * component only draws.
+ * events never render here — they land in the log and keep the
+ * Registry warm; the board is where the world's state reads. The
+ * data arrives streamed (lib/cursor.ts); this component only draws.
  */
 
 import {
   AtTooltip,
   authorAvatarUrl,
   dayOf,
-  eventFamilyOf,
   formatAt,
   formatDay,
   MarkdownText,
 } from "@/components/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Rail } from "@/components/rail";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -28,12 +26,6 @@ import {
 } from "@/components/ui/context-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { ChannelMessage, ThreadListing } from "@/lib/channel";
 import {
   decideApproval,
@@ -155,89 +147,6 @@ const Gutter = ({ at }: { at: number }) => (
 );
 
 /** A thread tag on a row — where the message was placed. */
-const ThreadChip = ({
-  thread,
-  directory,
-  onOpenThread,
-}: {
-  thread: string;
-  directory: ReadonlyArray<ThreadListing>;
-  onOpenThread: (id: string) => void;
-}) => {
-  const row = directory.find((entry) => entry.id === thread);
-  return (
-    <button
-      type="button"
-      onClick={() => onOpenThread(thread)}
-      title={row?.title ?? thread}
-      className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-    >
-      <MessageCircle className="size-3" />
-      {row?.name ?? thread}
-    </button>
-  );
-};
-
-/** Markdown, flattened for a tooltip: links keep their labels. */
-const plainText = (text: string): string =>
-  text.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replaceAll("`", "");
-
-/** An event from the outside world: ONE line, never wrapped — the
- *  family icon, who, what (elided); the whole text rides a tooltip. */
-const EventRow = memo(
-  ({
-    message,
-    directory,
-    onOpenThread,
-  }: {
-    message: ChannelMessage;
-    directory: ReadonlyArray<ThreadListing>;
-    onOpenThread: (id: string) => void;
-  }) => {
-    const family = eventFamilyOf(message.event ?? "");
-    const FamilyIcon = family.icon;
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-2 px-1 py-0.5 text-[13px]">
-              <Gutter at={message.at} />
-              <FamilyIcon
-                className={cn("size-3.5 shrink-0", family.className)}
-              />
-              <div className="flex min-w-0 flex-1 items-baseline gap-x-1.5 overflow-hidden">
-                {message.author !== undefined && (
-                  <span className="shrink-0 font-medium text-foreground">
-                    {message.author.login}
-                  </span>
-                )}
-                <span className="min-w-0 flex-1 truncate text-muted-foreground [&_p]:m-0 [&_p]:inline">
-                  <MarkdownText text={message.text} repo={message.repo} />
-                </span>
-                {message.thread !== undefined && (
-                  <ThreadChip
-                    thread={message.thread}
-                    directory={directory}
-                    onOpenThread={onOpenThread}
-                  />
-                )}
-              </div>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            side="left"
-            className="max-w-96 text-xs whitespace-pre-line"
-          >
-            {message.author === undefined ? "" : `${message.author.login} `}
-            {plainText(message.text)}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  },
-);
-EventRow.displayName = "EventRow";
-
 /** The operator speaking — avatar, name, text, and the RUN it
  *  triggered, behind a pill. While the agent is answering the pill
  *  pulses ("working"); either way clicking it opens the run's own
@@ -585,9 +494,6 @@ const CardRow = memo(
 );
 CardRow.displayName = "CardRow";
 
-/** The events rail's dock preference survives reloads. */
-const EVENTS_OPEN_KEY = "alchemy:events-open";
-
 /** Confirm, then delete — the DO broadcasts the removal so the rows
  *  vanish from every open view at once. Deferred a tick so the menu
  *  that asked has closed before the confirm dialog takes focus. */
@@ -641,7 +547,8 @@ export const ChannelView = ({
   const stickRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // the CONVERSATION is user | agent | card; events ride EventsRail
+  // the CONVERSATION is user | agent | card; events stay off-screen
+  // (they still land in the log and keep the Registry warm)
   const conversation = useMemo(
     () => messages.filter((message) => message.kind !== "event"),
     [messages],
@@ -737,19 +644,22 @@ export const ChannelView = ({
 
   // the agent is WORKING while the newest operator message has no
   // agent reply after it (its round ends with send_reply) — the
-  // conversation's quiet indicator
+  // conversation's quiet indicator. The newest agent seq is
+  // remembered MONOTONICALLY (a ref, safe to bump in the memo — the
+  // update is idempotent): deleting a reply or the "(stopped)" marker
+  // must not re-light the indicator for a session that is parked.
+  const answeredAt = useRef(0);
   const working = useMemo(() => {
     let lastUser = 0;
-    let lastAgent = 0;
     for (const message of conversation) {
       if (message.kind === "user" && message.seq > lastUser) {
         lastUser = message.seq;
       }
-      if (message.kind === "agent" && message.seq > lastAgent) {
-        lastAgent = message.seq;
+      if (message.kind === "agent" && message.seq > answeredAt.current) {
+        answeredAt.current = message.seq;
       }
     }
-    return live && lastUser > lastAgent;
+    return live && lastUser > answeredAt.current;
   }, [conversation, live]);
 
   const rows = useMemo(() => {
@@ -1133,102 +1043,6 @@ export const ChannelView = ({
   );
 };
 
-/**
- * The EVENTS rail — GitHub's stream as CONTEXT beside the board,
- * never the source of truth; dockable to a slim strip.
- */
-export const EventsRail = ({
-  messages,
-  directory,
-  onOpenThread,
-}: {
-  messages: ReadonlyArray<ChannelMessage>;
-  directory: ReadonlyArray<ThreadListing>;
-  onOpenThread: (id: string) => void;
-}) => {
-  const [open, setOpen] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(EVENTS_OPEN_KEY) !== "0";
-    } catch {
-      return true;
-    }
-  });
-  const toggle = useCallback(() => {
-    setOpen((current) => {
-      const next = !current;
-      try {
-        localStorage.setItem(EVENTS_OPEN_KEY, next ? "1" : "0");
-      } catch {
-        // storage disabled — the preference just won't survive
-      }
-      return next;
-    });
-  }, []);
-  const events = useMemo(
-    () => messages.filter((message) => message.kind === "event"),
-    [messages],
-  );
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={toggle}
-        aria-label="show the events pane"
-        title="Events — the GitHub stream"
-        className="flex w-6 shrink-0 cursor-pointer items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <span
-          className="text-[10px] tracking-widest"
-          style={{ writingMode: "vertical-rl" }}
-        >
-          EVENTS
-        </span>
-      </button>
-    );
-  }
-  return (
-    <Rail
-      label="Events"
-      side="right"
-      storageKey="events-rail-width"
-      defaultWidth={380}
-      minWidth={300}
-      className="bg-background"
-    >
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-          Events
-        </span>
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label="hide the events pane"
-          className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-2 py-2">
-        {events.length === 0 && (
-          <div className="px-2 py-8 text-center text-xs text-muted-foreground">
-            No events yet — GitHub deliveries land here.
-          </div>
-        )}
-        {events.slice(-500).map((message) => (
-          <div key={message.seq} data-seq={message.seq} className="px-0.5">
-            <EventRow
-              message={message}
-              directory={directory}
-              onOpenThread={onOpenThread}
-            />
-          </div>
-        ))}
-      </div>
-    </Rail>
-  );
-};
-
 /* ── the rail (thread list) ───────────────────────────────────────── */
 
 const TURN_LABEL: Record<string, string> = {
@@ -1262,7 +1076,7 @@ export const ThreadList = ({
   onOpenBoard: () => void;
   onOpenThread: (id: string) => void;
   /** Threads whose DELETE is in flight — the server is stopping their
-   *  agents and dropping their worktrees; the row stays until it is
+   *  agents and dropping their workspaces; the row stays until it is
    *  done and shows a spinner meanwhile. */
   deleting: ReadonlySet<string>;
   /** The menu's delete (one thread or a selection) — the shell
@@ -1356,7 +1170,7 @@ export const ThreadList = ({
                     aria-current={selected === row.id ? "page" : undefined}
                     title={
                       busy
-                        ? "Deleting — stopping its agents, dropping its worktrees, erasing its machine…"
+                        ? "Deleting — stopping its agents, dropping its workspaces and their machines…"
                         : row.title
                     }
                     className={cn(

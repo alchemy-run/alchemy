@@ -1,9 +1,7 @@
 import * as AI from "alchemy/AI";
-import * as Git from "alchemy/Git";
 import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { assignedTree } from "../sandbox/SessionTree.ts";
+import { defaultWorkspace } from "../sandbox/SessionTree.ts";
 import { Message } from "../thread/Message.ts";
 import { threadOf } from "../thread/Terms.ts";
 import { Distillation } from "../process/Distillation.ts";
@@ -61,13 +59,13 @@ export interface EngineerApi {
    *  sampling on; `undefined` returns to the org's default. Nothing
    *  in flight is interrupted. */
   readonly setModel: (model: string | undefined) => Effect.Effect<void>;
-  /** Hand the session an EXISTING tree on its machine — the key of a
-   *  `Git.Checkouts` checkout its owner made (a thread's worktree for
-   *  the pull request the brief is about). From the first tool call
-   *  on, the session's shell, file tools, and terminal are rooted
-   *  there (`SandboxCheckout`); `undefined` returns the session to the
-   *  tree its key derives. Set BEFORE the brief. */
-  readonly setTree: (key: string | undefined) => Effect.Effect<void>;
+  /** Hand the session its DEFAULT WORKSPACE — the thread-local name of
+   *  an existing workspace (a thread's checkout for the pull request
+   *  the brief is about). From the first tool call on, the session's
+   *  shell and relative paths land there (`WorkspaceRouter`), while
+   *  every sibling workspace stays reachable as `@<name>/…`;
+   *  `undefined` clears it. Set BEFORE the brief. */
+  readonly setWorkspace: (name: string | undefined) => Effect.Effect<void>;
 }
 
 export const GeneralEngineer = Engineer.make(
@@ -78,7 +76,6 @@ export const GeneralEngineer = Engineer.make(
     // is no session here; turns and methods read theirs from the frame.
     const model = yield* models;
     const repo = yield* SessionRepo;
-    const checkouts = yield* Git.Checkouts;
 
     // the session's own pick — a DECLARED durable cell, born at the
     // default, rewritten by `setModel` (the operator's selector, or a
@@ -96,7 +93,7 @@ export const GeneralEngineer = Engineer.make(
     // only READS which tree that is, for its prose — it touches no
     // machine (the resolver memoizes per session, so this is one
     // GitHub call per session, not per tick). The tree itself lands the
-    // first time a tool reaches for it (sandbox/SandboxCheckout.ts): a
+    // first time a tool reaches for it (sandbox/WorkspaceRouter.ts): a
     // reply that needs no tool needs no machine, and the wait shows on
     // the tool that does. A GitHub hiccup here costs the PR prose,
     // never the session.
@@ -115,31 +112,36 @@ export const GeneralEngineer = Engineer.make(
       const workspace = tree?.repo ?? "the alchemy repository";
       const pull = tree?.pull;
 
-      // a tree HANDED to the session (a thread's worktree for one pull
-      // request) — its shell and tools are rooted there; the stance
-      // names it so the model never reaches for another
-      const handedKey = yield* assignedTree;
-      const handedTree =
-        handedKey === null
-          ? undefined
-          : Option.getOrUndefined(yield* checkouts.get(handedKey));
+      // the DEFAULT workspace HANDED to the session (a thread's
+      // checkout for one unit of work) — its shell and relative paths
+      // land there; the stance names it, and names the bag, so the
+      // model knows both its footing and its reach. Name only — never
+      // a machine touch: the tree itself lands on the first tool call.
+      const handedName = yield* defaultWorkspace;
       const manager = threadOf(thread.key);
 
       // the PR clause of the stance — a nested fragment so its PushBranch
       // mention counts (mention-is-presence rides splices, not strings)
       const subject =
-        handedTree !== undefined
-          ? AI.fragment`
-            Your tree is the worktree at ${handedTree.path}, on the
-            branch ${handedTree.branch} — the thread's checkout for the
-            pull request your brief is about. Your shell, your file
-            tools, and your terminal all start THERE, and there is the
-            only place you work: never cd out of it, never touch
-            another checkout or worktree on this machine, never run
-            git checkout / git switch / gh pr checkout — the branch is
-            already the right one. Commit on it and push it back with
-            ${PushBranch} as "${handedTree.branch}" so the work lands
-            in the pull request itself.`
+        manager !== undefined
+          ? handedName !== null
+            ? AI.fragment`
+            Your DEFAULT workspace is "${handedName}" — one of this
+            thread's workspaces, the checkout for the work your brief
+            is about. Every relative path, your shell, and your
+            commits land in it; its branch is already the right one —
+            never run git checkout / git switch / gh pr checkout.
+            The thread's OTHER workspaces are equally yours: address
+            one as "@<name>/<path>" in any tool path or exec cwd
+            (read_state on the manager, or your brief, names them).
+            Commit and push with ${PushBranch} as the current branch
+            so the work lands where it belongs.`
+            : AI.fragment`
+            You have NO default workspace yet: relative paths resolve
+            nowhere until you address a workspace of this thread as
+            "@<name>/<path>" (your brief or the manager names them —
+            ${Message} the manager if none was named). There is no
+            machine root to fall back to.`
           : pull === undefined
             ? AI.fragment``
             : pull.ref === pull.head
@@ -240,8 +242,8 @@ export const GeneralEngineer = Engineer.make(
         Effect.map(chosen, (pick) => (pick === null ? undefined : pick)),
       setModel: (next: string | undefined) =>
         PersistentRef.set(chosen, next ?? null),
-      setTree: (key: string | undefined) =>
-        PersistentRef.set(assignedTree, key ?? null),
+      setWorkspace: (name: string | undefined) =>
+        PersistentRef.set(defaultWorkspace, name ?? null),
     };
   }),
 );

@@ -4,7 +4,7 @@
   - button "Stop all"
   - button "Delete all"
   - button "open the manager": /manager — Fix the reconcile bug [\d,.]+[bkmBKM]+/
-  - button "open agent engineer-1": /engineer — Implement the fix in pr-\d+'s worktree [\d,.]+[bkmBKM]+/
+  - button "open agent engineer-1": /engineer — Implement the fix in pr-\d+'s workspace [\d,.]+[bkmBKM]+/
   - button "Assigned · 1 pull · 1 issue" [expanded]
   - text: Bug in reconcile
   - link /#\d+/:
@@ -14,13 +14,13 @@
   - link /#\d+/:
     - /url: https://github.com/alchemy-run/test-alchemy/issues/148
   - text: open
-  - button /copy worktree path \/workspace\/trees\/pr-\d+/
-  - button "Worktrees · 1 worktree" [expanded]
-  - text: /pr-\d+/
-  - link /#\d+/:
-    - /url: https://github.com/alchemy-run/test-alchemy/pull/148
-  - button /copy worktree path \/workspace\/trees\/pr-\d+/
-  - text: /\/workspace\/trees\/pr-\d+/
-  - button "engineer"
+  - button /open workspace pr-\d+ terminal/
+  - button "Workspaces · 1 workspace" [expanded]
+  - button /open workspace pr-\d+ terminal/:
+    - text: ""
+    - link /#\d+/:
+      - /url: https://github.com/alchemy-run/test-alchemy/pull/148
+    - text: fix/sum-to-n
+    - button "engineer"
   - button "Close thread"
   - button "Delete thread"

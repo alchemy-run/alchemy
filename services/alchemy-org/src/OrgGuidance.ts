@@ -37,8 +37,8 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
   maintains, so a change here changes the hands that make the next
   change. The lift runs in three stages — a human coding agent editing
   this folder; \`alchemy dev\` running the org on the developer's
-  machine (sessions in git worktrees, GitHub by polling);
-  \`alchemy deploy\` running it live (sessions in microVMs, GitHub by
+  machine (workspaces as git worktrees, GitHub by polling);
+  \`alchemy deploy\` running it live (workspaces as microVMs, GitHub by
   webhook). Every stage is held to the same rules. The repository's
   root \`AGENTS.md\` applies in full; this folder adds its own.
 

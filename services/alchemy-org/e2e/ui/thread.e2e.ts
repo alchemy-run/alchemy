@@ -33,15 +33,16 @@ const seedThread = (api: import("./harness.ts").FakeApi) => {
         kind: "pull",
         state: "open",
         title: "Add sumToN helper",
-        worktree: "/workspace/trees/pr-148",
+        workspace: "pr-148",
       },
     ],
+    workspaces: [{ name: "pr-148", branch: "fix/sum-to-n" }],
     agents: [
       {
         key: "engineer-1",
         kind: "engineer",
-        brief: "Implement the fix in pr-148's worktree",
-        cwd: "/workspace/trees/pr-148",
+        brief: "Implement the fix in pr-148's workspace",
+        workspace: "pr-148",
         state: "running",
         startedAt: NOW.getTime() - 120_000,
       },
@@ -173,8 +174,8 @@ test("a burst streamed mid-handler wears the snapshot's id — deletable once it
 }) => {
   seedThread(api);
   const callId = api.seedOpenRound("Thread:t-1", {
-    ask: "get a worktree for the PR",
-    name: "worktree",
+    ask: "get a workspace for the PR",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
   });
   await openApp(page, threadPath("t-1"));
@@ -185,12 +186,12 @@ test("a burst streamed mid-handler wears the snapshot's id — deletable once it
   await expect(burst).toBeVisible();
 
   api.landOpenRound("Thread:t-1", callId, {
-    name: "worktree",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
-    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
-    reply: "Worktree ready.",
+    output: { name: "pr-148", branch: "fix/sum-to-n" },
+    reply: "Workspace ready.",
   });
-  await expect(burst).toContainText("Worktree ready.");
+  await expect(burst).toContainText("Workspace ready.");
 
   await burst.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete" }).click();
@@ -198,30 +199,30 @@ test("a burst streamed mid-handler wears the snapshot's id — deletable once it
   await expect
     .poll(() => api.deletedChatMessages)
     .toEqual([{ id: "Thread:t-1", messageId: "a-1" }]);
-  await expect(main(page)).not.toContainText("Worktree ready.");
+  await expect(main(page)).not.toContainText("Workspace ready.");
 });
 
 test("a tool call renders as its card", async ({ page, api }) => {
   seedThread(api);
   api.seedTool("Thread:t-1", {
-    ask: "get a worktree for the PR",
-    name: "worktree",
+    ask: "get a workspace for the PR",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
-    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
-    reply: "Worktree ready.",
+    output: { name: "pr-148", branch: "fix/sum-to-n" },
+    reply: "Workspace ready.",
   });
   await openApp(page, threadPath("t-1"));
 
-  await expect(main(page)).toContainText("Worktree for");
+  await expect(main(page)).toContainText("Workspace for");
   await expect(main(page)).toContainText(`${REPO}#148`);
 });
 
-const worktreeCall = (n: number, isFailure = false) => ({
-  name: "worktree",
+const workspaceCall = (n: number, isFailure = false) => ({
+  name: "workspace",
   input: { ref: `${REPO}#${n}` },
   output: isFailure
     ? `CheckoutFailed: ${REPO}#${n} has no head`
-    : { path: `/workspace/trees/pr-${n}`, branch: `pr-${n}` },
+    : { name: `pr-${n}`, branch: `pr-${n}` },
   isFailure,
 });
 
@@ -231,29 +232,29 @@ test("a run of one tool folds into one line that opens into its cards", async ({
 }) => {
   seedThread(api);
   api.seedTools("Thread:t-1", {
-    ask: "make a worktree for each of the five pulls",
-    calls: [1521, 1522, 1523, 1524, 1525].map((n) => worktreeCall(n)),
-    reply: "Five worktrees ready.",
+    ask: "make a workspace for each of the five pulls",
+    calls: [1521, 1522, 1523, 1524, 1525].map((n) => workspaceCall(n)),
+    reply: "Five workspaces ready.",
   });
   await openApp(page, threadPath("t-1"));
 
   // ONE line, not five cards
-  const run = main(page).locator("[data-tool-run='worktree']");
+  const run = main(page).locator("[data-tool-run='workspace']");
   await expect(run).toHaveCount(1);
   await expect(run).toHaveAttribute("data-count", "5");
-  await expect(run).toContainText("Created 5 worktrees");
-  await expect(main(page).locator("[data-tool='worktree']")).toHaveCount(0);
+  await expect(run).toContainText("Created 5 workspaces");
+  await expect(main(page).locator("[data-tool='workspace']")).toHaveCount(0);
   await expect(main(page)).not.toContainText(`${REPO}#1523`);
 
   // open: the five cards, in order; close: back to the line
   await run.getByRole("button", { expanded: false }).click();
-  const cards = main(page).locator("[data-tool='worktree']");
+  const cards = main(page).locator("[data-tool='workspace']");
   await expect(cards).toHaveCount(5);
   await expect(cards.nth(0)).toContainText(`${REPO}#1521`);
   await expect(cards.nth(4)).toContainText(`${REPO}#1525`);
   await expect(cards.nth(4)).toContainText("pr-1525");
   await run.getByRole("button", { expanded: true }).click();
-  await expect(main(page).locator("[data-tool='worktree']")).toHaveCount(0);
+  await expect(main(page).locator("[data-tool='workspace']")).toHaveCount(0);
 });
 
 test("a run with a failure opens by default and counts it in the line", async ({
@@ -262,18 +263,18 @@ test("a run with a failure opens by default and counts it in the line", async ({
 }) => {
   seedThread(api);
   api.seedTools("Thread:t-1", {
-    ask: "make a worktree for each pull",
-    calls: [worktreeCall(1521), worktreeCall(1522, true), worktreeCall(1523)],
-    reply: "Two of three worktrees ready; #1522 has no head.",
+    ask: "make a workspace for each pull",
+    calls: [workspaceCall(1521), workspaceCall(1522, true), workspaceCall(1523)],
+    reply: "Two of three workspaces ready; #1522 has no head.",
   });
   await openApp(page, threadPath("t-1"));
 
-  const run = main(page).locator("[data-tool-run='worktree']");
-  await expect(run).toContainText("Created 3 worktrees");
+  const run = main(page).locator("[data-tool-run='workspace']");
+  await expect(run).toContainText("Created 3 workspaces");
   await expect(run).toContainText("1 failed");
   // open already — the failure is the story
   await expect(run.getByRole("button", { expanded: true })).toBeVisible();
-  await expect(main(page).locator("[data-tool='worktree']")).toHaveCount(3);
+  await expect(main(page).locator("[data-tool='workspace']")).toHaveCount(3);
   await expect(main(page)).toContainText("CheckoutFailed");
 });
 
@@ -283,23 +284,23 @@ test("a run in flight says so: present tense, and how many are still running", a
 }) => {
   seedThread(api);
   api.seedTools("Thread:t-1", {
-    ask: "make a worktree for each pull",
+    ask: "make a workspace for each pull",
     calls: [
-      worktreeCall(1521),
-      worktreeCall(1522),
-      worktreeCall(1523),
-      { ...worktreeCall(1524), open: true },
-      { ...worktreeCall(1525), open: true },
+      workspaceCall(1521),
+      workspaceCall(1522),
+      workspaceCall(1523),
+      { ...workspaceCall(1524), open: true },
+      { ...workspaceCall(1525), open: true },
     ],
     reply: "",
   });
   await openApp(page, threadPath("t-1"));
 
-  const run = main(page).locator("[data-tool-run='worktree']");
-  await expect(run).toContainText("Creating 5 worktrees");
+  const run = main(page).locator("[data-tool-run='workspace']");
+  await expect(run).toContainText("Creating 5 workspaces");
   await expect(run).toContainText("2 running…");
   await run.getByRole("button", { expanded: false }).click();
-  const cards = main(page).locator("[data-tool='worktree']");
+  const cards = main(page).locator("[data-tool='workspace']");
   await expect(cards).toHaveCount(5);
   await expect(cards.nth(3)).toContainText("running…");
   await expect(cards.nth(0)).not.toContainText("running…");
@@ -311,15 +312,15 @@ test("two calls stay two cards; a different tool between calls breaks the run", 
 }) => {
   seedThread(api);
   api.seedTools("Thread:t-1", {
-    ask: "worktrees for both",
-    calls: [worktreeCall(1521), worktreeCall(1522)],
-    reply: "Two worktrees ready.",
+    ask: "workspaces for both",
+    calls: [workspaceCall(1521), workspaceCall(1522)],
+    reply: "Two workspaces ready.",
   });
   api.seedTools("Thread:t-1", {
     ask: "now the other three, and check the state between",
     calls: [
-      worktreeCall(1523),
-      worktreeCall(1524),
+      workspaceCall(1523),
+      workspaceCall(1524),
       {
         name: "read_state",
         input: {},
@@ -335,7 +336,7 @@ test("two calls stay two cards; a different tool between calls breaks the run", 
           },
         },
       },
-      worktreeCall(1525),
+      workspaceCall(1525),
     ],
     reply: "Done.",
   });
@@ -344,7 +345,7 @@ test("two calls stay two cards; a different tool between calls breaks the run", 
   // below the threshold, and broken by read_state: no fold anywhere,
   // every card on the page
   await expect(main(page).locator("[data-tool-run]")).toHaveCount(0);
-  await expect(main(page).locator("[data-tool='worktree']")).toHaveCount(5);
+  await expect(main(page).locator("[data-tool='workspace']")).toHaveCount(5);
   await expect(main(page).locator("[data-tool='read_state']")).toHaveCount(1);
 });
 
@@ -370,7 +371,7 @@ test("read_state renders the thread state: assigned and agents, counted", async 
             kind: "pull",
             state: "open",
             title: "Add sumToN helper",
-            worktree: "/workspace/trees/pr-148",
+            workspace: "pr-148",
           },
           { ref: `${REPO}#12`, kind: "issue", state: "open", title: "Bug" },
         ],
@@ -411,16 +412,16 @@ test("a view opened mid-handler sees the in-flight call; the round lands into th
   api,
 }) => {
   seedThread(api);
-  // the model called worktree; its handler is running — the page loads
+  // the model called workspace; its handler is running — the page loads
   // NOW, with nothing but the durable tool-call row to go on
   const callId = api.seedOpenRound("Thread:t-1", {
-    ask: "get a worktree for the PR",
-    name: "worktree",
+    ask: "get a workspace for the PR",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
   });
   await openApp(page, threadPath("t-1"));
 
-  const card = main(page).getByRole("button", { name: /^Worktree for/ });
+  const card = main(page).getByRole("button", { name: /^Workspace for/ });
   await expect(card).toHaveCount(1);
   await expect(card).toContainText("running…");
   await expect(
@@ -431,14 +432,14 @@ test("a view opened mid-handler sees the in-flight call; the round lands into th
   // call, the result lands, the model replies — still ONE card, now
   // complete, and the turn is over
   api.landOpenRound("Thread:t-1", callId, {
-    name: "worktree",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
-    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
-    reply: "Worktree ready.",
+    output: { name: "pr-148", branch: "fix/sum-to-n" },
+    reply: "Workspace ready.",
   });
-  await expect(main(page)).toContainText("Worktree ready.");
+  await expect(main(page)).toContainText("Workspace ready.");
   await expect(card).toHaveCount(1);
-  await expect(main(page)).toContainText("/workspace/trees/pr-148");
+  await expect(main(page)).toContainText("pr-148 (fix/sum-to-n)");
   await expect(
     main(page).getByRole("button", { name: "Submit" }),
   ).toBeVisible();
@@ -451,7 +452,7 @@ test("the stop button interrupts the round in flight; the turn ends", async ({
   seedThread(api);
   api.seedOpenRound("Thread:t-1", {
     ask: "review the PR",
-    name: "worktree",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
   });
   await openApp(page, threadPath("t-1"));
@@ -473,7 +474,7 @@ test("the stop button interrupts the round in flight; the turn ends", async ({
 
   // the call the stop cut short is CLOSED: the round that owed its
   // result is over, so the card does not run forever — it says so
-  const card = main(page).locator("[data-tool='worktree']");
+  const card = main(page).locator("[data-tool='workspace']");
   await expect(card).not.toContainText("running…");
   await expect(card).toContainText("stopped — the round ended");
 });
@@ -527,8 +528,8 @@ test("the working row rides an open round too: visible mid-handler, gone when it
 }) => {
   seedThread(api);
   const callId = api.seedOpenRound("Thread:t-1", {
-    ask: "get a worktree for the PR",
-    name: "worktree",
+    ask: "get a workspace for the PR",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
   });
   await openApp(page, threadPath("t-1"));
@@ -538,12 +539,12 @@ test("the working row rides an open round too: visible mid-handler, gone when it
   await expect(working).toBeVisible();
 
   api.landOpenRound("Thread:t-1", callId, {
-    name: "worktree",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
-    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
-    reply: "Worktree ready.",
+    output: { name: "pr-148", branch: "fix/sum-to-n" },
+    reply: "Workspace ready.",
   });
-  await expect(main(page)).toContainText("Worktree ready.");
+  await expect(main(page)).toContainText("Workspace ready.");
   await expect(working).toBeHidden();
 });
 
@@ -557,7 +558,7 @@ test("a spawn card reads the thread state: a stopped or deleted engineer is not 
   api.seedOpenRound("Thread:t-1", {
     ask: "fix the reconcile bug",
     name: "spawn",
-    input: { brief: "Implement the fix in pr-148's worktree" },
+    input: { brief: "Implement the fix in pr-148's workspace" },
   });
   await openApp(page, threadPath("t-1"));
   const card = main(page).locator("[data-tool='spawn']");
@@ -585,7 +586,7 @@ test("a spawn card reads the thread state: a stopped or deleted engineer is not 
   await expect(card).not.toContainText("working");
 });
 
-test("the state pane shows assigned refs, agents, and the worktree", async ({
+test("the state pane shows assigned refs, agents, and the workspace", async ({
   page,
   api,
 }) => {
@@ -596,19 +597,21 @@ test("the state pane shows assigned refs, agents, and the worktree", async ({
   await expect(pane).toContainText("Bug in reconcile");
   await expect(pane).toContainText("Add sumToN helper");
   await expect(pane).toContainText("pr-148");
-  // the worktree is a chip on the assignment AND a row of its own
-  // section (path, pull request, the engineers rooted in it)
+  // the workspace is a chip on the assignment AND a row of its own
+  // section (branch, pull request, the engineers whose default it is) —
+  // every one of them opens ITS terminal
   await expect(
-    pane.getByRole("button", {
-      name: "copy worktree path /workspace/trees/pr-148",
-    }),
+    pane.getByRole("button", { name: "open workspace pr-148 terminal" }),
   ).toHaveCount(2);
-  await expect(
-    pane.locator("[data-worktree='/workspace/trees/pr-148']"),
-  ).toContainText("engineer");
-  await expect(
-    pane.locator("[data-worktree='/workspace/trees/pr-148']"),
-  ).toContainText("#148");
+  await expect(pane.locator("[data-workspace='pr-148']")).toContainText(
+    "engineer",
+  );
+  await expect(pane.locator("[data-workspace='pr-148']")).toContainText(
+    "#148",
+  );
+  await expect(pane.locator("[data-workspace='pr-148']")).toContainText(
+    "fix/sum-to-n",
+  );
   // the manager leads the agents — the thread's own agent, first
   await expect(pane.locator("[data-manager]")).toContainText("manager");
   await expect(pane).toContainText("engineer");
@@ -664,12 +667,12 @@ test("a crowded thread stays in bounds: sections count and scroll, the tab strip
   await expect(
     assigned.getByRole("button", { name: "Assigned · 24 pulls · 1 issue" }),
   ).toBeVisible();
-  // …and the list scrolls INSIDE its section: Worktrees and Agents are
+  // …and the list scrolls INSIDE its section: Workspaces and Agents are
   // still on screen below it
   const box = (await assigned.boundingBox())!;
   const viewport = page.viewportSize()!;
   expect(box.height).toBeLessThan(viewport.height * 0.6);
-  await expect(pane.locator("[data-section=worktrees]")).toBeInViewport();
+  await expect(pane.locator("[data-section=workspaces]")).toBeInViewport();
   await expect(pane.locator("[data-section=agents]")).toBeInViewport();
   // folding the section leaves the summary
   await assigned.getByRole("button", { name: /^Assigned/ }).click();
@@ -740,10 +743,10 @@ test("an agent row opens the subagent's session; close returns to chat", async (
   seedThread(api);
   // the engineer's own transcript — a tool call the THREAD never saw
   api.seedBash("Engineer:engineer-1", {
-    ask: "Implement the fix in pr-148's worktree",
+    ask: "Implement the fix in pr-148's workspace",
     command: "pnpm test test/reconcile",
     stdout: "3 passed",
-    reply: "Tests are green in the worktree.",
+    reply: "Tests are green in the workspace.",
   });
   await openApp(page, threadPath("t-1"));
   await expect(main(page)).not.toContainText("pnpm test test/reconcile");
@@ -759,7 +762,7 @@ test("an agent row opens the subagent's session; close returns to chat", async (
   const session = main(page).locator("[data-agent-session='engineer-1']");
   await expect(session).toContainText("working");
   await expect(session).toContainText("pnpm test test/reconcile");
-  await expect(session).toContainText("Tests are green in the worktree.");
+  await expect(session).toContainText("Tests are green in the workspace.");
   await expect(session.getByRole("button", { name: "Submit" })).toBeVisible();
 
   // back to the chat via the pane's manager row — the header repeats
@@ -779,7 +782,7 @@ test("the Engineer card's open button jumps to the running agent", async ({
   api.seedOpenRound("Thread:t-1", {
     ask: "fix the reconcile bug",
     name: "spawn",
-    input: { brief: "Implement the fix in pr-148's worktree" },
+    input: { brief: "Implement the fix in pr-148's workspace" },
   });
   await openApp(page, threadPath("t-1"));
 
@@ -1063,21 +1066,32 @@ test("an assigned pull opens its review tab; the diff renders", async ({
   expect(api.pullLoads).toEqual([148]);
 });
 
-test("+ opens a terminal on the thread's machine; close returns to chat", async ({
+test("clicking a workspace opens a terminal INTO it; close returns to chat", async ({
   page,
   api,
 }) => {
   seedThread(api);
   await openApp(page, threadPath("t-1"));
 
-  await page.getByRole("button", { name: "new terminal" }).click();
-  await expect(page).toHaveURL(/\/terminal\//);
+  // the workspace row in the pane's Workspaces section (the chip on
+  // the assignment opens the same terminal)
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .locator("[data-workspace='pr-148']")
+    .click();
+  await expect(page).toHaveURL(/\/workspace\/pr-148$/);
   // the viewer's status line proves the socket; the prompt's BYTES
-  // land in ghostty's canvas, not the DOM — assert on the fake's record
+  // land in ghostty's canvas, not the DOM — assert on the fake's record.
+  // The socket names the WORKSPACE session — its own machine's door.
   await expect(main(page)).toContainText("connected");
   await expect.poll(() => api.terminal.opened.length).toBe(1);
+  // the path's segments are percent-encoded on the wire; the Worker
+  // decodes them before `sessions.attach`
+  expect(decodeURIComponent(api.terminal.sockets[0] ?? "")).toContain(
+    "/terminal/Workspace/t-1::ws-pr-148",
+  );
 
-  await page.getByRole("button", { name: /close terminal/ }).click();
+  await page.getByRole("button", { name: "close workspace pr-148" }).click();
   await expect(page).toHaveURL(new RegExp(`${threadPath("t-1")}$`));
 });
 

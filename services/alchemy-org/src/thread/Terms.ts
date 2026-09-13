@@ -35,3 +35,38 @@ export const shortName = (engineerKey: string): string => {
  *  thread. */
 export const engineerKey = (threadId: string, name: string): string =>
   name.includes("::") ? name : `${threadId}::${name}`;
+
+/* ── workspaces ─────────────────────────────────────────────────── */
+
+/** The workspace sessions' term — the session IS the resource: one
+ *  machine with one checkout, keyed by the thread and a local name. */
+export const WORKSPACE_TERM = "Workspace";
+
+/** A workspace's session key within its thread: `t-x::ws-pr-7`. */
+export const workspaceKey = (threadId: string, name: string): string =>
+  `${threadId}::ws-${name}`;
+
+/** The canonical workspace name for a pull request: `pr-<number>`. */
+export const pullWorkspaceName = (number: number): string => `pr-${number}`;
+
+/** The thread-local workspace name from a session key
+ *  (`t-x::ws-pr-7` → `pr-7`); `undefined` for any other key. */
+export const workspaceName = (sessionKey: string): string | undefined => {
+  const at = sessionKey.indexOf("::ws-");
+  if (at < 0) return undefined;
+  const name = sessionKey.slice(at + 5);
+  return name.includes("::") ? undefined : name;
+};
+
+/** The MACHINE a session's sandbox calls land on: a workspace session
+ *  owns its machine (its own key), and any deeper key inside a
+ *  workspace addresses that workspace's; everything else (standalone
+ *  coder sessions) is its own machine. A thread's agents own no
+ *  machine — their calls are routed per workspace (WorkspaceRouter)
+ *  before this mapping applies. */
+export const machineKey = (sessionKey: string): string => {
+  const at = sessionKey.indexOf("::ws-");
+  if (at < 0) return sessionKey;
+  const rest = sessionKey.indexOf("::", at + 5);
+  return rest < 0 ? sessionKey : sessionKey.slice(0, rest);
+};

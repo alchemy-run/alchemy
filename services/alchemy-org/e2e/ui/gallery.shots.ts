@@ -37,14 +37,16 @@ const seedWorld = (api: FakeApi) => {
         kind: "pull",
         state: "open",
         title: "Add sumToN helper",
-        worktree: "/workspace/trees/pr-148",
+        workspace: "pr-148",
       },
     ],
+    workspaces: [{ name: "pr-148", branch: "fix/sum-to-n" }],
     agents: [
       {
         key: "engineer-1",
         kind: "engineer",
-        brief: "Implement the fix in pr-148's worktree",
+        brief: "Implement the fix in pr-148's workspace",
+        workspace: "pr-148",
         state: "running",
         startedAt: NOW.getTime() - 120_000,
       },
@@ -220,24 +222,24 @@ test("channel: a thread being deleted", async ({ page, api }) => {
 test("thread: the conversation and the state pane", async ({ page, api }) => {
   seedWorld(api);
   api.seedTool("Thread:t-1", {
-    ask: "get a worktree for the PR",
-    name: "worktree",
+    ask: "get a workspace for the PR",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
-    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
-    reply: "Worktree ready — the engineer works there.",
+    output: { name: "pr-148", branch: "fix/sum-to-n" },
+    reply: "Workspace ready — the engineer works there.",
   });
   await openApp(page, threadPath("t-1"));
-  await expect(page.getByRole("main")).toContainText("Worktree ready");
+  await expect(page.getByRole("main")).toContainText("Workspace ready");
   await shot(page, "thread-01-conversation");
 });
 
 test("thread: a subagent's session", async ({ page, api }) => {
   seedWorld(api);
   api.seedBash("Engineer:engineer-1", {
-    ask: "Implement the fix in pr-148's worktree",
+    ask: "Implement the fix in pr-148's workspace",
     command: "pnpm test test/reconcile",
     stdout: "3 passed",
-    reply: "Tests are green in the worktree; pushing the fix.",
+    reply: "Tests are green in the workspace; pushing the fix.",
   });
   await openApp(page, `${threadPath("t-1")}/agent/engineer-1`);
   await expect(page.getByRole("main")).toContainText("3 passed");
@@ -300,7 +302,7 @@ test("thread: the read_state card, opened", async ({ page, api }) => {
             kind: "pull",
             state: "open",
             title: "Add sumToN helper",
-            worktree: "/workspace/trees/pr-148",
+            workspace: "pr-148",
           },
           { ref: `${REPO}#12`, kind: "issue", state: "open", title: "Bug" },
         ],
@@ -350,7 +352,7 @@ test("thread: the switches en masse, and a card reading the thread state", async
       {
         key: "engineer-1",
         kind: "engineer",
-        brief: "Implement the fix in pr-148's worktree",
+        brief: "Implement the fix in pr-148's workspace",
         state: "running",
         startedAt: NOW.getTime() - 120_000,
       },
@@ -385,40 +387,40 @@ test("thread: the switches en masse, and a card reading the thread state", async
   await shot(page, "thread-06-agent-switches");
 });
 
-test("thread: a run of worktrees folded, and another opened", async ({
+test("thread: a run of workspaces folded, and another opened", async ({
   page,
   api,
 }) => {
   seedWorld(api);
-  const worktree = (n: number) => ({
-    name: "worktree",
+  const workspace = (n: number) => ({
+    name: "workspace",
     input: { ref: `${REPO}#${n}` },
-    output: { path: `/workspace/trees/pr-${n}`, branch: `pr-${n}` },
+    output: { name: `pr-${n}`, branch: `pr-${n}` },
   });
   // five in a row: one line
   api.seedTools("Thread:t-1", {
-    ask: "make a worktree for each of the five pulls",
-    calls: [1521, 1522, 1523, 1524, 1525].map(worktree),
-    reply: "Five worktrees ready.",
+    ask: "make a workspace for each of the five pulls",
+    calls: [1521, 1522, 1523, 1524, 1525].map(workspace),
+    reply: "Five workspaces ready.",
   });
   // three more, still running two of them
   api.seedTools("Thread:t-1", {
     ask: "and the three follow-ups",
     calls: [
-      worktree(1526),
-      { ...worktree(1527), open: true },
-      { ...worktree(1528), open: true },
+      workspace(1526),
+      { ...workspace(1527), open: true },
+      { ...workspace(1528), open: true },
     ],
     reply: "",
   });
   await openApp(page, threadPath("t-1"));
-  const runs = page.getByRole("main").locator("[data-tool-run='worktree']");
+  const runs = page.getByRole("main").locator("[data-tool-run='workspace']");
   await expect(runs).toHaveCount(2);
   await expect(runs.nth(1)).toContainText("2 running…");
   // the first one opened, to show the fold's inside
   await runs.nth(0).getByRole("button", { expanded: false }).click();
   await expect(
-    page.getByRole("main").locator("[data-tool='worktree']"),
+    page.getByRole("main").locator("[data-tool='workspace']"),
   ).toHaveCount(5);
   await shot(page, "thread-07-tool-run");
 });
@@ -430,14 +432,14 @@ test("thread: the model selector open in the composer", async ({
   seedWorld(api);
   api.updateThread("t-1", { model: "claude-opus-5" });
   api.seedTool("Thread:t-1", {
-    ask: "get a worktree for the PR",
-    name: "worktree",
+    ask: "get a workspace for the PR",
+    name: "workspace",
     input: { ref: `${REPO}#148` },
-    output: { path: "/workspace/trees/pr-148", branch: "pr-148" },
-    reply: "Worktree ready — the engineer works there.",
+    output: { name: "pr-148", branch: "fix/sum-to-n" },
+    reply: "Workspace ready — the engineer works there.",
   });
   await openApp(page, threadPath("t-1"));
-  await expect(page.getByRole("main")).toContainText("Worktree ready");
+  await expect(page.getByRole("main")).toContainText("Workspace ready");
   // the pick rides the chat input of the agent being talked to
   const select = page
     .getByRole("main")
@@ -517,10 +519,13 @@ test("review: the diff", async ({ page, api }) => {
   await shot(page, "review-01-diff");
 });
 
-test("terminal: the thread's machine", async ({ page, api }) => {
+test("terminal: a workspace's machine", async ({ page, api }) => {
   seedWorld(api);
   await openApp(page, threadPath("t-1"));
-  await page.getByRole("button", { name: "new terminal" }).click();
+  await page
+    .getByRole("complementary", { name: "Thread state" })
+    .locator("[data-workspace='pr-148']")
+    .click();
   // the prompt's bytes land in ghostty's canvas, not the DOM — the
   // status line is the socket's proof of life
   await expect(page.getByRole("main")).toContainText("connected");

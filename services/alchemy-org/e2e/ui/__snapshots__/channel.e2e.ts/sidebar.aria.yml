@@ -1,5 +1,5 @@
 - navigation "Threads":
-  - button "# channel"
+  - button "Board"
   - text: Your turn
   - button "w-yours"
   - text: Agents working

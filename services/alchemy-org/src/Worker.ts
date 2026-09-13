@@ -31,6 +31,7 @@ import { routes } from "./Routes.ts";
 import { ArtifactsSandbox } from "./artifacts/ArtifactsSandbox.ts";
 import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
+import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
 import { MessageLive } from "./thread/Message.ts";
@@ -92,10 +93,19 @@ const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(SessionRepoLive),
 );
 
+/** The WORKSPACE — one session per workspace: the machine-owning
+ *  resource a thread's agents work in (its own MicroVM deployed, a
+ *  linked worktree in dev), the target of `/terminal/Workspace/…`. */
+const WorkspaceWorker = WorkspaceAgentLive.pipe(
+  Layer.provide(Checkouts),
+  Layer.provide(SandboxSession),
+);
+
 /** The THREAD AGENT — one session per thread, the task's whole
- *  conversation; governs its assigned refs, worktrees, subagents. */
+ *  conversation; governs its assigned refs, workspaces, subagents. */
 const ThreadWorker = Layer.suspend(() => ThreadAgentLive).pipe(
   Layer.provide(EngineerWorker),
+  Layer.provide(WorkspaceWorker),
   Layer.provide(MessageLive),
   Layer.provide(SessionRepoLive),
   Layer.provide(Checkouts),
@@ -144,13 +154,16 @@ const IngestWorker = ChannelEvents.pipe(
  * - GitHub       → `*Http` bindings + a REAL repository webhook; reads
  *                  for the review view are on demand, nothing mirrored;
  *                  agents write directly (push, open pull requests)
- * - the tools    → each thread's OWN machine (one sandbox per thread,
- *                  a worktree per pull request)
+ * - the tools    → WORKSPACES: each its own machine with the repo
+ *                  checked out (a MicroVM deployed, a linked worktree
+ *                  in dev); every agent of a thread works across the
+ *                  thread's whole bag of them
  */
 const Org = Layer.mergeAll(
   ChannelWorker,
   IngestWorker,
   EngineerWorker,
+  WorkspaceWorker,
   SandboxSession,
   PublishTokenLive,
 ).pipe(

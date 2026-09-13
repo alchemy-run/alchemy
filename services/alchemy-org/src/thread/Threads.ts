@@ -16,8 +16,11 @@ import { ThreadAgent } from "./ThreadAgent.ts";
  *
  * - the channel messages PLACED into it (the rows stay in the channel,
  *   tagged; the membership lives here),
- * - the GitHub issues and pulls assigned to it (refs + last-known state + the
- *   worktree each PR gets in the thread's one sandbox),
+ * - the GitHub issues and pulls assigned to it (refs + last-known state
+ *   + the workspace each PR gets),
+ * - the WORKSPACES it owns (each a machine with the repo checked out —
+ *   a MicroVM deployed, a linked worktree in dev; every agent of the
+ *   thread works across all of them),
  * - the subagent registry (who is running on whose brief),
  * - the meta the rail shows (name, title, status, turn).
  */
@@ -31,16 +34,30 @@ export interface Assignment {
   /** Last-known state (`open`, `closed`, `merged`) — GitHub's word. */
   readonly state: string;
   readonly title: string;
-  /** The named worktree in the thread's sandbox, once one exists. */
-  readonly worktree?: string;
+  /** The thread-local NAME of the pull request's workspace (`pr-832`),
+   *  once one exists. */
+  readonly workspace?: string;
+}
+
+/** A WORKSPACE of the thread — a machine with the repository checked
+ *  out, addressed by its thread-local name (`@<name>/…` in any agent's
+ *  paths; `Terms.workspaceKey` derives its session/machine key). */
+export interface ThreadWorkspace {
+  /** The thread-local name (`pr-832`, `scratch`). */
+  readonly name: string;
+  /** The branch its tree is on. */
+  readonly branch: string;
 }
 
 export interface Subagent {
-  /** The full session key (`t-<id>::<slug>`) — attach/terminal address. */
+  /** The full session key (`t-<id>::<slug>`) — the attach address. */
   readonly key: string;
   readonly kind: "engineer";
   readonly brief: string;
-  readonly cwd?: string;
+  /** The DEFAULT workspace the engineer was handed (a name in
+   *  `workspaces`) — where its relative paths land. Not a wall: every
+   *  agent reaches every workspace as `@<name>/…`. */
+  readonly workspace?: string;
   readonly state: "running" | "done" | "failed" | "stopped";
   readonly startedAt: number;
   readonly settledAt?: number;
@@ -63,6 +80,8 @@ export interface ThreadState {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly assigned: ReadonlyArray<Assignment>;
+  /** The thread's workspaces, oldest first. */
+  readonly workspaces: ReadonlyArray<ThreadWorkspace>;
   readonly agents: ReadonlyArray<Subagent>;
   /** Channel message ids placed into this thread, oldest first. */
   readonly members: ReadonlyArray<string>;
@@ -134,7 +153,7 @@ export class Threads extends Context.Service<
       messageIds: ReadonlyArray<string>,
     ) => Effect.Effect<ThreadState, never, RuntimeContext>;
     /** ASSIGN issues / pull requests to the thread — it governs them
-     *  from now on: their events route here; each pull gets a worktree. */
+     *  from now on: their events route here; each pull gets a workspace. */
     readonly assign: (
       id: string,
       assigned: ReadonlyArray<{
@@ -223,18 +242,19 @@ export class Threads extends Context.Service<
      * 1. the thread agent's own session — settled, its round cut (a
      *    `spawn` mid-await dies here, so no waiter re-records an agent);
      * 2. from INSIDE the thread (`ThreadAgent.teardown`): EVERY
-     *    session descended from it, machine spared (they shared the
-     *    thread's) — the engineers its subagents name AND whatever the
-     *    session index's parent edges reach beyond them, each settled
-     *    and its round cut, so an engineer mid-command stops before a
-     *    tree it writes into goes; then its pull requests' worktrees on
-     *    that machine; then every channel projection — the directory
-     *    row, the `ref → thread` ownership of its assigned refs, the
-     *    placed tags on its members (the channel rows themselves stay;
-     *    they are the channel's history) — and the state;
-     * 3. the session itself, machine and all. Last, so the thread
-     *    reads as "deleting" until everything under it is actually
-     *    gone.
+     *    session descended from it — the engineers its subagents name
+     *    AND whatever the session index's parent edges reach beyond
+     *    them, each settled and its round cut, so an engineer
+     *    mid-command stops before a tree it writes into goes (the
+     *    engineers own no machines — their calls route to workspaces);
+     *    then every WORKSPACE — its checkout released and its session
+     *    removed MACHINE AND ALL (each workspace owns one); then every
+     *    channel projection — the directory row, the `ref → thread`
+     *    ownership of its assigned refs, the placed tags on its
+     *    members (the channel rows themselves stay; they are the
+     *    channel's history) — and the state;
+     * 3. the session itself. Last, so the thread reads as "deleting"
+     *    until everything under it is actually gone.
      *
      * Answers the last snapshot; `undefined` when the thread never
      * existed. Idempotent.
@@ -246,12 +266,12 @@ export class Threads extends Context.Service<
 >()("alchemy-org/Threads") {}
 
 export { THREAD_TERM } from "./ThreadAgent.ts";
-
-/** The `Git.Checkouts` key of a pull request's worktree on a thread's
- *  machine — minted by the thread agent's `worktree` tool, released
- *  when the thread is deleted. */
-export const pullWorktreeKey = (threadId: string, number: number): string =>
-  `${threadId}--pr-${number}`;
+export {
+  WORKSPACE_TERM,
+  pullWorkspaceName,
+  workspaceKey,
+  workspaceName,
+} from "./Terms.ts";
 
 /** Mint a thread id from its name (stable, readable, collision-safe). */
 export const mintThreadId = (name: string): string =>

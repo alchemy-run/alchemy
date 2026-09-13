@@ -191,7 +191,7 @@ const state = AI.Thing(
         kind: S.Literals(["issue", "pull"]),
         state: S.String,
         title: S.String,
-        worktree: S.optionalKey(S.String),
+        workspace: S.optionalKey(S.String),
       }),
     ),
     agents: S.Array(

@@ -1,14 +1,14 @@
 /**
  * The APP — a thin shell over three surfaces: the CHANNEL (the org's
  * one stream), THREADS (each a task: its agent conversation + state
- * pane + reviews + terminals), and the sidebar directory. Visited
- * views stay mounted; the channel stream is one socket for the whole
- * app.
+ * pane + reviews + workspace terminals), and the sidebar directory.
+ * Visited views stay mounted; the channel stream is one socket for the
+ * whole app.
  */
 
 import { AppHeader } from "@/components/app-header";
 import { BoardPage } from "@/components/board";
-import { ChannelView, EventsRail, ThreadList } from "@/components/channel";
+import { ChannelView, ThreadList } from "@/components/channel";
 import { confirm, Confirmer } from "@/components/confirm";
 import { Rail } from "@/components/rail";
 import { ThreadView } from "@/components/thread";
@@ -22,7 +22,7 @@ import {
   pathOf,
   reviewPath,
   routeFromLocation,
-  terminalPath,
+  workspacePath,
   threadPath,
   type Route,
   type ThreadTab,
@@ -31,19 +31,7 @@ import { cn } from "@/lib/utils";
 import { NotificationRow } from "@/components/notification";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-/* ── per-thread terminals (local, remembered) ─────────────────────── */
-
-const TERMINALS_KEY = "alchemy-org:terminals";
 const BELL_SEEN_KEY = "alchemy-org:bell-seen";
-
-const readTerminals = (): Record<string, string[]> => {
-  try {
-    const raw = localStorage.getItem(TERMINALS_KEY);
-    return raw === null ? {} : (JSON.parse(raw) as Record<string, string[]>);
-  } catch {
-    return {};
-  }
-};
 
 /* ── one mounted thread ───────────────────────────────────────────── */
 
@@ -51,20 +39,14 @@ const ThreadPage = ({
   id,
   tab,
   active,
-  terminals,
   onTab,
-  onNewTerminal,
-  onCloseTerminal,
   deleting,
   onDeleteThread,
 }: {
   id: string;
   tab: ThreadTab;
   active: boolean;
-  terminals: ReadonlyArray<string>;
   onTab: (tab: ThreadTab) => void;
-  onNewTerminal: () => void;
-  onCloseTerminal: (pty: string) => void;
   /** The thread's DELETE is in flight. */
   deleting: boolean;
   /** The pane's "Delete thread" — the shell confirms and erases. */
@@ -88,10 +70,7 @@ const ThreadPage = ({
       missing={missing}
       tab={tab}
       active={active}
-      terminals={terminals}
       onTab={onTab}
-      onNewTerminal={onNewTerminal}
-      onCloseTerminal={onCloseTerminal}
       onCloseThread={onCloseThread}
       onReopenThread={onReopenThread}
       deleting={deleting}
@@ -130,31 +109,19 @@ export const App = () => {
     setTabs((current) => ({ ...current, [id]: tab }));
   }, [route]);
 
-  // terminals per thread — the operator's ptys, remembered locally
-  const [terminals, setTerminals] =
-    useState<Record<string, string[]>>(readTerminals);
-  const rememberTerminals = (next: Record<string, string[]>) => {
-    setTerminals(next);
-    try {
-      localStorage.setItem(TERMINALS_KEY, JSON.stringify(next));
-    } catch {
-      // storage disabled — the ptys still work, unremembered
-    }
-  };
-
   const openThread = useCallback((id: string) => {
     navigate(threadPath(id));
   }, []);
 
   // DELETE threads — one from its pane, one or a selection from the
   // sidebar's menu. Destructive and unrecoverable (the transcript, the
-  // subagents, the machine), so one confirm stands between the click
-  // and the erase. Afterwards each page is forgotten (its sockets
-  // close with it), so are the ptys it opened (the machine is gone),
-  // and a view that was ON a deleted thread falls back to the channel.
-  // threads whose DELETE is in flight — the server tears down agents,
-  // worktrees, and the machine before it answers, and the row stays
-  // in the directory until then; these render as "deleting"
+  // subagents, the workspaces with their machines), so one confirm
+  // stands between the click and the erase. Afterwards each page is
+  // forgotten (its sockets close with it) and a view that was ON a
+  // deleted thread falls back to the channel.
+  // threads whose DELETE is in flight — the server tears down agents
+  // and workspaces before it answers, and the row stays in the
+  // directory until then; these render as "deleting"
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -189,15 +156,6 @@ export const App = () => {
               done(id);
               if (!ok) return;
               setVisited((current) => current.filter((entry) => entry !== id));
-              setTerminals((current) => {
-                const { [id]: _dropped, ...rest } = current;
-                try {
-                  localStorage.setItem(TERMINALS_KEY, JSON.stringify(rest));
-                } catch {
-                  // storage disabled — nothing to forget
-                }
-                return rest;
-              });
               if (route.kind === "thread" && route.id === id) {
                 navigate(pathOf({ kind: "channel" }));
               }
@@ -374,11 +332,6 @@ export const App = () => {
                 onOpenReview={openReview}
               />
             </Rail>
-            <EventsRail
-              messages={messages}
-              directory={directory}
-              onOpenThread={openThread}
-            />
           </div>
           {/* visited threads stay mounted */}
           {visited.map((id) => {
@@ -395,7 +348,6 @@ export const App = () => {
                   id={id}
                   tab={tabs[id] ?? { kind: "chat" }}
                   active={activeThread}
-                  terminals={terminals[id] ?? []}
                   onTab={(tab) => {
                     setTabs((current) => ({ ...current, [id]: tab }));
                     navigate(
@@ -405,35 +357,8 @@ export const App = () => {
                           ? reviewPath(id, tab.owner, tab.repo, tab.number)
                           : tab.kind === "agent"
                             ? agentPath(id, tab.key)
-                            : terminalPath(id, tab.pty),
+                            : workspacePath(id, tab.name),
                     );
-                  }}
-                  onNewTerminal={() => {
-                    const pty = crypto.randomUUID().slice(0, 8);
-                    rememberTerminals({
-                      ...terminals,
-                      [id]: [...(terminals[id] ?? []), pty],
-                    });
-                    setTabs((current) => ({
-                      ...current,
-                      [id]: { kind: "terminal", pty },
-                    }));
-                    navigate(terminalPath(id, pty));
-                  }}
-                  onCloseTerminal={(pty) => {
-                    rememberTerminals({
-                      ...terminals,
-                      [id]: (terminals[id] ?? []).filter(
-                        (entry) => entry !== pty,
-                      ),
-                    });
-                    // closing a BACKGROUND terminal tab keeps the view
-                    // where it is; only the active one falls back
-                    const current = tabs[id];
-                    if (current?.kind === "terminal" && current.pty === pty) {
-                      setTabs((state) => ({ ...state, [id]: { kind: "chat" } }));
-                      navigate(threadPath(id));
-                    }
                   }}
                   deleting={deleting.has(id)}
                   onDeleteThread={() => removeThreads([id])}

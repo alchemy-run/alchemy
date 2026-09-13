@@ -1,12 +1,12 @@
 /**
  * The app's URLs — the channel is home, threads are pages, and a
- * thread's review/terminal are sub-paths. Nothing else routes.
+ * thread's review/workspace are sub-paths. Nothing else routes.
  *
  * ```
  * /                                         the channel
  * /threads/{id}                             a thread (its conversation)
  * /threads/{id}/{owner}/{repo}/pull/{n}     … a pull request's review
- * /threads/{id}/terminal/{pty}              … a terminal on its machine
+ * /threads/{id}/workspace/{name}            … a workspace's terminal
  * /threads/{id}/agent/{key}                 … a subagent's session
  * ```
  */
@@ -15,7 +15,7 @@
 export type ThreadTab =
   | { kind: "chat" }
   | { kind: "review"; owner: string; repo: string; number: number }
-  | { kind: "terminal"; pty: string }
+  | { kind: "workspace"; name: string }
   | { kind: "agent"; key: string };
 
 export type Route =
@@ -50,8 +50,8 @@ export const reviewPath = (
 ): string =>
   `${threadPath(id)}/${segment(owner)}/${segment(repo)}/pull/${number}`;
 
-export const terminalPath = (id: string, pty: string): string =>
-  `${threadPath(id)}/terminal/${segment(pty)}`;
+export const workspacePath = (id: string, name: string): string =>
+  `${threadPath(id)}/workspace/${segment(name)}`;
 
 export const agentPath = (id: string, key: string): string =>
   `${threadPath(id)}/agent/${segment(key)}`;
@@ -69,8 +69,8 @@ export const pathOf = (route: Route): string => {
         route.tab.repo,
         route.tab.number,
       );
-    case "terminal":
-      return terminalPath(route.id, route.tab.pty);
+    case "workspace":
+      return workspacePath(route.id, route.tab.name);
     case "agent":
       return agentPath(route.id, route.tab.key);
   }
@@ -86,8 +86,8 @@ export const routeOf = (pathname: string): Route => {
   const id = parts[1];
   const rest = parts.slice(2);
   if (rest.length === 0) return { kind: "thread", id, tab: { kind: "chat" } };
-  if (rest.length === 2 && rest[0] === "terminal") {
-    return { kind: "thread", id, tab: { kind: "terminal", pty: rest[1]! } };
+  if (rest.length === 2 && rest[0] === "workspace") {
+    return { kind: "thread", id, tab: { kind: "workspace", name: rest[1]! } };
   }
   if (rest.length === 2 && rest[0] === "agent") {
     return { kind: "thread", id, tab: { kind: "agent", key: rest[1]! } };

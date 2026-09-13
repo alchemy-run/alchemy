@@ -7,22 +7,26 @@ import type * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { machineKey } from "../thread/Terms.ts";
 import { CheckoutsSandbox } from "./CheckoutsSandbox.ts";
-import { CheckoutsWorktree } from "./CheckoutsWorktree.ts";
-import { SandboxCheckout } from "./SandboxCheckout.ts";
+import { CheckoutsWorkspace } from "./CheckoutsWorkspace.ts";
+import { WorkspaceRouter } from "./WorkspaceRouter.ts";
 import {
   SANDBOX_DEV_PORT,
   SANDBOX_URL_KEY,
-  SandboxWorktree,
-  machineKey,
-} from "./SandboxWorktree.ts";
+  SandboxDev,
+} from "./SandboxDev.ts";
 import { SessionRepoLive } from "../github/SessionRepo.ts";
 
 /**
- * Deployed: each session's own AWS Lambda MicroVM (Firecracker) launched
- * from the shared image (`SandboxMicrovm.ts`), driven cross-cloud from
- * this Worker (the HTTP/token binding impls mint an IAM user +
- * assume-role for it).
+ * Deployed: one AWS Lambda MicroVM (Firecracker) PER WORKSPACE (and per
+ * standalone coder session), launched from the shared image
+ * (`SandboxMicrovm.ts`), driven cross-cloud from this Worker (the
+ * HTTP/token binding impls mint an IAM user + assume-role for it).
+ * `machineKey` (Terms.ts) is what makes a workspace a machine: every
+ * session key inside `t-x::ws-pr-7` addresses that one VM; a thread's
+ * agents themselves own NO machine — their calls are routed per
+ * workspace by `WorkspaceRouter`.
  */
 const SandboxMicrovm = AWS.AI.SandboxMicrovmSession({ machineKey }).pipe(
   Layer.provide(
@@ -40,12 +44,14 @@ const SandboxMicrovm = AWS.AI.SandboxMicrovmSession({ machineKey }).pipe(
   ),
 );
 
-/** The machine plus git over it — ONE build per machine so the
- *  toolbox, the spill store, the checkout, and the terminal door all
+/** The machines plus git over them — ONE build per placement so the
+ *  toolbox, the spill store, the workspaces, and the terminal door all
  *  land on the same registry. The `AI.Sandbox` handed out is the
- *  CONVERGING one (`SandboxCheckout`): the session's tree lands on the
- *  machine the first time anything touches it, never at INIT. Git
- *  itself runs over the raw machine — it IS the converge. */
+ *  ROUTER (`WorkspaceRouter`): every call resolves WHICH workspace it
+ *  addresses (an explicit `@name/…`, the session's default, a
+ *  standalone session's implicit tree) and lands on that workspace's
+ *  machine — there is no machine root to fall back to. Git itself runs
+ *  over the raw machines — it IS the converge. */
 const machine = <R>(
   sandbox: Layer.Layer<AI.Sandbox, never, R>,
   checkouts: Layer.Layer<Git.Checkouts, never, AI.Sandbox>,
@@ -55,17 +61,17 @@ const machine = <R>(
   R | GitHub.GetPullRequest
 > => {
   const git = checkouts.pipe(Layer.provide(sandbox));
-  const converging = SandboxCheckout.pipe(
+  const routed = WorkspaceRouter.pipe(
     Layer.provide(Layer.mergeAll(sandbox, git, SessionRepoLive)),
   );
-  return Layer.mergeAll(converging, git);
+  return Layer.mergeAll(routed, git);
 };
 
 /**
- * Each session's own machine (`AI.Sandbox`) and git over it
- * (`Git.Checkouts`), resolved at CALL time from the session. WHICH
- * machine is decided ONCE, at layer build, from the world the code runs
- * in:
+ * Each session's view of its workspaces (`AI.Sandbox`, the router) and
+ * git over the machines (`Git.Checkouts`), resolved at CALL time from
+ * the session. WHICH physics is decided ONCE, at layer build, from the
+ * world the code runs in:
  *
  * - **plan** (the CLI evaluating the Worker): `AlchemyContext.dev`
  *   picks — a deploy binds the MicroVM operations onto the Worker; a
@@ -106,11 +112,11 @@ export const SandboxSession = Layer.unwrap(
         env: { PORT: String(SANDBOX_DEV_PORT) },
       });
       yield* runtime.set(SANDBOX_URL_KEY, server.url);
-      return machine(SandboxWorktree(url), CheckoutsWorktree);
+      return machine(SandboxDev(url), CheckoutsWorkspace(url));
     }
 
     return (yield* url) === undefined
       ? machine(SandboxMicrovm, CheckoutsSandbox)
-      : machine(SandboxWorktree(url), CheckoutsWorktree);
+      : machine(SandboxDev(url), CheckoutsWorkspace(url));
   }),
 );
