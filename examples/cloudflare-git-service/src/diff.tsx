@@ -24,7 +24,7 @@ export const DIFF_THEMES = {
 } as const;
 
 /** Memoized options for `<FileDiff>`: unified view, app-owned header. */
-export const useFileDiffOptions = (): FileDiffOptions<undefined> => {
+export const useFileDiffOptions = (): FileDiffOptions<undefined, undefined> => {
   const { resolved } = useTheme();
   return useMemo(
     () => ({
@@ -38,7 +38,7 @@ export const useFileDiffOptions = (): FileDiffOptions<undefined> => {
 };
 
 /** Memoized options for `<File>` (plain blob view, app-owned header). */
-export const useFileOptions = (): FileOptions<undefined> => {
+export const useFileOptions = (): FileOptions<undefined, undefined> => {
   const { resolved } = useTheme();
   return useMemo(
     () => ({
