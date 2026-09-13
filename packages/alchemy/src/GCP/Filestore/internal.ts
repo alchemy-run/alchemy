@@ -1,6 +1,6 @@
 import * as file from "@distilled.cloud/gcp/file_v1";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -13,28 +13,20 @@ export const DEFAULT_ZONE = "us-central1-a";
 export const DEFAULT_SHARE_NAME = "share1";
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Filestore.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Filestore.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.Filestore.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.Filestore.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.Filestore.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.Filestore.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.Filestore.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.Filestore.ResourceFailed")<{
   name: string;
   state: string;
 }> {}
@@ -59,10 +51,8 @@ export const rfc1035 = (name: string, fallback = "filestore"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const regionOf = (location: string) => {
   const parts = location.split("-");
@@ -92,26 +82,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -133,14 +113,11 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -191,10 +168,7 @@ export const isDeletingState = (state: string | undefined) =>
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */
-export const waitForOperation = (
-  operation: file.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+export const waitForOperation = (operation: file.Operation, options?: { notFoundOk?: boolean }) =>
   Effect.suspend(() => {
     let latest = operation;
     return waitForLongRunningOperation(
@@ -278,11 +252,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
   stateOf: (value: NonNullable<A>) => string | undefined,
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceFailed | ResourceNotReady,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceFailed | ResourceNotReady, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,

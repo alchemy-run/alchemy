@@ -70,9 +70,7 @@ export default class BucketApi extends Fly.Service<BucketApi>()(
           const text =
             obj.Body === undefined
               ? ""
-              : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(
-                  Effect.orDie,
-                );
+              : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             ok: text === OBJECT_BODY,
             text,

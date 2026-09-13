@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create and delete ai gateway with default props",
@@ -47,24 +44,14 @@ test.provider(
       expect(gateway.rateLimitingLimit).toEqual(null);
       expect(gateway.rateLimitingTechnique).toEqual("fixed");
 
-      const actualGateway = yield* aiGateway.getAiGateway({
-        accountId,
-        id: gateway.gatewayId,
-      });
+      const actualGateway = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
       expect(actualGateway.id).toEqual(gateway.gatewayId);
 
       yield* stack.destroy();
 
       yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
 test.provider(
@@ -88,10 +75,7 @@ test.provider(
         }),
       );
 
-      const actualGateway = yield* aiGateway.getAiGateway({
-        accountId,
-        id: gateway.gatewayId,
-      });
+      const actualGateway = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
       expect(actualGateway.id).toEqual(gateway.gatewayId);
       expect(actualGateway.cacheTtl).toEqual(60);
       expect(actualGateway.rateLimitingLimit).toEqual(100);
@@ -122,14 +106,7 @@ test.provider(
 
       yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
 // Per-gateway spend limits replace the deprecated account-level spending
@@ -161,10 +138,7 @@ test.provider(
       expect(gateway.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
       expect(gateway.spendLimits?.rules?.[0]?.window).toEqual(86_400);
 
-      const live = yield* aiGateway.getAiGateway({
-        accountId,
-        id: gateway.gatewayId,
-      });
+      const live = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
       expect(live.spendLimits?.enabled).toEqual(true);
       expect(live.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
       expect(live.spendLimits?.rules?.[0]?.window).toEqual(86_400);
@@ -198,24 +172,14 @@ test.provider(
       );
       expect(updated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
 
-      const liveUpdated = yield* aiGateway.getAiGateway({
-        accountId,
-        id: gateway.gatewayId,
-      });
+      const liveUpdated = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
       expect(liveUpdated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
       expect(liveUpdated.spendLimits?.rules?.[0]?.window).toEqual(3_600);
 
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
 test.provider(
@@ -228,9 +192,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AI.Gateway("ListGateway", {
-            id: gatewayId,
-          });
+          return yield* Cloudflare.AI.Gateway("ListGateway", { id: gatewayId });
         }),
       );
 
@@ -242,14 +204,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(deployed.gatewayId, deployed.accountId);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
 // Engine-level adoption: AI Gateways have no ownership signal (Cloudflare
@@ -278,11 +233,7 @@ test.provider(
       // Phase 2: wipe local state — the gateway stays on Cloudflare.
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableGateway",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableGateway" });
       }).pipe(Effect.provide(stack.state));
 
       // Phase 3: redeploy without `adopt(true)`. The engine calls
@@ -290,9 +241,7 @@ test.provider(
       // attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AI.Gateway("AdoptableGateway", {
-            id: gatewayId,
-          });
+          return yield* Cloudflare.AI.Gateway("AdoptableGateway", { id: gatewayId });
         }),
       );
 
@@ -300,11 +249,7 @@ test.provider(
 
       const persisted = yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        return yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableGateway",
-        });
+        return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "AdoptableGateway" });
       }).pipe(Effect.provide(stack.state));
 
       expect((persisted as any)?.attr).toMatchObject({ gatewayId });
@@ -312,50 +257,29 @@ test.provider(
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(gatewayId, accountId);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
-const waitForGatewayToBeDeleted = Effect.fn(function* (
-  gatewayId: string,
-  accountId: string,
-) {
-  yield* aiGateway
-    .getAiGateway({
-      accountId,
-      id: gatewayId,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new GatewayStillExists())),
-      Effect.retry({
-        while: (e): e is GatewayStillExists => e instanceof GatewayStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("GatewayNotFound", () => Effect.void),
-    );
+const waitForGatewayToBeDeleted = Effect.fn(function* (gatewayId: string, accountId: string) {
+  yield* aiGateway.getAiGateway({ accountId, id: gatewayId }).pipe(
+    Effect.flatMap(() => Effect.fail(new GatewayStillExists())),
+    Effect.retry({
+      while: (e): e is GatewayStillExists => e instanceof GatewayStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("GatewayNotFound", () => Effect.void),
+  );
 });
 
 class GatewayStillExists extends Data.TaggedError("GatewayStillExists") {}
 
 const Stack = Alchemy.Stack(
   "AiGatewayBindingStack",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const gateway = yield* Gateway;
     const worker = yield* TestWorker;
-    return {
-      gatewayId: gateway.gatewayId,
-      url: worker.url.as<string>(),
-    };
+    return { gatewayId: gateway.gatewayId, url: worker.url.as<string>() };
   }),
 );
 
@@ -378,10 +302,7 @@ test(
           ? Effect.succeed(res)
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
     );
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { url: string };
@@ -391,12 +312,7 @@ test(
     expect(body.url).toContain("gateway.ai.cloudflare.com");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );

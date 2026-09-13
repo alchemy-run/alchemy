@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import path from "pathe";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
@@ -85,10 +85,7 @@ export default SecurityLakeBindingsFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        SecurityLake.ListDataLakeExceptionsHttp,
-        SecurityLake.GetDataLakeSourcesHttp,
-      ),
+      Layer.mergeAll(SecurityLake.ListDataLakeExceptionsHttp, SecurityLake.GetDataLakeSourcesHttp),
     ),
   ),
 );

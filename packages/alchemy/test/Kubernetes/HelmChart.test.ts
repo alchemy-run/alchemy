@@ -5,16 +5,11 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import * as Kubernetes from "@/Kubernetes";
-import {
-  parseRenderedManifests,
-  renderHelmChart,
-} from "@/Kubernetes/internal/helm.ts";
+import { parseRenderedManifests, renderHelmChart } from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
-const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
-};
+const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
 const { test } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
@@ -67,9 +62,10 @@ describe("renderHelmChart (local fixture)", (it) => {
           values: { secondConfigMap: { enabled: true } },
         });
         expect(withSecond).toHaveLength(2);
-        expect(withSecond.map((object) => object.metadata.name).sort()).toEqual(
-          ["probe-config", "probe-second"],
-        );
+        expect(withSecond.map((object) => object.metadata.name).sort()).toEqual([
+          "probe-config",
+          "probe-second",
+        ]);
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
@@ -88,9 +84,7 @@ describe("renderHelmChart (local fixture)", (it) => {
           namespace: "demo",
         });
         expect(objects.map((object) => object.kind)).not.toContain("Job");
-        expect(objects.map((object) => object.metadata.name)).toEqual([
-          "probe-config",
-        ]);
+        expect(objects.map((object) => object.metadata.name)).toEqual(["probe-config"]);
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
@@ -136,14 +130,7 @@ metadata:
         expect(objects[0]?.kind).toBe("ConfigMap");
         expect(objects[0]?.metadata.name).toBe("example");
       }),
-    {
-      tags: [
-        "unit",
-        "provider:kubernetes",
-        "provider:kubernetes:helmchart",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 
   it.effect(
@@ -173,18 +160,9 @@ metadata:
 `,
         );
 
-        expect(objects.map((object) => object.metadata.name)).toEqual([
-          "ordinary",
-        ]);
+        expect(objects.map((object) => object.metadata.name)).toEqual(["ordinary"]);
       }),
-    {
-      tags: [
-        "unit",
-        "provider:kubernetes",
-        "provider:kubernetes:helmchart",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 
   it.effect(
@@ -205,14 +183,7 @@ Digest: sha256:0123456789abcdef
           expect(result.failure._tag).toBe("HelmError");
         }
       }),
-    {
-      tags: [
-        "unit",
-        "provider:kubernetes",
-        "provider:kubernetes:helmchart",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 
   it.effect(
@@ -238,14 +209,7 @@ Digest: sha256:0123456789abcdef
           expect(result.failure._tag).toBe("HelmError");
         }
       }),
-    {
-      tags: [
-        "unit",
-        "provider:kubernetes",
-        "provider:kubernetes:helmchart",
-        "local",
-      ],
-    },
+    { tags: ["unit", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
 });
 
@@ -263,12 +227,5 @@ test.provider(
       expect(Array.isArray(all)).toBe(true);
       expect(all).toEqual([]);
     }),
-  {
-    tags: [
-      "provider:aws",
-      "provider:kubernetes",
-      "provider:kubernetes:helmchart",
-      "local",
-    ],
-  },
+  { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
 );

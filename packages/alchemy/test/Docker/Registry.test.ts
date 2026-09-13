@@ -15,9 +15,7 @@ describe(
     });
 
     it("keeps the registry host and path", () => {
-      expect(repositoryFromImageRef("ghcr.io/acme/app:latest")).toBe(
-        "ghcr.io/acme/app",
-      );
+      expect(repositoryFromImageRef("ghcr.io/acme/app:latest")).toBe("ghcr.io/acme/app");
     });
 
     it("does not confuse a registry port for a tag", () => {
@@ -45,29 +43,23 @@ describe(
   { tags: ["unit", "provider:docker", "provider:docker:registry", "local"] },
   () => {
     it("prefixes a bare reference with the registry host", () => {
-      expect(withRegistryHost("app:latest", { server: "ghcr.io" })).toBe(
-        "ghcr.io/app:latest",
-      );
+      expect(withRegistryHost("app:latest", { server: "ghcr.io" })).toBe("ghcr.io/app:latest");
     });
 
     it("trims a trailing slash from the server", () => {
-      expect(withRegistryHost("app:latest", { server: "ghcr.io/" })).toBe(
-        "ghcr.io/app:latest",
-      );
+      expect(withRegistryHost("app:latest", { server: "ghcr.io/" })).toBe("ghcr.io/app:latest");
     });
 
     it("leaves a reference that already has a dotted-host prefix", () => {
-      expect(
-        withRegistryHost("registry.example.com/app:latest", {
-          server: "ghcr.io",
-        }),
-      ).toBe("registry.example.com/app:latest");
+      expect(withRegistryHost("registry.example.com/app:latest", { server: "ghcr.io" })).toBe(
+        "registry.example.com/app:latest",
+      );
     });
 
     it("leaves a localhost:port reference untouched", () => {
-      expect(
-        withRegistryHost("localhost:5000/app:latest", { server: "ghcr.io" }),
-      ).toBe("localhost:5000/app:latest");
+      expect(withRegistryHost("localhost:5000/app:latest", { server: "ghcr.io" })).toBe(
+        "localhost:5000/app:latest",
+      );
     });
   },
 );
@@ -88,9 +80,7 @@ describe(
     });
 
     it("returns undefined when no digest is present", () => {
-      expect(parseRepoDigest("app:latest", "Pushed without a digest")).toBe(
-        undefined,
-      );
+      expect(parseRepoDigest("app:latest", "Pushed without a digest")).toBe(undefined);
     });
   },
 );
@@ -117,9 +107,7 @@ describe(
 
     it("falls back to the wall clock for the year-1 zero value", () => {
       const before = Date.now();
-      expect(parseCreatedAt("0001-01-01T00:00:00Z")).toBeGreaterThanOrEqual(
-        before,
-      );
+      expect(parseCreatedAt("0001-01-01T00:00:00Z")).toBeGreaterThanOrEqual(before);
     });
   },
 );

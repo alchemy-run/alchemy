@@ -76,13 +76,7 @@ export interface SettingsAttributes {
   initialUseConnectionUrlPath: boolean;
 }
 
-export type Settings = Resource<
-  TypeId,
-  SettingsProps,
-  SettingsAttributes,
-  never,
-  Providers
->;
+export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never, Providers>;
 
 /**
  * The Page Shield configuration of a Cloudflare zone
@@ -199,9 +193,7 @@ export const SettingsProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* pageShield.getPageShield({ zoneId });
       // The configuration is a singleton that always exists with a
@@ -212,8 +204,7 @@ export const SettingsProvider = () =>
         output !== undefined
           ? {
               enabled: output.initialEnabled,
-              useCloudflareReportingEndpoint:
-                output.initialUseCloudflareReportingEndpoint,
+              useCloudflareReportingEndpoint: output.initialUseCloudflareReportingEndpoint,
               useConnectionUrlPath: output.initialUseConnectionUrlPath,
             }
           : observed;
@@ -235,8 +226,7 @@ export const SettingsProvider = () =>
         output !== undefined
           ? {
               enabled: output.initialEnabled,
-              useCloudflareReportingEndpoint:
-                output.initialUseCloudflareReportingEndpoint,
+              useCloudflareReportingEndpoint: output.initialUseCloudflareReportingEndpoint,
               useConnectionUrlPath: output.initialUseConnectionUrlPath,
             }
           : observed;
@@ -257,8 +247,7 @@ export const SettingsProvider = () =>
       const { zoneId } = output;
       const initial: DesiredSettings = {
         enabled: output.initialEnabled,
-        useCloudflareReportingEndpoint:
-          output.initialUseCloudflareReportingEndpoint,
+        useCloudflareReportingEndpoint: output.initialUseCloudflareReportingEndpoint,
         useConnectionUrlPath: output.initialUseConnectionUrlPath,
       };
       // Observe, then restore the pre-management flags; skip the call

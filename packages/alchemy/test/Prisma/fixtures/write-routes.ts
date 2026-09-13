@@ -33,9 +33,7 @@ export const writeRoutes = (
       const object = yield* store
         .put(key, body, {
           contentType: url.searchParams.get("contentType") ?? undefined,
-          metadata: metaKey
-            ? { [metaKey]: url.searchParams.get("metaValue") ?? "" }
-            : undefined,
+          metadata: metaKey ? { [metaKey]: url.searchParams.get("metaValue") ?? "" } : undefined,
         })
         .pipe(Effect.orDie);
       return yield* HttpServerResponse.json({ ok: true, key: object.key });
@@ -46,9 +44,7 @@ export const writeRoutes = (
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (request.method === "DELETE" && url.pathname === "/del-many") {
-      const keys = (url.searchParams.get("keys") ?? "")
-        .split(",")
-        .filter((k) => k.length > 0);
+      const keys = (url.searchParams.get("keys") ?? "").split(",").filter((k) => k.length > 0);
       yield* store.delete(keys).pipe(Effect.orDie);
       return yield* HttpServerResponse.json({ ok: true });
     }

@@ -49,9 +49,7 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObject<ChatBack
           persistence.getOrCreate("thread").pipe(
             // `streamText` on a persisted chat saves the appended turn
             // back to `state.storage` when the stream finalizes.
-            Effect.map((chat) =>
-              chat.streamText({ prompt }).pipe(Stream.provide(languageModel)),
-            ),
+            Effect.map((chat) => chat.streamText({ prompt }).pipe(Stream.provide(languageModel))),
             Stream.unwrap,
             Stream.orDie,
           ),

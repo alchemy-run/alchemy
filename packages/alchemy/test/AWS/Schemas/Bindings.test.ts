@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "SchemasBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -39,31 +36,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "Schemas Bindings",
@@ -79,9 +67,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Schemas test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Schemas test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Schemas test setup: deploying fixture");
@@ -96,21 +82,15 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Schemas test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Schemas test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Schemas test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Schemas test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -118,20 +98,14 @@ describe.sequential(
       { timeout: 240_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 120_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 120_000 });
 
     describe("binding registration", () => {
-      test.provider(
-        "all ten capabilities initialize in the runtime",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/bindings")) as {
-              bound: string[];
-            };
-            expect(response.bound).toHaveLength(10);
-          }),
+      test.provider("all ten capabilities initialize in the runtime", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/bindings")) as { bound: string[] };
+          expect(response.bound).toHaveLength(10);
+        }),
       );
     });
 
@@ -155,29 +129,22 @@ describe.sequential(
     });
 
     describe("ExportSchema", () => {
-      test.provider(
-        "surfaces the typed ForbiddenException for custom-registry schemas",
-        (_stack) =>
-          Effect.gen(function* () {
-            // AWS only allows exporting discovered / AWS-managed schemas. The
-            // call reaching the API and failing with the typed tag proves the
-            // binding + IAM wiring end-to-end.
-            const response = (yield* getJson("/export")) as {
-              outcome: string;
-              message?: string;
-            };
-            expect(response.outcome).toBe("forbidden");
-            expect(response.message).toContain("export");
-          }),
+      test.provider("surfaces the typed ForbiddenException for custom-registry schemas", (_stack) =>
+        Effect.gen(function* () {
+          // AWS only allows exporting discovered / AWS-managed schemas. The
+          // call reaching the API and failing with the typed tag proves the
+          // binding + IAM wiring end-to-end.
+          const response = (yield* getJson("/export")) as { outcome: string; message?: string };
+          expect(response.outcome).toBe("forbidden");
+          expect(response.message).toContain("export");
+        }),
       );
     });
 
     describe("ListSchemaVersions", () => {
       test.provider("lists the schema's single published version", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/versions")) as {
-            versions: string[];
-          };
+          const response = (yield* getJson("/versions")) as { versions: string[] };
           expect(response.versions).toContain("1");
         }),
       );
@@ -206,9 +173,7 @@ describe.sequential(
     describe("GetDiscoveredSchema", () => {
       test.provider("infers a schema from a sample event envelope", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/discover")) as {
-            hasContent: boolean;
-          };
+          const response = (yield* postJson("/discover")) as { hasContent: boolean };
           expect(response.hasContent).toBe(true);
         }),
       );
@@ -221,9 +186,7 @@ describe.sequential(
           Effect.gen(function* () {
             // Kick off async generation.
             const put = (yield* postJson("/codebinding")) as { status: string };
-            expect(["CREATE_IN_PROGRESS", "CREATE_COMPLETE"]).toContain(
-              put.status,
-            );
+            expect(["CREATE_IN_PROGRESS", "CREATE_COMPLETE"]).toContain(put.status);
 
             // Poll until generation completes (usually well under 30s).
             const status = yield* getJson("/codebinding").pipe(
@@ -237,9 +200,7 @@ describe.sequential(
             expect(status).toBe("CREATE_COMPLETE");
 
             // The generated zip streams back as Body.
-            const source = (yield* getJson("/codebinding/source")) as {
-              bytes: number;
-            };
+            const source = (yield* getJson("/codebinding/source")) as { bytes: number };
             expect(source.bytes).toBeGreaterThan(0);
           }),
         { timeout: 120_000 },
@@ -247,36 +208,28 @@ describe.sequential(
     });
 
     describe("StopDiscoverer / StartDiscoverer", () => {
-      test.provider(
-        "pauses and resumes the bound discoverer (injected discoverer id)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const stopped = (yield* postJson("/discoverer/stop")) as {
-              state: string;
-            };
-            expect(stopped.state).toBe("STOPPED");
+      test.provider("pauses and resumes the bound discoverer (injected discoverer id)", (_stack) =>
+        Effect.gen(function* () {
+          const stopped = (yield* postJson("/discoverer/stop")) as { state: string };
+          expect(stopped.state).toBe("STOPPED");
 
-            const started = (yield* postJson("/discoverer/start")) as {
-              state: string;
-            };
-            expect(started.state).toBe("STARTED");
-          }),
+          const started = (yield* postJson("/discoverer/start")) as { state: string };
+          expect(started.state).toBe("STARTED");
+        }),
       );
     });
 
     describe("consumeSchemaEvents", () => {
-      test.provider(
-        "the deploy created an EventBridge rule targeting the function",
-        (_stack) =>
-          Effect.gen(function* () {
-            // Out-of-band via distilled: the fixture's consumeSchemaEvents
-            // must have materialized as a rule on the default bus with the
-            // Lambda as target.
-            const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-              TargetArn: functionArn,
-            });
-            expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-          }),
+      test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeSchemaEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
       );
     });
   },

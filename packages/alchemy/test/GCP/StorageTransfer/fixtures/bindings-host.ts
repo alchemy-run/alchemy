@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Object seeded into the source bucket; the transfer copies it. */
@@ -56,9 +56,7 @@ export default class StorageTransferBindingsHost extends GCP.Function<StorageTra
         getGoogleServiceAccount: getAccount().pipe(
           Effect.map((account) => ({ accountEmail: account.accountEmail })),
         ),
-        runTransferJob: runJob().pipe(
-          Effect.map((operation) => ({ name: operation.name })),
-        ),
+        runTransferJob: runJob().pipe(Effect.map((operation) => ({ name: operation.name }))),
       }),
     };
   }).pipe(

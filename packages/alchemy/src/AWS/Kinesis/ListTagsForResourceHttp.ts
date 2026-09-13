@@ -19,22 +19,20 @@ export const ListTagsForResourceHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Kinesis.ListTagsForResource(${resource}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["kinesis:ListTagsForResource"],
-                  Resource: [getResourceArn(resource)],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Kinesis.ListTagsForResource(${resource}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["kinesis:ListTagsForResource"],
+                Resource: [getResourceArn(resource)],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.Kinesis.ListTagsForResource(${resource.LogicalId})`,
-      )(function* (request?: ListTagsForResourceRequest) {
+      return Effect.fn(`AWS.Kinesis.ListTagsForResource(${resource.LogicalId})`)(function* (
+        request?: ListTagsForResourceRequest,
+      ) {
         return yield* listTagsForResource({
           ...request,
           ResourceARN: yield* ResourceARN,

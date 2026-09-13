@@ -1,8 +1,8 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import path from "pathe";
 import * as GeoMaps from "@/AWS/GeoMaps";
 import * as GeoPlaces from "@/AWS/GeoPlaces";
@@ -11,9 +11,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class GeoTestFunction extends Lambda.Function<Lambda.Function>()(
-  "GeoTestFunction",
-) {}
+export class GeoTestFunction extends Lambda.Function<Lambda.Function>()("GeoTestFunction") {}
 
 export default GeoTestFunction.make(
   {

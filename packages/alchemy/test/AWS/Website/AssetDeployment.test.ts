@@ -28,16 +28,8 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const v1 = path.join(
-        import.meta.dirname,
-        "fixtures",
-        "asset-deployment-v1",
-      );
-      const v2 = path.join(
-        import.meta.dirname,
-        "fixtures",
-        "asset-deployment-v2",
-      );
+      const v1 = path.join(import.meta.dirname, "fixtures", "asset-deployment-v1");
+      const v2 = path.join(import.meta.dirname, "fixtures", "asset-deployment-v2");
 
       yield* stack.destroy();
 
@@ -59,11 +51,7 @@ test.provider(
       expect(deployed.files.bucketName).toBe(deployed.bucket.bucketName);
       expect(deployed.files.prefix).toBe("site");
       expect(deployed.files.fileCount).toBe(3);
-      expect(deployed.files.files).toEqual([
-        "about.html",
-        "index.html",
-        "robots.txt",
-      ]);
+      expect(deployed.files.files).toEqual(["about.html", "index.html", "robots.txt"]);
 
       yield* assertObjectKeys(deployed.bucket.bucketName, [
         "site/about.html",
@@ -88,11 +76,7 @@ test.provider(
 
       expect(updated.bucket.bucketName).toBe(deployed.bucket.bucketName);
       expect(updated.files.fileCount).toBe(3);
-      expect(updated.files.files).toEqual([
-        "extra.css",
-        "index.html",
-        "robots.txt",
-      ]);
+      expect(updated.files.files).toEqual(["extra.css", "index.html", "robots.txt"]);
       expect(updated.files.version).not.toBe(deployed.files.version);
 
       yield* assertObjectKeys(updated.bucket.bucketName, [
@@ -120,8 +104,7 @@ const listObjectKeys = (bucketName: string) =>
   });
 
 const keysMatch = (got: string[], expected: string[]) =>
-  got.length === expected.length &&
-  expected.every((key, index) => got[index] === key);
+  got.length === expected.length && expected.every((key, index) => got[index] === key);
 
 const assertObjectKeys = (bucketName: string, expected: string[]) =>
   Effect.gen(function* () {

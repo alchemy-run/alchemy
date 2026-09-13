@@ -8,9 +8,7 @@ import * as OAM from "@/AWS/OAM";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class OamTestFunction extends Lambda.Function<Lambda.Function>()(
-  "OamTestFunction",
-) {}
+export class OamTestFunction extends Lambda.Function<Lambda.Function>()("OamTestFunction") {}
 
 export default OamTestFunction.make(
   {

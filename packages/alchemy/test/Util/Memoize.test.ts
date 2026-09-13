@@ -1,7 +1,7 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
@@ -47,12 +47,9 @@ describe("cachedInScope", { tags: ["unit", "local"] }, () => {
           return Effect.fail("boom");
         }),
       );
-      const [a, b] = yield* Effect.all(
-        [Effect.result(memo), Effect.result(memo)],
-        {
-          concurrency: "unbounded",
-        },
-      );
+      const [a, b] = yield* Effect.all([Effect.result(memo), Effect.result(memo)], {
+        concurrency: "unbounded",
+      });
       expect(a._tag).toBe("Failure");
       expect(b._tag).toBe("Failure");
       expect(runs).toBe(1);
@@ -67,17 +64,13 @@ describe("cachedInScope", { tags: ["unit", "local"] }, () => {
         const scope = yield* Scope.make();
         const started = yield* Deferred.make<void>();
         const memo = yield* cachedInScope(scope)(
-          Deferred.succeed(started, undefined).pipe(
-            Effect.andThen(Effect.never),
-          ),
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
         );
         const waiter = yield* Effect.forkChild(memo);
         yield* Deferred.await(started);
         yield* Scope.close(scope, Exit.void);
         const exit = yield* Fiber.await(waiter);
-        expect(
-          Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause),
-        ).toBe(true);
+        expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
       }),
     { timeout: 5_000, retry: 0 },
   );

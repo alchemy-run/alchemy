@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as marketplace from "@distilled.cloud/gcp/authorizedbuyersmarketplace_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  lifecycleParent,
-  logLevel,
-  probeName,
-  probeParent,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { lifecycleParent, logLevel, probeName, probeParent, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -19,9 +13,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const error = yield* Effect.flip(
-        marketplace.getBuyersClientsUsers({ name: probeName }),
-      );
+      const error = yield* Effect.flip(marketplace.getBuyersClientsUsers({ name: probeName }));
       expect(error._tag).toEqual("AuthorizedBuyersScopeInsufficient");
 
       yield* stack.destroy();
@@ -63,10 +55,10 @@ test.provider.skipIf(!!process.env.FAST || lifecycleParent === undefined)(
       const parent = lifecycleParent!;
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AuthorizedBuyersMarketplace.BuyersClientsUser(
-            "Analyst",
-            { parent, email: "analyst@example.com" },
-          );
+          return yield* GCP.AuthorizedBuyersMarketplace.BuyersClientsUser("Analyst", {
+            parent,
+            email: "analyst@example.com",
+          });
         }),
       );
 
@@ -84,13 +76,10 @@ test.provider.skipIf(!!process.env.FAST || lifecycleParent === undefined)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AuthorizedBuyersMarketplace.BuyersClientsUser(
-            "Analyst",
-            {
-              parent: created.parent,
-              email: "analyst@example.com",
-            },
-          );
+          return yield* GCP.AuthorizedBuyersMarketplace.BuyersClientsUser("Analyst", {
+            parent: created.parent,
+            email: "analyst@example.com",
+          });
         }),
       );
 
@@ -100,13 +89,10 @@ test.provider.skipIf(!!process.env.FAST || lifecycleParent === undefined)(
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AuthorizedBuyersMarketplace.BuyersClientsUser(
-            "Analyst",
-            {
-              parent: created.parent,
-              email: "analyst-v2@example.com",
-            },
-          );
+          return yield* GCP.AuthorizedBuyersMarketplace.BuyersClientsUser("Analyst", {
+            parent: created.parent,
+            email: "analyst-v2@example.com",
+          });
         }),
       );
 

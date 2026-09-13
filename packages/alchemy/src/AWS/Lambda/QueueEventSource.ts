@@ -40,21 +40,15 @@ export const QueueEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "sqs:ReceiveMessage",
-                      "sqs:DeleteMessage",
-                      "sqs:GetQueueAttributes",
-                    ],
-                    Resource: [queue.queueArn],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+                  Resource: [queue.queueArn],
+                },
+              ],
+            });
 
             yield* Mapping(`${queue.LogicalId}-EventSource`, {
               functionName: host.functionName,
@@ -71,9 +65,7 @@ export const QueueEventSource = Layer.effect(
         Effect.gen(function* () {
           return (event: any) => {
             if (isSQSEvent(event)) {
-              return process(Stream.fromArray(event.Records)).pipe(
-                Effect.orDie,
-              );
+              return process(Stream.fromArray(event.Records)).pipe(Effect.orDie);
             }
           };
         }),

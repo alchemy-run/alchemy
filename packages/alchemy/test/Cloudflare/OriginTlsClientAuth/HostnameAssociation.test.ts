@@ -13,13 +13,9 @@ import { CERT_5, CERT_6, KEY_5, KEY_6 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test hostnames. Each test owns a disjoint subdomain so
 // reruns never collide (never derive names from Date.now()/random).
@@ -31,9 +27,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -52,9 +46,7 @@ const getAssociation = (zoneId: string, hostname: string) =>
     Effect.map((assoc) =>
       assoc.enabled === null || assoc.enabled === undefined ? undefined : assoc,
     ),
-    Effect.catchTag("HostnameAssociationNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("HostnameAssociationNotFound", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,
@@ -69,16 +61,7 @@ const voidAssociation = (zoneId: string, hostname: string) =>
     const observed = yield* getAssociation(zoneId, hostname);
     if (!observed?.certId) return;
     yield* originTls
-      .putHostname({
-        zoneId,
-        config: [
-          {
-            hostname,
-            certId: observed.certId,
-            enabled: null,
-          },
-        ],
-      })
+      .putHostname({ zoneId, config: [{ hostname, certId: observed.certId, enabled: null }] })
       .pipe(
         // The pinned certificate may already be gone (code 1415); the
         // association is inert without it.
@@ -108,70 +91,49 @@ const purgeCertificates = (zoneId: string, pems: string[]) =>
           targets.includes((c.certificate ?? "").trim()),
       ),
       (c) =>
-        originTls
-          .deleteHostnameCertificate({ zoneId, certificateId: c.id! })
-          .pipe(
-            Effect.retry({
-              while: (e) =>
-                e._tag === "CertificatePendingDeployment" ||
-                e._tag === "HostnameCertificateInUse",
-              schedule: Schedule.spaced("5 seconds"),
-              times: 10,
-            }),
-            Effect.catchTag(
-              ["HostnameCertificateNotFound", "CertificatePendingDeletion"],
-              () => Effect.void,
-            ),
+        originTls.deleteHostnameCertificate({ zoneId, certificateId: c.id! }).pipe(
+          Effect.retry({
+            while: (e) =>
+              e._tag === "CertificatePendingDeployment" || e._tag === "HostnameCertificateInUse",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 10,
+          }),
+          Effect.catchTag(
+            ["HostnameCertificateNotFound", "CertificatePendingDeletion"],
+            () => Effect.void,
           ),
+        ),
     );
   });
 
 // Both certificates stay deployed across every step so updates/replacements
 // only touch the association itself (replacing a resource while removing its
 // old dependency in the same deploy is a known engine deadlock).
-const program = (opts: {
-  zoneId: string;
-  hostname: string;
-  cert: "5" | "6";
-  enabled: boolean;
-}) =>
+const program = (opts: { zoneId: string; hostname: string; cert: "5" | "6"; enabled: boolean }) =>
   Effect.gen(function* () {
-    const cert5 = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate(
-      "AssocCert5",
-      {
-        zoneId: opts.zoneId,
-        certificate: CERT_5,
-        privateKey: Redacted.make(KEY_5),
-      },
-    );
-    const cert6 = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate(
-      "AssocCert6",
-      {
-        zoneId: opts.zoneId,
-        certificate: CERT_6,
-        privateKey: Redacted.make(KEY_6),
-      },
-    );
+    const cert5 = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate("AssocCert5", {
+      zoneId: opts.zoneId,
+      certificate: CERT_5,
+      privateKey: Redacted.make(KEY_5),
+    });
+    const cert6 = yield* Cloudflare.OriginTlsClientAuth.HostnameCertificate("AssocCert6", {
+      zoneId: opts.zoneId,
+      certificate: CERT_6,
+      privateKey: Redacted.make(KEY_6),
+    });
     const pinned = opts.cert === "6" ? cert6 : cert5;
-    const association =
-      yield* Cloudflare.OriginTlsClientAuth.HostnameAssociation("AopHost", {
-        zoneId: opts.zoneId,
-        hostname: opts.hostname,
-        certId: pinned.certificateId,
-        enabled: opts.enabled,
-      });
+    const association = yield* Cloudflare.OriginTlsClientAuth.HostnameAssociation("AopHost", {
+      zoneId: opts.zoneId,
+      hostname: opts.hostname,
+      certId: pinned.certificateId,
+      enabled: opts.enabled,
+    });
     return { cert5, cert6, association };
   });
 
 describe.skipIf(!!process.env.FAST)(
   "HostnameAssociation",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:origintlsclientauth",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:origintlsclientauth", "live"] },
   () => {
     // Hostname associations are keyed entirely by {zoneId, hostname} and
     // Cloudflare exposes no endpoint that enumerates which hostnames in a zone
@@ -188,10 +150,7 @@ describe.skipIf(!!process.env.FAST)(
         expect(all).toEqual([]);
 
         yield* stack.destroy();
-      }).pipe(
-        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-        logLevel,
-      ),
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
     );
 
     test.provider(
@@ -206,19 +165,12 @@ describe.skipIf(!!process.env.FAST)(
 
           // Create — pin cert 5, enabled.
           const initial = yield* stack.deploy(
-            program({
-              zoneId,
-              hostname: HOST_LIFECYCLE,
-              cert: "5",
-              enabled: true,
-            }),
+            program({ zoneId, hostname: HOST_LIFECYCLE, cert: "5", enabled: true }),
           );
 
           expect(initial.association.zoneId).toEqual(zoneId);
           expect(initial.association.hostname).toEqual(HOST_LIFECYCLE);
-          expect(initial.association.certId).toEqual(
-            initial.cert5.certificateId,
-          );
+          expect(initial.association.certId).toEqual(initial.cert5.certificateId);
           expect(initial.association.enabled).toEqual(true);
 
           const observed = yield* getAssociation(zoneId, HOST_LIFECYCLE);
@@ -227,18 +179,11 @@ describe.skipIf(!!process.env.FAST)(
 
           // Update in place — repin to cert 6 and disable enforcement.
           const updated = yield* stack.deploy(
-            program({
-              zoneId,
-              hostname: HOST_LIFECYCLE,
-              cert: "6",
-              enabled: false,
-            }),
+            program({ zoneId, hostname: HOST_LIFECYCLE, cert: "6", enabled: false }),
           );
 
           expect(updated.association.hostname).toEqual(HOST_LIFECYCLE);
-          expect(updated.association.certId).toEqual(
-            updated.cert6.certificateId,
-          );
+          expect(updated.association.certId).toEqual(updated.cert6.certificateId);
           expect(updated.association.enabled).toEqual(false);
 
           const reobserved = yield* getAssociation(zoneId, HOST_LIFECYCLE);
@@ -266,12 +211,7 @@ describe.skipIf(!!process.env.FAST)(
             Effect.map(() => true),
           );
           expect(gone).toEqual(true);
-        }).pipe(
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
-          logLevel,
-        ),
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
       // Two sequential deploys, each uploading two hostname client-certificates
       // plus the association, on Cloudflare's per-zone-serialized client-cert
       // API. Under a full concurrent `./test/Cloudflare` run this zone's cert
@@ -293,29 +233,17 @@ describe.skipIf(!!process.env.FAST)(
           yield* purgeCertificates(zoneId, [CERT_5, CERT_6]);
 
           const initial = yield* stack.deploy(
-            program({
-              zoneId,
-              hostname: HOST_REPLACE_A,
-              cert: "5",
-              enabled: true,
-            }),
+            program({ zoneId, hostname: HOST_REPLACE_A, cert: "5", enabled: true }),
           );
           expect(initial.association.hostname).toEqual(HOST_REPLACE_A);
 
           // Changing the hostname is a replacement — the old hostname's
           // association is voided and the new hostname gets its own entry.
           const replaced = yield* stack.deploy(
-            program({
-              zoneId,
-              hostname: HOST_REPLACE_B,
-              cert: "5",
-              enabled: true,
-            }),
+            program({ zoneId, hostname: HOST_REPLACE_B, cert: "5", enabled: true }),
           );
           expect(replaced.association.hostname).toEqual(HOST_REPLACE_B);
-          expect(replaced.association.certId).toEqual(
-            replaced.cert5.certificateId,
-          );
+          expect(replaced.association.certId).toEqual(replaced.cert5.certificateId);
 
           const observedNew = yield* getAssociation(zoneId, HOST_REPLACE_B);
           expect(observedNew?.enabled).toEqual(true);
@@ -361,12 +289,7 @@ describe.skipIf(!!process.env.FAST)(
             Effect.map(() => true),
           );
           expect(newGone).toEqual(true);
-        }).pipe(
-          Effect.ensuring(
-            stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore),
-          ),
-          logLevel,
-        ),
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
       // Same per-zone-serialized client-cert contention as the lifecycle case
       // above, plus two spaced void polls — give real headroom under load.
       { tags: ["provider:cloudflare:zone"], timeout: 300_000 },

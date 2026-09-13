@@ -14,12 +14,8 @@ test.provider(
   "getProfile on a nonexistent id fails with ResourceNotFoundException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        b2bi.getProfile({ profileId: "p-00000000000000000" }),
-      );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
+      const error = yield* Effect.flip(b2bi.getProfile({ profileId: "p-00000000000000000" }));
+      expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:b2bi", "live"] },
 );
@@ -28,19 +24,13 @@ const assertProfileGone = (profileId: string) =>
   Effect.gen(function* () {
     const result = yield* b2bi.getProfile({ profileId }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
-      return yield* Effect.fail(
-        new Error(`Profile '${profileId}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`Profile '${profileId}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]) }),
   );
 
 // Profiles are credential-free and cheap, so the full lifecycle runs ungated.
@@ -65,9 +55,7 @@ test.provider(
       expect(created.profileArn).toContain(":b2bi:");
 
       // Out-of-band verification.
-      const described = yield* b2bi.getProfile({
-        profileId: created.profileId,
-      });
+      const described = yield* b2bi.getProfile({ profileId: created.profileId });
       expect(described.businessName).toBe("Alchemy Test Corp");
 
       // No-op redeploy keeps the same id.
@@ -92,9 +80,7 @@ test.provider(
       );
       expect(updated.profileId).toBe(created.profileId);
       expect(updated.businessName).toBe("Alchemy Renamed Corp");
-      const reDescribed = yield* b2bi.getProfile({
-        profileId: created.profileId,
-      });
+      const reDescribed = yield* b2bi.getProfile({ profileId: created.profileId });
       expect(reDescribed.businessName).toBe("Alchemy Renamed Corp");
 
       // Changing logging replaces the profile (no member on updateProfile);

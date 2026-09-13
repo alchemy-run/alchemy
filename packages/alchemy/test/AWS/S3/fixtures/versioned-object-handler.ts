@@ -18,9 +18,7 @@ const bucket = (name: string) =>
     forceDestroy: true,
   });
 
-const Tags = Schema.Array(
-  Schema.Struct({ Key: Schema.String, Value: Schema.String }),
-);
+const Tags = Schema.Array(Schema.Struct({ Key: Schema.String, Value: Schema.String }));
 const Objects = Schema.Array(
   Schema.Struct({
     Key: Schema.String,
@@ -53,26 +51,19 @@ export default VersionedObjectFunction.make(
       DeleteObjectTagging: bucket("DeleteObjectTaggingBucket"),
       PresignPutObject: bucket("PresignPutObjectBucket"),
     });
-    const info = yield* Effect.forEach(
-      Object.entries(buckets),
-      ([name, resource]) =>
-        Effect.gen(function* () {
-          const bucketName = yield* resource.bucketName;
-          const bucketArn = yield* resource.bucketArn;
-          return Effect.gen(function* () {
-            return [
-              name,
-              { bucketName: yield* bucketName, bucketArn: yield* bucketArn },
-            ] as const;
-          });
-        }),
+    const info = yield* Effect.forEach(Object.entries(buckets), ([name, resource]) =>
+      Effect.gen(function* () {
+        const bucketName = yield* resource.bucketName;
+        const bucketArn = yield* resource.bucketArn;
+        return Effect.gen(function* () {
+          return [name, { bucketName: yield* bucketName, bucketArn: yield* bucketArn }] as const;
+        });
+      }),
     );
     const get = yield* S3.GetObject(buckets.GetObject);
     const put = yield* S3.PutObject(buckets.PutObject);
     const head = yield* S3.HeadObject(buckets.HeadObject);
-    const attributes = yield* S3.GetObjectAttributes(
-      buckets.GetObjectAttributes,
-    );
+    const attributes = yield* S3.GetObjectAttributes(buckets.GetObjectAttributes);
     const copy = yield* S3.CopyObject(buckets.CopyObject);
     yield* S3.GetObject(buckets.CopySource);
     const remove = yield* S3.DeleteObject(buckets.DeleteObject);
@@ -81,9 +72,7 @@ export default VersionedObjectFunction.make(
     const versions = yield* S3.ListObjectVersions(buckets.ListObjectVersions);
     const getTags = yield* S3.GetObjectTagging(buckets.GetObjectTagging);
     const putTags = yield* S3.PutObjectTagging(buckets.PutObjectTagging);
-    const deleteTags = yield* S3.DeleteObjectTagging(
-      buckets.DeleteObjectTagging,
-    );
+    const deleteTags = yield* S3.DeleteObjectTagging(buckets.DeleteObjectTagging);
     const presignPut = yield* S3.PresignPutObject(buckets.PresignPutObject);
 
     return {
@@ -92,9 +81,7 @@ export default VersionedObjectFunction.make(
         const url = yield* Effect.sync(() => new URL(request.originalUrl));
         const operation = url.pathname.slice(1);
         if (operation === "info") {
-          return yield* HttpServerResponse.json(
-            Object.fromEntries(yield* Effect.all(info)),
-          );
+          return yield* HttpServerResponse.json(Object.fromEntries(yield* Effect.all(info)));
         }
         const Key = url.searchParams.get("key") ?? "versions.txt";
         const VersionId = url.searchParams.get("versionId") ?? undefined;
@@ -103,28 +90,22 @@ export default VersionedObjectFunction.make(
             return yield* get({ Key, VersionId }).pipe(
               Effect.flatMap((result) =>
                 Effect.gen(function* () {
-                  const body = yield* Stream.mkString(
-                    Stream.decodeText(result.Body!),
-                  );
+                  const body = yield* Stream.mkString(Stream.decodeText(result.Body!));
                   return yield* HttpServerResponse.json({
                     body,
                     versionId: result.VersionId,
                   });
                 }),
               ),
-              Effect.catchTag(
-                ["NoSuchKey", "NoSuchVersion", "MethodNotAllowed"],
-                (error) =>
-                  HttpServerResponse.json(
-                    { tag: error._tag },
-                    { status: error._tag === "MethodNotAllowed" ? 405 : 404 },
-                  ),
+              Effect.catchTag(["NoSuchKey", "NoSuchVersion", "MethodNotAllowed"], (error) =>
+                HttpServerResponse.json(
+                  { tag: error._tag },
+                  { status: error._tag === "MethodNotAllowed" ? 405 : 404 },
+                ),
               ),
             );
           case "PutObject":
-            return yield* HttpServerResponse.json(
-              yield* put({ Key, Body: yield* request.text }),
-            );
+            return yield* HttpServerResponse.json(yield* put({ Key, Body: yield* request.text }));
           case "HeadObject":
             return yield* head({ Key, VersionId }).pipe(
               Effect.flatMap((result) =>
@@ -173,19 +154,15 @@ export default VersionedObjectFunction.make(
                   { status: 403 },
                 ),
               ),
-              Effect.catchTag(
-                ["NoSuchVersion", "NoSuchKey", "InvalidRequest"],
-                (error) =>
-                  HttpServerResponse.json(
-                    { tag: error._tag },
-                    { status: error._tag === "InvalidRequest" ? 400 : 404 },
-                  ),
+              Effect.catchTag(["NoSuchVersion", "NoSuchKey", "InvalidRequest"], (error) =>
+                HttpServerResponse.json(
+                  { tag: error._tag },
+                  { status: error._tag === "InvalidRequest" ? 400 : 404 },
+                ),
               ),
             );
           case "DeleteObject":
-            return yield* HttpServerResponse.json(
-              yield* remove({ Key, VersionId }),
-            );
+            return yield* HttpServerResponse.json(yield* remove({ Key, VersionId }));
           case "DeleteObjects": {
             const objects = yield* request.json.pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Objects)),
@@ -208,20 +185,14 @@ export default VersionedObjectFunction.make(
                 Prefix: url.searchParams.get("prefix") ?? undefined,
                 MaxKeys: 1,
                 KeyMarker: url.searchParams.get("keyMarker") ?? undefined,
-                VersionIdMarker:
-                  url.searchParams.get("versionMarker") ?? undefined,
+                VersionIdMarker: url.searchParams.get("versionMarker") ?? undefined,
               }),
             );
           case "GetObjectTagging":
             return yield* getTags({ Key, VersionId }).pipe(
               Effect.flatMap((result) => HttpServerResponse.json(result)),
               Effect.catchTag(
-                [
-                  "NoSuchVersion",
-                  "NoSuchKey",
-                  "MethodNotAllowed",
-                  "AccessDeniedException",
-                ],
+                ["NoSuchVersion", "NoSuchKey", "MethodNotAllowed", "AccessDeniedException"],
                 (error) =>
                   HttpServerResponse.json(
                     { tag: error._tag },
@@ -237,9 +208,7 @@ export default VersionedObjectFunction.make(
               ),
             );
           case "PutObjectTagging": {
-            const tags = yield* request.json.pipe(
-              Effect.flatMap(Schema.decodeUnknownEffect(Tags)),
-            );
+            const tags = yield* request.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Tags)));
             return yield* putTags({
               Key,
               VersionId,
@@ -247,12 +216,7 @@ export default VersionedObjectFunction.make(
             }).pipe(
               Effect.flatMap((result) => HttpServerResponse.json(result)),
               Effect.catchTag(
-                [
-                  "NoSuchVersion",
-                  "NoSuchKey",
-                  "MethodNotAllowed",
-                  "AccessDeniedException",
-                ],
+                ["NoSuchVersion", "NoSuchKey", "MethodNotAllowed", "AccessDeniedException"],
                 (error) =>
                   HttpServerResponse.json(
                     { tag: error._tag },
@@ -272,12 +236,7 @@ export default VersionedObjectFunction.make(
             return yield* deleteTags({ Key, VersionId }).pipe(
               Effect.flatMap((result) => HttpServerResponse.json(result)),
               Effect.catchTag(
-                [
-                  "NoSuchVersion",
-                  "NoSuchKey",
-                  "MethodNotAllowed",
-                  "AccessDeniedException",
-                ],
+                ["NoSuchVersion", "NoSuchKey", "MethodNotAllowed", "AccessDeniedException"],
                 (error) =>
                   HttpServerResponse.json(
                     { tag: error._tag },

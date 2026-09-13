@@ -1,7 +1,7 @@
 import * as Layer from "effect/Layer";
 import { makeReadWrite } from "../../Redis/index.ts";
-import { makeRedisBinding } from "./RedisBinding.ts";
 import { ReadWriteRedis } from "./ReadWriteRedis.ts";
+import { makeRedisBinding } from "./RedisBinding.ts";
 
 /**
  * HTTP/RESP implementation of {@link ReadWriteRedis}.

@@ -22,15 +22,11 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const sortedStrings = (values: readonly string[] | undefined) =>
   [...(values ?? [])].slice().sort();
 
-export const stringList = (
-  values: readonly (string | undefined)[] | null | undefined,
-): string[] =>
+export const stringList = (values: readonly (string | undefined)[] | null | undefined): string[] =>
   (values ?? []).filter((value): value is string => typeof value === "string");
 
 export const unspecified = (value: string | undefined) =>
-  value === undefined || value.length === 0 || value.endsWith("_UNSPECIFIED")
-    ? ""
-    : value;
+  value === undefined || value.length === 0 || value.endsWith("_UNSPECIFIED") ? "" : value;
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");

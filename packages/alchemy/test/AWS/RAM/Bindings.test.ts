@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "RAMBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,26 +34,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "RAM Bindings",
@@ -78,21 +68,15 @@ describe.sequential(
         baseUrl = functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `RAM test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`RAM test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `RAM test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`RAM test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -183,9 +167,7 @@ describe.sequential(
         "surfaces the typed not-found for a nonexistent invitation (proving the grant)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* getJson(
-              "/pending-resources-nonexistent",
-            )) as any;
+            const response = (yield* getJson("/pending-resources-nonexistent")) as any;
             expect([
               "ResourceShareInvitationArnNotFoundException",
               "MalformedArnException",
@@ -225,14 +207,10 @@ describe.sequential(
         "answers for a nonexistent resource (typed not-found or empty, proving the grant)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* getJson(
-              "/resource-policies-nonexistent",
-            )) as any;
-            expect([
-              "Ok",
-              "ResourceArnNotFoundException",
-              "MalformedArnException",
-            ]).toContain(response.tag);
+            const response = (yield* getJson("/resource-policies-nonexistent")) as any;
+            expect(["Ok", "ResourceArnNotFoundException", "MalformedArnException"]).toContain(
+              response.tag,
+            );
           }),
         { timeout: 60_000 },
       );

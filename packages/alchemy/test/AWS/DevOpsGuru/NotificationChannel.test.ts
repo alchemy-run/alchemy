@@ -22,13 +22,9 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        devopsguru.describeInsight({
-          Id: "alchemy-nonexistent-devopsguru-insight-probe",
-        }),
+        devopsguru.describeInsight({ Id: "alchemy-nonexistent-devopsguru-insight-probe" }),
       );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
+      expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:devopsguru", "live"] },
 );
@@ -103,17 +99,14 @@ test.provider(
       const afterUpdate = yield* listChannels;
       const liveUpdated = afterUpdate.find((c) => c.Id === updated.channel.id);
       expect(liveUpdated?.Config?.Sns?.TopicArn).toBe(created.topic.topicArn);
-      expect(
-        [...(liveUpdated?.Config?.Filters?.Severities ?? [])].sort(),
-      ).toEqual(["HIGH", "MEDIUM"]);
-      expect(liveUpdated?.Config?.Filters?.MessageTypes).toEqual([
-        "NEW_INSIGHT",
+      expect([...(liveUpdated?.Config?.Filters?.Severities ?? [])].sort()).toEqual([
+        "HIGH",
+        "MEDIUM",
       ]);
+      expect(liveUpdated?.Config?.Filters?.MessageTypes).toEqual(["NEW_INSIGHT"]);
       // The old channel is gone (not duplicated).
       expect(
-        afterUpdate.filter(
-          (c) => c.Config?.Sns?.TopicArn === created.topic.topicArn,
-        ),
+        afterUpdate.filter((c) => c.Config?.Sns?.TopicArn === created.topic.topicArn),
       ).toHaveLength(1);
 
       // Idempotent redeploy — no drift, id is unchanged.
@@ -133,20 +126,13 @@ test.provider(
       // Destroy — the channel is removed and the SNS topic is gone.
       yield* stack.destroy();
       const afterDestroy = yield* listChannels;
-      expect(
-        afterDestroy.some(
-          (c) => c.Config?.Sns?.TopicArn === created.topic.topicArn,
-        ),
-      ).toBe(false);
+      expect(afterDestroy.some((c) => c.Config?.Sns?.TopicArn === created.topic.topicArn)).toBe(
+        false,
+      );
       yield* assertTopicDeleted(created.topic.topicArn);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:devopsguru",
-      "provider:aws:sns",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:devopsguru", "provider:aws:sns", "live"],
     timeout: 180_000,
   },
 );

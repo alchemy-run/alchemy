@@ -17,8 +17,7 @@ export class Counter extends Cloudflare.DurableObject<Counter>()(
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       let count = (yield* state.storage.get<number>("count")) ?? 0;
-      const lastBodies =
-        (yield* state.storage.get<string[]>("lastBodies")) ?? [];
+      const lastBodies = (yield* state.storage.get<string[]>("lastBodies")) ?? [];
       return {
         record: Effect.fn(function* (body: string) {
           count += 1;
@@ -47,9 +46,7 @@ export class Counter extends Cloudflare.DurableObject<Counter>()(
  * deploy time, so this fixture has no separate consumer wiring.
  */
 export const RoundTripQueue = Cloudflare.Queues.Queue("RoundTripQueue");
-export const SecondaryRoundTripQueue = Cloudflare.Queues.Queue(
-  "SecondaryRoundTripQueue",
-);
+export const SecondaryRoundTripQueue = Cloudflare.Queues.Queue("SecondaryRoundTripQueue");
 
 interface QueueMessageBody {
   name: string;
@@ -66,9 +63,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     const queueResource = yield* RoundTripQueue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
     const secondaryQueueResource = yield* SecondaryRoundTripQueue;
-    const secondaryQueue = yield* Cloudflare.Queues.WriteQueue(
-      secondaryQueueResource,
-    );
+    const secondaryQueue = yield* Cloudflare.Queues.WriteQueue(secondaryQueueResource);
 
     // Effect-style queue consumer. The handler delegates to the
     // Counter DO so the test can verify the message landed by
@@ -90,9 +85,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
         retryDelay: "1 second",
       },
       (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          counters.getByName(msg.body.name).record(msg.body.text),
-        ),
+        Stream.runForEach(stream, (msg) => counters.getByName(msg.body.name).record(msg.body.text)),
     );
 
     // A second queue subscription on the same Worker verifies that
@@ -106,9 +99,7 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
         retryDelay: "2 seconds",
       },
       (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          counters.getByName(msg.body.name).record(msg.body.text),
-        ),
+        Stream.runForEach(stream, (msg) => counters.getByName(msg.body.name).record(msg.body.text)),
     );
 
     return {
@@ -120,20 +111,14 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
           const name = url.searchParams.get("name") ?? "default";
           const text = yield* request.text;
           yield* queue.send({ name, text }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { sent: { name, text } },
-            { status: 202 },
-          );
+          return yield* HttpServerResponse.json({ sent: { name, text } }, { status: 202 });
         }
 
         if (request.method === "POST" && url.pathname === "/send-secondary") {
           const name = url.searchParams.get("name") ?? "default";
           const text = yield* request.text;
           yield* secondaryQueue.send({ name, text }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { sent: { name, text } },
-            { status: 202 },
-          );
+          return yield* HttpServerResponse.json({ sent: { name, text } }, { status: 202 });
         }
 
         if (request.method === "GET" && url.pathname === "/count") {

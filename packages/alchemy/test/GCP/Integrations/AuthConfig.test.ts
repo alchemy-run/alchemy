@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsAuthConfigs({ name }).pipe(
@@ -101,11 +98,9 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.description).toEqual("updated auth");
 
-      const fetchedUpdate = yield* integrations.getProjectsLocationsAuthConfigs(
-        {
-          name: updated.name,
-        },
-      );
+      const fetchedUpdate = yield* integrations.getProjectsLocationsAuthConfigs({
+        name: updated.name,
+      });
       expect(fetchedUpdate.description).toContain("updated auth");
 
       yield* stack.destroy();

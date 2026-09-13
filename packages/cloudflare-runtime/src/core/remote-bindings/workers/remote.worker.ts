@@ -57,11 +57,7 @@ function getExposedJSRPCBinding(request: Request, env: Env) {
         // Check if this is an EmailMessage (has EmailMessage::raw property) or MessageBuilder
         if ("EmailMessage::raw" in e) {
           // EmailMessage API - reconstruct the EmailMessage object
-          const message = new EmailMessage(
-            e.from,
-            e.to,
-            e["EmailMessage::raw"],
-          );
+          const message = new EmailMessage(e.from, e.to, e["EmailMessage::raw"]);
           return (targetBinding as SendEmail).send(message);
         } else {
           // MessageBuilder API - pass through directly as a plain object
@@ -93,9 +89,7 @@ function getExposedFetcher(request: Request, env: Env) {
   }
 
   // Special case the Dispatch Namespace binding because it has a top-level synchronous .get() call
-  const dispatchNamespaceOptions = request.headers.get(
-    "MF-Dispatch-Namespace-Options",
-  );
+  const dispatchNamespaceOptions = request.headers.get("MF-Dispatch-Namespace-Options");
   if (dispatchNamespaceOptions) {
     const { name, args, options } = JSON.parse(dispatchNamespaceOptions);
     return (targetBinding as DispatchNamespace).get(name, args, options);
@@ -119,10 +113,7 @@ export default {
   async fetch(request, env) {
     try {
       if (isJSRPCBinding(request)) {
-        return await newWorkersRpcResponse(
-          request,
-          getExposedJSRPCBinding(request, env),
-        );
+        return await newWorkersRpcResponse(request, getExposedJSRPCBinding(request, env));
       } else {
         const fetcher = getExposedFetcher(request, env);
         const originalHeaders = new Headers();

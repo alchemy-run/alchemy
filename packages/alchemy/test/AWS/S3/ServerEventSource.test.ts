@@ -28,11 +28,7 @@ const testOptions = {
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const stackName = "S3ServerEventSource";
-const stack = Core.scratchStack(
-  testOptions,
-  stackName,
-  "test/AWS/S3/ServerEventSource.test.ts",
-);
+const stack = Core.scratchStack(testOptions, stackName, "test/AWS/S3/ServerEventSource.test.ts");
 
 interface Deployment {
   bucketName: string;
@@ -60,9 +56,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
     ],
   },
   () => {
-    beforeAll(Core.withProviders(stack.destroy(), testOptions, stackName), {
-      timeout: 120_000,
-    });
+    beforeAll(Core.withProviders(stack.destroy(), testOptions, stackName), { timeout: 120_000 });
     beforeAll(
       Core.withProviders(
         Effect.gen(function* () {
@@ -72,9 +66,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           const vpc = network.Vpcs?.find((candidate) => candidate.IsDefault);
           if (!vpc?.VpcId) {
             return yield* Effect.fail(
-              new Error(
-                "Server event acceptance requires an existing default VPC",
-              ),
+              new Error("Server event acceptance requires an existing default VPC"),
             );
           }
           const vpcId = AWS.EC2.VpcId(vpc.VpcId);
@@ -90,9 +82,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
             .sort();
           if (subnetIds.length === 0) {
             return yield* Effect.fail(
-              new Error(
-                "Server event acceptance requires an available public default subnet",
-              ),
+              new Error("Server event acceptance requires an available public default subnet"),
             );
           }
 
@@ -100,16 +90,12 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
             Effect.gen(function* () {
               const bucket = yield* ServerEventBucket;
               const cluster = yield* AWS.ECS.Cluster("S3ServerEventCluster");
-              const securityGroup = yield* AWS.EC2.SecurityGroup(
-                "S3ServerEventSecurityGroup",
-                {
-                  vpcId,
-                  description:
-                    "S3 notification consumer with outbound access only",
-                  ingress: [],
-                  egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
-                },
-              );
+              const securityGroup = yield* AWS.EC2.SecurityGroup("S3ServerEventSecurityGroup", {
+                vpcId,
+                description: "S3 notification consumer with outbound access only",
+                ingress: [],
+                egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
+              });
               const task = yield* ServerEventTask;
               const service = yield* AWS.ECS.Service("S3ServerEventService", {
                 cluster,
@@ -159,9 +145,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           if (deployed) {
             yield* S3.headBucket({ Bucket: deployed.bucketName }).pipe(
               Effect.flatMap(() =>
-                Effect.fail(
-                  new FixtureResourceStillExists({ resource: "bucket" }),
-                ),
+                Effect.fail(new FixtureResourceStillExists({ resource: "bucket" })),
               ),
               Effect.retry({
                 while: (error) => error._tag === "FixtureResourceStillExists",
@@ -171,13 +155,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
               Effect.catchTag("NotFound", () => Effect.void),
               Effect.timeout("45 seconds"),
             );
-            const clusters = yield* ECS.describeClusters({
-              clusters: [deployed.clusterArn],
-            });
+            const clusters = yield* ECS.describeClusters({ clusters: [deployed.clusterArn] });
             expect(
-              (clusters.clusters ?? []).filter(
-                (cluster) => cluster.status !== "INACTIVE",
-              ),
+              (clusters.clusters ?? []).filter((cluster) => cluster.status !== "INACTIVE"),
             ).toEqual([]);
           }
           if (queueUrl) {
@@ -186,9 +166,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
               AttributeNames: ["QueueArn"],
             }).pipe(
               Effect.flatMap(() =>
-                Effect.fail(
-                  new FixtureResourceStillExists({ resource: "queue" }),
-                ),
+                Effect.fail(new FixtureResourceStillExists({ resource: "queue" })),
               ),
               Effect.retry({
                 while: (error) => error._tag === "FixtureResourceStillExists",
@@ -229,10 +207,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           expect(notifications.QueueConfigurations).toHaveLength(1);
           expect(notifications.LambdaFunctionConfigurations ?? []).toEqual([]);
           const configuration = notifications.QueueConfigurations![0]!;
-          expect(configuration.Events).toEqual([
-            "s3:ObjectCreated:*",
-            "s3:ObjectRemoved:*",
-          ]);
+          expect(configuration.Events).toEqual(["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]);
           expect(
             configuration.Filter?.Key?.FilterRules?.map((rule) => ({
               ...rule,
@@ -248,9 +223,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
             AttributeNames: ["Policy", "QueueArn"],
           });
           expect(attributes.Attributes?.QueueArn).toBe(configuration.QueueArn);
-          const policy = yield* Effect.try(() =>
-            JSON.parse(attributes.Attributes!.Policy!),
-          );
+          const policy = yield* Effect.try(() => JSON.parse(attributes.Attributes!.Policy!));
           expect(policy).toEqual({
             Version: "2012-10-17",
             Statement: [
@@ -260,9 +233,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
                 Principal: { Service: "s3.amazonaws.com" },
                 Action: "sqs:SendMessage",
                 Resource: configuration.QueueArn,
-                Condition: {
-                  ArnEquals: { "aws:SourceArn": fixture.bucketArn },
-                },
+                Condition: { ArnEquals: { "aws:SourceArn": fixture.bucketArn } },
               },
             ],
           });
@@ -276,31 +247,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
         Effect.gen(function* () {
           const Bucket = deployed!.bucketName;
           const key = `${INCOMING_PREFIX}versions/space + percent% question? hash# 雪${INCOMING_SUFFIX}`;
-          const first = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: "first version",
-          });
-          const second = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: "second version",
-          });
+          const first = yield* S3.putObject({ Bucket, Key: key, Body: "first version" });
+          const second = yield* S3.putObject({ Bucket, Key: key, Body: "second version" });
           expect(first.VersionId).toBeTruthy();
           expect(second.VersionId).toBeTruthy();
           expect(first.VersionId).not.toBe(second.VersionId);
 
           const created = yield* waitForArtifacts([
-            {
-              key,
-              eventName: "s3:ObjectCreated:Put",
-              versionId: first.VersionId!,
-            },
-            {
-              key,
-              eventName: "s3:ObjectCreated:Put",
-              versionId: second.VersionId!,
-            },
+            { key, eventName: "s3:ObjectCreated:Put", versionId: first.VersionId! },
+            { key, eventName: "s3:ObjectCreated:Put", versionId: second.VersionId! },
           ]);
           expect(created.map((record) => record.content)).toEqual([
             "first version",
@@ -330,26 +285,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
               eventName: "s3:ObjectRemoved:DeleteMarkerCreated",
               versionId: marker.VersionId!,
             },
-            {
-              key,
-              eventName: "s3:ObjectRemoved:Delete",
-              versionId: first.VersionId!,
-            },
+            { key, eventName: "s3:ObjectRemoved:Delete", versionId: first.VersionId! },
           ]);
-          expect(removed.every((record) => record.content === undefined)).toBe(
-            true,
-          );
-          expect(
-            removed.every((record) => record.readVersionId === undefined),
-          ).toBe(true);
+          expect(removed.every((record) => record.content === undefined)).toBe(true);
+          expect(removed.every((record) => record.readVersionId === undefined)).toBe(true);
 
-          const versions = yield* S3.listObjectVersions({
-            Bucket,
-            Prefix: key,
-          });
-          expect(
-            (versions.Versions ?? []).map((version) => version.VersionId),
-          ).toEqual([second.VersionId]);
+          const versions = yield* S3.listObjectVersions({ Bucket, Prefix: key });
+          expect((versions.Versions ?? []).map((version) => version.VersionId)).toEqual([
+            second.VersionId,
+          ]);
           expect(versions.DeleteMarkers).toHaveLength(1);
           expect(versions.DeleteMarkers![0]!.VersionId).toBe(marker.VersionId);
           expect(versions.DeleteMarkers![0]!.IsLatest).toBe(true);
@@ -367,26 +311,14 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           const sourceKey = `copy-source/space + percent% 雪${INCOMING_SUFFIX}`;
           const key = `${INCOMING_PREFIX}copy/exact version + 雪${INCOMING_SUFFIX}`;
           const content = "copied version: 雪 + %";
-          const source = yield* S3.putObject({
-            Bucket,
-            Key: sourceKey,
-            Body: content,
-          });
+          const source = yield* S3.putObject({ Bucket, Key: sourceKey, Body: content });
           expect(source.VersionId).toBeTruthy();
-          yield* S3.putObject({
-            Bucket,
-            Key: sourceKey,
-            Body: "newer source",
-          });
+          yield* S3.putObject({ Bucket, Key: sourceKey, Body: "newer source" });
           const CopySource = yield* Effect.sync(
             () =>
               `${Bucket}/${encodeURIComponent(sourceKey)}?versionId=${encodeURIComponent(source.VersionId!)}`,
           );
-          const copied = yield* S3.copyObject({
-            Bucket,
-            Key: key,
-            CopySource,
-          });
+          const copied = yield* S3.copyObject({ Bucket, Key: key, CopySource });
           expect(copied.CopySourceVersionId).toBe(source.VersionId);
           expect(copied.VersionId).toBeTruthy();
           const overwritten = yield* S3.putObject({
@@ -396,16 +328,8 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           });
           expect(overwritten.VersionId).not.toBe(copied.VersionId);
           const records = yield* waitForArtifacts([
-            {
-              key,
-              eventName: "s3:ObjectCreated:Copy",
-              versionId: copied.VersionId!,
-            },
-            {
-              key,
-              eventName: "s3:ObjectCreated:Put",
-              versionId: overwritten.VersionId!,
-            },
+            { key, eventName: "s3:ObjectCreated:Copy", versionId: copied.VersionId! },
+            { key, eventName: "s3:ObjectCreated:Put", versionId: overwritten.VersionId! },
           ]);
           yield* assertCreation(
             records[0]!,
@@ -432,10 +356,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           const Bucket = deployed!.bucketName;
           const key = `${INCOMING_PREFIX}multipart/completed + 雪${INCOMING_SUFFIX}`;
           const content = "completed multipart version: 雪 + %";
-          const upload = yield* S3.createMultipartUpload({
-            Bucket,
-            Key: key,
-          });
+          const upload = yield* S3.createMultipartUpload({ Bucket, Key: key });
           expect(upload.UploadId).toBeTruthy();
           const UploadId = upload.UploadId!;
           yield* Effect.gen(function* () {
@@ -453,9 +374,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
               Bucket,
               Key: key,
               UploadId,
-              MultipartUpload: {
-                Parts: [{ PartNumber: 1, ETag: part.ETag! }],
-              },
+              MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag! }] },
             });
             expect(completed.VersionId).toBeTruthy();
             const overwritten = yield* S3.putObject({
@@ -470,18 +389,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
                 eventName: "s3:ObjectCreated:CompleteMultipartUpload",
                 versionId: completed.VersionId!,
               },
-              {
-                key,
-                eventName: "s3:ObjectCreated:Put",
-                versionId: overwritten.VersionId!,
-              },
+              { key, eventName: "s3:ObjectCreated:Put", versionId: overwritten.VersionId! },
             ]);
-            yield* assertCreation(
-              records[0]!,
-              content,
-              completed.VersionId!,
-              completed.ETag,
-            );
+            yield* assertCreation(records[0]!, content, completed.VersionId!, completed.ETag);
             yield* assertCreation(
               records[1]!,
               "after multipart",
@@ -508,11 +418,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           const Bucket = deployed!.bucketName;
           const key = `${INCOMING_PREFIX}marker/restore${INCOMING_SUFFIX}`;
           const content = "restored after marker deletion";
-          const source = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: content,
-          });
+          const source = yield* S3.putObject({ Bucket, Key: key, Body: content });
           expect(source.VersionId).toBeTruthy();
           const marker = yield* S3.deleteObject({ Bucket, Key: key });
           expect(marker.DeleteMarker).toBe(true);
@@ -525,36 +431,20 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           expect(deleted.DeleteMarker).toBe(true);
           expect(deleted.VersionId).toBe(marker.VersionId);
           const records = yield* waitForArtifacts([
-            {
-              key,
-              eventName: "s3:ObjectCreated:Put",
-              versionId: source.VersionId!,
-            },
+            { key, eventName: "s3:ObjectCreated:Put", versionId: source.VersionId! },
             {
               key,
               eventName: "s3:ObjectRemoved:DeleteMarkerCreated",
               versionId: marker.VersionId!,
             },
-            {
-              key,
-              eventName: "s3:ObjectRemoved:Delete",
-              versionId: marker.VersionId!,
-            },
+            { key, eventName: "s3:ObjectRemoved:Delete", versionId: marker.VersionId! },
           ]);
-          yield* assertCreation(
-            records[0]!,
-            content,
-            source.VersionId!,
-            source.ETag,
-          );
+          yield* assertCreation(records[0]!, content, source.VersionId!, source.ETag);
           for (const record of records.slice(1)) {
             expect(record.content).toBeUndefined();
             expect(record.readVersionId).toBeUndefined();
           }
-          const versions = yield* S3.listObjectVersions({
-            Bucket,
-            Prefix: key,
-          });
+          const versions = yield* S3.listObjectVersions({ Bucket, Prefix: key });
           expect(versions.IsTruncated).toBe(false);
           expect(versions.DeleteMarkers ?? []).toEqual([]);
           expect(versions.Versions).toHaveLength(1);
@@ -562,9 +452,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           expect(versions.Versions![0]!.IsLatest).toBe(true);
           const restored = yield* S3.getObject({ Bucket, Key: key });
           expect(restored.VersionId).toBe(source.VersionId);
-          expect(
-            yield* Stream.mkString(Stream.decodeText(restored.Body!)),
-          ).toBe(content);
+          expect(yield* Stream.mkString(Stream.decodeText(restored.Body!))).toBe(content);
           yield* assertArtifactCount(key, 3);
         }),
       { timeout: 120_000 },
@@ -577,11 +465,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           const Bucket = deployed!.bucketName;
           const key = `${INCOMING_PREFIX}replay/deleted + percent% 雪${INCOMING_SUFFIX}`;
           const content = "durable content after source deletion";
-          const source = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: content,
-          });
+          const source = yield* S3.putObject({ Bucket, Key: key, Body: content });
           expect(source.VersionId).toBeTruthy();
           const identity = {
             key,
@@ -589,12 +473,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
             versionId: source.VersionId!,
           };
           const [original] = yield* waitForArtifacts([identity]);
-          yield* assertCreation(
-            original!,
-            content,
-            source.VersionId!,
-            source.ETag,
-          );
+          yield* assertCreation(original!, content, source.VersionId!, source.ETag);
           const delivery = yield* findDelivery(identity);
           yield* waitForAcknowledgements([delivery.messageId]);
           const Key = yield* Effect.sync(() =>
@@ -603,17 +482,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           const before = yield* S3.headObject({ Bucket, Key });
           expect(before.VersionId).toBeTruthy();
 
-          yield* S3.deleteObject({
-            Bucket,
-            Key: key,
-            VersionId: source.VersionId!,
-          });
+          yield* S3.deleteObject({ Bucket, Key: key, VersionId: source.VersionId! });
           yield* waitForArtifacts([
-            {
-              key,
-              eventName: "s3:ObjectRemoved:Delete",
-              versionId: source.VersionId!,
-            },
+            { key, eventName: "s3:ObjectRemoved:Delete", versionId: source.VersionId! },
           ]);
           const missing = yield* S3.getObject({
             Bucket,
@@ -635,18 +506,13 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           });
           expect(replay.Failed ?? []).toEqual([]);
           expect(replay.Successful).toHaveLength(2);
-          yield* waitForAcknowledgements(
-            replay.Successful!.map((entry) => entry.MessageId),
-          );
+          yield* waitForAcknowledgements(replay.Successful!.map((entry) => entry.MessageId));
           const after = yield* S3.headObject({ Bucket, Key });
           expect(after.VersionId).toBe(before.VersionId);
           expect(after.ETag).toBe(before.ETag);
           const [durable] = yield* waitForArtifacts([identity]);
           expect(durable).toEqual(original);
-          const versions = yield* S3.listObjectVersions({
-            Bucket,
-            Prefix: Key,
-          });
+          const versions = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
           expect(versions.IsTruncated).toBe(false);
           expect(versions.Versions).toHaveLength(1);
           expect(versions.Versions![0]!.VersionId).toBe(before.VersionId);
@@ -661,9 +527,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
         Effect.gen(function* () {
           const Bucket = deployed!.bucketName;
           const key = `${INCOMING_PREFIX}test-event/later-genuine${INCOMING_SUFFIX}`;
-          const configuration = yield* S3.getBucketNotificationConfiguration({
-            Bucket,
-          });
+          const configuration = yield* S3.getBucketNotificationConfiguration({ Bucket });
           yield* S3.putBucketNotificationConfiguration({
             Bucket,
             NotificationConfiguration: configuration,
@@ -678,38 +542,20 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           );
           yield* waitForAcknowledgements([delivery.messageId]);
           const body = delivery.body;
-          const sent = yield* SQS.sendMessage({
-            QueueUrl: queueUrl!,
-            MessageBody: body,
-          });
+          const sent = yield* SQS.sendMessage({ QueueUrl: queueUrl!, MessageBody: body });
           expect(sent.MessageId).toBeTruthy();
           yield* waitForAcknowledgements([sent.MessageId!]);
-          const observed = yield* readEvidence(
-            `${RECEIVED_PREFIX}${sent.MessageId!}.json`,
-          );
+          const observed = yield* readEvidence(`${RECEIVED_PREFIX}${sent.MessageId!}.json`);
           expect(observed).toBe(body);
           yield* assertArtifactCount(key, 0);
 
           const content = "genuine delivery after TestEvent acknowledgement";
-          const source = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: content,
-          });
+          const source = yield* S3.putObject({ Bucket, Key: key, Body: content });
           expect(source.VersionId).toBeTruthy();
           const [record] = yield* waitForArtifacts([
-            {
-              key,
-              eventName: "s3:ObjectCreated:Put",
-              versionId: source.VersionId!,
-            },
+            { key, eventName: "s3:ObjectCreated:Put", versionId: source.VersionId! },
           ]);
-          yield* assertCreation(
-            record!,
-            content,
-            source.VersionId!,
-            source.ETag,
-          );
+          yield* assertCreation(record!, content, source.VersionId!, source.ETag);
           yield* assertArtifactCount(key, 1);
         }),
       { timeout: 120_000 },
@@ -726,36 +572,20 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
             `${INCOMING_PREFIX}filters/case.TXT`,
           ];
           for (const Key of excludedKeys) {
-            const source = yield* S3.putObject({
-              Bucket,
-              Key,
-              Body: "not subscribed",
-            });
+            const source = yield* S3.putObject({ Bucket, Key, Body: "not subscribed" });
             expect(source.VersionId).toBeTruthy();
             const marker = yield* S3.deleteObject({ Bucket, Key });
             expect(marker.DeleteMarker).toBe(true);
-            yield* S3.deleteObject({
-              Bucket,
-              Key,
-              VersionId: source.VersionId!,
-            });
+            yield* S3.deleteObject({ Bucket, Key, VersionId: source.VersionId! });
           }
           const key = `${INCOMING_PREFIX}filters/positive-control${INCOMING_SUFFIX}`;
-          const source = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: "subscribed",
-          });
+          const source = yield* S3.putObject({ Bucket, Key: key, Body: "subscribed" });
           const marker = yield* S3.deleteObject({ Bucket, Key: key });
           expect(source.VersionId).toBeTruthy();
           expect(marker.DeleteMarker).toBe(true);
           expect(marker.VersionId).toBeTruthy();
           yield* waitForArtifacts([
-            {
-              key,
-              eventName: "s3:ObjectCreated:Put",
-              versionId: source.VersionId!,
-            },
+            { key, eventName: "s3:ObjectCreated:Put", versionId: source.VersionId! },
             {
               key,
               eventName: "s3:ObjectRemoved:DeleteMarkerCreated",
@@ -765,12 +595,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST).concurrent(
           // Check a bounded quiet window after the positive control arrives.
           yield* Effect.forEach(excludedKeys, (excludedKey) =>
             assertArtifactCount(excludedKey, 0),
-          ).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("2 seconds"),
-              times: 4,
-            }),
-          );
+          ).pipe(Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 4 }));
           yield* assertArtifactCount(key, 2);
         }),
       { timeout: 120_000 },
@@ -804,34 +629,22 @@ const assertCreation = Effect.fn(function* (
 ) {
   expect(record.content).toBe(content);
   expect(record.readVersionId).toBe(versionId);
-  const size = yield* Effect.sync(
-    () => new TextEncoder().encode(content).byteLength,
-  );
+  const size = yield* Effect.sync(() => new TextEncoder().encode(content).byteLength);
   expect(record.size).toBe(size);
   expect(eTag).toBeTruthy();
   expect(record.eTag).toBe(eTag!.replace(/^"|"$/g, ""));
 });
 
 const assertArtifactCount = Effect.fn(function* (key: string, count: number) {
-  const Prefix = yield* Effect.sync(
-    () => `${PROCESSED_PREFIX}${encodeURIComponent(key)}/`,
-  );
-  const artifacts = yield* S3.listObjectsV2({
-    Bucket: deployed!.bucketName,
-    Prefix,
-  });
+  const Prefix = yield* Effect.sync(() => `${PROCESSED_PREFIX}${encodeURIComponent(key)}/`);
+  const artifacts = yield* S3.listObjectsV2({ Bucket: deployed!.bucketName, Prefix });
   expect(artifacts.IsTruncated).toBe(false);
   expect(artifacts.Contents ?? []).toHaveLength(count);
 });
 
 const readEvidence = Effect.fn(function* (Key: string) {
-  const object = yield* S3.getObject({
-    Bucket: deployed!.bucketName,
-    Key,
-  }).pipe(
-    Effect.catchTag("NoSuchKey", () =>
-      Effect.fail(new EvidenceNotReady({ key: Key })),
-    ),
+  const object = yield* S3.getObject({ Bucket: deployed!.bucketName, Key }).pipe(
+    Effect.catchTag("NoSuchKey", () => Effect.fail(new EvidenceNotReady({ key: Key }))),
     Effect.retry({
       while: (error) => error._tag === "EvidenceNotReady",
       schedule: Schedule.spaced("2 seconds"),
@@ -873,9 +686,7 @@ const deliverySchema = Schema.fromJsonString(
   }),
 );
 
-const findDelivery = Effect.fn(function* (
-  identity: NotificationIdentity | "s3:TestEvent",
-) {
+const findDelivery = Effect.fn(function* (identity: NotificationIdentity | "s3:TestEvent") {
   const deliveries = yield* S3.listObjectsV2({
     Bucket: deployed!.bucketName,
     Prefix: RECEIVED_PREFIX,
@@ -893,18 +704,13 @@ const findDelivery = Effect.fn(function* (
         : (payload.Records ?? []).some(
             (record) =>
               record.s3.bucket.name === deployed!.bucketName &&
-              decodeURIComponent(record.s3.object.key.replace(/\+/g, " ")) ===
-                identity.key &&
+              decodeURIComponent(record.s3.object.key.replace(/\+/g, " ")) === identity.key &&
               record.s3.object.versionId === identity.versionId &&
-              `s3:${record.eventName.replace(/^s3:/, "")}` ===
-                identity.eventName,
+              `s3:${record.eventName.replace(/^s3:/, "")}` === identity.eventName,
           ),
     );
     if (matches) {
-      return {
-        messageId: delivery.Key!.slice(RECEIVED_PREFIX.length, -".json".length),
-        body,
-      };
+      return { messageId: delivery.Key!.slice(RECEIVED_PREFIX.length, -".json".length), body };
     }
   }
   return yield* Effect.fail(
@@ -918,13 +724,8 @@ const readArtifact = Effect.fn(function* (identity: NotificationIdentity) {
   const Key = yield* Effect.sync(() =>
     artifactKey(identity.key, identity.eventName, identity.versionId),
   );
-  const object = yield* S3.getObject({
-    Bucket: deployed!.bucketName,
-    Key,
-  }).pipe(
-    Effect.catchTag("NoSuchKey", () =>
-      Effect.fail(new ArtifactNotReady(identity)),
-    ),
+  const object = yield* S3.getObject({ Bucket: deployed!.bucketName, Key }).pipe(
+    Effect.catchTag("NoSuchKey", () => Effect.fail(new ArtifactNotReady(identity))),
     Effect.retry({
       while: (error) => error._tag === "ArtifactNotReady",
       schedule: Schedule.spaced("4 seconds"),
@@ -944,24 +745,14 @@ const readArtifact = Effect.fn(function* (identity: NotificationIdentity) {
 });
 
 const waitForArtifacts = (identities: NotificationIdentity[]) =>
-  Effect.all(identities.map(readArtifact), { concurrency: 2 }).pipe(
-    Effect.timeout("45 seconds"),
-  );
+  Effect.all(identities.map(readArtifact), { concurrency: 2 }).pipe(Effect.timeout("45 seconds"));
 
-class ArtifactNotReady extends Data.TaggedError(
-  "ArtifactNotReady",
-)<NotificationIdentity> {}
+class ArtifactNotReady extends Data.TaggedError("ArtifactNotReady")<NotificationIdentity> {}
 
-class DeliveryNotReady extends Data.TaggedError("DeliveryNotReady")<{
-  eventName: string;
-}> {}
+class DeliveryNotReady extends Data.TaggedError("DeliveryNotReady")<{ eventName: string }> {}
 
-class EvidenceNotReady extends Data.TaggedError("EvidenceNotReady")<{
-  key: string;
-}> {}
+class EvidenceNotReady extends Data.TaggedError("EvidenceNotReady")<{ key: string }> {}
 
-class FixtureResourceStillExists extends Data.TaggedError(
-  "FixtureResourceStillExists",
-)<{
+class FixtureResourceStillExists extends Data.TaggedError("FixtureResourceStillExists")<{
   resource: string;
 }> {}

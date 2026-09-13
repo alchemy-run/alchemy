@@ -32,11 +32,7 @@ import { runBuildChild } from "../core/BuildChild.ts";
  * "@alchemy.run/frontend-frameworks/nextjs/node"`.
  */
 import * as FrameworkCore from "../core/index.ts";
-import {
-  DeployTargetError,
-  makeDeployTarget,
-  type DeployTarget,
-} from "../core/index.ts";
+import { DeployTargetError, makeDeployTarget, type DeployTarget } from "../core/index.ts";
 import {
   NODE_BUNDLE_CONDITIONS,
   NODE_SERVE_ENTRY_FILE_NAME,
@@ -101,21 +97,14 @@ const resolveNextCli = (root: string) =>
       return require.resolve("next/dist/bin/next");
     },
     catch: failFramework(
-      `Failed to resolve "next" from ${root}. ` +
-        "It must be installed in your project.",
+      `Failed to resolve "next" from ${root}. ` + "It must be installed in your project.",
     ),
   });
 
-const runNextBuild = (options: {
-  readonly root: string;
-  readonly cli: string;
-}) =>
+const runNextBuild = (options: { readonly root: string; readonly cli: string }) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const env = yield* Effect.sync(() => ({
-        ...process.env,
-        NODE_ENV: "production",
-      }));
+      const env = yield* Effect.sync(() => ({ ...process.env, NODE_ENV: "production" }));
       const child = yield* ChildProcess.make("node", [options.cli, "build"], {
         cwd: options.root,
         stdin: "ignore",
@@ -123,19 +112,12 @@ const runNextBuild = (options: {
         stderr: "pipe",
         env,
       }).pipe(
-        Effect.mapError(
-          failFramework(
-            "Failed to spawn the next build CLI (is `node` on PATH?)",
-          ),
-        ),
+        Effect.mapError(failFramework("Failed to spawn the next build CLI (is `node` on PATH?)")),
       );
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
         dest: NodeJS.WriteStream,
-      ) =>
-        Stream.runForEach(stream, (chunk) =>
-          Effect.sync(() => dest.write(chunk)),
-        );
+      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,
@@ -143,14 +125,10 @@ const runNextBuild = (options: {
           stderr: forward(child.stderr, process.stderr),
         },
         { concurrency: "unbounded" },
-      ).pipe(
-        Effect.mapError(failFramework("Failed reading next build output")),
-      );
+      ).pipe(Effect.mapError(failFramework("Failed reading next build output")));
       if (exitCode !== 0) {
         return yield* Effect.fail(
-          failFramework(`The next build exited with code ${exitCode}`)(
-            undefined,
-          ),
+          failFramework(`The next build exited with code ${exitCode}`)(undefined),
         );
       }
     }),
@@ -166,28 +144,16 @@ const collectNextOutput = (root: string) =>
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const nextDir = path.join(root, ".next");
-    const hasNext = yield* fs
-      .exists(nextDir)
-      .pipe(Effect.orElseSucceed(() => false));
+    const hasNext = yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasNext) {
-      return yield* Effect.fail(
-        failFramework(`The next build produced no ${nextDir}`)(undefined),
-      );
+      return yield* Effect.fail(failFramework(`The next build produced no ${nextDir}`)(undefined));
     }
     const serverFilesPath = path.join(nextDir, "required-server-files.json");
     const { config } = yield* fs
       .readFileString(serverFilesPath)
       .pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(
-            Schema.fromJsonString(RequiredServerFiles),
-          ),
-        ),
-        Effect.mapError(
-          failFramework(
-            `Failed to read the built Next config ${serverFilesPath}`,
-          ),
-        ),
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(RequiredServerFiles))),
+        Effect.mapError(failFramework(`Failed to read the built Next config ${serverFilesPath}`)),
       );
     if (config.output === "export") {
       return yield* Effect.fail(
@@ -199,9 +165,7 @@ const collectNextOutput = (root: string) =>
       );
     }
     const publicDir = path.join(root, "public");
-    const hasPublic = yield* fs
-      .exists(publicDir)
-      .pipe(Effect.orElseSucceed(() => false));
+    const hasPublic = yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false));
     // No `clientDirExpression`: Next serves `.next/static` and `public/`
     // itself from the serve entry's `dir` (the project root).
     return yield* writeNodeServeEntry({
@@ -214,9 +178,7 @@ const collectNextOutput = (root: string) =>
       servePath: path.join(root, SERVER_ENTRY_NAME),
       serveModuleName: SERVER_ENTRY_NAME,
       handler: nextNodeServeHandler,
-    }).pipe(
-      Effect.mapError((error) => failFramework(error.message)(error.cause)),
-    );
+    }).pipe(Effect.mapError((error) => failFramework(error.message)(error.cause)));
   });
 
 export interface NextjsNodeBuildChildConfig {
@@ -232,34 +194,25 @@ export const buildInChild = (config: NextjsNodeBuildChildConfig) =>
     const cli = yield* resolveNextCli(root);
     const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
       Layer.provide(
-        Layer.merge(
-          Layer.succeed(FileSystem.FileSystem)(fs),
-          Layer.succeed(Path.Path)(path),
-        ),
+        Layer.merge(Layer.succeed(FileSystem.FileSystem)(fs), Layer.succeed(Path.Path)(path)),
       ),
     );
     yield* runNextBuild({ root, cli }).pipe(Effect.provide(spawnerLayer));
     return yield* collectNextOutput(root);
   });
 
-const makeNodeChildTarget = (
-  config: NextjsNodeTargetConfig = {},
-): NextjsNodeTarget =>
+const makeNodeChildTarget = (config: NextjsNodeTargetConfig = {}): NextjsNodeTarget =>
   makeDeployTarget({
     platform: "node",
     config,
-    bundle: {
-      conditions: [...NODE_BUNDLE_CONDITIONS],
-    },
+    bundle: { conditions: [...NODE_BUNDLE_CONDITIONS] },
   });
 
 /**
  * Create the Node {@link NextjsNodeTarget}: wholesale `next build` in a
  * child process, then a custom-server serve entry.
  */
-export const makeNodeTarget = (
-  config: NextjsNodeTargetConfig = {},
-): NextjsNodeTarget => ({
+export const makeNodeTarget = (config: NextjsNodeTargetConfig = {}): NextjsNodeTarget => ({
   ...makeNodeChildTarget(config),
   build: (context) =>
     runBuildChild({
@@ -267,10 +220,7 @@ export const makeNodeTarget = (
       rootDir: context.root,
       env: context.env,
       framework: "nextjs",
-      config: {
-        rootDir: context.root,
-        config,
-      } satisfies NextjsNodeBuildChildConfig,
+      config: { rootDir: context.root, config } satisfies NextjsNodeBuildChildConfig,
     }).pipe(Effect.mapError((error) => failTarget(error.message, error.cause))),
 });
 
@@ -282,30 +232,25 @@ export default makeNodeTarget;
 // Framework-module contract (AWS.Website.Server / container composites)
 // ---------------------------------------------------------------------------
 
-const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> =
-  Effect.callback((resume) => {
+const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> = Effect.callback(
+  (resume) => {
     const net = createRequire(import.meta.url)("net") as typeof NodeNet;
     const server = net.createServer();
     server.once("error", (cause) =>
-      resume(
-        Effect.fail(
-          failFramework("Failed to allocate an ephemeral port")(cause),
-        ),
-      ),
+      resume(Effect.fail(failFramework("Failed to allocate an ephemeral port")(cause))),
     );
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       if (address === null || typeof address === "string") {
         server.close();
-        resume(
-          Effect.fail(failFramework("No TCP address for the port probe")(null)),
-        );
+        resume(Effect.fail(failFramework("No TCP address for the port probe")(null)));
         return;
       }
       const port = address.port;
       server.close(() => resume(Effect.succeed(port)));
     });
-  });
+  },
+);
 
 interface NextDevChild {
   readonly exited: () => boolean;
@@ -321,9 +266,7 @@ const spawnNextDev = (options: {
   Effect.acquireRelease(
     Effect.try({
       try: () => {
-        const cp = createRequire(import.meta.url)(
-          "child_process",
-        ) as typeof NodeChildProcessModule;
+        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
         const child = cp.spawn(
           "node",
           [
@@ -333,11 +276,7 @@ const spawnNextDev = (options: {
             String(options.port),
             ...(options.host !== undefined ? ["-H", options.host] : []),
           ],
-          {
-            cwd: options.root,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: false,
-          },
+          { cwd: options.root, stdio: ["ignore", "pipe", "pipe"], detached: false },
         );
         let exited = false;
         let output = "";
@@ -353,15 +292,10 @@ const spawnNextDev = (options: {
         });
         return {
           child,
-          handle: {
-            exited: () => exited,
-            output: () => output,
-          } satisfies NextDevChild,
+          handle: { exited: () => exited, output: () => output } satisfies NextDevChild,
         };
       },
-      catch: failFramework(
-        "Failed to spawn the next dev CLI (is `node` on PATH?)",
-      ),
+      catch: failFramework("Failed to spawn the next dev CLI (is `node` on PATH?)"),
     }),
     ({ child }) =>
       Effect.callback<void>((resume) => {
@@ -432,16 +366,12 @@ const awaitNextDevReady = (options: {
       yield* Effect.sleep(500);
     }
     return yield* Effect.fail(
-      failFramework(
-        `Timed out waiting for the next dev server at ${options.url}`,
-      )(undefined),
+      failFramework(`Timed out waiting for the next dev server at ${options.url}`)(undefined),
     );
   });
 
 export interface NextjsNodeService {
-  readonly build: (
-    options?: FrameworkCore.FrameworkBuildOptions,
-  ) => Effect.Effect<
+  readonly build: (options?: FrameworkCore.FrameworkBuildOptions) => Effect.Effect<
     {
       readonly distDirectory: string;
       readonly clientDirectory: string;
@@ -451,11 +381,7 @@ export interface NextjsNodeService {
   >;
   readonly dev: (
     options?: FrameworkCore.FrameworkDevOptions,
-  ) => Effect.Effect<
-    FrameworkCore.FrameworkDevServer,
-    FrameworkCore.FrameworkError,
-    Scope.Scope
-  >;
+  ) => Effect.Effect<FrameworkCore.FrameworkDevServer, FrameworkCore.FrameworkError, Scope.Scope>;
 }
 
 /**
@@ -464,47 +390,43 @@ export interface NextjsNodeService {
  */
 export const make: (
   options?: NextjsNodeOptions,
-) => Effect.Effect<
-  NextjsNodeService,
-  never,
-  FileSystem.FileSystem | Path.Path
-> = Effect.fnUntraced(function* (options?: NextjsNodeOptions) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const resolveRoot = (override: string | undefined) =>
-    Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
+) => Effect.Effect<NextjsNodeService, never, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
+  function* (options?: NextjsNodeOptions) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const resolveRoot = (override: string | undefined) =>
+      Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
 
-  const build: NextjsNodeService["build"] = Effect.fn(function* (
-    buildOptions?: FrameworkCore.FrameworkBuildOptions,
-  ) {
-    const root = yield* resolveRoot(buildOptions?.root);
-    const nodeTarget = makeNodeTarget({ root });
-    const output = yield* nodeTarget.build!({ root, framework: "nextjs" }).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-      Effect.mapError((error) => failFramework(error.message)(error.cause)),
-    );
-    return {
-      distDirectory: output.distDirectory ?? root,
-      clientDirectory: output.clientDirectory ?? path.join(root, ".next"),
-      serverModules: (output.serverModules ?? []).map((module_) => ({
-        name: module_.name,
-      })),
-    };
-  });
+    const build: NextjsNodeService["build"] = Effect.fn(function* (
+      buildOptions?: FrameworkCore.FrameworkBuildOptions,
+    ) {
+      const root = yield* resolveRoot(buildOptions?.root);
+      const nodeTarget = makeNodeTarget({ root });
+      const output = yield* nodeTarget.build!({ root, framework: "nextjs" }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+        Effect.mapError((error) => failFramework(error.message)(error.cause)),
+      );
+      return {
+        distDirectory: output.distDirectory ?? root,
+        clientDirectory: output.clientDirectory ?? path.join(root, ".next"),
+        serverModules: (output.serverModules ?? []).map((module_) => ({ name: module_.name })),
+      };
+    });
 
-  const dev: NextjsNodeService["dev"] = Effect.fn(function* (
-    devOptions?: FrameworkCore.FrameworkDevOptions,
-  ) {
-    const root = yield* resolveRoot(devOptions?.root);
-    const port = devOptions?.port ?? (yield* pickEphemeralPort);
-    const cli = yield* resolveNextCli(root);
-    const host = devOptions?.host ?? "127.0.0.1";
-    const child = yield* spawnNextDev({ root, cli, port, host });
-    const url = `http://${host}:${port}`;
-    yield* awaitNextDevReady({ url, child });
-    return { url };
-  });
+    const dev: NextjsNodeService["dev"] = Effect.fn(function* (
+      devOptions?: FrameworkCore.FrameworkDevOptions,
+    ) {
+      const root = yield* resolveRoot(devOptions?.root);
+      const port = devOptions?.port ?? (yield* pickEphemeralPort);
+      const cli = yield* resolveNextCli(root);
+      const host = devOptions?.host ?? "127.0.0.1";
+      const child = yield* spawnNextDev({ root, cli, port, host });
+      const url = `http://${host}:${port}`;
+      yield* awaitNextDevReady({ url, child });
+      return { url };
+    });
 
-  return { build, dev };
-});
+    return { build, dev };
+  },
+);

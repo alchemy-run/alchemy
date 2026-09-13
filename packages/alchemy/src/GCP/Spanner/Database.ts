@@ -15,9 +15,7 @@ import { waitForOperation } from "./operations.ts";
 const DEFAULT_DIALECT = "GOOGLE_STANDARD_SQL";
 const MAX_DATABASE_ID_LENGTH = 30;
 
-export type DatabaseDialect =
-  | spanner.DatabaseDatabaseDialectEnum
-  | (string & {});
+export type DatabaseDialect = spanner.DatabaseDatabaseDialectEnum | (string & {});
 
 export type EncryptionConfig = {
   /**
@@ -153,22 +151,16 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("GCP.Spanner.Database");
 
-export class DatabaseNotResolved extends Data.TaggedError(
-  "GCP.Spanner.DatabaseNotResolved",
-)<{
+export class DatabaseNotResolved extends Data.TaggedError("GCP.Spanner.DatabaseNotResolved")<{
   name: string;
 }> {}
 
-export class DatabaseNotReady extends Data.TaggedError(
-  "GCP.Spanner.DatabaseNotReady",
-)<{
+export class DatabaseNotReady extends Data.TaggedError("GCP.Spanner.DatabaseNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class DatabaseStillExists extends Data.TaggedError(
-  "GCP.Spanner.DatabaseStillExists",
-)<{
+export class DatabaseStillExists extends Data.TaggedError("GCP.Spanner.DatabaseStillExists")<{
   name: string;
 }> {}
 
@@ -185,11 +177,8 @@ const normalizeDialect = (value: string | undefined) => {
   return next.endsWith("_UNSPECIFIED") ? DEFAULT_DIALECT : next;
 };
 
-const resourceName = (
-  project: string,
-  instanceId: string,
-  databaseId: string,
-) => `projects/${project}/instances/${instanceId}/databases/${databaseId}`;
+const resourceName = (project: string, instanceId: string, databaseId: string) =>
+  `projects/${project}/instances/${instanceId}/databases/${databaseId}`;
 
 const instanceName = (project: string, instanceId: string) =>
   `projects/${project}/instances/${instanceId}`;
@@ -200,14 +189,10 @@ const parseName = (name: string) => {
   const instancesAt = parts.lastIndexOf("instances");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    instanceId:
-      instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    instanceId: instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : "",
     databaseId:
-      databasesAt >= 0 && parts[databasesAt + 1]
-        ? parts[databasesAt + 1]!
-        : lastSegment(name),
+      databasesAt >= 0 && parts[databasesAt + 1] ? parts[databasesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -223,11 +208,7 @@ const toSpannerId = (name: string) => {
   return next;
 };
 
-const toDatabaseId = (
-  id: string,
-  databaseId: string | undefined,
-  existing?: string,
-) =>
+const toDatabaseId = (id: string, databaseId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (databaseId !== undefined) return databaseId;
     if (existing !== undefined) return existing;
@@ -267,13 +248,9 @@ const encryptionKey = (config: EncryptionConfig | undefined) =>
     kmsKeyNames: [...(config?.kmsKeyNames ?? [])].sort(),
   });
 
-const extraKey = (statements: string[] | undefined) =>
-  JSON.stringify(statements ?? []);
+const extraKey = (statements: string[] | undefined) => JSON.stringify(statements ?? []);
 
-const toAttrs = (
-  database: spanner.Database,
-  project: string,
-): Database["Attributes"] => {
+const toAttrs = (database: spanner.Database, project: string): Database["Attributes"] => {
   const name = database.name ?? "";
   const parsed = parseName(name);
   return {
@@ -301,9 +278,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
-      database
-        ? Effect.succeed(database)
-        : Effect.fail(new DatabaseNotResolved({ name })),
+      database ? Effect.succeed(database) : Effect.fail(new DatabaseNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.DatabaseNotResolved",
@@ -341,9 +316,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
-      database === undefined
-        ? Effect.void
-        : Effect.fail(new DatabaseStillExists({ name })),
+      database === undefined ? Effect.void : Effect.fail(new DatabaseStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.DatabaseStillExists",
@@ -372,15 +345,11 @@ const listAlchemyInstances = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.instances ?? [])),
       Stream.filter((instance) =>
-        Object.keys(instance.labels ?? {}).some((key) =>
-          key.startsWith(ALCHEMY_LABEL_PREFIX),
-        ),
+        Object.keys(instance.labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX)),
       ),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as spanner.Instance[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as spanner.Instance[])),
     );
 
 export const DatabaseProvider = () =>
@@ -394,18 +363,10 @@ export const DatabaseProvider = () =>
       const nextInstance = news.instance;
       const previousId = olds?.databaseId ?? output?.databaseId;
       const nextId = news.databaseId ?? previousId;
-      const previousDialect = normalizeDialect(
-        olds?.databaseDialect ?? output?.databaseDialect,
-      );
-      const nextDialect = normalizeDialect(
-        news.databaseDialect ?? output?.databaseDialect,
-      );
-      const previousKms = encryptionKey(
-        olds?.encryptionConfig ?? output?.encryptionConfig,
-      );
-      const nextKms = encryptionKey(
-        news.encryptionConfig ?? output?.encryptionConfig,
-      );
+      const previousDialect = normalizeDialect(olds?.databaseDialect ?? output?.databaseDialect);
+      const nextDialect = normalizeDialect(news.databaseDialect ?? output?.databaseDialect);
+      const previousKms = encryptionKey(olds?.encryptionConfig ?? output?.encryptionConfig);
+      const nextKms = encryptionKey(news.encryptionConfig ?? output?.encryptionConfig);
       const extraChanged =
         olds?.extraStatements !== undefined &&
         news.extraStatements !== undefined &&
@@ -414,10 +375,7 @@ export const DatabaseProvider = () =>
       const instanceChanged =
         previousInstance !== undefined &&
         instanceIdOf(previousInstance) !== instanceIdOf(nextInstance);
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId;
+      const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
 
       const replace =
         instanceChanged ||
@@ -429,24 +387,16 @@ export const DatabaseProvider = () =>
       if (!replace) return undefined;
       return {
         action: "replace" as const,
-        deleteFirst:
-          !instanceChanged && previousId !== undefined && nextId === previousId,
+        deleteFirst: !instanceChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const instanceId = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       if (instanceId.length === 0) return undefined;
-      const databaseId = yield* toDatabaseId(
-        id,
-        olds?.databaseId,
-        output?.databaseId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, instanceId, databaseId);
+      const databaseId = yield* toDatabaseId(id, olds?.databaseId, output?.databaseId);
+      const name = output?.name ?? resourceName(env.project, instanceId, databaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, env.project);
@@ -469,15 +419,11 @@ export const DatabaseProvider = () =>
                 pageSize: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.databases ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.databases ?? [])),
                 Stream.map((database) => toAttrs(database, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as Database["Attributes"][]),
-                ),
+                Effect.catchTag("NotFound", () => Effect.succeed([] as Database["Attributes"][])),
               );
           },
           { concurrency: 4 },
@@ -488,11 +434,7 @@ export const DatabaseProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = instanceIdOf(news.instance);
-      const databaseId = yield* toDatabaseId(
-        id,
-        news.databaseId,
-        output?.databaseId,
-      );
+      const databaseId = yield* toDatabaseId(id, news.databaseId, output?.databaseId);
       const name = resourceName(env.project, instanceId, databaseId);
       const dialect = normalizeDialect(news.databaseDialect);
       const desiredProtection = news.enableDropProtection === true;
@@ -507,8 +449,7 @@ export const DatabaseProvider = () =>
               createStatement: createStatementOf(databaseId, dialect),
               extraStatements: news.extraStatements,
               encryptionConfig: news.encryptionConfig,
-              databaseDialect:
-                dialect === DEFAULT_DIALECT ? undefined : dialect,
+              databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));

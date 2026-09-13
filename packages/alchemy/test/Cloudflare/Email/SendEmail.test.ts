@@ -12,10 +12,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const FROM = process.env.CLOUDFLARE_TEST_EMAIL_FROM;
 const TO = process.env.CLOUDFLARE_TEST_EMAIL_TO;
@@ -47,9 +44,7 @@ test.skipIf(skip)(
 
     const sendUrl = `${url}/send?from=${encodeURIComponent(FROM!)}&to=${encodeURIComponent(TO!)}`;
     const res = yield* client.get(sendUrl).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200 ? Effect.succeed(res) : Effect.fail(res),
-      ),
+      Effect.flatMap((res) => (res.status === 200 ? Effect.succeed(res) : Effect.fail(res))),
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
         times: 10,

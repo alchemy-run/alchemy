@@ -26,9 +26,7 @@ test.provider(
         }),
       );
 
-      expect(outputs.server.identifier).toBe(
-        "https://api.alchemy-test.example.com",
-      );
+      expect(outputs.server.identifier).toBe("https://api.alchemy-test.example.com");
       expect(outputs.server.name).toBe("Test API");
 
       // out-of-band verification via distilled
@@ -70,9 +68,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }),

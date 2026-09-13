@@ -1,8 +1,8 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -75,9 +75,7 @@ export const toPhysicalId = (
   });
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const organizationIdOf = (value: string) => lastSegment(value);
 
@@ -92,13 +90,8 @@ export const parseName = (name: string, collection: string) => {
   return {
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -138,13 +131,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const defaultPolicySets = (): securityposture.PolicySetList => [
   {
@@ -183,15 +173,13 @@ export const waitForOperation = (
     return waitForLongRunningOperation(
       operation,
       (name) => {
-        const get = securityposture
-          .getOrganizationsLocationsOperations({ name })
-          .pipe(
-            Effect.tap((current) =>
-              Effect.sync(() => {
-                latest = current;
-              }),
-            ),
-          );
+        const get = securityposture.getOrganizationsLocationsOperations({ name }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
+            }),
+          ),
+        );
         const observe: Effect.Effect<
           securityposture.Operation,
           securityposture.GetOrganizationsLocationsOperationsError,
@@ -290,10 +278,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);
@@ -306,15 +291,13 @@ export const resolveOrganization = (
   });
 
 export const projectNumberOf = (project: string) =>
-  resourcemanager
-    .getProjects({ name: `projects/${lastSegment(project)}` })
-    .pipe(
-      Effect.map((resource) => {
-        const number = lastSegment(resource.name ?? "");
-        return /^\d+$/.test(number) ? number : lastSegment(project);
-      }),
-      Effect.catchTag("NotFound", () => Effect.succeed(lastSegment(project))),
-    );
+  resourcemanager.getProjects({ name: `projects/${lastSegment(project)}` }).pipe(
+    Effect.map((resource) => {
+      const number = lastSegment(resource.name ?? "");
+      return /^\d+$/.test(number) ? number : lastSegment(project);
+    }),
+    Effect.catchTag("NotFound", () => Effect.succeed(lastSegment(project))),
+  );
 
 export const normalizeTargetResource = (value: string) =>
   Effect.gen(function* () {

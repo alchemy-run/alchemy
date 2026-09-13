@@ -27,11 +27,7 @@ export const ResourceRow = Schema.Struct({
 type ResourceRow = typeof ResourceRow.Type;
 
 /** Delay one final resource-row rename; all filesystem operations remain real. */
-export const delayedResourceWrite = (target: {
-  stack: string;
-  stage: string;
-  fqn: string;
-}) =>
+export const delayedResourceWrite = (target: { stack: string; stage: string; fqn: string }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -57,9 +53,7 @@ export const delayedResourceWrite = (target: {
             from.endsWith(".tmp")
           ) {
             const row = yield* fs.readFileString(from).pipe(
-              Effect.flatMap(
-                Schema.decodeUnknownEffect(Schema.fromJsonString(ResourceRow)),
-              ),
+              Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ResourceRow))),
               Effect.catchTag("SchemaError", () =>
                 Effect.fail(
                   PlatformError.badArgument({
@@ -88,8 +82,7 @@ export const delayedResourceWrite = (target: {
                       _tag: "TimedOut",
                       module: "FileSystem",
                       method: "rename",
-                      description:
-                        "Delayed resource-row release exceeded 600 seconds",
+                      description: "Delayed resource-row release exceeded 600 seconds",
                     }),
                   ),
                 ),
@@ -103,9 +96,7 @@ export const delayedResourceWrite = (target: {
         }),
     };
     return {
-      state: localState().pipe(
-        Layer.provide(Layer.succeed(FileSystem.FileSystem, forwarded)),
-      ),
+      state: localState().pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, forwarded))),
       wait: Deferred.await(held).pipe(Effect.timeout("600 seconds")),
       release: Deferred.succeed(released, undefined).pipe(Effect.asVoid),
       written: Deferred.await(written).pipe(Effect.timeout("600 seconds")),

@@ -8,11 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Application } from "@/AWS/KinesisAnalyticsV2";
 import * as Test from "@/Test/Alchemy";
-import {
-  codeKey,
-  deleteCodeBucketIdempotent,
-  provisionCodeBucket,
-} from "./code-bucket.ts";
+import { codeKey, deleteCodeBucketIdempotent, provisionCodeBucket } from "./code-bucket.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,36 +19,22 @@ const { test } = Test.make({ providers: AWS.providers() });
 const appCodeBucket = "alchemy-test-kav2-app-code";
 const renameCodeBucket = "alchemy-test-kav2-rename-code";
 
-class ApplicationStillExists extends Data.TaggedError(
-  "ApplicationStillExists",
-) {}
+class ApplicationStillExists extends Data.TaggedError("ApplicationStillExists") {}
 
 const assertApplicationDeleted = Effect.fn(function* (applicationName: string) {
-  yield* analytics
-    .describeApplication({ ApplicationName: applicationName })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new ApplicationStillExists())),
-      Effect.retry({
-        while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
-        schedule: Schedule.max([
-          Schedule.fixed("3 seconds"),
-          Schedule.recurs(40),
-        ]),
-      }),
-      Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-    );
+  yield* analytics.describeApplication({ ApplicationName: applicationName }).pipe(
+    Effect.flatMap(() => Effect.fail(new ApplicationStillExists())),
+    Effect.retry({
+      while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
+    }),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+  );
 });
 
 describe.skipIf(!!process.env.FAST)(
   "AWS.KinesisAnalyticsV2.Application",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:kinesisanalyticsv2",
-      "provider:aws:s3",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:kinesisanalyticsv2", "provider:aws:s3", "live"] },
   () => {
     test.provider(
       "create Flink application in READY, update configuration in place, destroy",
@@ -70,10 +52,7 @@ describe.skipIf(!!process.env.FAST)(
                 runtimeEnvironment: "FLINK-1_20",
                 code: { bucketArn: codeBucketArn, fileKey: codeKey },
                 environmentProperties: [
-                  {
-                    propertyGroupId: "AppProperties",
-                    propertyMap: { mode: "test" },
-                  },
+                  { propertyGroupId: "AppProperties", propertyMap: { mode: "test" } },
                 ],
                 tags: { Environment: "test" },
               });
@@ -96,12 +75,8 @@ describe.skipIf(!!process.env.FAST)(
           const described = yield* analytics.describeApplication({
             ApplicationName: deployed.app.applicationName,
           });
-          expect(described.ApplicationDetail.ApplicationStatus).toEqual(
-            "READY",
-          );
-          expect(described.ApplicationDetail.RuntimeEnvironment).toEqual(
-            "FLINK-1_20",
-          );
+          expect(described.ApplicationDetail.ApplicationStatus).toEqual("READY");
+          expect(described.ApplicationDetail.RuntimeEnvironment).toEqual("FLINK-1_20");
           const observedGroups =
             described.ApplicationDetail.ApplicationConfigurationDescription
               ?.EnvironmentPropertyDescriptions?.PropertyGroupDescriptions;
@@ -116,10 +91,7 @@ describe.skipIf(!!process.env.FAST)(
           expect(tagKeys).toContain("alchemy::stack");
           expect(tagKeys).toContain("alchemy::stage");
           expect(tagKeys).toContain("alchemy::id");
-          expect(tags.Tags).toContainEqual({
-            Key: "Environment",
-            Value: "test",
-          });
+          expect(tags.Tags).toContainEqual({ Key: "Environment", Value: "test" });
 
           // Typed error probe: describing a nonexistent snapshot of a live
           // application surfaces the typed ResourceNotFoundException.
@@ -159,9 +131,7 @@ describe.skipIf(!!process.env.FAST)(
           );
 
           // Same physical application — updated in place, not replaced.
-          expect(updated.app.applicationName).toEqual(
-            deployed.app.applicationName,
-          );
+          expect(updated.app.applicationName).toEqual(deployed.app.applicationName);
           expect(updated.app.applicationVersionId).toBeGreaterThan(1);
           expect(updated.app.applicationStatus).toEqual("READY");
           // Maintenance window applied via UpdateApplicationMaintenanceConfiguration.
@@ -172,11 +142,10 @@ describe.skipIf(!!process.env.FAST)(
             ApplicationName: deployed.app.applicationName,
           });
           const updatedConfig =
-            updatedDescribe.ApplicationDetail
-              .ApplicationConfigurationDescription;
+            updatedDescribe.ApplicationDetail.ApplicationConfigurationDescription;
           expect(
-            updatedConfig?.EnvironmentPropertyDescriptions
-              ?.PropertyGroupDescriptions?.[0]?.PropertyMap?.mode,
+            updatedConfig?.EnvironmentPropertyDescriptions?.PropertyGroupDescriptions?.[0]
+              ?.PropertyMap?.mode,
           ).toEqual("production");
           expect(
             updatedConfig?.FlinkApplicationConfigurationDescription
@@ -186,14 +155,8 @@ describe.skipIf(!!process.env.FAST)(
           const updatedTags = yield* analytics.listTagsForResource({
             ResourceARN: deployed.app.applicationArn,
           });
-          expect(updatedTags.Tags).toContainEqual({
-            Key: "Environment",
-            Value: "production",
-          });
-          expect(updatedTags.Tags).toContainEqual({
-            Key: "Team",
-            Value: "platform",
-          });
+          expect(updatedTags.Tags).toContainEqual({ Key: "Environment", Value: "production" });
+          expect(updatedTags.Tags).toContainEqual({ Key: "Team", Value: "platform" });
 
           // A no-change redeploy must not bump the application version
           // (observed-vs-desired diffing skips the UpdateApplication call).
@@ -222,9 +185,7 @@ describe.skipIf(!!process.env.FAST)(
               return { app };
             }),
           );
-          expect(steady.app.applicationVersionId).toEqual(
-            updated.app.applicationVersionId,
-          );
+          expect(steady.app.applicationVersionId).toEqual(updated.app.applicationVersionId);
 
           yield* stack.destroy();
 
@@ -269,12 +230,8 @@ describe.skipIf(!!process.env.FAST)(
           );
 
           // Name change is a replacement — new physical application.
-          expect(replaced.app.applicationName).toEqual(
-            "alchemy-test-kav2-renamed",
-          );
-          expect(replaced.app.applicationName).not.toEqual(
-            initial.app.applicationName,
-          );
+          expect(replaced.app.applicationName).toEqual("alchemy-test-kav2-renamed");
+          expect(replaced.app.applicationName).not.toEqual(initial.app.applicationName);
 
           // The replaced (old) application is deleted by the engine.
           yield* assertApplicationDeleted(initial.app.applicationName);

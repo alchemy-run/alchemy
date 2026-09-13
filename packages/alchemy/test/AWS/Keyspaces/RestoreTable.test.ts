@@ -23,28 +23,18 @@ const deleteRestoredTable = keyspaces
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e): boolean => e._tag === "ConflictException",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(36),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
     }),
     // Wait (bounded) until it is actually gone so the keyspace can be
     // destroyed without a ConflictException.
     Effect.andThen(
-      keyspaces
-        .getTable({ keyspaceName: RESTORE_KS, tableName: RESTORED_TABLE })
-        .pipe(
-          Effect.flatMap(() =>
-            Effect.fail(new Error(`'${RESTORED_TABLE}' still deleting`)),
-          ),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(20),
-            ]),
-          }),
-        ),
+      keyspaces.getTable({ keyspaceName: RESTORE_KS, tableName: RESTORED_TABLE }).pipe(
+        Effect.flatMap(() => Effect.fail(new Error(`'${RESTORED_TABLE}' still deleting`))),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+        }),
+      ),
     ),
   );
 
@@ -69,10 +59,7 @@ describe(
               targetTableName: "restored_tbl",
             })
             .pipe(Effect.flip);
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(error._tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
         }),
       { timeout: 60_000 },
     );
@@ -102,21 +89,13 @@ describe(
             Effect.flatMap((response) =>
               response.status === 200
                 ? response.json
-                : Effect.fail(
-                    new Error(`restore not ready: ${response.status}`),
-                  ),
+                : Effect.fail(new Error(`restore not ready: ${response.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
             }),
           );
-          const restored = body as {
-            restoredTableARN?: string;
-            error?: string;
-          };
+          const restored = body as { restoredTableARN?: string; error?: string };
           expect(restored.error).toBeUndefined();
           expect(restored.restoredTableARN).toContain(
             `/keyspace/${RESTORE_KS}/table/${RESTORED_TABLE}`,

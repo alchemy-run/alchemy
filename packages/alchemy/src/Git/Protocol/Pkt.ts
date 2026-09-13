@@ -34,24 +34,18 @@ export const MAX_PKT_PAYLOAD = 65516;
  * Error raised on malformed pkt-line framing (bad hex length, out-of-range
  * length, truncated payload, oversize writer payload).
  */
-export class PktLineError extends Schema.TaggedError<PktLineError>()(
-  "PktLineError",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class PktLineError extends Schema.TaggedError<PktLineError>()("PktLineError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * Error raised when a syntactically valid pkt-line stream contains a request
  * the protocol grammar does not allow (bad `want`/`have`/command lines,
  * unsupported arguments). Shared by `UploadPack` and `ReceivePack`.
  */
-export class ProtocolError extends Schema.TaggedError<ProtocolError>()(
-  "ProtocolError",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class ProtocolError extends Schema.TaggedError<ProtocolError>()("ProtocolError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * One decoded pkt-line: a data packet with its payload, or one of the three
@@ -113,8 +107,7 @@ export const pktText = (text: string): Uint8Array =>
  * place of an advertisement); the client prints `remote error: <message>`
  * and aborts.
  */
-export const errPkt = (message: string): Uint8Array =>
-  pktText(`ERR ${message}`);
+export const errPkt = (message: string): Uint8Array => pktText(`ERR ${message}`);
 
 /**
  * Decodes a data pkt-line payload as UTF-8 text with the optional trailing
@@ -148,10 +141,7 @@ const hexDigit = (byte: number): number => {
  * Returns `incomplete` when more bytes are needed, `invalid` on malformed
  * framing, or the decoded packet and the offset of the next one.
  */
-export const readPktLineAt = (
-  buf: Uint8Array,
-  offset: number,
-): PktReadResult => {
+export const readPktLineAt = (buf: Uint8Array, offset: number): PktReadResult => {
   if (offset + 4 > buf.length) return { _tag: "incomplete" };
   let n = 0;
   for (let i = 0; i < 4; i++) {
@@ -206,9 +196,7 @@ export const decodePktLines = (
           pos = r.next;
           break;
         case "incomplete":
-          return Effect.fail(
-            new PktLineError({ reason: `truncated pkt-line at offset ${pos}` }),
-          );
+          return Effect.fail(new PktLineError({ reason: `truncated pkt-line at offset ${pos}` }));
         case "invalid":
           return Effect.fail(new PktLineError({ reason: r.reason }));
       }

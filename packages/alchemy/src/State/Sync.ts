@@ -64,13 +64,9 @@ export const syncState = Effect.fn(function* (
                 }),
                 { concurrency },
               ),
-              Effect.forEach(
-                toDelete,
-                (fqn) => destination.delete({ stack, stage, fqn }),
-                {
-                  concurrency,
-                },
-              ),
+              Effect.forEach(toDelete, (fqn) => destination.delete({ stack, stage, fqn }), {
+                concurrency,
+              }),
             ],
             { concurrency: "unbounded" },
           );
@@ -86,6 +82,4 @@ export const syncState = Effect.fn(function* (
   );
 });
 
-const union = <T>(left: Iterable<T>, right: Iterable<T>) => [
-  ...new Set([...left, ...right]),
-];
+const union = <T>(left: Iterable<T>, right: Iterable<T>) => [...new Set([...left, ...right])];

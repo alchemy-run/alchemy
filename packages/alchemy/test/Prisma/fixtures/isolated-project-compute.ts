@@ -14,13 +14,10 @@ import { isolatedProject } from "../../IsolatedProject.ts";
  */
 export const project = isolatedProject("prisma-compute", import.meta.filename);
 
-export const IsolatedProjectPrismaProject = Project(
-  "PrismaIsolatedProjectProject",
-  {
-    name: "alchemy-isolated-project",
-    createDatabase: false,
-  },
-);
+export const IsolatedProjectPrismaProject = Project("PrismaIsolatedProjectProject", {
+  name: "alchemy-isolated-project",
+  createDatabase: false,
+});
 
 /**
  * Minimal Effect-native `Prisma.Compute` app served from an isolated

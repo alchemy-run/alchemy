@@ -252,9 +252,7 @@ export const DeviceCustomProfile = Resource<DeviceCustomProfile>(TypeId);
 /**
  * Returns true if the given value is a DeviceCustomProfile resource.
  */
-export const isDeviceCustomProfile = (
-  value: unknown,
-): value is DeviceCustomProfile =>
+export const isDeviceCustomProfile = (value: unknown): value is DeviceCustomProfile =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DeviceCustomProfileProvider = () =>
@@ -333,9 +331,7 @@ export const DeviceCustomProfileProvider = () =>
         observed = yield* observeProfile(accountId, policyId);
         if (!observed) {
           return yield* Effect.fail(
-            new Error(
-              `custom device profile ${policyId} disappeared right after create`,
-            ),
+            new Error(`custom device profile ${policyId} disappeared right after create`),
           );
         }
       }
@@ -348,10 +344,7 @@ export const DeviceCustomProfileProvider = () =>
       };
       let dirty = false;
       const setIf = <
-        K extends Exclude<
-          keyof zeroTrust.PatchDevicePolicyCustomRequest,
-          "accountId" | "policyId"
-        >,
+        K extends Exclude<keyof zeroTrust.PatchDevicePolicyCustomRequest, "accountId" | "policyId">,
       >(
         key: K,
         desired: zeroTrust.PatchDevicePolicyCustomRequest[K],
@@ -368,33 +361,13 @@ export const DeviceCustomProfileProvider = () =>
       setIf("precedence", news.precedence, denull(observed.precedence));
       setIf("enabled", news.enabled, denull(observed.enabled));
       setIf("description", news.description, denull(observed.description));
-      setIf(
-        "captivePortal",
-        news.captivePortal,
-        denull(observed.captivePortal),
-      );
+      setIf("captivePortal", news.captivePortal, denull(observed.captivePortal));
       setIf("autoConnect", news.autoConnect, denull(observed.autoConnect));
-      setIf(
-        "allowedToLeave",
-        news.allowedToLeave,
-        denull(observed.allowedToLeave),
-      );
-      setIf(
-        "allowModeSwitch",
-        news.allowModeSwitch,
-        denull(observed.allowModeSwitch),
-      );
+      setIf("allowedToLeave", news.allowedToLeave, denull(observed.allowedToLeave));
+      setIf("allowModeSwitch", news.allowModeSwitch, denull(observed.allowModeSwitch));
       setIf("allowUpdates", news.allowUpdates, denull(observed.allowUpdates));
-      setIf(
-        "disableAutoFallback",
-        news.disableAutoFallback,
-        denull(observed.disableAutoFallback),
-      );
-      setIf(
-        "excludeOfficeIps",
-        news.excludeOfficeIps,
-        denull(observed.excludeOfficeIps),
-      );
+      setIf("disableAutoFallback", news.disableAutoFallback, denull(observed.disableAutoFallback));
+      setIf("excludeOfficeIps", news.excludeOfficeIps, denull(observed.excludeOfficeIps));
       setIf("switchLocked", news.switchLocked, denull(observed.switchLocked));
       setIf(
         "registerInterfaceIpWithDns",
@@ -407,17 +380,10 @@ export const DeviceCustomProfileProvider = () =>
         denull(observed.sccmVpnBoundarySupport),
       );
       setIf("supportUrl", news.supportUrl, denull(observed.supportUrl));
-      setIf(
-        "tunnelProtocol",
-        news.tunnelProtocol,
-        denull(observed.tunnelProtocol),
-      );
+      setIf("tunnelProtocol", news.tunnelProtocol, denull(observed.tunnelProtocol));
       if (
         news.serviceModeV2 !== undefined &&
-        !sameJSON(
-          news.serviceModeV2,
-          normalizeServiceMode(observed.serviceModeV2),
-        )
+        !sameJSON(news.serviceModeV2, normalizeServiceMode(observed.serviceModeV2))
       ) {
         patch.serviceModeV2 = news.serviceModeV2;
         dirty = true;
@@ -439,20 +405,14 @@ export const DeviceCustomProfileProvider = () =>
       // 3. Sync (b) — replace the per-profile lists when they differ from
       //    the observed cloud state.
       const lists = yield* observeLists(accountId, policyId);
-      if (
-        news.include !== undefined &&
-        !sameJSON(news.include, lists.include)
-      ) {
+      if (news.include !== undefined && !sameJSON(news.include, lists.include)) {
         yield* zeroTrust.putDevicePolicyCustomInclude({
           accountId,
           policyId,
           body: news.include.map(encodeSplit),
         });
       }
-      if (
-        news.exclude !== undefined &&
-        !sameJSON(news.exclude, lists.exclude)
-      ) {
+      if (news.exclude !== undefined && !sameJSON(news.exclude, lists.exclude)) {
         yield* zeroTrust.putDevicePolicyCustomExclude({
           accountId,
           policyId,
@@ -474,9 +434,7 @@ export const DeviceCustomProfileProvider = () =>
       const final = yield* observeProfile(accountId, policyId);
       if (!final) {
         return yield* Effect.fail(
-          new Error(
-            `custom device profile ${policyId} disappeared during reconcile`,
-          ),
+          new Error(`custom device profile ${policyId} disappeared during reconcile`),
         );
       }
       return yield* buildAttrs(accountId, final);
@@ -499,28 +457,20 @@ export const DeviceCustomProfileProvider = () =>
     // mid-enumeration is dropped via the typed `DevicePolicyNotFound` map.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const items = yield* zeroTrust.listDevicePolicyCustoms
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.result ?? []),
-          ),
-        );
+      const items = yield* zeroTrust.listDevicePolicyCustoms.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
+      );
       const rows = yield* Effect.forEach(
         items.filter((p) => p.policyId != null),
         (p) =>
           Effect.gen(function* () {
             const observed = yield* observeProfile(accountId, p.policyId!);
-            return observed
-              ? yield* buildAttrs(accountId, observed)
-              : undefined;
+            return observed ? yield* buildAttrs(accountId, observed) : undefined;
           }),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is DeviceCustomProfileAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is DeviceCustomProfileAttributes => row !== undefined);
     }),
   });
 
@@ -575,10 +525,7 @@ const createProfileName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const buildAttrs = Effect.fn(function* (
-  accountId: string,
-  profile: ObservedProfile,
-) {
+const buildAttrs = Effect.fn(function* (accountId: string, profile: ObservedProfile) {
   const policyId = profile.policyId!;
   const lists = yield* observeLists(accountId, policyId);
   const attrs: DeviceCustomProfileAttributes = {
@@ -614,8 +561,7 @@ const buildAttrs = Effect.fn(function* (
  * Strip Cloudflare's `null` echoes to `undefined` so structural equality
  * (`JSON.stringify`) works.
  */
-const denull = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const denull = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const normalizeServiceMode = (
   sm: { mode?: string | null; port?: number | null } | null | undefined,
@@ -653,9 +599,7 @@ const normalizeFallback = (entry: {
  */
 const encodeSplit = (
   e: DeviceDefaultProfile.SplitTunnelEntry,
-):
-  | { address: string; description?: string }
-  | { host: string; description?: string } => {
+): { address: string; description?: string } | { host: string; description?: string } => {
   if (e.host && !e.address) {
     return e.description !== undefined
       ? { host: e.host, description: e.description }
@@ -678,5 +622,4 @@ const encodeFallback = (
 };
 
 /** Structural deep-equality via canonical JSON. */
-const sameJSON = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const sameJSON = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Aws from "../../Alchemist/routes/aws.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { confirmOrDecline } from "./confirm.ts";
@@ -15,9 +15,7 @@ const awsProfile = Flag.String("aws-profile").pipe(
 );
 
 const awsRegion = Flag.String("region").pipe(
-  Flag.withDescription(
-    "AWS region to bootstrap (defaults to AWS_REGION env var)",
-  ),
+  Flag.withDescription("AWS region to bootstrap (defaults to AWS_REGION env var)"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );
@@ -47,9 +45,7 @@ const runBootstrap = Effect.fn(function* (args: {
   const result = yield* Aws.bootstrap(target);
   yield* result.created
     ? prompt.output.success(`Created assets bucket: ${result.bucketName}`)
-    : prompt.output.success(
-        `Assets bucket already exists: ${result.bucketName}`,
-      );
+    : prompt.output.success(`Assets bucket already exists: ${result.bucketName}`);
 });
 
 const teardownCommand = Command.make(

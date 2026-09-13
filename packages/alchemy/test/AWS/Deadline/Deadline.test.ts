@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ungated typed-error probes: prove the distilled error union carries the
 // not-found tag every provider read/delete path in this service depends on.
@@ -23,9 +20,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        deadline.getFarm({
-          farmId: "farm-00000000000000000000000000000000",
-        }),
+        deadline.getFarm({ farmId: "farm-00000000000000000000000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -37,9 +32,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        deadline.getMonitor({
-          monitorId: "monitor-00000000000000000000000000000000",
-        }),
+        deadline.getMonitor({ monitorId: "monitor-00000000000000000000000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -53,10 +46,7 @@ const assertFarmDeleted = Effect.fn(function* (farmId: string) {
     Effect.flatMap(() => Effect.fail(new FarmStillExists())),
     Effect.retry({
       while: (e) => e._tag === "FarmStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("6 seconds"),
-        Schedule.recurs(9),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -93,9 +83,7 @@ test.provider(
           const profile = yield* StorageProfile("LinuxHosts", {
             farmId: farm.farmId,
             osFamily: "LINUX",
-            fileSystemLocations: [
-              { name: "Assets", path: "/mnt/assets", type: "SHARED" },
-            ],
+            fileSystemLocations: [{ name: "Assets", path: "/mnt/assets", type: "SHARED" }],
           });
           const queue = yield* Queue("RenderQueue", {
             farmId: farm.farmId,
@@ -106,12 +94,7 @@ test.provider(
             farmId: farm.farmId,
             queueId: queue.queueId,
             approximateDollarLimit: 1,
-            actions: [
-              {
-                type: "STOP_SCHEDULING_AND_COMPLETE_TASKS",
-                thresholdPercentage: 100,
-              },
-            ],
+            actions: [{ type: "STOP_SCHEDULING_AND_COMPLETE_TASKS", thresholdPercentage: 100 }],
             schedule,
           });
           return { farm, profile, queue, budget };
@@ -137,9 +120,7 @@ test.provider(
         queueId: created.queue.queueId,
       });
       expect(queue.displayName).toBe(created.queue.displayName);
-      const tags = yield* deadline.listTagsForResource({
-        resourceArn: created.farm.farmArn,
-      });
+      const tags = yield* deadline.listTagsForResource({ resourceArn: created.farm.farmArn });
       expect(tags.tags?.fixture).toBe("deadline");
       expect(tags.tags?.["alchemy::id"]).toBe("TestFarm");
 
@@ -169,12 +150,7 @@ test.provider(
             farmId: farm.farmId,
             queueId: queue.queueId,
             approximateDollarLimit: 2,
-            actions: [
-              {
-                type: "STOP_SCHEDULING_AND_CANCEL_TASKS",
-                thresholdPercentage: 90,
-              },
-            ],
+            actions: [{ type: "STOP_SCHEDULING_AND_CANCEL_TASKS", thresholdPercentage: 90 }],
             schedule,
           });
           return { farm, profile, queue, budget };
@@ -184,9 +160,7 @@ test.provider(
       // Stable identifiers survive the in-place update.
       expect(updated.farm.farmId).toBe(created.farm.farmId);
       expect(updated.queue.queueId).toBe(created.queue.queueId);
-      expect(updated.profile.storageProfileId).toBe(
-        created.profile.storageProfileId,
-      );
+      expect(updated.profile.storageProfileId).toBe(created.profile.storageProfileId);
       expect(updated.budget.budgetId).toBe(created.budget.budgetId);
       expect(updated.farm.costScaleFactor).toBe(2);
       expect(updated.budget.approximateDollarLimit).toBe(2);
@@ -197,18 +171,14 @@ test.provider(
         farmId: created.farm.farmId,
         queueId: created.queue.queueId,
       });
-      expect(updatedQueue.allowedStorageProfileIds).toEqual([
-        created.profile.storageProfileId,
-      ]);
+      expect(updatedQueue.allowedStorageProfileIds).toEqual([created.profile.storageProfileId]);
       const updatedBudget = yield* deadline.getBudget({
         farmId: created.farm.farmId,
         budgetId: created.budget.budgetId,
       });
       expect(updatedBudget.approximateDollarLimit).toBe(2);
       expect(updatedBudget.actions).toHaveLength(1);
-      expect(updatedBudget.actions[0]?.type).toBe(
-        "STOP_SCHEDULING_AND_CANCEL_TASKS",
-      );
+      expect(updatedBudget.actions[0]?.type).toBe("STOP_SCHEDULING_AND_CANCEL_TASKS");
       const updatedFarmTags = yield* deadline.listTagsForResource({
         resourceArn: created.farm.farmArn,
       });
@@ -245,9 +215,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DEADLINE)(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AWSDeadlineCloud-FleetWorker",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AWSDeadlineCloud-FleetWorker"],
           });
           const fleet = yield* Fleet("Workers", {
             farmId: farm.farmId,
@@ -276,18 +244,12 @@ test.provider.skipIf(!process.env.AWS_TEST_DEADLINE)(
       expect(fleet.maxWorkerCount).toBe(1);
 
       // Verify out-of-band via distilled.
-      const described = yield* deadline.getFleet({
-        farmId: fleet.farmId,
-        fleetId: fleet.fleetId,
-      });
+      const described = yield* deadline.getFleet({ farmId: fleet.farmId, fleetId: fleet.fleetId });
       expect(described.status).toBe("ACTIVE");
       expect(described.configuration.customerManaged?.mode).toBe("NO_SCALING");
 
       yield* stack.destroy();
       yield* assertFarmDeleted(farm.farmId);
     }).pipe(logLevel),
-  {
-    tags: ["provider:aws", "provider:aws:deadline", "provider:aws:iam", "live"],
-    timeout: 300_000,
-  },
+  { tags: ["provider:aws", "provider:aws:deadline", "provider:aws:iam", "live"], timeout: 300_000 },
 );

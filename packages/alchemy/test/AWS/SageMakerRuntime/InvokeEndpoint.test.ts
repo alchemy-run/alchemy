@@ -45,8 +45,7 @@ test.provider(
         sagemaker.invokeEndpointAsync({
           EndpointName: "alchemy-nonexistent-endpoint-probe",
           ContentType: "application/json",
-          InputLocation:
-            "s3://alchemy-nonexistent-bucket-probe/input/request.json",
+          InputLocation: "s3://alchemy-nonexistent-bucket-probe/input/request.json",
         }),
       );
 

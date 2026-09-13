@@ -10,20 +10,13 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  fetchSiteWiseTags,
-  matchesDesired,
-  syncSiteWiseTags,
-} from "./internal.ts";
+import { fetchSiteWiseTags, matchesDesired, syncSiteWiseTags } from "./internal.ts";
 
 export type AssetModelType = sitewise.AssetModelType;
 export type AssetModelState = sitewise.AssetModelState;
-export type AssetModelPropertyDefinition =
-  sitewise.AssetModelPropertyDefinition;
-export type AssetModelHierarchyDefinition =
-  sitewise.AssetModelHierarchyDefinition;
-export type AssetModelCompositeModelDefinition =
-  sitewise.AssetModelCompositeModelDefinition;
+export type AssetModelPropertyDefinition = sitewise.AssetModelPropertyDefinition;
+export type AssetModelHierarchyDefinition = sitewise.AssetModelHierarchyDefinition;
+export type AssetModelCompositeModelDefinition = sitewise.AssetModelCompositeModelDefinition;
 
 export interface AssetModelProps {
   /**
@@ -149,10 +142,7 @@ export interface AssetModel extends Resource<
  */
 export const AssetModel = Resource<AssetModel>("AWS.IoTSiteWise.AssetModel");
 
-const createAssetModelName = (
-  id: string,
-  props: { assetModelName?: string | undefined },
-) =>
+const createAssetModelName = (id: string, props: { assetModelName?: string | undefined }) =>
   props.assetModelName
     ? Effect.succeed(props.assetModelName)
     : createPhysicalName({ id, maxLength: 256 });
@@ -165,11 +155,7 @@ interface AssetModelState_ {
 const readAssetModelById = Effect.fn(function* (assetModelId: string) {
   const described = yield* sitewise
     .describeAssetModel({ assetModelId, excludeProperties: false })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.assetModelStatus.state === "DELETING") {
     return undefined;
   }
@@ -190,9 +176,7 @@ const readAssetModelById = Effect.fn(function* (assetModelId: string) {
 const findAssetModelByName = Effect.fn(function* (name: string) {
   const summaries = yield* sitewise.listAssetModels.pages({}).pipe(
     EffectStream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.assetModelSummaries),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.assetModelSummaries)),
   );
   const match = summaries.find(
     (summary) => summary.name === name && summary.status.state !== "DELETING",
@@ -214,9 +198,7 @@ class AssetModelNotReady extends Data.TaggedError("AssetModelNotReady")<{
  * An asset model whose asynchronous provisioning converged to the
  * terminal `FAILED` state.
  */
-export class AssetModelProvisioningFailed extends Data.TaggedError(
-  "AssetModelProvisioningFailed",
-)<{
+export class AssetModelProvisioningFailed extends Data.TaggedError("AssetModelProvisioningFailed")<{
   readonly assetModelId: string;
   readonly message: string | undefined;
 }> {}
@@ -237,11 +219,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
 
 // A delete/update racing an in-flight CREATING/UPDATING transition
 // surfaces as ConflictingOperationException — bounded retry through it.
-const retryThroughConflictingOperation = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryThroughConflictingOperation = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -249,19 +227,12 @@ const retryThroughConflictingOperation = <
     schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
   });
 
-const waitForAssetModelState = (
-  assetModelId: string,
-  target: "ACTIVE" | "DELETED",
-) =>
+const waitForAssetModelState = (assetModelId: string, target: "ACTIVE" | "DELETED") =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const described = yield* sitewise
         .describeAssetModel({ assetModelId, excludeProperties: true })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* Effect.fail(
@@ -315,25 +286,19 @@ export const AssetModelProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* sitewise.listAssetModels.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.assetModelSummaries),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.assetModelSummaries)),
             );
             const hydrated = yield* Effect.forEach(
               summaries.map((s) => s.id),
               (assetModelId) => readAssetModelById(assetModelId),
               { concurrency: 5 },
             );
-            return hydrated.flatMap((state) =>
-              state === undefined ? [] : [state.attrs],
-            );
+            return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.assetModelId
             ? yield* readAssetModelById(output.assetModelId)
-            : yield* findAssetModelByName(
-                yield* createAssetModelName(id, olds ?? {}),
-              );
+            : yield* findAssetModelByName(yield* createAssetModelName(id, olds ?? {}));
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -343,18 +308,13 @@ export const AssetModelProvider = () =>
           if (!isResolved(news)) return;
           if (olds === undefined) return;
           // The model type is fixed at creation.
-          if (
-            (olds.assetModelType ?? "ASSET_MODEL") !==
-            (news.assetModelType ?? "ASSET_MODEL")
-          ) {
+          if ((olds.assetModelType ?? "ASSET_MODEL") !== (news.assetModelType ?? "ASSET_MODEL")) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("IoT SiteWise AssetModel requires props"),
-            );
+            return yield* Effect.fail(new Error("IoT SiteWise AssetModel requires props"));
           }
           const name = yield* createAssetModelName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -378,15 +338,11 @@ export const AssetModelProvider = () =>
               assetModelCompositeModels: news.assetModelCompositeModels,
               tags: desiredTags,
             });
-            yield* session.note(
-              `Creating asset model ${name} (${created.assetModelId})...`,
-            );
+            yield* session.note(`Creating asset model ${name} (${created.assetModelId})...`);
             yield* waitForAssetModelState(created.assetModelId, "ACTIVE");
             state = yield* readAssetModelById(created.assetModelId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created asset model ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created asset model ${name}`));
             }
           }
 
@@ -416,12 +372,9 @@ export const AssetModelProvider = () =>
           };
           const definitionDrifted =
             name !== described.assetModelName ||
-            (news.assetModelDescription ?? "") !==
-              described.assetModelDescription ||
-            desiredProperties.length !==
-              described.assetModelProperties.length ||
-            desiredHierarchies.length !==
-              described.assetModelHierarchies.length ||
+            (news.assetModelDescription ?? "") !== described.assetModelDescription ||
+            desiredProperties.length !== described.assetModelProperties.length ||
+            desiredHierarchies.length !== described.assetModelHierarchies.length ||
             !matchesDesired(desiredDefinition, observedDefinition);
           if (definitionDrifted) {
             yield* retryThroughConflictingOperation(
@@ -438,19 +391,13 @@ export const AssetModelProvider = () =>
           }
 
           // Sync tags — diff against observed cloud tags.
-          yield* syncSiteWiseTags(
-            state.attrs.assetModelArn,
-            state.attrs.tags,
-            desiredTags,
-          );
+          yield* syncSiteWiseTags(state.attrs.assetModelArn, state.attrs.tags, desiredTags);
 
           yield* session.note(state.attrs.assetModelArn);
 
           const final = yield* readAssetModelById(state.attrs.assetModelId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled asset model ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled asset model ${name}`));
           }
           return final.attrs;
         }),
@@ -461,9 +408,7 @@ export const AssetModelProvider = () =>
           yield* retryThroughConflictingOperation(
             sitewise
               .deleteAssetModel({ assetModelId: output.assetModelId })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           yield* waitForAssetModelState(output.assetModelId, "DELETED");
         }),

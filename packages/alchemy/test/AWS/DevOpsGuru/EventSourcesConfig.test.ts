@@ -11,10 +11,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const observedProfilerStatus = devopsguru
   .describeEventSourcesConfig({})
   .pipe(
-    Effect.map(
-      ({ EventSources }) =>
-        EventSources?.AmazonCodeGuruProfiler?.Status ?? "DISABLED",
-    ),
+    Effect.map(({ EventSources }) => EventSources?.AmazonCodeGuruProfiler?.Status ?? "DISABLED"),
   );
 
 // Ungated typed probe: the describe call always answers with the config.

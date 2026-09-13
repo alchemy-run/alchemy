@@ -1,10 +1,5 @@
 #!/usr/bin/env -S node
-import {
-  Migration,
-  MigrationCLI,
-  col,
-  primaryKey,
-} from "@internal/postgres/migration";
+import { Migration, MigrationCLI, col, primaryKey } from "@internal/postgres/migration";
 import type { Contract as End } from "../../snapshots/b09d1a81a21c191e35c6d2e6bbb462154b005582529fa8120638576d8ee3cd1d/contract";
 import endContract from "../../snapshots/b09d1a81a21c191e35c6d2e6bbb462154b005582529fa8120638576d8ee3cd1d/contract.json" with { type: "json" };
 

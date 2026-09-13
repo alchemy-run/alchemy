@@ -20,9 +20,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // revision is INACTIVE/deleted).
 const describeActive = (family: string) =>
   ecs.describeTaskDefinition({ taskDefinition: family }).pipe(
-    Effect.map((d) =>
-      d.taskDefinition?.status === "ACTIVE" ? d.taskDefinition : undefined,
-    ),
+    Effect.map((d) => (d.taskDefinition?.status === "ACTIVE" ? d.taskDefinition : undefined)),
     Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
   );
 
@@ -31,9 +29,7 @@ const listExactFamily = (family: string, status: "ACTIVE" | "INACTIVE") =>
     .listTaskDefinitions({ familyPrefix: family, status })
     .pipe(
       Effect.map((result) =>
-        (result.taskDefinitionArns ?? []).filter((arn) =>
-          arn.includes(`/${family}:`),
-        ),
+        (result.taskDefinitionArns ?? []).filter((arn) => arn.includes(`/${family}:`)),
       ),
     );
 
@@ -103,22 +99,14 @@ test.provider(
       expect(observed.taskDefinition?.status).toBe("ACTIVE");
       const container = observed.taskDefinition?.containerDefinitions?.[0];
       expect(container?.logConfiguration?.logDriver).toBe("awslogs");
-      expect(container?.logConfiguration?.options?.["awslogs-group"]).toBe(
-        `/ecs/${family}`,
-      );
-      const tagMap = Object.fromEntries(
-        (observed.tags ?? []).map((t) => [t.key, t.value]),
-      );
+      expect(container?.logConfiguration?.options?.["awslogs-group"]).toBe(`/ecs/${family}`);
+      const tagMap = Object.fromEntries((observed.tags ?? []).map((t) => [t.key, t.value]));
       expect(tagMap.env).toBe("test");
       expect(tagMap["alchemy::id"]).toBe("LifecycleTaskDef");
 
       // The managed log group exists.
-      const groups = yield* logs.describeLogGroups({
-        logGroupNamePrefix: `/ecs/${family}`,
-      });
-      expect(
-        groups.logGroups?.some((g) => g.logGroupName === `/ecs/${family}`),
-      ).toBe(true);
+      const groups = yield* logs.describeLogGroups({ logGroupNamePrefix: `/ecs/${family}` });
+      expect(groups.logGroups?.some((g) => g.logGroupName === `/ecs/${family}`)).toBe(true);
 
       // No-op redeploy — identical content must NOT register a new revision.
       const same = yield* deployTaskDefinition("one");
@@ -140,12 +128,8 @@ test.provider(
       expect(yield* listExactFamily(family, "ACTIVE")).toEqual([]);
       expect(yield* listExactFamily(family, "INACTIVE")).toEqual([]);
 
-      const groupsAfter = yield* logs.describeLogGroups({
-        logGroupNamePrefix: `/ecs/${family}`,
-      });
-      expect(
-        groupsAfter.logGroups?.some((g) => g.logGroupName === `/ecs/${family}`),
-      ).toBe(false);
+      const groupsAfter = yield* logs.describeLogGroups({ logGroupNamePrefix: `/ecs/${family}` });
+      expect(groupsAfter.logGroups?.some((g) => g.logGroupName === `/ecs/${family}`)).toBe(false);
     }),
   { tags: ["provider:aws", "provider:aws:ecs", "provider:aws:iam", "live"] },
 );
@@ -211,9 +195,7 @@ test.provider(
       yield* stack.destroy();
 
       const azResult = yield* ec2.describeAvailabilityZones({});
-      const az = (azResult.AvailabilityZones ?? []).find(
-        (z) => z.State === "available",
-      )?.ZoneName!;
+      const az = (azResult.AvailabilityZones ?? []).find((z) => z.State === "available")?.ZoneName!;
       const defaultVpc = yield* getDefaultVpc;
 
       const out = yield* stack.deploy(
@@ -289,10 +271,7 @@ test.provider(
 
       // The container actually starts: poll (bounded) until runningCount >= 1.
       const running = yield* ecs
-        .describeServices({
-          cluster: out.clusterArn,
-          services: [out.serviceName],
-        })
+        .describeServices({ cluster: out.clusterArn, services: [out.serviceName] })
         .pipe(
           Effect.map((d) => d.services?.[0]?.runningCount ?? 0),
           Effect.repeat({
@@ -306,26 +285,16 @@ test.provider(
       yield* stack.destroy();
 
       // Out-of-band: the family has no ACTIVE revision left.
-      expect(
-        yield* describeActive("alchemy-test-ecs-taskdef-byo"),
-      ).toBeUndefined();
+      expect(yield* describeActive("alchemy-test-ecs-taskdef-byo")).toBeUndefined();
 
       // And the cluster is gone too (deleted clusters report INACTIVE).
       const clustersAfter = yield* ecs.describeClusters({
         clusters: ["alchemy-test-ecs-taskdef-byo"],
       });
-      expect(
-        (clustersAfter.clusters ?? []).some((c) => c.status === "ACTIVE"),
-      ).toBe(false);
+      expect((clustersAfter.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:ec2",
-      "provider:aws:ecs",
-      "provider:aws:iam",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "provider:aws:iam", "live"],
     timeout: 420_000,
   },
 );

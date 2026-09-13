@@ -8,18 +8,13 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -39,9 +34,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Addressing.ServiceBinding,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Addressing.ServiceBinding);
       const all = yield* retryForbidden(provider.list());
 
       expect(Array.isArray(all)).toBe(true);

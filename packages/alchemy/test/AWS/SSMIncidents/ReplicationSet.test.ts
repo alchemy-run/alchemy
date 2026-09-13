@@ -93,24 +93,16 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       yield* incidents.getReplicationSet({ arn: onboarded.success.arn }).pipe(
         Effect.map((r) => r.replicationSet.status),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
           until: (status) => status !== "CREATING" && status !== "UPDATING",
         }),
       );
       yield* incidents.deleteReplicationSet({ arn: onboarded.success.arn });
       yield* incidents.getReplicationSet({ arn: onboarded.success.arn }).pipe(
         Effect.map((r) => r.replicationSet.status),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
           until: (status) => status === "GONE",
         }),
       );
@@ -120,9 +112,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // Create — onboard Incident Manager in the ambient region.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* ReplicationSet("Incidents", {
-            tags: { env: "test" },
-          });
+          return yield* ReplicationSet("Incidents", { tags: { env: "test" } });
         }),
       );
       expect(created.arn).toContain(":replication-set/");
@@ -133,9 +123,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // Out-of-band verification via distilled.
       const live = yield* incidents.getReplicationSet({ arn: created.arn });
       expect(live.replicationSet.status).toBe("ACTIVE");
-      const tags = yield* incidents.listTagsForResource({
-        resourceArn: created.arn,
-      });
+      const tags = yield* incidents.listTagsForResource({ resourceArn: created.arn });
       expect(tags.tags["alchemy::id"]).toBe("Incidents");
       expect(tags.tags["env"]).toBe("test");
 
@@ -169,13 +157,9 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       expect(plan.arn).toContain(":response-plan/");
       expect(plan.name).toBe(planName);
 
-      const afterUpdate = yield* incidents.getReplicationSet({
-        arn: created.arn,
-      });
+      const afterUpdate = yield* incidents.getReplicationSet({ arn: created.arn });
       expect(afterUpdate.replicationSet.deletionProtected).toBe(true);
-      const updatedTags = yield* incidents.listTagsForResource({
-        resourceArn: created.arn,
-      });
+      const updatedTags = yield* incidents.listTagsForResource({ resourceArn: created.arn });
       expect(updatedTags.tags["env"]).toBe("prod");
 
       const livePlan = yield* incidents.getResponsePlan({ arn: plan.arn });
@@ -212,16 +196,11 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // lifted automatically, and Incident Manager is offboarded. The
       // provider's delete waits until the set is fully gone.
       yield* stack.destroy();
-      const planError = yield* Effect.flip(
-        incidents.getResponsePlan({ arn: plan.arn }),
-      );
+      const planError = yield* Effect.flip(incidents.getResponsePlan({ arn: plan.arn }));
       expect(planError._tag).toBe("ResourceNotFoundException");
       const after = yield* incidents.listReplicationSets({});
       expect(after.replicationSetArns).toHaveLength(0);
     }),
   // onboarding (~1-2 min) + updates + offboarding (~1-2 min).
-  {
-    tags: ["provider:aws", "provider:aws:ssmincidents", "live"],
-    timeout: 900_000,
-  },
+  { tags: ["provider:aws", "provider:aws:ssmincidents", "live"], timeout: 900_000 },
 );

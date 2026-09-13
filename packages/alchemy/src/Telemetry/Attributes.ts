@@ -34,9 +34,9 @@ export interface TelemetryAttributes {
 }
 
 const tryRead = (path: string): Effect.Effect<string | null> =>
-  Effect.tryPromise(() =>
-    fs.readFile(path, "utf-8").then((s) => s.trim()),
-  ).pipe(Effect.orElseSucceed(() => null));
+  Effect.tryPromise(() => fs.readFile(path, "utf-8").then((s) => s.trim())).pipe(
+    Effect.orElseSucceed(() => null),
+  );
 
 const sha256Hex = (input: string): string =>
   crypto.createHash("sha256").update(input).digest("hex");
@@ -80,9 +80,7 @@ const getGitOriginUrl: Effect.Effect<string | null> = execCapture(
   "git config --get remote.origin.url",
 );
 
-const getBranchName: Effect.Effect<string | null> = execCapture(
-  "git rev-parse --abbrev-ref HEAD",
-);
+const getBranchName: Effect.Effect<string | null> = execCapture("git rev-parse --abbrev-ref HEAD");
 
 const getRuntime = (): { name: string; version: string } => {
   const g = globalThis as unknown as {
@@ -122,72 +120,59 @@ const getCIEnvironment = (): { provider: string; isCI: boolean } => {
 };
 
 const TELEMETRY_DISABLED_ENV = (): boolean =>
-  !!process.env.ALCHEMY_TELEMETRY_DISABLED ||
-  !!process.env.DO_NOT_TRACK ||
-  !!process.env.NO_TRACK;
+  !!process.env.ALCHEMY_TELEMETRY_DISABLED || !!process.env.DO_NOT_TRACK || !!process.env.NO_TRACK;
 
 /**
  * `true` if telemetry is disabled via environment variable
  * (`DO_NOT_TRACK`, `NO_TRACK`, `ALCHEMY_TELEMETRY_DISABLED`) or via a
  * persisted opt-out file at `~/.alchemy/telemetry-disabled`.
  */
-export const isTelemetryDisabled: Effect.Effect<boolean> = Effect.gen(
-  function* () {
-    if (TELEMETRY_DISABLED_ENV()) return true;
-    const persisted = yield* tryRead(disabledPath());
-    return persisted === "true";
-  },
-);
+export const isTelemetryDisabled: Effect.Effect<boolean> = Effect.gen(function* () {
+  if (TELEMETRY_DISABLED_ENV()) return true;
+  const persisted = yield* tryRead(disabledPath());
+  return persisted === "true";
+});
 
 /**
  * Persists an opt-out so future invocations skip telemetry without needing
  * an env var.
  */
-export const setTelemetryDisabled: Effect.Effect<void> = Effect.tryPromise(
-  async () => {
-    await fs.mkdir(rootDir(), { recursive: true });
-    await fs.writeFile(disabledPath(), "true");
-  },
-).pipe(Effect.ignore);
+export const setTelemetryDisabled: Effect.Effect<void> = Effect.tryPromise(async () => {
+  await fs.mkdir(rootDir(), { recursive: true });
+  await fs.writeFile(disabledPath(), "true");
+}).pipe(Effect.ignore);
 
 export const setTelemetryEnabled: Effect.Effect<void> = Effect.tryPromise(() =>
   fs.rm(disabledPath(), { force: true }),
 ).pipe(Effect.ignore);
 
-const collectAttributesUncached: Effect.Effect<TelemetryAttributes> =
-  Effect.gen(function* () {
-    const [userId, rootCommit, originUrl, branch] = yield* Effect.all(
-      [
-        getOrCreateUserId,
-        getRootCommitHash,
-        getGitOriginUrl,
-        getBranchName,
-      ] as const,
-      { concurrency: "unbounded" },
-    );
+const collectAttributesUncached: Effect.Effect<TelemetryAttributes> = Effect.gen(function* () {
+  const [userId, rootCommit, originUrl, branch] = yield* Effect.all(
+    [getOrCreateUserId, getRootCommitHash, getGitOriginUrl, getBranchName] as const,
+    { concurrency: "unbounded" },
+  );
 
-    const runtime = getRuntime();
-    const ci = getCIEnvironment();
+  const runtime = getRuntime();
+  const ci = getCIEnvironment();
 
-    return {
-      "alchemy.user.id": userId,
-      "alchemy.session.id":
-        process.env.ALCHEMY_TELEMETRY_SESSION_ID ?? crypto.randomUUID(),
-      "alchemy.version": packageJson.version,
-      "alchemy.git.root_commit": rootCommit ?? "",
-      "alchemy.git.origin_hash": hashStringOrEmpty(originUrl),
-      "alchemy.git.branch_hash": hashStringOrEmpty(branch),
-      "alchemy.runtime.name": runtime.name,
-      "alchemy.runtime.version": runtime.version,
-      "alchemy.ci.provider": ci.provider,
-      "alchemy.ci": ci.isCI,
-      "host.arch": os.arch(),
-      "os.type": os.platform(),
-      "os.version": os.release(),
-      "host.cpus": os.cpus().length,
-      "host.memory_mb": Math.round(os.totalmem() / 1024 / 1024),
-    } satisfies TelemetryAttributes;
-  });
+  return {
+    "alchemy.user.id": userId,
+    "alchemy.session.id": process.env.ALCHEMY_TELEMETRY_SESSION_ID ?? crypto.randomUUID(),
+    "alchemy.version": packageJson.version,
+    "alchemy.git.root_commit": rootCommit ?? "",
+    "alchemy.git.origin_hash": hashStringOrEmpty(originUrl),
+    "alchemy.git.branch_hash": hashStringOrEmpty(branch),
+    "alchemy.runtime.name": runtime.name,
+    "alchemy.runtime.version": runtime.version,
+    "alchemy.ci.provider": ci.provider,
+    "alchemy.ci": ci.isCI,
+    "host.arch": os.arch(),
+    "os.type": os.platform(),
+    "os.version": os.release(),
+    "host.cpus": os.cpus().length,
+    "host.memory_mb": Math.round(os.totalmem() / 1024 / 1024),
+  } satisfies TelemetryAttributes;
+});
 
 let cachedAttrs: TelemetryAttributes | undefined;
 
@@ -197,15 +182,14 @@ let cachedAttrs: TelemetryAttributes | undefined;
  * subsequent caller gets the same record (and therefore the same session
  * id).
  */
-export const collectAttributes: Effect.Effect<TelemetryAttributes> =
-  Effect.suspend(() =>
-    cachedAttrs !== undefined
-      ? Effect.succeed(cachedAttrs)
-      : collectAttributesUncached.pipe(
-          Effect.tap((a) =>
-            Effect.sync(() => {
-              cachedAttrs = a;
-            }),
-          ),
+export const collectAttributes: Effect.Effect<TelemetryAttributes> = Effect.suspend(() =>
+  cachedAttrs !== undefined
+    ? Effect.succeed(cachedAttrs)
+    : collectAttributesUncached.pipe(
+        Effect.tap((a) =>
+          Effect.sync(() => {
+            cachedAttrs = a;
+          }),
         ),
-  );
+      ),
+);

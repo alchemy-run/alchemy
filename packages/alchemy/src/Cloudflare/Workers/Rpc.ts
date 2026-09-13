@@ -1,13 +1,8 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/http/HttpClient";
-import {
-  RpcClient,
-  RpcSerialization,
-  type Rpc,
-  type RpcGroup,
-} from "effect/rpc";
+import * as Layer from "effect/Layer";
+import { RpcClient, RpcSerialization, type Rpc, type RpcGroup } from "effect/rpc";
 import type * as RpcClientError from "effect/rpc/RpcClientError";
 import {
   asEffectOrStream,
@@ -49,9 +44,7 @@ export const makeRpcStub = <Shape>(
   },
 ): Shape => {
   const isLazy = isYieldableEffect(stubSource);
-  const eagerFetcher = isLazy
-    ? undefined
-    : fromCloudflareFetcher(stubSource as cf.Fetcher);
+  const eagerFetcher = isLazy ? undefined : fromCloudflareFetcher(stubSource as cf.Fetcher);
   const proxyTarget: object = eagerFetcher ?? {};
   const revive = makeRpcErrorReviver(options?.errors);
 
@@ -64,13 +57,10 @@ export const makeRpcStub = <Shape>(
       return (...args: any[]) =>
         asEffectOrStream(
           Effect.gen(function* () {
-            const stub = isLazy
-              ? yield* stubSource as Effect.Effect<any>
-              : stubSource;
+            const stub = isLazy ? yield* stubSource as Effect.Effect<any> : stubSource;
             return yield* Effect.tryPromise({
               try: () => (stub as any)[prop](...args),
-              catch: (cause) =>
-                new RpcCallError({ method: String(prop), cause }),
+              catch: (cause) => new RpcCallError({ method: String(prop), cause }),
             }).pipe(Effect.flatMap((value) => decodeRpcResult(value, revive)));
           }),
         );
@@ -120,9 +110,10 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
           return HttpClient.make((request) => stub.fetch(request));
         }),
       );
-      const protocol = RpcClient.layerProtocolHttp({
-        url: "http://alchemy-rpc/",
-      }).pipe(Layer.provide(serialization), Layer.provide(httpClient));
+      const protocol = RpcClient.layerProtocolHttp({ url: "http://alchemy-rpc/" }).pipe(
+        Layer.provide(serialization),
+        Layer.provide(httpClient),
+      );
       return yield* RpcClient.make(group).pipe(Effect.provide(protocol));
     }) as any,
   };

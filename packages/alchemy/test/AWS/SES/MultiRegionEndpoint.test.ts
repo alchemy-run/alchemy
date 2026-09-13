@@ -16,9 +16,7 @@ class EndpointStillExists extends Data.TaggedError("EndpointStillExists")<{
 const getEndpoint = (name: string) =>
   sesv2
     .getMultiRegionEndpoint({ EndpointName: name })
-    .pipe(
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
 const assertEndpointDeleted = (name: string) =>
   getEndpoint(name).pipe(

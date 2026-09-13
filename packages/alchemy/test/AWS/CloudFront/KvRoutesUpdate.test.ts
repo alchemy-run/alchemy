@@ -68,9 +68,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const store = yield* KeyValueStore("RoutesStore", {
-                comment: "kv-routes lifecycle",
-              });
+              const store = yield* KeyValueStore("RoutesStore", { comment: "kv-routes lifecycle" });
               const route = yield* KvRoutesUpdate("HomeRoute", {
                 store: store.keyValueStoreArn,
                 namespace: "app",
@@ -87,23 +85,17 @@ describe(
           expect(deployed.route.entry).toBe(initialEntry);
 
           const described = yield* withKvsRegion(
-            kvs.describeKeyValueStore({
-              KvsARN: deployed.store.keyValueStoreArn,
-            }),
+            kvs.describeKeyValueStore({ KvsARN: deployed.store.keyValueStoreArn }),
           );
           expect(described.KvsARN).toBe(deployed.store.keyValueStoreArn);
 
-          yield* assertRoutes(deployed.store.keyValueStoreArn, "app:routes", [
-            initialEntry,
-          ]);
+          yield* assertRoutes(deployed.store.keyValueStoreArn, "app:routes", [initialEntry]);
 
           const updatedEntry = "site,mysite,*,/app";
 
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              const store = yield* KeyValueStore("RoutesStore", {
-                comment: "kv-routes lifecycle",
-              });
+              const store = yield* KeyValueStore("RoutesStore", { comment: "kv-routes lifecycle" });
               const route = yield* KvRoutesUpdate("HomeRoute", {
                 store: store.keyValueStoreArn,
                 namespace: "app",
@@ -114,14 +106,10 @@ describe(
             }),
           );
 
-          expect(updated.store.keyValueStoreArn).toBe(
-            deployed.store.keyValueStoreArn,
-          );
+          expect(updated.store.keyValueStoreArn).toBe(deployed.store.keyValueStoreArn);
           expect(updated.route.entry).toBe(updatedEntry);
 
-          yield* assertRoutes(updated.store.keyValueStoreArn, "app:routes", [
-            updatedEntry,
-          ]);
+          yield* assertRoutes(updated.store.keyValueStoreArn, "app:routes", [updatedEntry]);
 
           yield* stack.destroy();
           yield* assertKeyValueStoreDeleted(deployed.store.keyValueStoreName);
@@ -137,8 +125,7 @@ const getRoutesDocument = (store: string, fullKey: string) =>
   );
 
 const routesMatch = (got: string[], expected: string[]) =>
-  got.length === expected.length &&
-  expected.every((entry) => got.includes(entry));
+  got.length === expected.length && expected.every((entry) => got.includes(entry));
 
 const assertRoutes = (store: string, fullKey: string, expected: string[]) =>
   Effect.gen(function* () {
@@ -157,11 +144,7 @@ const assertKeyValueStoreDeleted = (name: string) =>
     Effect.flatMap(() => Effect.fail(new Error("KeyValueStoreStillExists"))),
     Effect.catchTag("EntityNotFound", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "KeyValueStoreStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      while: (error) => error instanceof Error && error.message === "KeyValueStoreStillExists",
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );

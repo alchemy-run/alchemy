@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
 
@@ -91,10 +86,7 @@ export interface PlaceIndex extends Resource<
  */
 export const PlaceIndex = Resource<PlaceIndex>("AWS.Location.PlaceIndex");
 
-const createIndexName = (
-  id: string,
-  props: { indexName?: string | undefined },
-) =>
+const createIndexName = (id: string, props: { indexName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.indexName) return props.indexName;
     return yield* createPhysicalName({ id, maxLength: 100 });
@@ -103,11 +95,7 @@ const createIndexName = (
 const readIndex = Effect.fn(function* (indexName: string) {
   const found = yield* location
     .describePlaceIndex({ IndexName: indexName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!found) return undefined;
   return {
     indexName: found.IndexName,
@@ -135,25 +123,18 @@ export const PlaceIndexProvider = () =>
                 ),
               ),
             );
-            const hydrated = yield* Effect.forEach(
-              names,
-              (name) => readIndex(name),
-              {
-                concurrency: 10,
-              },
-            );
+            const hydrated = yield* Effect.forEach(names, (name) => readIndex(name), {
+              concurrency: 10,
+            });
             return hydrated.filter(
               (attrs): attrs is PlaceIndex["Attributes"] => attrs !== undefined,
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const indexName =
-            output?.indexName ?? (yield* createIndexName(id, olds ?? {}));
+          const indexName = output?.indexName ?? (yield* createIndexName(id, olds ?? {}));
           const state = yield* readIndex(indexName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -165,8 +146,7 @@ export const PlaceIndexProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const indexName =
-            output?.indexName ?? (yield* createIndexName(id, news));
+          const indexName = output?.indexName ?? (yield* createIndexName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -194,8 +174,7 @@ export const PlaceIndexProvider = () =>
 
           if (
             state.description !== (news.description ?? undefined) ||
-            (news.intendedUse !== undefined &&
-              state.intendedUse !== news.intendedUse)
+            (news.intendedUse !== undefined && state.intendedUse !== news.intendedUse)
           ) {
             yield* location.updatePlaceIndex({
               IndexName: indexName,
@@ -233,9 +212,7 @@ export const PlaceIndexProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* location
             .deletePlaceIndex({ IndexName: output.indexName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -15,10 +15,7 @@ type TypeId = typeof TypeId;
 /**
  * The Certificate Authority Total TLS certificates are issued through.
  */
-export type TotalTlsCertificateAuthority =
-  | "google"
-  | "lets_encrypt"
-  | "ssl_com";
+export type TotalTlsCertificateAuthority = "google" | "lets_encrypt" | "ssl_com";
 
 export interface TotalTlsProps {
   /**
@@ -69,13 +66,7 @@ export interface TotalTlsAttributes {
   initialCertificateAuthority: string | undefined;
 }
 
-export type TotalTls = Resource<
-  TypeId,
-  TotalTlsProps,
-  TotalTlsAttributes,
-  never,
-  Providers
->;
+export type TotalTls = Resource<TypeId, TotalTlsProps, TotalTlsAttributes, never, Providers>;
 
 /**
  * The Total TLS setting of a Cloudflare zone
@@ -148,16 +139,10 @@ export const TotalTlsProvider = () =>
         (zoneId) =>
           acm.getTotalTl({ zoneId }).pipe(
             Effect.map((observed) =>
-              toAttributes(
-                zoneId,
-                observed,
-                initialStateOf(undefined, observed),
-              ),
+              toAttributes(zoneId, observed, initialStateOf(undefined, observed)),
             ),
             // Zone deleted out-of-band between enumeration and read.
-            Effect.catchTag("InvalidObjectIdentifier", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -168,13 +153,8 @@ export const TotalTlsProvider = () =>
       if (!isResolved(news)) return undefined;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -185,9 +165,7 @@ export const TotalTlsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* acm.getTotalTl({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -243,19 +221,14 @@ export const TotalTlsProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* acm
         .getTotalTl({ zoneId })
-        .pipe(
-          Effect.catchTag("InvalidObjectIdentifier", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)));
       if (observed === undefined) return;
       // Restore the pre-management state; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
       if (
         (observed.enabled ?? false) === initialEnabled &&
         (initialCertificateAuthority === undefined ||
-          (observed.certificateAuthority ?? undefined) ===
-            initialCertificateAuthority)
+          (observed.certificateAuthority ?? undefined) === initialCertificateAuthority)
       ) {
         return;
       }
@@ -273,10 +246,7 @@ export const TotalTlsProvider = () =>
           // The zone lost its ACM entitlement since we configured it —
           // Cloudflare already refuses Total TLS writes, so there is
           // nothing left to restore.
-          Effect.catchTag(
-            "AdvancedCertificateManagerRequired",
-            () => Effect.void,
-          ),
+          Effect.catchTag("AdvancedCertificateManagerRequired", () => Effect.void),
           Effect.retry({
             while: (e) => e._tag === "PreviousJobInProgress",
             schedule: Schedule.spaced("3 seconds"),
@@ -300,10 +270,7 @@ type ObservedTotalTls = acm.GetTotalTlResponse | acm.UpdateTotalTlResponse;
 const initialStateOf = (
   output: TotalTlsAttributes | undefined,
   observed: ObservedTotalTls,
-): Pick<
-  TotalTlsAttributes,
-  "initialEnabled" | "initialCertificateAuthority"
-> =>
+): Pick<TotalTlsAttributes, "initialEnabled" | "initialCertificateAuthority"> =>
   output !== undefined
     ? {
         initialEnabled: output.initialEnabled,
@@ -319,10 +286,7 @@ const initialStateOf = (
  * certificate authority only participates when explicitly requested
  * (Cloudflare picks one otherwise).
  */
-const matchesDesired = (
-  observed: ObservedTotalTls,
-  news: TotalTlsProps,
-): boolean =>
+const matchesDesired = (observed: ObservedTotalTls, news: TotalTlsProps): boolean =>
   (observed.enabled ?? false) === news.enabled &&
   (news.certificateAuthority === undefined ||
     (observed.certificateAuthority ?? undefined) === news.certificateAuthority);
@@ -330,10 +294,7 @@ const matchesDesired = (
 const toAttributes = (
   zoneId: string,
   setting: ObservedTotalTls,
-  initial: Pick<
-    TotalTlsAttributes,
-    "initialEnabled" | "initialCertificateAuthority"
-  >,
+  initial: Pick<TotalTlsAttributes, "initialEnabled" | "initialCertificateAuthority">,
 ): TotalTlsAttributes => ({
   zoneId,
   enabled: setting.enabled ?? false,

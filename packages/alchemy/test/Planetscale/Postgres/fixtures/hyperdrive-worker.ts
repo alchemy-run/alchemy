@@ -59,20 +59,14 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
         const idMatch = url.pathname.match(/^\/widgets\/(\d+)$/);
         if (request.method === "DELETE" && idMatch) {
           const id = Number(idMatch[1]);
-          const [deleted] = yield* db
-            .delete(Widgets)
-            .where(eq(Widgets.id, id))
-            .returning();
+          const [deleted] = yield* db.delete(Widgets).where(eq(Widgets.id, id)).returning();
           return yield* HttpServerResponse.json({ widget: deleted ?? null });
         }
 
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catch((cause: any) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(cause) }, { status: 500 }),
         ),
       ),
     };

@@ -49,8 +49,7 @@ export const SQLite = (filename?: string): Layer.Layer<Database> =>
   Layer.effect(
     Database,
     Effect.gen(function* () {
-      const resolved =
-        filename ?? path.join(yield* dotAlchemyDirectory, "better-auth.sqlite");
+      const resolved = filename ?? path.join(yield* dotAlchemyDirectory, "better-auth.sqlite");
       return {
         provider: "sqlite",
         runtime: open(resolved),

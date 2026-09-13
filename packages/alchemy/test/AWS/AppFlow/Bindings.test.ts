@@ -32,15 +32,11 @@ const program = Effect.gen(function* () {
 // Lambda Function URLs cold-start and a fresh role's IAM grants are
 // eventually consistent; retrying on any non-200 lets the FIRST request wait
 // through that window.
-const readinessSchedule = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessSchedule = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 // Function URLs come back with a trailing slash; strip it before joining so
 // pathnames match the fixture's routes.
-const urlOf = (baseUrl: string, path: string) =>
-  `${baseUrl.replace(/\/+$/, "")}${path}`;
+const urlOf = (baseUrl: string, path: string) => `${baseUrl.replace(/\/+$/, "")}${path}`;
 
 const getJson = (baseUrl: string, path: string) =>
   HttpClient.get(urlOf(baseUrl, path)).pipe(
@@ -54,10 +50,7 @@ const getJson = (baseUrl: string, path: string) =>
 
 const postJson = (baseUrl: string, path: string, body: unknown) =>
   HttpClient.execute(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(urlOf(baseUrl, path)),
-      body,
-    ),
+    HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(urlOf(baseUrl, path)), body),
   ).pipe(
     Effect.flatMap((response) =>
       response.status === 200
@@ -99,16 +92,11 @@ const waitForExecution = (baseUrl: string, executionId: string) =>
       ).flowExecutions.find((r) => r.executionId === executionId);
       return record?.executionStatus && record.executionStatus !== "InProgress"
         ? Effect.succeed(record)
-        : Effect.fail(
-            new ExecutionNotFinished({ lastStatus: record?.executionStatus }),
-          );
+        : Effect.fail(new ExecutionNotFinished({ lastStatus: record?.executionStatus }));
     }),
     Effect.retry({
       while: (e): boolean => e instanceof ExecutionNotFinished,
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -152,13 +140,10 @@ const publishUntilFlowEvent = (queueUrl: string, executionId: string) =>
       WaitTimeSeconds: 2,
     });
     const match = (result.Messages ?? [])
-      .flatMap((message) =>
-        message.Body ? [JSON.parse(message.Body) as DeliveredFlowEvent] : [],
-      )
+      .flatMap((message) => (message.Body ? [JSON.parse(message.Body) as DeliveredFlowEvent] : []))
       .find(
         (body) =>
-          body.detail?.["flow-name"] === FLOW_NAME &&
-          body.detail?.["execution-id"] === executionId,
+          body.detail?.["flow-name"] === FLOW_NAME && body.detail?.["execution-id"] === executionId,
       );
     if (!match) {
       return yield* Effect.fail(new EventNotDelivered());
@@ -175,9 +160,7 @@ const assertFlowGone = (flowName: string) =>
   Effect.gen(function* () {
     const result = yield* appflow.describeFlow({ flowName }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
       return yield* Effect.fail(new Error(`Flow '${flowName}' still exists`));
@@ -240,10 +223,7 @@ test.provider(
       // flowEvents — AppFlow's native delivery is best-effort. Publish the
       // documented run-report envelope until the fresh rule is active, then
       // verify the consume loop forwards it into the SQS sink.
-      const event = yield* publishUntilFlowEvent(
-        queueUrl,
-        started.executionId!,
-      );
+      const event = yield* publishUntilFlowEvent(queueUrl, started.executionId!);
       expect(event.detail["flow-name"]).toBe(FLOW_NAME);
       expect(event.detailType).toContain("Flow Run Report");
 

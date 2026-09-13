@@ -10,16 +10,10 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getKeyspace = (name: string) =>
   keyspaces
     .getKeyspace({ keyspaceName: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const getTags = (arn: string) =>
-  keyspaces
-    .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.map((r) => r.tags ?? []));
+  keyspaces.listTagsForResource({ resourceArn: arn }).pipe(Effect.map((r) => r.tags ?? []));
 
 test.provider(
   "create, update tags, delete Keyspaces keyspace",

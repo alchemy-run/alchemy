@@ -21,10 +21,7 @@ const SCHEDULE_PREFIX = "alch-schedtest-";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let sinkQueueUrl: string;
@@ -48,19 +45,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -71,12 +63,8 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
 // beforeAll/afterAll hooks do not.
 const purgeTestSchedules = Core.withProviders(
   Effect.gen(function* () {
-    const listed = yield* scheduler.listSchedules({
-      NamePrefix: SCHEDULE_PREFIX,
-    });
-    const names = (listed.Schedules ?? []).flatMap((s) =>
-      s.Name ? [s.Name] : [],
-    );
+    const listed = yield* scheduler.listSchedules({ NamePrefix: SCHEDULE_PREFIX });
+    const names = (listed.Schedules ?? []).flatMap((s) => (s.Name ? [s.Name] : []));
     if (names.length > 0) {
       yield* Effect.logInfo(
         `Scheduler test cleanup: deleting leftover schedules ${names.join(", ")}`,
@@ -87,9 +75,7 @@ const purgeTestSchedules = Core.withProviders(
       (name) =>
         scheduler
           .deleteSchedule({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
       { concurrency: 5 },
     );
   }),
@@ -121,18 +107,12 @@ const receiveMatching = (
     if (!match?.ReceiptHandle) {
       return yield* Effect.fail(new MessageNotDelivered());
     }
-    yield* SQS.deleteMessage({
-      QueueUrl: queueUrl,
-      ReceiptHandle: match.ReceiptHandle,
-    });
+    yield* SQS.deleteMessage({ QueueUrl: queueUrl, ReceiptHandle: match.ReceiptHandle });
     return JSON.parse(match.Body!) as any;
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "MessageNotDelivered",
-      schedule: Schedule.max([
-        Schedule.fixed("1 seconds"),
-        Schedule.recurs(options?.times ?? 12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("1 seconds"), Schedule.recurs(options?.times ?? 12)]),
     }),
   );
 
@@ -141,21 +121,14 @@ const waitUntilScheduleGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* scheduler
       .getSchedule({ Name: name })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
     if (found !== undefined) {
       return yield* Effect.fail(new ScheduleStillExists());
     }
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "ScheduleStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -174,9 +147,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Scheduler test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Scheduler test setup: destroying previous resources");
         yield* sharedStack.destroy();
         yield* purgeTestSchedules;
 
@@ -191,31 +162,20 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/info`;
 
-        yield* Effect.logInfo(
-          `Scheduler test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Scheduler test setup: probing readiness at ${readinessUrl}`);
         const info = yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
-              ? (response.json as Effect.Effect<{
-                  sinkQueueUrl?: string;
-                  cronQueueUrl?: string;
-                }>)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              ? (response.json as Effect.Effect<{ sinkQueueUrl?: string; cronQueueUrl?: string }>)
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
             body.sinkQueueUrl && body.cronQueueUrl
-              ? Effect.succeed(
-                  body as { sinkQueueUrl: string; cronQueueUrl: string },
-                )
+              ? Effect.succeed(body as { sinkQueueUrl: string; cronQueueUrl: string })
               : Effect.fail(new Error("Function returned empty queue urls")),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Scheduler test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Scheduler test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -245,13 +205,8 @@ describe(
             const name = `${SCHEDULE_PREFIX}oneshot`;
 
             const created = (yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/schedules/${name}?delaySeconds=15`,
-              ),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              scheduleArn: string;
-              expression: string;
-            };
+              HttpClientRequest.post(`${baseUrl}/schedules/${name}?delaySeconds=15`),
+            ).pipe(Effect.flatMap((r) => r.json))) as { scheduleArn: string; expression: string };
 
             expect(created.scheduleArn).toContain(`:schedule/default/${name}`);
             expect(created.expression).toMatch(/^at\(/);
@@ -266,10 +221,7 @@ describe(
             // The schedule fires ~15s after creation; the execution role (which
             // the binding contributed iam:PassRole for) delivers the marker into
             // the sink queue. Bounded: ~15s delay + poll ≤ ~75s.
-            const message = yield* receiveMatching(
-              sinkQueueUrl,
-              (body) => body.marker === name,
-            );
+            const message = yield* receiveMatching(sinkQueueUrl, (body) => body.marker === name);
             expect(message.marker).toBe(name);
 
             // ActionAfterCompletion=DELETE reaps the fired one-shot: typed
@@ -285,29 +237,18 @@ describe(
         Effect.gen(function* () {
           const name = `${SCHEDULE_PREFIX}get`;
 
-          yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/schedules/${name}?delaySeconds=900`,
-            ),
-          );
+          yield* send(HttpClientRequest.post(`${baseUrl}/schedules/${name}?delaySeconds=900`));
 
-          const found = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/schedules/${name}`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            arn: string;
-            name: string;
-            state: string;
-            expression: string;
-          };
+          const found = (yield* send(HttpClientRequest.get(`${baseUrl}/schedules/${name}`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { arn: string; name: string; state: string; expression: string };
 
           expect(found.name).toBe(name);
           expect(found.state).toBe("ENABLED");
           expect(found.expression).toMatch(/^at\(/);
 
           // cleanup via the DeleteSchedule binding route
-          const deleted = yield* send(
-            HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
-          );
+          const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
           expect(deleted.status).toBe(200);
         }),
       );
@@ -315,9 +256,7 @@ describe(
       test.provider("surfaces the typed not-found as a 404", (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/schedules/${SCHEDULE_PREFIX}missing`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/schedules/${SCHEDULE_PREFIX}missing`),
           );
           expect(response.status).toBe(404);
         }),
@@ -331,21 +270,14 @@ describe(
           Effect.gen(function* () {
             const name = `${SCHEDULE_PREFIX}upd`;
 
-            yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/schedules/${name}?delaySeconds=900`,
-              ),
-            );
+            yield* send(HttpClientRequest.post(`${baseUrl}/schedules/${name}?delaySeconds=900`));
 
             // Update: push the fire time out further and set a description.
             const updated = (yield* send(
               HttpClientRequest.put(
                 `${baseUrl}/schedules/${name}?delaySeconds=1800&description=rescheduled`,
               ),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              scheduleArn: string;
-              expression: string;
-            };
+            ).pipe(Effect.flatMap((r) => r.json))) as { scheduleArn: string; expression: string };
             expect(updated.scheduleArn).toContain(`:schedule/default/${name}`);
 
             // Out-of-band: the new expression and description landed.
@@ -354,9 +286,7 @@ describe(
             expect(observed.Description).toBe("rescheduled");
 
             // cleanup via the DeleteSchedule binding route
-            const deleted = yield* send(
-              HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
-            );
+            const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
             expect(deleted.status).toBe(200);
           }),
         { timeout: 120_000 },
@@ -365,9 +295,7 @@ describe(
       test.provider("surfaces the typed not-found as a 404", (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.put(
-              `${baseUrl}/schedules/${SCHEDULE_PREFIX}missing-upd`,
-            ),
+            HttpClientRequest.put(`${baseUrl}/schedules/${SCHEDULE_PREFIX}missing-upd`),
           );
           expect(response.status).toBe(404);
         }),
@@ -382,21 +310,11 @@ describe(
             const nameA = `${SCHEDULE_PREFIX}list-a`;
             const nameB = `${SCHEDULE_PREFIX}list-b`;
 
-            yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/schedules/${nameA}?delaySeconds=900`,
-              ),
-            );
-            yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/schedules/${nameB}?delaySeconds=900`,
-              ),
-            );
+            yield* send(HttpClientRequest.post(`${baseUrl}/schedules/${nameA}?delaySeconds=900`));
+            yield* send(HttpClientRequest.post(`${baseUrl}/schedules/${nameB}?delaySeconds=900`));
 
             const listed = (yield* send(
-              HttpClientRequest.get(
-                `${baseUrl}/schedules?namePrefix=${SCHEDULE_PREFIX}list-`,
-              ),
+              HttpClientRequest.get(`${baseUrl}/schedules?namePrefix=${SCHEDULE_PREFIX}list-`),
             ).pipe(Effect.flatMap((r) => r.json))) as {
               names: string[];
               error?: string;
@@ -410,9 +328,7 @@ describe(
 
             // cleanup via the DeleteSchedule binding route
             for (const name of [nameA, nameB]) {
-              const deleted = yield* send(
-                HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
-              );
+              const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
               expect(deleted.status).toBe(200);
             }
           }),
@@ -427,19 +343,13 @@ describe(
           Effect.gen(function* () {
             const name = `${SCHEDULE_PREFIX}del`;
 
-            yield* send(
-              HttpClientRequest.post(
-                `${baseUrl}/schedules/${name}?delaySeconds=900`,
-              ),
-            );
+            yield* send(HttpClientRequest.post(`${baseUrl}/schedules/${name}?delaySeconds=900`));
 
             // out-of-band: it exists before deletion
             const observed = yield* scheduler.getSchedule({ Name: name });
             expect(observed.Name).toBe(name);
 
-            const first = yield* send(
-              HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
-            );
+            const first = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
             expect(first.status).toBe(200);
             expect(((yield* first.json) as any).deleted).toBe(true);
 
@@ -447,9 +357,7 @@ describe(
             yield* waitUntilScheduleGone(name);
 
             // idempotent repeat surfaces the typed ResourceNotFoundException
-            const second = yield* send(
-              HttpClientRequest.delete(`${baseUrl}/schedules/${name}`),
-            );
+            const second = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
             expect(second.status).toBe(404);
           }),
         { timeout: 120_000 },

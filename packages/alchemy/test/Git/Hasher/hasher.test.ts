@@ -14,12 +14,7 @@ import {
  * The hasher protocol (src/Git/Hasher/Hasher.ts): a scan result survives the
  * binary encoding byte for byte, and the inline layer scans in-process.
  */
-import {
-  hashObject,
-  encodeTypeSize,
-  makeSha1,
-  type Oid,
-} from "@/Git/Protocol/ObjectCodec.ts";
+import { hashObject, encodeTypeSize, makeSha1, type Oid } from "@/Git/Protocol/ObjectCodec.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import { concat } from "../harness/pack.ts";
@@ -62,9 +57,7 @@ describe("Hasher", { tags: ["unit", "local"] }, () => {
         expect(result.entries[0]!.content).toBeUndefined();
         const wire = encodeScanResult({
           ...result,
-          unresolved: [
-            { offset: 99, dataOffset: 101, span: 7, baseOffset: 42, size: 12 },
-          ],
+          unresolved: [{ offset: 99, dataOffset: 101, span: 7, baseOffset: 42, size: 12 }],
         });
         const back = decodeScanResult(wire);
         expect(back.count).toBe(3);
@@ -72,74 +65,52 @@ describe("Hasher", { tags: ["unit", "local"] }, () => {
         expect(back.unresolved).toEqual([
           { offset: 99, dataOffset: 101, span: 7, baseOffset: 42, size: 12 },
         ]);
-        expect(
-          back.entries.map((e) => [
-            e.oid,
-            e.type,
-            e.size,
-            e.dataOffset,
-            e.span,
-          ]),
-        ).toEqual(
-          result.entries.map((e) => [
-            e.oid,
-            e.type,
-            e.size,
-            e.dataOffset,
-            e.span,
-          ]),
+        expect(back.entries.map((e) => [e.oid, e.type, e.size, e.dataOffset, e.span])).toEqual(
+          result.entries.map((e) => [e.oid, e.type, e.size, e.dataOffset, e.span]),
         );
         expect(Array.from(back.entries[1]!.content!)).toEqual(
           Array.from(result.entries[1]!.content!),
         );
       }).pipe(
         Effect.provide(
-          HasherInline.pipe(
-            Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore())),
-          ),
+          HasherInline.pipe(Layer.provide(Layer.succeed(BlobStore, makeMemoryBlobStore()))),
         ),
       ),
     );
   });
 });
 
-describe(
-  "hash route framing (DESIGN §22.9)",
-  { tags: ["unit", "local"] },
-  () => {
-    test("frames split across reads are reassembled; the part frame follows the scan", async () => {
-      const scan = frame(new TextEncoder().encode("scan-bytes"));
-      const part = frame(
-        new TextEncoder().encode(JSON.stringify({ partNumber: 3, etag: "e3" })),
-      );
-      const whole = concat([scan, part]);
-      // Deliver in awkward pieces: mid-length-prefix and mid-frame cuts.
-      const cuts = [1, 3, 7, 12, whole.length];
-      let at = 0;
-      const body = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (at >= whole.length) return controller.close();
-          const to = cuts.find((c) => c > at) ?? whole.length;
-          controller.enqueue(whole.subarray(at, to));
-          at = to;
-        },
-      });
-      const next = makeFrameReader(body);
-      const out = await Effect.runPromise(
-        Effect.gen(function* () {
-          const first = yield* next();
-          const second = yield* next();
-          const third = yield* next();
-          return {
-            first: first && new TextDecoder().decode(first),
-            second: second && JSON.parse(new TextDecoder().decode(second)),
-            third,
-          };
-        }),
-      );
-      expect(out.first).toBe("scan-bytes");
-      expect(out.second).toEqual({ partNumber: 3, etag: "e3" });
-      expect(out.third).toBeUndefined();
+describe("hash route framing (DESIGN §22.9)", { tags: ["unit", "local"] }, () => {
+  test("frames split across reads are reassembled; the part frame follows the scan", async () => {
+    const scan = frame(new TextEncoder().encode("scan-bytes"));
+    const part = frame(new TextEncoder().encode(JSON.stringify({ partNumber: 3, etag: "e3" })));
+    const whole = concat([scan, part]);
+    // Deliver in awkward pieces: mid-length-prefix and mid-frame cuts.
+    const cuts = [1, 3, 7, 12, whole.length];
+    let at = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (at >= whole.length) return controller.close();
+        const to = cuts.find((c) => c > at) ?? whole.length;
+        controller.enqueue(whole.subarray(at, to));
+        at = to;
+      },
     });
-  },
-);
+    const next = makeFrameReader(body);
+    const out = await Effect.runPromise(
+      Effect.gen(function* () {
+        const first = yield* next();
+        const second = yield* next();
+        const third = yield* next();
+        return {
+          first: first && new TextDecoder().decode(first),
+          second: second && JSON.parse(new TextDecoder().decode(second)),
+          third,
+        };
+      }),
+    );
+    expect(out.first).toBe("scan-bytes");
+    expect(out.second).toEqual({ partNumber: 3, etag: "e3" });
+    expect(out.third).toBeUndefined();
+  });
+});

@@ -51,10 +51,7 @@ test.provider(
       // Out-of-band assert-gone: both the composite alarm and its member
       // metric alarm are deleted after the final destroy.
       const gone = yield* cloudwatch.describeAlarms({
-        AlarmNames: [
-          "alchemy-test-composite-list",
-          "alchemy-test-composite-list-metric",
-        ],
+        AlarmNames: ["alchemy-test-composite-list", "alchemy-test-composite-list-metric"],
         AlarmTypes: ["CompositeAlarm", "MetricAlarm"],
       });
       expect(gone.CompositeAlarms ?? []).toEqual([]);

@@ -16,28 +16,20 @@ export const DEFAULT_CONSENSUS_CLIENT = "LIGHTHOUSE";
 export const MAX_NAME_LENGTH = 63;
 export const COLLECTION = "blockchainNodes";
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.BlockchainNodeEngine.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.BlockchainNodeEngine.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.BlockchainNodeEngine.StillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.BlockchainNodeEngine.StillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.BlockchainNodeEngine.NotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.BlockchainNodeEngine.NotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.BlockchainNodeEngine.Failed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.BlockchainNodeEngine.Failed")<{
   name: string;
   state: string;
   message: string | undefined;
@@ -63,10 +55,8 @@ export const rfc1035 = (name: string, fallback = "node"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const normalizeEnum = (value: string | undefined, fallback: string) => {
   const next = (value ?? fallback).toUpperCase();
@@ -76,11 +66,8 @@ export const normalizeEnum = (value: string | undefined, fallback: string) => {
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  blockchainNodeId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${blockchainNodeId}`;
+export const resourceName = (project: string, location: string, blockchainNodeId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${blockchainNodeId}`;
 
 export const toPhysicalId = (
   id: string,
@@ -107,16 +94,10 @@ export const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -124,9 +105,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -149,13 +129,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -210,20 +187,15 @@ export const isFailedState = (state: string | undefined) =>
  * ~30 minutes. ALREADY_EXISTS (code 6) counts as success (create race);
  * with `notFoundOk`, so does NOT_FOUND (code 5, delete race).
  */
-export const waitForOperation = (
-  operation: bne.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForGcpOperation(
-    operation,
-    (name) => bne.getProjectsLocationsOperations({ name }),
-    { budget: "45 minutes", interval: "10 seconds" },
-  ).pipe(
+export const waitForOperation = (operation: bne.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => bne.getProjectsLocationsOperations({ name }), {
+    budget: "45 minutes",
+    interval: "10 seconds",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.succeed(operation),
     ),
   );
@@ -266,11 +238,7 @@ export const waitUntilReady = <A, E, R>(
   name: string,
   stateOf: (value: NonNullable<A>) => string | undefined,
   messageOf?: (value: NonNullable<A>) => string | undefined,
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceFailed | ResourceNotReady,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceFailed | ResourceNotReady, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
@@ -294,9 +262,7 @@ export const waitUntilReady = <A, E, R>(
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ResourceNotReady ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ResourceNotReady || error instanceof ResourceNotResolved,
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),

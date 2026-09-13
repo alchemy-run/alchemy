@@ -26,9 +26,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        entityresolution.getMatchingWorkflow({
-          workflowName: "does-not-exist-alchemy-probe",
-        }),
+        entityresolution.getMatchingWorkflow({ workflowName: "does-not-exist-alchemy-probe" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -94,11 +92,9 @@ const workflowStack = (variant: "v1" | "v2") =>
       storageDescriptor: {
         location: Output.interpolate`s3://${bucket.bucketName}/input/`,
         inputFormat: "org.apache.hadoop.mapred.TextInputFormat",
-        outputFormat:
-          "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        outputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
         serdeInfo: {
-          serializationLibrary:
-            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          serializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
           parameters: { "field.delim": ",", "skip.header.line.count": "1" },
         },
         columns: [
@@ -115,13 +111,8 @@ const workflowStack = (variant: "v1" | "v2") =>
       tags: { Environment: "test" },
     });
     const workflow = yield* MatchingWorkflow("Dedupe", {
-      description:
-        variant === "v1"
-          ? "Match customers by email"
-          : "Match by email or name",
-      inputSourceConfig: [
-        { inputSourceARN: table.tableArn, schemaName: schema.schemaName },
-      ],
+      description: variant === "v1" ? "Match customers by email" : "Match by email or name",
+      inputSourceConfig: [{ inputSourceARN: table.tableArn, schemaName: schema.schemaName }],
       outputSourceConfig: [
         {
           outputS3Path: Output.interpolate`s3://${bucket.bucketName}/matches/`,
@@ -171,9 +162,7 @@ test.provider(
       const schemaTags = yield* entityresolution.listTagsForResource({
         resourceArn: created.schema.schemaArn,
       });
-      expect(toTagRecord(schemaTags.tags)["alchemy::id"]).toBe(
-        "CustomersSchema",
-      );
+      expect(toTagRecord(schemaTags.tags)["alchemy::id"]).toBe("CustomersSchema");
       expect(toTagRecord(schemaTags.tags).Environment).toBe("test");
 
       const observedWorkflow = yield* entityresolution.getMatchingWorkflow({
@@ -181,13 +170,9 @@ test.provider(
       });
       expect(observedWorkflow.description).toBe("Match customers by email");
       expect(observedWorkflow.roleArn).toBe(created.role.roleArn);
-      expect(observedWorkflow.inputSourceConfig[0]?.schemaName).toBe(
-        created.schema.schemaName,
-      );
+      expect(observedWorkflow.inputSourceConfig[0]?.schemaName).toBe(created.schema.schemaName);
       expect(
-        observedWorkflow.resolutionTechniques.ruleBasedProperties?.rules.map(
-          (r) => r.ruleName,
-        ),
+        observedWorkflow.resolutionTechniques.ruleBasedProperties?.rules.map((r) => r.ruleName),
       ).toEqual(["ByEmail"]);
       const workflowTags = yield* entityresolution.listTagsForResource({
         resourceArn: created.workflow.workflowArn,
@@ -206,23 +191,17 @@ test.provider(
       });
       expect(reobserved.description).toBe("Match by email or name");
       expect(
-        reobserved.resolutionTechniques.ruleBasedProperties?.rules.map(
-          (r) => r.ruleName,
-        ),
+        reobserved.resolutionTechniques.ruleBasedProperties?.rules.map((r) => r.ruleName),
       ).toEqual(["ByEmail", "ByName"]);
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();
       const workflowError = yield* Effect.flip(
-        entityresolution.getMatchingWorkflow({
-          workflowName: created.workflow.workflowName,
-        }),
+        entityresolution.getMatchingWorkflow({ workflowName: created.workflow.workflowName }),
       );
       expect(workflowError._tag).toBe("ResourceNotFoundException");
       const schemaError = yield* Effect.flip(
-        entityresolution.getSchemaMapping({
-          schemaName: created.schema.schemaName,
-        }),
+        entityresolution.getSchemaMapping({ schemaName: created.schema.schemaName }),
       );
       expect(schemaError._tag).toBe("ResourceNotFoundException");
     }),
@@ -269,10 +248,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ENTITYRESOLUTION_RUN)(
       });
 
       const job = yield* entityresolution
-        .getMatchingJob({
-          workflowName: created.workflow.workflowName,
-          jobId,
-        })
+        .getMatchingJob({ workflowName: created.workflow.workflowName, jobId })
         .pipe(
           Effect.repeat({
             schedule: Schedule.spaced("15 seconds"),

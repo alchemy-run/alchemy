@@ -49,9 +49,7 @@ test.provider(
       const provider = yield* Provider.findProvider(Repository);
       const all = yield* provider.list();
 
-      expect(all.some((r) => r.repositoryName === repo.repositoryName)).toBe(
-        true,
-      );
+      expect(all.some((r) => r.repositoryName === repo.repositoryName)).toBe(true);
 
       yield* stack.destroy();
       yield* assertRepositoryDeleted(repo.repositoryName);
@@ -65,10 +63,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployRepository = (
-        imageTagMutability: "MUTABLE" | "IMMUTABLE",
-        scanOnPush: boolean,
-      ) =>
+      const deployRepository = (imageTagMutability: "MUTABLE" | "IMMUTABLE", scanOnPush: boolean) =>
         stack.deploy(
           Repository("SettingsRepository", {
             repositoryName: "alchemy-test-ecr-repo-settings",
@@ -110,9 +105,7 @@ const repositoryPolicy: PolicyDocument = {
 const readRepositoryPolicy = (repositoryName: string) =>
   ecr.getRepositoryPolicy({ repositoryName }).pipe(
     Effect.map((response) => response.policyText),
-    Effect.catchTag("RepositoryPolicyNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
   );
 
 test.provider(
@@ -138,9 +131,7 @@ test.provider(
       // document (normalized comparison — key order / whitespace agnostic).
       const observed = yield* readRepositoryPolicy(repo.repositoryName);
       expect(observed).toBeDefined();
-      expect(normalizePolicyDocument(observed!)).toBe(
-        normalizePolicyDocument(repositoryPolicy),
-      );
+      expect(normalizePolicyDocument(observed!)).toBe(normalizePolicyDocument(repositoryPolicy));
 
       // Re-deploy the identical PolicyDocument — must converge cleanly (the
       // provider diffs normalized observed vs desired and no-ops the set).
@@ -165,8 +156,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertRepositoryDeleted(repo.repositoryName);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:ecr", "provider:aws:iam", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:ecr", "provider:aws:iam", "live"], timeout: 120_000 },
 );

@@ -6,11 +6,7 @@ import { diffTags } from "../../Tags.ts";
  * Build the ARN of an AppConfig application from its identity.
  * `arn:aws:appconfig:{region}:{account}:application/{appId}`
  */
-export const applicationArn = (
-  region: string,
-  accountId: string,
-  applicationId: string,
-): string =>
+export const applicationArn = (region: string, accountId: string, applicationId: string): string =>
   `arn:aws:appconfig:${region}:${accountId}:application/${applicationId}`;
 
 /**
@@ -45,8 +41,7 @@ export const deploymentStrategyArn = (
   region: string,
   accountId: string,
   deploymentStrategyId: string,
-): string =>
-  `arn:aws:appconfig:${region}:${accountId}:deploymentstrategy/${deploymentStrategyId}`;
+): string => `arn:aws:appconfig:${region}:${accountId}:deploymentstrategy/${deploymentStrategyId}`;
 
 /**
  * Data-plane resource ARN used by appconfigdata (StartConfigurationSession /
@@ -79,9 +74,7 @@ export const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**

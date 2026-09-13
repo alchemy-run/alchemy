@@ -18,13 +18,8 @@ const typeCases = (project: Project, branch: Branch, credential: Credential) =>
     });
     yield* AIGateway("BranchRef", { branch, credential });
     yield* AIGateway("ProjectRef", { project, credential });
-    yield* AIGateway("ProjectOutput", {
-      project: { projectId: project.projectId },
-      credential,
-    });
-    yield* AIGateway("Literal", {
-      branch: { projectId: "project", branchId: "branch" },
-    });
+    yield* AIGateway("ProjectOutput", { project: { projectId: project.projectId }, credential });
+    yield* AIGateway("Literal", { branch: { projectId: "project", branchId: "branch" } });
     // @ts-expect-error Exactly one scope is required.
     yield* AIGateway("Both", { branch, project });
     // @ts-expect-error Scope cannot be omitted.
@@ -33,15 +28,9 @@ const typeCases = (project: Project, branch: Branch, credential: Credential) =>
     const model: Layer.Layer<LanguageModel, never, RuntimeContext> = ai.model({
       model: "gpt-5-mini",
     });
-    const token: Effect.Effect<
-      Redacted.Redacted<string>,
-      never,
-      RuntimeContext
-    > = ai.token;
+    const token: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext> = ai.token;
     // @ts-expect-error Model construction retains its runtime-only requirement.
-    const deploymentModel: Layer.Layer<LanguageModel> = ai.model({
-      model: "gpt-5-mini",
-    });
+    const deploymentModel: Layer.Layer<LanguageModel> = ai.model({ model: "gpt-5-mini" });
     // @ts-expect-error Credentials cannot be consumed as plaintext strings.
     const plaintext: Effect.Effect<string, never, RuntimeContext> = ai.token;
     return { model, token, deploymentModel, plaintext };

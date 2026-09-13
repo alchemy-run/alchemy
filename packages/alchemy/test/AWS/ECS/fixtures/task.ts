@@ -65,9 +65,7 @@ export default class TestTask extends AWS.ECS.Task<TestTask>()(
         // runtimes batch on intervals; they must not flush per request.
         if (url.pathname === "/work") {
           const tag = url.searchParams.get("tag") ?? "none";
-          yield* Effect.log(`ecs-work-log:${tag}`).pipe(
-            Effect.withSpan(`work:${tag}`),
-          );
+          yield* Effect.log(`ecs-work-log:${tag}`).pipe(Effect.withSpan(`work:${tag}`));
           return yield* HttpServerResponse.json({
             marker: `ecs-did-work:${tag}`,
           });

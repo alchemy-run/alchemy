@@ -7,9 +7,7 @@ import type { Database } from "./Database.ts";
 import type { DocumentSnapshot } from "./ReadDatabase.ts";
 
 /** `create` found a document already at `path`. */
-export class DocumentAlreadyExists extends Data.TaggedError(
-  "GCP.Firestore.DocumentAlreadyExists",
-)<{
+export class DocumentAlreadyExists extends Data.TaggedError("GCP.Firestore.DocumentAlreadyExists")<{
   path: string;
   message: string;
 }> {}
@@ -44,11 +42,7 @@ export interface WriteDatabaseClient {
   /** Delete the document at `path`. Deleting a missing document succeeds. */
   delete(
     path: string,
-  ): Effect.Effect<
-    void,
-    firestore.DeleteProjectsDatabasesDocumentsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<void, firestore.DeleteProjectsDatabasesDocumentsError, RuntimeContext>;
   /**
    * Create the document at `path`; fails with
    * {@link DocumentAlreadyExists} when it already exists.
@@ -59,10 +53,7 @@ export interface WriteDatabaseClient {
   ): Effect.Effect<
     DocumentSnapshot,
     | DocumentAlreadyExists
-    | Exclude<
-        firestore.CreateDocumentProjectsDatabasesDocumentsError,
-        { _tag: "Conflict" }
-      >,
+    | Exclude<firestore.CreateDocumentProjectsDatabasesDocumentsError, { _tag: "Conflict" }>,
     RuntimeContext
   >;
 }
@@ -94,6 +85,4 @@ export interface WriteDatabase extends Binding.Service<
   (database: Database) => Effect.Effect<WriteDatabaseClient>
 > {}
 
-export const WriteDatabase = Binding.Service<WriteDatabase>(
-  "GCP.Firestore.WriteDatabase",
-);
+export const WriteDatabase = Binding.Service<WriteDatabase>("GCP.Firestore.WriteDatabase");

@@ -48,8 +48,7 @@ export const apiLayer = (version: string) =>
         fetch: Effect.gen(function* () {
           const version = yield* Config.String("VERSION").pipe(Effect.orDie);
           const request = yield* HttpServerRequest;
-          if (request.url.startsWith("/health"))
-            return HttpServerResponse.text("ok");
+          if (request.url.startsWith("/health")) return HttpServerResponse.text("ok");
           if (request.url.startsWith("/active"))
             return HttpServerResponse.text(String(yield* Ref.get(active)));
           if (request.url.startsWith("/slow")) {

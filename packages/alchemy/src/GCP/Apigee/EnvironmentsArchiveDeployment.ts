@@ -1,9 +1,9 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -112,10 +112,9 @@ export type EnvironmentsArchiveDeployment = Resource<
  * @resource
  * @category Apigee
  */
-export const EnvironmentsArchiveDeployment =
-  Resource<EnvironmentsArchiveDeployment>(
-    "GCP.Apigee.EnvironmentsArchiveDeployment",
-  );
+export const EnvironmentsArchiveDeployment = Resource<EnvironmentsArchiveDeployment>(
+  "GCP.Apigee.EnvironmentsArchiveDeployment",
+);
 
 export class EnvironmentsArchiveDeploymentNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsArchiveDeploymentNotResolved",
@@ -123,11 +122,7 @@ export class EnvironmentsArchiveDeploymentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organizationId: string,
-  environmentId: string,
-  archiveDeploymentId: string,
-) =>
+const resourceName = (organizationId: string, environmentId: string, archiveDeploymentId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/archiveDeployments/${archiveDeploymentId}`;
 
 const userLabels = (
@@ -157,9 +152,7 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  missingToUndefined(
-    apigee.getOrganizationsEnvironmentsArchiveDeployments({ name }),
-  );
+  missingToUndefined(apigee.getOrganizationsEnvironmentsArchiveDeployments({ name }));
 
 const uploadZip = (uploadUri: string, archiveZip: string) =>
   Effect.gen(function* () {
@@ -180,18 +173,11 @@ const uploadZip = (uploadUri: string, archiveZip: string) =>
 
 export const EnvironmentsArchiveDeploymentProvider = () =>
   Provider.succeed(EnvironmentsArchiveDeployment, {
-    stables: [
-      "name",
-      "archiveDeploymentId",
-      "organizationId",
-      "environmentId",
-      "createdAt",
-    ],
+    stables: ["name", "archiveDeploymentId", "organizationId", "environmentId", "createdAt"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.archiveDeploymentId ?? output?.archiveDeploymentId;
+      const previousId = olds?.archiveDeploymentId ?? output?.archiveDeploymentId;
       const previousOrg = olds?.organization ?? output?.organizationId;
       const previousEnv = olds?.environment ?? output?.environmentId;
       const idChanged =
@@ -201,8 +187,7 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -218,24 +203,18 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
       const archiveDeploymentId = yield* toResourceId(
         id,
         olds?.archiveDeploymentId,
         output?.archiveDeploymentId,
         { maxLength: MAX_NAME_LENGTH, rfc1035: true },
       );
-      const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, archiveDeploymentId);
+      const name = output?.name ?? resourceName(organizationId, environmentId, archiveDeploymentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organizationId, environmentId);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -243,29 +222,20 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         const environments = yield* listProjectEnvironments();
         const found: EnvironmentsArchiveDeployment["Attributes"][] = [];
         for (const item of environments) {
-          const archives =
-            yield* apigee.listOrganizationsEnvironmentsArchiveDeployments
-              .pages({ parent: item.parent, pageSize: 100 })
-              .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.archiveDeployments ?? []),
-                ),
-                Stream.filter((archive) =>
-                  Object.keys(archive.labels ?? {}).some((key) =>
-                    key.startsWith("alchemy-"),
-                  ),
-                ),
-                Stream.map((archive) =>
-                  toAttrs(archive, item.organizationId, item.environmentId),
-                ),
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-                  Effect.succeed(
-                    [] as EnvironmentsArchiveDeployment["Attributes"][],
-                  ),
-                ),
-              );
+          const archives = yield* apigee.listOrganizationsEnvironmentsArchiveDeployments
+            .pages({ parent: item.parent, pageSize: 100 })
+            .pipe(
+              Stream.flatMap((page) => Stream.fromIterable(page.archiveDeployments ?? [])),
+              Stream.filter((archive) =>
+                Object.keys(archive.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+              ),
+              Stream.map((archive) => toAttrs(archive, item.organizationId, item.environmentId)),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+                Effect.succeed([] as EnvironmentsArchiveDeployment["Attributes"][]),
+              ),
+            );
           found.push(...archives);
         }
         return found;
@@ -282,11 +252,7 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         { maxLength: MAX_NAME_LENGTH, rfc1035: true },
       );
       const parent = environmentNameOf(organizationId, environmentId);
-      const name = resourceName(
-        organizationId,
-        environmentId,
-        archiveDeploymentId,
-      );
+      const name = resourceName(organizationId, environmentId, archiveDeploymentId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -297,10 +263,9 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
       if (current === undefined) {
         let gcsUri = news.gcsUri;
         if (gcsUri === undefined && news.archiveZip !== undefined) {
-          const upload =
-            yield* apigee.generateUploadUrlOrganizationsEnvironmentsArchiveDeployments(
-              { parent, body: {} },
-            );
+          const upload = yield* apigee.generateUploadUrlOrganizationsEnvironmentsArchiveDeployments(
+            { parent, body: {} },
+          );
           if (upload.uploadUri) {
             gcsUri = yield* uploadZip(upload.uploadUri, news.archiveZip);
           }
@@ -334,12 +299,11 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
-        current =
-          yield* apigee.patchOrganizationsEnvironmentsArchiveDeployments({
-            name: current.name ?? name,
-            updateMask: "labels",
-            body: { labels: desiredLabels },
-          });
+        current = yield* apigee.patchOrganizationsEnvironmentsArchiveDeployments({
+          name: current.name ?? name,
+          updateMask: "labels",
+          body: { labels: desiredLabels },
+        });
       }
 
       return toAttrs(current, organizationId, environmentId);
@@ -350,11 +314,6 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         .deleteOrganizationsEnvironmentsArchiveDeployments({
           name: output.name,
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

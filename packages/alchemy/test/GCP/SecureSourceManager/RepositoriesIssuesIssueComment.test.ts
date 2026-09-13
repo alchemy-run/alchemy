@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ssm from "@distilled.cloud/gcp/securesourcemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  currentProject,
-  logLevel,
-  missingIssueOf,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { currentProject, logLevel, missingIssueOf, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -58,13 +53,10 @@ test.provider(
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.SecureSourceManager.RepositoriesIssuesIssueComment(
-              "Note",
-              {
-                issue: missingIssue,
-                body: "reproduced on main",
-              },
-            );
+            return yield* GCP.SecureSourceManager.RepositoriesIssuesIssueComment("Note", {
+              issue: missingIssue,
+              body: "reproduced on main",
+            });
           }),
         ),
       );
@@ -88,24 +80,16 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const issue = yield* GCP.SecureSourceManager.RepositoriesIssue(
-            "Bug",
-            {
-              repository:
-                process.env.GCP_TEST_SECURE_SOURCE_MANAGER_REPO ??
-                missingIssue.split("/issues/")[0]!,
-              title: "comment parent",
-              body: "parent issue",
-            },
-          );
-          const comment =
-            yield* GCP.SecureSourceManager.RepositoriesIssuesIssueComment(
-              "Note",
-              {
-                issue: issue.name,
-                body: "reproduced on main",
-              },
-            );
+          const issue = yield* GCP.SecureSourceManager.RepositoriesIssue("Bug", {
+            repository:
+              process.env.GCP_TEST_SECURE_SOURCE_MANAGER_REPO ?? missingIssue.split("/issues/")[0]!,
+            title: "comment parent",
+            body: "parent issue",
+          });
+          const comment = yield* GCP.SecureSourceManager.RepositoriesIssuesIssueComment("Note", {
+            issue: issue.name,
+            body: "reproduced on main",
+          });
           return { issue, comment };
         }),
       );
@@ -114,33 +98,25 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.comment.body).toEqual("reproduced on main");
       expect(created.comment.issue).toEqual(created.issue.name);
 
-      const fetched =
-        yield* ssm.getProjectsLocationsRepositoriesIssuesIssueComments({
-          name: created.comment.name,
-        });
+      const fetched = yield* ssm.getProjectsLocationsRepositoriesIssuesIssueComments({
+        name: created.comment.name,
+      });
       expect(fetched.name).toEqual(created.comment.name);
       expect(fetched.body).toEqual("reproduced on main");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const issue = yield* GCP.SecureSourceManager.RepositoriesIssue(
-            "Bug",
-            {
-              repository: created.issue.repository,
-              issueId: created.issue.issueId,
-              title: "comment parent",
-              body: "parent issue",
-            },
-          );
-          const comment =
-            yield* GCP.SecureSourceManager.RepositoriesIssuesIssueComment(
-              "Note",
-              {
-                issue: issue.name,
-                commentId: created.comment.commentId,
-                body: "reproduced on release",
-              },
-            );
+          const issue = yield* GCP.SecureSourceManager.RepositoriesIssue("Bug", {
+            repository: created.issue.repository,
+            issueId: created.issue.issueId,
+            title: "comment parent",
+            body: "parent issue",
+          });
+          const comment = yield* GCP.SecureSourceManager.RepositoriesIssuesIssueComment("Note", {
+            issue: issue.name,
+            commentId: created.comment.commentId,
+            body: "reproduced on release",
+          });
           return { issue, comment };
         }),
       );

@@ -31,32 +31,26 @@ export default RestApiEventSourceFunction.make(
     });
 
     // GET /items — static JSON response.
-    yield* ApiGateway.onRestApiRoute(
-      api,
-      { path: "/items", httpMethod: "GET" },
-      () =>
-        Effect.succeed({
-          statusCode: 200,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ items: ["alpha", "beta"] }),
-        }),
+    yield* ApiGateway.onRestApiRoute(api, { path: "/items", httpMethod: "GET" }, () =>
+      Effect.succeed({
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ items: ["alpha", "beta"] }),
+      }),
     );
 
     // POST /echo — proves the proxy event (method, resource, body) reaches
     // the handler intact.
-    yield* ApiGateway.onRestApiRoute(
-      api,
-      { path: "/echo", httpMethod: "POST" },
-      (event) =>
-        Effect.sync(() => ({
-          statusCode: 200,
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            method: event.httpMethod,
-            resource: event.resource,
-            echoed: event.body === null ? null : JSON.parse(event.body),
-          }),
-        })),
+    yield* ApiGateway.onRestApiRoute(api, { path: "/echo", httpMethod: "POST" }, (event) =>
+      Effect.sync(() => ({
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          method: event.httpMethod,
+          resource: event.resource,
+          echoed: event.body === null ? null : JSON.parse(event.body),
+        }),
+      })),
     );
 
     const deployment = yield* ApiGateway.Deployment("AgEsDep", {

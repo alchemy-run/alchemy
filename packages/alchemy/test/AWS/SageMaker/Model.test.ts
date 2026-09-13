@@ -17,9 +17,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        sagemaker.describeModel({
-          ModelName: "alchemy-nonexistent-sagemaker-model-probe",
-        }),
+        sagemaker.describeModel({ ModelName: "alchemy-nonexistent-sagemaker-model-probe" }),
       );
       expect(error._tag).toBe("ModelNotFound");
     }),
@@ -43,9 +41,7 @@ const sagemakerRole = Role("SageMakerModelRole", {
     ],
   },
   // CreateModel validates the execution role can pull the container image.
-  managedPolicyArns: [
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-  ],
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
 });
 
 test.provider(
@@ -63,10 +59,7 @@ test.provider(
             const role = yield* sagemakerRole;
             const model = yield* Model("TestModel", {
               executionRoleArn: role.roleArn,
-              primaryContainer: {
-                Image: image,
-                Environment: env,
-              },
+              primaryContainer: { Image: image, Environment: env },
               tags: { purpose: "alchemy-test" },
             });
             return { model };
@@ -95,9 +88,7 @@ test.provider(
       const { model: replaced } = yield* deployModel({ MODEL_VERSION: "2" });
       expect(replaced.modelName).not.toBe(model.modelName);
       const observedReplacement = yield* findModel(replaced.modelName);
-      expect(
-        observedReplacement?.PrimaryContainer?.Environment?.MODEL_VERSION,
-      ).toBe("2");
+      expect(observedReplacement?.PrimaryContainer?.Environment?.MODEL_VERSION).toBe("2");
       // the replaced model is deleted
       expect(yield* findModel(model.modelName)).toBeUndefined();
 
@@ -105,12 +96,7 @@ test.provider(
       expect(yield* findModel(replaced.modelName)).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:sagemaker",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:sagemaker", "live"],
     timeout: 240_000,
   },
 );

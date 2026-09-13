@@ -1,8 +1,8 @@
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -21,18 +21,10 @@ import {
 const DEFAULT_QUERY_SCOPE = "COLLECTION";
 const DEFAULT_API_SCOPE = "ANY_API";
 
-export type IndexQueryScope =
-  | firestore.GoogleFirestoreAdminV1IndexQueryScopeEnum
-  | (string & {});
-export type IndexApiScope =
-  | firestore.GoogleFirestoreAdminV1IndexApiScopeEnum
-  | (string & {});
-export type IndexDensity =
-  | firestore.GoogleFirestoreAdminV1IndexDensityEnum
-  | (string & {});
-export type IndexFieldOrder =
-  | firestore.GoogleFirestoreAdminV1IndexFieldOrderEnum
-  | (string & {});
+export type IndexQueryScope = firestore.GoogleFirestoreAdminV1IndexQueryScopeEnum | (string & {});
+export type IndexApiScope = firestore.GoogleFirestoreAdminV1IndexApiScopeEnum | (string & {});
+export type IndexDensity = firestore.GoogleFirestoreAdminV1IndexDensityEnum | (string & {});
+export type IndexFieldOrder = firestore.GoogleFirestoreAdminV1IndexFieldOrderEnum | (string & {});
 export type IndexFieldArrayConfig =
   | firestore.GoogleFirestoreAdminV1IndexFieldArrayConfigEnum
   | (string & {});
@@ -174,20 +166,15 @@ export type DatabasesCollectionGroupsIndex = Resource<
  * @resource
  * @category Firestore
  */
-export const DatabasesCollectionGroupsIndex =
-  Resource<DatabasesCollectionGroupsIndex>(
-    "GCP.Firestore.DatabasesCollectionGroupsIndex",
-  );
+export const DatabasesCollectionGroupsIndex = Resource<DatabasesCollectionGroupsIndex>(
+  "GCP.Firestore.DatabasesCollectionGroupsIndex",
+);
 
-export class IndexNotResolved extends Data.TaggedError(
-  "GCP.Firestore.IndexNotResolved",
-)<{
+export class IndexNotResolved extends Data.TaggedError("GCP.Firestore.IndexNotResolved")<{
   name: string;
 }> {}
 
-export class IndexStillExists extends Data.TaggedError(
-  "GCP.Firestore.IndexStillExists",
-)<{
+export class IndexStillExists extends Data.TaggedError("GCP.Firestore.IndexStillExists")<{
   name: string;
 }> {}
 
@@ -196,9 +183,7 @@ const normalizeEnum = (value: string | undefined, fallback: string) => {
   return next.endsWith("_UNSPECIFIED") ? fallback : next;
 };
 
-const fieldOf = (
-  field: IndexField | firestore.GoogleFirestoreAdminV1IndexField,
-): IndexField => ({
+const fieldOf = (field: IndexField | firestore.GoogleFirestoreAdminV1IndexField): IndexField => ({
   fieldPath: field.fieldPath,
   order: field.order,
   arrayConfig: field.arrayConfig,
@@ -226,9 +211,7 @@ const canonicalizeFields = (
 };
 
 const fieldsKey = (
-  fields:
-    | readonly (IndexField | firestore.GoogleFirestoreAdminV1IndexField)[]
-    | undefined,
+  fields: readonly (IndexField | firestore.GoogleFirestoreAdminV1IndexField)[] | undefined,
 ) =>
   JSON.stringify(
     canonicalizeFields(fields ?? []).map((field) => ({
@@ -239,11 +222,7 @@ const fieldsKey = (
     })),
   );
 
-const collectionGroupParent = (
-  project: string,
-  database: string,
-  collectionGroup: string,
-) =>
+const collectionGroupParent = (project: string, database: string, collectionGroup: string) =>
   `${databaseNameOf(project, database)}/collectionGroups/${lastSegment(collectionGroup)}`;
 
 const toAttrs = (
@@ -318,9 +297,7 @@ const listOnParent = (parent: string) =>
     ),
   );
 
-const nameFromOperation = (
-  operation: firestore.GoogleLongrunningOperation,
-): string | undefined =>
+const nameFromOperation = (operation: firestore.GoogleLongrunningOperation): string | undefined =>
   stringFromMap(operation.response, "name") ??
   stringFromMap(operation.metadata, "index") ??
   stringFromMap(operation.metadata, "name");
@@ -342,9 +319,7 @@ const resolveCreatedIndexName = (
         if (fromOp !== undefined) return fromOp;
       }
     }
-    const match = (yield* listOnParent(parent)).find((index) =>
-      matchesDesired(index, news),
-    );
+    const match = (yield* listOnParent(parent)).find((index) => matchesDesired(index, news));
     if (match?.name !== undefined) return match.name;
     return yield* new IndexNotResolved({ name: `${parent}/indexes` });
   }).pipe(
@@ -358,9 +333,7 @@ const resolveCreatedIndexName = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((index) =>
-      index
-        ? Effect.succeed(index)
-        : Effect.fail(new IndexNotResolved({ name })),
+      index ? Effect.succeed(index) : Effect.fail(new IndexNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.IndexNotResolved",
@@ -401,9 +374,7 @@ export const DatabasesCollectionGroupsIndexProvider = () =>
         olds?.database ?? output?.database ?? output?.databaseId ?? "",
       );
       const nextDatabase = databaseIdOf(news.database);
-      const previousGroup = lastSegment(
-        olds?.collectionGroup ?? output?.collectionGroupId ?? "",
-      );
+      const previousGroup = lastSegment(olds?.collectionGroup ?? output?.collectionGroupId ?? "");
       const nextGroup = lastSegment(news.collectionGroup);
       const previousFields = fieldsKey(olds?.fields ?? output?.fields);
       const nextFields = fieldsKey(news.fields);
@@ -412,21 +383,13 @@ export const DatabasesCollectionGroupsIndexProvider = () =>
         DEFAULT_QUERY_SCOPE,
       );
       const nextScope = normalizeEnum(news.queryScope, DEFAULT_QUERY_SCOPE);
-      const previousApi = normalizeEnum(
-        olds?.apiScope ?? output?.apiScope,
-        DEFAULT_API_SCOPE,
-      );
+      const previousApi = normalizeEnum(olds?.apiScope ?? output?.apiScope, DEFAULT_API_SCOPE);
       const nextApi = normalizeEnum(news.apiScope, DEFAULT_API_SCOPE);
       const previousUnique = olds?.unique === true || output?.unique === true;
       const nextUnique = news.unique === true;
-      const previousMultikey =
-        olds?.multikey === true || output?.multikey === true;
+      const previousMultikey = olds?.multikey === true || output?.multikey === true;
       const nextMultikey = news.multikey === true;
-      const previousDensity = (
-        olds?.density ??
-        output?.density ??
-        ""
-      ).toUpperCase();
+      const previousDensity = (olds?.density ?? output?.density ?? "").toUpperCase();
       const nextDensity = (news.density ?? previousDensity).toUpperCase();
       const previousShards = olds?.shardCount ?? output?.shardCount;
       const nextShards = news.shardCount ?? previousShards;
@@ -459,15 +422,10 @@ export const DatabasesCollectionGroupsIndexProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = collectionGroupParent(
-        env.project,
-        news.database,
-        news.collectionGroup,
-      );
+      const parent = collectionGroupParent(env.project, news.database, news.collectionGroup);
       const body = desiredBody(news);
 
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
 
       if (current === undefined) {
         const existing = yield* listOnParent(parent);

@@ -11,10 +11,7 @@ import { isolatedProject } from "../../../../IsolatedProject.ts";
  * bootstrap's own imports (`@effect/platform-bun`, `alchemy/*`, …) must be
  * anchored by the bundler.
  */
-export const project = isolatedProject(
-  "cloudflare-container",
-  import.meta.filename,
-);
+export const project = isolatedProject("cloudflare-container", import.meta.filename);
 
 /**
  * Minimal effectful `Cloudflare.Container` served from an isolated project.

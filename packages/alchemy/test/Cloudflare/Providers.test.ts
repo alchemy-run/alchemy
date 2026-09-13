@@ -45,16 +45,10 @@ it.live(
             bindings: {},
             actions: {},
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
+          Layer.succeed(AlchemyContext, { dev: false, adopt: false, dotAlchemy: ".alchemy" }),
           Layer.succeed(
             ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-            }),
+            ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
           ),
           Layer.sync(ArtifactStore, createArtifactStore),
           NodeServices.layer,
@@ -87,11 +81,7 @@ it.live(
             bindings: {},
             actions: {},
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
+          Layer.succeed(AlchemyContext, { dev: false, adopt: false, dotAlchemy: ".alchemy" }),
           Layer.succeed(
             ConfigProvider.ConfigProvider,
             ConfigProvider.fromUnknown({

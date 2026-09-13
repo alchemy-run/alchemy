@@ -13,13 +13,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // The custom origin trust store requires the Advanced Certificate Manager
 // add-on (~$10/mo per zone). On the standard testing zone every call —
@@ -30,18 +26,13 @@ const entitledZoneId = process.env.CLOUDFLARE_TEST_ACM_ZONE_ID;
 
 // Checked-in, deterministic self-signed root CA fixtures (no key material).
 const ROOT_CA_PEM = pathe.resolve(import.meta.dirname, "fixtures/root-ca.pem");
-const ROOT_CA_2_PEM = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/root-ca-2.pem",
-);
+const ROOT_CA_2_PEM = pathe.resolve(import.meta.dirname, "fixtures/root-ca-2.pem");
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -55,9 +46,8 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 const getTrustStore = (zoneId: string, id: string) =>
   acm.getCustomTrustStore({ zoneId, customOriginTrustStoreId: id }).pipe(
     Effect.map((cert): acm.GetCustomTrustStoreResponse | undefined => cert),
-    Effect.catchTag(
-      ["CustomTrustStoreNotFound", "InvalidObjectIdentifier"],
-      () => Effect.succeed(undefined),
+    Effect.catchTag(["CustomTrustStoreNotFound", "InvalidObjectIdentifier"], () =>
+      Effect.succeed(undefined),
     ),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -78,28 +68,19 @@ test.provider(
 
       // The standard testing zone lacks the ACM add-on — uploading a trust
       // store certificate must fail with the typed entitlement tag (1450).
-      const error = yield* acm
-        .createCustomTrustStore({ zoneId, certificate })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-          Effect.flip,
-        );
+      const error = yield* acm.createCustomTrustStore({ zoneId, certificate }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+        Effect.flip,
+      );
       expect(error._tag).toEqual("AdvancedCertificateManagerRequired");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:acm",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:acm", "provider:cloudflare:zone", "live"] },
 );
 
 // Canonical `list()` test (zone-scoped collection): `list()` enumerates
@@ -115,9 +96,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Acm.CustomTrustStore,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Acm.CustomTrustStore);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -140,28 +119,18 @@ test.provider.skipIf(!entitledZoneId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", {
-            zoneId,
-            certificate,
-          });
+          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", { zoneId, certificate });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Acm.CustomTrustStore,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Acm.CustomTrustStore);
       const all = yield* provider.list();
 
-      expect(all.some((c) => c.id === created.id && c.zoneId === zoneId)).toBe(
-        true,
-      );
+      expect(all.some((c) => c.id === created.id && c.zoneId === zoneId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:acm", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:acm", "live"], timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitledZoneId)(
@@ -178,10 +147,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Create.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", {
-            zoneId,
-            certificate,
-          });
+          return yield* Cloudflare.Acm.CustomTrustStore("RootCa", { zoneId, certificate });
         }),
       );
       expect(created.zoneId).toEqual(zoneId);
@@ -212,20 +178,13 @@ test.provider.skipIf(!entitledZoneId)(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           until: (cert) =>
-            cert === undefined ||
-            cert.status === "pending_deletion" ||
-            cert.status === "deleted",
+            cert === undefined || cert.status === "pending_deletion" || cert.status === "deleted",
           times: 30,
         }),
       );
       expect(
-        gone === undefined ||
-          gone.status === "pending_deletion" ||
-          gone.status === "deleted",
+        gone === undefined || gone.status === "pending_deletion" || gone.status === "deleted",
       ).toBe(true);
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:acm", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:acm", "live"], timeout: 120_000 },
 );

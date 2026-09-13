@@ -35,12 +35,8 @@ const adoptRoleName = `AWSServiceRoleForAutoScaling_${testAdoptSuffix}`;
 // Idempotent out-of-band cleanup for the adoption SLR — safe when the stack
 // already deleted it (or it never fully created). Submits the async deletion
 // task and tolerates not-found.
-const deleteAdoptRoleIfExists = IAM.deleteServiceLinkedRole({
-  RoleName: adoptRoleName,
-}).pipe(
-  Effect.catchTag("NoSuchEntityException", () =>
-    Effect.succeed({ DeletionTaskId: "" }),
-  ),
+const deleteAdoptRoleIfExists = IAM.deleteServiceLinkedRole({ RoleName: adoptRoleName }).pipe(
+  Effect.catchTag("NoSuchEntityException", () => Effect.succeed({ DeletionTaskId: "" })),
   Effect.asVoid,
   // Any non-not-found failure is a real cleanup bug — surface it loudly.
   Effect.orDie,
@@ -75,24 +71,16 @@ describe(
 
           // Out-of-band: the role exists under the service's deterministic path.
           const observed = yield* IAM.getRole({ RoleName: created.roleName });
-          expect(observed.Role?.Path).toBe(
-            `/aws-service-role/${testServiceName}/`,
-          );
+          expect(observed.Role?.Path).toBe(`/aws-service-role/${testServiceName}/`);
           expect(observed.Role?.Arn).toBe(created.roleArn);
-          expect(observed.Role?.Description).toBe(
-            "alchemy service-linked role test",
-          );
+          expect(observed.Role?.Description).toBe("alchemy service-linked role test");
 
           // Update — the description is the only mutable aspect of an SLR.
           const updated = yield* deployRole("alchemy SLR updated description");
           expect(updated.roleArn).toBe(created.roleArn);
 
-          const afterUpdate = yield* IAM.getRole({
-            RoleName: created.roleName,
-          });
-          expect(afterUpdate.Role?.Description).toBe(
-            "alchemy SLR updated description",
-          );
+          const afterUpdate = yield* IAM.getRole({ RoleName: created.roleName });
+          expect(afterUpdate.Role?.Description).toBe("alchemy SLR updated description");
 
           // Destroy — the provider waits for the async deletion task; give
           // getRole a bounded window to observe the removal.
@@ -118,9 +106,7 @@ describe(
           }).pipe(
             // Idempotence across re-runs: an earlier interrupted run may have
             // left the role behind — the create then reports InvalidInput.
-            Effect.catchTag("InvalidInputException", () =>
-              Effect.succeed({ Role: undefined }),
-            ),
+            Effect.catchTag("InvalidInputException", () => Effect.succeed({ Role: undefined })),
           );
 
           const adopted = yield* stack.deploy(

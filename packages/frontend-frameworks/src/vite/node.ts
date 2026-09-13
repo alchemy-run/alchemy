@@ -42,15 +42,10 @@ const makeNodeChildTarget = (config: ViteTargetConfig = {}): ViteTarget =>
         const path = yield* Path.Path;
         if (output.clientDirectory === undefined) {
           return yield* Effect.fail(
-            fail(
-              "The Vite build produced no client directory for the Node serve entry",
-            ),
+            fail("The Vite build produced no client directory for the Node serve entry"),
           );
         }
-        const servePath = path.join(
-          output.clientDirectory,
-          NODE_SERVE_ENTRY_FILE_NAME,
-        );
+        const servePath = path.join(output.clientDirectory, NODE_SERVE_ENTRY_FILE_NAME);
         return yield* writeNodeServeEntry({
           output,
           servePath,

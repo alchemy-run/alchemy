@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Instance } from "./Instance.ts";
 
-export interface GetInstanceRequest extends Omit<
-  bigtable.GetProjectsInstancesRequest,
-  "name"
-> {}
+export interface GetInstanceRequest extends Omit<bigtable.GetProjectsInstancesRequest, "name"> {}
 
 /**
  * Runtime binding for Cloud Bigtable `instances.get`.
@@ -33,14 +30,8 @@ export interface GetInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetInstanceRequest,
-    ) => Effect.Effect<
-      bigtable.Instance,
-      bigtable.GetProjectsInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<bigtable.Instance, bigtable.GetProjectsInstancesError, RuntimeContext>
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.Bigtable.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.Bigtable.GetInstance");

@@ -27,15 +27,10 @@ import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
 import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 const ModuleRunnerWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-vite-worker/module-runner/module-runner.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-vite-worker/module-runner/module-runner.worker"),
 };
 const WrapperWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-vite-worker/module-runner/wrapper.worker",
-    ),
+  worker: () => loadInternalWorker("#cloudflare-runtime-vite-worker/module-runner/wrapper.worker"),
 };
 import * as ViteAssets from "./assets/ViteAssets.ts";
 import { renderExportWrappers } from "./export-types.ts";
@@ -68,18 +63,12 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     // friends) from the runtime context, so the context must feed the layer,
     // not just sit beside it.
     Effect.provide(
-      ViteAssets.ViteAssetsLive(server).pipe(
-        Layer.provideMerge(Layer.succeedContext(context)),
-      ),
+      ViteAssets.ViteAssetsLive(server).pipe(Layer.provideMerge(Layer.succeedContext(context))),
     ),
     Scope.provide(scope),
     Effect.runPromise,
   );
-  return {
-    address,
-    proxySharedSecret,
-    close: () => closeScope(scope),
-  };
+  return { address, proxySharedSecret, close: () => closeScope(scope) };
 };
 
 export const createDefaultContext = async (): Promise<
@@ -88,9 +77,7 @@ export const createDefaultContext = async (): Promise<
   const scope = Scope.makeUnsafe();
 
   return await RuntimeServices.layerRuntime({
-    api: {
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
-    },
+    api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! },
   }).pipe(
     Layer.provideMerge(PlatformServices),
     Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
@@ -100,9 +87,7 @@ export const createDefaultContext = async (): Promise<
 };
 
 const closeScope = async (scope: Scope.Closeable) => {
-  await Effect.runPromiseExit(
-    Scope.closeUnsafe(scope, Exit.void) ?? Effect.void,
-  );
+  await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
 };
 
 const makeModuleFallbackService = Effect.gen(function* () {
@@ -162,9 +147,7 @@ const makeModuleFallbackService = Effect.gen(function* () {
       }
     } catch (error) {
       res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end(
-        error instanceof Error ? (error.stack ?? error.message) : String(error),
-      );
+      res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
     }
   });
 
@@ -189,9 +172,7 @@ const makeModuleFallbackService = Effect.gen(function* () {
 
   const address = server.address();
   if (address === null || typeof address === "string") {
-    return yield* Effect.die(
-      new Error("Module fallback server address unavailable"),
-    );
+    return yield* Effect.die(new Error("Module fallback server address unavailable"));
   }
   return `127.0.0.1:${address.port}`;
 });
@@ -230,10 +211,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         name: `vite:invoke-module:${name}`,
         handler: Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
-          const targetEnvironment = Headers.get(
-            request.headers,
-            ENVIRONMENT_NAME_HEADER,
-          ).pipe(Option.getOrThrow);
+          const targetEnvironment = Headers.get(request.headers, ENVIRONMENT_NAME_HEADER).pipe(
+            Option.getOrThrow,
+          );
           const json = (yield* request.json) as unknown as vite.CustomPayload;
           const devEnvironment = server.environments[targetEnvironment];
           const result = yield* Effect.promise(
@@ -245,11 +225,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       ...(options.worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [
-      {
-        className: "ModuleRunnerDO",
-        sql: false,
-        ephemeralLocal: true,
-      },
+      { className: "ModuleRunnerDO", sql: false, ephemeralLocal: true },
       ...(options.worker?.durableObjectNamespaces ?? []),
     ],
     workflows: options.worker?.workflows,
@@ -261,10 +237,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     queueConsumers: options.worker?.queueConsumers,
     crons: options.worker?.crons,
     assets: options.worker?.assets,
-    unsafe: {
-      moduleFallback,
-      ...(options.worker?.unsafe ?? {}),
-    },
+    unsafe: { moduleFallback, ...options.worker?.unsafe },
   });
 });
 
@@ -313,18 +286,13 @@ const parseModuleFallbackRequest = async (
     if (typeof json === "object" && json !== null && "specifier" in json) {
       return {
         protocol: "v2",
-        ...(json as Omit<
-          Extract<ModuleFallbackRequest, { protocol: "v2" }>,
-          "protocol"
-        >),
+        ...(json as Omit<Extract<ModuleFallbackRequest, { protocol: "v2" }>, "protocol">),
       };
     }
   }
 };
 
-async function makeWorkerModules(
-  exportTypes: ExportTypes,
-): Promise<Array<Module>> {
+async function makeWorkerModules(exportTypes: ExportTypes): Promise<Array<Module>> {
   const [moduleRunnerWorker, wrapperWorker] = await Promise.all([
     ModuleRunnerWorker.worker(),
     WrapperWorker.worker(),
@@ -339,9 +307,5 @@ async function makeWorkerModules(
     ...moduleRunnerWorker.modules,
     ...wrapperWorker.modules,
   };
-  return Object.entries(modules).map(([name, content]) => ({
-    name,
-    type: "ESModule",
-    content,
-  }));
+  return Object.entries(modules).map(([name, content]) => ({ name, type: "ESModule", content }));
 }

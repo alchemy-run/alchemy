@@ -11,10 +11,7 @@ import { emailRoutingScoped } from "./scope.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A deterministic STANDING destination address used for the list test.
 // Cloudflare sends a verification email on first create; the address still
@@ -41,9 +38,9 @@ test.provider.skipIf(!emailRoutingScoped)(
 
       const address = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Email.Address("ListAddress", {
-            email: testEmail,
-          }).pipe(RemovalPolicy.retain());
+          return yield* Cloudflare.Email.Address("ListAddress", { email: testEmail }).pipe(
+            RemovalPolicy.retain(),
+          );
         }),
       );
 
@@ -57,10 +54,7 @@ test.provider.skipIf(!emailRoutingScoped)(
         description: "list() includes the deployed email address",
         effect: provider.list(),
         predicate: (all) => all.some((a) => a.email === testEmail),
-        schedule: Schedule.max([
-          Schedule.spaced("3 seconds"),
-          Schedule.recurs(20),
-        ]),
+        schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
       });
 
       expect(all.some((a) => a.addressId === address.addressId)).toBe(true);

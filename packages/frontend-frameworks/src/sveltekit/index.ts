@@ -99,9 +99,7 @@ export interface HarnessOptions {
  * target serves them on `platform.env` via cloudflare-runtime's platform
  * proxy — resource bindings included, not just literal values).
  */
-export const fromHarnessOptions = (
-  options: HarnessOptions,
-): SvelteKitOptions => {
+export const fromHarnessOptions = (options: HarnessOptions): SvelteKitOptions => {
   const worker = options.target?.cloudflare?.worker ?? options.vite;
   return {
     compatibilityDate: worker?.compatibilityDate,

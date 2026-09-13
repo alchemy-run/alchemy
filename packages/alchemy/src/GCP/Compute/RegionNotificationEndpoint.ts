@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionNotificationEndpointGrpcSettings = {
   /**
@@ -204,16 +200,10 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const sameInterval = (
-  left: compute.Duration | undefined,
-  right: compute.Duration | undefined,
-) =>
-  (left?.seconds ?? "") === (right?.seconds ?? "") &&
-  (left?.nanos ?? 0) === (right?.nanos ?? 0);
+const sameInterval = (left: compute.Duration | undefined, right: compute.Duration | undefined) =>
+  (left?.seconds ?? "") === (right?.seconds ?? "") && (left?.nanos ?? 0) === (right?.nanos ?? 0);
 
 const toAttrs = (endpoint: compute.NotificationEndpoint, project: string) => {
   const parsed = parseDescription(endpoint.description);
@@ -234,11 +224,7 @@ const toAttrs = (endpoint: compute.NotificationEndpoint, project: string) => {
   };
 };
 
-const getByName = (
-  project: string,
-  region: string,
-  notificationEndpoint: string,
-) =>
+const getByName = (project: string, region: string, notificationEndpoint: string) =>
   compute
     .getRegionNotificationEndpoints({
       project,
@@ -254,22 +240,18 @@ const immutableChanged = (
 ) => {
   const previousDescription = olds?.description ?? output?.description ?? "";
   if ((news.description ?? "") !== previousDescription) return true;
-  const previousEndpoint =
-    olds?.grpcSettings.endpoint ?? output?.grpcEndpoint ?? "";
+  const previousEndpoint = olds?.grpcSettings.endpoint ?? output?.grpcEndpoint ?? "";
   if (news.grpcSettings.endpoint !== previousEndpoint) return true;
-  const previousRetry =
-    olds?.grpcSettings.retryDurationSec ?? output?.retryDurationSec;
+  const previousRetry = olds?.grpcSettings.retryDurationSec ?? output?.retryDurationSec;
   if (
     news.grpcSettings.retryDurationSec !== undefined &&
     news.grpcSettings.retryDurationSec !== previousRetry
   ) {
     return true;
   }
-  const previousPayload =
-    olds?.grpcSettings.payloadName ?? output?.payloadName ?? "";
+  const previousPayload = olds?.grpcSettings.payloadName ?? output?.payloadName ?? "";
   if ((news.grpcSettings.payloadName ?? "") !== previousPayload) return true;
-  const previousAuthority =
-    olds?.grpcSettings.authority ?? output?.authority ?? "";
+  const previousAuthority = olds?.grpcSettings.authority ?? output?.authority ?? "";
   if ((news.grpcSettings.authority ?? "") !== previousAuthority) return true;
   if (
     news.grpcSettings.resendInterval !== undefined &&
@@ -297,27 +279,14 @@ export const RegionNotificationEndpointProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.notificationEndpointName ?? output?.notificationEndpointName;
+      const previousName = olds?.notificationEndpointName ?? output?.notificationEndpointName;
       const nextName = news.notificationEndpointName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      if (
-        nameChanged ||
-        regionChanged ||
-        immutableChanged(news, olds, output)
-      ) {
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      if (nameChanged || regionChanged || immutableChanged(news, olds, output)) {
         return {
           action: "replace" as const,
           deleteFirst: !regionChanged,
@@ -333,15 +302,8 @@ export const RegionNotificationEndpointProvider = () =>
         olds?.notificationEndpointName,
         output?.notificationEndpointName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        notificationEndpointName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, notificationEndpointName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -378,11 +340,7 @@ export const RegionNotificationEndpointProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        notificationEndpointName,
-      );
+      let current = yield* getByName(env.project, region, notificationEndpointName);
 
       if (current === undefined) {
         const grpcSettings: compute.NotificationEndpointGrpcSettings = {
@@ -418,11 +376,7 @@ export const RegionNotificationEndpointProvider = () =>
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        current = yield* getByName(
-          env.project,
-          region,
-          notificationEndpointName,
-        );
+        current = yield* getByName(env.project, region, notificationEndpointName);
       }
 
       if (current === undefined) {

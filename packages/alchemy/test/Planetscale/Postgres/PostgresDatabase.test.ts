@@ -13,10 +13,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixturesDir = `${import.meta.dirname}/fixtures`;
 
@@ -30,9 +27,7 @@ describe
       // per-database default-branch hydration) without provisioning anything.
       test.provider("list enumerates databases (read-only)", () =>
         Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(
-            Planetscale.PostgresDatabase,
-          );
+          const provider = yield* Provider.findProvider(Planetscale.PostgresDatabase);
           const all = yield* provider.list();
 
           expect(Array.isArray(all)).toBe(true);
@@ -57,27 +52,20 @@ describe
 
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "ListDatabase",
-                  {
-                    name: "alchemy-pg-db-list",
-                    clusterSize: "PS_10",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("ListDatabase", {
+                  name: "alchemy-pg-db-list",
+                  clusterSize: "PS_10",
+                });
                 return { database };
               }),
             );
 
-            const provider = yield* Provider.findProvider(
-              Planetscale.PostgresDatabase,
-            );
+            const provider = yield* Provider.findProvider(Planetscale.PostgresDatabase);
             const all = yield* provider.list();
 
             expect(
               all.some(
-                (db) =>
-                  db.organization === database.organization &&
-                  db.name === database.name,
+                (db) => db.organization === database.organization && db.name === database.name,
               ),
             ).toBe(true);
 
@@ -94,16 +82,11 @@ describe
 
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "PostgresDatabaseBasic",
-                  {
-                    clusterSize: "PS_10",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("PostgresDatabaseBasic", {
+                  clusterSize: "PS_10",
+                });
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
@@ -117,9 +100,7 @@ describe
               createdAt: expect.any(String),
               updatedAt: expect.any(String),
               htmlUrl: expect.any(String),
-              region: {
-                slug: expect.any(String),
-              },
+              region: { slug: expect.any(String) },
               clusterSize: "PS_10_AWS_X86",
             });
 
@@ -144,17 +125,12 @@ describe
 
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "PostgresDatabaseBasicArm",
-                  {
-                    clusterSize: "PS_10",
-                    arch: "arm",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("PostgresDatabaseBasicArm", {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                });
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
@@ -168,9 +144,7 @@ describe
               createdAt: expect.any(String),
               updatedAt: expect.any(String),
               htmlUrl: expect.any(String),
-              region: {
-                slug: expect.any(String),
-              },
+              region: { slug: expect.any(String) },
               arch: "arm",
               clusterSize: "PS_10_AWS_ARM",
             });
@@ -198,24 +172,17 @@ describe
 
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "PostgresDatabaseCRUD",
-                  {
-                    name,
-                    region: {
-                      slug: "us-east",
-                    },
-                    clusterSize: "PS_10",
-                    defaultBranch: "main",
-                    requireApprovalForDeploy: false,
-                    restrictBranchRegion: true,
-                    productionBranchWebConsole: true,
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("PostgresDatabaseCRUD", {
+                  name,
+                  region: { slug: "us-east" },
+                  clusterSize: "PS_10",
+                  defaultBranch: "main",
+                  requireApprovalForDeploy: false,
+                  restrictBranchRegion: true,
+                  productionBranchWebConsole: true,
+                });
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
@@ -228,9 +195,7 @@ describe
               createdAt: expect.any(String),
               updatedAt: expect.any(String),
               htmlUrl: expect.any(String),
-              region: {
-                slug: expect.any(String),
-              },
+              region: { slug: expect.any(String) },
               clusterSize: "PS_10_AWS_X86",
               defaultBranch: "main",
               requireApprovalForDeploy: false,
@@ -252,9 +217,7 @@ describe
                   },
                 );
 
-                return {
-                  updatedDatabase,
-                };
+                return { updatedDatabase };
               }),
             );
 
@@ -276,10 +239,7 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -297,23 +257,14 @@ describe
               Effect.gen(function* () {
                 const database = yield* Planetscale.PostgresDatabase(
                   "PostgresDatabaseCustomBranch",
-                  {
-                    name,
-                    clusterSize: "PS_10",
-                    defaultBranch,
-                  },
+                  { name, clusterSize: "PS_10", defaultBranch },
                 );
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
-            expect(database).toMatchObject({
-              name,
-              defaultBranch,
-            });
+            expect(database).toMatchObject({ name, defaultBranch });
 
             const branch = yield* Planetscale.waitForBranchReady(
               database.organization,
@@ -327,10 +278,7 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000, // must wait on multiple resizes and branch creation
       );
@@ -344,35 +292,25 @@ describe
             const importFile = `${fixturesDir}/seed.sql`;
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "PostgresDatabaseMigrations",
-                  {
-                    clusterSize: "PS_10",
-                    migrations: `${fixturesDir}/migrations`,
-                    importFiles: [importFile],
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("PostgresDatabaseMigrations", {
+                  clusterSize: "PS_10",
+                  migrations: `${fixturesDir}/migrations`,
+                  importFiles: [importFile],
+                });
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
             expect(database.migrationsTable).toEqual("__alchemy_migrations");
-            expect(
-              database.migrationsHashes["0001_create_widgets.sql"],
-            ).toEqual(expect.any(String));
-            expect(database.importHashes[importFile]).toEqual(
+            expect(database.migrationsHashes["0001_create_widgets.sql"]).toEqual(
               expect.any(String),
             );
+            expect(database.importHashes[importFile]).toEqual(expect.any(String));
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -387,35 +325,26 @@ describe
 
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.MySQLDatabase(
-                  "MySQLBaselineWrongKind",
-                  {
-                    name,
-                    region: { slug: "us-east" },
-                    clusterSize: "PS_10",
-                  },
-                );
+                const database = yield* Planetscale.MySQLDatabase("MySQLBaselineWrongKind", {
+                  name,
+                  region: { slug: "us-east" },
+                  clusterSize: "PS_10",
+                });
 
                 return { database };
               }),
             );
 
-            yield* Planetscale.waitForDatabaseReady(
-              database.organization,
-              name,
-            );
+            yield* Planetscale.waitForDatabaseReady(database.organization, name);
 
             const exit = yield* Effect.exit(
               stack
                 .deploy(
                   Effect.gen(function* () {
-                    const database = yield* Planetscale.PostgresDatabase(
-                      "PostgresWrongKind",
-                      {
-                        name,
-                        clusterSize: "PS_10",
-                      },
-                    );
+                    const database = yield* Planetscale.PostgresDatabase("PostgresWrongKind", {
+                      name,
+                      clusterSize: "PS_10",
+                    });
 
                     return { database };
                   }),
@@ -445,17 +374,12 @@ describe
             // Create a database with arm
             const { database } = yield* stack.deploy(
               Effect.gen(function* () {
-                const database = yield* Planetscale.PostgresDatabase(
-                  "PostgresDatabaseWrongArch",
-                  {
-                    arch: "arm",
-                    clusterSize: "PS_10",
-                  },
-                );
+                const database = yield* Planetscale.PostgresDatabase("PostgresDatabaseWrongArch", {
+                  arch: "arm",
+                  clusterSize: "PS_10",
+                });
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
@@ -466,14 +390,9 @@ describe
               Effect.gen(function* () {
                 const newDatabase = yield* Planetscale.PostgresDatabase(
                   "PostgresDatabaseWrongArch",
-                  {
-                    arch: "x86",
-                    clusterSize: "PS_10",
-                  },
+                  { arch: "x86", clusterSize: "PS_10" },
                 );
-                return {
-                  newDatabase,
-                };
+                return { newDatabase };
               }),
             );
 
@@ -481,14 +400,8 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
-            yield* waitForDatabaseToBeDeleted(
-              newDatabase.name,
-              newDatabase.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+            yield* waitForDatabaseToBeDeleted(newDatabase.name, newDatabase.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -503,31 +416,20 @@ describe
               Effect.gen(function* () {
                 const database = yield* Planetscale.PostgresDatabase(
                   "PostgresDatabaseRetainRemoval",
-                  {
-                    region: { slug: "us-east" },
-                    clusterSize: "PS_10",
-                  },
+                  { region: { slug: "us-east" }, clusterSize: "PS_10" },
                 ).pipe(RemovalPolicy.retain(true));
 
-                return {
-                  database,
-                };
+                return { database };
               }),
             );
 
             // Verify database exists
-            yield* Planetscale.waitForDatabaseReady(
-              database.organization,
-              database.name,
-            );
+            yield* Planetscale.waitForDatabaseReady(database.organization, database.name);
 
             // When we call destroy, the database should NOT be deleted via API
             yield* stack.destroy();
 
-            yield* Planetscale.waitForDatabaseReady(
-              database.organization,
-              database.name,
-            );
+            yield* Planetscale.waitForDatabaseReady(database.organization, database.name);
 
             // Verify database still exists (was not deleted via API)
             const live = yield* ps.getDatabase({
@@ -542,10 +444,7 @@ describe
 
             // Clean up manually for the test
             yield* ps
-              .deleteDatabase({
-                organization: database.organization,
-                database: database.name,
-              })
+              .deleteDatabase({ organization: database.organization, database: database.name })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
           }).pipe(logLevel),
         5_000_000,
@@ -553,24 +452,15 @@ describe
     },
   );
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
-  yield* ps
-    .getDatabase({
-      organization,
-      database,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
-      Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
+  yield* ps.getDatabase({ organization, database }).pipe(
+    Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
+    Effect.retry({
+      while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 });
 
 class DatabaseStillExists extends Data.TaggedError("DatabaseStillExists") {}

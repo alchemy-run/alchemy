@@ -1,7 +1,7 @@
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
@@ -62,22 +62,14 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const rootDir = pathe.resolve(
-        import.meta.dirname,
-        "fixtures/vite-url-fixture",
-      );
+      const rootDir = pathe.resolve(import.meta.dirname, "fixtures/vite-url-fixture");
       const site = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Worker("UrlViteWorker", {
             vite: {
               rootDir,
               memo: {
-                include: [
-                  "index.html",
-                  "package.json",
-                  "vite.config.ts",
-                  "src/**",
-                ],
+                include: ["index.html", "package.json", "vite.config.ts", "src/**"],
               },
             },
             compatibility: {

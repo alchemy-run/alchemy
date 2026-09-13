@@ -13,10 +13,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create and delete namespace with default props",
@@ -71,9 +68,7 @@ test.provider(
 
       const updatedNamespace = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* KV.Namespace("TestNamespace", {
-            title: namespace.title + "-updated",
-          });
+          return yield* KV.Namespace("TestNamespace", { title: namespace.title + "-updated" });
         }),
       );
 
@@ -81,9 +76,7 @@ test.provider(
         accountId,
         namespaceId: updatedNamespace.namespaceId,
       });
-      expect(actualUpdatedNamespace.title).toEqual(
-        namespace.title + "-updated",
-      );
+      expect(actualUpdatedNamespace.title).toEqual(namespace.title + "-updated");
       expect(actualUpdatedNamespace.id).toEqual(updatedNamespace.namespaceId);
 
       yield* stack.destroy();
@@ -112,9 +105,7 @@ test.provider(
       const provider = yield* Provider.findProvider(KV.Namespace);
       const all = yield* provider.list();
 
-      expect(all.some((ns) => ns.namespaceId === namespace.namespaceId)).toBe(
-        true,
-      );
+      expect(all.some((ns) => ns.namespaceId === namespace.namespaceId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -151,11 +142,7 @@ test.provider(
       // Phase 2: wipe local state — the namespace stays on Cloudflare.
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableNamespace",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableNamespace" });
       }).pipe(Effect.provide(stack.state));
 
       // Phase 3: redeploy without `adopt(true)`. The engine calls
@@ -180,10 +167,7 @@ test.provider(
         });
       }).pipe(Effect.provide(stack.state));
 
-      expect((persisted as any)?.attr).toMatchObject({
-        namespaceId: initialId,
-        title,
-      });
+      expect((persisted as any)?.attr).toMatchObject({ namespaceId: initialId, title });
 
       yield* stack.destroy();
       yield* waitForNamespaceToBeDeleted(initialId, accountId);
@@ -191,24 +175,15 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:kv", "live"] },
 );
 
-const waitForNamespaceToBeDeleted = Effect.fn(function* (
-  namespaceId: string,
-  accountId: string,
-) {
-  yield* kv
-    .getNamespace({
-      accountId,
-      namespaceId,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
-      Effect.retry({
-        while: (e): e is NamespaceStillExists =>
-          e instanceof NamespaceStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NamespaceNotFound", () => Effect.void),
-    );
+const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
+  yield* kv.getNamespace({ accountId, namespaceId }).pipe(
+    Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
+    Effect.retry({
+      while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NamespaceNotFound", () => Effect.void),
+  );
 });
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}

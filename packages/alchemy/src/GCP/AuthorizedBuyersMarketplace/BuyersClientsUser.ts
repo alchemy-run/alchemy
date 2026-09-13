@@ -146,10 +146,7 @@ const lookupName = (
   return "";
 };
 
-const syncState = (
-  current: marketplace.ClientUser,
-  desired: string | undefined,
-) =>
+const syncState = (current: marketplace.ClientUser, desired: string | undefined) =>
   Effect.gen(function* () {
     if (!desired || !current.name) return current;
     const observed = current.state ?? "";
@@ -187,18 +184,10 @@ export const BuyersClientsUserProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = expandParent(olds?.parent ?? output?.parent ?? "");
-      const name = lookupName(
-        parent,
-        olds?.userId ?? output?.userId,
-        output?.name,
-      );
+      const name = lookupName(parent, olds?.userId ?? output?.userId, output?.name);
       const existing = yield* getByName(name);
       if (existing !== undefined) {
-        return toAttrs(
-          existing,
-          parentOfName(existing.name ?? "") || parent,
-          env.project,
-        );
+        return toAttrs(existing, parentOfName(existing.name ?? "") || parent, env.project);
       }
       // Without a known name, a user with the same email may be someone
       // else's invite: surface it as unowned.
@@ -206,20 +195,14 @@ export const BuyersClientsUserProvider = () =>
       if (!parent || !email) return undefined;
       const users = yield* listUsers(parent);
       const found = findUserByEmail(users, email);
-      return found === undefined
-        ? undefined
-        : Unowned(toAttrs(found, parent, env.project));
+      return found === undefined ? undefined : Unowned(toAttrs(found, parent, env.project));
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = expandParent(news.parent);
       const email = yield* toEmail(id, news.email, output?.email);
-      const name = lookupName(
-        parent,
-        news.userId ?? output?.userId,
-        output?.name,
-      );
+      const name = lookupName(parent, news.userId ?? output?.userId, output?.name);
 
       let current = yield* getByName(name);
       if (current === undefined) {
@@ -232,9 +215,7 @@ export const BuyersClientsUserProvider = () =>
           .createBuyersClientsUsers({ parent, body: { email } })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              listUsers(parent).pipe(
-                Effect.map((users) => findUserByEmail(users, email)),
-              ),
+              listUsers(parent).pipe(Effect.map((users) => findUserByEmail(users, email))),
             ),
           );
       }

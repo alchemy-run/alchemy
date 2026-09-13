@@ -22,15 +22,10 @@ describe(
                 shardCount: 1,
               });
 
-              const consumer = yield* AWS.Kinesis.StreamConsumer(
-                "AnalyticsConsumer",
-                {
-                  streamArn: stream.streamArn,
-                  tags: {
-                    fixture: "consumer-test",
-                  },
-                },
-              );
+              const consumer = yield* AWS.Kinesis.StreamConsumer("AnalyticsConsumer", {
+                streamArn: stream.streamArn,
+                tags: { fixture: "consumer-test" },
+              });
 
               return { stream, consumer };
             }),
@@ -39,17 +34,12 @@ describe(
           const description = yield* Kinesis.describeStreamConsumer({
             ConsumerARN: deployed.consumer.consumerArn,
           });
-          expect(description.ConsumerDescription.ConsumerStatus).toEqual(
-            "ACTIVE",
-          );
+          expect(description.ConsumerDescription.ConsumerStatus).toEqual("ACTIVE");
 
           const initialTags = yield* Kinesis.listTagsForResource({
             ResourceARN: deployed.consumer.consumerArn,
           });
-          expect(initialTags.Tags).toContainEqual({
-            Key: "fixture",
-            Value: "consumer-test",
-          });
+          expect(initialTags.Tags).toContainEqual({ Key: "fixture", Value: "consumer-test" });
 
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
@@ -58,16 +48,10 @@ describe(
                 shardCount: 1,
               });
 
-              const consumer = yield* AWS.Kinesis.StreamConsumer(
-                "AnalyticsConsumer",
-                {
-                  streamArn: stream.streamArn,
-                  tags: {
-                    fixture: "consumer-test-updated",
-                    team: "platform",
-                  },
-                },
-              );
+              const consumer = yield* AWS.Kinesis.StreamConsumer("AnalyticsConsumer", {
+                streamArn: stream.streamArn,
+                tags: { fixture: "consumer-test-updated", team: "platform" },
+              });
 
               return { stream, consumer };
             }),
@@ -80,10 +64,7 @@ describe(
             Key: "fixture",
             Value: "consumer-test-updated",
           });
-          expect(updatedTags.Tags).toContainEqual({
-            Key: "team",
-            Value: "platform",
-          });
+          expect(updatedTags.Tags).toContainEqual({ Key: "team", Value: "platform" });
 
           yield* stack.destroy();
 
@@ -91,9 +72,7 @@ describe(
             ConsumerARN: updated.consumer.consumerArn,
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           expect(deleted).toBe(true);
         }),
@@ -113,25 +92,18 @@ describe(
                 shardCount: 1,
               });
 
-              const consumer = yield* AWS.Kinesis.StreamConsumer(
-                "ListConsumer",
-                {
-                  streamArn: stream.streamArn,
-                },
-              );
+              const consumer = yield* AWS.Kinesis.StreamConsumer("ListConsumer", {
+                streamArn: stream.streamArn,
+              });
 
               return { stream, consumer };
             }),
           );
 
-          const provider = yield* Provider.findProvider(
-            AWS.Kinesis.StreamConsumer,
-          );
+          const provider = yield* Provider.findProvider(AWS.Kinesis.StreamConsumer);
           const all = yield* provider.list();
 
-          expect(
-            all.some((c) => c.consumerArn === deployed.consumer.consumerArn),
-          ).toBe(true);
+          expect(all.some((c) => c.consumerArn === deployed.consumer.consumerArn)).toBe(true);
 
           yield* stack.destroy();
         }),

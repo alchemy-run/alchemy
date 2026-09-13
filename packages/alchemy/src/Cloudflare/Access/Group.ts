@@ -20,8 +20,7 @@ import type { Providers } from "../Providers.ts";
  * `CreateAccessGroupForAccountRequest` so the full Cloudflare rule surface is
  * available without re-declaring the union.
  */
-export type GroupRule =
-  zeroTrust.CreateAccessGroupForAccountRequest["include"][number];
+export type GroupRule = zeroTrust.CreateAccessGroupForAccountRequest["include"][number];
 
 /**
  * One arm of the exclude-side rule union, and its require-side twin.
@@ -128,8 +127,7 @@ export type Group = Resource<
 export const Group = Resource<Group>("Cloudflare.Access.Group");
 
 export const isGroup = (value: unknown): value is Group =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Group";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Group";
 
 export const GroupProvider = () =>
   Provider.succeed(Group, {
@@ -153,9 +151,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
           );
         if (direct && direct.id) {
           return {
@@ -178,26 +174,21 @@ export const GroupProvider = () =>
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessGroupsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (g): g is (typeof page.result)[number] & { id: string } =>
-                    g.id != null,
-                )
-                .map((g) => ({
-                  groupId: g.id,
-                  accountId,
-                  name: g.name ?? "",
-                  isDefault: g.isDefault ?? undefined,
-                })),
-            ),
+      return yield* zeroTrust.listAccessGroupsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((g): g is (typeof page.result)[number] & { id: string } => g.id != null)
+              .map((g) => ({
+                groupId: g.id,
+                accountId,
+                name: g.name ?? "",
+                isDefault: g.isDefault ?? undefined,
+              })),
           ),
-        );
+        ),
+      );
     }),
     reconcile: Effect.fn(function* ({ id, news = {} as GroupProps, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -216,9 +207,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
           );
       }
       if (!observed) {

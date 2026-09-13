@@ -10,10 +10,7 @@ import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const origin = Effect.gen(function* () {
   const { project, environment } = yield* suitePartition;
@@ -48,22 +45,18 @@ const readConfig = Query.fn((serviceId: string, environmentId: string) => ({
   ),
 }));
 
-const readCachingState = Query.fn(
-  (serviceId: string, environmentId: string) => {
-    const instance = RailwayApi.serviceInstance({ serviceId, environmentId });
-    return {
-      serviceId: instance.serviceId,
-      edgeConfig: instance.edgeConfig.pipe(
-        Query.map((config) => ({
-          enabled: config.enabled,
-          caching: config.caching.pipe(
-            Query.map((caching) => ({ mode: caching.mode })),
-          ),
-        })),
-      ),
-    };
-  },
-);
+const readCachingState = Query.fn((serviceId: string, environmentId: string) => {
+  const instance = RailwayApi.serviceInstance({ serviceId, environmentId });
+  return {
+    serviceId: instance.serviceId,
+    edgeConfig: instance.edgeConfig.pipe(
+      Query.map((config) => ({
+        enabled: config.enabled,
+        caching: config.caching.pipe(Query.map((caching) => ({ mode: caching.mode }))),
+      })),
+    ),
+  };
+});
 
 test.provider(
   "enable, update, and disable CDN while retaining its origin",
@@ -93,9 +86,7 @@ test.provider(
       );
       expect(initial.edgeConfig?.id).toEqual(created.cdn.edgeConfigId);
       expect(initial.edgeConfig?.enabled).toEqual(true);
-      expect(initial.edgeConfig?.caching?.mode.toLowerCase()).not.toEqual(
-        "off",
-      );
+      expect(initial.edgeConfig?.caching?.mode.toLowerCase()).not.toEqual("off");
       expect(initial.edgeConfig?.caching?.htmlCaching).toEqual("auto");
       expect(initial.edgeConfig?.caching?.purgeOnDeploy).toEqual("HTML");
       expect(initial.edgeConfig?.caching?.defaultTtlSeconds).toEqual(60);
@@ -122,9 +113,7 @@ test.provider(
         updated.environment.environmentId,
       );
       expect(changed.edgeConfig?.enabled).toEqual(true);
-      expect(changed.edgeConfig?.caching?.mode.toLowerCase()).not.toEqual(
-        "off",
-      );
+      expect(changed.edgeConfig?.caching?.mode.toLowerCase()).not.toEqual("off");
       expect(changed.edgeConfig?.caching?.htmlCaching).toEqual("force");
       expect(changed.edgeConfig?.caching?.purgeOnDeploy).toEqual("ALL");
       expect(changed.edgeConfig?.caching?.defaultTtlSeconds).toEqual(120);
@@ -132,9 +121,7 @@ test.provider(
       // Keep both dependencies deployed so this step tests CDN deletion alone.
       const retained = yield* stack.deploy(origin);
       expect(retained.service.serviceId).toEqual(created.service.serviceId);
-      expect(retained.environment.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(retained.environment.environmentId).toEqual(created.environment.environmentId);
 
       const disabled = yield* readCachingState(
         retained.service.serviceId,

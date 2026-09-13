@@ -13,9 +13,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const readRegistryPolicy = ecr.getRegistryPolicy({}).pipe(
   Effect.map((response) => response.policyText),
-  Effect.catchTag("RegistryPolicyNotFoundException", () =>
-    Effect.succeed(undefined),
-  ),
+  Effect.catchTag("RegistryPolicyNotFoundException", () => Effect.succeed(undefined)),
 );
 
 // The registry policy is an account/region SINGLETON — capture any
@@ -63,9 +61,7 @@ test.provider(
         // document (normalized comparison).
         const observed = yield* readRegistryPolicy;
         expect(observed).toBeDefined();
-        expect(normalizePolicyDocument(observed!)).toBe(
-          normalizePolicyDocument(registryPolicy),
-        );
+        expect(normalizePolicyDocument(observed!)).toBe(normalizePolicyDocument(registryPolicy));
 
         // Re-deploy the identical PolicyDocument — must converge cleanly
         // (normalized observed vs desired no-ops the put).

@@ -18,9 +18,7 @@ test.provider(
         "../../../../../packages/frontend-frameworks/src/vocs/neon.ts",
         import.meta.url,
       ).href;
-      const server = yield* stack.deploy(
-        Server("Build", { root, framework, target: framework }),
-      );
+      const server = yield* stack.deploy(Server("Build", { root, framework, target: framework }));
       expect(server.url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+/);
       yield* bodyContaining(`${server.url}/counter`, "count:");
       yield* browserRoundtrip(String(server.url), "vocs");

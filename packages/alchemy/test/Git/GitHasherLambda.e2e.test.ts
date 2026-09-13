@@ -26,10 +26,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeLambdaTestStack("GitHasherLambdaStack");
 
@@ -125,9 +122,7 @@ test(
       Effect.catchTag("RepoNotFound", () => Effect.void),
       edgeRetry,
     );
-    const created = yield* admin.repos
-      .create({ payload: { owner, name } })
-      .pipe(edgeRetry);
+    const created = yield* admin.repos.create({ payload: { owner, name } }).pipe(edgeRetry);
     const parsed = new URL(url);
     const remote = `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/${owner}/${name}.git`;
     const fs = yield* FileSystem.FileSystem;
@@ -151,9 +146,7 @@ test(
     );
     const head = yield* sh(dir, "cd src && git rev-parse HEAD");
     expect(back.stdout.trim().split("\n").pop()).toBe(head.stdout.trim());
-    const repo = yield* admin.repos
-      .get({ params: { owner, repo: name } })
-      .pipe(edgeRetry);
+    const repo = yield* admin.repos.get({ params: { owner, repo: name } }).pipe(edgeRetry);
     const push = repo.lastPush;
     expect(push).not.toBeNull();
     // Four 4 MiB chunks were dispatched to Lambda; nothing fell back.

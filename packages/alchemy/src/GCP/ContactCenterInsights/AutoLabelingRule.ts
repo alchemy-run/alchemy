@@ -75,10 +75,7 @@ export type AutoLabelingRuleProps = {
    * Label key type.
    * @default "LABEL_KEY_TYPE_CUSTOM"
    */
-  labelKeyType?:
-    | "LABEL_KEY_TYPE_UNSPECIFIED"
-    | "LABEL_KEY_TYPE_CUSTOM"
-    | (string & {});
+  labelKeyType?: "LABEL_KEY_TYPE_UNSPECIFIED" | "LABEL_KEY_TYPE_CUSTOM" | (string & {});
   /**
    * Sequential if / else-if conditions. The value of the first matching
    * condition is used.
@@ -152,11 +149,7 @@ export class AutoLabelingRuleNotResolved extends Data.TaggedError(
 
 const DEFAULT_LABEL_KEY_TYPE = "LABEL_KEY_TYPE_CUSTOM";
 
-const resourceName = (
-  project: string,
-  location: string,
-  autoLabelingRuleId: string,
-) =>
+const resourceName = (project: string, location: string, autoLabelingRuleId: string) =>
   `${locationParent(project, location)}/autoLabelingRules/${autoLabelingRuleId}`;
 
 const conditionsOf = (
@@ -169,10 +162,7 @@ const conditionsOf = (
     condition: condition.condition,
   }));
 
-const toAttrs = (
-  rule: cci.GoogleCloudContactcenterinsightsV1AutoLabelingRule,
-  project: string,
-) => {
+const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AutoLabelingRule, project: string) => {
   const name = rule.name ?? "";
   const parsed = parseOwnership(rule.description);
   return {
@@ -199,29 +189,18 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  cci.listProjectsLocationsAutoLabelingRules
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.autoLabelingRules ?? []),
-      ),
-      Stream.filter((rule) => hasOwnershipMarker(rule.description)),
-      Stream.map((rule) => toAttrs(rule, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsAutoLabelingRules.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.autoLabelingRules ?? [])),
+    Stream.filter((rule) => hasOwnershipMarker(rule.description)),
+    Stream.map((rule) => toAttrs(rule, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const AutoLabelingRuleProvider = () =>
   Provider.succeed(AutoLabelingRule, {
-    stables: [
-      "name",
-      "autoLabelingRuleId",
-      "location",
-      "project",
-      "labelKey",
-      "createTime",
-    ],
+    stables: ["name", "autoLabelingRuleId", "location", "project", "labelKey", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -251,33 +230,23 @@ export const AutoLabelingRuleProvider = () =>
         olds?.autoLabelingRuleId,
         output?.autoLabelingRuleId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, autoLabelingRuleId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, autoLabelingRuleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
       const autoLabelingRuleId = yield* toResourceId(
         id,
@@ -287,8 +256,7 @@ export const AutoLabelingRuleProvider = () =>
       const name = resourceName(env.project, location, autoLabelingRuleId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
-      const displayName =
-        news.displayName ?? encodeOwnershipLine(ownership, undefined);
+      const displayName = news.displayName ?? encodeOwnershipLine(ownership, undefined);
       const active = news.active === true;
       const labelKeyType = news.labelKeyType ?? DEFAULT_LABEL_KEY_TYPE;
       const labelKey = news.labelKey ?? autoLabelingRuleId;
@@ -322,17 +290,9 @@ export const AutoLabelingRuleProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
       const activeChanged = (current.active === true) !== active;
-      const conditionsChanged = !jsonEqual(
-        conditionsOf(current.conditions),
-        conditions,
-      );
+      const conditionsChanged = !jsonEqual(conditionsOf(current.conditions), conditions);
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        activeChanged ||
-        conditionsChanged
-      ) {
+      if (displayChanged || descriptionChanged || activeChanged || conditionsChanged) {
         current = yield* cci.patchProjectsLocationsAutoLabelingRules({
           name: currentName,
           updateMask: updateMaskOf(

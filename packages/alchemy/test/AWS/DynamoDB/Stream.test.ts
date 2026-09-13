@@ -32,14 +32,10 @@ describe.skipIf(!!process.env.FAST).sequential(
       "processes real DynamoDB stream records through Lambda",
       (stack) =>
         Effect.gen(function* () {
-          yield* Effect.logInfo(
-            "DynamoDB Stream test: destroying previous resources",
-          );
+          yield* Effect.logInfo("DynamoDB Stream test: destroying previous resources");
           yield* stack.destroy();
 
-          yield* Effect.logInfo(
-            "DynamoDB Stream test: deploying stream fixture",
-          );
+          yield* Effect.logInfo("DynamoDB Stream test: deploying stream fixture");
           const { table, queue, streamFunction } = yield* stack.deploy(
             Effect.gen(function* () {
               const { table, queue } = yield* TableAndQueue;
@@ -47,20 +43,13 @@ describe.skipIf(!!process.env.FAST).sequential(
               const func = yield* DynamoDBStreamFunction;
 
               return { table, queue, streamFunction: func };
-            }).pipe(
-              Effect.provide(
-                Layer.mergeAll(DynamoDBStreamFunctionLive, TableAndQueueLive),
-              ),
-            ),
+            }).pipe(Effect.provide(Layer.mergeAll(DynamoDBStreamFunctionLive, TableAndQueueLive))),
           );
 
-          const streamState = yield* waitForTableStreamSpecification(
-            table.tableName,
-            {
-              StreamEnabled: true,
-              StreamViewType: "NEW_AND_OLD_IMAGES",
-            },
-          );
+          const streamState = yield* waitForTableStreamSpecification(table.tableName, {
+            StreamEnabled: true,
+            StreamViewType: "NEW_AND_OLD_IMAGES",
+          });
           expect(streamState.Table?.StreamSpecification).toEqual({
             StreamEnabled: true,
             StreamViewType: "NEW_AND_OLD_IMAGES",
@@ -72,16 +61,10 @@ describe.skipIf(!!process.env.FAST).sequential(
             streamState.Table?.LatestStreamArn!,
           );
 
-          yield* Effect.logInfo(
-            `DynamoDB Stream test: writing item into ${table.tableName}`,
-          );
+          yield* Effect.logInfo(`DynamoDB Stream test: writing item into ${table.tableName}`);
           yield* DynamoDB.putItem({
             TableName: table.tableName,
-            Item: {
-              pk: { S: "stream#1" },
-              sk: { S: "item#1" },
-              data: { S: "payload" },
-            },
+            Item: { pk: { S: "stream#1" }, sk: { S: "item#1" }, data: { S: "payload" } },
           });
 
           const message = yield* waitForQueueMessage(queue.queueUrl);
@@ -110,19 +93,12 @@ describe.skipIf(!!process.env.FAST).sequential(
 
 // Out-of-band proof that the trailing destroy deleted the fixture table.
 const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
-  yield* Effect.logInfo(
-    `DynamoDB Stream test: waiting for deletion of ${tableName}`,
-  );
-  yield* DynamoDB.describeTable({
-    TableName: tableName,
-  }).pipe(
+  yield* Effect.logInfo(`DynamoDB Stream test: waiting for deletion of ${tableName}`);
+  yield* DynamoDB.describeTable({ TableName: tableName }).pipe(
     Effect.flatMap(() => Effect.fail(new TableStillExists())),
     Effect.retry({
       while: (e) => e._tag === "TableStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -153,10 +129,7 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "EventSourceMappingNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );
 });
@@ -165,21 +138,15 @@ const waitForTableStreamSpecification = Effect.fn(function* (
   tableName: string,
   expected: DynamoDB.StreamSpecification,
 ) {
-  yield* Effect.logInfo(
-    `DynamoDB Stream test: waiting for stream configuration on ${tableName}`,
-  );
+  yield* Effect.logInfo(`DynamoDB Stream test: waiting for stream configuration on ${tableName}`);
 
-  return yield* DynamoDB.describeTable({
-    TableName: tableName,
-  }).pipe(
+  return yield* DynamoDB.describeTable({ TableName: tableName }).pipe(
     Effect.flatMap((result) => {
       const actual = result.Table?.StreamSpecification;
       if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         return Effect.logInfo(
           `DynamoDB Stream test: stream configuration not ready yet. actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`,
-        ).pipe(
-          Effect.andThen(Effect.fail(new TableStreamConfigurationNotReady())),
-        );
+        ).pipe(Effect.andThen(Effect.fail(new TableStreamConfigurationNotReady())));
       }
       return Effect.logInfo(
         `DynamoDB Stream test: stream configuration ready on ${tableName}`,
@@ -187,18 +154,13 @@ const waitForTableStreamSpecification = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "TableStreamConfigurationNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );
 });
 
 const waitForQueueMessage = Effect.fn(function* (queueUrl: string) {
-  yield* Effect.logInfo(
-    `DynamoDB Stream test: waiting for stream output message on ${queueUrl}`,
-  );
+  yield* Effect.logInfo(`DynamoDB Stream test: waiting for stream output message on ${queueUrl}`);
 
   // Even after the EventSourceMapping reports `Enabled`, AWS needs a cold-
   // start window (typically 30–90s for the first record) before the Lambda
@@ -213,9 +175,9 @@ const waitForQueueMessage = Effect.fn(function* (queueUrl: string) {
     Effect.flatMap((result) => {
       const message = result.Messages?.[0];
       if (!message?.Body) {
-        return Effect.logInfo(
-          "DynamoDB Stream test: stream output queue is still empty",
-        ).pipe(Effect.andThen(Effect.fail(new StreamMessageNotReady())));
+        return Effect.logInfo("DynamoDB Stream test: stream output queue is still empty").pipe(
+          Effect.andThen(Effect.fail(new StreamMessageNotReady())),
+        );
       }
       return Effect.logInfo(
         `DynamoDB Stream test: received stream output message ${message.MessageId}`,
@@ -223,19 +185,14 @@ const waitForQueueMessage = Effect.fn(function* (queueUrl: string) {
     }),
     Effect.retry({
       while: (error) => error._tag === "StreamMessageNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(72),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(72)]),
     }),
   );
 });
 
 class TableStillExists extends Data.TaggedError("TableStillExists") {}
 
-class EventSourceMappingNotReady extends Data.TaggedError(
-  "EventSourceMappingNotReady",
-) {}
+class EventSourceMappingNotReady extends Data.TaggedError("EventSourceMappingNotReady") {}
 
 class TableStreamConfigurationNotReady extends Data.TaggedError(
   "TableStreamConfigurationNotReady",

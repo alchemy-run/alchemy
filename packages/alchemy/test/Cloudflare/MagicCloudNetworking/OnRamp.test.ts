@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
 // On the standard testing account every MCN call fails with the typed
@@ -91,13 +88,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"] },
 );
 
 test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
@@ -157,11 +148,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       yield* expectGone(accountId, onramp.onRampId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
     timeout: 120_000,
   },
 );
@@ -183,9 +170,7 @@ test.provider(
         Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicCloudNetworking.OnRamp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicCloudNetworking.OnRamp);
       const all = yield* provider.list();
 
       if (!canList) {
@@ -197,13 +182,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"] },
 );
 
 test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
@@ -227,9 +206,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicCloudNetworking.OnRamp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicCloudNetworking.OnRamp);
       const all = yield* provider.list();
 
       expect(all.some((x) => x.onRampId === onramp.onRampId)).toBe(true);
@@ -240,11 +217,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       yield* expectGone(accountId, onramp.onRampId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
     timeout: 120_000,
   },
 );

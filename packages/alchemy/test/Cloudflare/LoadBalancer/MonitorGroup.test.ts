@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Monitor groups are Enterprise-only. On the testing account creation is
 // rejected with "monitor groups not enabled; enterprise only" (Cloudflare
@@ -42,18 +39,13 @@ const getMonitorGroup = (accountId: string, monitorGroupId: string) =>
 
 const expectGone = (accountId: string, monitorGroupId: string) =>
   getMonitorGroup(accountId, monitorGroupId).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "MonitorGroupNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "MonitorGroupNotDeleted" } as const)),
     // A missing group surfaces as the typed `MonitorGroupNotFound`
     // (Cloudflare error code 1001) — that's the success condition here.
     Effect.catchTag("MonitorGroupNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MonitorGroupNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -104,9 +96,7 @@ test.provider(
   "list returns an array of monitor groups",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.MonitorGroup,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.MonitorGroup);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
     }).pipe(logLevel),
@@ -135,20 +125,13 @@ test.provider.skipIf(!monitorGroupsEnabled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.MonitorGroup,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.MonitorGroup);
       const all = yield* provider.list();
-      expect(
-        all.some((g) => g.monitorGroupId === deployed.group.monitorGroupId),
-      ).toBe(true);
+      expect(all.some((g) => g.monitorGroupId === deployed.group.monitorGroupId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"], timeout: 120_000 },
 );
 
 test.provider.skipIf(!monitorGroupsEnabled)(
@@ -179,14 +162,9 @@ test.provider.skipIf(!monitorGroupsEnabled)(
       expect(initial.group.accountId).toEqual(accountId);
       expect(initial.group.description).toEqual(NAME_LIFECYCLE);
 
-      const live = yield* getMonitorGroup(
-        accountId,
-        initial.group.monitorGroupId,
-      );
+      const live = yield* getMonitorGroup(accountId, initial.group.monitorGroupId);
       expect(live.description).toEqual(NAME_LIFECYCLE);
-      expect(live.members.map((m) => m.monitorId)).toEqual([
-        initial.monitor.monitorId,
-      ]);
+      expect(live.members.map((m) => m.monitorId)).toEqual([initial.monitor.monitorId]);
 
       // Member flags update in place — same monitorGroupId. Keep the
       // monitor deployed across every step.
@@ -205,22 +183,14 @@ test.provider.skipIf(!monitorGroupsEnabled)(
           return { monitor, group };
         }),
       );
-      expect(updated.group.monitorGroupId).toEqual(
-        initial.group.monitorGroupId,
-      );
+      expect(updated.group.monitorGroupId).toEqual(initial.group.monitorGroupId);
 
-      const synced = yield* getMonitorGroup(
-        accountId,
-        updated.group.monitorGroupId,
-      );
+      const synced = yield* getMonitorGroup(accountId, updated.group.monitorGroupId);
       expect(synced.members[0]?.monitoringOnly).toEqual(true);
 
       yield* stack.destroy();
 
       yield* expectGone(accountId, initial.group.monitorGroupId);
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:loadbalancer", "live"], timeout: 120_000 },
 );

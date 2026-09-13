@@ -26,14 +26,10 @@ const assertKeyPairGone = (arn: string) =>
   Effect.gen(function* () {
     const keyPair = yield* ivs.getPlaybackKeyPair({ arn }).pipe(
       Effect.map((r) => r.keyPair),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (keyPair !== undefined) {
-      return yield* Effect.fail(
-        new Error(`playback key pair '${arn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`playback key pair '${arn}' still exists`));
     }
   }).pipe(
     Effect.retry({

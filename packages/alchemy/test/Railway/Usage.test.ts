@@ -1,8 +1,5 @@
 import { Query } from "@distilled.cloud/core/query";
-import {
-  Railway as RailwayApi,
-  type UsageLimitSetInput,
-} from "@distilled.cloud/railway";
+import { Railway as RailwayApi, type UsageLimitSetInput } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -14,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const SOFT_V1 = 100_000;
 const SOFT_V2 = 100_001;
@@ -39,9 +33,7 @@ const readUsageLimit = Query.fn((workspaceId: string) => {
   };
 });
 
-const setUsageLimit = Query.fn((input: UsageLimitSetInput) =>
-  RailwayApi.usageLimitSet({ input }),
-);
+const setUsageLimit = Query.fn((input: UsageLimitSetInput) => RailwayApi.usageLimitSet({ input }));
 
 const removeUsageLimit = Query.fn((customerId: string) =>
   RailwayApi.usageLimitRemove({ input: { customerId } }),
@@ -68,18 +60,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const rows = yield* Railway.usage({
-        measurements: ["CPU_USAGE", "MEMORY_USAGE_GB"],
-      });
+      const rows = yield* Railway.usage({ measurements: ["CPU_USAGE", "MEMORY_USAGE_GB"] });
       expect(Array.isArray(rows)).toEqual(true);
       for (const row of rows) {
         expect(row.measurement).toEqual(expect.any(String));
         expect(row.value).toEqual(expect.any(Number));
       }
 
-      const estimated = yield* Railway.estimatedUsage({
-        measurements: ["CPU_USAGE"],
-      });
+      const estimated = yield* Railway.estimatedUsage({ measurements: ["CPU_USAGE"] });
       expect(Array.isArray(estimated)).toEqual(true);
       for (const row of estimated) {
         expect(row.measurement).toEqual(expect.any(String));
@@ -88,10 +76,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:railway", "provider:railway:usage", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:railway", "provider:railway:usage", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -105,17 +90,10 @@ test.provider(
       const customerId = live.customer.id;
       expect(customerId.length).toBeGreaterThan(0);
 
-      const probe = yield* Effect.result(
-        setUsageLimit({
-          customerId,
-          softLimitDollars: SOFT_V1,
-        }),
-      );
+      const probe = yield* Effect.result(setUsageLimit({ customerId, softLimitDollars: SOFT_V1 }));
       if (Result.isFailure(probe)) {
         expect(
-          ["RailwayForbidden", "RailwayPlanLimitExceeded"].includes(
-            probe.failure._tag,
-          ),
+          ["RailwayForbidden", "RailwayPlanLimitExceeded"].includes(probe.failure._tag),
         ).toEqual(true);
         yield* stack.destroy();
         return;
@@ -147,9 +125,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.UsageLimit);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (row) => row.usageLimitId === created.usageLimitId,
-      );
+      const found = listed.find((row) => row.usageLimitId === created.usageLimitId);
       expect(found).toBeDefined();
       expect(found?.customerId).toEqual(created.customerId);
       expect(found?.softLimitDollars).toEqual(SOFT_V1);
@@ -172,14 +148,8 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilLimitGone(
-        created.workspaceId,
-        created.usageLimitId,
-      );
+      const gone = yield* waitUntilLimitGone(created.workspaceId, created.usageLimitId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  {
-    tags: ["provider:railway", "provider:railway:usage", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:railway", "provider:railway:usage", "live"], timeout: 120_000 },
 );

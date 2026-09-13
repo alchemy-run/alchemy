@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionTargetHttpProxyProps = {
   /**
@@ -196,20 +192,14 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const resourceTail = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
   return lastSegment(value);
 };
 
-const toUrlMapRef = (
-  project: string,
-  region: string,
-  urlMap: string,
-): string => {
+const toUrlMapRef = (project: string, region: string, urlMap: string): string => {
   if (urlMap.includes("/")) return urlMap;
   return `projects/${project}/regions/${region}/urlMaps/${urlMap}`;
 };
@@ -243,18 +233,14 @@ const immutableChanged = (
   output: RegionTargetHttpProxy["Attributes"] | undefined,
 ) => {
   const previousDescription = olds?.description ?? output?.description;
-  if (
-    news.description !== undefined &&
-    news.description !== previousDescription
-  ) {
+  if (news.description !== undefined && news.description !== previousDescription) {
     return true;
   }
   const previousBind = olds?.proxyBind ?? output?.proxyBind;
   if (news.proxyBind !== undefined && news.proxyBind !== previousBind) {
     return true;
   }
-  const previousKeepAlive =
-    olds?.httpKeepAliveTimeoutSec ?? output?.httpKeepAliveTimeoutSec;
+  const previousKeepAlive = olds?.httpKeepAliveTimeoutSec ?? output?.httpKeepAliveTimeoutSec;
   if (
     news.httpKeepAliveTimeoutSec !== undefined &&
     news.httpKeepAliveTimeoutSec !== previousKeepAlive
@@ -278,27 +264,14 @@ export const RegionTargetHttpProxyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.targetHttpProxyName ?? output?.targetHttpProxyName;
+      const previousName = olds?.targetHttpProxyName ?? output?.targetHttpProxyName;
       const nextName = news.targetHttpProxyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
-      if (
-        nameChanged ||
-        regionChanged ||
-        immutableChanged(news, olds, output)
-      ) {
+      if (nameChanged || regionChanged || immutableChanged(news, olds, output)) {
         return {
           action: "replace" as const,
           deleteFirst: !regionChanged,
@@ -314,15 +287,8 @@ export const RegionTargetHttpProxyProvider = () =>
         olds?.targetHttpProxyName,
         output?.targetHttpProxyName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        targetHttpProxyName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, targetHttpProxyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -407,11 +373,7 @@ export const RegionTargetHttpProxyProvider = () =>
             targetHttpProxy: targetHttpProxyName,
             body: { urlMap: desiredUrlMap },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpProxyName);
         if (current === undefined) {
           return yield* new RegionTargetHttpProxyNotResolved({

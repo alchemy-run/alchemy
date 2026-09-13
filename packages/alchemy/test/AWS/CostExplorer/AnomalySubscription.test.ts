@@ -17,13 +17,9 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const subscriptionName = "alchemy-test-anomaly-subscription";
 
 const getSubscription = (subscriptionArn: string) =>
-  pin(
-    ce.getAnomalySubscriptions({ SubscriptionArnList: [subscriptionArn] }),
-  ).pipe(
+  pin(ce.getAnomalySubscriptions({ SubscriptionArnList: [subscriptionArn] })).pipe(
     Effect.map((r) => r.AnomalySubscriptions[0]),
-    Effect.catchTag("UnknownSubscriptionException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("UnknownSubscriptionException", () => Effect.succeed(undefined)),
   );
 
 // Typed wait-until-gone on delete.
@@ -31,9 +27,7 @@ const assertSubscriptionGone = (subscriptionArn: string) =>
   Effect.gen(function* () {
     const found = yield* getSubscription(subscriptionArn);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`subscription '${subscriptionArn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`subscription '${subscriptionArn}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -91,9 +85,7 @@ test.provider(
       expect(updated.subscriptionArn).toBe(deployed.subscriptionArn);
       const afterUpdate = yield* getSubscription(deployed.subscriptionArn);
       expect(afterUpdate?.Frequency).toBe("WEEKLY");
-      expect(afterUpdate?.ThresholdExpression?.Dimensions?.Values).toEqual([
-        "250",
-      ]);
+      expect(afterUpdate?.ThresholdExpression?.Dimensions?.Values).toEqual(["250"]);
 
       // Destroy — subscription and monitor are gone.
       yield* stack.destroy();

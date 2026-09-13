@@ -11,11 +11,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getRuleset = (name: string) =>
   databrew
     .describeRuleset({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, update, delete DataBrew ruleset",
@@ -53,9 +49,7 @@ test.provider(
       );
 
       expect(created.ruleset.rulesetName).toBeDefined();
-      expect(created.ruleset.rulesetArn).toContain(
-        `:ruleset/${created.ruleset.rulesetName}`,
-      );
+      expect(created.ruleset.rulesetArn).toContain(`:ruleset/${created.ruleset.rulesetName}`);
       expect(created.ruleset.targetArn).toEqual(created.dataset.datasetArn);
 
       // out-of-band verification

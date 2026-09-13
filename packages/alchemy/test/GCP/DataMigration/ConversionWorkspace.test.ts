@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -60,10 +60,9 @@ test.provider(
       expect(created.destination?.engine).toEqual("POSTGRESQL");
       expect(created.globalSettings).toMatchObject({ skip_triggers: "false" });
 
-      const fetched =
-        yield* datamigration.getProjectsLocationsConversionWorkspaces({
-          name: created.name,
-        });
+      const fetched = yield* datamigration.getProjectsLocationsConversionWorkspaces({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toMatch(/^\[(alchemy|alc) /);
       expect(fetched.displayName).toContain("oracle-to-pg");
@@ -87,10 +86,9 @@ test.provider(
       expect(updated.displayName).toEqual("oracle-to-pg-v2");
       expect(updated.globalSettings).toMatchObject({ skip_triggers: "true" });
 
-      const fetchedUpdate =
-        yield* datamigration.getProjectsLocationsConversionWorkspaces({
-          name: updated.name,
-        });
+      const fetchedUpdate = yield* datamigration.getProjectsLocationsConversionWorkspaces({
+        name: updated.name,
+      });
       expect(fetchedUpdate.displayName).toContain("oracle-to-pg-v2");
       expect(fetchedUpdate.globalSettings?.skip_triggers).toEqual("true");
 

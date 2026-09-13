@@ -28,12 +28,8 @@ for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
         if (keyId === undefined) {
           return yield* Effect.die(new Error("Expected a deploy SSH key"));
         }
-        expect((yield* servers.getServer({ id: server.id })).server?.name).toBe(
-          server.name,
-        );
-        expect((yield* sshKeys.getSshKey({ id: keyId })).ssh_key.id).toBe(
-          keyId,
-        );
+        expect((yield* servers.getServer({ id: server.id })).server?.name).toBe(server.name);
+        expect((yield* sshKeys.getSshKey({ id: keyId })).ssh_key.id).toBe(keyId);
 
         // Reproduce a crash after cloud creation but before attributes were committed.
         yield* Effect.gen(function* () {
@@ -41,15 +37,10 @@ for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
           const address = { stack: stack.name, stage: stack.stage, fqn: "Box" };
           const stored = yield* state.get(address);
           if (!stored || isActionState(stored) || stored.status !== "created") {
-            return yield* Effect.die(
-              new Error("Expected a created server row"),
-            );
+            return yield* Effect.die(new Error("Expected a created server row"));
           }
           const { attr, ...creating } = stored;
-          yield* state.set({
-            ...address,
-            value: { ...creating, status: "creating" },
-          });
+          yield* state.set({ ...address, value: { ...creating, status: "creating" } });
         }).pipe(Effect.provide(stack.state));
 
         yield* stack.destroy();
@@ -70,12 +61,7 @@ for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
         yield* stack.destroy();
       }),
     {
-      tags: [
-        "provider:hetzner",
-        "provider:hetzner:server",
-        "provider:hetzner:service",
-        "live",
-      ],
+      tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
       timeout: 120_000,
       exclusive: true,
     },

@@ -87,10 +87,7 @@ import {
   assertCommitted,
 } from "./fixtures/bluegreen.ts";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
-import {
-  makeReadinessControl,
-  repairReadiness,
-} from "./fixtures/http-readiness-control.ts";
+import { makeReadinessControl, repairReadiness } from "./fixtures/http-readiness-control.ts";
 import {
   assertReadinessCommit,
   readinessActor,
@@ -157,15 +154,8 @@ import {
   successful,
   type SignalCase,
 } from "./fixtures/signal-overlap.ts";
-import {
-  delayedResourceWrite,
-  ResourceRow,
-} from "./fixtures/state-persistence.ts";
-import {
-  transportProxy,
-  throughProxy,
-  type TransportEvent,
-} from "./fixtures/transport.ts";
+import { delayedResourceWrite, ResourceRow } from "./fixtures/state-persistence.ts";
+import { transportProxy, throughProxy, type TransportEvent } from "./fixtures/transport.ts";
 
 describe.sequential(
   "deployment",
@@ -195,19 +185,10 @@ describe.sequential(
                   name: "bluegreen-worker-long-name-base",
                   image: "nginx:alpine",
                   env: { VERSION: version },
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "30 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "10 seconds" },
                   checks: {
-                    ready: {
-                      type: "http",
-                      port: 80,
-                      path,
-                      interval: "2s",
-                      timeout: "1s",
-                    },
+                    ready: { type: "http", port: 80, path, interval: "2s", timeout: "1s" },
                   },
                 });
               }),
@@ -221,31 +202,22 @@ describe.sequential(
           const machine = yield* waitHealthy(first.appName, committed, 30_000);
           expect(machine.instance_id).toBe(committed.instance_id);
           yield* Effect.logInfo("Observed promoted worker", {
-            checks: machine.checks?.map(({ name, status }) => ({
-              name,
-              status,
-            })),
+            checks: machine.checks?.map(({ name, status }) => ({ name, status })),
             configured: machine.config?.checks,
             metadata: machine.config?.metadata,
           });
           expect(machine.cordoned).toBe(false);
           expect(
-            machine.checks?.some(
-              (check) => check.name === "ready" && check.status === "passing",
-            ),
+            machine.checks?.some((check) => check.name === "ready" && check.status === "passing"),
           ).toBe(true);
           expect(machine.config?.metadata?.["alchemy.phase"]).toBe("active");
           expect(first.name.length).toBeLessThanOrEqual(30);
           const second = yield* deploy("two");
           expect(second.machineId).not.toBe(first.machineId);
           expect(second.baseName).toBe(first.baseName);
-          const listed = yield* machines.listMachines({
-            app_name: first.appName,
-          });
+          const listed = yield* machines.listMachines({ app_name: first.appName });
           expect(
-            listed
-              .filter((machine) => machine.state !== "destroyed")
-              .map((machine) => machine.id),
+            listed.filter((machine) => machine.state !== "destroyed").map((machine) => machine.id),
           ).toEqual([second.machineId]);
           yield* stack.destroy();
           yield* assertAppGone(first.appName);
@@ -265,9 +237,7 @@ describe.sequential(
           }).pipe(Effect.result);
           expect(Result.isFailure(failed)).toBe(true);
           if (Result.isFailure(failed))
-            expect(failed.failure).toMatchObject({
-              _tag: "Fly.ReplicaChecksNotPassing",
-            });
+            expect(failed.failure).toMatchObject({ _tag: "Fly.ReplicaChecksNotPassing" });
           const live = yield* census(initial.appName);
           expect(live.map((machine) => machine.id)).toEqual(initial.machineIds);
           expect(live[0]!.state).toBe("started");
@@ -310,15 +280,12 @@ describe.sequential(
           yield* Effect.sync(() => {
             proxy.arm({
               match: (event) =>
-                event.method === "DELETE" &&
-                event.path === `/v1/apps/${app.appName}`,
+                event.method === "DELETE" && event.path === `/v1/apps/${app.appName}`,
               action: "drop-response",
               remaining: Infinity,
             });
           });
-          const result = yield* actor
-            .destroy()
-            .pipe(Effect.timeout("45 seconds"), Effect.result);
+          const result = yield* actor.destroy().pipe(Effect.timeout("45 seconds"), Effect.result);
           assert(Result.isFailure(result));
           assert(result.failure instanceof DestroyError);
           expect(result.failure.blocked).toEqual([]);
@@ -343,10 +310,7 @@ describe.sequential(
           expect(attempts).toHaveLength(1);
           expect(
             proxy.events.some(
-              (event) =>
-                event.stage === "dropped" &&
-                event.status! >= 200 &&
-                event.status! < 300,
+              (event) => event.stage === "dropped" && event.status! >= 200 && event.status! < 300,
             ),
           ).toBe(true);
           yield* Effect.sync(proxy.clear);
@@ -368,8 +332,7 @@ describe.sequential(
           yield* Effect.sync(() =>
             proxy.arm({
               match: (event) =>
-                event.method === "DELETE" &&
-                event.path === `/v1/apps/${app.appName}`,
+                event.method === "DELETE" && event.path === `/v1/apps/${app.appName}`,
               action: "hold-response",
               remaining: 1,
             }),
@@ -385,10 +348,7 @@ describe.sequential(
               .destroy()
               .pipe(Effect.scoped, Effect.result, Effect.forkScoped);
             yield* proxy.wait(
-              (event) =>
-                event.stage === "held" &&
-                event.status! >= 200 &&
-                event.status! < 300,
+              (event) => event.stage === "held" && event.status! >= 200 && event.status! < 300,
             );
             yield* assertAppGone(app.appName);
             // This independent API actor demonstrates the missing cross-process tombstone, not safe automatic recreation.
@@ -405,9 +365,7 @@ describe.sequential(
                 })
                 .pipe(Effect.provide(FetchHttpClient.layer));
               yield* Effect.sync(proxy.dropHeld);
-              const result = yield* Fiber.join(deletion).pipe(
-                Effect.timeout("45 seconds"),
-              );
+              const result = yield* Fiber.join(deletion).pipe(Effect.timeout("45 seconds"));
               expect(
                 proxy.events.filter(
                   (event) =>
@@ -432,10 +390,7 @@ describe.sequential(
                 evidence: "HttpClientError",
               });
               const surviving = yield* machines
-                .getMachine({
-                  app_name: app.appName,
-                  machine_id: successor.id!,
-                })
+                .getMachine({ app_name: app.appName, machine_id: successor.id! })
                 .pipe(Effect.provide(FetchHttpClient.layer));
               expect(surviving.id).toBe(successor.id);
               expect(surviving.name).toBe("successor-sentinel");
@@ -517,9 +472,7 @@ describe.sequential(
                   remaining: Infinity,
                 }),
               );
-              const deletion = yield* actor
-                .destroy()
-                .pipe(Effect.result, Effect.forkScoped);
+              const deletion = yield* actor.destroy().pipe(Effect.result, Effect.forkScoped);
               const accepted = yield* proxy.wait(
                 (event) =>
                   event.stage === "forwarded" &&
@@ -530,14 +483,10 @@ describe.sequential(
               );
               const verification = yield* proxy.wait(
                 (event) =>
-                  event.stage === fault.stage &&
-                  event.method === "GET" &&
-                  event.path === path,
+                  event.stage === fault.stage && event.method === "GET" && event.path === path,
               );
               expect(verification.sequence).toBeGreaterThan(accepted.sequence);
-              const result = yield* Fiber.join(deletion).pipe(
-                Effect.timeout("45 seconds"),
-              );
+              const result = yield* Fiber.join(deletion).pipe(Effect.timeout("45 seconds"));
               assert(Result.isFailure(result));
               assert(result.failure instanceof DestroyError);
               expect(result.failure.blocked).toEqual([]);
@@ -559,9 +508,7 @@ describe.sequential(
               expect(
                 proxy.events.filter(
                   (event) =>
-                    event.stage === "request" &&
-                    event.method === "DELETE" &&
-                    event.path === path,
+                    event.stage === "request" && event.method === "DELETE" && event.path === path,
                 ),
               ).toHaveLength(1);
             }).pipe(
@@ -584,361 +531,76 @@ describe.sequential(
   },
 );
 
-describe.sequential(
-  "autostop",
-  { tags: ["provider:fly", "provider:fly:service"] },
-  () => {
-    const { test } = Test.make({ providers: Fly.providers() });
+describe.sequential("autostop", { tags: ["provider:fly", "provider:fly:service"] }, () => {
+  const { test } = Test.make({ providers: Fly.providers() });
 
-    it.effect(
-      "S03 check identity rejects duplicate, missing, warning and unknown reports",
-      () =>
-        Effect.sync(() => {
-          const config = {
-            checks: { ready: { type: "http", port: 80 } },
-            services: [{ internal_port: 80, checks: [{ type: "http" }] }],
-          };
-          const checks = [
-            { name: "ready", status: "passing" },
-            { name: "servicecheck-00-http-80", status: "passing" },
-          ];
-          expect(checksPassing({ state: "started", checks }, config)).toBe(
-            true,
-          );
-          expect(checksPassing({ state: "stopped", checks }, config)).toBe(
-            false,
-          );
-          for (const invalid of [
-            [],
-            checks.slice(0, 1),
-            [checks[0]!, checks[0]!],
-            [...checks, { name: "unknown", status: "passing" }],
-            checks.map((check) => ({ ...check, status: "warning" })),
-          ]) {
-            expect(
-              checksPassing({ state: "started", checks: invalid }, config),
-            ).toBe(false);
-          }
-        }),
-      { tags: ["unit", "local"] },
-    );
+  it.effect(
+    "S03 check identity rejects duplicate, missing, warning and unknown reports",
+    () =>
+      Effect.sync(() => {
+        const config = {
+          checks: { ready: { type: "http", port: 80 } },
+          services: [{ internal_port: 80, checks: [{ type: "http" }] }],
+        };
+        const checks = [
+          { name: "ready", status: "passing" },
+          { name: "servicecheck-00-http-80", status: "passing" },
+        ];
+        expect(checksPassing({ state: "started", checks }, config)).toBe(true);
+        expect(checksPassing({ state: "stopped", checks }, config)).toBe(false);
+        for (const invalid of [
+          [],
+          checks.slice(0, 1),
+          [checks[0]!, checks[0]!],
+          [...checks, { name: "unknown", status: "passing" }],
+          checks.map((check) => ({ ...check, status: "warning" })),
+        ]) {
+          expect(checksPassing({ state: "started", checks: invalid }, config)).toBe(false);
+        }
+      }),
+    { tags: ["unit", "local"] },
+  );
 
-    it.effect(
-      "S05 deterministic representatives, floors, scale-up and mixed-service roles",
-      () =>
-        Effect.sync(() => {
-          const services = [{ autostop: "stop", min_machines_running: 0 }];
-          expect(readinessRoles({ services }, 3, [])).toEqual([
-            "run",
-            "idle",
-            "idle",
-          ]);
-          const running = [
-            {
-              state: "started",
-              config: { metadata: { "alchemy.replica": "1" } },
-            },
-          ];
-          expect(readinessRoles({ services }, 3, running)).toEqual([
-            "idle",
-            "run",
-            "idle",
-          ]);
-          expect(
-            readinessRoles(
-              { services: [{ autostop: "suspend", min_machines_running: 2 }] },
-              3,
-              running,
-            ),
-          ).toEqual(["run", "run", "idle"]);
-          expect(
-            readinessRoles(
-              { services: [...services, { autostop: "off" }] },
-              3,
-              [],
-            ),
-          ).toEqual(["run", "run", "run"]);
-        }),
-      { tags: ["unit", "local"] },
-    );
+  it.effect(
+    "S05 deterministic representatives, floors, scale-up and mixed-service roles",
+    () =>
+      Effect.sync(() => {
+        const services = [{ autostop: "stop", min_machines_running: 0 }];
+        expect(readinessRoles({ services }, 3, [])).toEqual(["run", "idle", "idle"]);
+        const running = [{ state: "started", config: { metadata: { "alchemy.replica": "1" } } }];
+        expect(readinessRoles({ services }, 3, running)).toEqual(["idle", "run", "idle"]);
+        expect(
+          readinessRoles(
+            { services: [{ autostop: "suspend", min_machines_running: 2 }] },
+            3,
+            running,
+          ),
+        ).toEqual(["run", "run", "idle"]);
+        expect(readinessRoles({ services: [...services, { autostop: "off" }] }, 3, [])).toEqual([
+          "run",
+          "run",
+          "run",
+        ]);
+      }),
+    { tags: ["unit", "local"] },
+  );
 
-    for (const autostop of ["stop", "suspend"] as const) {
-      test.provider(
-        `S05 S11 ${autostop} all-idle replacement preserves nonrepresentatives`,
-        (stack) =>
-          Effect.gen(function* () {
-            yield* stack.destroy();
-            const deploy = (version: string, healthTimeout = 20_000) =>
-              stack.deploy(
-                Effect.gen(function* () {
-                  const app = yield* Fly.App("Site");
-                  return yield* Fly.Machine("Worker", {
-                    app,
-                    image: "nginx:alpine",
-                    count: 2,
-                    env: { VERSION: version },
-                    deploy: { strategy: "bluegreen", healthTimeout },
-                    shutdown: { signal: "SIGQUIT", timeout: "10 seconds" },
-                    services: [
-                      {
-                        protocol: "tcp",
-                        internalPort: 80,
-                        autostop,
-                        autostart: true,
-                        minMachinesRunning: 0,
-                        checks: [
-                          {
-                            type: "http",
-                            port: 80,
-                            path: "/",
-                            interval: "2s",
-                            timeout: "1s",
-                          },
-                        ],
-                      },
-                    ],
-                  });
-                }),
-              );
-            const first = yield* deploy("one");
-            const firstIdle = yield* machines.getMachine({
-              app_name: first.appName,
-              machine_id: first.machineIds[1]!,
-            });
-            expect(firstIdle.config?.metadata?.["alchemy.readiness-role"]).toBe(
-              "idle",
-            );
-            expect(firstIdle.state).not.toBe("started");
-            const primary = {
-              app_name: first.appName,
-              machine_id: first.machineId,
-            };
-            if (autostop === "suspend") yield* machines.suspendMachine(primary);
-            else
-              yield* machines.stopMachine({
-                ...primary,
-                signal: "SIGQUIT",
-                timeout: "10s",
-              });
-            yield* machines.waitMachine({
-              ...primary,
-              state: autostop === "suspend" ? "suspended" : "stopped",
-              timeout: 8,
-            });
-            const second = yield* deploy("two");
-            expect(
-              second.machineIds.every((id) => !first.machineIds.includes(id)),
-            ).toBe(true);
-            const live = (yield* machines.listMachines({
-              app_name: second.appName,
-            })).filter((machine) => machine.state !== "destroyed");
-            expect(live.map((machine) => machine.id).sort()).toEqual(
-              [...second.machineIds].sort(),
-            );
-            const nonrepresentative = live.find(
-              (machine) =>
-                machine.config?.metadata?.["alchemy.replica"] === "1",
-            );
-            expect(nonrepresentative?.state).not.toBe("started");
-            expect(nonrepresentative?.config?.metadata?.["alchemy.phase"]).toBe(
-              "active",
-            );
-            expect(
-              autostopMode(nonrepresentative?.config?.services?.[0]?.autostop),
-            ).toBe(autostop);
-            const committed = {
-              app_name: second.appName,
-              machine_id: second.machineId,
-            };
-            if (autostop === "suspend")
-              yield* machines.suspendMachine(committed);
-            else
-              yield* machines.stopMachine({
-                ...committed,
-                signal: "SIGQUIT",
-                timeout: "10s",
-              });
-            yield* machines.waitMachine({
-              ...committed,
-              state: autostop === "suspend" ? "suspended" : "stopped",
-              timeout: 8,
-            });
-            const unchanged = yield* deploy("two", 22_000);
-            expect(unchanged.machineIds).toEqual(second.machineIds);
-            expect((yield* machines.getMachine(committed)).state).not.toBe(
-              "started",
-            );
-            yield* stack.destroy();
-            expect(
-              yield* machines.listMachines({ app_name: second.appName }).pipe(
-                Effect.map((machines) =>
-                  machines.filter((machine) => machine.state !== "destroyed"),
-                ),
-                Effect.catchTag("NotFound", () => Effect.succeed([])),
-              ),
-            ).toEqual([]);
-          }),
-        {
-          tags: ["provider:fly:app", "provider:fly:machine", "live"],
-          timeout: 120_000,
-        },
-      );
-    }
-
-    for (const autostop of ["stop", "suspend"] as const) {
-      test.provider(
-        `P3 ${autostop} cordoned readiness and restored instance probe`,
-        (stack) =>
-          Effect.gen(function* () {
-            yield* stack.destroy();
-            const output = yield* stack.deploy(
+  for (const autostop of ["stop", "suspend"] as const) {
+    test.provider(
+      `S05 S11 ${autostop} all-idle replacement preserves nonrepresentatives`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const deploy = (version: string, healthTimeout = 20_000) =>
+            stack.deploy(
               Effect.gen(function* () {
                 const app = yield* Fly.App("Site");
                 return yield* Fly.Machine("Worker", {
                   app,
                   image: "nginx:alpine",
-                  skipLaunch: true,
-                  services: [
-                    {
-                      protocol: "tcp",
-                      internalPort: 80,
-                      autostop,
-                      autostart: true,
-                      minMachinesRunning: 0,
-                      ports: [{ port: 80, handlers: ["http"] }],
-                      checks: [
-                        {
-                          type: "http",
-                          port: 80,
-                          path: "/",
-                          interval: "2s",
-                          timeout: "1s",
-                        },
-                        {
-                          type: "tcp",
-                          port: 80,
-                          interval: "2s",
-                          timeout: "1s",
-                        },
-                      ],
-                    },
-                    {
-                      protocol: "tcp",
-                      internalPort: 81,
-                      autostop,
-                      autostart: true,
-                      checks: [
-                        {
-                          type: "http",
-                          port: 80,
-                          path: "/",
-                          interval: "2s",
-                          timeout: "1s",
-                        },
-                      ],
-                    },
-                  ],
-                });
-              }),
-            );
-            const request = {
-              app_name: output.appName,
-              machine_id: output.machineId,
-            };
-            const original = yield* machines.getMachine(request);
-            yield* machines.cordonMachine(request);
-            const prepared = yield* machines.updateMachine({
-              ...request,
-              config: {
-                ...original.config,
-                services: original.config?.services?.map((service) => ({
-                  ...service,
-                  autostop: "off",
-                })),
-              },
-              skip_launch: true,
-              skip_service_registration: true,
-            });
-            const ready = yield* ensureStarted(
-              output.appName,
-              prepared,
-              false,
-              30_000,
-            );
-            expect(ready.cordoned).toBe(true);
-            yield* machines.uncordonMachine(request);
-            const restored = yield* machines.updateMachine({
-              ...request,
-              config: original.config,
-            });
-            const fresh = yield* ensureStarted(
-              output.appName,
-              restored,
-              false,
-              30_000,
-            );
-            yield* waitHealthy(output.appName, fresh, 30_000);
-            yield* Effect.logInfo("P3 restored idle policy", {
-              autostop,
-              beforeInstance: ready.instance_id,
-              afterInstance: fresh.instance_id,
-              state: fresh.state,
-              checks: fresh.checks?.map((check) => ({
-                name: check.name,
-                status: check.status,
-              })),
-            });
-            expect(autostopMode(fresh.config?.services?.[0]?.autostop)).toBe(
-              autostop,
-            );
-            if (autostop === "suspend") yield* machines.suspendMachine(request);
-            else
-              yield* machines.stopMachine({
-                ...request,
-                signal: "SIGQUIT",
-                timeout: "10s",
-              });
-            yield* machines.waitMachine({
-              ...request,
-              state: autostop === "suspend" ? "suspended" : "stopped",
-              timeout: 8,
-            });
-            const idle = yield* machines.getMachine(request);
-            expect(idle.state).toBe(
-              autostop === "suspend" ? "suspended" : "stopped",
-            );
-            yield* stack.destroy();
-            expect(
-              yield* machines.getMachine(request).pipe(
-                Effect.map((machine) => machine.state === "destroyed"),
-                Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              ),
-            ).toBe(true);
-          }),
-        {
-          tags: ["provider:fly:app", "provider:fly:machine", "live"],
-          timeout: 120_000,
-        },
-      );
-    }
-
-    for (const autostop of ["stop", "suspend"] as const) {
-      test.provider(
-        `P3 public ${autostop} restored policy autostarts on real traffic`,
-        (stack) =>
-          Effect.gen(function* () {
-            yield* stack.destroy();
-            const output = yield* stack.deploy(
-              Effect.gen(function* () {
-                const app = yield* Fly.App("Site");
-                yield* Fly.IpAssignment("Public", { app, type: "shared_v4" });
-                return yield* Fly.Machine("Worker", {
-                  app,
-                  image: "nginx:alpine",
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "20 seconds",
-                  },
+                  count: 2,
+                  env: { VERSION: version },
+                  deploy: { strategy: "bluegreen", healthTimeout },
                   shutdown: { signal: "SIGQUIT", timeout: "10 seconds" },
                   services: [
                     {
@@ -947,74 +609,212 @@ describe.sequential(
                       autostop,
                       autostart: true,
                       minMachinesRunning: 0,
-                      ports: [{ port: 80, handlers: ["http"] }],
                       checks: [
-                        {
-                          type: "http",
-                          port: 80,
-                          path: "/",
-                          interval: "2s",
-                          timeout: "1s",
-                        },
+                        { type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" },
                       ],
                     },
                   ],
                 });
               }),
             );
-            const request = {
-              app_name: output.appName,
-              machine_id: output.machineId,
-            };
-            if (autostop === "suspend") yield* machines.suspendMachine(request);
-            else
-              yield* machines.stopMachine({
-                ...request,
-                signal: "SIGQUIT",
-                timeout: "10s",
+          const first = yield* deploy("one");
+          const firstIdle = yield* machines.getMachine({
+            app_name: first.appName,
+            machine_id: first.machineIds[1]!,
+          });
+          expect(firstIdle.config?.metadata?.["alchemy.readiness-role"]).toBe("idle");
+          expect(firstIdle.state).not.toBe("started");
+          const primary = { app_name: first.appName, machine_id: first.machineId };
+          if (autostop === "suspend") yield* machines.suspendMachine(primary);
+          else yield* machines.stopMachine({ ...primary, signal: "SIGQUIT", timeout: "10s" });
+          yield* machines.waitMachine({
+            ...primary,
+            state: autostop === "suspend" ? "suspended" : "stopped",
+            timeout: 8,
+          });
+          const second = yield* deploy("two");
+          expect(second.machineIds.every((id) => !first.machineIds.includes(id))).toBe(true);
+          const live = (yield* machines.listMachines({ app_name: second.appName })).filter(
+            (machine) => machine.state !== "destroyed",
+          );
+          expect(live.map((machine) => machine.id).sort()).toEqual([...second.machineIds].sort());
+          const nonrepresentative = live.find(
+            (machine) => machine.config?.metadata?.["alchemy.replica"] === "1",
+          );
+          expect(nonrepresentative?.state).not.toBe("started");
+          expect(nonrepresentative?.config?.metadata?.["alchemy.phase"]).toBe("active");
+          expect(autostopMode(nonrepresentative?.config?.services?.[0]?.autostop)).toBe(autostop);
+          const committed = { app_name: second.appName, machine_id: second.machineId };
+          if (autostop === "suspend") yield* machines.suspendMachine(committed);
+          else yield* machines.stopMachine({ ...committed, signal: "SIGQUIT", timeout: "10s" });
+          yield* machines.waitMachine({
+            ...committed,
+            state: autostop === "suspend" ? "suspended" : "stopped",
+            timeout: 8,
+          });
+          const unchanged = yield* deploy("two", 22_000);
+          expect(unchanged.machineIds).toEqual(second.machineIds);
+          expect((yield* machines.getMachine(committed)).state).not.toBe("started");
+          yield* stack.destroy();
+          expect(
+            yield* machines.listMachines({ app_name: second.appName }).pipe(
+              Effect.map((machines) => machines.filter((machine) => machine.state !== "destroyed")),
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+            ),
+          ).toEqual([]);
+        }),
+      { tags: ["provider:fly:app", "provider:fly:machine", "live"], timeout: 120_000 },
+    );
+  }
+
+  for (const autostop of ["stop", "suspend"] as const) {
+    test.provider(
+      `P3 ${autostop} cordoned readiness and restored instance probe`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const output = yield* stack.deploy(
+            Effect.gen(function* () {
+              const app = yield* Fly.App("Site");
+              return yield* Fly.Machine("Worker", {
+                app,
+                image: "nginx:alpine",
+                skipLaunch: true,
+                services: [
+                  {
+                    protocol: "tcp",
+                    internalPort: 80,
+                    autostop,
+                    autostart: true,
+                    minMachinesRunning: 0,
+                    ports: [{ port: 80, handlers: ["http"] }],
+                    checks: [
+                      { type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" },
+                      { type: "tcp", port: 80, interval: "2s", timeout: "1s" },
+                    ],
+                  },
+                  {
+                    protocol: "tcp",
+                    internalPort: 81,
+                    autostop,
+                    autostart: true,
+                    checks: [{ type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" }],
+                  },
+                ],
               });
-            yield* machines.waitMachine({
-              ...request,
-              state: autostop === "suspend" ? "suspended" : "stopped",
-              timeout: 8,
-            });
-            const client = yield* HttpClient.HttpClient;
-            const response = yield* client
-              .get(`http://${output.appName}.fly.dev`)
-              .pipe(
-                Effect.retry({
-                  schedule: Schedule.spaced("2 seconds"),
-                  times: 8,
-                }),
-              );
-            expect(response.status).toBe(200);
-            expect(yield* response.text).toContain("Welcome to nginx");
-            const awakened = yield* machines.getMachine(request);
-            expect(awakened.state).toBe("started");
-            expect(autostopMode(awakened.config?.services?.[0]?.autostop)).toBe(
-              autostop,
-            );
-            yield* stack.destroy();
-            expect(
-              yield* machines.getMachine(request).pipe(
-                Effect.map((machine) => machine.state === "destroyed"),
-                Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              ),
-            ).toBe(true);
-          }),
-        {
-          tags: [
-            "provider:fly:app",
-            "provider:fly:ipassignment",
-            "provider:fly:machine",
-            "live",
-          ],
-          timeout: 120_000,
-        },
-      );
-    }
-  },
-);
+            }),
+          );
+          const request = { app_name: output.appName, machine_id: output.machineId };
+          const original = yield* machines.getMachine(request);
+          yield* machines.cordonMachine(request);
+          const prepared = yield* machines.updateMachine({
+            ...request,
+            config: {
+              ...original.config,
+              services: original.config?.services?.map((service) => ({
+                ...service,
+                autostop: "off",
+              })),
+            },
+            skip_launch: true,
+            skip_service_registration: true,
+          });
+          const ready = yield* ensureStarted(output.appName, prepared, false, 30_000);
+          expect(ready.cordoned).toBe(true);
+          yield* machines.uncordonMachine(request);
+          const restored = yield* machines.updateMachine({ ...request, config: original.config });
+          const fresh = yield* ensureStarted(output.appName, restored, false, 30_000);
+          yield* waitHealthy(output.appName, fresh, 30_000);
+          yield* Effect.logInfo("P3 restored idle policy", {
+            autostop,
+            beforeInstance: ready.instance_id,
+            afterInstance: fresh.instance_id,
+            state: fresh.state,
+            checks: fresh.checks?.map((check) => ({ name: check.name, status: check.status })),
+          });
+          expect(autostopMode(fresh.config?.services?.[0]?.autostop)).toBe(autostop);
+          if (autostop === "suspend") yield* machines.suspendMachine(request);
+          else yield* machines.stopMachine({ ...request, signal: "SIGQUIT", timeout: "10s" });
+          yield* machines.waitMachine({
+            ...request,
+            state: autostop === "suspend" ? "suspended" : "stopped",
+            timeout: 8,
+          });
+          const idle = yield* machines.getMachine(request);
+          expect(idle.state).toBe(autostop === "suspend" ? "suspended" : "stopped");
+          yield* stack.destroy();
+          expect(
+            yield* machines.getMachine(request).pipe(
+              Effect.map((machine) => machine.state === "destroyed"),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
+          ).toBe(true);
+        }),
+      { tags: ["provider:fly:app", "provider:fly:machine", "live"], timeout: 120_000 },
+    );
+  }
+
+  for (const autostop of ["stop", "suspend"] as const) {
+    test.provider(
+      `P3 public ${autostop} restored policy autostarts on real traffic`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const output = yield* stack.deploy(
+            Effect.gen(function* () {
+              const app = yield* Fly.App("Site");
+              yield* Fly.IpAssignment("Public", { app, type: "shared_v4" });
+              return yield* Fly.Machine("Worker", {
+                app,
+                image: "nginx:alpine",
+                deploy: { strategy: "bluegreen", healthTimeout: "20 seconds" },
+                shutdown: { signal: "SIGQUIT", timeout: "10 seconds" },
+                services: [
+                  {
+                    protocol: "tcp",
+                    internalPort: 80,
+                    autostop,
+                    autostart: true,
+                    minMachinesRunning: 0,
+                    ports: [{ port: 80, handlers: ["http"] }],
+                    checks: [{ type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" }],
+                  },
+                ],
+              });
+            }),
+          );
+          const request = { app_name: output.appName, machine_id: output.machineId };
+          if (autostop === "suspend") yield* machines.suspendMachine(request);
+          else yield* machines.stopMachine({ ...request, signal: "SIGQUIT", timeout: "10s" });
+          yield* machines.waitMachine({
+            ...request,
+            state: autostop === "suspend" ? "suspended" : "stopped",
+            timeout: 8,
+          });
+          const client = yield* HttpClient.HttpClient;
+          const response = yield* client
+            .get(`http://${output.appName}.fly.dev`)
+            .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 8 }));
+          expect(response.status).toBe(200);
+          expect(yield* response.text).toContain("Welcome to nginx");
+          const awakened = yield* machines.getMachine(request);
+          expect(awakened.state).toBe("started");
+          expect(autostopMode(awakened.config?.services?.[0]?.autostop)).toBe(autostop);
+          yield* stack.destroy();
+          expect(
+            yield* machines.getMachine(request).pipe(
+              Effect.map((machine) => machine.state === "destroyed"),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
+          ).toBe(true);
+        }),
+      {
+        tags: ["provider:fly:app", "provider:fly:ipassignment", "provider:fly:machine", "live"],
+        timeout: 120_000,
+      },
+    );
+  }
+});
 
 describe.sequential(
   "commit recovery",
@@ -1044,9 +844,7 @@ describe.sequential(
             const proxy = yield* transportProxy();
             yield* Effect.sync(() =>
               proxy.arm({
-                match: (event) =>
-                  event.path.endsWith("/metadata") &&
-                  event.phase === "validating",
+                match: (event) => event.path.endsWith("/metadata") && event.phase === "validating",
                 action: "hold-response",
                 remaining: 1,
               }),
@@ -1072,12 +870,9 @@ describe.sequential(
                 Effect.raceFirst(
                   Effect.gen(function* () {
                     const result = yield* Fiber.join(attempt);
-                    if (Result.isFailure(result))
-                      return yield* Effect.fail(result.failure);
+                    if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
                     return yield* Effect.fail(
-                      new Error(
-                        "Deployment completed without reaching the validating barrier",
-                      ),
+                      new Error("Deployment completed without reaching the validating barrier"),
                     );
                   }),
                 ),
@@ -1086,8 +881,7 @@ describe.sequential(
             expect(machineId).toBeDefined();
 
             const firstRouting = proxy.events.findIndex(
-              (event) =>
-                event.stage === "request" && event.path.endsWith("/uncordon"),
+              (event) => event.stage === "request" && event.path.endsWith("/uncordon"),
             );
             expect(firstRouting).toBeGreaterThan(0);
             const preparation = proxy.events.slice(0, firstRouting);
@@ -1105,30 +899,21 @@ describe.sequential(
                 event.path.endsWith(`/machines/${machineId}`) &&
                 event.state === "started" &&
                 event.cordoned === true &&
-                event.checks?.find((check) => check.name === "ready")
-                  ?.status === "passing",
+                event.checks?.find((check) => check.name === "ready")?.status === "passing",
             );
             expect(promoting).toBeGreaterThanOrEqual(0);
             expect(ready).toBeGreaterThan(promoting);
 
             yield* readiness.turnOff(site.appName, machineId);
             if (interrupted) {
-              const interruption = yield* Fiber.interrupt(attempt).pipe(
-                Effect.forkScoped,
-              );
+              const interruption = yield* Fiber.interrupt(attempt).pipe(Effect.forkScoped);
               yield* Effect.yieldNow;
               yield* Effect.sync(proxy.release);
-              yield* Fiber.join(interruption).pipe(
-                Effect.timeout("180 seconds"),
-              );
-              expect(Exit.hasInterrupts(yield* Fiber.await(attempt))).toBe(
-                true,
-              );
+              yield* Fiber.join(interruption).pipe(Effect.timeout("180 seconds"));
+              expect(Exit.hasInterrupts(yield* Fiber.await(attempt))).toBe(true);
             } else {
               yield* Effect.sync(proxy.release);
-              const result = yield* Fiber.join(attempt).pipe(
-                Effect.timeout("180 seconds"),
-              );
+              const result = yield* Fiber.join(attempt).pipe(Effect.timeout("180 seconds"));
               expect(Result.isFailure(result)).toBe(true);
               if (Result.isFailure(result))
                 expect(result.failure._tag).toBe("Fly.ReplicaChecksNotPassing");
@@ -1162,16 +947,11 @@ describe.sequential(
               .pipe(Effect.scoped, Effect.result);
             expect(Result.isFailure(stillBroken)).toBe(true);
             if (Result.isFailure(stillBroken))
-              expect(stillBroken.failure._tag).toBe(
-                "Fly.ReplicaChecksNotPassing",
-              );
-            expect(
-              (yield* census(site.appName)).map((machine) => machine.id),
-            ).toEqual([machineId]);
+              expect(stillBroken.failure._tag).toBe("Fly.ReplicaChecksNotPassing");
+            expect((yield* census(site.appName)).map((machine) => machine.id)).toEqual([machineId]);
             expect(
               proxy.events.some(
-                (event) =>
-                  event.phase === "active" && event.path.endsWith("/metadata"),
+                (event) => event.phase === "active" && event.path.endsWith("/metadata"),
               ),
             ).toBe(false);
 
@@ -1230,8 +1010,7 @@ describe.sequential(
           const proxy = yield* transportProxy();
           yield* Effect.sync(() =>
             proxy.arm({
-              match: (event) =>
-                event.method === "GET" && event.path.endsWith("/machines"),
+              match: (event) => event.method === "GET" && event.path.endsWith("/machines"),
               action: "hold-response",
               remaining: 1,
             }),
@@ -1253,26 +1032,17 @@ describe.sequential(
               Effect.result,
               Effect.forkScoped,
             );
-            yield* proxy.wait(
-              (event) => event.stage === "held" && event.status === 200,
-            );
+            yield* proxy.wait((event) => event.stage === "held" && event.status === 200);
             const newer = yield* deployWorker(freshActor, "three");
             expect(newer.machineId).not.toBe(initial.machineId);
             expect(
-              proxy.events.some(
-                (event) => event.stage === "request" && event.method !== "GET",
-              ),
+              proxy.events.some((event) => event.stage === "request" && event.method !== "GET"),
             ).toBe(false);
             yield* Effect.sync(proxy.release);
-            const result = yield* Fiber.join(delayed).pipe(
-              Effect.timeout("180 seconds"),
-            );
+            const result = yield* Fiber.join(delayed).pipe(Effect.timeout("180 seconds"));
             if (Result.isSuccess(result)) {
               // A later valid reconcile may win; native leases do not fence LocalState with a global epoch.
-              yield* assertCommitted(
-                initial.appName,
-                result.success.machineIds,
-              );
+              yield* assertCommitted(initial.appName, result.success.machineIds);
               for (const id of newer.machineIds) {
                 const retire = proxy.events.findIndex(
                   (event) =>
@@ -1280,8 +1050,7 @@ describe.sequential(
                     event.machineId === id &&
                     (event.path.endsWith("/stop") ||
                       event.path.endsWith("/cordon") ||
-                      (event.method === "DELETE" &&
-                        !event.path.endsWith("/lease"))),
+                      (event.method === "DELETE" && !event.path.endsWith("/lease"))),
                 );
                 expect(retire).toBeGreaterThan(0);
                 for (const candidate of result.success.machineIds) {
@@ -1295,9 +1064,7 @@ describe.sequential(
                           event.method === "GET" &&
                           event.state === "started" &&
                           event.checks?.some(
-                            (check) =>
-                              check.name === "ready" &&
-                              check.status === "passing",
+                            (check) => check.name === "ready" && check.status === "passing",
                           ),
                       ),
                   ).toBe(true);
@@ -1312,14 +1079,11 @@ describe.sequential(
                 "NotFound",
               ]).toContain(result.failure._tag);
               expect(
-                (yield* census(initial.appName)).some(
-                  (machine) => machine.id === newer.machineId,
-                ),
+                (yield* census(initial.appName)).some((machine) => machine.id === newer.machineId),
               ).toBe(true);
-              yield* Effect.logInfo(
-                "Stale snapshot refused without state-fencing guarantee",
-                { outcome: result.failure._tag },
-              );
+              yield* Effect.logInfo("Stale snapshot refused without state-fencing guarantee", {
+                outcome: result.failure._tag,
+              });
             }
             const resumed = yield* engineActor(
               stack,
@@ -1355,8 +1119,7 @@ describe.sequential(
               const contenderProxy = yield* transportProxy();
               yield* Effect.sync(() =>
                 holderProxy.arm({
-                  match: (event) =>
-                    event.method === "POST" && event.path.endsWith("/machines"),
+                  match: (event) => event.method === "POST" && event.path.endsWith("/machines"),
                   action: "hold-response",
                   remaining: 1,
                 }),
@@ -1386,10 +1149,7 @@ describe.sequential(
                   competitor === "destroy"
                     ? contenderActor.destroy()
                     : deployWorker(contenderActor, "three", {
-                        deploy: {
-                          strategy: competitor,
-                          healthTimeout: "30 seconds",
-                        },
+                        deploy: { strategy: competitor, healthTimeout: "30 seconds" },
                       }).pipe(Effect.asVoid);
                 const result = yield* operation.pipe(
                   Effect.scoped,
@@ -1399,9 +1159,7 @@ describe.sequential(
                 yield* Effect.sync(holderProxy.release);
                 expect(Result.isFailure(result)).toBe(true);
                 if (Result.isFailure(result))
-                  expect(result.failure).not.toMatchObject({
-                    _tag: "TimeoutError",
-                  });
+                  expect(result.failure).not.toMatchObject({ _tag: "TimeoutError" });
                 expect(
                   contenderProxy.events.some(
                     (event) =>
@@ -1420,13 +1178,11 @@ describe.sequential(
                       !event.path.endsWith("/lease"),
                   ),
                 ).toBe(false);
-                const next = yield* Fiber.join(holder).pipe(
-                  Effect.timeout("90 seconds"),
-                );
+                const next = yield* Fiber.join(holder).pipe(Effect.timeout("90 seconds"));
                 expect(next.machineIds).toEqual([held.machineId]);
-                expect(
-                  (yield* census(initial.appName)).map((machine) => machine.id),
-                ).toEqual(next.machineIds);
+                expect((yield* census(initial.appName)).map((machine) => machine.id)).toEqual(
+                  next.machineIds,
+                );
               }).pipe(
                 Effect.ensuring(
                   Effect.sync(() => {
@@ -1453,8 +1209,7 @@ describe.sequential(
             const secondProxy = yield* transportProxy();
             yield* Effect.sync(() =>
               firstProxy.arm({
-                match: (event) =>
-                  event.method === "POST" && event.path.endsWith("/machines"),
+                match: (event) => event.method === "POST" && event.path.endsWith("/machines"),
                 action: "hold-response",
                 remaining: 1,
               }),
@@ -1502,20 +1257,11 @@ describe.sequential(
               );
               const during = yield* census(app.appName);
               yield* Effect.sync(firstProxy.release);
-              const firstResult = yield* Fiber.join(first).pipe(
-                Effect.timeout("90 seconds"),
-              );
-              yield* Effect.logInfo(
-                "First-deploy results: no global exclusion promised",
-                {
-                  first: Result.isFailure(firstResult)
-                    ? firstResult.failure._tag
-                    : firstResult._tag,
-                  second: Result.isFailure(second)
-                    ? second.failure._tag
-                    : second._tag,
-                },
-              );
+              const firstResult = yield* Fiber.join(first).pipe(Effect.timeout("90 seconds"));
+              yield* Effect.logInfo("First-deploy results: no global exclusion promised", {
+                first: Result.isFailure(firstResult) ? firstResult.failure._tag : firstResult._tag,
+                second: Result.isFailure(second) ? second.failure._tag : second._tag,
+              });
               const successfulIds: string[] = [];
               for (const result of [firstResult, second]) {
                 if (Result.isSuccess(result)) {
@@ -1535,17 +1281,9 @@ describe.sequential(
               expect(successfulIds.length).toBeGreaterThan(0);
               // A held create response conveys no lease; a leased, ready successor may retire it.
               if (Result.isSuccess(second)) {
-                const committed = yield* assertCommitted(
-                  app.appName,
-                  second.success.machineIds,
-                );
+                const committed = yield* assertCommitted(app.appName, second.success.machineIds);
                 for (const machine of committed) {
-                  yield* waitHealthy(
-                    app.appName,
-                    machine,
-                    30_000,
-                    machine.config,
-                  );
+                  yield* waitHealthy(app.appName, machine, 30_000, machine.config);
                 }
                 expect(during.map((machine) => machine.id).sort()).toEqual(
                   [...second.success.machineIds].sort(),
@@ -1559,9 +1297,7 @@ describe.sequential(
                   ),
                 ).toBe(true);
               } else {
-                expect(
-                  during.some((machine) => machine.id === created.machineId),
-                ).toBe(true);
+                expect(during.some((machine) => machine.id === created.machineId)).toBe(true);
               }
               const createdIds = new Set(
                 [firstProxy, secondProxy].flatMap((proxy) =>
@@ -1584,8 +1320,7 @@ describe.sequential(
                       event.path.endsWith("/stop") ||
                       event.path.endsWith("/cordon") ||
                       event.phase === "retiring" ||
-                      (event.method === "DELETE" &&
-                        /\/machines\/[^/]+$/.test(event.path))
+                      (event.method === "DELETE" && /\/machines\/[^/]+$/.test(event.path))
                     )
                   )
                     continue;
@@ -1624,9 +1359,7 @@ describe.sequential(
                         ready.state === "started" &&
                         ready.cordoned === false &&
                         ready.checks?.some(
-                          (check) =>
-                            check.name === "ready" &&
-                            check.status === "passing",
+                          (check) => check.name === "ready" && check.status === "passing",
                         ) &&
                         before
                           .slice(readyIndex + 1)
@@ -1651,13 +1384,10 @@ describe.sequential(
                     machine.state === "started" &&
                     machine.cordoned === false &&
                     machine.checks?.some(
-                      (check) =>
-                        check.name === "ready" && check.status === "passing",
+                      (check) => check.name === "ready" && check.status === "passing",
                     ) &&
-                    machine.config?.metadata?.["alchemy.fqn"] ===
-                      owner?.["alchemy.fqn"] &&
-                    machine.config?.metadata?.["alchemy.instance"] ===
-                      owner?.["alchemy.instance"],
+                    machine.config?.metadata?.["alchemy.fqn"] === owner?.["alchemy.fqn"] &&
+                    machine.config?.metadata?.["alchemy.instance"] === owner?.["alchemy.instance"],
                 ),
               ).toBe(true);
               yield* assertCommitted(
@@ -1707,8 +1437,7 @@ describe.sequential(
           yield* Effect.sync(() => {
             endpoint = proxy.url;
             proxy.arm({
-              match: (event) =>
-                event.method === "POST" && event.path.endsWith("/machines"),
+              match: (event) => event.method === "POST" && event.path.endsWith("/machines"),
               action: "drop-response",
               remaining: 1,
             });
@@ -1725,9 +1454,7 @@ describe.sequential(
             expect(created).toHaveLength(1);
             expect(next.machineIds).toEqual([created[0]!.machineId]);
             expect(next.machineId).not.toBe(initial.machineId);
-            expect(
-              proxy.events.filter((event) => event.stage === "dropped"),
-            ).toHaveLength(1);
+            expect(proxy.events.filter((event) => event.stage === "dropped")).toHaveLength(1);
             const live = yield* assertCommitted(next.appName, next.machineIds);
             const conflict = yield* machines
               .createMachine({
@@ -1738,8 +1465,7 @@ describe.sequential(
               })
               .pipe(Retry.none, Effect.result);
             expect(Result.isFailure(conflict)).toBe(true);
-            if (Result.isFailure(conflict))
-              expect(conflict.failure._tag).toBe("Conflict");
+            if (Result.isFailure(conflict)) expect(conflict.failure._tag).toBe("Conflict");
             yield* assertCommitted(next.appName, next.machineIds);
           } finally {
             yield* Effect.sync(() => {
@@ -1790,9 +1516,7 @@ describe.sequential(
             file,
             proxy.url,
           );
-          const first = yield* firstActor
-            .deploy(Fly.App("Site"))
-            .pipe(Effect.scoped);
+          const first = yield* firstActor.deploy(Fly.App("Site")).pipe(Effect.scoped);
           const secondActor = yield* engineActor(
             stack,
             "F07 F11 fresh engine contexts reopen real durable LocalState without recreating the App",
@@ -1800,9 +1524,7 @@ describe.sequential(
             proxy.url,
           );
           expect(secondActor.state).not.toBe(firstActor.state);
-          const second = yield* secondActor
-            .deploy(Fly.App("Site"))
-            .pipe(Effect.scoped);
+          const second = yield* secondActor.deploy(Fly.App("Site")).pipe(Effect.scoped);
           expect(second.appName).toBe(first.appName);
           expect(second.appId).toBe(first.appId);
           expect(
@@ -1822,169 +1544,133 @@ describe.sequential(
   },
 );
 
-describe.sequential(
-  "exec leases",
-  { tags: ["provider:fly", "provider:fly:service"] },
-  () => {
-    const { test } = Test.make({ providers: Fly.providers() });
+describe.sequential("exec leases", { tags: ["provider:fly", "provider:fly:service"] }, () => {
+  const { test } = Test.make({ providers: Fly.providers() });
 
-    it.effect(
-      "exec probe sanitizes failures and defects without losing interruption",
-      () =>
-        Effect.gen(function* () {
-          const privateHeader = "fixture-private-lease-header";
-          const outcome = yield* Effect.failCause(
-            Cause.fromReasons([
-              Cause.makeFailReason(new Error(privateHeader)),
-              Cause.makeDieReason({
-                headers: { "fly-machine-lease-nonce": privateHeader },
-              }),
-              Cause.makeInterruptReason(123),
-            ]),
-          ).pipe(sanitizeExecFailure, Effect.exit);
-          expect(Exit.isFailure(outcome)).toBe(true);
-          if (Exit.isFailure(outcome)) {
-            expect(outcome.cause.reasons.map((reason) => reason._tag)).toEqual([
-              "Fail",
-              "Die",
-              "Interrupt",
-            ]);
-            expect(Cause.pretty(outcome.cause)).not.toContain(privateHeader);
-            const interrupted = outcome.cause.reasons.find(
-              Cause.isInterruptReason,
-            );
-            expect(interrupted?.fiberId).toBe(123);
-          }
-        }),
-      { tags: ["unit", "local"] },
-    );
+  it.effect(
+    "exec probe sanitizes failures and defects without losing interruption",
+    () =>
+      Effect.gen(function* () {
+        const privateHeader = "fixture-private-lease-header";
+        const outcome = yield* Effect.failCause(
+          Cause.fromReasons([
+            Cause.makeFailReason(new Error(privateHeader)),
+            Cause.makeDieReason({ headers: { "fly-machine-lease-nonce": privateHeader } }),
+            Cause.makeInterruptReason(123),
+          ]),
+        ).pipe(sanitizeExecFailure, Effect.exit);
+        expect(Exit.isFailure(outcome)).toBe(true);
+        if (Exit.isFailure(outcome)) {
+          expect(outcome.cause.reasons.map((reason) => reason._tag)).toEqual([
+            "Fail",
+            "Die",
+            "Interrupt",
+          ]);
+          expect(Cause.pretty(outcome.cause)).not.toContain(privateHeader);
+          const interrupted = outcome.cause.reasons.find(Cause.isInterruptReason);
+          expect(interrupted?.fiberId).toBe(123);
+        }
+      }),
+    { tags: ["unit", "local"] },
+  );
 
-    test.provider(
-      "exec remains blocked during a native lease even with its nonce and succeeds after observable release",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const created = yield* stack.deploy(
+  test.provider(
+    "exec remains blocked during a native lease even with its nonce and succeeds after observable release",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("ExecLeaseSite");
+            return yield* Fly.Machine("ExecLeaseTarget", {
+              app,
+              region: "iad",
+              image: "nginx:alpine",
+              guest: { cpus: 1, memoryMb: 256 },
+              checks,
+              deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
+              shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
+            });
+          }),
+        );
+        const target = { app_name: created.appName, machine_id: created.machineId };
+        const command = ["/bin/sh", "-c", "printf lease-exec-ok"];
+        yield* Effect.gen(function* () {
+          const leases = yield* makeMachineLeases(created.appName);
+          yield* leases.acquire([created.machineId]);
+          yield* leases.guard(
             Effect.gen(function* () {
-              const app = yield* Fly.App("ExecLeaseSite");
-              return yield* Fly.Machine("ExecLeaseTarget", {
-                app,
-                region: "iad",
-                image: "nginx:alpine",
-                guest: { cpus: 1, memoryMb: 256 },
-                checks,
-                deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
-                shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
+              const verifyAuthority = Effect.gen(function* () {
+                const current = yield* machines
+                  .getMachineLease(target)
+                  .pipe(Retry.none, Effect.timeout("15 seconds"));
+                const nonce = current.data?.nonce;
+                if (!nonce)
+                  return yield* Effect.fail(new Error("Owned Machine lease response has no nonce"));
+                expect(nonce === (yield* leases.nonceIfHeld(created.machineId))).toBe(true);
+                expect(current.data?.expires_at).toBeGreaterThan(
+                  (yield* Clock.currentTimeMillis) / 1000 + 15,
+                );
+                return nonce;
               });
-            }),
+              const client = yield* HttpClient.HttpClient;
+              for (const header of ["held", "missing", "wrong"] as const) {
+                const nonce = yield* verifyAuthority;
+                const value =
+                  header === "held" ? nonce : `${nonce[0] === "a" ? "b" : "a"}${nonce.slice(1)}`;
+                let observed = false;
+                // Probe the general lease header without advertising unsupported exec authorization.
+                const probeClient = HttpClient.mapRequest(client, (request) =>
+                  header === "missing"
+                    ? request
+                    : HttpClientRequest.setHeader(request, "fly-machine-lease-nonce", value),
+                ).pipe(
+                  HttpClient.tapRequest((request) =>
+                    Effect.sync(() => {
+                      observed = true;
+                      expect(
+                        request.headers["fly-machine-lease-nonce"] ===
+                          (header === "missing" ? undefined : value),
+                      ).toBe(true);
+                    }),
+                  ),
+                );
+                const outcome = yield* machines
+                  .execMachine({ ...target, command, timeout: 5 })
+                  .pipe(
+                    Retry.none,
+                    Effect.timeout("15 seconds"),
+                    Effect.provideService(HttpClient.HttpClient, probeClient),
+                    Effect.as("accepted" as const),
+                    Effect.catchTag("Conflict", () => Effect.succeed("Conflict" as const)),
+                  );
+                expect(observed).toBe(true);
+                expect(outcome).toBe("Conflict");
+                yield* verifyAuthority;
+              }
+            }).pipe(Effect.timeout("90 seconds")),
           );
-          const target = {
-            app_name: created.appName,
-            machine_id: created.machineId,
-          };
-          const command = ["/bin/sh", "-c", "printf lease-exec-ok"];
-          yield* Effect.gen(function* () {
-            const leases = yield* makeMachineLeases(created.appName);
-            yield* leases.acquire([created.machineId]);
-            yield* leases.guard(
-              Effect.gen(function* () {
-                const verifyAuthority = Effect.gen(function* () {
-                  const current = yield* machines
-                    .getMachineLease(target)
-                    .pipe(Retry.none, Effect.timeout("15 seconds"));
-                  const nonce = current.data?.nonce;
-                  if (!nonce)
-                    return yield* Effect.fail(
-                      new Error("Owned Machine lease response has no nonce"),
-                    );
-                  expect(
-                    nonce === (yield* leases.nonceIfHeld(created.machineId)),
-                  ).toBe(true);
-                  expect(current.data?.expires_at).toBeGreaterThan(
-                    (yield* Clock.currentTimeMillis) / 1000 + 15,
-                  );
-                  return nonce;
-                });
-                const client = yield* HttpClient.HttpClient;
-                for (const header of ["held", "missing", "wrong"] as const) {
-                  const nonce = yield* verifyAuthority;
-                  const value =
-                    header === "held"
-                      ? nonce
-                      : `${nonce[0] === "a" ? "b" : "a"}${nonce.slice(1)}`;
-                  let observed = false;
-                  // Probe the general lease header without advertising unsupported exec authorization.
-                  const probeClient = HttpClient.mapRequest(
-                    client,
-                    (request) =>
-                      header === "missing"
-                        ? request
-                        : HttpClientRequest.setHeader(
-                            request,
-                            "fly-machine-lease-nonce",
-                            value,
-                          ),
-                  ).pipe(
-                    HttpClient.tapRequest((request) =>
-                      Effect.sync(() => {
-                        observed = true;
-                        expect(
-                          request.headers["fly-machine-lease-nonce"] ===
-                            (header === "missing" ? undefined : value),
-                        ).toBe(true);
-                      }),
-                    ),
-                  );
-                  const outcome = yield* machines
-                    .execMachine({
-                      ...target,
-                      command,
-                      timeout: 5,
-                    })
-                    .pipe(
-                      Retry.none,
-                      Effect.timeout("15 seconds"),
-                      Effect.provideService(HttpClient.HttpClient, probeClient),
-                      Effect.as("accepted" as const),
-                      Effect.catchTag("Conflict", () =>
-                        Effect.succeed("Conflict" as const),
-                      ),
-                    );
-                  expect(observed).toBe(true);
-                  expect(outcome).toBe("Conflict");
-                  yield* verifyAuthority;
-                }
-              }).pipe(Effect.timeout("90 seconds")),
-            );
-          }).pipe(Effect.scoped);
+        }).pipe(Effect.scoped);
 
-          const released = yield* machines.getMachineLease(target).pipe(
-            Retry.none,
-            Effect.timeout("15 seconds"),
-            Effect.as(false),
-            Effect.catchTag("NotFound", () => Effect.succeed(true)),
-          );
-          expect(released).toBe(true);
-          expect((yield* machines.getMachine(target)).state).toBe("started");
-          const unleased = yield* machines
-            .execMachine({
-              ...target,
-              command,
-              timeout: 5,
-            })
-            .pipe(Retry.none, Effect.timeout("15 seconds"));
-          expect(unleased.exit_code).toBe(0);
-          expect(unleased.stdout).toBe("lease-exec-ok");
-          yield* stack.destroy();
-          yield* assertAppGone(created.appName);
-        }).pipe(sanitizeExecFailure),
-      {
-        tags: ["provider:fly:app", "provider:fly:machine", "live"],
-        timeout: 300_000,
-      },
-    );
-  },
-);
+        const released = yield* machines.getMachineLease(target).pipe(
+          Retry.none,
+          Effect.timeout("15 seconds"),
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        );
+        expect(released).toBe(true);
+        expect((yield* machines.getMachine(target)).state).toBe("started");
+        const unleased = yield* machines
+          .execMachine({ ...target, command, timeout: 5 })
+          .pipe(Retry.none, Effect.timeout("15 seconds"));
+        expect(unleased.exit_code).toBe(0);
+        expect(unleased.stdout).toBe("lease-exec-ok");
+        yield* stack.destroy();
+        yield* assertAppGone(created.appName);
+      }).pipe(sanitizeExecFailure),
+    { tags: ["provider:fly:app", "provider:fly:machine", "live"], timeout: 300_000 },
+  );
+});
 
 describe.sequential(
   "failures",
@@ -2012,33 +1698,24 @@ describe.sequential(
                 return yield* Fly.Machine("Worker", {
                   app,
                   image,
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "30 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "10 seconds" },
                   checks: {
-                    ready: {
-                      type: "http",
-                      port: 80,
-                      path: "/",
-                      interval: "2s",
-                      timeout: "1s",
-                    },
+                    ready: { type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" },
                   },
                 });
               }),
             );
           const initial = yield* deploy("nginx:alpine");
-          const failed = yield* deploy(
-            "nginx:alchemy-bluegreen-nonexistent-image",
-          ).pipe(Effect.result);
+          const failed = yield* deploy("nginx:alchemy-bluegreen-nonexistent-image").pipe(
+            Effect.result,
+          );
           expect(Result.isFailure(failed)).toBe(true);
           if (Result.isFailure(failed))
             expect(failed.failure).toMatchObject({ _tag: "BadRequest" });
-          const live = (yield* machines.listMachines({
-            app_name: initial.appName,
-          })).filter((machine) => machine.state !== "destroyed");
+          const live = (yield* machines.listMachines({ app_name: initial.appName })).filter(
+            (machine) => machine.state !== "destroyed",
+          );
           expect(live.map((machine) => machine.id)).toEqual(initial.machineIds);
           expect(live[0]?.state).toBe("started");
           expect(live[0]?.cordoned).toBe(false);
@@ -2076,10 +1753,7 @@ describe.sequential(
             });
             const extra = { ...checks.ready, path: "/does-not-exist" };
             const failed = yield* deployWorker(stack, "two", {
-              checks:
-                kind === "named"
-                  ? { ready: checks.ready, dependency: extra }
-                  : checks,
+              checks: kind === "named" ? { ready: checks.ready, dependency: extra } : checks,
               services:
                 kind === "named"
                   ? undefined
@@ -2101,34 +1775,21 @@ describe.sequential(
             }).pipe(Effect.result);
             expect(Result.isFailure(failed)).toBe(true);
             if (Result.isFailure(failed))
-              expect(failed.failure).toMatchObject({
-                _tag: "Fly.ReplicaChecksNotPassing",
-              });
+              expect(failed.failure).toMatchObject({ _tag: "Fly.ReplicaChecksNotPassing" });
             const live = yield* census(initial.appName);
-            expect(live.map((machine) => machine.id)).toEqual(
-              initial.machineIds,
-            );
+            expect(live.map((machine) => machine.id)).toEqual(initial.machineIds);
             expect(live[0]!.cordoned).toBe(false);
             const fixed = yield* deployWorker(stack, "two", {
               checks: { ready: checks.ready, dependency: checks.ready },
               deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
             });
-            const committed = yield* assertCommitted(
-              initial.appName,
-              fixed.machineIds,
-            );
+            const committed = yield* assertCommitted(initial.appName, fixed.machineIds);
             // Active commit metadata can reset reports after readiness validation.
-            const healthy = yield* waitHealthy(
-              initial.appName,
-              committed[0]!,
-              30_000,
-            );
+            const healthy = yield* waitHealthy(initial.appName, committed[0]!, 30_000);
             expect(healthy.instance_id).toBe(committed[0]!.instance_id);
             expect(
               ["ready", "dependency"].every((name) =>
-                healthy.checks?.some(
-                  (check) => check.name === name && check.status === "passing",
-                ),
+                healthy.checks?.some((check) => check.name === name && check.status === "passing"),
               ),
             ).toBe(true);
             yield* stack.destroy();
@@ -2169,28 +1830,18 @@ describe.sequential(
           });
           const proxy = yield* transportProxy();
           const match = (event: { method: string; path: string }) =>
-            event.method === "GET" &&
-            event.path.endsWith(`/machines/${initial.machineId}`);
+            event.method === "GET" && event.path.endsWith(`/machines/${initial.machineId}`);
           yield* Effect.sync(() => {
             endpoint = proxy.url;
             proxy.arm({ match, action: "drop-response", remaining: 1 });
           });
           try {
-            const healthy = yield* waitHealthy(
-              initial.appName,
-              observed,
-              30_000,
-              observed.config!,
-            );
+            const healthy = yield* waitHealthy(initial.appName, observed, 30_000, observed.config!);
             expect(healthy.id).toBe(initial.machineId);
             expect(healthy.instance_id).toBe(observed.instance_id);
+            expect(healthy.checks?.every((check) => check.status === "passing")).toBe(true);
             expect(
-              healthy.checks?.every((check) => check.status === "passing"),
-            ).toBe(true);
-            expect(
-              proxy.events.filter(
-                (event) => event.stage === "dropped" && event.status === 200,
-              ),
+              proxy.events.filter((event) => event.stage === "dropped" && event.status === 200),
             ).toHaveLength(1);
             yield* Effect.sync(() =>
               proxy.arm({ match, action: "cut-request", remaining: Infinity }),
@@ -2213,13 +1864,8 @@ describe.sequential(
               healthy,
               8_000,
               healthy.config!,
-            ).pipe(
-              Effect.provideService(HttpClient.HttpClient, observedClient),
-              Effect.result,
-            );
-            expect(
-              (yield* Clock.currentTimeMillis) - started,
-            ).toBeLessThanOrEqual(12_000);
+            ).pipe(Effect.provideService(HttpClient.HttpClient, observedClient), Effect.result);
+            expect((yield* Clock.currentTimeMillis) - started).toBeLessThanOrEqual(12_000);
             expect(Result.isFailure(failed)).toBe(true);
             if (Result.isFailure(failed)) {
               expect(failed.failure).toMatchObject({
@@ -2228,16 +1874,12 @@ describe.sequential(
                 machineId: initial.machineId,
               });
             }
-            expect(
-              proxy.events.filter((event) => event.stage === "cut").length,
-            ).toBeGreaterThan(0);
+            expect(proxy.events.filter((event) => event.stage === "cut").length).toBeGreaterThan(0);
             // Count logical client calls independently of Bun's physical GET retries.
             expect(attempts).toBeGreaterThan(0);
             expect(attempts).toBeLessThanOrEqual(11);
             const live = yield* census(initial.appName);
-            expect(live.map((machine) => machine.id)).toEqual(
-              initial.machineIds,
-            );
+            expect(live.map((machine) => machine.id)).toEqual(initial.machineIds);
             expect(live[0]!.cordoned).toBe(false);
           } finally {
             yield* Effect.sync(() => {
@@ -2282,35 +1924,22 @@ describe.sequential(
             yield* stack.destroy();
             const initial = yield* deployWorker(stack, "one");
             const result = yield* deployWorker(stack, "two", {
-              init: {
-                exec: [
-                  "/bin/sh",
-                  "-c",
-                  "sleep 65; exec nginx -g 'daemon off;'",
-                ],
-              },
+              init: { exec: ["/bin/sh", "-c", "sleep 65; exec nginx -g 'daemon off;'"] },
               checks: { ready: { ...checks.ready, gracePeriod: "65s" } },
               deploy: { strategy: "bluegreen", healthTimeout: budget },
             }).pipe(Effect.result);
             if (budget === 8_000) {
               expect(Result.isFailure(result)).toBe(true);
               if (Result.isFailure(result))
-                expect(result.failure).toMatchObject({
-                  _tag: "Fly.ReplicaChecksNotPassing",
-                });
+                expect(result.failure).toMatchObject({ _tag: "Fly.ReplicaChecksNotPassing" });
               const live = yield* census(initial.appName);
-              expect(live.map((machine) => machine.id)).toEqual(
-                initial.machineIds,
-              );
+              expect(live.map((machine) => machine.id)).toEqual(initial.machineIds);
               expect(live[0]!.cordoned).toBe(false);
             } else {
               expect(Result.isSuccess(result)).toBe(true);
               if (Result.isSuccess(result)) {
                 expect(result.success.machineId).not.toBe(initial.machineId);
-                yield* assertCommitted(
-                  initial.appName,
-                  result.success.machineIds,
-                );
+                yield* assertCommitted(initial.appName, result.success.machineIds);
               }
             }
             yield* stack.destroy();
@@ -2363,29 +1992,20 @@ describe.sequential(
                   ...props,
                   deploy: { strategy: "rolling" },
                 });
-                for (const id of allIdle
-                  ? initial.machineIds
-                  : initial.machineIds.slice(1)) {
+                for (const id of allIdle ? initial.machineIds : initial.machineIds.slice(1)) {
                   const target = { app_name: initial.appName, machine_id: id };
                   yield* mode === "stop"
-                    ? machines.stopMachine({
-                        ...target,
-                        signal: "SIGQUIT",
-                        timeout: "5s",
-                      })
+                    ? machines.stopMachine({ ...target, signal: "SIGQUIT", timeout: "5s" })
                     : machines.suspendMachine(target);
                   const observed = yield* machines.getMachine(target).pipe(
                     Effect.repeat({
                       schedule: Schedule.spaced("2 seconds"),
                       times: 8,
                       until: (machine) =>
-                        machine.state ===
-                        (mode === "stop" ? "stopped" : "suspended"),
+                        machine.state === (mode === "stop" ? "stopped" : "suspended"),
                     }),
                   );
-                  expect(observed.state).toBe(
-                    mode === "stop" ? "stopped" : "suspended",
-                  );
+                  expect(observed.state).toBe(mode === "stop" ? "stopped" : "suspended");
                 }
                 const proxy = yield* transportProxy();
                 yield* Effect.sync(() => {
@@ -2407,9 +2027,7 @@ describe.sequential(
                   live.filter((machine) => machine.state === "started").length,
                 ).toBeLessThanOrEqual(1);
                 expect(
-                  live.some((machine) =>
-                    ["stopped", "suspended"].includes(machine.state!),
-                  ),
+                  live.some((machine) => ["stopped", "suspended"].includes(machine.state!)),
                 ).toBe(true);
                 expect(
                   proxy.events.some(
@@ -2474,9 +2092,7 @@ describe.sequential(
           minMachinesRunning: floor,
           checks: [checks.ready],
         },
-        ...(mixed
-          ? [{ protocol: "tcp", internalPort: 81, autostop: "off" as const }]
-          : []),
+        ...(mixed ? [{ protocol: "tcp", internalPort: 81, autostop: "off" as const }] : []),
       ],
     });
 
@@ -2487,9 +2103,7 @@ describe.sequential(
           times: 30,
           until: (machine) => machine.state === state,
         }),
-        Effect.tap((machine) =>
-          Effect.sync(() => expect(machine.state).toBe(state)),
-        ),
+        Effect.tap((machine) => Effect.sync(() => expect(machine.state).toBe(state))),
         Effect.timeout("90 seconds"),
       );
 
@@ -2504,46 +2118,28 @@ describe.sequential(
             yield* waitState(appName, id, "started");
           }
           if (mode === "stop") {
-            yield* machines.stopMachine({
-              ...target,
-              signal: "SIGQUIT",
-              timeout: "5s",
-            });
+            yield* machines.stopMachine({ ...target, signal: "SIGQUIT", timeout: "5s" });
           } else {
             yield* machines.suspendMachine(target);
           }
-          yield* waitState(
-            appName,
-            id,
-            mode === "stop" ? "stopped" : "suspended",
-          );
+          yield* waitState(appName, id, mode === "stop" ? "stopped" : "suspended");
         }),
       );
 
     // Expected slots are literal scenario inputs, never computed by readinessRoles.
-    const assertSlots = (
-      live: machines.Machine[],
-      runningSlots: readonly number[],
-    ) => {
+    const assertSlots = (live: machines.Machine[], runningSlots: readonly number[]) => {
       const ordered = [...live].sort(
         (left, right) =>
           Number(left.config?.metadata?.["alchemy.replica"]) -
           Number(right.config?.metadata?.["alchemy.replica"]),
       );
-      expect(
-        ordered.map((machine) => machine.config?.metadata?.["alchemy.replica"]),
-      ).toEqual(
+      expect(ordered.map((machine) => machine.config?.metadata?.["alchemy.replica"])).toEqual(
         Array.from({ length: live.length }, (_, index) => String(index)),
       );
       expect(
         ordered
-          .filter(
-            (machine) =>
-              machine.config?.metadata?.["alchemy.readiness-role"] === "run",
-          )
-          .map((machine) =>
-            Number(machine.config?.metadata?.["alchemy.replica"]),
-          ),
+          .filter((machine) => machine.config?.metadata?.["alchemy.readiness-role"] === "run")
+          .map((machine) => Number(machine.config?.metadata?.["alchemy.replica"])),
       ).toEqual([...runningSlots]);
       const roles = Array.from({ length: live.length }, (_, slot) =>
         runningSlots.includes(slot) ? "run" : "idle",
@@ -2552,9 +2148,7 @@ describe.sequential(
         expect(machine.config?.metadata?.["alchemy.readiness-role"]).toBe(
           runningSlots.includes(slot) ? "run" : "idle",
         );
-        expect(machine.config?.metadata?.["alchemy.readiness-roles"]).toBe(
-          roles,
-        );
+        expect(machine.config?.metadata?.["alchemy.readiness-roles"]).toBe(roles);
       }
       return ordered;
     };
@@ -2571,38 +2165,24 @@ describe.sequential(
         const live = yield* assertCommitted(appName, ids);
         const ordered = assertSlots(live, runningSlots);
         expect(
-          new Set(
-            live.map(
-              (machine) => machine.config?.metadata?.["alchemy.generation"],
-            ),
-          ).size,
+          new Set(live.map((machine) => machine.config?.metadata?.["alchemy.generation"])).size,
         ).toBe(1);
         for (const [slot, machine] of ordered.entries()) {
-          expect(
-            machine.config?.metadata?.["alchemy.idle-policy-restored"],
-          ).toBe("true");
+          expect(machine.config?.metadata?.["alchemy.idle-policy-restored"]).toBe("true");
           expect(machine.cordoned).toBe(false);
           expect(machine.config?.services).toHaveLength(mixed ? 2 : 1);
-          expect(autostopMode(machine.config?.services?.[0]?.autostop)).toBe(
-            mode,
-          );
+          expect(autostopMode(machine.config?.services?.[0]?.autostop)).toBe(mode);
           expect(machine.config?.services?.[0]?.autostart).toBe(true);
-          expect(machine.config?.services?.[0]?.min_machines_running).toBe(
-            floor,
-          );
+          expect(machine.config?.services?.[0]?.min_machines_running).toBe(floor);
           if (mixed) {
-            expect(autostopMode(machine.config?.services?.[1]?.autostop)).toBe(
-              "off",
-            );
+            expect(autostopMode(machine.config?.services?.[1]?.autostop)).toBe("off");
           }
           if (!runningSlots.includes(slot)) {
-            expect(["created", "stopped", "suspended"]).toContain(
+            expect(["created", "stopped", "suspended"]).toContain(machine.state);
+          } else {
+            expect(mixed ? ["started"] : ["started", "stopped", "suspended"]).toContain(
               machine.state,
             );
-          } else {
-            expect(
-              mixed ? ["started"] : ["started", "stopped", "suspended"],
-            ).toContain(machine.state);
             expect(machine.instance_id).toBeDefined();
             expect(machine.config?.metadata?.["alchemy.checked-instance"]).toBe(
               machine.instance_id,
@@ -2676,14 +2256,7 @@ describe.sequential(
                   file,
                   proxy,
                 );
-                const first = yield* checkedDeployment(
-                  actor,
-                  proxy,
-                  "one",
-                  mode,
-                  1,
-                  [0],
-                );
+                const first = yield* checkedDeployment(actor, proxy, "one", mode, 1, [0]);
                 yield* idleAll(site.appName, first.machineIds, mode);
                 const up = yield* checkedDeployment(
                   actor,
@@ -2695,9 +2268,7 @@ describe.sequential(
                   first.machineIds,
                 );
                 expect(up.machineIds).toHaveLength(3);
-                expect(
-                  up.machineIds.every((id) => !first.machineIds.includes(id)),
-                ).toBe(true);
+                expect(up.machineIds.every((id) => !first.machineIds.includes(id))).toBe(true);
                 yield* idleAll(site.appName, up.machineIds, mode);
                 const down = yield* checkedDeployment(
                   actor,
@@ -2711,11 +2282,7 @@ describe.sequential(
                 expect(down.machineIds).toHaveLength(1);
                 expect(up.machineIds).not.toContain(down.machineId);
                 yield* idleAll(site.appName, down.machineIds, mode);
-                const unchanged = yield* deployWorker(
-                  actor,
-                  "three",
-                  topology(mode, 1),
-                );
+                const unchanged = yield* deployWorker(actor, "three", topology(mode, 1));
                 expect(unchanged.machineIds).toEqual(down.machineIds);
                 expect((yield* census(site.appName))[0]!.state).toBe(
                   mode === "stop" ? "stopped" : "suspended",
@@ -2742,14 +2309,7 @@ describe.sequential(
                   file,
                   proxy,
                 );
-                const first = yield* checkedDeployment(
-                  actor,
-                  proxy,
-                  "one",
-                  mode,
-                  3,
-                  [0],
-                );
+                const first = yield* checkedDeployment(actor, proxy, "one", mode, 3, [0]);
                 yield* idleAll(site.appName, first.machineIds, mode);
                 const raised = yield* checkedDeployment(
                   actor,
@@ -2773,10 +2333,7 @@ describe.sequential(
                 );
                 yield* idleAll(site.appName, lowered.machineIds, mode);
                 const slots = assertSlots(yield* census(site.appName), [0]);
-                yield* machines.startMachine({
-                  app_name: site.appName,
-                  machine_id: slots[2]!.id!,
-                });
+                yield* machines.startMachine({ app_name: site.appName, machine_id: slots[2]!.id! });
                 yield* waitState(site.appName, slots[2]!.id!, "started");
                 const mixedOld = (yield* census(site.appName)).sort(
                   (a, b) =>
@@ -2798,23 +2355,14 @@ describe.sequential(
                   lowered.machineIds,
                 );
                 yield* idleAll(site.appName, retained.machineIds, mode);
-                const retainedSlots = assertSlots(
-                  yield* census(site.appName),
-                  [2],
-                );
+                const retainedSlots = assertSlots(yield* census(site.appName), [2]);
                 yield* machines.startMachine({
                   app_name: site.appName,
                   machine_id: retainedSlots[2]!.id!,
                 });
-                yield* waitState(
-                  site.appName,
-                  retainedSlots[2]!.id!,
-                  "started",
-                );
+                yield* waitState(site.appName, retainedSlots[2]!.id!, "started");
                 expect(
-                  assertSlots(yield* census(site.appName), [2]).map(
-                    (machine) => machine.state,
-                  ),
+                  assertSlots(yield* census(site.appName), [2]).map((machine) => machine.state),
                 ).toEqual([
                   mode === "stop" ? "stopped" : "suspended",
                   mode === "stop" ? "stopped" : "suspended",
@@ -2843,15 +2391,7 @@ describe.sequential(
                   true,
                 );
                 yield* idleAll(site.appName, mixed.machineIds, mode);
-                yield* checkedDeployment(
-                  actor,
-                  proxy,
-                  "one",
-                  mode,
-                  3,
-                  [0],
-                  mixed.machineIds,
-                );
+                yield* checkedDeployment(actor, proxy, "one", mode, 3, [0], mixed.machineIds);
               } finally {
                 yield* stack.destroy();
                 yield* assertAppGone(site.appName);
@@ -2875,14 +2415,7 @@ describe.sequential(
                     file,
                     proxy,
                   );
-                  const first = yield* checkedDeployment(
-                    initial,
-                    proxy,
-                    "one",
-                    mode,
-                    3,
-                    [0],
-                  );
+                  const first = yield* checkedDeployment(initial, proxy, "one", mode, 3, [0]);
                   yield* idleAll(site.appName, first.machineIds, mode);
                   const source = (yield* census(site.appName))[0]!;
                   const metadata = source.config!.metadata!;
@@ -2897,70 +2430,49 @@ describe.sequential(
                         proxy,
                         (event) =>
                           event.method === "POST" &&
-                          event.path ===
-                            `/v1/apps/${site.appName}/machines/${event.machineId}` &&
+                          event.path === `/v1/apps/${site.appName}/machines/${event.machineId}` &&
                           event.metadata?.["alchemy.replica"] === "1" &&
-                          event.metadata["alchemy.fqn"] ===
-                            metadata["alchemy.fqn"] &&
-                          event.metadata["alchemy.generation"] !==
-                            metadata["alchemy.generation"] &&
-                          event.metadata["alchemy.readiness-roles"] ===
-                            "run,run,idle" &&
-                          event.metadata["alchemy.idle-policy-restored"] ===
-                            "true" &&
+                          event.metadata["alchemy.fqn"] === metadata["alchemy.fqn"] &&
+                          event.metadata["alchemy.generation"] !== metadata["alchemy.generation"] &&
+                          event.metadata["alchemy.readiness-roles"] === "run,run,idle" &&
+                          event.metadata["alchemy.idle-policy-restored"] === "true" &&
                           event.phase === "promoting"
                             ? Deferred.succeed(gate, event.machineId!).pipe(
                                 Effect.andThen(Effect.never),
                               )
                             : Effect.void,
                       );
-                      const attempt = yield* deployWorker(
-                        actor,
-                        "two",
-                        topology(mode, 3, 2),
-                      ).pipe(Effect.scoped, Effect.forkScoped);
+                      const attempt = yield* deployWorker(actor, "two", topology(mode, 3, 2)).pipe(
+                        Effect.scoped,
+                        Effect.forkScoped,
+                      );
                       const barrierMachine = yield* Deferred.await(gate).pipe(
                         Effect.timeout("180 seconds"),
                       );
                       const pending = yield* census(site.appName);
                       expect(
-                        pending.filter((machine) =>
-                          first.machineIds.includes(machine.id!),
-                        ),
+                        pending.filter((machine) => first.machineIds.includes(machine.id!)),
                       ).toHaveLength(3);
-                      expect(
-                        proxy.events.some((event) =>
-                          retires(event, first.machineIds),
-                        ),
-                      ).toBe(false);
+                      expect(proxy.events.some((event) => retires(event, first.machineIds))).toBe(
+                        false,
+                      );
                       const candidates = yield* Effect.forEach(
-                        pending.filter(
-                          (machine) => !first.machineIds.includes(machine.id!),
-                        ),
+                        pending.filter((machine) => !first.machineIds.includes(machine.id!)),
                         (machine) =>
-                          machines.getMachine({
-                            app_name: site.appName,
-                            machine_id: machine.id!,
-                          }),
+                          machines.getMachine({ app_name: site.appName, machine_id: machine.id! }),
                       );
                       expect(candidates).toHaveLength(3);
                       expect(
                         candidates.every(
-                          (machine) =>
-                            machine.config?.metadata?.["alchemy.phase"] ===
-                            "promoting",
+                          (machine) => machine.config?.metadata?.["alchemy.phase"] === "promoting",
                         ),
                       ).toBe(true);
                       const pendingSlots = assertSlots(candidates, [0, 1]);
                       expect(
-                        pendingSlots[0]!.config?.metadata?.[
-                          "alchemy.idle-policy-restored"
-                        ],
+                        pendingSlots[0]!.config?.metadata?.["alchemy.idle-policy-restored"],
                       ).toBe("true");
                       expect(
-                        pendingSlots[1]!.config?.metadata?.[
-                          "alchemy.idle-policy-restored"
-                        ],
+                        pendingSlots[1]!.config?.metadata?.["alchemy.idle-policy-restored"],
                       ).toBe("false");
                       expect(
                         proxy.readiness.some(
@@ -2969,8 +2481,7 @@ describe.sequential(
                             event.method === "GET" &&
                             event.machineId === pendingSlots[0]!.id &&
                             event.instanceId === pendingSlots[0]!.instance_id &&
-                            event.metadata?.["alchemy.idle-policy-restored"] ===
-                              "true" &&
+                            event.metadata?.["alchemy.idle-policy-restored"] === "true" &&
                             event.phase === "promoting" &&
                             event.state === "started" &&
                             readinessChecksPassing(event.checks, [
@@ -2980,25 +2491,19 @@ describe.sequential(
                         ),
                       ).toBe(true);
                       expect(barrierMachine).toBe(pendingSlots[1]!.id);
-                      expect(
-                        autostopMode(
-                          pendingSlots[0]!.config?.services?.[0]?.autostop,
-                        ),
-                      ).toBe(mode);
-                      expect(
-                        autostopMode(
-                          pendingSlots[1]!.config?.services?.[0]?.autostop,
-                        ),
-                      ).toBe("off");
+                      expect(autostopMode(pendingSlots[0]!.config?.services?.[0]?.autostop)).toBe(
+                        mode,
+                      );
+                      expect(autostopMode(pendingSlots[1]!.config?.services?.[0]?.autostop)).toBe(
+                        "off",
+                      );
                       expect(
                         proxy.events
                           .slice(attemptBegin)
                           .some(
                             (event) =>
                               event.method === "POST" &&
-                              event.path.endsWith(
-                                `/machines/${barrierMachine}`,
-                              ) &&
+                              event.path.endsWith(`/machines/${barrierMachine}`) &&
                               event.phase === "promoting",
                           ),
                       ).toBe(false);
@@ -3014,20 +2519,14 @@ describe.sequential(
                       expect(read?.machineIds).toEqual(first.machineIds);
                       expect(read?.count).toBe(3);
                       expect(read?.rolloutPending).toBe(true);
-                      const interruption = yield* Fiber.interrupt(attempt).pipe(
-                        Effect.forkScoped,
-                      );
+                      const interruption = yield* Fiber.interrupt(attempt).pipe(Effect.forkScoped);
                       yield* Effect.yieldNow;
                       yield* Effect.sync(() => {
                         proxy.clear();
                         proxy.release();
                       });
-                      yield* Fiber.join(interruption).pipe(
-                        Effect.timeout("180 seconds"),
-                      );
-                      expect(
-                        Exit.hasInterrupts(yield* Fiber.await(attempt)),
-                      ).toBe(true);
+                      yield* Fiber.join(interruption).pipe(Effect.timeout("180 seconds"));
+                      expect(Exit.hasInterrupts(yield* Fiber.await(attempt))).toBe(true);
                       expect(
                         proxy.events
                           .slice(attemptBegin)
@@ -3043,16 +2542,12 @@ describe.sequential(
                             event.stage === "request" &&
                             event.path.endsWith("/metadata") &&
                             event.phase === "active" &&
-                            candidates.some(
-                              (machine) => machine.id === event.machineId,
-                            ),
+                            candidates.some((machine) => machine.id === event.machineId),
                         ),
                       ).toBe(false);
-                      expect(
-                        proxy.events.some((event) =>
-                          retires(event, first.machineIds),
-                        ),
-                      ).toBe(false);
+                      expect(proxy.events.some((event) => retires(event, first.machineIds))).toBe(
+                        false,
+                      );
                       const resumed = yield* readinessActor(
                         stack,
                         `S05 S11 F08 F13 ${mode} interrupted partial idle restoration recovers count 3 to ${recoveredCount}`,
@@ -3073,8 +2568,7 @@ describe.sequential(
                       } else {
                         expect(
                           recovered.machineIds.every(
-                            (id) =>
-                              !pending.some((machine) => machine.id === id),
+                            (id) => !pending.some((machine) => machine.id === id),
                           ),
                         ).toBe(true);
                       }
@@ -3101,9 +2595,7 @@ describe.sequential(
                         "two",
                         topology(mode, recoveredCount, 2),
                       ).pipe(Effect.scoped);
-                      expect(unchanged.machineIds).toEqual(
-                        recovered.machineIds,
-                      );
+                      expect(unchanged.machineIds).toEqual(recovered.machineIds);
                       const committed = yield* observeReplicaSet({
                         appName: site.appName,
                         id: "Worker",
@@ -3113,9 +2605,7 @@ describe.sequential(
                         machineIds: recovered.machineIds,
                       });
                       expect(committed?.rolloutPending).toBe(false);
-                      expect(committed?.machineIds).toEqual(
-                        recovered.machineIds,
-                      );
+                      expect(committed?.machineIds).toEqual(recovered.machineIds);
                     } finally {
                       yield* Effect.sync(() => {
                         proxy.clear();
@@ -3142,17 +2632,11 @@ describe.sequential(
                 const output = yield* stack.deploy(
                   Effect.gen(function* () {
                     const app = yield* Fly.App("Site");
-                    yield* Fly.IpAssignment("Public", {
-                      app,
-                      type: "shared_v4",
-                    });
+                    yield* Fly.IpAssignment("Public", { app, type: "shared_v4" });
                     return yield* Fly.Machine("Worker", {
                       app,
                       image: "nginx:alpine",
-                      deploy: {
-                        strategy: "bluegreen",
-                        healthTimeout: "60 seconds",
-                      },
+                      deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
                       shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
                       services: [
                         {
@@ -3171,27 +2655,17 @@ describe.sequential(
                 yield* idleAll(site.appName, output.machineIds, mode);
                 const client = yield* HttpClient.HttpClient;
                 yield* Effect.gen(function* () {
-                  const response = yield* client.get(
-                    `http://${site.appName}.fly.dev`,
-                  );
+                  const response = yield* client.get(`http://${site.appName}.fly.dev`);
                   const body = yield* response.text;
-                  if (
-                    response.status !== 200 ||
-                    !body.includes("Welcome to nginx")
-                  ) {
+                  if (response.status !== 200 || !body.includes("Welcome to nginx")) {
                     return yield* Effect.fail(
-                      new Error(
-                        `Public Fly route is not ready: ${response.status}`,
-                      ),
+                      new Error(`Public Fly route is not ready: ${response.status}`),
                     );
                   }
                   expect(response.status).toBe(200);
                   expect(body).toContain("Welcome to nginx");
                 }).pipe(
-                  Effect.retry({
-                    schedule: Schedule.spaced("3 seconds"),
-                    times: 20,
-                  }),
+                  Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
                   Effect.timeout("90 seconds"),
                 );
                 yield* waitState(site.appName, output.machineId, "started");
@@ -3199,10 +2673,7 @@ describe.sequential(
                 const idleState = mode === "stop" ? "stopped" : "suspended";
                 // Only native GETs follow the last public request; no stop, suspend, or update substitutes.
                 const idle = yield* machines
-                  .getMachine({
-                    app_name: site.appName,
-                    machine_id: output.machineId,
-                  })
+                  .getMachine({ app_name: site.appName, machine_id: output.machineId })
                   .pipe(
                     Effect.tap((machine) =>
                       Effect.logInfo("Automatic Fly idle observation", {
@@ -3220,19 +2691,15 @@ describe.sequential(
                   );
                 expect(idle.state).toBe(idleState);
                 expect(idle.cordoned).toBe(false);
-                expect(autostopMode(idle.config?.services?.[0]?.autostop)).toBe(
-                  mode,
-                );
-                expect(
-                  idle.config?.metadata?.["alchemy.idle-policy-restored"],
-                ).toBe("true");
+                expect(autostopMode(idle.config?.services?.[0]?.autostop)).toBe(mode);
+                expect(idle.config?.metadata?.["alchemy.idle-policy-restored"]).toBe("true");
                 yield* Effect.logInfo("Automatic return to idle observed", {
                   mode,
                   elapsedMs: (yield* Clock.currentTimeMillis) - started,
                 });
-                expect(
-                  (yield* census(site.appName)).map((machine) => machine.id),
-                ).toEqual(output.machineIds);
+                expect((yield* census(site.appName)).map((machine) => machine.id)).toEqual(
+                  output.machineIds,
+                );
               } finally {
                 yield* stack.destroy();
                 yield* assertAppGone(site.appName);
@@ -3269,10 +2736,7 @@ describe.sequential(
             app_name: initial.appName,
             machine_id: initial.machineIds[0]!,
           });
-          const target = {
-            app_name: initial.appName,
-            machine_id: initial.machineIds[1]!,
-          };
+          const target = { app_name: initial.appName, machine_id: initial.machineIds[1]! };
           const second = yield* machines.getMachine(target);
           yield* machines.updateMachine({
             ...target,
@@ -3295,18 +2759,11 @@ describe.sequential(
             count: 2,
             deploy: { strategy: "bluegreen", healthTimeout: "25 seconds" },
           });
-          expect(
-            repaired.machineIds.every((id) => !initial.machineIds.includes(id)),
-          ).toBe(true);
-          const live = yield* assertCommitted(
-            initial.appName,
-            repaired.machineIds,
-          );
+          expect(repaired.machineIds.every((id) => !initial.machineIds.includes(id))).toBe(true);
+          const live = yield* assertCommitted(initial.appName, repaired.machineIds);
           expect(
             live.every((machine) =>
-              machine.config?.metadata?.["alchemy.image"]?.endsWith(
-                machine.image_ref!.digest!,
-              ),
+              machine.config?.metadata?.["alchemy.image"]?.endsWith(machine.image_ref!.digest!),
             ),
           ).toBe(true);
           yield* stack.destroy();
@@ -3330,9 +2787,7 @@ describe.sequential(
           );
           yield* publisher.destroy();
           yield* Effect.gen(function* () {
-            const minted = yield* machines.createAppDeployToken({
-              app_name: initial.appName,
-            });
+            const minted = yield* machines.createAppDeployToken({ app_name: initial.appName });
             expect(minted.token).toBeDefined();
             const publish = (tag: string) =>
               publisher.deploy(
@@ -3352,14 +2807,11 @@ describe.sequential(
             // Upload both layer sets before holding a provider call with its own bounded deadline.
             yield* publish("1.27-alpine");
             const original = yield* publish("1.26-alpine");
-            expect(original.imageRef).toBe(
-              `registry.fly.io/${initial.appName}:acceptance-mutable`,
-            );
+            expect(original.imageRef).toBe(`registry.fly.io/${initial.appName}:acceptance-mutable`);
             const proxy = yield* transportProxy();
             yield* Effect.sync(() =>
               proxy.arm({
-                match: (event) =>
-                  event.method === "POST" && event.path.endsWith("/machines"),
+                match: (event) => event.method === "POST" && event.path.endsWith("/machines"),
                 action: "hold-response",
                 remaining: 1,
               }),
@@ -3403,9 +2855,7 @@ describe.sequential(
                 expect(probe.image_ref?.digest).toMatch(/^sha256:/);
                 expect(probe.image_ref?.digest).not.toBe(held.digest);
                 yield* Effect.sync(proxy.release);
-                const next = yield* Fiber.join(rollout).pipe(
-                  Effect.timeout("180 seconds"),
-                );
+                const next = yield* Fiber.join(rollout).pipe(Effect.timeout("180 seconds"));
                 const creates = proxy.events.filter(
                   (event) =>
                     event.stage === "completed" &&
@@ -3414,13 +2864,9 @@ describe.sequential(
                     event.status! < 300,
                 );
                 expect(creates).toHaveLength(3);
+                expect(creates.every((event) => event.digest === held.digest)).toBe(true);
                 expect(
-                  creates.every((event) => event.digest === held.digest),
-                ).toBe(true);
-                expect(
-                  creates
-                    .slice(1)
-                    .every((event) => event.image?.endsWith(`@${held.digest}`)),
+                  creates.slice(1).every((event) => event.image?.endsWith(`@${held.digest}`)),
                 ).toBe(true);
                 for (const id of next.machineIds) {
                   const machine = yield* machines.getMachine({
@@ -3429,9 +2875,7 @@ describe.sequential(
                   });
                   expect(machine.image_ref?.digest).toBe(held.digest);
                   expect(
-                    machine.config?.metadata?.["alchemy.image"]?.endsWith(
-                      `@${held.digest}`,
-                    ),
+                    machine.config?.metadata?.["alchemy.image"]?.endsWith(`@${held.digest}`),
                   ).toBe(true);
                 }
                 expect(next.machineIds).toContain(held.machineId);
@@ -3459,12 +2903,8 @@ describe.sequential(
               ),
               Effect.scoped,
             );
-            const live = yield* machines.listMachines({
-              app_name: initial.appName,
-            });
-            const active = live.filter(
-              (machine) => machine.state !== "destroyed",
-            );
+            const live = yield* machines.listMachines({ app_name: initial.appName });
+            const active = live.filter((machine) => machine.state !== "destroyed");
             expect(active).toHaveLength(3);
             yield* assertCommitted(
               initial.appName,
@@ -3474,10 +2914,7 @@ describe.sequential(
           yield* stack.destroy();
           yield* assertAppGone(initial.appName);
         }).pipe(Effect.scoped),
-      {
-        tags: ["provider:docker", "provider:docker:remoteimage"],
-        timeout: 600_000,
-      },
+      { tags: ["provider:docker", "provider:docker:remoteimage"], timeout: 600_000 },
     );
   },
 );
@@ -3514,9 +2951,7 @@ describe.sequential(
                     : event.method === "DELETE" &&
                       /\/machines\/[^/]+$/.test(event.path) &&
                       event.machineId === initial.machineId;
-              yield* Effect.sync(() =>
-                proxy.arm({ match, action: "hold-response", remaining: 1 }),
-              );
+              yield* Effect.sync(() => proxy.arm({ match, action: "hold-response", remaining: 1 }));
               yield* Effect.gen(function* () {
                 const actor = yield* engineActor(
                   stack,
@@ -3536,30 +2971,20 @@ describe.sequential(
                     match(event),
                 );
                 expect(barrier.machineId).toBeDefined();
-                const interruption = yield* Fiber.interrupt(interrupted).pipe(
-                  Effect.forkScoped,
-                );
+                const interruption = yield* Fiber.interrupt(interrupted).pipe(Effect.forkScoped);
                 yield* Effect.yieldNow;
                 // Let accepted uninterruptible work and finalizers settle; this is not process-kill evidence.
                 yield* Effect.sync(() => {
                   proxy.clear();
                   proxy.release();
                 });
-                yield* Fiber.join(interruption).pipe(
-                  Effect.timeout("90 seconds"),
-                );
+                yield* Fiber.join(interruption).pipe(Effect.timeout("90 seconds"));
                 const exit = yield* Fiber.await(interrupted);
                 expect(Exit.hasInterrupts(exit)).toBe(true);
                 const surviving = yield* census(initial.appName);
-                const green = surviving.filter(
-                  (machine) => machine.id !== initial.machineId,
-                );
+                const green = surviving.filter((machine) => machine.id !== initial.machineId);
                 if (phase === "create") {
-                  expect(
-                    surviving.some(
-                      (machine) => machine.id === initial.machineId,
-                    ),
-                  ).toBe(true);
+                  expect(surviving.some((machine) => machine.id === initial.machineId)).toBe(true);
                   expect(green.length).toBeLessThanOrEqual(1);
                 } else {
                   expect(green).toHaveLength(1);
@@ -3571,13 +2996,9 @@ describe.sequential(
                   file,
                 );
                 expect(resumed.state).not.toBe(actor.state);
-                const recovered = yield* deployWorker(resumed, "two").pipe(
-                  Effect.scoped,
-                );
+                const recovered = yield* deployWorker(resumed, "two").pipe(Effect.scoped);
                 if (green.length)
-                  expect(recovered.machineIds).toEqual(
-                    green.map((machine) => machine.id),
-                  );
+                  expect(recovered.machineIds).toEqual(green.map((machine) => machine.id));
                 yield* assertCommitted(initial.appName, recovered.machineIds);
               }).pipe(
                 Effect.ensuring(
@@ -3610,10 +3031,7 @@ describe.sequential(
     const sanitizeFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
         Effect.mapError(
-          (error) =>
-            new Error(
-              error instanceof Error ? error.name : "Fly SDK probe failed",
-            ),
+          (error) => new Error(error instanceof Error ? error.name : "Fly SDK probe failed"),
         ),
       );
 
@@ -3623,10 +3041,7 @@ describe.sequential(
         let teardownReached = false;
         const exit = yield* Effect.gen(function* () {
           yield* scopedLeaseCleanup(
-            Effect.fail({
-              _tag: "ReleaseProbeFailure",
-              privateValue: "cleanup-secret",
-            }),
+            Effect.fail({ _tag: "ReleaseProbeFailure", privateValue: "cleanup-secret" }),
           ).pipe(Effect.scoped);
           teardownReached = true;
         }).pipe(Effect.exit);
@@ -3634,9 +3049,7 @@ describe.sequential(
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
           expect(Cause.hasDies(exit.cause)).toBe(true);
-          expect(Cause.pretty(exit.cause)).toContain(
-            "Lease cleanup failed (ReleaseProbeFailure)",
-          );
+          expect(Cause.pretty(exit.cause)).toContain("Lease cleanup failed (ReleaseProbeFailure)");
           expect(Cause.pretty(exit.cause)).not.toContain("cleanup-secret");
         }
       }),
@@ -3646,20 +3059,14 @@ describe.sequential(
       "pure lease cleanup retains the primary failure alongside cleanup failure",
       Effect.gen(function* () {
         const exit = yield* Effect.gen(function* () {
-          yield* scopedLeaseCleanup(
-            Effect.fail({ _tag: "ReleaseProbeFailure" }),
-          );
+          yield* scopedLeaseCleanup(Effect.fail({ _tag: "ReleaseProbeFailure" }));
           return yield* Effect.fail("primary failure");
         }).pipe(Effect.scoped, Effect.exit);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
-          expect(Cause.findError(exit.cause)).toEqual(
-            Result.succeed("primary failure"),
-          );
+          expect(Cause.findError(exit.cause)).toEqual(Result.succeed("primary failure"));
           expect(Cause.hasDies(exit.cause)).toBe(true);
-          expect(Cause.pretty(exit.cause)).toContain(
-            "Lease cleanup failed (ReleaseProbeFailure)",
-          );
+          expect(Cause.pretty(exit.cause)).toContain("Lease cleanup failed (ReleaseProbeFailure)");
         }
       }),
     );
@@ -3667,14 +3074,13 @@ describe.sequential(
     test(
       "pure lease cleanup timeout remains a test failure",
       Effect.gen(function* () {
-        const exit = yield* scopedLeaseCleanup(
-          Effect.never.pipe(Effect.timeout("1 millis")),
-        ).pipe(Effect.scoped, Effect.exit);
+        const exit = yield* scopedLeaseCleanup(Effect.never.pipe(Effect.timeout("1 millis"))).pipe(
+          Effect.scoped,
+          Effect.exit,
+        );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
-          expect(Cause.pretty(exit.cause)).toContain(
-            "Lease cleanup failed (TimeoutError)",
-          );
+          expect(Cause.pretty(exit.cause)).toContain("Lease cleanup failed (TimeoutError)");
         }
       }),
     );
@@ -3684,25 +3090,20 @@ describe.sequential(
       Effect.gen(function* () {
         const calls = yield* Ref.make(0);
         yield* Effect.gen(function* () {
-          const cleanup = yield* scopedLeaseCleanup(
-            Ref.update(calls, (n) => n + 1),
-          );
+          const cleanup = yield* scopedLeaseCleanup(Ref.update(calls, (n) => n + 1));
           yield* cleanup.release;
           yield* cleanup.release;
         }).pipe(Effect.scoped);
         expect(yield* Ref.get(calls)).toBe(1);
         yield* Effect.gen(function* () {
-          const cleanup = yield* scopedLeaseCleanup(
-            Ref.update(calls, (n) => n + 1),
-          );
+          const cleanup = yield* scopedLeaseCleanup(Ref.update(calls, (n) => n + 1));
           yield* cleanup.complete;
         }).pipe(Effect.scoped);
         expect(yield* Ref.get(calls)).toBe(1);
       }),
     );
 
-    const differentNonce = (nonce: string) =>
-      `${nonce[0] === "a" ? "b" : "a"}${nonce.slice(1)}`;
+    const differentNonce = (nonce: string) => `${nonce[0] === "a" ? "b" : "a"}${nonce.slice(1)}`;
 
     test(
       "P4 pure HTTP 408 status mapping agrees with the Fly timeout model",
@@ -3765,16 +3166,12 @@ describe.sequential(
 
     const lease = (target: Target, ttl = 120) =>
       Effect.gen(function* () {
-        yield* Effect.logInfo("P1 acquiring native lease", {
-          machineId: target.machine_id,
-          ttl,
-        });
+        yield* Effect.logInfo("P1 acquiring native lease", { machineId: target.machine_id, ttl });
         const acquired = yield* machines
           .createMachineLease({ ...target, ttl })
           .pipe(Effect.timeout("15 seconds"));
         const nonce = acquired.data?.nonce;
-        if (!nonce)
-          return yield* Effect.fail(new Error("Lease response has no nonce"));
+        if (!nonce) return yield* Effect.fail(new Error("Lease response has no nonce"));
         const cleanup = yield* scopedLeaseCleanup(
           machines
             .machinesReleaseLease({ ...target, lease_nonce: nonce })
@@ -3784,9 +3181,7 @@ describe.sequential(
           acquired,
           nonce,
           release: cleanup.release,
-          confirmDeleted: expectGone(target).pipe(
-            Effect.andThen(cleanup.complete),
-          ),
+          confirmDeleted: expectGone(target).pipe(Effect.andThen(cleanup.complete)),
           confirmExpired: Effect.gen(function* () {
             const now = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
             expect(acquired.data?.expires_at).toBeLessThanOrEqual(now);
@@ -3823,9 +3218,7 @@ describe.sequential(
           until: (machine) => machine.state === state,
           times: 8,
         }),
-        Effect.tap((machine) =>
-          Effect.sync(() => expect(machine.state).toBe(state)),
-        ),
+        Effect.tap((machine) => Effect.sync(() => expect(machine.state).toBe(state))),
       );
 
     const expectGone = (target: Target) =>
@@ -3833,11 +3226,7 @@ describe.sequential(
         Retry.none,
         Effect.map((machine) => machine.state === "destroyed"),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: Boolean,
-          times: 8,
-        }),
+        Effect.repeat({ schedule: Schedule.spaced("1 second"), until: Boolean, times: 8 }),
         Effect.tap((gone) => Effect.sync(() => expect(gone).toBe(true))),
       );
 
@@ -3858,23 +3247,16 @@ describe.sequential(
               });
             }),
           );
-          const target = {
-            app_name: created.appName,
-            machine_id: created.machineId,
-          };
+          const target = { app_name: created.appName, machine_id: created.machineId };
           const client = yield* observeTransport;
           yield* Effect.gen(function* () {
-            const before = yield* Effect.sync(() =>
-              Math.floor(Date.now() / 1000),
-            );
+            const before = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
             const held = yield* lease(target);
             const { acquired, nonce } = held;
             expect(acquired.status).toBe("success");
             expect(typeof acquired.data?.owner).toBe("string");
             expect(typeof acquired.data?.version).toBe("string");
-            expect(acquired.data?.expires_at).toBeGreaterThanOrEqual(
-              before + 115,
-            );
+            expect(acquired.data?.expires_at).toBeGreaterThanOrEqual(before + 115);
             expect(acquired.data?.expires_at).toBeLessThanOrEqual(before + 130);
             yield* Effect.logInfo("P1 lease envelope verified", {
               keys: Object.keys(acquired),
@@ -3883,9 +3265,7 @@ describe.sequential(
             });
             const observed = yield* machines.getMachineLease(target);
             expect(observed.data?.expires_at).toBe(acquired.data?.expires_at);
-            yield* expectFailure(
-              machines.createMachineLease({ ...target, ttl: 120 }),
-            );
+            yield* expectFailure(machines.createMachineLease({ ...target, ttl: 120 }));
             yield* expectFailure(
               machines.createMachineLease({
                 ...target,
@@ -3894,10 +3274,7 @@ describe.sequential(
               }),
             );
             yield* expectFailure(
-              machines.machinesReleaseLease({
-                ...target,
-                lease_nonce: differentNonce(nonce),
-              }),
+              machines.machinesReleaseLease({ ...target, lease_nonce: differentNonce(nonce) }),
               "Forbidden",
             );
             const refreshed = yield* machines.createMachineLease({
@@ -3906,17 +3283,11 @@ describe.sequential(
               lease_nonce: nonce,
             });
             expect(refreshed.data?.nonce === nonce).toBe(true);
-            expect(refreshed.data?.expires_at).toBeGreaterThanOrEqual(
-              acquired.data!.expires_at!,
-            );
+            expect(refreshed.data?.expires_at).toBeGreaterThanOrEqual(acquired.data!.expires_at!);
             yield* held.release;
             const next = yield* lease(target);
             expect(next.nonce !== nonce).toBe(true);
-          }).pipe(
-            Effect.scoped,
-            Retry.none,
-            Effect.provideService(HttpClient.HttpClient, client),
-          );
+          }).pipe(Effect.scoped, Retry.none, Effect.provideService(HttpClient.HttpClient, client));
           yield* stack.destroy();
           yield* expectGone(target);
         }).pipe(sanitizeFailure),
@@ -3942,24 +3313,13 @@ describe.sequential(
                     protocol: "tcp",
                     internalPort: 80,
                     ports: [{ port: 80, handlers: ["http"] }],
-                    checks: [
-                      {
-                        type: "http",
-                        port: 80,
-                        path: "/",
-                        interval: "2s",
-                        timeout: "1s",
-                      },
-                    ],
+                    checks: [{ type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" }],
                   },
                 ],
               });
             }),
           );
-          const target = {
-            app_name: created.appName,
-            machine_id: created.machineId,
-          };
+          const target = { app_name: created.appName, machine_id: created.machineId };
           const client = yield* observeTransport;
           yield* Effect.gen(function* () {
             const held = yield* lease(target);
@@ -3969,14 +3329,10 @@ describe.sequential(
                 const held = yield* machines
                   .getMachineLease(target)
                   .pipe(Effect.timeout("15 seconds"));
-                const now = yield* Effect.sync(() =>
-                  Math.floor(Date.now() / 1000),
-                );
+                const now = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
                 expect(held.data?.nonce === nonce).toBe(true);
                 expect(held.data?.owner === acquired.data?.owner).toBe(true);
-                expect(held.data?.expires_at).toBeGreaterThan(
-                  now + minimumRemainingSeconds,
-                );
+                expect(held.data?.expires_at).toBeGreaterThan(now + minimumRemainingSeconds);
               });
             const refreshAuthority = Effect.gen(function* () {
               yield* verifyAuthority(15);
@@ -3999,52 +3355,28 @@ describe.sequential(
             for (const lease_nonce of [undefined, differentNonce(nonce)]) {
               const request = { ...target, lease_nonce };
               const attempts = [
-                [
-                  "update",
-                  machines.updateMachine({
-                    ...request,
-                    config: initial.config,
-                  }),
-                ],
+                ["update", machines.updateMachine({ ...request, config: initial.config })],
                 ["start", machines.startMachine(request)],
                 ["cordon", machines.cordonMachine(request)],
                 ["uncordon", machines.uncordonMachine(request)],
-                [
-                  "stop",
-                  machines.stopMachine({
-                    ...request,
-                    signal: "SIGTERM",
-                    timeout: "5s",
-                  }),
-                ],
+                ["stop", machines.stopMachine({ ...request, signal: "SIGTERM", timeout: "5s" })],
                 ["suspend", machines.suspendMachine(request)],
                 [
                   "restart",
-                  machines.restartMachine({
-                    ...request,
-                    signal: "SIGTERM",
-                    timeout: "5s",
-                  }),
+                  machines.restartMachine({ ...request, signal: "SIGTERM", timeout: "5s" }),
                 ],
                 ["delete", machines.deleteMachine({ ...request, force: true })],
               ] as const;
               for (const [operation, attempt] of attempts) {
                 yield* refreshAuthority;
-                const result = yield* attempt.pipe(
-                  Effect.timeout("60 seconds"),
-                  Effect.result,
-                );
+                const result = yield* attempt.pipe(Effect.timeout("60 seconds"), Effect.result);
                 yield* verifyAuthority();
                 yield* Effect.logInfo("P1 mutation enforcement", {
                   operation,
                   nonce: lease_nonce ? "wrong" : "absent",
-                  outcome: Result.isFailure(result)
-                    ? result.failure._tag
-                    : "accepted",
+                  outcome: Result.isFailure(result) ? result.failure._tag : "accepted",
                 });
-                outcomes.push(
-                  Result.isFailure(result) ? result.failure._tag : "accepted",
-                );
+                outcomes.push(Result.isFailure(result) ? result.failure._tag : "accepted");
                 expect(Result.isFailure(result)).toBe(true);
               }
             }
@@ -4059,18 +3391,13 @@ describe.sequential(
                   value: "metadata-is-not-fenced",
                 });
                 const observed = yield* machines.getMachine(target);
-                expect(observed.config?.metadata?.["lease-probe"]).toBe(
-                  "metadata-is-not-fenced",
-                );
+                expect(observed.config?.metadata?.["lease-probe"]).toBe("metadata-is-not-fenced");
                 return observed;
               }),
             );
-            yield* Effect.logInfo(
-              "P2 metadata mutation bypasses target lease",
-              {
-                checksAfterMutation: metadata.checks?.length ?? 0,
-              },
-            );
+            yield* Effect.logInfo("P2 metadata mutation bypasses target lease", {
+              checksAfterMutation: metadata.checks?.length ?? 0,
+            });
             const request = { ...target, lease_nonce: nonce };
             yield* withAuthority(
               Effect.gen(function* () {
@@ -4082,34 +3409,26 @@ describe.sequential(
                   },
                 });
                 yield* waitState(target, "started");
-                expect(
-                  (yield* machines.getMachine(target)).config?.env?.LEASE_PROBE,
-                ).toBe("updated");
+                expect((yield* machines.getMachine(target)).config?.env?.LEASE_PROBE).toBe(
+                  "updated",
+                );
               }),
             );
             yield* withAuthority(
               Effect.gen(function* () {
                 yield* machines.cordonMachine(request);
-                expect((yield* machines.getMachine(target)).cordoned).toBe(
-                  true,
-                );
+                expect((yield* machines.getMachine(target)).cordoned).toBe(true);
               }),
             );
             yield* withAuthority(
               Effect.gen(function* () {
                 yield* machines.uncordonMachine(request);
-                expect((yield* machines.getMachine(target)).cordoned).toBe(
-                  false,
-                );
+                expect((yield* machines.getMachine(target)).cordoned).toBe(false);
               }),
             );
             yield* withAuthority(
               Effect.gen(function* () {
-                yield* machines.stopMachine({
-                  ...request,
-                  signal: "SIGTERM",
-                  timeout: "5s",
-                });
+                yield* machines.stopMachine({ ...request, signal: "SIGTERM", timeout: "5s" });
                 yield* waitState(target, "stopped");
               }),
             );
@@ -4121,11 +3440,7 @@ describe.sequential(
             );
             yield* withAuthority(
               Effect.gen(function* () {
-                yield* machines.restartMachine({
-                  ...request,
-                  signal: "SIGTERM",
-                  timeout: "5s",
-                });
+                yield* machines.restartMachine({ ...request, signal: "SIGTERM", timeout: "5s" });
                 yield* waitState(target, "started");
               }),
             );
@@ -4137,32 +3452,19 @@ describe.sequential(
             );
             yield* withAuthority(
               Effect.gen(function* () {
-                yield* machines.stopMachine({
-                  ...request,
-                  signal: "SIGTERM",
-                  timeout: "5s",
-                });
+                yield* machines.stopMachine({ ...request, signal: "SIGTERM", timeout: "5s" });
                 yield* waitState(target, "stopped");
               }),
             );
             yield* refreshAuthority;
-            yield* machines
-              .deleteMachine(request)
-              .pipe(Effect.timeout("60 seconds"));
+            yield* machines.deleteMachine(request).pipe(Effect.timeout("60 seconds"));
             yield* held.confirmDeleted.pipe(Effect.timeout("30 seconds"));
             expect(outcomes).toEqual(Array(16).fill("Conflict"));
-          }).pipe(
-            Effect.scoped,
-            Retry.none,
-            Effect.provideService(HttpClient.HttpClient, client),
-          );
+          }).pipe(Effect.scoped, Retry.none, Effect.provideService(HttpClient.HttpClient, client));
           yield* stack.destroy();
           yield* expectGone(target);
         }).pipe(sanitizeFailure),
-      {
-        tags: ["provider:fly:app", "provider:fly:machine"],
-        timeout: 30 * 60_000,
-      },
+      { tags: ["provider:fly:app", "provider:fly:machine"], timeout: 30 * 60_000 },
     );
 
     test.provider(
@@ -4183,14 +3485,8 @@ describe.sequential(
               });
             }),
           );
-          const first = {
-            app_name: created.appName,
-            machine_id: created.machineIds[0]!,
-          };
-          const second = {
-            app_name: created.appName,
-            machine_id: created.machineIds[1]!,
-          };
+          const first = { app_name: created.appName, machine_id: created.machineIds[0]! };
+          const second = { app_name: created.appName, machine_id: created.machineIds[1]! };
           yield* Effect.gen(function* () {
             yield* lease(first);
             const partial = yield* Effect.gen(function* () {
@@ -4200,13 +3496,9 @@ describe.sequential(
             expect(Result.isFailure(partial)).toBe(true);
             if (Result.isFailure(partial))
               expect(partial.failure).toMatchObject({ _tag: "Conflict" });
-            const before = yield* Effect.sync(() =>
-              Math.floor(Date.now() / 1000),
-            );
+            const before = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
             const expired = yield* lease(second, 2);
-            expect(expired.acquired.data?.expires_at).toBeLessThanOrEqual(
-              before + 5,
-            );
+            expect(expired.acquired.data?.expires_at).toBeLessThanOrEqual(before + 5);
             yield* Effect.sleep("3 seconds");
             const successor = yield* lease(second);
             expect(successor.nonce !== expired.nonce).toBe(true);
@@ -4221,23 +3513,14 @@ describe.sequential(
               }),
             );
             yield* expectFailure(
-              machines.createMachineLease({
-                ...second,
-                lease_nonce: expired.nonce,
-                ttl: 120,
-              }),
+              machines.createMachineLease({ ...second, lease_nonce: expired.nonce, ttl: 120 }),
             );
             yield* expectFailure(
-              machines.machinesReleaseLease({
-                ...second,
-                lease_nonce: expired.nonce,
-              }),
+              machines.machinesReleaseLease({ ...second, lease_nonce: expired.nonce }),
               "Forbidden",
             );
             const stillHeld = yield* machines.getMachineLease(second);
-            expect(stillHeld.data?.expires_at).toBe(
-              successor.acquired.data?.expires_at,
-            );
+            expect(stillHeld.data?.expires_at).toBe(successor.acquired.data?.expires_at);
           }).pipe(Effect.scoped, Retry.none);
           yield* stack.destroy();
           yield* expectGone(first);
@@ -4263,10 +3546,7 @@ describe.sequential(
               });
             }),
           );
-          const target = {
-            app_name: created.appName,
-            machine_id: created.machineId,
-          };
+          const target = { app_name: created.appName, machine_id: created.machineId };
           const observed = yield* machines.getMachine(target);
           yield* expectFailure(
             machines
@@ -4279,20 +3559,13 @@ describe.sequential(
               })
               .pipe(Retry.none),
           );
-          const matches = (yield* machines.listMachines({
-            app_name: created.appName,
-          })).filter(
-            (machine) =>
-              machine.name === created.name && machine.state !== "destroyed",
+          const matches = (yield* machines.listMachines({ app_name: created.appName })).filter(
+            (machine) => machine.name === created.name && machine.state !== "destroyed",
           );
           expect(matches).toHaveLength(1);
           expect(matches[0]?.id).toBe(created.machineId);
-          expect(matches[0]?.config?.metadata).toEqual(
-            observed.config?.metadata,
-          );
-          expect(matches[0]?.image_ref?.digest).toBe(
-            observed.image_ref?.digest,
-          );
+          expect(matches[0]?.config?.metadata).toEqual(observed.config?.metadata);
+          expect(matches[0]?.image_ref?.digest).toBe(observed.image_ref?.digest);
           yield* stack.destroy();
           yield* expectGone(target);
         }).pipe(sanitizeFailure),
@@ -4329,9 +3602,7 @@ describe.sequential(
             yield* Effect.logInfo("P4 transport fault outcome", {
               forwarded: yield* proxy.forwarded,
               completedStatus: yield* proxy.completedStatus,
-              outcome: Result.isFailure(result)
-                ? result.failure._tag
-                : "accepted",
+              outcome: Result.isFailure(result) ? result.failure._tag : "accepted",
               rejection:
                 Result.isFailure(result) && result.failure._tag === "BadRequest"
                   ? result.failure.message
@@ -4350,42 +3621,23 @@ describe.sequential(
               forwarded: yield* proxy.forwarded,
             });
           }).pipe(Effect.scoped);
-          const matches = (yield* machines.listMachines({
-            app_name: app.appName,
-          })).filter(
-            (machine) =>
-              machine.name === request.name && machine.state !== "destroyed",
+          const matches = (yield* machines.listMachines({ app_name: app.appName })).filter(
+            (machine) => machine.name === request.name && machine.state !== "destroyed",
           );
           expect(matches).toHaveLength(1);
-          expect(matches[0]?.config?.metadata?.["sdk-probe-owner"]).toBe(
-            "completed-response-loss",
+          expect(matches[0]?.config?.metadata?.["sdk-probe-owner"]).toBe("completed-response-loss");
+          yield* expectFailure(machines.createMachine(request).pipe(Retry.none));
+          const after = (yield* machines.listMachines({ app_name: app.appName })).filter(
+            (machine) => machine.name === request.name && machine.state !== "destroyed",
           );
-          yield* expectFailure(
-            machines.createMachine(request).pipe(Retry.none),
-          );
-          const after = (yield* machines.listMachines({
-            app_name: app.appName,
-          })).filter(
-            (machine) =>
-              machine.name === request.name && machine.state !== "destroyed",
-          );
-          expect(after.map((machine) => machine.id)).toEqual(
-            matches.map((machine) => machine.id),
-          );
+          expect(after.map((machine) => machine.id)).toEqual(matches.map((machine) => machine.id));
           yield* stack.destroy();
-          yield* expectGone({
-            app_name: app.appName,
-            machine_id: matches[0]!.id!,
-          });
+          yield* expectGone({ app_name: app.appName, machine_id: matches[0]!.id! });
         }).pipe(sanitizeFailure),
       { tags: ["provider:fly:app", "provider:fly:machine"], timeout: 120_000 },
     );
 
-    const p3CheckNames = [
-      "servicecheck-00-http-80",
-      "servicecheck-00-tcp-80",
-      "ready",
-    ];
+    const p3CheckNames = ["servicecheck-00-http-80", "servicecheck-00-tcp-80", "ready"];
 
     interface RestoredReadiness {
       previousInstance: string;
@@ -4399,8 +3651,7 @@ describe.sequential(
     ) =>
       p3CheckNames.every((name) => {
         const matching = reports?.filter((check) => check.name === name) ?? [];
-        if (matching.length !== 1 || matching[0]!.status !== "passing")
-          return false;
+        if (matching.length !== 1 || matching[0]!.status !== "passing") return false;
         const observedAt = Date.parse(matching[0]!.updated_at ?? "");
         if (!Number.isFinite(observedAt)) return false;
         if (!freshness) return true;
@@ -4437,16 +3688,11 @@ describe.sequential(
           undefined,
         ]) {
           expect(
-            readyCheckReports(
-              [{ ...reports[0]!, updated_at }, ...reports.slice(1)],
-              freshness,
-            ),
+            readyCheckReports([{ ...reports[0]!, updated_at }, ...reports.slice(1)], freshness),
           ).toBe(false);
         }
         expect(readyCheckReports(reports.slice(1), freshness)).toBe(false);
-        expect(readyCheckReports([...reports, reports[0]!], freshness)).toBe(
-          false,
-        );
+        expect(readyCheckReports([...reports, reports[0]!], freshness)).toBe(false);
       }),
       { tags: ["provider:fly:machine"] },
     );
@@ -4454,9 +3700,7 @@ describe.sequential(
     test(
       "P3 pure autostop schema accepts strings and legacy booleans",
       Effect.sync(() => {
-        const decode = Schema.decodeUnknownSync(
-          machines.FlyMachineServiceAutostop,
-        );
+        const decode = Schema.decodeUnknownSync(machines.FlyMachineServiceAutostop);
         for (const value of ["off", "stop", "suspend", false, true]) {
           expect(decode(value)).toBe(value);
         }
@@ -4484,13 +3728,7 @@ describe.sequential(
                   guest: { cpus: 1, memoryMb: 256 },
                   skipLaunch: true,
                   checks: {
-                    ready: {
-                      type: "http",
-                      port: 80,
-                      path: "/",
-                      interval: "2s",
-                      timeout: "1s",
-                    },
+                    ready: { type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" },
                   },
                   services: [
                     {
@@ -4501,13 +3739,7 @@ describe.sequential(
                       minMachinesRunning: 1,
                       ports: [{ port: 443, handlers: ["tls", "http"] }],
                       checks: [
-                        {
-                          type: "http",
-                          port: 80,
-                          path: "/",
-                          interval: "2s",
-                          timeout: "1s",
-                        },
+                        { type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" },
                       ],
                     },
                     {
@@ -4518,40 +3750,23 @@ describe.sequential(
                       minMachinesRunning: 0,
                       ports: [{ port: 8080, handlers: ["http"] }],
                       // Identical HTTP checks reported only one service-check identity.
-                      checks: [
-                        {
-                          type: "tcp",
-                          port: 80,
-                          interval: "2s",
-                          timeout: "1s",
-                        },
-                      ],
+                      checks: [{ type: "tcp", port: 80, interval: "2s", timeout: "1s" }],
                     },
                   ],
                 });
               }),
             );
-            const target = {
-              app_name: created.appName,
-              machine_id: created.machineIds[0]!,
-            };
-            const idle = {
-              app_name: created.appName,
-              machine_id: created.machineIds[1]!,
-            };
+            const target = { app_name: created.appName, machine_id: created.machineIds[0]! };
+            const idle = { app_name: created.appName, machine_id: created.machineIds[1]! };
             const client = yield* observeTransport;
-            const healthy = (
-              mode: "off" | "stop" | "suspend",
-              freshness?: RestoredReadiness,
-            ) => {
+            const healthy = (mode: "off" | "stop" | "suspend", freshness?: RestoredReadiness) => {
               const isReady = (machine: machines.Machine) => {
                 const services = machine.config?.services;
                 return (
                   machine.state === "started" &&
                   machine.cordoned === true &&
                   !!machine.instance_id &&
-                  (!freshness ||
-                    machine.instance_id !== freshness.previousInstance) &&
+                  (!freshness || machine.instance_id !== freshness.previousInstance) &&
                   readyCheckReports(machine.checks, freshness) &&
                   services?.length === 2 &&
                   services.every(
@@ -4564,11 +3779,7 @@ describe.sequential(
               };
               return machines.getMachine(target).pipe(
                 Retry.none,
-                Effect.repeat({
-                  schedule: Schedule.spaced("3 seconds"),
-                  times: 8,
-                  until: isReady,
-                }),
+                Effect.repeat({ schedule: Schedule.spaced("3 seconds"), times: 8, until: isReady }),
                 Effect.tap((machine) =>
                   Effect.logInfo("P3 observed readiness reports", {
                     state: machine.state,
@@ -4584,9 +3795,7 @@ describe.sequential(
                     ),
                   }),
                 ),
-                Effect.tap((machine) =>
-                  Effect.sync(() => expect(isReady(machine)).toBe(true)),
-                ),
+                Effect.tap((machine) => Effect.sync(() => expect(isReady(machine)).toBe(true))),
               );
             };
             yield* Effect.gen(function* () {
@@ -4600,18 +3809,12 @@ describe.sequential(
                 ...request,
                 config: {
                   ...config,
-                  services: config.services?.map((service) => ({
-                    ...service,
-                    autostop: "off",
-                  })),
+                  services: config.services?.map((service) => ({ ...service, autostop: "off" })),
                 },
                 skip_launch: true,
                 skip_service_registration: true,
               });
-              yield* machines.cordonMachine({
-                ...idle,
-                lease_nonce: other.nonce,
-              });
+              yield* machines.cordonMachine({ ...idle, lease_nonce: other.nonce });
               yield* machines.cordonMachine(request);
               yield* machines.startMachine(request).pipe(
                 Effect.retry({
@@ -4624,13 +3827,9 @@ describe.sequential(
               yield* waitState(target, "started");
               const prepared = yield* healthy("off");
               expect(prepared.cordoned).toBe(true);
-              expect(["created", "stopped"]).toContain(
-                (yield* machines.getMachine(idle)).state,
-              );
+              expect(["created", "stopped"]).toContain((yield* machines.getMachine(idle)).state);
               if (!prepared.instance_id) {
-                return yield* Effect.fail(
-                  new Error("Prepared Machine has no instance ID"),
-                );
+                return yield* Effect.fail(new Error("Prepared Machine has no instance ID"));
               }
               const previousChecks = yield* Effect.sync(
                 () =>
@@ -4638,8 +3837,7 @@ describe.sequential(
                     p3CheckNames.map((name) => [
                       name,
                       Date.parse(
-                        prepared.checks?.find((check) => check.name === name)
-                          ?.updated_at ?? "",
+                        prepared.checks?.find((check) => check.name === name)?.updated_at ?? "",
                       ),
                     ]),
                   ),
@@ -4673,48 +3871,32 @@ describe.sequential(
                 })),
               });
               expect(
-                restored.config?.services?.map(
-                  (service) => service.min_machines_running,
-                ),
+                restored.config?.services?.map((service) => service.min_machines_running),
               ).toEqual([1, 0]);
               expect(
-                restored.config?.services?.map((service) =>
-                  wireAutostop(service.autostop),
-                ),
+                restored.config?.services?.map((service) => wireAutostop(service.autostop)),
               ).toEqual([autostop, autostop]);
-              expect(
-                restored.config?.services?.map((service) => service.autostart),
-              ).toEqual([true, true]);
+              expect(restored.config?.services?.map((service) => service.autostart)).toEqual([
+                true,
+                true,
+              ]);
               yield* machines.uncordonMachine(request);
-              yield* machines.uncordonMachine({
-                ...idle,
-                lease_nonce: other.nonce,
-              });
+              yield* machines.uncordonMachine({ ...idle, lease_nonce: other.nonce });
               if (autostop === "suspend") {
-                yield* machines
-                  .suspendMachine(request)
-                  .pipe(Effect.timeout("15 seconds"));
+                yield* machines.suspendMachine(request).pipe(Effect.timeout("15 seconds"));
                 yield* waitState(target, "suspended");
               } else {
-                yield* machines.stopMachine({
-                  ...request,
-                  signal: "SIGTERM",
-                  timeout: "5s",
-                });
+                yield* machines.stopMachine({ ...request, signal: "SIGTERM", timeout: "5s" });
                 yield* waitState(target, "stopped");
               }
               // Fly Proxy must be free to start either Machine without our nonce.
               yield* held.release;
               yield* other.release;
-              yield* Effect.logInfo(
-                "P3 released own leases before proxy autostart",
-              );
+              yield* Effect.logInfo("P3 released own leases before proxy autostart");
               const beforeRequest = (yield* machines.listMachines({
                 app_name: created.appName,
               })).filter(
-                (machine) =>
-                  machine.id === target.machine_id ||
-                  machine.id === idle.machine_id,
+                (machine) => machine.id === target.machine_id || machine.id === idle.machine_id,
               );
               expect(beforeRequest.length).toBe(2);
               expect(
@@ -4730,15 +3912,10 @@ describe.sequential(
                 .get(`https://${created.appName}.fly.dev`)
                 .pipe(
                   Effect.timeout("5 seconds"),
-                  Effect.retry({
-                    schedule: Schedule.spaced("2 seconds"),
-                    times: 3,
-                  }),
+                  Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 3 }),
                 );
               expect(response.status).toBe(200);
-              const states = yield* machines.listMachines({
-                app_name: created.appName,
-              });
+              const states = yield* machines.listMachines({ app_name: created.appName });
               expect(
                 states.some(
                   (machine) =>
@@ -4760,11 +3937,7 @@ describe.sequential(
             yield* expectGone(idle);
           }).pipe(sanitizeFailure),
         {
-          tags: [
-            "provider:fly:app",
-            "provider:fly:ipassignment",
-            "provider:fly:machine",
-          ],
+          tags: ["provider:fly:app", "provider:fly:ipassignment", "provider:fly:machine"],
           timeout: 5 * 60_000,
         },
       );
@@ -4801,8 +3974,7 @@ describe.sequential(
           times: 45,
           until: (machine) =>
             machine.state === "started" &&
-            machine.config?.metadata?.["alchemy.deployment-protocol"] ===
-              undefined &&
+            machine.config?.metadata?.["alchemy.deployment-protocol"] === undefined &&
             machine.config?.metadata?.["alchemy.generation"] === undefined &&
             machine.config?.stop_config === undefined,
         }),
@@ -4811,12 +3983,8 @@ describe.sequential(
           Effect.sync(() => {
             expect(machine.state).toBe("started");
             expect(machine.config?.stop_config).toBeUndefined();
-            expect(
-              machine.config?.metadata?.["alchemy.deployment-protocol"],
-            ).toBeUndefined();
-            expect(
-              machine.config?.metadata?.["alchemy.generation"],
-            ).toBeUndefined();
+            expect(machine.config?.metadata?.["alchemy.deployment-protocol"]).toBeUndefined();
+            expect(machine.config?.metadata?.["alchemy.generation"]).toBeUndefined();
           }),
         ),
       );
@@ -4834,18 +4002,11 @@ describe.sequential(
                   deploy: { strategy: "rolling" },
                   shutdown: undefined,
                 });
-                yield* writeLegacyProtocol(
-                  site.appName,
-                  initial.machineId,
-                  runtimeTimeoutMs,
+                yield* writeLegacyProtocol(site.appName, initial.machineId, runtimeTimeoutMs);
+                const legacy = yield* runningLegacy(site.appName, initial.machineId);
+                expect(legacy.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS).toBe(
+                  runtimeTimeoutMs?.toString(),
                 );
-                const legacy = yield* runningLegacy(
-                  site.appName,
-                  initial.machineId,
-                );
-                expect(
-                  legacy.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS,
-                ).toBe(runtimeTimeoutMs?.toString());
                 const policy = yield* predecessorShutdown(legacy);
                 if (runtimeTimeoutMs === undefined) {
                   expect(policy.signal).toBeUndefined();
@@ -4861,24 +4022,17 @@ describe.sequential(
                   stops = [];
                 });
                 const upgraded = yield* deployWorker(stack, "two", {
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "60 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
                 });
                 expect(upgraded.machineId).not.toBe(initial.machineId);
                 yield* assertCommitted(site.appName, upgraded.machineIds);
-                const stop = stops.filter(
-                  (request) => request.machineId === initial.machineId,
-                );
+                const stop = stops.filter((request) => request.machineId === initial.machineId);
                 expect(stop).toHaveLength(1);
                 expect(stop[0]!.signal).toBe(
                   runtimeTimeoutMs === undefined ? undefined : "SIGTERM",
                 );
                 expect(stop[0]!.timeout).toBe(
-                  runtimeTimeoutMs === undefined
-                    ? undefined
-                    : `${runtimeTimeoutMs}ms`,
+                  runtimeTimeoutMs === undefined ? undefined : `${runtimeTimeoutMs}ms`,
                 );
                 expect(
                   proxy.events.some(
@@ -4902,10 +4056,7 @@ describe.sequential(
                   ),
                 ).toBe(true);
                 const same = yield* deployWorker(stack, "two", {
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "65 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "65 seconds" },
                 });
                 expect(same.machineIds).toEqual(upgraded.machineIds);
               } finally {
@@ -4945,9 +4096,8 @@ describe.sequential(
                 expect(
                   before.filter(
                     (machine) =>
-                      machine.config?.metadata?.[
-                        "alchemy.deployment-protocol"
-                      ] === "future-unknown",
+                      machine.config?.metadata?.["alchemy.deployment-protocol"] ===
+                      "future-unknown",
                   ),
                 ).toHaveLength(affected);
                 const metadata = before[0]!.config!.metadata!;
@@ -4965,14 +4115,13 @@ describe.sequential(
                 yield* Effect.sync(() => {
                   endpoint = proxy.url;
                 });
-                const result = yield* deployWorker(stack, "two", {
-                  count: 2,
-                }).pipe(Effect.timeout("180 seconds"), Effect.result);
+                const result = yield* deployWorker(stack, "two", { count: 2 }).pipe(
+                  Effect.timeout("180 seconds"),
+                  Effect.result,
+                );
                 expect(Result.isFailure(result)).toBe(true);
                 if (Result.isFailure(result)) {
-                  expect(result.failure).toMatchObject({
-                    _tag: "Fly.DeploymentRecoveryAmbiguous",
-                  });
+                  expect(result.failure).toMatchObject({ _tag: "Fly.DeploymentRecoveryAmbiguous" });
                 }
                 expect(
                   proxy.events.some(
@@ -4987,9 +4136,7 @@ describe.sequential(
                   initial.machineIds.slice().sort(),
                 );
                 for (const machine of after) {
-                  const previous = before.find(
-                    (item) => item.id === machine.id,
-                  )!;
+                  const previous = before.find((item) => item.id === machine.id)!;
                   expect(machine.instance_id).toBe(previous.instance_id);
                   expect(machine.config).toEqual(previous.config);
                   expect(machine.cordoned).toBe(false);
@@ -5015,36 +4162,25 @@ describe.sequential(
             const site = yield* stack.deploy(Fly.App("Site"));
             try {
               const first = yield* deployWorker(stack, "one", { count: 2 });
-              yield* writeLegacyProtocol(
-                site.appName,
-                first.machineIds[0]!,
-                60_000,
-              );
+              yield* writeLegacyProtocol(site.appName, first.machineIds[0]!, 60_000);
               yield* runningLegacy(site.appName, first.machineIds[0]!);
               const mixed = yield* census(site.appName);
               expect(
                 mixed.filter(
-                  (machine) =>
-                    machine.config?.metadata?.[
-                      "alchemy.deployment-protocol"
-                    ] === "1",
+                  (machine) => machine.config?.metadata?.["alchemy.deployment-protocol"] === "1",
                 ),
               ).toHaveLength(1);
               expect(
                 mixed.filter(
                   (machine) =>
-                    machine.config?.metadata?.[
-                      "alchemy.deployment-protocol"
-                    ] === undefined,
+                    machine.config?.metadata?.["alchemy.deployment-protocol"] === undefined,
                 ),
               ).toHaveLength(1);
               const proxy = yield* transportProxy();
               try {
                 yield* Effect.sync(() =>
                   proxy.arm({
-                    match: (event) =>
-                      event.method === "POST" &&
-                      event.path.endsWith("/machines"),
+                    match: (event) => event.method === "POST" && event.path.endsWith("/machines"),
                     action: "hold-response",
                     remaining: 1,
                   }),
@@ -5056,22 +4192,20 @@ describe.sequential(
                     file,
                     proxy.url,
                   );
-                  const upgrade = yield* deployWorker(actor, "two", {
-                    count: 2,
-                  }).pipe(Effect.scoped, Effect.forkScoped);
+                  const upgrade = yield* deployWorker(actor, "two", { count: 2 }).pipe(
+                    Effect.scoped,
+                    Effect.forkScoped,
+                  );
                   yield* proxy.wait(
                     (event) =>
-                      event.stage === "held" &&
-                      event.status! >= 200 &&
-                      event.status! < 300,
+                      event.stage === "held" && event.status! >= 200 && event.status! < 300,
                   );
                   const competing = yield* writeLegacyProtocol(
                     site.appName,
                     first.machineIds[1]!,
                   ).pipe(Effect.result);
                   expect(Result.isFailure(competing)).toBe(true);
-                  if (Result.isFailure(competing))
-                    expect(competing.failure._tag).toBe("Conflict");
+                  if (Result.isFailure(competing)) expect(competing.failure._tag).toBe("Conflict");
                   expect(
                     (yield* census(site.appName)).filter((machine) =>
                       first.machineIds.includes(machine.id!),
@@ -5081,16 +4215,10 @@ describe.sequential(
                     proxy.clear();
                     proxy.release();
                   });
-                  const upgraded = yield* Fiber.join(upgrade).pipe(
-                    Effect.timeout("300 seconds"),
-                  );
+                  const upgraded = yield* Fiber.join(upgrade).pipe(Effect.timeout("300 seconds"));
                   yield* assertCommitted(site.appName, upgraded.machineIds);
                   // A lease-aware legacy writer can still change a successor after lease release.
-                  yield* writeLegacyProtocol(
-                    site.appName,
-                    upgraded.machineIds[0]!,
-                    60_000,
-                  );
+                  yield* writeLegacyProtocol(site.appName, upgraded.machineIds[0]!, 60_000);
                   yield* runningLegacy(site.appName, upgraded.machineIds[0]!);
                   const partial = yield* census(site.appName);
                   expect(partial.map((machine) => machine.id).sort()).toEqual(
@@ -5099,9 +4227,7 @@ describe.sequential(
                   expect(
                     partial.filter(
                       (machine) =>
-                        machine.config?.metadata?.[
-                          "alchemy.deployment-protocol"
-                        ] === undefined,
+                        machine.config?.metadata?.["alchemy.deployment-protocol"] === undefined,
                     ),
                   ).toHaveLength(1);
                   const resumed = yield* engineActor(
@@ -5109,18 +4235,15 @@ describe.sequential(
                     "F11 F14 partial upgrade with explicit native legacy-protocol writer honors current leases but has no old-binary global fence",
                     file,
                   );
-                  const recovered = yield* deployWorker(resumed, "three", {
-                    count: 2,
-                  }).pipe(Effect.scoped);
+                  const recovered = yield* deployWorker(resumed, "three", { count: 2 }).pipe(
+                    Effect.scoped,
+                  );
                   expect(
-                    recovered.machineIds.every(
-                      (id) => !upgraded.machineIds.includes(id),
-                    ),
+                    recovered.machineIds.every((id) => !upgraded.machineIds.includes(id)),
                   ).toBe(true);
                   yield* assertCommitted(site.appName, recovered.machineIds);
                   yield* Effect.logInfo("Partial-upgrade model boundary", {
-                    model:
-                      "native lease-aware legacy protocol writer, not a literal old binary",
+                    model: "native lease-aware legacy protocol writer, not a literal old binary",
                     globalFence: false,
                     recoveredCount: recovered.machineIds.length,
                   });
@@ -5192,9 +4315,7 @@ describe.sequential(
                     file,
                     proxy,
                   );
-                  const props: Partial<
-                    Omit<Extract<MachineProps, { image: string }>, "app">
-                  > = {
+                  const props: Partial<Omit<Extract<MachineProps, { image: string }>, "app">> = {
                     init: {
                       exec: [
                         "/bin/sh",
@@ -5218,13 +4339,12 @@ describe.sequential(
                   };
                   yield* Effect.gen(function* () {
                     const started = yield* Clock.currentTimeMillis;
-                    const attempt = yield* deployWorker(
-                      actor,
-                      "two",
-                      props,
-                    ).pipe(Effect.scoped, Effect.result, Effect.forkScoped);
-                    const checkName =
-                      kind === "named" ? "ready" : "servicecheck-00-http-80";
+                    const attempt = yield* deployWorker(actor, "two", props).pipe(
+                      Effect.scoped,
+                      Effect.result,
+                      Effect.forkScoped,
+                    );
+                    const checkName = kind === "named" ? "ready" : "servicecheck-00-http-80";
                     const failed = yield* census(site.appName).pipe(
                       Effect.map((live) =>
                         live.find(
@@ -5232,9 +4352,7 @@ describe.sequential(
                             !first.machineIds.includes(machine.id!) &&
                             machine.state === "started" &&
                             machine.checks?.some(
-                              (check) =>
-                                check.name === checkName &&
-                                check.status === "critical",
+                              (check) => check.name === checkName && check.status === "critical",
                             ),
                         ),
                       ),
@@ -5247,8 +4365,7 @@ describe.sequential(
                       Effect.raceFirst(
                         Effect.gen(function* () {
                           const result = yield* Fiber.join(attempt);
-                          if (Result.isFailure(result))
-                            return yield* Effect.fail(result.failure);
+                          if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
                           return yield* Effect.fail(
                             new Error(
                               "Candidate committed before a failing long-cadence report was observed",
@@ -5260,57 +4377,41 @@ describe.sequential(
                     expect(failed).toBeDefined();
                     if (!failed)
                       return yield* Effect.fail(
-                        new Error(
-                          "Fly never emitted the initial failing cadence report",
-                        ),
+                        new Error("Fly never emitted the initial failing cadence report"),
                       );
                     const nativeCheck =
                       kind === "named"
                         ? failed.config?.checks?.ready
                         : failed.config?.services?.[0]?.checks?.[0];
-                    expect(
-                      kind === "named"
-                        ? ["75s", "1m15s"]
-                        : ["60s", "1m0s", "1m"],
-                    ).toContain(nativeCheck?.interval);
-                    expect(["0s", "0", undefined]).toContain(
-                      nativeCheck?.grace_period,
+                    expect(kind === "named" ? ["75s", "1m15s"] : ["60s", "1m0s", "1m"]).toContain(
+                      nativeCheck?.interval,
                     );
+                    expect(["0s", "0", undefined]).toContain(nativeCheck?.grace_period);
                     expect(failed.cordoned).toBe(true);
-                    const failureReport = failed.checks!.find(
-                      (check) => check.name === checkName,
-                    )!;
+                    const failureReport = failed.checks!.find((check) => check.name === checkName)!;
                     expect(failureReport.updated_at).toBeDefined();
                     if (sufficient) {
                       const passing = yield* machines
-                        .getMachine({
-                          app_name: site.appName,
-                          machine_id: failed.id!,
-                        })
+                        .getMachine({ app_name: site.appName, machine_id: failed.id! })
                         .pipe(
                           Effect.repeat({
                             schedule: Schedule.spaced("1 second"),
                             times: 120,
                             until: (machine) =>
                               machine.checks?.some(
-                                (check) =>
-                                  check.name === checkName &&
-                                  check.status === "passing",
+                                (check) => check.name === checkName && check.status === "passing",
                               ) === true,
                           }),
                           Effect.timeout("120 seconds"),
                         );
-                      const report = passing.checks?.find(
-                        (check) => check.name === checkName,
-                      );
+                      const report = passing.checks?.find((check) => check.name === checkName);
                       expect(report?.status).toBe("passing");
                       expect(report?.updated_at).toBeDefined();
                       expect(failed.instance_id).toBeDefined();
                       expect(passing.instance_id).toBe(failed.instance_id);
                       const reportSpacing = yield* Effect.sync(
                         () =>
-                          Date.parse(report!.updated_at!) -
-                          Date.parse(failureReport.updated_at!),
+                          Date.parse(report!.updated_at!) - Date.parse(failureReport.updated_at!),
                       );
                       expect(reportSpacing).toBeGreaterThan(60_000);
                       yield* Effect.logInfo(
@@ -5321,20 +4422,15 @@ describe.sequential(
                           passingReport: report!.updated_at,
                         },
                       );
-                      const result = yield* Fiber.join(attempt).pipe(
-                        Effect.timeout("600 seconds"),
-                      );
+                      const result = yield* Fiber.join(attempt).pipe(Effect.timeout("600 seconds"));
                       expect(Result.isSuccess(result)).toBe(true);
-                      if (Result.isFailure(result))
-                        return yield* Effect.fail(result.failure);
+                      if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
                       expect(result.success.machineIds).toEqual([failed.id]);
                       const committed = yield* assertCommitted(
                         site.appName,
                         result.success.machineIds,
                       );
-                      expect(committed[0]!.instance_id).toBe(
-                        failed.instance_id,
-                      );
+                      expect(committed[0]!.instance_id).toBe(failed.instance_id);
                       assertReadinessCommit(
                         proxy.readiness,
                         first.machineIds,
@@ -5344,21 +4440,13 @@ describe.sequential(
                         false,
                       );
                     } else {
-                      const result = yield* Fiber.join(attempt).pipe(
-                        Effect.timeout("180 seconds"),
-                      );
+                      const result = yield* Fiber.join(attempt).pipe(Effect.timeout("180 seconds"));
                       expect(Result.isFailure(result)).toBe(true);
                       if (Result.isFailure(result))
-                        expect(result.failure._tag).toBe(
-                          "Fly.ReplicaChecksNotPassing",
-                        );
-                      expect(
-                        (yield* Clock.currentTimeMillis) - started,
-                      ).toBeLessThan(180_000);
+                        expect(result.failure._tag).toBe("Fly.ReplicaChecksNotPassing");
+                      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(180_000);
                       const live = yield* census(site.appName);
-                      expect(live.map((machine) => machine.id)).toEqual(
-                        first.machineIds,
-                      );
+                      expect(live.map((machine) => machine.id)).toEqual(first.machineIds);
                       expect(live[0]!.state).toBe("started");
                       expect(live[0]!.cordoned).toBe(false);
                       expect(
@@ -5369,17 +4457,14 @@ describe.sequential(
                             (event.path.endsWith("/stop") ||
                               event.path.endsWith("/cordon") ||
                               event.path.endsWith("/suspend") ||
-                              (event.path.endsWith("/metadata") &&
-                                event.phase === "retiring") ||
-                              (event.method === "DELETE" &&
-                                /\/machines\/[^/]+$/.test(event.path))),
+                              (event.path.endsWith("/metadata") && event.phase === "retiring") ||
+                              (event.method === "DELETE" && /\/machines\/[^/]+$/.test(event.path))),
                         ),
                       ).toBe(false);
                       expect(
                         proxy.events.some(
                           (event) =>
-                            event.machineId === failed.id &&
-                            event.path.endsWith("/uncordon"),
+                            event.machineId === failed.id && event.path.endsWith("/uncordon"),
                         ),
                       ).toBe(false);
                       expect(
@@ -5447,10 +4532,7 @@ describe.sequential(
                   image: "nginx:alpine",
                   env: { VERSION: version },
                   checks,
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "20 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "20 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
                 });
                 return { sibling, worker };
@@ -5465,11 +4547,7 @@ describe.sequential(
               image: "nginx:alpine",
               env: { VERSION: "foreign" },
               services: [
-                {
-                  protocol: "tcp",
-                  internal_port: 80,
-                  ports: [{ port: 80, handlers: ["http"] }],
-                },
+                { protocol: "tcp", internal_port: 80, ports: [{ port: 80, handlers: ["http"] }] },
               ],
             },
           });
@@ -5486,18 +4564,10 @@ describe.sequential(
             expect(next.sibling.machineId).toBe(initial.sibling.machineId);
             const before = yield* census(initial.worker.appName);
             expect(before.map((machine) => machine.id).sort()).toEqual(
-              [
-                next.worker.machineId,
-                next.sibling.machineId,
-                foreign.id!,
-              ].sort(),
+              [next.worker.machineId, next.sibling.machineId, foreign.id!].sort(),
             );
-            expect(
-              before.find((machine) => machine.id === foreign.id)?.cordoned,
-            ).toBe(false);
-            const owned = before.find(
-              (machine) => machine.id === next.worker.machineId,
-            )!;
+            expect(before.find((machine) => machine.id === foreign.id)?.cordoned).toBe(false);
+            const owned = before.find((machine) => machine.id === next.worker.machineId)!;
             yield* deleteReplicaSet({
               appName: next.worker.appName,
               id: "Worker",
@@ -5508,9 +4578,7 @@ describe.sequential(
               volumeIds: [],
             });
             expect(
-              (yield* census(initial.worker.appName))
-                .map((machine) => machine.id)
-                .sort(),
+              (yield* census(initial.worker.appName)).map((machine) => machine.id).sort(),
             ).toEqual(before.map((machine) => machine.id).sort());
           }).pipe(Effect.ensuring(removeForeign.pipe(Effect.orDie)));
           yield* stack.destroy();
@@ -5534,10 +4602,7 @@ describe.sequential(
                   image: "nginx:alpine",
                   checks,
                   env: { VERSION: version },
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "30 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
                 });
               }),
@@ -5600,9 +4665,7 @@ describe.sequential(
             expect(live.map((machine) => machine.id).sort()).toEqual(
               [successor.machineId, collision.id!].sort(),
             );
-            const foreign = live.find(
-              (machine) => machine.id === collision.id,
-            )!;
+            const foreign = live.find((machine) => machine.id === collision.id)!;
             expect(foreign.config?.metadata?.["alchemy.fqn"]).toBe(
               `${oldMetadata["alchemy.fqn"]}/OtherScope`,
             );
@@ -5669,31 +4732,21 @@ describe.sequential(
                 .pipe(Effect.result, Effect.forkScoped);
               const promoted = yield* proxy.wait(
                 (event) =>
-                  event.stage === "held" &&
-                  event.path.endsWith("/uncordon") &&
-                  event.status! < 300,
+                  event.stage === "held" && event.path.endsWith("/uncordon") && event.status! < 300,
               );
               expect(promoted.machineId).toBeDefined();
               yield* readiness.turnOff(initial.appName, promoted.machineId!);
               yield* Effect.sync(proxy.release);
-              const result = yield* Fiber.join(update).pipe(
-                Effect.timeout("60 seconds"),
-              );
+              const result = yield* Fiber.join(update).pipe(Effect.timeout("60 seconds"));
               expect(Result.isFailure(result)).toBe(true);
               if (Result.isFailure(result))
-                expect(result.failure).toMatchObject({
-                  _tag: "Fly.ReplicaChecksNotPassing",
-                });
+                expect(result.failure).toMatchObject({ _tag: "Fly.ReplicaChecksNotPassing" });
               const live = yield* census(initial.appName);
               expect(live.map((machine) => machine.id).sort()).toEqual(
                 [initial.machineId, promoted.machineId!].sort(),
               );
-              expect(live.every((machine) => machine.cordoned === false)).toBe(
-                true,
-              );
-              const pending = live.find(
-                (machine) => machine.id === promoted.machineId,
-              )!;
+              expect(live.every((machine) => machine.cordoned === false)).toBe(true);
+              const pending = live.find((machine) => machine.id === promoted.machineId)!;
               const metadata = pending.config!.metadata!;
               expect(metadata["alchemy.phase"]).toBe("validating");
               expect(metadata["alchemy.checked-instance"]).toBeUndefined();
@@ -5709,20 +4762,14 @@ describe.sequential(
               expect(read?.rolloutPending).toBe(true);
               expect(
                 proxy.events.some(
-                  (event) =>
-                    event.method === "DELETE" &&
-                    /\/machines\/[^/]+$/.test(event.path),
+                  (event) => event.method === "DELETE" && /\/machines\/[^/]+$/.test(event.path),
                 ),
               ).toBe(false);
               if (!changed) {
                 yield* repairReadiness(initial.appName, promoted.machineId!);
               }
-              const recovered = yield* readiness.deployWorker(
-                stack,
-                changed ? "three" : "two",
-              );
-              if (changed)
-                expect(recovered.machineId).not.toBe(promoted.machineId);
+              const recovered = yield* readiness.deployWorker(stack, changed ? "three" : "two");
+              if (changed) expect(recovered.machineId).not.toBe(promoted.machineId);
               else expect(recovered.machineId).toBe(promoted.machineId);
               yield* assertCommitted(initial.appName, recovered.machineIds);
               yield* Effect.sync(() => {
@@ -5757,12 +4804,7 @@ describe.sequential(
     ],
   },
   () => {
-    const options = {
-      providers: Fly.providers(),
-      profile: "testing",
-      dev: false,
-      sidecar: false,
-    };
+    const options = { providers: Fly.providers(), profile: "testing", dev: false, sidecar: false };
     const { test } = Test.make(options);
     const selected = process.env.FLY_PROCESS_DEATH_CASE;
 
@@ -5785,11 +4827,7 @@ describe.sequential(
         const proxy = yield* transportProxy();
         const actor = yield* Effect.sync(() =>
           scratchStack(
-            {
-              ...options,
-              providers: throughProxy(() => proxy.url),
-              stage: stack.stage,
-            },
+            { ...options, providers: throughProxy(() => proxy.url), stage: stack.stage },
             title,
             processDeathFile,
           ),
@@ -5799,18 +4837,13 @@ describe.sequential(
         expect(actor.state).not.toBe(stack.state);
         const match = (event: Parameters<typeof matchesBarrier>[3]) =>
           matchesBarrier(phase, initial.appName, predecessor.id, event);
-        yield* Effect.sync(() =>
-          proxy.arm({ match, action: "hold-response", remaining: 1 }),
-        );
+        yield* Effect.sync(() => proxy.arm({ match, action: "hold-response", remaining: 1 }));
         const pid = yield* Effect.sync(() => process.pid);
         // Ordinary failure/interruption invalidates the attempt; SIGKILL cannot run this.
         yield* Effect.addFinalizer(() =>
           writeEvidence(paths.finalized, { pid, phase }).pipe(Effect.orDie),
         );
-        const attempt = yield* deploy(actor, "two").pipe(
-          Effect.scoped,
-          Effect.forkScoped,
-        );
+        const attempt = yield* deploy(actor, "two").pipe(Effect.scoped, Effect.forkScoped);
         yield* Effect.gen(function* () {
           const barrier = yield* proxy.wait(
             (event) =>
@@ -5822,9 +4855,7 @@ describe.sequential(
           );
           yield* Effect.gen(function* () {
             const live = yield* censusProcessDeath(initial.appName);
-            const candidates = live.filter(
-              (value) => value.id !== predecessor.id,
-            );
+            const candidates = live.filter((value) => value.id !== predecessor.id);
             expect(candidates).toHaveLength(1);
             const candidate = yield* identity(
               yield* machine(initial.appName, candidates[0]!.id!),
@@ -5832,14 +4863,10 @@ describe.sequential(
             );
             expect(candidate.generation).not.toBe(predecessor.generation);
             expect(candidate.workload).not.toBe(predecessor.workload);
-            expect(Number(candidate.sequence)).toBe(
-              Number(predecessor.sequence) + 1,
-            );
+            expect(Number(candidate.sequence)).toBe(Number(predecessor.sequence) + 1);
             expect(candidate.instance).toBe(predecessor.instance);
             expect(candidate.fqn).toBe(predecessor.fqn);
-            expect(barrier.machineId).toBe(
-              phase === "retirement" ? predecessor.id : candidate.id,
-            );
+            expect(barrier.machineId).toBe(phase === "retirement" ? predecessor.id : candidate.id);
             const leases = yield* heldLeases(
               initial.appName,
               live.map((value) => value.id!),
@@ -5904,8 +4931,7 @@ describe.sequential(
               ).toBe(false);
               expect(
                 proxy.events.some(
-                  (event) =>
-                    event.method === "DELETE" && event.path.endsWith("/lease"),
+                  (event) => event.method === "DELETE" && event.path.endsWith("/lease"),
                 ),
               ).toBe(false);
               expect(
@@ -5928,11 +4954,7 @@ describe.sequential(
           Effect.raceFirst(
             Fiber.join(attempt).pipe(
               Effect.andThen(
-                Effect.fail(
-                  new Error(
-                    "Rollout finished before the process-death barrier",
-                  ),
-                ),
+                Effect.fail(new Error("Rollout finished before the process-death barrier")),
               ),
             ),
           ),
@@ -5969,13 +4991,9 @@ describe.sequential(
           }),
         ).toBe(true);
         expect(witness.barrier.machineId).toBe(
-          phase === "retirement"
-            ? witness.predecessor.id
-            : witness.candidate.id,
+          phase === "retirement" ? witness.predecessor.id : witness.candidate.id,
         );
-        expect(yield* persistedRow(stack, witness.row.fqn)).toEqual(
-          witness.row,
-        );
+        expect(yield* persistedRow(stack, witness.row.fqn)).toEqual(witness.row);
         expect(witness.row.status).toBe("updating");
         // No deploy, destroy, lease acquisition or release precedes the expiry observations.
         yield* assertBarrierInventory(stack, witness);
@@ -6072,8 +5090,7 @@ describe.sequential(
           yield* stack.destroy();
           const initial = yield* deployWorker(stack, "one", { count: 2 });
           const proxy = yield* transportProxy();
-          const match = (event: { path: string }) =>
-            event.path.endsWith("/uncordon");
+          const match = (event: { path: string }) => event.path.endsWith("/uncordon");
           yield* Effect.sync(() => {
             endpoint = proxy.url;
             proxy.arm({ match, action: "drop-response", remaining: 1 });
@@ -6086,22 +5103,17 @@ describe.sequential(
             );
             expect(Result.isFailure(failed)).toBe(true);
             const lost = proxy.events.find(
-              (event) =>
-                event.stage === "dropped" && event.path.endsWith("/uncordon"),
+              (event) => event.stage === "dropped" && event.path.endsWith("/uncordon"),
             );
             expect(lost?.status).toBeGreaterThanOrEqual(200);
             expect(lost?.status).toBeLessThan(300);
             const live = yield* census(initial.appName);
             expect(
               initial.machineIds.every((id) =>
-                live.some(
-                  (machine) => machine.id === id && machine.cordoned === false,
-                ),
+                live.some((machine) => machine.id === id && machine.cordoned === false),
               ),
             ).toBe(true);
-            expect(
-              live.find((machine) => machine.id === lost!.machineId)?.cordoned,
-            ).toBe(false);
+            expect(live.find((machine) => machine.id === lost!.machineId)?.cordoned).toBe(false);
             const candidateIds = live
               .filter((machine) => !initial.machineIds.includes(machine.id!))
               .map((machine) => machine.id!);
@@ -6116,9 +5128,7 @@ describe.sequential(
             ).toBe(false);
             yield* Effect.sync(proxy.clear);
             const recovered = yield* deployWorker(stack, "two", { count: 2 });
-            expect([...recovered.machineIds].sort()).toEqual(
-              candidateIds.sort(),
-            );
+            expect([...recovered.machineIds].sort()).toEqual(candidateIds.sort());
             yield* assertCommitted(initial.appName, recovered.machineIds);
           } finally {
             yield* Effect.sync(() => {
@@ -6143,15 +5153,7 @@ describe.sequential(
 
 describe.sequential(
   "protocol branches",
-  {
-    tags: [
-      "unit",
-      "provider:fly",
-      "provider:fly:machine",
-      "provider:fly:service",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:fly", "provider:fly:machine", "provider:fly:service", "local"] },
   () => {
     it.live(
       "S07 P actual SDK GET 408 decoder returns typed GatewayTimeout, not genuine remote 408",
@@ -6165,11 +5167,7 @@ describe.sequential(
               expect(new URL(request.url).pathname).toBe(
                 `/v1/apps/${appName}/machines/${candidateId}`,
               );
-              return reply(
-                request,
-                { error: "controlled request timeout" },
-                408,
-              );
+              return reply(request, { error: "controlled request timeout" }, 408);
             }),
           );
           const result = yield* machines
@@ -6190,40 +5188,23 @@ describe.sequential(
       "F02 P delayed visibility readback reuses one candidate without replaying create",
       () =>
         Effect.gen(function* () {
-          const fixture = yield* protocolClient({
-            conflict: true,
-            hiddenLists: 2,
-          });
-          const result = yield* reconcile.pipe(
-            withControlledClient(fixture.client),
-          );
+          const fixture = yield* protocolClient({ conflict: true, hiddenLists: 2 });
+          const result = yield* reconcile.pipe(withControlledClient(fixture.client));
           expect(result.machineIds).toEqual([candidateId]);
-          const lists = fixture.events.filter(
-            (event) => event.visible !== undefined,
-          );
-          expect(lists.map((event) => event.visible)).toEqual([
-            false,
-            false,
-            false,
-            true,
-          ]);
+          const lists = fixture.events.filter((event) => event.visible !== undefined);
+          expect(lists.map((event) => event.visible)).toEqual([false, false, false, true]);
           const creates = fixture.events.filter(
-            (event) =>
-              event.method === "POST" && event.path.endsWith("/machines"),
+            (event) => event.method === "POST" && event.path.endsWith("/machines"),
           );
           expect(creates).toHaveLength(1);
           const visibleAt = fixture.events.indexOf(lists[3]!);
           const leaseAt = fixture.events.findIndex(
             (event) => event.method === "POST" && event.path.endsWith("/lease"),
           );
-          const promotionAt = fixture.events.findIndex((event) =>
-            event.path.endsWith("/uncordon"),
-          );
+          const promotionAt = fixture.events.findIndex((event) => event.path.endsWith("/uncordon"));
           expect(leaseAt).toBeGreaterThan(visibleAt);
           expect(promotionAt).toBeGreaterThan(leaseAt);
-          expect(
-            fixture.events.filter((event) => event.phase === "active"),
-          ).toHaveLength(1);
+          expect(fixture.events.filter((event) => event.phase === "active")).toHaveLength(1);
         }),
       { timeout: 30_000 },
     );
@@ -6232,27 +5213,17 @@ describe.sequential(
       "F02 P visibility exhaustion fails bounded readback without replay or promotion",
       () =>
         Effect.gen(function* () {
-          const fixture = yield* protocolClient({
-            conflict: true,
-            hiddenLists: Infinity,
-          });
-          const result = yield* reconcile.pipe(
-            withControlledClient(fixture.client),
-            Effect.result,
-          );
+          const fixture = yield* protocolClient({ conflict: true, hiddenLists: Infinity });
+          const result = yield* reconcile.pipe(withControlledClient(fixture.client), Effect.result);
           expect(Result.isFailure(result)).toBe(true);
-          if (Result.isFailure(result))
-            expect(result.failure).toBeInstanceOf(ReplicaNotCreated);
+          if (Result.isFailure(result)) expect(result.failure).toBeInstanceOf(ReplicaNotCreated);
           expect(
             fixture.events.filter(
-              (event) =>
-                event.method === "POST" && event.path.endsWith("/machines"),
+              (event) => event.method === "POST" && event.path.endsWith("/machines"),
             ),
           ).toHaveLength(1);
           // Initial observation, nine bounded readback attempts, and failure-path observation.
-          expect(
-            fixture.events.filter((event) => event.visible === false),
-          ).toHaveLength(11);
+          expect(fixture.events.filter((event) => event.visible === false)).toHaveLength(11);
           expect(
             fixture.events.some(
               (event) =>
@@ -6266,49 +5237,38 @@ describe.sequential(
     );
 
     for (const missing of ["image_ref", "digest", "repository"] as const) {
-      it.live(
-        `S08 P missing ${missing} refuses candidate promotion through the controller`,
-        () =>
-          Effect.gen(function* () {
-            const fixture = yield* protocolClient({ missingImageRef: missing });
-            const result = yield* reconcile.pipe(
-              withControlledClient(fixture.client),
-              Effect.result,
-            );
-            expect(Result.isFailure(result)).toBe(true);
-            if (Result.isFailure(result)) {
-              expect(result.failure).toBeInstanceOf(
-                DeploymentRecoveryAmbiguous,
+      it.live(`S08 P missing ${missing} refuses candidate promotion through the controller`, () =>
+        Effect.gen(function* () {
+          const fixture = yield* protocolClient({ missingImageRef: missing });
+          const result = yield* reconcile.pipe(withControlledClient(fixture.client), Effect.result);
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure).toBeInstanceOf(DeploymentRecoveryAmbiguous);
+            if (result.failure._tag === "Fly.DeploymentRecoveryAmbiguous") {
+              expect(result.failure.appName).toBe(appName);
+              expect(result.failure.message).toBe(
+                `Candidate ${candidateId} changed before its lease was acquired. Mismatch: image_ref.`,
               );
-              if (result.failure._tag === "Fly.DeploymentRecoveryAmbiguous") {
-                expect(result.failure.appName).toBe(appName);
-                expect(result.failure.message).toBe(
-                  `Candidate ${candidateId} changed before its lease was acquired. Mismatch: image_ref.`,
-                );
-              }
             }
-            expect(
-              fixture.events.some(
-                (event) =>
-                  event.method === "POST" && event.path.endsWith("/lease"),
-              ),
-            ).toBe(true);
-            expect(
-              fixture.events.some(
-                (event) =>
-                  event.path.endsWith("/metadata") ||
-                  event.path.endsWith("/uncordon"),
-              ),
-            ).toBe(false);
-            const current = yield* machines
-              .getMachine({ app_name: appName, machine_id: candidateId })
-              .pipe(withControlledClient(fixture.client));
-            expect(current.cordoned).toBe(true);
-            expect(current.config?.metadata?.[keys.phase]).toBe("candidate");
-            if (missing === "image_ref")
-              expect(current.image_ref).toBeUndefined();
-            else expect(current.image_ref?.[missing]).toBeUndefined();
-          }),
+          }
+          expect(
+            fixture.events.some(
+              (event) => event.method === "POST" && event.path.endsWith("/lease"),
+            ),
+          ).toBe(true);
+          expect(
+            fixture.events.some(
+              (event) => event.path.endsWith("/metadata") || event.path.endsWith("/uncordon"),
+            ),
+          ).toBe(false);
+          const current = yield* machines
+            .getMachine({ app_name: appName, machine_id: candidateId })
+            .pipe(withControlledClient(fixture.client));
+          expect(current.cordoned).toBe(true);
+          expect(current.config?.metadata?.[keys.phase]).toBe("candidate");
+          if (missing === "image_ref") expect(current.image_ref).toBeUndefined();
+          else expect(current.image_ref?.[missing]).toBeUndefined();
+        }),
       );
     }
 
@@ -6324,11 +5284,7 @@ describe.sequential(
       () =>
         Effect.gen(function* () {
           const target = unreachable();
-          const events: Array<{
-            method: string;
-            path: string;
-            force: string | undefined;
-          }> = [];
+          const events: Array<{ method: string; path: string; force: string | undefined }> = [];
           const client = HttpClient.make((request) =>
             Effect.sync(() => {
               const url = new URL(request.url);
@@ -6337,33 +5293,20 @@ describe.sequential(
                 method: request.method,
                 path,
                 force:
-                  request.urlParams.params.find(
-                    ([key]) => key === "force",
-                  )?.[1] ??
+                  request.urlParams.params.find(([key]) => key === "force")?.[1] ??
                   url.searchParams.get("force") ??
                   undefined,
               });
-              if (
-                request.method === "DELETE" &&
-                path.endsWith(`/machines/${target.id}`)
-              )
+              if (request.method === "DELETE" && path.endsWith(`/machines/${target.id}`))
                 return reply(request, {});
               if (request.method === "GET" && path.endsWith("/wait"))
                 return reply(request, { error: "not found" }, 404);
-              throw new Error(
-                `Unexpected unreachable-host request: ${request.method} ${path}`,
-              );
+              throw new Error(`Unexpected unreachable-host request: ${request.method} ${path}`);
             }),
           );
-          yield* retireMachines(appName, [target], true).pipe(
-            withControlledClient(client),
-          );
+          yield* retireMachines(appName, [target], true).pipe(withControlledClient(client));
           expect(events).toEqual([
-            {
-              method: "DELETE",
-              path: `/v1/apps/${appName}/machines/${target.id}`,
-              force: "true",
-            },
+            { method: "DELETE", path: `/v1/apps/${appName}/machines/${target.id}`, force: "true" },
             {
               method: "GET",
               path: `/v1/apps/${appName}/machines/${target.id}/wait`,
@@ -6374,25 +5317,16 @@ describe.sequential(
     );
 
     const unsafe: Array<{ name: string; machine: () => machines.Machine }> = [
-      {
-        name: "missing config",
-        machine: () => ({ ...unreachable(), config: undefined }),
-      },
+      { name: "missing config", machine: () => ({ ...unreachable(), config: undefined }) },
       {
         name: "incomplete config",
-        machine: () => ({
-          ...unreachable(),
-          incomplete_config: { image: "fixture:latest" },
-        }),
+        machine: () => ({ ...unreachable(), incomplete_config: { image: "fixture:latest" } }),
       },
       {
         name: "mounted config",
         machine: () => ({
           ...unreachable(),
-          config: {
-            metadata,
-            mounts: [{ volume: "vol-controlled", path: "/data" }],
-          },
+          config: { metadata, mounts: [{ volume: "vol-controlled", path: "/data" }] },
         }),
       },
       {
@@ -6412,41 +5346,32 @@ describe.sequential(
     ];
 
     for (const variant of unsafe) {
-      it.live(
-        `F06 P unreachable host with ${variant.name} refuses force retirement`,
-        () =>
-          Effect.gen(function* () {
-            let requests = 0;
-            const client = HttpClient.make(() =>
-              Effect.sync(() => {
-                requests++;
-                throw new Error(
-                  "Unsafe unreachable target must not reach the transport",
-                );
-              }),
-            );
-            const target = variant.machine();
-            const result = yield* retireMachines(appName, [target], true).pipe(
-              withControlledClient(client),
-              Effect.result,
-            );
-            expect(Result.isFailure(result)).toBe(true);
-            if (Result.isFailure(result)) {
-              expect(result.failure).toBeInstanceOf(
-                ReplicaRetirementIncomplete,
-              );
-              if (result.failure._tag === "Fly.ReplicaRetirementIncomplete") {
-                expect(result.failure.appName).toBe(appName);
-                expect(result.failure.residuals).toEqual([
-                  {
-                    machineId: target.id,
-                    stage: "Fly.ReplicaOwnershipChanged",
-                  },
-                ]);
-              }
+      it.live(`F06 P unreachable host with ${variant.name} refuses force retirement`, () =>
+        Effect.gen(function* () {
+          let requests = 0;
+          const client = HttpClient.make(() =>
+            Effect.sync(() => {
+              requests++;
+              throw new Error("Unsafe unreachable target must not reach the transport");
+            }),
+          );
+          const target = variant.machine();
+          const result = yield* retireMachines(appName, [target], true).pipe(
+            withControlledClient(client),
+            Effect.result,
+          );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure).toBeInstanceOf(ReplicaRetirementIncomplete);
+            if (result.failure._tag === "Fly.ReplicaRetirementIncomplete") {
+              expect(result.failure.appName).toBe(appName);
+              expect(result.failure.residuals).toEqual([
+                { machineId: target.id, stage: "Fly.ReplicaOwnershipChanged" },
+              ]);
             }
-            expect(requests).toBe(0);
-          }),
+          }
+          expect(requests).toBe(0);
+        }),
       );
     }
 
@@ -6460,36 +5385,24 @@ describe.sequential(
               const path = new URL(request.url).pathname;
               events.push(`${request.method} ${path}`);
               if (request.method === "POST" && path.endsWith("/lease"))
-                return reply(
-                  request,
-                  { error: "controlled host unavailable" },
-                  503,
-                );
-              throw new Error(
-                `Unexpected unready retirement request: ${request.method} ${path}`,
-              );
+                return reply(request, { error: "controlled host unavailable" }, 503);
+              throw new Error(`Unexpected unready retirement request: ${request.method} ${path}`);
             }),
           );
-          const result = yield* retireMachines(
-            appName,
-            [unreachable()],
-            false,
-          ).pipe(withControlledClient(client), Effect.result);
+          const result = yield* retireMachines(appName, [unreachable()], false).pipe(
+            withControlledClient(client),
+            Effect.result,
+          );
           expect(Result.isFailure(result)).toBe(true);
           if (
             Result.isFailure(result) &&
             result.failure._tag === "Fly.ReplicaRetirementIncomplete"
           ) {
             expect(result.failure.residuals).toEqual([
-              {
-                machineId: "controlled-unreachable",
-                stage: "ServiceUnavailable",
-              },
+              { machineId: "controlled-unreachable", stage: "ServiceUnavailable" },
             ]);
           } else {
-            throw new Error(
-              "Expected exact retirement residual for unavailable lease acquisition",
-            );
+            throw new Error("Expected exact retirement residual for unavailable lease acquisition");
           }
           expect(events).toEqual([
             `POST /v1/apps/${appName}/machines/controlled-unreachable/lease`,
@@ -6501,30 +5414,20 @@ describe.sequential(
 
 describe.sequential(
   "readiness oracle",
-  {
-    tags: [
-      "unit",
-      "provider:fly",
-      "provider:fly:machine",
-      "provider:fly:service",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:fly", "provider:fly:machine", "provider:fly:service", "local"] },
   () => {
     const names = ["ready", "servicecheck-00-http-80"];
     const reports = (mirror = false) =>
-      [...names, ...(mirror ? ["bg_deployments_compat-00-http-80"] : [])].map(
-        (name) => ({ name, status: "passing" }),
-      );
+      [...names, ...(mirror ? ["bg_deployments_compat-00-http-80"] : [])].map((name) => ({
+        name,
+        status: "passing",
+      }));
 
     // Synthetic journals exercise the oracle only; they are not native Fly evidence.
     const trace = (idle = true, retry = false, mirror = false) => {
       const events: ReadinessEvent[] = [];
       const path = (slot: number) => `/v1/apps/oracle/machines/green-${slot}`;
-      const metadata = (
-        slot: number,
-        phase: string,
-      ): Record<string, string> => ({
+      const metadata = (slot: number, phase: string): Record<string, string> => ({
         "alchemy.stack": "oracle",
         "alchemy.stage": "pure",
         "alchemy.id": "Worker",
@@ -6539,58 +5442,29 @@ describe.sequential(
         "alchemy.readiness-role": "run",
         "alchemy.readiness-roles": "run,run",
         "alchemy.idle-policy-restored": "true",
-        ...(phase === "active"
-          ? { "alchemy.checked-instance": `instance-${slot}` }
-          : {}),
+        ...(phase === "active" ? { "alchemy.checked-instance": `instance-${slot}` } : {}),
       });
       const request = (input: Omit<ReadinessEvent, "stage" | "sequence">) => {
-        const event: ReadinessEvent = {
-          ...input,
-          stage: "request",
-          sequence: events.length,
-        };
+        const event: ReadinessEvent = { ...input, stage: "request", sequence: events.length };
         events.push(event);
         return event;
       };
-      const reply = (
-        input: ReadinessEvent,
-        fields: Partial<ReadinessEvent> = {},
-      ) => {
-        const event: ReadinessEvent = {
-          ...input,
-          stage: "forwarded",
-          status: 200,
-          ...fields,
-        };
+      const reply = (input: ReadinessEvent, fields: Partial<ReadinessEvent> = {}) => {
+        const event: ReadinessEvent = { ...input, stage: "forwarded", status: 200, ...fields };
         events.push(event);
         return event;
       };
       const read = (slot: number, phase: string, state: string) =>
-        reply(
-          request({
-            method: "GET",
-            path: path(slot),
-            machineId: `green-${slot}`,
-          }),
-          {
-            instanceId: `instance-${slot}`,
-            digest: "sha256:fixture",
-            state,
-            cordoned: false,
-            phase,
-            metadata: metadata(slot, phase),
-            checks: state === "started" ? reports(mirror) : [],
-            services: [
-              {
-                protocol: "tcp",
-                port: 80,
-                autostop: "stop",
-                autostart: true,
-                floor: 0,
-              },
-            ],
-          },
-        );
+        reply(request({ method: "GET", path: path(slot), machineId: `green-${slot}` }), {
+          instanceId: `instance-${slot}`,
+          digest: "sha256:fixture",
+          state,
+          cordoned: false,
+          phase,
+          metadata: metadata(slot, phase),
+          checks: state === "started" ? reports(mirror) : [],
+          services: [{ protocol: "tcp", port: 80, autostop: "stop", autostart: true, floor: 0 }],
+        });
       const stamp = (slot: number, phase: string) => {
         const input = {
           method: "PUT",
@@ -6600,29 +5474,18 @@ describe.sequential(
           metadata: metadata(slot, phase),
           metadataOnly: true,
         };
-        if (retry)
-          reply(request(input), { status: phase === "active" ? 503 : 429 });
+        if (retry) reply(request(input), { status: phase === "active" ? 503 : 429 });
         reply(request(input));
       };
       for (const slot of [0, 1]) {
-        reply(
-          request({
-            method: "POST",
-            path: path(slot),
-            machineId: `green-${slot}`,
-          }),
-        );
+        reply(request({ method: "POST", path: path(slot), machineId: `green-${slot}` }));
         read(slot, "promoting", "started");
       }
       for (const slot of [0, 1]) stamp(slot, "validating");
       for (const slot of [0, 1])
         read(slot, "validating", idle && slot === 0 ? "stopped" : "started");
       for (const slot of [1, 0]) stamp(slot, "active");
-      request({
-        method: "POST",
-        path: "/v1/apps/oracle/machines/old/cordon",
-        machineId: "old",
-      });
+      request({ method: "POST", path: "/v1/apps/oracle/machines/old/cordon", machineId: "old" });
       const candidates: Machine[] = [0, 1].map((slot) => ({
         id: `green-${slot}`,
         instance_id: `instance-${slot}`,
@@ -6658,33 +5521,21 @@ describe.sequential(
               path: "/v1/apps/oracle/machines/green-0/start",
               machineId: "green-0",
             };
-            value.events.splice(2, 0, request, {
-              ...request,
-              stage: "forwarded",
-              status,
-            });
+            value.events.splice(2, 0, request, { ...request, stage: "forwarded", status });
             return value;
           };
           expect(() => check(rejectedStart(412))).not.toThrow();
           expect(() => check(rejectedStart(500))).toThrow();
           const missing = rejectedStart(412);
           for (const event of missing.events)
-            if (event.method === "GET" && event.machineId === "green-0")
-              event.state = "stopped";
+            if (event.method === "GET" && event.machineId === "green-0") event.state = "stopped";
           expect(() => check(missing)).toThrow();
         }),
     );
 
     type Trace = ReturnType<typeof trace>;
     const check = ({ events, candidates }: Trace, allowIdle = true) =>
-      assertReadinessCommit(
-        events,
-        ["old"],
-        candidates,
-        [0, 1],
-        names,
-        allowIdle,
-      );
+      assertReadinessCommit(events, ["old"], candidates, [0, 1], names, allowIdle);
     const restored = ({ events }: Trace) =>
       events.find(
         (event) =>
@@ -6704,43 +5555,30 @@ describe.sequential(
     const active = ({ events }: Trace) =>
       events.filter(
         (event) =>
-          event.method === "PUT" &&
-          event.machineId === "green-0" &&
-          event.phase === "active",
+          event.method === "PUT" && event.machineId === "green-0" && event.phase === "active",
       );
 
-    it.effect(
-      "pure readiness matcher permits only passing corresponding mirrors",
-      () =>
-        Effect.sync(() => {
-          expect(readinessChecksPassing(reports(), names)).toBe(true);
-          expect(readinessChecksPassing(reports(true), names)).toBe(true);
-          for (const invalid of [
-            undefined,
-            [],
-            reports(true).filter(
-              (check) => check.name !== "servicecheck-00-http-80",
-            ),
-            [...reports(), reports()[0]!],
-            [...reports(true), reports(true).at(-1)!],
-            [...reports(), { name: "unrelated", status: "passing" }],
-            [
-              ...reports(),
-              { name: "bg_deployments_compat-00-tcp-80", status: "passing" },
-            ],
-            [...reports(), { name: undefined, status: "passing" }],
-            reports(true).map((check) => ({ ...check, status: "warning" })),
-            reports(true).map((check) =>
-              check.name.startsWith("bg_")
-                ? { ...check, status: "critical" }
-                : check,
-            ),
-          ])
-            expect(readinessChecksPassing(invalid, names)).toBe(false);
-          expect(readinessChecksPassing(reports(), [...names, names[0]!])).toBe(
-            false,
-          );
-        }),
+    it.effect("pure readiness matcher permits only passing corresponding mirrors", () =>
+      Effect.sync(() => {
+        expect(readinessChecksPassing(reports(), names)).toBe(true);
+        expect(readinessChecksPassing(reports(true), names)).toBe(true);
+        for (const invalid of [
+          undefined,
+          [],
+          reports(true).filter((check) => check.name !== "servicecheck-00-http-80"),
+          [...reports(), reports()[0]!],
+          [...reports(true), reports(true).at(-1)!],
+          [...reports(), { name: "unrelated", status: "passing" }],
+          [...reports(), { name: "bg_deployments_compat-00-tcp-80", status: "passing" }],
+          [...reports(), { name: undefined, status: "passing" }],
+          reports(true).map((check) => ({ ...check, status: "warning" })),
+          reports(true).map((check) =>
+            check.name.startsWith("bg_") ? { ...check, status: "critical" } : check,
+          ),
+        ])
+          expect(readinessChecksPassing(invalid, names)).toBe(false);
+        expect(readinessChecksPassing(reports(), [...names, names[0]!])).toBe(false);
+      }),
     );
 
     it.effect(
@@ -6799,20 +5637,14 @@ describe.sequential(
             path: "/v1/apps/oracle/machines/green-0",
             machineId: "green-0",
           };
-          value.events.splice(index, 0, event, {
-            ...event,
-            stage: "forwarded",
-            status: 200,
-          });
+          value.events.splice(index, 0, event, { ...event, stage: "forwarded", status: 200 });
         },
       ],
       [
         "GET requested before restoration completed",
         (value) => {
           const response = restored(value);
-          const index = value.events.findIndex(
-            (event) => event.sequence === response.sequence,
-          );
+          const index = value.events.findIndex((event) => event.sequence === response.sequence);
           const [request] = value.events.splice(index, 1);
           value.events.splice(1, 0, request!);
         },
@@ -6826,10 +5658,7 @@ describe.sequential(
               event.machineId === "green-0" &&
               event.phase === "validating",
           )) {
-            event.metadata = {
-              ...event.metadata,
-              "alchemy.checked-instance": "unproven",
-            };
+            event.metadata = { ...event.metadata, "alchemy.checked-instance": "unproven" };
           }
         },
       ],
@@ -6839,10 +5668,7 @@ describe.sequential(
           const retry = active(value)
             .filter((event) => event.stage === "request")
             .at(-1)!;
-          retry.metadata = {
-            ...retry.metadata,
-            "alchemy.checked-instance": "other",
-          };
+          retry.metadata = { ...retry.metadata, "alchemy.checked-instance": "other" };
         },
       ],
       [
@@ -6857,11 +5683,7 @@ describe.sequential(
           const attempts = active(value);
           const index = value.events.indexOf(attempts[2]!);
           value.events.splice(index, 1);
-          value.events.splice(
-            value.events.indexOf(attempts[1]!),
-            0,
-            attempts[2]!,
-          );
+          value.events.splice(value.events.indexOf(attempts[1]!), 0, attempts[2]!);
         },
       ],
       [
@@ -6893,30 +5715,20 @@ describe.sequential(
               event.status === 200,
           )!;
           value.events.splice(value.events.indexOf(response), 1);
-          value.events.splice(
-            value.events.indexOf(active(value)[0]!) + 1,
-            0,
-            response,
-          );
+          value.events.splice(value.events.indexOf(active(value)[0]!) + 1, 0, response);
         },
       ],
       [
         "retirement before terminal commit receipt",
         (value) => {
           const retirement = value.events.pop()!;
-          value.events.splice(
-            value.events.indexOf(active(value).at(-1)!),
-            0,
-            retirement,
-          );
+          value.events.splice(value.events.indexOf(active(value).at(-1)!), 0, retirement);
         },
       ],
       [
         "commit before complete topology validation",
         (value) => {
-          const first = value.events.findIndex(
-            (event) => event.phase === "active",
-          );
+          const first = value.events.findIndex((event) => event.phase === "active");
           const commit = value.events.splice(first, 4);
           const validation = value.events.findIndex(
             (event) =>
@@ -6940,12 +5752,10 @@ describe.sequential(
       );
     }
 
-    it.effect(
-      "pure readiness trace refuses idle completion when autostop is disabled",
-      () =>
-        Effect.sync(() => {
-          expect(() => check(trace(), false)).toThrow();
-        }),
+    it.effect("pure readiness trace refuses idle completion when autostop is disabled", () =>
+      Effect.sync(() => {
+        expect(() => check(trace(), false)).toThrow();
+      }),
     );
   },
 );
@@ -6964,13 +5774,7 @@ describe.sequential(
   () => {
     const { test } = Test.make({ providers: Fly.providers() });
     const checks = {
-      ready: {
-        type: "http" as const,
-        port: 80,
-        path: "/",
-        interval: "2s",
-        timeout: "1s",
-      },
+      ready: { type: "http" as const, port: 80, path: "/", interval: "2s", timeout: "1s" },
     };
 
     test.provider(
@@ -7033,13 +5837,11 @@ describe.sequential(
           expect(read?.count).toBe(2);
           expect(read?.rolloutPending).toBe(true);
           const recovered = yield* deploy(40_000);
-          expect(recovered.machineIds).toEqual(
-            candidates.map((machine) => machine.id),
-          );
+          expect(recovered.machineIds).toEqual(candidates.map((machine) => machine.id));
           expect(
-            (yield* machines.listMachines({
-              app_name: initial.appName,
-            })).filter((machine) => machine.state !== "destroyed"),
+            (yield* machines.listMachines({ app_name: initial.appName })).filter(
+              (machine) => machine.state !== "destroyed",
+            ),
           ).toHaveLength(2);
           const unchanged = yield* deploy(45_000);
           expect(unchanged.machineIds).toEqual(recovered.machineIds);
@@ -7057,10 +5859,7 @@ describe.sequential(
             stack.deploy(
               Effect.gen(function* () {
                 const app = yield* Fly.App("Site");
-                const other = yield* Fly.Machine("Other", {
-                  app,
-                  image: "nginx:alpine",
-                });
+                const other = yield* Fly.Machine("Other", { app, image: "nginx:alpine" });
                 const worker = yield* Fly.Machine("Worker", {
                   app,
                   image: "nginx:alpine",
@@ -7093,15 +5892,13 @@ describe.sequential(
           const recovered = yield* deploy("rolling");
           expect(recovered.worker.machineId).toBe(initial.worker.machineId);
           expect(recovered.other.machineId).toBe(initial.other.machineId);
-          const live = (yield* machines.listMachines({
-            app_name: initial.worker.appName,
-          })).filter((machine) => machine.state !== "destroyed");
+          const live = (yield* machines.listMachines({ app_name: initial.worker.appName })).filter(
+            (machine) => machine.state !== "destroyed",
+          );
           expect(live.map((machine) => machine.id).sort()).toEqual(
             [initial.worker.machineId, initial.other.machineId].sort(),
           );
-          expect(live.some((machine) => machine.id === candidate.id)).toBe(
-            false,
-          );
+          expect(live.some((machine) => machine.id === candidate.id)).toBe(false);
           yield* stack.destroy();
         }),
       { timeout: 300_000 },
@@ -7172,9 +5969,9 @@ describe.sequential(
             machineIds: recovered.machineIds,
             volumeIds: [],
           });
-          const live = (yield* machines.listMachines({
-            app_name: initial.appName,
-          })).filter((machine) => machine.state !== "destroyed");
+          const live = (yield* machines.listMachines({ app_name: initial.appName })).filter(
+            (machine) => machine.state !== "destroyed",
+          );
           expect(live.map((machine) => machine.id).sort()).toEqual(
             [...recovered.machineIds].sort(),
           );
@@ -7203,48 +6000,32 @@ describe.sequential(
               }),
             );
           const initial = yield* deploy(30_000);
-          const target = {
-            app_name: initial.appName,
-            machine_id: initial.machineIds[1]!,
-          };
+          const target = { app_name: initial.appName, machine_id: initial.machineIds[1]! };
           const source = yield* machines.getMachine(target);
           const drifted = yield* machines.updateMachine({
             ...target,
             config: { ...source.config, env: { DRIFT: "true" } },
           });
           expect(drifted.config?.env?.DRIFT).toBe("true");
-          const observed = yield* machines
-            .listMachines({ app_name: initial.appName })
-            .pipe(
-              Effect.map((listed) =>
-                listed.find((machine) => machine.id === target.machine_id),
-              ),
-              Effect.repeat({
-                schedule: Schedule.spaced("2 seconds"),
-                until: (machine) =>
-                  machine?.state === "started" &&
-                  machine.config?.env?.DRIFT === "true",
-                times: 10,
-              }),
-            );
+          const observed = yield* machines.listMachines({ app_name: initial.appName }).pipe(
+            Effect.map((listed) => listed.find((machine) => machine.id === target.machine_id)),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (machine) =>
+                machine?.state === "started" && machine.config?.env?.DRIFT === "true",
+              times: 10,
+            }),
+          );
           expect(observed?.config?.env?.DRIFT).toBe("true");
           expect(observed?.state).toBe("started");
           const recovered = yield* deploy(40_000);
-          expect(
-            recovered.machineIds.every(
-              (id) => !initial.machineIds.includes(id),
-            ),
-          ).toBe(true);
-          const live = (yield* machines.listMachines({
-            app_name: initial.appName,
-          })).filter((machine) => machine.state !== "destroyed");
+          expect(recovered.machineIds.every((id) => !initial.machineIds.includes(id))).toBe(true);
+          const live = (yield* machines.listMachines({ app_name: initial.appName })).filter(
+            (machine) => machine.state !== "destroyed",
+          );
           expect(live).toHaveLength(2);
-          expect(
-            live.every((machine) => machine.config?.env?.DRIFT === undefined),
-          ).toBe(true);
-          expect(
-            new Set(live.map((machine) => machine.image_ref?.digest)).size,
-          ).toBe(1);
+          expect(live.every((machine) => machine.config?.env?.DRIFT === undefined)).toBe(true);
+          expect(new Set(live.map((machine) => machine.image_ref?.digest)).size).toBe(1);
           yield* stack.destroy();
         }),
       { timeout: 300_000 },
@@ -7291,34 +6072,21 @@ describe.sequential(
                 remaining: Infinity,
               });
             });
-            const result = yield* deployWorker(stack, "two", props).pipe(
-              Effect.result,
-            );
+            const result = yield* deployWorker(stack, "two", props).pipe(Effect.result);
             expect(Result.isFailure(result)).toBe(true);
             if (Result.isFailure(result))
-              expect(result.failure).toMatchObject({
-                _tag: "Fly.MachineMutationUncertain",
-              });
+              expect(result.failure).toMatchObject({ _tag: "Fly.MachineMutationUncertain" });
             const cut = proxy.events.filter(
               (event) => event.stage === "cut" && event.phase === "promoting",
             );
             expect(cut.length).toBeGreaterThan(0);
             expect(new Set(cut.map((event) => event.machineId)).size).toBe(1);
             const live = yield* census(initial.appName);
-            const old = live.filter((machine) =>
-              initial.machineIds.includes(machine.id!),
-            );
-            const candidates = live.filter(
-              (machine) => !initial.machineIds.includes(machine.id!),
-            );
-            expect(old.map((machine) => machine.id).sort()).toEqual(
-              [...initial.machineIds].sort(),
-            );
+            const old = live.filter((machine) => initial.machineIds.includes(machine.id!));
+            const candidates = live.filter((machine) => !initial.machineIds.includes(machine.id!));
+            expect(old.map((machine) => machine.id).sort()).toEqual([...initial.machineIds].sort());
             expect(
-              old.every(
-                (machine) =>
-                  machine.cordoned === false && machine.state === "started",
-              ),
+              old.every((machine) => machine.cordoned === false && machine.state === "started"),
             ).toBe(true);
             expect(candidates).toHaveLength(2);
             expect(
@@ -7328,38 +6096,26 @@ describe.sequential(
                   machine.config?.metadata?.["alchemy.phase"] === "candidate",
               ),
             ).toBe(true);
-            expect(
-              candidates.some((machine) => machine.id === cut[0]!.machineId),
-            ).toBe(true);
-            expect(
-              proxy.events.some((event) => event.path.endsWith("/uncordon")),
-            ).toBe(false);
+            expect(candidates.some((machine) => machine.id === cut[0]!.machineId)).toBe(true);
+            expect(proxy.events.some((event) => event.path.endsWith("/uncordon"))).toBe(false);
             expect(
               proxy.events.some(
                 (event) =>
                   initial.machineIds.includes(event.machineId!) &&
                   (event.path.endsWith("/cordon") ||
                     event.path.endsWith("/stop") ||
-                    (event.method === "DELETE" &&
-                      /\/machines\/[^/]+$/.test(event.path))),
+                    (event.method === "DELETE" && /\/machines\/[^/]+$/.test(event.path))),
               ),
             ).toBe(false);
             expect(
-              proxy.events.some(
-                (event) =>
-                  event.phase === "active" || event.phase === "retiring",
-              ),
+              proxy.events.some((event) => event.phase === "active" || event.phase === "retiring"),
             ).toBe(false);
             expect(
               proxy.events.some(
-                (event) =>
-                  event.method === "DELETE" &&
-                  /\/machines\/[^/]+$/.test(event.path),
+                (event) => event.method === "DELETE" && /\/machines\/[^/]+$/.test(event.path),
               ),
             ).toBe(false);
-            const candidateIds = candidates
-              .map((machine) => machine.id!)
-              .sort();
+            const candidateIds = candidates.map((machine) => machine.id!).sort();
             yield* Effect.sync(proxy.clear);
             const recovered = yield* deployWorker(stack, "two", props);
             expect([...recovered.machineIds].sort()).toEqual(candidateIds);
@@ -7422,54 +6178,33 @@ describe.sequential(
                     match: (event) =>
                       event.machineId === targetId &&
                       (operation === "delete"
-                        ? event.method === "DELETE" &&
-                          event.path.endsWith(`/machines/${targetId}`)
-                        : event.method === "POST" &&
-                          event.path.endsWith(`/${operation}`)),
+                        ? event.method === "DELETE" && event.path.endsWith(`/machines/${targetId}`)
+                        : event.method === "POST" && event.path.endsWith(`/${operation}`)),
                     action: "cut-request",
                     remaining: Infinity,
                   });
                 });
-                const result = yield* deployWorker(stack, "two", props).pipe(
-                  Effect.result,
-                );
+                const result = yield* deployWorker(stack, "two", props).pipe(Effect.result);
                 expect(Result.isFailure(result)).toBe(true);
                 if (Result.isFailure(result)) {
-                  expect(result.failure).toBeInstanceOf(
-                    ReplicaRetirementIncomplete,
-                  );
+                  expect(result.failure).toBeInstanceOf(ReplicaRetirementIncomplete);
                   if (result.failure instanceof ReplicaRetirementIncomplete) {
                     expect(result.failure.appName).toBe(initial.appName);
                     expect(result.failure.residuals).toEqual([
-                      {
-                        machineId: targetId,
-                        stage: `${operation}: Fly.MachineMutationUncertain`,
-                      },
+                      { machineId: targetId, stage: `${operation}: Fly.MachineMutationUncertain` },
                     ]);
                   }
                 }
-                const cuts = proxy.events.filter(
-                  (event) => event.stage === "cut",
-                );
+                const cuts = proxy.events.filter((event) => event.stage === "cut");
                 expect(cuts.length).toBeGreaterThan(0);
-                expect([
-                  ...new Set(cuts.map((event) => event.machineId)),
-                ]).toEqual([targetId]);
+                expect([...new Set(cuts.map((event) => event.machineId))]).toEqual([targetId]);
                 const live = yield* census(initial.appName);
-                const old = live.filter((machine) =>
-                  initial.machineIds.includes(machine.id!),
-                );
-                const green = live.filter(
-                  (machine) => !initial.machineIds.includes(machine.id!),
-                );
+                const old = live.filter((machine) => initial.machineIds.includes(machine.id!));
+                const green = live.filter((machine) => !initial.machineIds.includes(machine.id!));
                 expect(old.map((machine) => machine.id)).toEqual([targetId]);
-                expect(live.some((machine) => machine.id === siblingId)).toBe(
-                  false,
-                );
+                expect(live.some((machine) => machine.id === siblingId)).toBe(false);
                 expect(old[0]!.cordoned).toBe(operation !== "cordon");
-                expect(old[0]!.state).toBe(
-                  operation === "delete" ? "stopped" : "started",
-                );
+                expect(old[0]!.state).toBe(operation === "delete" ? "stopped" : "started");
                 expect(green).toHaveLength(2);
                 expect(
                   green.every(
@@ -7556,19 +6291,13 @@ describe.sequential(
             const removedAgain = yield* machines
               .deleteMachine(target)
               .pipe(Retry.none, Effect.result);
-            if (Result.isFailure(removedAgain))
-              expect(removedAgain.failure._tag).toBe("NotFound");
+            if (Result.isFailure(removedAgain)) expect(removedAgain.failure._tag).toBe("NotFound");
             const absent = yield* machines
-              .getMachine({
-                app_name: target.app_name,
-                machine_id: target.machine_id,
-              })
+              .getMachine({ app_name: target.app_name, machine_id: target.machine_id })
               .pipe(
                 Retry.none,
                 Effect.map(
-                  (machine) =>
-                    machine.id === target.machine_id &&
-                    machine.state === "destroyed",
+                  (machine) => machine.id === target.machine_id && machine.state === "destroyed",
                 ),
                 Effect.catchTag("NotFound", () => Effect.succeed(true)),
                 Effect.repeat({
@@ -7582,9 +6311,7 @@ describe.sequential(
             yield* Effect.logInfo("Observed real second-remover outcome", {
               appName: initial.appName,
               machineId: initial.machineId,
-              outcome: Result.isSuccess(removedAgain)
-                ? "accepted"
-                : removedAgain.failure._tag,
+              outcome: Result.isSuccess(removedAgain) ? "accepted" : removedAgain.failure._tag,
               absenceConfirmed: absent,
             });
             expect(yield* census(initial.appName)).toHaveLength(0);
@@ -7609,9 +6336,7 @@ describe.sequential(
                   "trap 'if [ -f /slow-drain ]; then sleep 60; fi; exit 0' TERM; nginx -g 'daemon off;' & while :; do sleep 1 & wait $!; done",
                 ],
               },
-            } satisfies Partial<
-              Omit<Extract<MachineProps, { image: string }>, "app">
-            >;
+            } satisfies Partial<Omit<Extract<MachineProps, { image: string }>, "app">>;
             const initial = yield* deployWorker(stack, "one", props);
             const [fastId, slowId] = [...initial.machineIds].sort();
             expect(initial.machineIds).toHaveLength(2);
@@ -7629,16 +6354,8 @@ describe.sequential(
               event.path.endsWith(`/machines/${fastId}`);
             yield* Effect.sync(() => {
               endpoint = proxy.url;
-              proxy.arm({
-                match: isFastDelete,
-                action: "drop-response",
-                remaining: 1,
-              });
-              proxy.arm({
-                match: isFastDelete,
-                action: "cut-request",
-                remaining: Infinity,
-              });
+              proxy.arm({ match: isFastDelete, action: "drop-response", remaining: 1 });
+              proxy.arm({ match: isFastDelete, action: "cut-request", remaining: Infinity });
             });
             const update = yield* deployWorker(stack, "two", props).pipe(
               Effect.result,
@@ -7659,9 +6376,7 @@ describe.sequential(
               machine_id: slowId!,
             });
             expect(draining.state).not.toBe("destroyed");
-            expect(
-              (yield* Clock.currentTimeMillis) - deletedAt,
-            ).toBeGreaterThanOrEqual(30_000);
+            expect((yield* Clock.currentTimeMillis) - deletedAt).toBeGreaterThanOrEqual(30_000);
             expect(
               proxy.events.some(
                 (event) =>
@@ -7674,22 +6389,13 @@ describe.sequential(
                   event.status! < 300,
               ),
             ).toBe(true);
-            const result = yield* Fiber.join(update).pipe(
-              Effect.timeout("240 seconds"),
-            );
+            const result = yield* Fiber.join(update).pipe(Effect.timeout("240 seconds"));
             expect(Result.isSuccess(result)).toBe(true);
             if (Result.isSuccess(result))
-              yield* assertCommitted(
-                initial.appName,
-                result.success.machineIds,
-              );
+              yield* assertCommitted(initial.appName, result.success.machineIds);
             const live = yield* census(initial.appName);
             expect(live).toHaveLength(2);
-            expect(
-              live.every(
-                (machine) => !initial.machineIds.includes(machine.id!),
-              ),
-            ).toBe(true);
+            expect(live.every((machine) => !initial.machineIds.includes(machine.id!))).toBe(true);
             expect(
               proxy.events.some(
                 (event) =>
@@ -7700,18 +6406,14 @@ describe.sequential(
                   (event.status === 404 || event.state === "destroyed"),
               ),
             ).toBe(true);
-            yield* Effect.logInfo(
-              "Exact-target retirement transport evidence",
-              {
-                machineId: fastId,
-                events: proxy.events.filter(
-                  (event) =>
-                    isFastDelete(event) ||
-                    (event.method === "GET" &&
-                      event.path.endsWith(`/machines/${fastId}`)),
-                ),
-              },
-            );
+            yield* Effect.logInfo("Exact-target retirement transport evidence", {
+              machineId: fastId,
+              events: proxy.events.filter(
+                (event) =>
+                  isFastDelete(event) ||
+                  (event.method === "GET" && event.path.endsWith(`/machines/${fastId}`)),
+              ),
+            });
             expect(
               proxy.events.some(
                 (event) =>
@@ -7759,43 +6461,30 @@ describe.sequential(
               const match = (event: TransportEvent) =>
                 event.machineId === initial.machineId &&
                 (operation === "delete"
-                  ? event.method === "DELETE" &&
-                    event.path.endsWith(initial.machineId)
+                  ? event.method === "DELETE" && event.path.endsWith(initial.machineId)
                   : event.path.endsWith(`/${operation}`));
               yield* Effect.sync(() => {
                 endpoint = proxy.url;
                 proxy.arm({ match, action: "drop-response", remaining: 1 });
-                proxy.arm({
-                  match,
-                  action: "cut-request",
-                  remaining: Infinity,
-                });
+                proxy.arm({ match, action: "cut-request", remaining: Infinity });
               });
               const result = yield* deployWorker(stack, "two").pipe(
                 Effect.timeout("120 seconds"),
                 Effect.result,
               );
               expect(
-                proxy.events.some(
-                  (event) => event.stage === "dropped" && event.status! < 300,
-                ),
+                proxy.events.some((event) => event.stage === "dropped" && event.status! < 300),
               ).toBe(true);
               const live = yield* census(initial.appName);
-              const green = live.filter(
-                (machine) => machine.id !== initial.machineId,
-              );
+              const green = live.filter((machine) => machine.id !== initial.machineId);
               expect(green).toHaveLength(1);
               expect(green[0]!.cordoned).toBe(false);
-              expect(green[0]!.config?.metadata?.["alchemy.phase"]).toBe(
-                "active",
-              );
+              expect(green[0]!.config?.metadata?.["alchemy.phase"]).toBe("active");
               if (live.some((machine) => machine.id === initial.machineId))
                 expect(Result.isFailure(result)).toBe(true);
               yield* Effect.sync(proxy.clear);
               const recovered = yield* deployWorker(stack, "two");
-              expect(recovered.machineIds).toEqual(
-                green.map((machine) => machine.id),
-              );
+              expect(recovered.machineIds).toEqual(green.map((machine) => machine.id));
               yield* assertCommitted(initial.appName, recovered.machineIds);
               yield* Effect.sync(() => {
                 endpoint = undefined;
@@ -7825,8 +6514,7 @@ describe.sequential(
               yield* Effect.sync(() => {
                 endpoint = proxy.url;
                 proxy.arm({
-                  match: (event) =>
-                    event.path.endsWith("/metadata") && event.phase === phase,
+                  match: (event) => event.path.endsWith("/metadata") && event.phase === phase,
                   action: "cut-request",
                   remaining: Infinity,
                 });
@@ -7836,27 +6524,20 @@ describe.sequential(
                 Effect.result,
               );
               expect(
-                proxy.events.some(
-                  (event) => event.stage === "cut" && event.phase === phase,
-                ),
+                proxy.events.some((event) => event.stage === "cut" && event.phase === phase),
               ).toBe(true);
               const live = yield* census(initial.appName);
-              const green = live.filter(
-                (machine) => machine.id !== initial.machineId,
-              );
+              const green = live.filter((machine) => machine.id !== initial.machineId);
               expect(green).toHaveLength(1);
               expect(green[0]!.cordoned).toBe(false);
               if (phase === "retiring") {
                 expect(Result.isSuccess(result)).toBe(true);
-                expect(
-                  live.some((machine) => machine.id === initial.machineId),
-                ).toBe(false);
+                expect(live.some((machine) => machine.id === initial.machineId)).toBe(false);
               } else {
                 expect(Result.isFailure(result)).toBe(true);
-                expect(
-                  live.find((machine) => machine.id === initial.machineId)
-                    ?.cordoned,
-                ).toBe(false);
+                expect(live.find((machine) => machine.id === initial.machineId)?.cordoned).toBe(
+                  false,
+                );
                 expect(
                   proxy.events.some(
                     (event) =>
@@ -7868,9 +6549,7 @@ describe.sequential(
               }
               yield* Effect.sync(proxy.clear);
               const recovered = yield* deployWorker(stack, "two");
-              expect(recovered.machineIds).toEqual(
-                green.map((machine) => machine.id),
-              );
+              expect(recovered.machineIds).toEqual(green.map((machine) => machine.id));
               yield* assertCommitted(initial.appName, recovered.machineIds);
               yield* Effect.sync(() => {
                 endpoint = undefined;
@@ -7928,27 +6607,16 @@ describe.sequential(
         const client = yield* HttpClient.HttpClient;
         const url = `https://${appName}.fly.dev/writer`;
         const request = (
-          method === "POST"
-            ? HttpClientRequest.post(url)
-            : HttpClientRequest.get(url)
+          method === "POST" ? HttpClientRequest.post(url) : HttpClientRequest.get(url)
         ).pipe(HttpClientRequest.bearerToken(token));
         const response = yield* client
           .execute(request)
-          .pipe(
-            Effect.mapError(
-              () => new WriterProbeFailed({ stage: "transport" }),
-            ),
-          );
+          .pipe(Effect.mapError(() => new WriterProbeFailed({ stage: "transport" })));
         if (response.status !== 200) {
-          return yield* new WriterProbeFailed({
-            stage: "status",
-            status: response.status,
-          });
+          return yield* new WriterProbeFailed({ stage: "status", status: response.status });
         }
         return yield* response.json.pipe(
-          Effect.flatMap(
-            Schema.decodeUnknownEffect(Receipt, { onExcessProperty: "error" }),
-          ),
+          Effect.flatMap(Schema.decodeUnknownEffect(Receipt, { onExcessProperty: "error" })),
           Effect.mapError(() => new WriterProbeFailed({ stage: "decode" })),
         );
       }).pipe(
@@ -7985,9 +6653,7 @@ describe.sequential(
           let appName: string | undefined;
           yield* Effect.addFinalizer(() =>
             stack.destroy().pipe(
-              Effect.andThen(() =>
-                appName === undefined ? Effect.void : assertAppGone(appName),
-              ),
+              Effect.andThen(() => (appName === undefined ? Effect.void : assertAppGone(appName))),
               Effect.orDie,
             ),
           );
@@ -7999,9 +6665,7 @@ describe.sequential(
           );
           const trigger = yield* Effect.sync(() =>
             Redacted.make(
-              Array.from(randomBytes(32), (byte) =>
-                byte.toString(16).padStart(2, "0"),
-              ).join(""),
+              Array.from(randomBytes(32), (byte) => byte.toString(16).padStart(2, "0")).join(""),
             ),
           );
           const deploy = (count: number, floor?: number) =>
@@ -8015,9 +6679,7 @@ describe.sequential(
                   value: trigger,
                 });
                 yield* Fly.IpAssignment("Public", { app, type: "shared_v4" });
-                const writer = yield* Writer.pipe(
-                  Effect.provide(writerLayer(auth.digest)),
-                );
+                const writer = yield* Writer.pipe(Effect.provide(writerLayer(auth.digest)));
                 const consumer = yield* Fly.Machine("Consumer", {
                   app,
                   region: "iad",
@@ -8033,10 +6695,7 @@ describe.sequential(
                     ],
                   },
                   checks,
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "60 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
                 });
                 return { app, secret, writer, consumer };
@@ -8056,8 +6715,7 @@ describe.sequential(
             Effect.retry({
               while: (error) =>
                 error.stage === "transport" ||
-                (error.stage === "status" &&
-                  [404, 502, 503].includes(error.status ?? 0)),
+                (error.stage === "status" && [404, 502, 503].includes(error.status ?? 0)),
               schedule: Schedule.spaced("2 seconds"),
               times: 8,
             }),
@@ -8069,21 +6727,14 @@ describe.sequential(
             marker: "ready",
           });
           const client = yield* HttpClient.HttpClient;
-          const unauthorized = yield* client
-            .post(`https://${appName}.fly.dev/writer`)
-            .pipe(
-              Effect.timeout("30 seconds"),
-              Effect.mapError(
-                () => new WriterProbeFailed({ stage: "transport" }),
-              ),
-            );
+          const unauthorized = yield* client.post(`https://${appName}.fly.dev/writer`).pipe(
+            Effect.timeout("30 seconds"),
+            Effect.mapError(() => new WriterProbeFailed({ stage: "transport" })),
+          );
           expect(unauthorized.status).toBe(401);
           const initialCensus = yield* census(appName);
           expect(initialCensus.map((machine) => machine.id).sort()).toEqual(
-            [
-              ...initial.writer.machineIds,
-              ...initial.consumer.machineIds,
-            ].sort(),
+            [...initial.writer.machineIds, ...initial.consumer.machineIds].sort(),
           );
           const writerBefore = initialCensus.find(
             (machine) => machine.id === initial.writer.machineId,
@@ -8101,9 +6752,7 @@ describe.sequential(
               event.secretsVersion !== undefined,
           );
           expect(secretWrites.length).toBeGreaterThan(0);
-          const floor = Math.max(
-            ...secretWrites.map((event) => event.secretsVersion!),
-          );
+          const floor = Math.max(...secretWrites.map((event) => event.secretsVersion!));
           expect(Number.isSafeInteger(floor)).toBe(true);
           expect(floor).toBeGreaterThan(0);
           const start = proxy.events.length;
@@ -8119,10 +6768,7 @@ describe.sequential(
             }),
           );
           yield* Effect.gen(function* () {
-            const rollout = yield* deploy(2, floor).pipe(
-              Effect.scoped,
-              Effect.forkScoped,
-            );
+            const rollout = yield* deploy(2, floor).pipe(Effect.scoped, Effect.forkScoped);
             const held = yield* proxy.wait(
               (event) =>
                 event.stage === "held" &&
@@ -8134,49 +6780,34 @@ describe.sequential(
             expect(held.machineId).toBeTruthy();
             expect(held.minSecretsVersion).toBe(floor);
             // This POST runs the existing WriteSecret binding inside the sibling Machine.
-            const later = yield* probeWriter(
-              initial.app.appName,
-              trigger,
-              "POST",
-            );
+            const later = yield* probeWriter(initial.app.appName, trigger, "POST");
             expect(later.machineId).toBe(initial.writer.machineId);
             expect(later.marker).toBe("three");
             expect(Number.isSafeInteger(later.version)).toBe(true);
             expect(later.version).toBeGreaterThan(floor);
             expect(
               proxy.events.some(
-                (event) =>
-                  event.sequence === held.sequence &&
-                  event.stage === "forwarded",
+                (event) => event.sequence === held.sequence && event.stage === "forwarded",
               ),
             ).toBe(false);
             yield* Effect.sync(proxy.release);
-            const next = yield* Fiber.join(rollout).pipe(
-              Effect.timeout("240 seconds"),
-            );
+            const next = yield* Fiber.join(rollout).pipe(Effect.timeout("240 seconds"));
             expect(next.app.appName).toBe(initial.app.appName);
             expect(next.secret.name).toBe(initial.secret.name);
             expect(next.writer.machineIds).toEqual(initial.writer.machineIds);
             expect(next.consumer.machineIds).toHaveLength(2);
             expect(next.consumer.machineIds).toContain(held.machineId);
-            expect(next.consumer.machineIds).not.toContain(
-              initial.consumer.machineId,
-            );
+            expect(next.consumer.machineIds).not.toContain(initial.consumer.machineId);
             const events = proxy.events.slice(start);
             const creates = events.filter(
               (event) =>
-                event.stage === "request" &&
-                event.method === "POST" &&
-                event.path === machinePath,
+                event.stage === "request" && event.method === "POST" && event.path === machinePath,
             );
             expect(creates).toHaveLength(2);
             expect(creates[0]?.sequence).toBe(held.sequence);
-            expect(
-              creates.every((event) => event.minSecretsVersion === floor),
-            ).toBe(true);
+            expect(creates.every((event) => event.minSecretsVersion === floor)).toBe(true);
             const released = events.findIndex(
-              (event) =>
-                event.sequence === held.sequence && event.stage === "forwarded",
+              (event) => event.sequence === held.sequence && event.stage === "forwarded",
             );
             expect(released).toBeGreaterThan(-1);
             expect(events.indexOf(creates[1]!)).toBeGreaterThan(released);
@@ -8192,30 +6823,20 @@ describe.sequential(
             expect(live.map((machine) => machine.id).sort()).toEqual(
               [...next.writer.machineIds, ...next.consumer.machineIds].sort(),
             );
-            const writerAfter = live.find(
-              (machine) => machine.id === initial.writer.machineId,
-            );
+            const writerAfter = live.find((machine) => machine.id === initial.writer.machineId);
             expect(writerAfter?.instance_id).toBe(writerBefore?.instance_id);
-            expect(writerAfter?.image_ref?.digest).toBe(
-              writerBefore?.image_ref?.digest,
-            );
+            expect(writerAfter?.image_ref?.digest).toBe(writerBefore?.image_ref?.digest);
             for (const id of next.consumer.machineIds) {
               const machine = live.find((machine) => machine.id === id);
-              expect(machine?.config?.metadata?.["alchemy.phase"]).toBe(
-                "active",
-              );
-              expect(machine?.image_ref?.digest).toBe(
-                initial.consumer.imageRef?.digest,
-              );
+              expect(machine?.config?.metadata?.["alchemy.phase"]).toBe("active");
+              expect(machine?.image_ref?.digest).toBe(initial.consumer.imageRef?.digest);
               const observed = yield* marker(initial.app.appName, id);
               expect(observed.code).toBe(0);
-              expect(
-                id === held.machineId ? ["two", "three"] : ["three"],
-              ).toContain(observed.marker);
+              expect(id === held.machineId ? ["two", "three"] : ["three"]).toContain(
+                observed.marker,
+              );
             }
-            expect(
-              yield* probeWriter(initial.app.appName, trigger, "GET"),
-            ).toEqual(before);
+            expect(yield* probeWriter(initial.app.appName, trigger, "GET")).toEqual(before);
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {
@@ -8264,13 +6885,7 @@ describe.sequential(
               autostop: "off" as const,
               ports: [{ port: 80, handlers: ["http" as const] }],
               checks: [
-                {
-                  type: "http" as const,
-                  port: 80,
-                  path: "/",
-                  interval: "2s",
-                  timeout: "1s",
-                },
+                { type: "http" as const, port: 80, path: "/", interval: "2s", timeout: "1s" },
               ],
             },
           ];
@@ -8293,10 +6908,7 @@ describe.sequential(
                       "printf '%s:%s' \"$VERSION\" \"$FLY_MACHINE_ID\" > /usr/share/nginx/html/version; exec nginx -g 'daemon off;'",
                     ],
                   },
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "60 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
                 });
               }),
@@ -8312,10 +6924,7 @@ describe.sequential(
           let previous = yield* deploy("one", 1);
           expect(
             yield* traffic(previous.appName).pipe(
-              Effect.retry({
-                schedule: Schedule.spaced("2 seconds"),
-                times: 8,
-              }),
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 8 }),
             ),
           ).toBe(`one:${previous.machineId}`);
           for (const [version, count] of [
@@ -8329,29 +6938,19 @@ describe.sequential(
             const live = yield* assertCommitted(next.appName, next.machineIds);
             expect(live).toHaveLength(count);
             expect(
-              new Set(
-                live.map(
-                  (machine) => machine.config?.metadata?.["alchemy.generation"],
-                ),
-              ).size,
+              new Set(live.map((machine) => machine.config?.metadata?.["alchemy.generation"])).size,
             ).toBe(1);
             expect(
-              new Set(
-                live.map(
-                  (machine) => machine.config?.metadata?.["alchemy.replica"],
-                ),
-              ).size,
+              new Set(live.map((machine) => machine.config?.metadata?.["alchemy.replica"])).size,
             ).toBe(count);
             expect(
               live.every(
                 (machine) =>
-                  machine.config?.metadata?.["alchemy.count"] ===
-                    String(count) && machine.config?.env?.VERSION === version,
+                  machine.config?.metadata?.["alchemy.count"] === String(count) &&
+                  machine.config?.env?.VERSION === version,
               ),
             ).toBe(true);
-            expect(
-              next.machineIds.every((id) => !previous.machineIds.includes(id)),
-            ).toBe(true);
+            expect(next.machineIds.every((id) => !previous.machineIds.includes(id))).toBe(true);
             const creates = events.filter(
               (event) =>
                 event.stage === "completed" &&
@@ -8362,17 +6961,12 @@ describe.sequential(
             expect(creates).toHaveLength(count);
             const digest = creates[0]!.digest;
             expect(digest).toMatch(/^sha256:/);
-            expect(
-              live.every((machine) => machine.image_ref?.digest === digest),
-            ).toBe(true);
-            expect(
-              creates
-                .slice(1)
-                .every((event) => event.image?.endsWith(`@${digest}`)),
-            ).toBe(true);
+            expect(live.every((machine) => machine.image_ref?.digest === digest)).toBe(true);
+            expect(creates.slice(1).every((event) => event.image?.endsWith(`@${digest}`))).toBe(
+              true,
+            );
             const firstRouting = events.findIndex(
-              (event) =>
-                event.stage === "request" && event.path.endsWith("/uncordon"),
+              (event) => event.stage === "request" && event.path.endsWith("/uncordon"),
             );
             expect(firstRouting).toBeGreaterThan(0);
             const beforeRouting = events.slice(0, firstRouting);
@@ -8394,24 +6988,18 @@ describe.sequential(
                   !event.path.endsWith("/lease"),
               );
               expect(ready).toBeDefined();
-              expect(beforeRouting.indexOf(ready!)).toBeGreaterThan(
-                lastConfigWrite,
-              );
+              expect(beforeRouting.indexOf(ready!)).toBeGreaterThan(lastConfigWrite);
               expect(ready?.state).toBe("started");
               expect(ready?.cordoned).toBe(true);
               expect(ready?.instanceId).toBeDefined();
               expect(ready?.digest).toBe(digest);
-              expect(
-                ready?.checks?.find((check) => check.name === "ready")?.status,
-              ).toBe("passing");
-              expect(
-                ready?.checks?.some((check) =>
-                  check.name?.startsWith("servicecheck-"),
-                ),
-              ).toBe(true);
-              expect(
-                ready?.checks?.every((check) => check.status === "passing"),
-              ).toBe(true);
+              expect(ready?.checks?.find((check) => check.name === "ready")?.status).toBe(
+                "passing",
+              );
+              expect(ready?.checks?.some((check) => check.name?.startsWith("servicecheck-"))).toBe(
+                true,
+              );
+              expect(ready?.checks?.every((check) => check.status === "passing")).toBe(true);
             }
             expect(
               beforeRouting.some(
@@ -8425,9 +7013,7 @@ describe.sequential(
               ),
             ).toBe(false);
             const served = yield* traffic(next.appName);
-            expect(next.machineIds.map((id) => `${version}:${id}`)).toContain(
-              served,
-            );
+            expect(next.machineIds.map((id) => `${version}:${id}`)).toContain(served);
             previous = next;
           }
           yield* stack.destroy();
@@ -8457,29 +7043,16 @@ describe.sequential(
                     deploy: { strategy, healthTimeout: "30 seconds" },
                     shutdown: { signal: "SIGQUIT", timeout: "10 seconds" },
                     checks: {
-                      ready: {
-                        type: "http",
-                        port: 80,
-                        path: "/",
-                        interval: "2s",
-                        timeout: "1s",
-                      },
+                      ready: { type: "http", port: 80, path: "/", interval: "2s", timeout: "1s" },
                     },
                   });
                 }),
               );
-            const initial = yield* deploy(
-              before,
-              before === 2 ? "rolling" : "bluegreen",
-            );
+            const initial = yield* deploy(before, before === 2 ? "rolling" : "bluegreen");
             if (before === 2) {
               // Reproduce the ownership metadata written before generation support.
               for (const machineId of initial.machineIds) {
-                for (const key of [
-                  "alchemy.instance",
-                  "alchemy.fqn",
-                  "alchemy.base-name",
-                ]) {
+                for (const key of ["alchemy.instance", "alchemy.fqn", "alchemy.base-name"]) {
                   yield* machines.deleteMachineMetadata({
                     app_name: initial.appName,
                     machine_id: machineId,
@@ -8487,37 +7060,29 @@ describe.sequential(
                   });
                 }
               }
-              const legacy = yield* machines
-                .listMachines({ app_name: initial.appName })
-                .pipe(
-                  Effect.repeat({
-                    schedule: Schedule.spaced("1 second"),
-                    until: (listed) =>
-                      listed.every(
-                        (machine) =>
-                          machine.config?.metadata?.["alchemy.instance"] ===
-                          undefined,
-                      ),
-                    times: 8,
-                  }),
-                );
+              const legacy = yield* machines.listMachines({ app_name: initial.appName }).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("1 second"),
+                  until: (listed) =>
+                    listed.every(
+                      (machine) => machine.config?.metadata?.["alchemy.instance"] === undefined,
+                    ),
+                  times: 8,
+                }),
+              );
               expect(
                 legacy.every(
-                  (machine) =>
-                    machine.config?.metadata?.["alchemy.instance"] ===
-                    undefined,
+                  (machine) => machine.config?.metadata?.["alchemy.instance"] === undefined,
                 ),
               ).toBe(true);
             }
             const scaled = yield* deploy(after, "bluegreen");
             expect(scaled.count).toBe(after);
             expect(scaled.machineIds).toHaveLength(after);
-            expect(
-              scaled.machineIds.every((id) => !initial.machineIds.includes(id)),
-            ).toBe(true);
-            const live = (yield* machines.listMachines({
-              app_name: initial.appName,
-            })).filter((machine) => machine.state !== "destroyed");
+            expect(scaled.machineIds.every((id) => !initial.machineIds.includes(id))).toBe(true);
+            const live = (yield* machines.listMachines({ app_name: initial.appName })).filter(
+              (machine) => machine.state !== "destroyed",
+            );
             expect(live).toHaveLength(after);
             expect(
               live.every(
@@ -8526,9 +7091,7 @@ describe.sequential(
                   machine.config?.metadata?.["alchemy.phase"] === "active",
               ),
             ).toBe(true);
-            expect(
-              new Set(live.map((machine) => machine.image_ref?.digest)).size,
-            ).toBe(1);
+            expect(new Set(live.map((machine) => machine.image_ref?.digest)).size).toBe(1);
             yield* stack.destroy();
             yield* assertAppGone(initial.appName);
           }),
@@ -8561,10 +7124,7 @@ describe.sequential(
           timeout: 5,
         })
         .pipe(
-          Effect.map((response) => ({
-            code: response.exit_code,
-            marker: response.stdout?.trim(),
-          })),
+          Effect.map((response) => ({ code: response.exit_code, marker: response.stdout?.trim() })),
         );
     const init = {
       exec: [
@@ -8590,10 +7150,7 @@ describe.sequential(
             init,
             minSecretsVersion: firstFloor,
           });
-          expect(yield* marker(app.appName, first.machineId)).toEqual({
-            code: 0,
-            marker: "one",
-          });
+          expect(yield* marker(app.appName, first.machineId)).toEqual({ code: 0, marker: "one" });
           const rotated = yield* machines.updateSecrets({
             app_name: app.appName,
             values: { ACCEPTANCE_SECRET: "fixture-token-two" },
@@ -8605,25 +7162,16 @@ describe.sequential(
             minSecretsVersion: firstFloor,
           });
           expect(unchanged.machineIds).toEqual(first.machineIds);
-          expect(yield* marker(app.appName, first.machineId)).toEqual({
-            code: 0,
-            marker: "one",
-          });
+          expect(yield* marker(app.appName, first.machineId)).toEqual({ code: 0, marker: "one" });
           // A later writer advances the shared vault; the requested version is a floor, not a snapshot.
           const later = yield* machines.updateSecrets({
             app_name: app.appName,
             values: { ACCEPTANCE_SECRET: "fixture-token-three" },
           });
           expect(later.version ?? later.Version).toBeGreaterThan(floor!);
-          const next = yield* deployWorker(stack, "same-image", {
-            init,
-            minSecretsVersion: floor,
-          });
+          const next = yield* deployWorker(stack, "same-image", { init, minSecretsVersion: floor });
           expect(next.machineId).not.toBe(first.machineId);
-          expect(yield* marker(app.appName, next.machineId)).toEqual({
-            code: 0,
-            marker: "three",
-          });
+          expect(yield* marker(app.appName, next.machineId)).toEqual({ code: 0, marker: "three" });
           yield* assertCommitted(app.appName, next.machineIds);
           yield* stack.destroy();
           yield* assertAppGone(app.appName);
@@ -8679,17 +7227,12 @@ describe.sequential(
           const initial = yield* deploy("one", "one");
           expect(
             yield* request(initial.app.appName, "/seed").pipe(
-              Effect.retry({
-                schedule: Schedule.spaced("2 seconds"),
-                times: 8,
-              }),
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 8 }),
             ),
           ).toEqual({ config: "one", redis: "one" });
           const configOnly = yield* deploy("two", "one");
           expect(
-            configOnly.service.machineIds.every(
-              (id) => !initial.service.machineIds.includes(id),
-            ),
+            configOnly.service.machineIds.every((id) => !initial.service.machineIds.includes(id)),
           ).toBe(true);
           expect(yield* request(initial.app.appName, "/marker")).toEqual({
             config: "two",
@@ -8700,9 +7243,7 @@ describe.sequential(
           expect(next.one.redisId).toBe(initial.one.redisId);
           expect(next.two.redisId).toBe(initial.two.redisId);
           expect(
-            next.service.machineIds.every(
-              (id) => !configOnly.service.machineIds.includes(id),
-            ),
+            next.service.machineIds.every((id) => !configOnly.service.machineIds.includes(id)),
           ).toBe(true);
           expect(yield* request(next.app.appName, "/marker")).toEqual({
             config: "two",
@@ -8721,9 +7262,7 @@ describe.sequential(
               event.secretsVersion !== undefined,
           );
           expect(secretWrites.length).toBeGreaterThan(0);
-          const floor = Math.max(
-            ...secretWrites.map((event) => event.secretsVersion!),
-          );
+          const floor = Math.max(...secretWrites.map((event) => event.secretsVersion!));
           const creates = events.filter(
             (event) =>
               event.stage === "request" &&
@@ -8734,42 +7273,25 @@ describe.sequential(
           expect(
             creates.every(
               (event) =>
-                secretWrites.every(
-                  (write) => events.indexOf(write) < events.indexOf(event),
-                ) &&
+                secretWrites.every((write) => events.indexOf(write) < events.indexOf(event)) &&
                 event.minSecretsVersion !== undefined &&
                 event.minSecretsVersion >= floor,
             ),
           ).toBe(true);
-          const live = yield* assertCommitted(
-            next.app.appName,
-            next.service.machineIds,
-          );
+          const live = yield* assertCommitted(next.app.appName, next.service.machineIds);
           expect(
-            live.every(
-              (machine) =>
-                machine.image_ref?.digest === initial.service.imageRef?.digest,
-            ),
+            live.every((machine) => machine.image_ref?.digest === initial.service.imageRef?.digest),
           ).toBe(true);
           yield* stack.destroy();
           yield* assertAppGone(next.app.appName);
           expect(
-            yield* Fly.findRedisAddOn({
-              id: next.one.redisId,
-              name: next.one.name,
-            }),
+            yield* Fly.findRedisAddOn({ id: next.one.redisId, name: next.one.name }),
           ).toBeUndefined();
           expect(
-            yield* Fly.findRedisAddOn({
-              id: next.two.redisId,
-              name: next.two.name,
-            }),
+            yield* Fly.findRedisAddOn({ id: next.two.redisId, name: next.two.name }),
           ).toBeUndefined();
         }).pipe(Effect.scoped),
-      {
-        tags: ["provider:fly:ipassignment", "provider:fly:redis"],
-        timeout: 600_000,
-      },
+      { tags: ["provider:fly:ipassignment", "provider:fly:redis"], timeout: 600_000 },
     );
 
     test.provider(
@@ -8793,26 +7315,25 @@ describe.sequential(
                   checks,
                   minSecretsVersion: floor,
                   env: { SECRET_RESOURCE_NAME: secret.name },
-                  deploy: {
-                    strategy: "bluegreen",
-                    healthTimeout: "30 seconds",
-                  },
+                  deploy: { strategy: "bluegreen", healthTimeout: "30 seconds" },
                   shutdown: { signal: "SIGQUIT", timeout: "5 seconds" },
                 });
                 return { app, secret, worker };
               }),
             );
           const initial = yield* deploy("one");
-          expect(
-            yield* marker(initial.app.appName, initial.worker.machineId),
-          ).toEqual({ code: 0, marker: "one" });
+          expect(yield* marker(initial.app.appName, initial.worker.machineId)).toEqual({
+            code: 0,
+            marker: "one",
+          });
           const staged = yield* deploy("two");
           expect(staged.secret.name).toBe(initial.secret.name);
           expect(staged.secret.digest).not.toBe(initial.secret.digest);
           expect(staged.worker.machineIds).toEqual(initial.worker.machineIds);
-          expect(
-            yield* marker(staged.app.appName, staged.worker.machineId),
-          ).toEqual({ code: 0, marker: "one" });
+          expect(yield* marker(staged.app.appName, staged.worker.machineId)).toEqual({
+            code: 0,
+            marker: "one",
+          });
           // A separate vault fence returns a floor that includes the completed Secret reconcile.
           const fence = yield* machines.updateSecrets({
             app_name: staged.app.appName,
@@ -8822,19 +7343,12 @@ describe.sequential(
           expect(floor).toBeGreaterThan(0);
           const next = yield* deploy("two", floor);
           expect(next.worker.machineId).not.toBe(initial.worker.machineId);
-          expect(
-            yield* marker(next.app.appName, next.worker.machineId),
-          ).toEqual({
+          expect(yield* marker(next.app.appName, next.worker.machineId)).toEqual({
             code: 0,
             marker: "two",
           });
-          const live = yield* assertCommitted(
-            next.app.appName,
-            next.worker.machineIds,
-          );
-          expect(live[0]?.image_ref?.digest).toBe(
-            initial.worker.imageRef?.digest,
-          );
+          const live = yield* assertCommitted(next.app.appName, next.worker.machineIds);
+          expect(live[0]?.image_ref?.digest).toBe(initial.worker.imageRef?.digest);
           yield* stack.destroy();
           yield* assertAppGone(next.app.appName);
         }),
@@ -8864,8 +7378,7 @@ describe.sequential(
           const proxy = yield* transportProxy();
           yield* Effect.sync(() =>
             proxy.arm({
-              match: (event) =>
-                event.method === "POST" && event.path.endsWith("/machines"),
+              match: (event) => event.method === "POST" && event.path.endsWith("/machines"),
               action: "hold-response",
               remaining: 1,
             }),
@@ -8894,9 +7407,7 @@ describe.sequential(
             const later = yield* Fiber.join(writer);
             expect(later.version ?? later.Version).toBeGreaterThan(floor!);
             yield* Effect.sync(proxy.release);
-            const next = yield* Fiber.join(rollout).pipe(
-              Effect.timeout("180 seconds"),
-            );
+            const next = yield* Fiber.join(rollout).pipe(Effect.timeout("180 seconds"));
             const live = yield* assertCommitted(app.appName, next.machineIds);
             expect(next.machineIds).toContain(held.machineId);
             expect(next.machineIds).not.toContain(initial.machineId);
@@ -8907,15 +7418,13 @@ describe.sequential(
                 event.path.endsWith("/machines"),
             );
             expect(creates).toHaveLength(2);
-            expect(
-              creates.every((event) => event.minSecretsVersion === floor),
-            ).toBe(true);
+            expect(creates.every((event) => event.minSecretsVersion === floor)).toBe(true);
             for (const machine of live) {
               const observed = yield* marker(app.appName, machine.id!);
               expect(observed.code).toBe(0);
-              expect(
-                machine.id === held.machineId ? ["two", "three"] : ["three"],
-              ).toContain(observed.marker);
+              expect(machine.id === held.machineId ? ["two", "three"] : ["three"]).toContain(
+                observed.marker,
+              );
             }
           }).pipe(
             Effect.ensuring(
@@ -8973,9 +7482,7 @@ describe.sequential(
             const held = yield* proxy.wait(
               (event) => event.stage === "held" && event.status! < 300,
             );
-            const interruption = yield* Fiber.interrupt(rollout).pipe(
-              Effect.forkScoped,
-            );
+            const interruption = yield* Fiber.interrupt(rollout).pipe(Effect.forkScoped);
             yield* Effect.yieldNow;
             yield* Effect.sync(() => {
               proxy.clear();
@@ -8984,9 +7491,7 @@ describe.sequential(
             yield* Fiber.join(interruption).pipe(Effect.timeout("120 seconds"));
             expect(Exit.hasInterrupts(yield* Fiber.await(rollout))).toBe(true);
             expect(
-              (yield* census(app.appName)).some(
-                (machine) => machine.id === held.machineId,
-              ),
+              (yield* census(app.appName)).some((machine) => machine.id === held.machineId),
             ).toBe(true);
             const later = yield* machines.updateSecrets({
               app_name: app.appName,
@@ -9105,16 +7610,11 @@ describe.sequential(
                   rawSignal: policy.rawSignal,
                   afterSignalMs: policy.delay,
                 });
-                const oldWorker = yield* requireValue(
-                  first.worker,
-                  "initial worker output",
-                );
+                const oldWorker = yield* requireValue(first.worker, "initial worker output");
                 const oldId = oldWorker.machineId;
                 const url = `https://${first.workerApp.appName}.fly.dev`;
                 const get = (route: string) =>
-                  HttpClient.get(`${url}${route}`, {
-                    headers: { connection: "close" },
-                  }).pipe(
+                  HttpClient.get(`${url}${route}`, { headers: { connection: "close" } }).pipe(
                     Effect.flatMap((response) =>
                       response.status === 200
                         ? response.text
@@ -9125,10 +7625,7 @@ describe.sequential(
                 expect(
                   JSON.parse(
                     yield* get("/").pipe(
-                      Effect.retry({
-                        times: 8,
-                        schedule: Schedule.spaced("1 second"),
-                      }),
+                      Effect.retry({ times: 8, schedule: Schedule.spaced("1 second") }),
                     ),
                   ),
                 ).toEqual({ machine: oldId, version: "one" });
@@ -9144,10 +7641,7 @@ describe.sequential(
                     ? ["60000ms", "60s", "1m", "1m0s"]
                     : ["10000ms", "10s"],
                 ).toContain(observed.config?.stop_config?.timeout);
-                yield* scenario.call(first.ledgerUrl, "enqueue", [
-                  "in-flight-job",
-                  "hold",
-                ]);
+                yield* scenario.call(first.ledgerUrl, "enqueue", ["in-flight-job", "hold"]);
                 yield* scenario.wait(first.ledgerUrl, (ledger) =>
                   ledger.events.some(
                     (event) =>
@@ -9162,24 +7656,17 @@ describe.sequential(
                   first.ledgerUrl,
                   (ledger) =>
                     ledger.events.filter(
-                      (event) =>
-                        event.machine === oldId &&
-                        event.event === "request-started",
+                      (event) => event.machine === oldId && event.event === "request-started",
                     ).length === 2,
                 );
                 const responses = yield* Ref.make<
-                  Array<
-                    { machine: string; version: string } | { failure: string }
-                  >
+                  Array<{ machine: string; version: string } | { failure: string }>
                 >([]);
                 const finished = yield* Ref.make(false);
                 yield* Effect.addFinalizer(() =>
                   Ref.get(responses).pipe(
                     Effect.flatMap((samples) =>
-                      Effect.logInfo(
-                        "Unretried public traffic samples",
-                        samples,
-                      ),
+                      Effect.logInfo("Unretried public traffic samples", samples),
                     ),
                   ),
                 );
@@ -9191,10 +7678,7 @@ describe.sequential(
                         Ref.update(responses, (values) => [
                           ...values,
                           Result.isSuccess(result)
-                            ? (JSON.parse(result.success) as {
-                                machine: string;
-                                version: string;
-                              })
+                            ? (JSON.parse(result.success) as { machine: string; version: string })
                             : { failure: String(result.failure) },
                         ]),
                       ),
@@ -9214,21 +7698,15 @@ describe.sequential(
                   rawSignal: policy.nextRawSignal,
                   afterSignalMs: 1000,
                 });
-                const newWorker = yield* requireValue(
-                  second.worker,
-                  "replacement worker output",
-                );
+                const newWorker = yield* requireValue(second.worker, "replacement worker output");
                 expect(JSON.parse(yield* Fiber.join(slow))).toEqual({
                   machine: oldId,
                   version: "one",
                 });
                 const body = yield* Fiber.join(streamed);
-                const expected =
-                  "first\n".repeat(32768) + "last\n".repeat(32768);
+                const expected = "first\n".repeat(32768) + "last\n".repeat(32768);
                 const hashes = yield* Effect.sync(() =>
-                  [body, expected].map((value) =>
-                    createHash("sha256").update(value).digest("hex"),
-                  ),
+                  [body, expected].map((value) => createHash("sha256").update(value).digest("hex")),
                 );
                 expect(body.length).toBe(360448);
                 expect(hashes[0]).toBe(hashes[1]);
@@ -9240,15 +7718,11 @@ describe.sequential(
                 yield* Ref.set(finished, true);
                 yield* Fiber.join(traffic);
                 const samples = yield* Ref.get(responses);
-                expect(samples.filter((sample) => "failure" in sample)).toEqual(
-                  [],
-                );
+                expect(samples.filter((sample) => "failure" in sample)).toEqual([]);
                 expect(
                   samples.some(
                     (sample) =>
-                      "version" in sample &&
-                      sample.version === "one" &&
-                      sample.machine === oldId,
+                      "version" in sample && sample.version === "one" && sample.machine === oldId,
                   ),
                 ).toBe(true);
                 expect(
@@ -9259,43 +7733,24 @@ describe.sequential(
                       sample.machine === newWorker.machineId,
                   ),
                 ).toBe(true);
-                yield* assertReplacement(
-                  first.workerApp.appName,
-                  oldId,
-                  newWorker.machineId,
-                );
+                yield* assertReplacement(first.workerApp.appName, oldId, newWorker.machineId);
                 const ledger = yield* scenario.settle(first.ledgerUrl);
                 assertStopped(ledger.events, oldId);
-                assertOrder(
-                  ledger.events,
-                  oldId,
-                  "request-finalized",
-                  "shared-closed",
-                );
-                assertOrder(
-                  ledger.events,
-                  oldId,
-                  "client-released",
-                  "shared-closed",
-                );
+                assertOrder(ledger.events, oldId, "request-finalized", "shared-closed");
+                assertOrder(ledger.events, oldId, "client-released", "shared-closed");
                 const stop = yield* requireValue(
                   ledger.events.find(
-                    (event) =>
-                      event.machine === oldId && event.event === "stop-started",
+                    (event) => event.machine === oldId && event.event === "stop-started",
                   ),
                   "old worker stop event",
                 );
                 if (policy.raw) expect(stop.signal).toBe(policy.rawSignal);
                 const completed = ledger.events.filter(
-                  (event) =>
-                    event.machine === oldId &&
-                    event.event === "response-finished",
+                  (event) => event.machine === oldId && event.event === "response-finished",
                 );
                 expect(completed).toHaveLength(2);
                 for (const event of completed) {
-                  expect(event.at - stop.at).toBeGreaterThan(
-                    policy.delay - 500,
-                  );
+                  expect(event.at - stop.at).toBeGreaterThan(policy.delay - 500);
                 }
                 const ack = yield* requireValue(
                   ledger.events.find(
@@ -9308,8 +7763,7 @@ describe.sequential(
                 );
                 expect(ack.ack).toBe(1);
                 expect(ack.at - stop.at).toBeGreaterThan(policy.delay - 500);
-                if (policy.old === "10 seconds")
-                  expect(ack.at - stop.at).toBeLessThan(10_000);
+                if (policy.old === "10 seconds") expect(ack.at - stop.at).toBeLessThan(10_000);
               }).pipe(Effect.scoped, Effect.ensuring(scenario.cleanup));
             }),
           {
@@ -9322,95 +7776,77 @@ describe.sequential(
   },
 );
 
-describe.sequential(
-  "shutdown policy",
-  { tags: ["provider:fly", "provider:fly:service"] },
-  () => {
-    const { test } = Test.make({ providers: Fly.providers() });
+describe.sequential("shutdown policy", { tags: ["provider:fly", "provider:fly:service"] }, () => {
+  const { test } = Test.make({ providers: Fly.providers() });
 
-    it.effect(
-      "R02 predecessor policy preserves raw overrides and managed legacy grace",
-      () =>
-        Effect.gen(function* () {
-          for (const timeout of ["10s", "60s"]) {
-            for (const signal of ["SIGQUIT", "SIGTERM"] as const) {
-              const policy = yield* predecessorShutdown({
-                config: { stop_config: { signal, timeout } },
-              });
-              expect(policy.signal).toBe(signal);
-              expect(policy.timeout).toBe(timeout);
-            }
+  it.effect(
+    "R02 predecessor policy preserves raw overrides and managed legacy grace",
+    () =>
+      Effect.gen(function* () {
+        for (const timeout of ["10s", "60s"]) {
+          for (const signal of ["SIGQUIT", "SIGTERM"] as const) {
+            const policy = yield* predecessorShutdown({
+              config: { stop_config: { signal, timeout } },
+            });
+            expect(policy.signal).toBe(signal);
+            expect(policy.timeout).toBe(timeout);
           }
-          const raw = yield* predecessorShutdown({ config: {} });
-          expect(raw.signal).toBeUndefined();
-          expect(raw.timeout).toBeUndefined();
-          const legacy = yield* predecessorShutdown({
+        }
+        const raw = yield* predecessorShutdown({ config: {} });
+        expect(raw.signal).toBeUndefined();
+        expect(raw.timeout).toBeUndefined();
+        const legacy = yield* predecessorShutdown({
+          config: {
+            stop_config: { signal: "SIGINT" },
+            env: { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: "60000" },
+          },
+        });
+        expect(legacy).toEqual({ signal: "SIGINT", timeout: "60000ms", timeoutMs: 60000 });
+        for (const injected of ["broken", "0", "300001", "60000"]) {
+          const error = yield* predecessorShutdown({
             config: {
-              stop_config: { signal: "SIGINT" },
-              env: { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: "60000" },
+              stop_config: { signal: "SIGTERM", timeout: "10s" },
+              env: { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: injected },
             },
-          });
-          expect(legacy).toEqual({
-            signal: "SIGINT",
-            timeout: "60000ms",
-            timeoutMs: 60000,
-          });
-          for (const injected of ["broken", "0", "300001", "60000"]) {
-            const error = yield* predecessorShutdown({
-              config: {
-                stop_config: { signal: "SIGTERM", timeout: "10s" },
-                env: { ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: injected },
-              },
-            }).pipe(Effect.flip);
-            expect(error._tag).toBe("Fly.ShutdownPolicyMismatch");
-          }
-        }),
-      { tags: ["unit", "local"] },
-    );
+          }).pipe(Effect.flip);
+          expect(error._tag).toBe("Fly.ShutdownPolicyMismatch");
+        }
+      }),
+    { tags: ["unit", "local"] },
+  );
 
-    test.provider(
-      "R02 observed predecessor policy survives replacement and retires suspended without resume",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const current = yield* stack.deploy(
-            Effect.gen(function* () {
-              const app = yield* Fly.App("Site");
-              return yield* Fly.Machine("Worker", {
-                app,
-                image: "nginx:alpine",
-                shutdown: { signal: "SIGQUIT", timeout: "60 seconds" },
-              });
-            }),
-          );
-          const request = {
-            app_name: current.appName,
-            machine_id: current.machineId,
-          };
-          const observed = yield* machines.getMachine(request);
-          expect((yield* predecessorShutdown(observed)).timeoutMs).toBe(60_000);
-          yield* machines.suspendMachine(request);
-          yield* machines.waitMachine({
-            ...request,
-            state: "suspended",
-            timeout: 8,
-          });
-          yield* retireMachine(current.appName, current.machineId);
-          expect(
-            yield* machines.getMachine(request).pipe(
-              Effect.map((machine) => machine.state === "destroyed"),
-              Effect.catchTag("NotFound", () => Effect.succeed(true)),
-            ),
-          ).toBe(true);
-          yield* stack.destroy();
-        }),
-      {
-        tags: ["provider:fly:app", "provider:fly:machine", "live"],
-        timeout: 120_000,
-      },
-    );
-  },
-);
+  test.provider(
+    "R02 observed predecessor policy survives replacement and retires suspended without resume",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const current = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("Site");
+            return yield* Fly.Machine("Worker", {
+              app,
+              image: "nginx:alpine",
+              shutdown: { signal: "SIGQUIT", timeout: "60 seconds" },
+            });
+          }),
+        );
+        const request = { app_name: current.appName, machine_id: current.machineId };
+        const observed = yield* machines.getMachine(request);
+        expect((yield* predecessorShutdown(observed)).timeoutMs).toBe(60_000);
+        yield* machines.suspendMachine(request);
+        yield* machines.waitMachine({ ...request, state: "suspended", timeout: 8 });
+        yield* retireMachine(current.appName, current.machineId);
+        expect(
+          yield* machines.getMachine(request).pipe(
+            Effect.map((machine) => machine.state === "destroyed"),
+            Effect.catchTag("NotFound", () => Effect.succeed(true)),
+          ),
+        ).toBe(true);
+        yield* stack.destroy();
+      }),
+    { tags: ["provider:fly:app", "provider:fly:machine", "live"], timeout: 120_000 },
+  );
+});
 
 describe.sequential(
   "process signals and overlap",
@@ -9424,19 +7860,11 @@ describe.sequential(
     ],
   },
   () => {
-    const options = {
-      providers: Fly.providers(),
-      profile: "testing",
-      dev: false,
-      sidecar: false,
-    };
+    const options = { providers: Fly.providers(), profile: "testing", dev: false, sidecar: false };
     const { test, beforeEach, afterEach } = Test.make(options);
     const selected = process.env.FLY_SIGNAL_OVERLAP_CASE;
     let signaled:
-      | {
-          witness: WitnessSignalOverlap;
-          paths: Effect.Success<ReturnType<typeof pathsFor>>;
-        }
+      | { witness: WitnessSignalOverlap; paths: Effect.Success<ReturnType<typeof pathsFor>> }
       | undefined;
 
     // Observe the runner's own teardown; never bridge SIGINT into a manual fiber interrupt.
@@ -9457,23 +7885,14 @@ describe.sequential(
       { timeout: 30_000 },
     );
 
-    const crash = (
-      stack: Test.ScratchStack,
-      title: string,
-      selectedCase: SignalCase,
-    ) =>
+    const crash = (stack: Test.ScratchStack, title: string, selectedCase: SignalCase) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const paths = yield* pathsFor(stack);
         // Never erase an incomplete signal attempt to make a retry green.
-        if (
-          (yield* fs.exists(paths.witness)) &&
-          !(yield* fs.exists(paths.recovered))
-        ) {
+        if ((yield* fs.exists(paths.witness)) && !(yield* fs.exists(paths.recovered))) {
           return yield* Effect.fail(
-            new Error(
-              "An unrecovered signal witness exists; preserve it and use the recovery leg",
-            ),
+            new Error("An unrecovered signal witness exists; preserve it and use the recovery leg"),
           );
         }
         for (const file of [
@@ -9496,11 +7915,7 @@ describe.sequential(
         const proxy = yield* transportProxy();
         const actor = yield* Effect.sync(() =>
           scratchStack(
-            {
-              ...options,
-              providers: throughProxy(() => proxy.url),
-              stage: stack.stage,
-            },
+            { ...options, providers: throughProxy(() => proxy.url), stage: stack.stage },
             title,
             signalOverlapFile,
           ),
@@ -9509,16 +7924,8 @@ describe.sequential(
         expect(actor.stage).toBe(stack.stage);
         expect(actor.state).not.toBe(stack.state);
         const match = (event: Parameters<typeof matches>[4]) =>
-          matches(
-            selectedCase.phase,
-            initial.appName,
-            predecessor.id,
-            proxy.events,
-            event,
-          );
-        yield* Effect.sync(() =>
-          proxy.arm({ match, action: "hold-response", remaining: 1 }),
-        );
+          matches(selectedCase.phase, initial.appName, predecessor.id, proxy.events, event);
+        yield* Effect.sync(() => proxy.arm({ match, action: "hold-response", remaining: 1 }));
         const pid = yield* Effect.sync(() => process.pid);
         let armed: WitnessSignalOverlap | undefined;
         const attempt = yield* deploy(actor, "two").pipe(
@@ -9551,8 +7958,7 @@ describe.sequential(
                 pid,
                 case: selectedCase.name,
                 witnessRecordedAt: armed.recordedAt,
-                interruptedOnly:
-                  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause),
+                interruptedOnly: Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause),
                 at: yield* nowSeconds,
                 releases,
                 leases,
@@ -9563,14 +7969,11 @@ describe.sequential(
         );
         yield* Effect.gen(function* () {
           const barrier = yield* proxy.wait(
-            (event) =>
-              event.stage === "held" && successful(event) && match(event),
+            (event) => event.stage === "held" && successful(event) && match(event),
           );
           yield* Effect.gen(function* () {
             const live = yield* censusProcessDeath(initial.appName);
-            const candidates = live.filter(
-              (value) => value.id !== predecessor.id,
-            );
+            const candidates = live.filter((value) => value.id !== predecessor.id);
             expect(candidates).toHaveLength(1);
             const candidate = yield* identity(
               yield* machine(initial.appName, candidates[0]!.id!),
@@ -9578,9 +7981,7 @@ describe.sequential(
             );
             expect(candidate.generation).not.toBe(predecessor.generation);
             expect(candidate.workload).not.toBe(predecessor.workload);
-            expect(Number(candidate.sequence)).toBe(
-              Number(predecessor.sequence) + 1,
-            );
+            expect(Number(candidate.sequence)).toBe(Number(predecessor.sequence) + 1);
             expect(candidate.instance).toBe(predecessor.instance);
             expect(candidate.fqn).toBe(predecessor.fqn);
             const leases = yield* heldLeases(
@@ -9609,10 +8010,7 @@ describe.sequential(
             const row = yield* persistedRow(stack, candidate.fqn);
             expect(row.instanceId).toBe(candidate.instance);
             expect(row.status).toBe("updating");
-            const returned = firstReturnedUncordon(
-              proxy.events,
-              initial.appName,
-            );
+            const returned = firstReturnedUncordon(proxy.events, initial.appName);
             const witness = {
               version: 1,
               case: selectedCase.name,
@@ -9636,9 +8034,7 @@ describe.sequential(
             yield* assertBoundary(witness);
             yield* assertInventory(stack, witness);
             yield* writeEvidence(paths.witness, witness);
-            expect(
-              yield* readEvidence(paths.witness, WitnessSignalOverlap),
-            ).toEqual(witness);
+            expect(yield* readEvidence(paths.witness, WitnessSignalOverlap)).toEqual(witness);
             yield* Effect.sync(() => {
               expect(attempt.pollUnsafe() === undefined).toBe(true);
               expect(
@@ -9650,8 +8046,7 @@ describe.sequential(
               ).toBe(false);
               expect(
                 proxy.events.some(
-                  (event) =>
-                    event.method === "DELETE" && event.path.endsWith("/lease"),
+                  (event) => event.method === "DELETE" && event.path.endsWith("/lease"),
                 ),
               ).toBe(false);
               expect(
@@ -9667,9 +8062,7 @@ describe.sequential(
                 expect(returned).toBeDefined();
                 expect(
                   proxy.events.filter(
-                    (event) =>
-                      event.stage === "forwarded" &&
-                      event.path.endsWith("/uncordon"),
+                    (event) => event.stage === "forwarded" && event.path.endsWith("/uncordon"),
                   ),
                 ).toHaveLength(1);
                 expect(
@@ -9681,9 +8074,7 @@ describe.sequential(
                 ).toBe(false);
                 expect(
                   proxy.events.some(
-                    (event) =>
-                      event.stage === "request" &&
-                      event.path.endsWith("/cordon"),
+                    (event) => event.stage === "request" && event.path.endsWith("/cordon"),
                   ),
                 ).toBe(false);
                 expect(
@@ -9705,9 +8096,7 @@ describe.sequential(
               process.kill(process.pid, selectedCase.signal);
             });
             if (selectedCase.signal === "SIGKILL") {
-              return yield* Effect.fail(
-                new Error("SIGKILL did not terminate the sole runner"),
-              );
+              return yield* Effect.fail(new Error("SIGKILL did not terminate the sole runner"));
             }
           }).pipe(Effect.timeout("20 seconds"));
           // Only the runner may interrupt the deploy; the held response stays held.
@@ -9717,9 +8106,7 @@ describe.sequential(
             Fiber.join(attempt).pipe(
               Effect.andThen(
                 Effect.fail(
-                  new Error(
-                    "Rollout completed instead of terminating at the signal barrier",
-                  ),
+                  new Error("Rollout completed instead of terminating at the signal barrier"),
                 ),
               ),
             ),
@@ -9731,10 +8118,7 @@ describe.sequential(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const paths = yield* pathsFor(stack);
-        const witness = yield* readEvidence(
-          paths.witness,
-          WitnessSignalOverlap,
-        );
+        const witness = yield* readEvidence(paths.witness, WitnessSignalOverlap);
         const pid = yield* Effect.sync(() => process.pid);
         expect(witness.pid).toBeGreaterThan(0);
         expect(pid).not.toBe(witness.pid);
@@ -9746,9 +8130,7 @@ describe.sequential(
         expect(witness.stage).toBe(stack.stage);
         expect(yield* fs.exists(paths.recovered)).toBe(false);
         yield* assertBoundary(witness);
-        expect(yield* persistedRow(stack, witness.row.fqn)).toEqual(
-          witness.row,
-        );
+        expect(yield* persistedRow(stack, witness.row.fqn)).toEqual(witness.row);
         expect(witness.row.status).toBe("updating");
         yield* assertInventory(stack, witness);
         // No deploy, destroy, acquire or release can manufacture either lease proof.
@@ -9758,10 +8140,7 @@ describe.sequential(
             expect(yield* fs.exists(paths.runnerInterrupted)).toBe(false);
             return { mode: "expiry", evidence: yield* observeExpiry(witness) };
           }
-          const runner = yield* readEvidence(
-            paths.runnerInterrupted,
-            RunnerInterrupted,
-          );
+          const runner = yield* readEvidence(paths.runnerInterrupted, RunnerInterrupted);
           expect(runner.pid).toBe(witness.pid);
           expect(runner.case).toBe(witness.case);
           expect(runner.witnessRecordedAt).toBe(witness.recordedAt);
@@ -9784,27 +8163,15 @@ describe.sequential(
           }
           expect(runner.deployFinalized).toBe(true);
           const finalized = yield* readEvidence(paths.finalized, Finalized);
-          return {
-            mode: "release",
-            runner,
-            evidence: yield* assertReleased(witness, finalized),
-          };
+          return { mode: "release", runner, evidence: yield* assertReleased(witness, finalized) };
         });
         yield* assertInventory(stack, witness);
         const recovered = yield* deploy(stack, "two").pipe(Effect.scoped);
         expect(recovered.appName).toBe(witness.appName);
-        yield* assertConvergedSignalOverlap(
-          stack,
-          witness,
-          recovered.machineIds,
-        );
+        yield* assertConvergedSignalOverlap(stack, witness, recovered.machineIds);
         const unchanged = yield* deploy(stack, "two").pipe(Effect.scoped);
         expect(unchanged.machineIds).toEqual(recovered.machineIds);
-        yield* assertConvergedSignalOverlap(
-          stack,
-          witness,
-          unchanged.machineIds,
-        );
+        yield* assertConvergedSignalOverlap(stack, witness, unchanged.machineIds);
         yield* stack.destroy();
         yield* assertClean(stack, witness.appName);
         yield* writeEvidence(paths.recovered, {
@@ -9856,8 +8223,7 @@ describe.sequential(
     for (const selectedCase of cases) {
       const skip =
         selected === undefined ||
-        (cases.some((value) => value.name === selected) &&
-          selected !== selectedCase.name);
+        (cases.some((value) => value.name === selected) && selected !== selectedCase.name);
       if (skip) {
         it.live.skip(
           `F10 deployer ${selectedCase.signal} at ${selectedCase.phase}`,
@@ -9879,9 +8245,7 @@ describe.sequential(
           }
           if (mode === "crash") {
             return yield* Effect.fail(
-              new Error(
-                "The crash setup returned without terminating the runner",
-              ),
+              new Error("The crash setup returned without terminating the runner"),
             );
           }
           const stack = yield* Effect.sync(() =>
@@ -9891,11 +8255,7 @@ describe.sequential(
               signalOverlapFile,
             ),
           );
-          yield* withProviders(
-            recover(stack, selectedCase),
-            options,
-            stack.name,
-          );
+          yield* withProviders(recover(stack, selectedCase), options, stack.name);
         }).pipe(Effect.scoped),
         { timeout: 750_000, retry: 0, exclusive: true },
       );
@@ -9916,12 +8276,7 @@ describe.sequential(
   },
   () => {
     const stackName = "Fly-BlueGreenStatePersistence-delayed-durable-write";
-    const options = {
-      providers: Fly.providers(),
-      dev: false,
-      sidecar: false,
-      stage: undefined,
-    };
+    const options = { providers: Fly.providers(), dev: false, sidecar: false, stage: undefined };
     const { test } = Test.make(options);
 
     const actor = (state = localState(), endpoint?: string) => {
@@ -9954,19 +8309,14 @@ describe.sequential(
       "F11 delayed durable LocalState rename cannot authorize deletion of the live successor",
       TestCore.withProviders(
         Effect.gen(function* () {
-          const target = {
-            stack: stackName,
-            stage: Test.resolveStage(options),
-          };
+          const target = { stack: stackName, stage: Test.resolveStage(options) };
           const readWorker = () =>
             Effect.gen(function* () {
               const state = yield* makeLocalState();
               return yield* state.get({ ...target, fqn: "Worker" }).pipe(
                 Effect.flatMap(Schema.decodeUnknownEffect(ResourceRow)),
                 Effect.catchTag("SchemaError", () =>
-                  Effect.fail(
-                    new Error("Missing or invalid durable Worker row"),
-                  ),
+                  Effect.fail(new Error("Missing or invalid durable Worker row")),
                 ),
               );
             });
@@ -9974,16 +8324,10 @@ describe.sequential(
             Effect.gen(function* () {
               const state = yield* makeLocalState();
               expect(yield* state.list(target)).toEqual([]);
-              expect(
-                (yield* state.get({ ...target, fqn: "Worker" })) === undefined,
-              ).toBe(true);
-              expect(
-                (yield* state.get({ ...target, fqn: "Site" })) === undefined,
-              ).toBe(true);
+              expect((yield* state.get({ ...target, fqn: "Worker" })) === undefined).toBe(true);
+              expect((yield* state.get({ ...target, fqn: "Site" })) === undefined).toBe(true);
               expect((yield* state.getOutput(target)) === undefined).toBe(true);
-              expect(yield* state.listStages(target.stack)).not.toContain(
-                target.stage,
-              );
+              expect(yield* state.listStages(target.stack)).not.toContain(target.stage);
             });
           yield* actor().destroy();
           yield* assertEmptyState();
@@ -10015,27 +8359,18 @@ describe.sequential(
             const initialRow = yield* readWorker();
             expect(initialRow.status).toBe("created");
             expect(initialRow.attr?.machineIds).toEqual(initial.machineIds);
-            const gate = yield* delayedResourceWrite({
-              ...target,
-              fqn: "Worker",
-            });
+            const gate = yield* delayedResourceWrite({ ...target, fqn: "Worker" });
             const actorA = actor(gate.state);
             const actorB = actor();
             expect(actorA.state).not.toBe(actorB.state);
             yield* Effect.gen(function* () {
-              const delayed = yield* actorA
-                .deploy("two")
-                .pipe(Effect.forkScoped);
+              const delayed = yield* actorA.deploy("two").pipe(Effect.forkScoped);
               yield* Effect.gen(function* () {
                 const held = yield* gate.wait.pipe(
                   Effect.raceFirst(
                     Fiber.join(delayed).pipe(
                       Effect.flatMap(() =>
-                        Effect.fail(
-                          new Error(
-                            "Actor A finished without holding its final rename",
-                          ),
-                        ),
+                        Effect.fail(new Error("Actor A finished without holding its final rename")),
                       ),
                     ),
                   ),
@@ -10045,17 +8380,10 @@ describe.sequential(
                 expect(held.attr?.machineIds).toHaveLength(1);
                 expect(held.attr?.machineId).not.toBe(initial.machineId);
                 const heldIds = [...held.attr!.machineIds];
-                const prepared = yield* assertCommitted(
-                  initial.appName,
-                  heldIds,
-                );
+                const prepared = yield* assertCommitted(initial.appName, heldIds);
                 expect(prepared[0]?.config?.env?.VERSION).toBe("two");
-                expect(
-                  prepared[0]?.config?.metadata?.["alchemy.instance"],
-                ).toBe(held.instanceId);
-                expect(prepared[0]?.config?.metadata?.["alchemy.fqn"]).toBe(
-                  "Worker",
-                );
+                expect(prepared[0]?.config?.metadata?.["alchemy.instance"]).toBe(held.instanceId);
+                expect(prepared[0]?.config?.metadata?.["alchemy.fqn"]).toBe("Worker");
                 const beforeRename = yield* readWorker();
                 expect(beforeRename.status).toBe("updating");
                 expect(beforeRename.attr?.machineIds).not.toEqual(heldIds);
@@ -10069,29 +8397,20 @@ describe.sequential(
                 expect(newerRow.status).toBe("updated");
                 expect(newerRow.instanceId).toBe(held.instanceId);
                 expect(newerRow.attr?.machineIds).toEqual(newer.machineIds);
-                const successor = yield* assertCommitted(
-                  newer.appName,
-                  newer.machineIds,
-                );
+                const successor = yield* assertCommitted(newer.appName, newer.machineIds);
                 const successorMetadata = successor[0]!.config!.metadata!;
                 expect(successor[0]?.config?.env?.VERSION).toBe("three");
-                expect(successorMetadata["alchemy.instance"]).toBe(
-                  held.instanceId,
-                );
+                expect(successorMetadata["alchemy.instance"]).toBe(held.instanceId);
                 expect(successorMetadata["alchemy.fqn"]).toBe("Worker");
                 expect(successorMetadata["alchemy.generation"]).not.toBe(
                   prepared[0]?.config?.metadata?.["alchemy.generation"],
                 );
-                expect(
-                  Number(successorMetadata["alchemy.sequence"]),
-                ).toBeGreaterThan(
+                expect(Number(successorMetadata["alchemy.sequence"])).toBeGreaterThan(
                   Number(prepared[0]?.config?.metadata?.["alchemy.sequence"]),
                 );
 
                 yield* gate.release;
-                const late = yield* Fiber.join(delayed).pipe(
-                  Effect.timeout("600 seconds"),
-                );
+                const late = yield* Fiber.join(delayed).pipe(Effect.timeout("600 seconds"));
                 expect(late.machineIds).toEqual(heldIds);
                 expect((yield* gate.written).attr?.machineIds).toEqual(heldIds);
                 const stale = yield* readWorker();
@@ -10122,20 +8441,16 @@ describe.sequential(
                       newer.machineIds.includes(event.machineId ?? "") &&
                       (event.path.endsWith("/cordon") ||
                         event.path.endsWith("/stop") ||
-                        (event.method === "DELETE" &&
-                          !event.path.endsWith("/lease"))),
+                        (event.method === "DELETE" && !event.path.endsWith("/lease"))),
                   ),
                 ).toEqual([]);
-                const preserved = yield* assertCommitted(
-                  newer.appName,
-                  newer.machineIds,
+                const preserved = yield* assertCommitted(newer.appName, newer.machineIds);
+                expect(preserved[0]?.config?.metadata?.["alchemy.instance"]).toBe(
+                  successorMetadata["alchemy.instance"],
                 );
-                expect(
-                  preserved[0]?.config?.metadata?.["alchemy.instance"],
-                ).toBe(successorMetadata["alchemy.instance"]);
-                expect(
-                  preserved[0]?.config?.metadata?.["alchemy.generation"],
-                ).toBe(successorMetadata["alchemy.generation"]);
+                expect(preserved[0]?.config?.metadata?.["alchemy.generation"]).toBe(
+                  successorMetadata["alchemy.generation"],
+                );
                 const recoveredRow = yield* readWorker();
                 expect(recoveredRow.instanceId).toBe(held.instanceId);
                 expect(recovered.machineIds).toEqual(newer.machineIds);
@@ -10145,10 +8460,7 @@ describe.sequential(
                 Effect.ensuring(
                   gate.release.pipe(
                     Effect.andThen(
-                      Fiber.await(delayed).pipe(
-                        Effect.timeout("600 seconds"),
-                        Effect.orDie,
-                      ),
+                      Fiber.await(delayed).pipe(Effect.timeout("600 seconds"), Effect.orDie),
                     ),
                   ),
                 ),
@@ -10190,15 +8502,11 @@ describe.sequential(
             endpoint = proxy.url;
           });
           try {
-            const request = machines
-              .getApp({ app_name: app.appName })
-              .pipe(Retry.none);
+            const request = machines.getApp({ app_name: app.appName }).pipe(Retry.none);
             const forwarded = yield* request;
             expect(forwarded.name).toBe(app.appName);
             expect(
-              proxy.events.some(
-                (event) => event.stage === "forwarded" && event.status === 200,
-              ),
+              proxy.events.some((event) => event.stage === "forwarded" && event.status === 200),
             ).toBe(true);
             yield* Effect.sync(() =>
               proxy.arm({
@@ -10209,49 +8517,33 @@ describe.sequential(
             );
             const dropped = yield* request.pipe(Effect.result);
             // The HTTP runtime may transparently replay an idempotent GET after a socket reset.
-            if (Result.isFailure(dropped))
-              expect(dropped.failure._tag).toBe("HttpClientError");
+            if (Result.isFailure(dropped)) expect(dropped.failure._tag).toBe("HttpClientError");
             else expect(dropped.success.name).toBe(app.appName);
             expect(
-              proxy.events.filter(
-                (event) => event.stage === "dropped" && event.status === 200,
-              ),
+              proxy.events.filter((event) => event.stage === "dropped" && event.status === 200),
             ).toHaveLength(1);
             yield* Effect.sync(() =>
-              proxy.arm({
-                match: () => true,
-                action: "cut-request",
-                remaining: Infinity,
-              }),
+              proxy.arm({ match: () => true, action: "cut-request", remaining: Infinity }),
             );
             const cut = yield* request.pipe(Effect.result);
             expect(Result.isFailure(cut)).toBe(true);
-            const cutEvent = proxy.events.find(
-              (event) => event.stage === "cut",
-            )!;
+            const cutEvent = proxy.events.find((event) => event.stage === "cut")!;
             expect(
               proxy.events.some(
-                (event) =>
-                  event.sequence === cutEvent.sequence &&
-                  event.stage === "completed",
+                (event) => event.sequence === cutEvent.sequence && event.stage === "completed",
               ),
             ).toBe(false);
             yield* Effect.sync(() => {
               proxy.clear();
-              proxy.arm({
-                match: () => true,
-                action: "hold-response",
-                remaining: 1,
-              });
+              proxy.arm({ match: () => true, action: "hold-response", remaining: 1 });
             });
             const child = yield* request.pipe(Effect.forkScoped);
             const held = yield* proxy.wait((event) => event.stage === "held");
             expect(held.status).toBe(200);
             yield* Effect.sync(proxy.release);
-            expect(
-              (yield* Fiber.join(child).pipe(Effect.timeout("10 seconds")))
-                .name,
-            ).toBe(app.appName);
+            expect((yield* Fiber.join(child).pipe(Effect.timeout("10 seconds"))).name).toBe(
+              app.appName,
+            );
             expect((yield* request).name).toBe(app.appName);
           } finally {
             yield* Effect.sync(() => {
@@ -10289,18 +8581,13 @@ describe.sequential(
   () => {
     let endpoint: string | undefined;
     const { test } = Test.make({ providers: throughProxy(() => endpoint) });
-    const invalid: Array<
-      [string, Partial<Extract<MachineProps, { image: string }>>]
-    > = [
+    const invalid: Array<[string, Partial<Extract<MachineProps, { image: string }>>]> = [
       ["direct volume", { mounts: [{ path: "/data", sizeGb: 1 }] }],
       ["skipLaunch", { skipLaunch: true }],
       ["autoDestroy", { autoDestroy: true }],
       ["restart=no", { restart: { policy: "no" } }],
       ["missing checks", { checks: {} }],
-      [
-        "unchecked public service",
-        { services: [{ internalPort: 80, ports: [{ port: 80 }] }] },
-      ],
+      ["unchecked public service", { services: [{ internalPort: 80, ports: [{ port: 80 }] }] }],
     ];
 
     describe.sequential("pre-mutation validation", () => {
@@ -10331,20 +8618,15 @@ describe.sequential(
                 .pipe(Effect.result);
               expect(Result.isFailure(failed)).toBe(true);
               if (Result.isFailure(failed))
-                expect(failed.failure).toMatchObject({
-                  _tag: "Fly.InvalidDeployment",
-                });
+                expect(failed.failure).toMatchObject({ _tag: "Fly.InvalidDeployment" });
               expect(
                 proxy.events.some(
                   (event) =>
-                    event.method !== "GET" &&
-                    /\/(machines|volumes)(\/|$)/.test(event.path),
+                    event.method !== "GET" && /\/(machines|volumes)(\/|$)/.test(event.path),
                 ),
               ).toBe(false);
               expect(yield* census(app.appName)).toHaveLength(0);
-              expect(
-                yield* machines.listVolumes({ app_name: app.appName }),
-              ).toHaveLength(0);
+              expect(yield* machines.listVolumes({ app_name: app.appName })).toHaveLength(0);
               yield* Effect.sync(() => {
                 endpoint = undefined;
               });
@@ -10372,25 +8654,17 @@ describe.sequential(
             yield* Effect.sync(() => {
               endpoint = proxy.url;
             });
-            const failed = yield* stack
-              .deploy(MountedBlueGreen)
-              .pipe(Effect.result);
+            const failed = yield* stack.deploy(MountedBlueGreen).pipe(Effect.result);
             expect(Result.isFailure(failed)).toBe(true);
             if (Result.isFailure(failed))
-              expect(failed.failure).toMatchObject({
-                _tag: "Fly.InvalidDeployment",
-              });
+              expect(failed.failure).toMatchObject({ _tag: "Fly.InvalidDeployment" });
             expect(
               proxy.events.some(
-                (event) =>
-                  event.method !== "GET" &&
-                  /\/(machines|volumes)(\/|$)/.test(event.path),
+                (event) => event.method !== "GET" && /\/(machines|volumes)(\/|$)/.test(event.path),
               ),
             ).toBe(false);
             expect(yield* census(app.appName)).toHaveLength(0);
-            expect(
-              yield* machines.listVolumes({ app_name: app.appName }),
-            ).toHaveLength(0);
+            expect(yield* machines.listVolumes({ app_name: app.appName })).toHaveLength(0);
             yield* Effect.sync(() => {
               endpoint = undefined;
             });
@@ -10447,22 +8721,12 @@ describe.sequential(
                   mode,
                   workers: 2,
                 });
-                const worker = yield* requireValue(
-                  first.worker,
-                  "worker output",
-                );
+                const worker = yield* requireValue(first.worker, "worker output");
                 const machineId = worker.machineId;
-                const observe = <A, E, R>(
-                  phase: string,
-                  effect: Effect.Effect<A, E, R>,
-                ) =>
+                const observe = <A, E, R>(phase: string, effect: Effect.Effect<A, E, R>) =>
                   Effect.gen(function* () {
                     const started = yield* Clock.currentTimeMillis;
-                    yield* Effect.logInfo("R05 phase started", {
-                      mode,
-                      machineId,
-                      phase,
-                    });
+                    yield* Effect.logInfo("R05 phase started", { mode, machineId, phase });
                     return yield* effect.pipe(
                       Effect.onExit((exit) =>
                         Clock.currentTimeMillis.pipe(
@@ -10485,9 +8749,7 @@ describe.sequential(
                     first.ledgerUrl,
                     (ledger) =>
                       ledger.events.filter(
-                        (event) =>
-                          event.machine === machineId &&
-                          event.event === "worker-ready",
+                        (event) => event.machine === machineId && event.event === "worker-ready",
                       ).length === 2,
                   ),
                 );
@@ -10501,10 +8763,7 @@ describe.sequential(
                 const stopped = yield* observe(
                   "stopped-machine-observation",
                   machines
-                    .getMachine({
-                      app_name: first.workerApp.appName,
-                      machine_id: machineId,
-                    })
+                    .getMachine({ app_name: first.workerApp.appName, machine_id: machineId })
                     .pipe(
                       Effect.repeat({
                         until: (value) => value.state === "stopped",
@@ -10518,25 +8777,11 @@ describe.sequential(
                   "post-stop-ledger-snapshot",
                   scenario.snapshot(first.ledgerUrl),
                 );
-                assertOrder(
-                  ledger.events,
-                  machineId,
-                  "stopped",
-                  "drained",
-                  "b",
-                );
-                assertOrder(
-                  ledger.events,
-                  machineId,
-                  "drained",
-                  "client-released",
-                  "b",
-                );
+                assertOrder(ledger.events, machineId, "stopped", "drained", "b");
+                assertOrder(ledger.events, machineId, "drained", "client-released", "b");
                 const stopStarted = yield* requireValue(
                   ledger.events.find(
-                    (event) =>
-                      event.machine === machineId &&
-                      event.event === "stop-started",
+                    (event) => event.machine === machineId && event.event === "stop-started",
                   ),
                   "worker stop-started event",
                 );
@@ -10549,15 +8794,10 @@ describe.sequential(
                   ),
                   "worker b client release event",
                 );
-                expect(
-                  independentRelease.at - stopStarted.at,
-                ).toBeGreaterThanOrEqual(0);
-                expect(independentRelease.at - stopStarted.at).toBeLessThan(
-                  10_000,
-                );
+                expect(independentRelease.at - stopStarted.at).toBeGreaterThanOrEqual(0);
+                expect(independentRelease.at - stopStarted.at).toBeLessThan(10_000);
                 const selected = ledger.events.filter(
-                  (event) =>
-                    event.machine === machineId && event.worker === "a",
+                  (event) => event.machine === machineId && event.worker === "a",
                 );
                 if (mode === "stop-delay") {
                   const a = yield* requireValue(
@@ -10574,57 +8814,41 @@ describe.sequential(
                     "worker b stopped event",
                   );
                   expect(a.at - b.at).toBeGreaterThan(700);
-                  assertOrder(
-                    ledger.events,
-                    machineId,
-                    "stopped",
-                    "drained",
-                    "a",
-                  );
+                  assertOrder(ledger.events, machineId, "stopped", "drained", "a");
                   assertStopped(ledger.events, machineId);
                 } else {
                   expect(
                     selected.some(
-                      (event) =>
-                        event.event === "stopped" || event.event === "drained",
+                      (event) => event.event === "stopped" || event.event === "drained",
                     ),
                   ).toBe(false);
                   expect(
                     selected.some(
                       (event) =>
-                        event.event ===
-                        (mode === "stop-fail" ? "stop-failed" : "stop-started"),
+                        event.event === (mode === "stop-fail" ? "stop-failed" : "stop-started"),
                     ),
                   ).toBe(true);
                 }
                 if (mode === "stop-hang") {
                   expect(
                     selected.some(
-                      (event) =>
-                        event.event === "work-closed" ||
-                        event.event === "client-released",
+                      (event) => event.event === "work-closed" || event.event === "client-released",
                     ),
                   ).toBe(false);
                 }
                 expect(
                   ledger.events.some(
-                    (event) =>
-                      event.machine === machineId &&
-                      event.event === "shared-closed",
+                    (event) => event.machine === machineId && event.event === "shared-closed",
                   ),
                 ).toBe(mode !== "stop-hang");
-                const exit = stopped.events?.find(
-                  (event) => event.type === "exit",
-                )?.request as
+                const exit = stopped.events?.find((event) => event.type === "exit")?.request as
                   | { exit_event?: { exit_code?: number } }
                   | undefined;
                 yield* Effect.logInfo("Observed managed worker exit", {
                   mode,
                   exitCode: exit?.exit_event?.exit_code,
                 });
-                expect(exit?.exit_event?.exit_code).toBe(
-                  mode === "stop-delay" ? 0 : 1,
-                );
+                expect(exit?.exit_event?.exit_code).toBe(mode === "stop-delay" ? 0 : 1);
               }).pipe(Effect.ensuring(scenario.cleanup));
             }),
           { timeout },
@@ -10645,31 +8869,16 @@ describe.sequential(
                 runOnly: true,
                 gatewayOnly: true,
               });
-              expect((yield* HttpClient.post(first.ledgerUrl)).status).toBe(
-                401,
-              );
+              expect((yield* HttpClient.post(first.ledgerUrl)).status).toBe(401);
               const added = yield* scenario
                 .call(first.ledgerUrl, "enqueue", ["durable-probe", "quick"])
-                .pipe(
-                  Effect.retry({
-                    times: 8,
-                    schedule: Schedule.spaced("1 second"),
-                  }),
-                );
+                .pipe(Effect.retry({ times: 8, schedule: Schedule.spaced("1 second") }));
               expect(typeof added).toBe("string");
               expect(
-                yield* scenario.call(first.ledgerUrl, "enqueue", [
-                  "durable-probe",
-                  "quick",
-                ]),
+                yield* scenario.call(first.ledgerUrl, "enqueue", ["durable-probe", "quick"]),
               ).toBe(0);
               const claimed = JSON.parse(
-                String(
-                  yield* scenario.call(first.ledgerUrl, "claim", [
-                    "probe-client",
-                    "one",
-                  ]),
-                ),
+                String(yield* scenario.call(first.ledgerUrl, "claim", ["probe-client", "one"])),
               ) as { id: string; job: string };
               expect(claimed.job).toBe("durable-probe");
               expect(
@@ -10702,19 +8911,10 @@ describe.sequential(
                   signal: "SIGTERM" as const,
                   mode: "checkpoint",
                 };
-                const first = yield* scenario.deploy({
-                  ...options,
-                  version: "one",
-                });
-                const oldWorker = yield* requireValue(
-                  first.worker,
-                  "initial worker output",
-                );
+                const first = yield* scenario.deploy({ ...options, version: "one" });
+                const oldWorker = yield* requireValue(first.worker, "initial worker output");
                 const oldId = oldWorker.machineId;
-                yield* scenario.call(first.ledgerUrl, "enqueue", [
-                  "checkpoint-job",
-                  "checkpoint",
-                ]);
+                yield* scenario.call(first.ledgerUrl, "enqueue", ["checkpoint-job", "checkpoint"]);
                 yield* scenario.wait(first.ledgerUrl, (ledger) =>
                   ledger.events.some(
                     (event) =>
@@ -10729,10 +8929,7 @@ describe.sequential(
                   mode: "drain",
                   signal: "SIGINT",
                 });
-                const newWorker = yield* requireValue(
-                  second.worker,
-                  "replacement worker output",
-                );
+                const newWorker = yield* requireValue(second.worker, "replacement worker output");
                 const newId = newWorker.machineId;
                 yield* assertReplacement(first.workerApp.appName, oldId, newId);
                 const ledger = yield* scenario.settle(first.ledgerUrl);
@@ -10747,32 +8944,18 @@ describe.sequential(
                   ),
                 ).toBe(true);
                 const ack = ledger.events.filter(
-                  (event) =>
-                    event.event === "acked" && event.job === "checkpoint-job",
+                  (event) => event.event === "acked" && event.job === "checkpoint-job",
                 );
                 expect(ack).toHaveLength(1);
                 expect(ack[0]?.ack).toBe(1);
                 expect(ack[0]?.fresh).toBe(1);
                 assertStopped(ledger.events, oldId);
                 assertOrder(ledger.events, oldId, "stopped", "checkpoint");
-                assertOrder(
-                  ledger.events,
-                  oldId,
-                  "checkpoint",
-                  "client-released",
-                );
-                assertOrder(
-                  ledger.events,
-                  oldId,
-                  "client-released",
-                  "shared-closed",
-                );
+                assertOrder(ledger.events, oldId, "checkpoint", "client-released");
+                assertOrder(ledger.events, oldId, "client-released", "shared-closed");
                 const oldSlots = new Set(
                   ledger.events
-                    .filter(
-                      (event) =>
-                        event.machine === oldId && event.event === "producer",
-                    )
+                    .filter((event) => event.machine === oldId && event.event === "producer")
                     .map((event) => event.job),
                 );
                 const overlaps = ledger.events.filter(
@@ -10785,10 +8968,7 @@ describe.sequential(
                 for (const event of overlaps) {
                   expect(
                     ledger.events.filter(
-                      (row) =>
-                        row.event === "producer" &&
-                        row.job === event.job &&
-                        row.fresh === 1,
+                      (row) => row.event === "producer" && row.job === event.job && row.fresh === 1,
                     ),
                   ).toHaveLength(1);
                 }
@@ -10803,9 +8983,7 @@ describe.sequential(
 
 describe.sequential(
   "multi-container",
-  {
-    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
-  },
+  { tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"] },
   () => {
     const { test } = Test.make({ providers: Fly.providers() });
     const firstImage =
@@ -10832,13 +9010,7 @@ describe.sequential(
           name: "web",
           image: firstImage,
           healthChecks: [
-            {
-              name: "web-tcp",
-              kind: "readiness",
-              tcp: { port: 80 },
-              interval: 5,
-              timeout: 2,
-            },
+            { name: "web-tcp", kind: "readiness", tcp: { port: 80 }, interval: 5, timeout: 2 },
           ],
         },
         {
@@ -10861,18 +9033,10 @@ describe.sequential(
           ],
         },
         ...(extra
-          ? [
-              {
-                name: "extra",
-                image: firstImage,
-                cmd: ["sh", "-c", "sleep infinity"],
-              },
-            ]
+          ? [{ name: "extra", image: firstImage, cmd: ["sh", "-c", "sleep infinity"] }]
           : []),
       ];
-      return reordered
-        ? group.reverse().map((container) => ({ ...container, env: {} }))
-        : group;
+      return reordered ? group.reverse().map((container) => ({ ...container, env: {} })) : group;
     };
 
     const machineChecks = (badHealth: boolean) => ({
@@ -10885,11 +9049,7 @@ describe.sequential(
       },
     });
 
-    const deployGroup = (
-      stack: ScratchStack,
-      sidecarImage: string,
-      options: GroupOptions = {},
-    ) =>
+    const deployGroup = (stack: ScratchStack, sidecarImage: string, options: GroupOptions = {}) =>
       stack.deploy(
         Effect.gen(function* () {
           const app = yield* Fly.App("MultiContainerBlueGreenSite");
@@ -10924,11 +9084,7 @@ describe.sequential(
       machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
         Effect.map((machine) => machine.state === "destroyed"),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          times: 10,
-          until: (gone) => gone,
-        }),
+        Effect.repeat({ schedule: Schedule.spaced("2 seconds"), times: 10, until: (gone) => gone }),
       );
 
     test.provider(
@@ -10952,18 +9108,11 @@ describe.sequential(
             const ready = yield* waitHealthy(first.appName, machine, 30_000);
             for (const check of ["web", "sidecar"])
               expect(
-                ready.checks?.some(
-                  ({ name, status }) => name === check && status === "passing",
-                ),
+                ready.checks?.some(({ name, status }) => name === check && status === "passing"),
               ).toBe(true);
           }
-          const reordered = yield* deployGroup(stack, firstImage, {
-            count: 2,
-            reordered: true,
-          });
-          expect([...reordered.machineIds].sort()).toEqual(
-            [...first.machineIds].sort(),
-          );
+          const reordered = yield* deployGroup(stack, firstImage, { count: 2, reordered: true });
+          expect([...reordered.machineIds].sort()).toEqual([...first.machineIds].sort());
           for (const machine of observed) {
             const after = yield* machines.getMachine({
               app_name: first.appName,
@@ -10982,9 +9131,7 @@ describe.sequential(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
-          const rolling = yield* deployGroup(stack, firstImage, {
-            strategy: "rolling",
-          });
+          const rolling = yield* deployGroup(stack, firstImage, { strategy: "rolling" });
           const promoted = yield* deployGroup(stack, firstImage);
           expect(promoted.machineId).not.toBe(rolling.machineId);
           const promotedMachine = yield* machines.getMachine({
@@ -10996,9 +9143,7 @@ describe.sequential(
             { name: "sidecar", image: firstImage },
             { name: "web", image: firstImage },
           ]);
-          const optedOut = yield* deployGroup(stack, firstImage, {
-            strategy: "rolling",
-          });
+          const optedOut = yield* deployGroup(stack, firstImage, { strategy: "rolling" });
           expect(optedOut.machineId).toBe(promoted.machineId);
           const live = yield* machines.getMachine({
             app_name: optedOut.appName,
@@ -11051,9 +9196,7 @@ describe.sequential(
             { name: "sidecar", image: firstImage },
             { name: "web", image: firstImage },
           ]);
-          expect(yield* machineGone(single.appName, single.machineId)).toBe(
-            true,
-          );
+          expect(yield* machineGone(single.appName, single.machineId)).toBe(true);
           yield* stack.destroy();
           expect(yield* appGone(single.appName)).toBe(true);
         }),
@@ -11066,9 +9209,7 @@ describe.sequential(
         Effect.gen(function* () {
           yield* stack.destroy();
           const first = yield* deployGroup(stack, firstImage);
-          const updated = yield* deployGroup(stack, nextImage, {
-            reordered: true,
-          });
+          const updated = yield* deployGroup(stack, nextImage, { reordered: true });
           expect(updated.machineId).not.toBe(first.machineId);
           const replacement = yield* machines.getMachine({
             app_name: updated.appName,
@@ -11082,9 +9223,7 @@ describe.sequential(
           expect(replacement.config?.metadata?.[keys.phase]).toBe("active");
           expect(yield* machineGone(first.appName, first.machineId)).toBe(true);
 
-          const extended = yield* deployGroup(stack, nextImage, {
-            extra: true,
-          });
+          const extended = yield* deployGroup(stack, nextImage, { extra: true });
           expect(extended.machineId).not.toBe(updated.machineId);
           expect(
             images(
@@ -11098,9 +9237,7 @@ describe.sequential(
             { name: "sidecar", image: nextImage },
             { name: "web", image: firstImage },
           ]);
-          expect(yield* machineGone(updated.appName, updated.machineId)).toBe(
-            true,
-          );
+          expect(yield* machineGone(updated.appName, updated.machineId)).toBe(true);
           yield* stack.destroy();
           expect(yield* appGone(first.appName)).toBe(true);
         }),
@@ -11113,9 +9250,9 @@ describe.sequential(
         Effect.gen(function* () {
           yield* stack.destroy();
           const first = yield* deployGroup(stack, firstImage);
-          const failed = yield* deployGroup(stack, nextImage, {
-            badHealth: true,
-          }).pipe(Effect.result);
+          const failed = yield* deployGroup(stack, nextImage, { badHealth: true }).pipe(
+            Effect.result,
+          );
           expect(Result.isFailure(failed)).toBe(true);
           const predecessor = yield* machines.getMachine({
             app_name: first.appName,
@@ -11140,20 +9277,13 @@ describe.sequential(
         Effect.gen(function* () {
           yield* stack.destroy();
           const first = yield* deployGroup(stack, firstImage);
-          const target = {
-            app_name: first.appName,
-            machine_id: first.machineId,
-          };
+          const target = { app_name: first.appName, machine_id: first.machineId };
           const original = yield* machines.getMachine(target);
           const tamperings: Array<[string, Record<string, string>]> = [
             ["unknown protocol", { [keys.protocol]: "future" }],
             [
               "incomplete image set",
-              {
-                [keys.containerImageSet]: JSON.stringify([
-                  { name: "web", image: firstImage },
-                ]),
-              },
+              { [keys.containerImageSet]: JSON.stringify([{ name: "web", image: firstImage }]) },
             ],
           ];
           for (const [label, overrides] of tamperings) {
@@ -11172,9 +9302,7 @@ describe.sequential(
               instance_id: tampered.instance_id,
               timeout: 30,
             });
-            const failed = yield* deployGroup(stack, nextImage).pipe(
-              Effect.flip,
-            );
+            const failed = yield* deployGroup(stack, nextImage).pipe(Effect.flip);
             expect(failed, label).toBeInstanceOf(DeploymentRecoveryAmbiguous);
             const preserved = yield* machines.getMachine(target);
             expect(preserved.instance_id, label).toBe(tampered.instance_id);
@@ -11183,9 +9311,9 @@ describe.sequential(
               { name: "sidecar", image: firstImage },
               { name: "web", image: firstImage },
             ]);
-            const inventory = (yield* machines.listMachines({
-              app_name: first.appName,
-            })).filter((machine) => machine.state !== "destroyed");
+            const inventory = (yield* machines.listMachines({ app_name: first.appName })).filter(
+              (machine) => machine.state !== "destroyed",
+            );
             expect(
               inventory.map(({ id }) => id),
               label,
@@ -11214,9 +9342,7 @@ describe.sequential(
 
 describe.sequential(
   "multi-container public traffic",
-  {
-    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
-  },
+  { tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"] },
   () => {
     const { test } = Test.make({ providers: Fly.providers() });
     const image =
@@ -11227,9 +9353,7 @@ describe.sequential(
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const script = yield* fs.readFileString(
-          yield* path.fromFileUrl(
-            new URL("./fixtures/multi-container-http.ts", import.meta.url),
-          ),
+          yield* path.fromFileUrl(new URL("./fixtures/multi-container-http.ts", import.meta.url)),
         );
         return (version: string, badHealth = false) =>
           stack.deploy(
@@ -11244,27 +9368,13 @@ describe.sequential(
                   {
                     name: "web",
                     image,
-                    cmd: [
-                      "node",
-                      "--input-type=module-typescript",
-                      "-e",
-                      script,
-                    ],
-                    env: {
-                      PORT: "3000",
-                      CONTAINER_NAME: "web",
-                      VERSION: version,
-                    },
+                    cmd: ["node", "--input-type=module-typescript", "-e", script],
+                    env: { PORT: "3000", CONTAINER_NAME: "web", VERSION: version },
                   },
                   {
                     name: "sidecar",
                     image,
-                    cmd: [
-                      "node",
-                      "--input-type=module-typescript",
-                      "-e",
-                      script,
-                    ],
+                    cmd: ["node", "--input-type=module-typescript", "-e", script],
                     env: {
                       PORT: "3001",
                       CONTAINER_NAME: "sidecar",
@@ -11289,13 +9399,7 @@ describe.sequential(
                     internalPort: 3000,
                     ports: [{ port: 443, handlers: ["tls", "http"] }],
                     checks: [
-                      {
-                        type: "http",
-                        port: 3000,
-                        path: "/health",
-                        interval: "2s",
-                        timeout: "1s",
-                      },
+                      { type: "http", port: 3000, path: "/health", interval: "2s", timeout: "1s" },
                     ],
                     autostop: "off",
                   },
@@ -11381,10 +9485,7 @@ describe.sequential(
           // Headers arrive only once the request is held inside each container.
           const web = yield* request(first.appName, "/hold");
           const sidecar = yield* request(first.appName, "/sidecar/hold");
-          const webBody = yield* web.text.pipe(
-            Effect.timeout("90 seconds"),
-            Effect.forkScoped,
-          );
+          const webBody = yield* web.text.pipe(Effect.timeout("90 seconds"), Effect.forkScoped);
           const sidecarBody = yield* sidecar.text.pipe(
             Effect.timeout("90 seconds"),
             Effect.forkScoped,
@@ -11411,14 +9512,9 @@ describe.sequential(
           const samples = yield* finishTraffic;
           expect(samples).toContain("old");
           expect(samples).toContain("new");
-          expect(
-            samples.every((sample) => sample === "old" || sample === "new"),
-          ).toBe(true);
+          expect(samples.every((sample) => sample === "old" || sample === "new")).toBe(true);
           const oldGone = yield* machines
-            .getMachine({
-              app_name: first.appName,
-              machine_id: first.machineId,
-            })
+            .getMachine({ app_name: first.appName, machine_id: first.machineId })
             .pipe(
               Effect.map((machine) => machine.state === "destroyed"),
               Effect.catchTag("NotFound", () => Effect.succeed(true)),
@@ -11441,10 +9537,7 @@ describe.sequential(
           if (failed instanceof ReplicaChecksNotPassing) {
             expect(failed.machineId).not.toBe(first.machineId);
             expect(
-              failed.checks.some(
-                (check) =>
-                  check.name === "sidecar" && check.status !== "passing",
-              ),
+              failed.checks.some((check) => check.name === "sidecar" && check.status !== "passing"),
             ).toBe(true);
           }
           expect(yield* version(first.appName)).toBe("old");

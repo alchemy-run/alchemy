@@ -31,10 +31,7 @@ export interface CancelDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<greengrassv2.CancelDeploymentRequest, "deploymentId">,
-    ) => Effect.Effect<
-      greengrassv2.CancelDeploymentResponse,
-      greengrassv2.CancelDeploymentError
-    >
+    ) => Effect.Effect<greengrassv2.CancelDeploymentResponse, greengrassv2.CancelDeploymentError>
   >
 > {}
 export const CancelDeployment = Binding.Service<CancelDeployment>(

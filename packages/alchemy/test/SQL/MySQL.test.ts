@@ -65,10 +65,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
           name: "erin",
           email: "erin@example.com",
         };
-        const committed = (yield* postJson(`${url}/tx/commit`, [
-          dave,
-          erin,
-        ])) as {
+        const committed = (yield* postJson(`${url}/tx/commit`, [dave, erin])) as {
           rows: UserRow[];
         };
         expect(committed.rows).toEqual([dave, erin]);

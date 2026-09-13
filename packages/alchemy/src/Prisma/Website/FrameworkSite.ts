@@ -41,18 +41,13 @@ export type WebsiteComputeOptions = Pick<
 /** Shared contract for Prisma's framework website composites. */
 export interface FrameworkSiteProps {
   /** Existing Project or ID reference, optionally produced by an Effect. Omission creates a project without a database, only on live deployments. */
-  project?:
-    | WebsiteProjectReference
-    | Effect.Effect<WebsiteProjectReference, never, Providers>;
+  project?: WebsiteProjectReference | Effect.Effect<WebsiteProjectReference, never, Providers>;
   /** Application directory containing package.json and framework configuration. @default "." */
   rootDir?: string;
   /** Build input hashing options. Set false to rebuild on every deployment. @default true */
   memo?: MemoOptions | boolean;
   /** Build, development, and runtime environment. Wrap secrets in Redacted; public framework variables can be compiled into browser assets. */
-  env?: Record<
-    string,
-    string | Redacted.Redacted<string> | Output.Output<string | undefined>
-  >;
+  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /** Origin static-file routing, using the same vocabulary as Fly and Railway websites. */
   assets?: WebsiteAssetsProps;
   /** Native framework development server options, including external-server mode. */
@@ -143,9 +138,7 @@ export const deployWebsite = Effect.fn(function* (
     ? yield* CustomDomain("Domain", { app: compute, hostname: props.domain })
     : undefined;
   return {
-    url: domain
-      ? Output.map(domain.hostname, (hostname) => `https://${hostname}`)
-      : compute.url,
+    url: domain ? Output.map(domain.hostname, (hostname) => `https://${hostname}`) : compute.url,
     compute,
     project,
     domain,
@@ -163,9 +156,7 @@ export const makeFrameworkSite = Effect.fn(function* (
   const handling = props.assets?.notFoundHandling;
   const targetConfig = {
     notFoundHandling:
-      handling === "single-page-application"
-        ? "spa"
-        : (handling ?? config.notFoundHandling),
+      handling === "single-page-application" ? "spa" : (handling ?? config.notFoundHandling),
     htmlHandling: props.assets?.htmlHandling ?? config.htmlHandling,
   };
   const build = yield* Server("Build", {
@@ -188,9 +179,7 @@ export const makeFrameworkSite = Effect.fn(function* (
   const requiredPath = (value: string | undefined) =>
     value === undefined
       ? Effect.die(
-          new Error(
-            `The ${config.framework} Node build produced no deployable server output.`,
-          ),
+          new Error(`The ${config.framework} Node build produced no deployable server output.`),
         )
       : Effect.succeed(value);
   const artifact = yield* WebsiteArtifact("Artifact", {

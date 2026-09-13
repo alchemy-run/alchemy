@@ -45,6 +45,4 @@ export interface ExecuteQuery extends Binding.Service<
   >
 > {}
 
-export const ExecuteQuery = Binding.Service<ExecuteQuery>(
-  "GCP.FirebaseDataConnect.ExecuteQuery",
-);
+export const ExecuteQuery = Binding.Service<ExecuteQuery>("GCP.FirebaseDataConnect.ExecuteQuery");

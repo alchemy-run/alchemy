@@ -15,10 +15,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "consumer-worker.ts");
 
@@ -105,10 +102,7 @@ test.provider(
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue("Q");
-          yield* Cloudflare.Worker("WorkerA", {
-            main,
-            compatibility: { date: "2024-01-01" },
-          });
+          yield* Cloudflare.Worker("WorkerA", { main, compatibility: { date: "2024-01-01" } });
           const workerB = yield* Cloudflare.Worker("WorkerB", {
             main,
             compatibility: { date: "2024-01-01" },
@@ -122,9 +116,7 @@ test.provider(
         }),
       );
 
-      expect(replaced.consumer.consumerId).not.toEqual(
-        initial.consumer.consumerId,
-      );
+      expect(replaced.consumer.consumerId).not.toEqual(initial.consumer.consumerId);
       expect(replaced.consumer.scriptName).toEqual(replaced.workerB.workerName);
 
       const liveReplaced = yield* queues.getConsumer({
@@ -132,9 +124,9 @@ test.provider(
         queueId: replaced.queue.queueId,
         consumerId: replaced.consumer.consumerId,
       });
-      expect(
-        "scriptName" in liveReplaced ? liveReplaced.scriptName : undefined,
-      ).toEqual(replaced.workerB.workerName);
+      expect("scriptName" in liveReplaced ? liveReplaced.scriptName : undefined).toEqual(
+        replaced.workerB.workerName,
+      );
 
       // The original consumer must be gone after the replace.
       const oldExit = yield* Effect.exit(
@@ -297,11 +289,7 @@ test.provider(
       // redeploy reuses the same queueId / scriptName.
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Consumer",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Consumer" });
       }).pipe(Effect.provide(stack.state));
 
       const adopted = yield* stack.deploy(
@@ -328,9 +316,7 @@ test.provider(
         queueId: adopted.queue.queueId,
         consumerId: adopted.consumer.consumerId,
       });
-      expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-        adopted.worker.workerName,
-      );
+      expect("scriptName" in live ? live.scriptName : undefined).toEqual(adopted.worker.workerName);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -382,11 +368,7 @@ test.provider(
 
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Consumer",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Consumer" });
       }).pipe(Effect.provide(stack.state));
 
       // Phase 2: redeploy with a different scriptName under the same
@@ -484,11 +466,7 @@ test.provider(
       // attached to the queue, pointing at the current script.
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Consumer",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Consumer" });
       }).pipe(Effect.provide(stack.state));
 
       // Replace the worker's physical script (explicit `name` forces a
@@ -529,9 +507,7 @@ test.provider(
             times: 8,
           }),
         );
-      expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-        replacedName,
-      );
+      expect("scriptName" in live ? live.scriptName : undefined).toEqual(replacedName);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -581,10 +557,7 @@ test.provider(
             providerVersion: 0,
             bindings: [],
             downstream: [],
-            props: {
-              queueId: devQueueId,
-              scriptName: "dev-worker",
-            },
+            props: { queueId: devQueueId, scriptName: "dev-worker" },
             attr: {
               consumerId: devConsumerId,
               queueId: devQueueId,
@@ -602,11 +575,7 @@ test.provider(
       // The dev-only resource is removed from state.
       const persisted = yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        return yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Consumer",
-        });
+        return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Consumer" });
       });
       expect(persisted).toBeUndefined();
     }).pipe(logLevel),
@@ -668,11 +637,7 @@ test.provider(
           fqn: "Consumer",
           value: {
             ...currentConsumer,
-            attr: {
-              ...currentConsumer.attr,
-              queueId: devQueueId,
-              consumerId: devConsumerId,
-            },
+            attr: { ...currentConsumer.attr, queueId: devQueueId, consumerId: devConsumerId },
           },
         });
       });
@@ -739,9 +704,7 @@ test.provider(
       const provider = yield* Provider.findProvider(Cloudflare.Queues.Consumer);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (c) => c.consumerId === deployed.consumer.consumerId,
-      );
+      const found = all.find((c) => c.consumerId === deployed.consumer.consumerId);
       expect(found).toBeDefined();
       expect(found?.queueId).toEqual(deployed.queue.queueId);
       expect(found?.scriptName).toEqual(deployed.worker.workerName);

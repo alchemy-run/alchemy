@@ -27,9 +27,7 @@ export class NeonHostContainerObject extends Cloudflare.DurableObject<NeonHostCo
 
       const get = (path: string) =>
         Effect.gen(function* () {
-          const response = yield* fetch(
-            HttpClientRequest.get(`http://container${path}`),
-          );
+          const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
           return yield* response.text;
         });
 

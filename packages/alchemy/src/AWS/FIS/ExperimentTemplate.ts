@@ -9,12 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { toSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -378,9 +373,7 @@ export interface ExperimentTemplate extends Resource<
  *
  * @resource
  */
-export const ExperimentTemplate = Resource<ExperimentTemplate>(
-  "AWS.FIS.ExperimentTemplate",
-);
+export const ExperimentTemplate = Resource<ExperimentTemplate>("AWS.FIS.ExperimentTemplate");
 
 /**
  * A freshly created IAM role referenced by `roleArn` can take a few seconds
@@ -417,8 +410,7 @@ const normalize = (value: unknown): unknown => {
   return value;
 };
 
-const stableStringify = (value: unknown): string =>
-  JSON.stringify(normalize(value) ?? null);
+const stableStringify = (value: unknown): string => JSON.stringify(normalize(value) ?? null);
 
 export const ExperimentTemplateProvider = () =>
   Provider.effect(
@@ -427,9 +419,7 @@ export const ExperimentTemplateProvider = () =>
       const getTemplate = (templateId: string) =>
         fis.getExperimentTemplate({ id: templateId }).pipe(
           Effect.map((r) => r.experimentTemplate),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       // FIS template IDs are server-generated, so when the cached output is
@@ -466,9 +456,7 @@ export const ExperimentTemplateProvider = () =>
       // central Duration util (handles state-persisted Duration JSON), then
       // emit hours when the duration is whole hours, else minutes, else
       // seconds, matching the canonical forms FIS reports back.
-      const toIsoDuration = (
-        input: Duration.Input | undefined,
-      ): string | undefined => {
+      const toIsoDuration = (input: Duration.Input | undefined): string | undefined => {
         if (input === undefined) return undefined;
         const seconds = toSeconds(input)!;
         if (seconds > 0 && seconds % 3600 === 0) return `PT${seconds / 3600}H`;
@@ -484,12 +472,8 @@ export const ExperimentTemplateProvider = () =>
         config
           ? {
               ...config,
-              preExperimentDuration: toIsoDuration(
-                config.preExperimentDuration,
-              ),
-              postExperimentDuration: toIsoDuration(
-                config.postExperimentDuration,
-              ),
+              preExperimentDuration: toIsoDuration(config.preExperimentDuration),
+              postExperimentDuration: toIsoDuration(config.postExperimentDuration),
             }
           : undefined;
 
@@ -511,8 +495,7 @@ export const ExperimentTemplateProvider = () =>
               logSchemaVersion: props.logConfiguration.logSchemaVersion ?? 2,
             }
           : undefined,
-        emptyTargetResolutionMode:
-          props.experimentOptions?.emptyTargetResolutionMode,
+        emptyTargetResolutionMode: props.experimentOptions?.emptyTargetResolutionMode,
         experimentReportConfiguration: projectReportConfiguration(
           props.experimentReportConfiguration,
         ),
@@ -527,11 +510,8 @@ export const ExperimentTemplateProvider = () =>
         stopConditions: template.stopConditions ?? [],
         targets: template.targets ?? {},
         actions: template.actions ?? {},
-        logConfiguration: props.logConfiguration
-          ? template.logConfiguration
-          : undefined,
-        emptyTargetResolutionMode: props.experimentOptions
-          ?.emptyTargetResolutionMode
+        logConfiguration: props.logConfiguration ? template.logConfiguration : undefined,
+        emptyTargetResolutionMode: props.experimentOptions?.emptyTargetResolutionMode
           ? template.experimentOptions?.emptyTargetResolutionMode
           : undefined,
         experimentReportConfiguration: props.experimentReportConfiguration
@@ -556,14 +536,11 @@ export const ExperimentTemplateProvider = () =>
               (summary) =>
                 summary.id === undefined
                   ? Effect.succeed(undefined)
-                  : getTemplate(summary.id).pipe(
-                      Effect.map((t) => (t ? toAttrs(t) : undefined)),
-                    ),
+                  : getTemplate(summary.id).pipe(Effect.map((t) => (t ? toAttrs(t) : undefined))),
               { concurrency: 10 },
             );
             return items.filter(
-              (item): item is ExperimentTemplate["Attributes"] =>
-                item !== undefined,
+              (item): item is ExperimentTemplate["Attributes"] => item !== undefined,
             );
           }),
 
@@ -573,9 +550,7 @@ export const ExperimentTemplateProvider = () =>
             : yield* findByTags(id, instanceId);
           if (template === undefined) return undefined;
           const attrs = toAttrs(template);
-          return (yield* hasAlchemyTags(id, template.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, template.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -591,8 +566,7 @@ export const ExperimentTemplateProvider = () =>
           if (newOptions !== undefined && !isResolved(newOptions)) {
             return undefined;
           }
-          const oldTargeting =
-            olds.experimentOptions?.accountTargeting ?? "single-account";
+          const oldTargeting = olds.experimentOptions?.accountTargeting ?? "single-account";
           const newTargeting = newOptions?.accountTargeting ?? "single-account";
           if (oldTargeting !== newTargeting) {
             return { action: "replace" } as const;
@@ -600,13 +574,7 @@ export const ExperimentTemplateProvider = () =>
           // fall through: undefined → default update
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = {
             ...news.tags,
@@ -637,8 +605,7 @@ export const ExperimentTemplateProvider = () =>
                 roleArn: news.roleArn,
                 logConfiguration: desired.logConfiguration,
                 experimentOptions: news.experimentOptions,
-                experimentReportConfiguration:
-                  desired.experimentReportConfiguration,
+                experimentReportConfiguration: desired.experimentReportConfiguration,
                 tags: desiredTags,
               }),
             ).pipe(Effect.map((r) => r.experimentTemplate!));
@@ -647,8 +614,7 @@ export const ExperimentTemplateProvider = () =>
             // desired projection and apply a single update on any delta
             // (UpdateExperimentTemplate replaces the provided aspects
             // wholesale). Skip the API entirely on no-op.
-            stableStringify(projectObserved(observed, news)) !==
-            stableStringify(desired)
+            stableStringify(projectObserved(observed, news)) !== stableStringify(desired)
           ) {
             observed = yield* retryRolePropagation(
               fis.updateExperimentTemplate({
@@ -661,12 +627,10 @@ export const ExperimentTemplateProvider = () =>
                 logConfiguration: desired.logConfiguration,
                 experimentOptions: news.experimentOptions
                   ? {
-                      emptyTargetResolutionMode:
-                        news.experimentOptions.emptyTargetResolutionMode,
+                      emptyTargetResolutionMode: news.experimentOptions.emptyTargetResolutionMode,
                     }
                   : undefined,
-                experimentReportConfiguration:
-                  desired.experimentReportConfiguration,
+                experimentReportConfiguration: desired.experimentReportConfiguration,
               }),
             ).pipe(Effect.map((r) => r.experimentTemplate!));
           }
@@ -697,9 +661,7 @@ export const ExperimentTemplateProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* fis
             .deleteExperimentTemplate({ id: output.id })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

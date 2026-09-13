@@ -5,10 +5,7 @@ import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { viteBuildInProcess } from "./Sources/Vite.ts";
-import type {
-  ViteBuildChildConfig,
-  ViteBuildChildResult,
-} from "./ViteChild.shared.ts";
+import type { ViteBuildChildConfig, ViteBuildChildResult } from "./ViteChild.shared.ts";
 
 /**
  * Entry point of the one-shot Vite *build* child spawned by
@@ -34,17 +31,17 @@ const readConfig = Effect.gen(function* () {
 const program = Effect.gen(function* () {
   const config = yield* readConfig;
   const fs = yield* FileSystem.FileSystem;
-  const { clientDirectory, base, serverBundle, externalWorkspaces } =
-    yield* viteBuildInProcess(config.rootDir, config.env, {
+  const { clientDirectory, base, serverBundle, externalWorkspaces } = yield* viteBuildInProcess(
+    config.rootDir,
+    config.env,
+    {
       main: config.main,
       compatibilityDate: config.compatibilityDate,
       compatibilityFlags: config.compatibilityFlags,
       viteEnvironments: config.viteEnvironments,
-    });
-  const [bundle, workspaces] = yield* Effect.all([
-    serverBundle,
-    externalWorkspaces,
-  ]);
+    },
+  );
+  const [bundle, workspaces] = yield* Effect.all([serverBundle, externalWorkspaces]);
   const result: ViteBuildChildResult = {
     clientDirectory,
     base,

@@ -18,9 +18,7 @@ const describeAction = (scheduledActionName: string) =>
     })
     .pipe(
       Effect.map((res) =>
-        res.ScheduledActions?.find(
-          (a) => a.ScheduledActionName === scheduledActionName,
-        ),
+        res.ScheduledActions?.find((a) => a.ScheduledActionName === scheduledActionName),
       ),
     );
 
@@ -99,9 +97,7 @@ test.provider(
       });
       expect(updated.scheduledActionName).toEqual(created.scheduledActionName);
       expect(updated.scheduledActionArn).toEqual(created.scheduledActionArn);
-      const observedAfterUpdate = yield* describeAction(
-        created.scheduledActionName,
-      );
+      const observedAfterUpdate = yield* describeAction(created.scheduledActionName);
       expect(observedAfterUpdate?.Schedule).toBe("at(2030-06-01T00:00:00)");
       expect(observedAfterUpdate?.ScalableTargetAction?.MinCapacity).toBe(3);
 
@@ -110,12 +106,7 @@ test.provider(
       expect(gone).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:applicationautoscaling",
-      "provider:aws:dynamodb",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:applicationautoscaling", "provider:aws:dynamodb", "live"],
     timeout: 240_000,
   },
 );

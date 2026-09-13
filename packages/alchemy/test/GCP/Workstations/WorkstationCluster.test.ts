@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Workstation clusters take ~20 minutes to create and delete.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -30,15 +27,11 @@ test.provider(
       );
       expect(error._tag).toEqual("NotFound");
 
-      const page = yield* workstations.listProjectsLocationsWorkstationClusters(
-        {
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        },
-      );
-      expect(
-        (page.workstationClusters ?? []).map((item) => item.name),
-      ).not.toContain(
+      const page = yield* workstations.listProjectsLocationsWorkstationClusters({
+        parent: `projects/${project}/locations/-`,
+        pageSize: 10,
+      });
+      expect((page.workstationClusters ?? []).map((item) => item.name)).not.toContain(
         `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
       );
 
@@ -99,32 +92,25 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "alchemy-test-cluster",
             labels: { env: "test" },
           });
-          const config =
-            yield* GCP.Workstations.WorkstationClustersWorkstationConfig(
-              "Code",
-              {
-                workstationCluster: cluster.name,
-                displayName: "alchemy-test-config",
-                idleTimeout: "300s",
-                host: {
-                  gceInstance: {
-                    machineType: "e2-standard-2",
-                    poolSize: 0,
-                    bootDiskSizeGb: 30,
-                  },
-                },
-                labels: { env: "test" },
+          const config = yield* GCP.Workstations.WorkstationClustersWorkstationConfig("Code", {
+            workstationCluster: cluster.name,
+            displayName: "alchemy-test-config",
+            idleTimeout: "300s",
+            host: {
+              gceInstance: {
+                machineType: "e2-standard-2",
+                poolSize: 0,
+                bootDiskSizeGb: 30,
               },
-            );
+            },
+            labels: { env: "test" },
+          });
           const workstation =
-            yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation(
-              "Mine",
-              {
-                workstationConfig: config.name,
-                displayName: "alchemy-test-station",
-                labels: { env: "test" },
-              },
-            );
+            yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation("Mine", {
+              workstationConfig: config.name,
+              displayName: "alchemy-test-station",
+              labels: { env: "test" },
+            });
           return { cluster, config, workstation };
         }),
       );
@@ -132,14 +118,11 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.cluster.name).toContain("/workstationClusters/");
       expect(created.cluster.labels).toMatchObject({ env: "test" });
       expect(created.config.workstationCluster).toEqual(created.cluster.name);
-      expect(created.workstation.workstationConfig).toEqual(
-        created.config.name,
-      );
+      expect(created.workstation.workstationConfig).toEqual(created.config.name);
 
-      const fetched =
-        yield* workstations.getProjectsLocationsWorkstationClusters({
-          name: created.cluster.name,
-        });
+      const fetched = yield* workstations.getProjectsLocationsWorkstationClusters({
+        name: created.cluster.name,
+      });
       expect(fetched.name).toEqual(created.cluster.name);
       expect(fetched.labels?.env).toEqual("test");
 
@@ -153,43 +136,32 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "alchemy-test-cluster-v2",
             labels: { env: "prod", role: "dev" },
           });
-          const config =
-            yield* GCP.Workstations.WorkstationClustersWorkstationConfig(
-              "Code",
-              {
-                workstationConfigId: created.config.workstationConfigId,
-                workstationCluster: cluster.name,
-                displayName: "alchemy-test-config-v2",
-                idleTimeout: "600s",
-                labels: { env: "prod" },
-              },
-            );
+          const config = yield* GCP.Workstations.WorkstationClustersWorkstationConfig("Code", {
+            workstationConfigId: created.config.workstationConfigId,
+            workstationCluster: cluster.name,
+            displayName: "alchemy-test-config-v2",
+            idleTimeout: "600s",
+            labels: { env: "prod" },
+          });
           const workstation =
-            yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation(
-              "Mine",
-              {
-                workstationId: created.workstation.workstationId,
-                workstationConfig: config.name,
-                displayName: "alchemy-test-station-v2",
-                labels: { env: "prod" },
-              },
-            );
+            yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation("Mine", {
+              workstationId: created.workstation.workstationId,
+              workstationConfig: config.name,
+              displayName: "alchemy-test-station-v2",
+              labels: { env: "prod" },
+            });
           return { cluster, config, workstation };
         }),
       );
 
-      expect(updated.cluster.workstationClusterId).toEqual(
-        created.cluster.workstationClusterId,
-      );
+      expect(updated.cluster.workstationClusterId).toEqual(created.cluster.workstationClusterId);
       expect(updated.cluster.displayName).toEqual("alchemy-test-cluster-v2");
       expect(updated.cluster.labels).toMatchObject({
         env: "prod",
         role: "dev",
       });
       expect(updated.config.displayName).toEqual("alchemy-test-config-v2");
-      expect(updated.workstation.displayName).toEqual(
-        "alchemy-test-station-v2",
-      );
+      expect(updated.workstation.displayName).toEqual("alchemy-test-station-v2");
 
       yield* stack.destroy();
 

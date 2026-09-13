@@ -33,28 +33,18 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Hetzner.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(
-    Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
-  );
+  effect.pipe(Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)));
 
-class ApiNotReady extends Data.TaggedError("ApiNotReady")<{
-  status: number;
-}> {}
+class ApiNotReady extends Data.TaggedError("ApiNotReady")<{ status: number }> {}
 
 const Stack = Alchemy.Stack(
   "HetznerAppFixture",
-  {
-    providers: Hetzner.providers(),
-    state: Alchemy.localState(),
-  },
+  { providers: Hetzner.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const server = yield* Box;
     const volume = yield* Volume;
@@ -110,21 +100,15 @@ test.skipIf(!hasHetznerCreds)(
     expect(out.apiUnit).not.toEqual(out.workerUnit);
     expect(out.apiUrl).toContain(out.serverIpv4);
 
-    const liveServer = yield* distilled(
-      servers.getServer({ id: out.serverId }),
-    );
+    const liveServer = yield* distilled(servers.getServer({ id: out.serverId }));
     expect(liveServer.server?.id).toEqual(out.serverId);
     expect(liveServer.server?.public_net.ipv4?.ip).toEqual(out.serverIpv4);
 
-    const liveVolume = yield* distilled(
-      volumes.getVolume({ id: out.volumeId }),
-    );
+    const liveVolume = yield* distilled(volumes.getVolume({ id: out.volumeId }));
     expect(liveVolume.volume.server).toEqual(out.serverId);
     expect(liveVolume.volume.linux_device).toMatch(/^\/dev\//);
 
-    const liveFirewall = yield* distilled(
-      firewalls.getFirewall({ id: out.firewallId }),
-    );
+    const liveFirewall = yield* distilled(firewalls.getFirewall({ id: out.firewallId }));
     expect(liveFirewall.firewall.applied_to).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -135,22 +119,12 @@ test.skipIf(!hasHetznerCreds)(
     );
     expect(liveFirewall.firewall.rules).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          direction: "in",
-          protocol: "tcp",
-          port: "22",
-        }),
-        expect.objectContaining({
-          direction: "in",
-          protocol: "tcp",
-          port: String(API_PORT),
-        }),
+        expect.objectContaining({ direction: "in", protocol: "tcp", port: "22" }),
+        expect.objectContaining({ direction: "in", protocol: "tcp", port: String(API_PORT) }),
       ]),
     );
 
-    const liveLb = yield* distilled(
-      loadBalancers.getLoadBalancer({ id: out.lbId }),
-    );
+    const liveLb = yield* distilled(loadBalancers.getLoadBalancer({ id: out.lbId }));
     expect(liveLb.load_balancer.public_net.ipv4.ip).toEqual(out.lbIpv4);
     expect(liveLb.load_balancer.targets).toEqual(
       expect.arrayContaining([
@@ -178,9 +152,7 @@ test.skipIf(!hasHetznerCreds)(
     const body = yield* client.get(url).pipe(
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.json.pipe(
-              Effect.mapError(() => new ApiNotReady({ status: res.status })),
-            )
+          ? res.json.pipe(Effect.mapError(() => new ApiNotReady({ status: res.status })))
           : Effect.fail(new ApiNotReady({ status: res.status })),
       ),
       Effect.retry({

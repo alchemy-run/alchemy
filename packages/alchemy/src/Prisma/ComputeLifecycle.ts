@@ -20,9 +20,7 @@ export { isConflict } from "./Client.ts";
  * A wait exceeded its `timeoutSeconds` budget before the deployment reached
  * the requested status.
  */
-export class PrismaDeploymentWaitTimeout extends Data.TaggedError(
-  "PrismaDeploymentWaitTimeout",
-)<{
+export class PrismaDeploymentWaitTimeout extends Data.TaggedError("PrismaDeploymentWaitTimeout")<{
   message: string;
 }> {}
 
@@ -34,9 +32,7 @@ export class PrismaDeploymentWaitInvalidOptions extends Data.TaggedError(
 }> {}
 
 /** The deployment reached the terminal `failed` status while being waited on. */
-export class PrismaDeploymentFailed extends Data.TaggedError(
-  "PrismaDeploymentFailed",
-)<{
+export class PrismaDeploymentFailed extends Data.TaggedError("PrismaDeploymentFailed")<{
   message: string;
 }> {}
 
@@ -103,8 +99,7 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DELETE_CONFLICT_RETRY_ATTEMPTS = 5;
 
-const deleteRetryDelay = (attempt: number) =>
-  Effect.sleep(Duration.millis(250 * 2 ** attempt));
+const deleteRetryDelay = (attempt: number) => Effect.sleep(Duration.millis(250 * 2 ** attempt));
 
 const ensureError = (error: unknown): Error =>
   error instanceof Error
@@ -118,8 +113,7 @@ const deploymentDeleteFailed = (
   statusAtDelete: string | undefined,
   error: unknown,
 ) => {
-  const format = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const format = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const detail = format(error);
   const isKnownStoppedDeleteFailure =
     statusAtDelete === "stopped" && Category.hasCategory(error, "ServerError");
@@ -175,21 +169,15 @@ export const waitForDeploymentStatus = Effect.fn(function* (
   let lastStatus: string | undefined;
 
   while (true) {
-    const remainingBeforeObservation = yield* Effect.sync(
-      () => deadline - Date.now(),
-    );
+    const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
     if (remainingBeforeObservation <= 0) {
-      return yield* Effect.fail(
-        deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus),
-      );
+      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
     }
     const deploymentOption = yield* observeDeployment(deploymentId).pipe(
       Effect.timeoutOption(Duration.millis(remainingBeforeObservation)),
     );
     if (Option.isNone(deploymentOption)) {
-      return yield* Effect.fail(
-        deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus),
-      );
+      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
     }
     const deployment = deploymentOption.value;
     lastStatus = deployment.status;
@@ -206,14 +194,10 @@ export const waitForDeploymentStatus = Effect.fn(function* (
 
     const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
     if (elapsed >= timeoutMs) {
-      return yield* Effect.fail(
-        deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus),
-      );
+      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
     }
 
-    yield* Effect.sleep(
-      Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)),
-    );
+    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
   }
 });
 
@@ -249,11 +233,9 @@ export const destroyDeployment = Effect.fn(function* (
       Effect.catchTag("NotFound", () => Effect.void),
       Effect.mapError(ensureError),
     );
-    const stoppedVersion = yield* waitForDeploymentStatus(
-      deploymentId,
-      "stopped",
-      options,
-    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    const stoppedVersion = yield* waitForDeploymentStatus(deploymentId, "stopped", options).pipe(
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    );
     statusAtDelete = stoppedVersion?.status ?? "stopped";
     stopped = true;
   }
@@ -330,9 +312,7 @@ export const destroyProjectApps = Effect.fn(function* (
       let cursor: string | undefined;
       while (true) {
         const page = yield* getServices(
-          cursor === undefined
-            ? { projectId, limit: 100 }
-            : { projectId, limit: 100, cursor },
+          cursor === undefined ? { projectId, limit: 100 } : { projectId, limit: 100, cursor },
         );
         items.push(...page.data);
         const nextCursor = page.pagination.nextCursor;

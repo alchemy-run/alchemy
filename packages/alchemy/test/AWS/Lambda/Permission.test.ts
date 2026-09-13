@@ -93,9 +93,7 @@ test.provider(
 // with it the permission's policy) from the cloud.
 const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
   yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`Function ${functionName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`Function ${functionName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -103,10 +101,7 @@ const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
   );
 });
 
-const getPolicyStatement = Effect.fn(function* (
-  functionName: string,
-  statementId: string,
-) {
+const getPolicyStatement = Effect.fn(function* (functionName: string, statementId: string) {
   return yield* Lambda.getPolicy({ FunctionName: functionName }).pipe(
     Effect.flatMap(({ Policy }) =>
       Effect.try({
@@ -117,16 +112,13 @@ const getPolicyStatement = Effect.fn(function* (
               Condition?: unknown;
             }>;
           };
-          const statement = policy.Statement?.find(
-            (statement) => statement.Sid === statementId,
-          );
+          const statement = policy.Statement?.find((statement) => statement.Sid === statementId);
           if (!statement) {
             throw new Error(`Policy statement ${statementId} not found`);
           }
           return statement;
         },
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
       }),
     ),
     Effect.retry({

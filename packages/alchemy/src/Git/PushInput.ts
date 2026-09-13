@@ -8,9 +8,7 @@ import { StoreError } from "./Protocol/Store.ts";
 import { incomingStates, type PushInput, type RefUpdate } from "./Push.ts";
 import { makeStreamingSource } from "./Store/StreamingSource.ts";
 
-const Commands = Schema.Array(
-  Schema.Struct({ ref: RefName, oldOid: Oid, newOid: Oid }),
-);
+const Commands = Schema.Array(Schema.Struct({ ref: RefName, oldOid: Oid, newOid: Oid }));
 
 /**
  * Prepare input from decoded ref updates and raw pack bytes, with no HTTP dependency.
@@ -24,9 +22,7 @@ export const fromStream = <E, R>(
   Effect.gen(function* () {
     const commands = yield* Schema.decodeUnknownEffect(Commands)(updates);
     const input: PushInput = Object.freeze({
-      updates: Object.freeze(
-        commands.map((command) => Object.freeze({ ...command })),
-      ),
+      updates: Object.freeze(commands.map((command) => Object.freeze({ ...command }))),
       atomic: options?.atomic ?? true,
     });
     const feeder = makeStreamingSource();
@@ -46,8 +42,7 @@ export const fromStream = <E, R>(
           return { total };
         }),
         Effect.mapError(
-          (error) =>
-            new StoreError({ reason: `pack stream failed: ${String(error)}` }),
+          (error) => new StoreError({ reason: `pack stream failed: ${String(error)}` }),
         ),
         Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
         Effect.result,

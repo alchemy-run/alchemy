@@ -13,13 +13,7 @@ const fixtureDir = pathe.resolve(
   "../../../../../examples/cloudflare-website-vocs",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "package.json",
-  "public",
-  "src",
-  "tsconfig.json",
-  "vocs.config.ts",
-];
+const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
 describe(
   "Railway.Website.Vocs local",

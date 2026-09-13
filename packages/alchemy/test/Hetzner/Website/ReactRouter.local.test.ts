@@ -40,9 +40,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Hetzner.Website.ReactRouter("Web", {
-                rootDir,
-              });
+              const site = yield* Hetzner.Website.ReactRouter("Web", { rootDir });
               return { site };
             }),
           );

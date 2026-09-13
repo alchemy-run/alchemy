@@ -9,10 +9,7 @@ import { WorkflowBinding, WorkflowHandle } from "../binding.ts";
 import type { Engine, EngineLogs } from "../engine.ts";
 import { InstanceEvent, InstanceStatus } from "../index.ts";
 import { WorkflowSubscriptionTarget } from "../subscription.ts";
-import type {
-  WorkflowSubscription,
-  WorkflowSubscriptionEvent,
-} from "../subscription.ts";
+import type { WorkflowSubscription, WorkflowSubscriptionEvent } from "../subscription.ts";
 import { setTestWorkflowCallback } from "./test-entry.ts";
 
 let instanceCounter = 0;
@@ -46,9 +43,7 @@ async function waitUntilLogEvent(
 
 describe("WorkflowBinding", () => {
   describe("create()", () => {
-    it("should create an instance with provided id and params", async ({
-      expect,
-    }) => {
+    it("should create an instance with provided id and params", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -107,18 +102,14 @@ describe("WorkflowBinding", () => {
       );
     });
 
-    it("should throw WorkflowError for invalid instance id", async ({
-      expect,
-    }) => {
+    it("should throw WorkflowError for invalid instance id", async ({ expect }) => {
       const binding = createBinding();
       await expect(binding.create({ id: "#invalid!" })).rejects.toThrow(
         "Workflow instance has invalid id",
       );
     });
 
-    it("should block creation when pending persistence deletion fails", async ({
-      expect,
-    }) => {
+    it("should block creation when pending persistence deletion fails", async ({ expect }) => {
       const binding = new WorkflowBinding(createExecutionContext(), {
         ENGINE: env.ENGINE,
         BINDING_NAME: "TEST_WORKFLOW",
@@ -135,9 +126,7 @@ describe("WorkflowBinding", () => {
   });
 
   describe("get()", () => {
-    it("should return a WorkflowHandle for an existing instance", async ({
-      expect,
-    }) => {
+    it("should return a WorkflowHandle for an existing instance", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -170,9 +159,7 @@ describe("WorkflowBinding", () => {
   });
 
   describe("instance deletion", () => {
-    it("deleteInstance should delete an instance and wipe its stored state", async ({
-      expect,
-    }) => {
+    it("deleteInstance should delete an instance and wipe its stored state", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
 
@@ -199,14 +186,12 @@ describe("WorkflowBinding", () => {
     });
 
     it("should accept a cron-generated instance ID", async ({ expect }) => {
-      await expect(
-        createBinding().deleteInstance("*/30 * * * *-1786001400000"),
-      ).rejects.toThrow("instance.not_found");
+      await expect(createBinding().deleteInstance("*/30 * * * *-1786001400000")).rejects.toThrow(
+        "instance.not_found",
+      );
     });
 
-    it("should let a running instance delete itself and stop execution", async ({
-      expect,
-    }) => {
+    it("should let a running instance delete itself and stop execution", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       let deleteStarted = false;
@@ -240,9 +225,7 @@ describe("WorkflowBinding", () => {
   });
 
   describe("deleteBatch()", () => {
-    it("should delete instances and wipe their stored state", async ({
-      expect,
-    }) => {
+    it("should delete instances and wipe their stored state", async ({ expect }) => {
       const ids = [uniqueId(), uniqueId()];
       const binding = createBinding();
 
@@ -269,9 +252,7 @@ describe("WorkflowBinding", () => {
       }
     });
 
-    it("should report each duplicate missing cron-generated ID", async ({
-      expect,
-    }) => {
+    it("should report each duplicate missing cron-generated ID", async ({ expect }) => {
       const binding = createBinding();
       const cronId = "*/30 * * * *-1786001400000";
       await expect(
@@ -296,9 +277,7 @@ describe("WorkflowBinding", () => {
     });
 
     it("should normalize unexpected deletion errors", async ({ expect }) => {
-      const deleteInstance = vi
-        .fn()
-        .mockRejectedValue(new Error("sensitive failure"));
+      const deleteInstance = vi.fn().mockRejectedValue(new Error("sensitive failure"));
       const binding = new WorkflowBinding(createExecutionContext(), {
         ENGINE: {
           idFromName: (id: string) => id,
@@ -308,9 +287,7 @@ describe("WorkflowBinding", () => {
         WORKFLOW_NAME: "test-workflow",
       });
 
-      await expect(
-        binding.deleteBatch({ instances: ["broken-instance"] }),
-      ).resolves.toEqual({
+      await expect(binding.deleteBatch({ instances: ["broken-instance"] })).resolves.toEqual({
         deleted: [],
         errors: [
           {
@@ -323,12 +300,8 @@ describe("WorkflowBinding", () => {
       expect(deleteInstance).toHaveBeenCalledOnce();
     });
 
-    it("should report persistence cleanup failures per instance", async ({
-      expect,
-    }) => {
-      const abort = vi.fn(() =>
-        Promise.reject(new Error("Durable Object aborted")),
-      );
+    it("should report persistence cleanup failures per instance", async ({ expect }) => {
+      const abort = vi.fn(() => Promise.reject(new Error("Durable Object aborted")));
       const loopbackFetch = vi.fn((url: string) =>
         Promise.resolve(
           new Response(null, {
@@ -343,9 +316,7 @@ describe("WorkflowBinding", () => {
             id,
             deleteInstance: () => {
               if (id.toString() === "missing") {
-                return Promise.reject(
-                  new Error("(instance.not_found) Instance does not exist"),
-                );
+                return Promise.reject(new Error("(instance.not_found) Instance does not exist"));
               }
               return Promise.resolve();
             },
@@ -399,9 +370,7 @@ describe("WorkflowBinding", () => {
         binding.deleteBatch({
           instances: Array.from({ length: 101 }, (_, i) => `instance-${i}`),
         }),
-      ).rejects.toThrow(
-        "(body) batchDeleteInstances only supports 100 instances at a time",
-      );
+      ).rejects.toThrow("(body) batchDeleteInstances only supports 100 instances at a time");
       await expect(binding.deleteBatch({ instances: [""] })).rejects.toThrow(
         "(instance.invalid_id) Instance ID is invalid",
       );
@@ -449,9 +418,7 @@ describe("WorkflowBinding", () => {
 });
 
 describe("WorkflowBinding", () => {
-  it("should not call dispose when sending an event to an instance", async ({
-    expect,
-  }) => {
+  it("should not call dispose when sending an event to an instance", async ({ expect }) => {
     const id = uniqueId();
     const disposeSpy = vi.fn();
     const receiveEvent = vi.fn(() =>
@@ -473,9 +440,7 @@ describe("WorkflowBinding", () => {
 
 describe("WorkflowHandle", () => {
   describe("status()", () => {
-    it("should return running status for a workflow waiting for an event", async ({
-      expect,
-    }) => {
+    it("should return running status for a workflow waiting for an event", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -504,9 +469,7 @@ describe("WorkflowHandle", () => {
       await instance.terminate();
     });
 
-    it("should return complete status and output for a successful workflow", async ({
-      expect,
-    }) => {
+    it("should return complete status and output for a successful workflow", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -524,9 +487,7 @@ describe("WorkflowHandle", () => {
       expect(status.error).toBeUndefined();
     });
 
-    it("should return errored status and error for a failed workflow", async ({
-      expect,
-    }) => {
+    it("should return errored status and error for a failed workflow", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -547,18 +508,13 @@ describe("WorkflowHandle", () => {
       expect(status.output).toBeNull();
     });
 
-    it("should return step outputs in __LOCAL_DEV_STEP_OUTPUTS", async ({
-      expect,
-    }) => {
+    it("should return step outputs in __LOCAL_DEV_STEP_OUTPUTS", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
 
       setTestWorkflowCallback(async (_event, step) => {
-        const step1Result = await step.do(
-          "step-1",
-          async () => "result-from-step-1",
-        );
+        const step1Result = await step.do("step-1", async () => "result-from-step-1");
         const step2Result = await step.do("step-2", async () => ({
           data: "result-from-step-2",
         }));
@@ -581,9 +537,7 @@ describe("WorkflowHandle", () => {
       expect(status.__LOCAL_DEV_STEP_OUTPUTS[2]).toBe(123);
     });
 
-    it("should return terminated status for a terminated instance", async ({
-      expect,
-    }) => {
+    it("should return terminated status for a terminated instance", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -613,9 +567,7 @@ describe("WorkflowHandle", () => {
     it("finishes a pending next request when disposed", async ({ expect }) => {
       const started = Promise.withResolvers<void>();
       const pendingEvent =
-        Promise.withResolvers<
-          IteratorResult<WorkflowSubscriptionEvent, undefined>
-        >();
+        Promise.withResolvers<IteratorResult<WorkflowSubscriptionEvent, undefined>>();
       const onClose = vi.fn();
       const subscription = new WorkflowSubscriptionTarget(async () => {
         started.resolve();
@@ -727,10 +679,7 @@ describe("WorkflowHandle", () => {
         throw new Error("Expected subscription events");
       }
       expect(events.map(({ eventId }) => eventId)).toEqual(
-        Array.from(
-          { length: events.length },
-          (_, index) => firstEvent.eventId + index,
-        ),
+        Array.from({ length: events.length }, (_, index) => firstEvent.eventId + index),
       );
       expect(events).toContainEqual(
         expect.objectContaining({
@@ -769,9 +718,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("uses errored event names for Workflow and step failures", async ({
-      expect,
-    }) => {
+    it("uses errored event names for Workflow and step failures", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -805,9 +752,7 @@ describe("WorkflowHandle", () => {
       expect(eventTypes.at(-1)).toBe("workflow_errored");
     });
 
-    it("includes the resolved rollback config in rollback step events", async ({
-      expect,
-    }) => {
+    it("includes the resolved rollback config in rollback step events", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -851,9 +796,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("returns stored structured and streamed step outputs", async ({
-      expect,
-    }) => {
+    it("returns stored structured and streamed step outputs", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -863,19 +806,13 @@ describe("WorkflowHandle", () => {
         const stream = await step.do("stream output", async () => {
           return new ReadableStream<Uint8Array>({
             start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode("streamed step output"),
-              );
+              controller.enqueue(new TextEncoder().encode("streamed step output"));
               controller.close();
             },
           });
         });
         await new Response(stream as ReadableStream<Uint8Array>).arrayBuffer();
-        await step.do(
-          "sensitive output",
-          { sensitive: "output" },
-          async () => "secret",
-        );
+        await step.do("sensitive output", { sensitive: "output" }, async () => "secret");
         await step.do("undefined output", async () => undefined);
         await step.do("null output", async () => null);
         return "done";
@@ -890,10 +827,7 @@ describe("WorkflowHandle", () => {
       });
 
       const structuredResult = await subscription.next();
-      if (
-        structuredResult.done ||
-        structuredResult.value.type !== "step_completed"
-      ) {
+      if (structuredResult.done || structuredResult.value.type !== "step_completed") {
         throw new Error("Expected a structured step output event");
       }
       const structuredEvent = structuredResult.value;
@@ -913,11 +847,9 @@ describe("WorkflowHandle", () => {
         stepName: "stream output-1",
       });
       expect(streamEvent.output).toBeInstanceOf(ReadableStream);
-      expect(
-        await new Response(
-          streamEvent.output as ReadableStream<Uint8Array>,
-        ).text(),
-      ).toBe("streamed step output");
+      expect(await new Response(streamEvent.output as ReadableStream<Uint8Array>).text()).toBe(
+        "streamed step output",
+      );
 
       expect(await subscription.next()).toMatchObject({
         done: false,
@@ -981,9 +913,7 @@ describe("WorkflowHandle", () => {
       expect(result.value.output).toEqual(createWorkflowOutput());
 
       const logs = (await engineStub.readLogs()) as EngineLogs;
-      const completedLog = logs.logs.find(
-        (log) => log.event === InstanceEvent.WORKFLOW_SUCCESS,
-      );
+      const completedLog = logs.logs.find((log) => log.event === InstanceEvent.WORKFLOW_SUCCESS);
       expect(completedLog?.metadata.result).toEqual({
         count: "[BigInt(42)]",
         typedArray: "[Uint16Array(4 bytes)]",
@@ -993,9 +923,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("rejects when a stored streamed step output is corrupt", async ({
-      expect,
-    }) => {
+    it("rejects when a stored streamed step output is corrupt", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1044,9 +972,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("returns done when the cursor is at or after a terminal event", async ({
-      expect,
-    }) => {
+    it("returns done when the cursor is at or after a terminal event", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1071,10 +997,7 @@ describe("WorkflowHandle", () => {
         using subscription = await instance.subscribe({ cursor });
         const result = Promise.resolve(subscription.next());
         await expect(
-          Promise.race([
-            result,
-            scheduler.wait(1000).then(() => "timed out" as const),
-          ]),
+          Promise.race([result, scheduler.wait(1000).then(() => "timed out" as const)]),
         ).resolves.toEqual({ done: true, value: undefined });
       };
 
@@ -1084,15 +1007,11 @@ describe("WorkflowHandle", () => {
       await runInDurableObject(engineStub, (engine) => {
         engine.writeLog(InstanceEvent.__INTERNAL_PROD, null, null, {});
       });
-      const laterInternalEventId = await getEventId(
-        InstanceEvent.__INTERNAL_PROD,
-      );
+      const laterInternalEventId = await getEventId(InstanceEvent.__INTERNAL_PROD);
       await expectDoneAtCursor(laterInternalEventId);
     });
 
-    it("waits for live events and applies cursor and filter options", async ({
-      expect,
-    }) => {
+    it("waits for live events and applies cursor and filter options", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1112,9 +1031,7 @@ describe("WorkflowHandle", () => {
         id: number;
         event: InstanceEvent;
       }>;
-      const startEventId = logs.find(
-        ({ event }) => event === InstanceEvent.WORKFLOW_START,
-      )?.id;
+      const startEventId = logs.find(({ event }) => event === InstanceEvent.WORKFLOW_START)?.id;
       if (startEventId === undefined) {
         throw new Error("Expected a workflow start event");
       }
@@ -1279,16 +1196,13 @@ describe("WorkflowHandle", () => {
       ];
 
       for (const [description, options] of invalidOptions) {
-        await expect(
-          unsafeInstance.subscribe(options),
-          description,
-        ).rejects.toThrow("Invalid Workflow subscription options");
+        await expect(unsafeInstance.subscribe(options), description).rejects.toThrow(
+          "Invalid Workflow subscription options",
+        );
       }
     });
 
-    it("streams a persisted termination event after the Engine aborts", async ({
-      expect,
-    }) => {
+    it("streams a persisted termination event after the Engine aborts", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1318,9 +1232,7 @@ describe("WorkflowHandle", () => {
   });
 
   describe("sendEvent()", () => {
-    it("should deliver event payload to a waiting workflow", async ({
-      expect,
-    }) => {
+    it("should deliver event payload to a waiting workflow", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1389,9 +1301,7 @@ describe("WorkflowHandle", () => {
       await vi.waitUntil(
         async () => {
           const logs = (await engineStub.readLogs()) as EngineLogs;
-          const waitStarts = logs.logs.filter(
-            (log) => log.event === InstanceEvent.WAIT_START,
-          );
+          const waitStarts = logs.logs.filter((log) => log.event === InstanceEvent.WAIT_START);
           return waitStarts.length === 2;
         },
         { timeout: 5000 },
@@ -1456,9 +1366,7 @@ describe("WorkflowHandle", () => {
       expect(hasTerminatedEvent).toBe(true);
 
       // assert that step.do never started
-      const hasStepStart = logs.logs.some(
-        (log) => log.event === InstanceEvent.STEP_START,
-      );
+      const hasStepStart = logs.logs.some((log) => log.event === InstanceEvent.STEP_START);
       expect(hasStepStart).toBe(false);
     });
   });
@@ -1542,9 +1450,7 @@ describe("WorkflowHandle", () => {
   });
 
   describe("resume()", () => {
-    it("should resume a paused workflow and complete it", async ({
-      expect,
-    }) => {
+    it("should resume a paused workflow and complete it", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));

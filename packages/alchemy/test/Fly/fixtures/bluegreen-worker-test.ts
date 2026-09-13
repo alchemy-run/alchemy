@@ -12,11 +12,7 @@ import * as Fly from "@/Fly";
 import * as Output from "@/Output";
 import type { ScratchStack } from "@/Test/Alchemy";
 import { Ledger, ledgerLayer } from "./bluegreen-worker-ledger.ts";
-import {
-  Worker,
-  workerLayer,
-  type WorkerOptions,
-} from "./bluegreen-worker-managed.ts";
+import { Worker, workerLayer, type WorkerOptions } from "./bluegreen-worker-managed.ts";
 import {
   Cache,
   LedgerSite,
@@ -142,23 +138,17 @@ const diagnoseMachines = (appName: string, role: "worker" | "ledger") =>
   );
 
 export const requireValue = <A>(value: A | undefined, name: string) =>
-  value === undefined
-    ? Effect.fail(new Error(`Missing ${name}`))
-    : Effect.succeed(value);
+  value === undefined ? Effect.fail(new Error(`Missing ${name}`)) : Effect.succeed(value);
 
 export const makeScenario = (stack: ScratchStack) =>
   Effect.gen(function* () {
     const token = yield* Effect.sync(() =>
-      Array.from(randomBytes(32), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join(""),
+      Array.from(randomBytes(32), (byte) => byte.toString(16).padStart(2, "0")).join(""),
     );
     const fs = yield* FileSystem;
     const path = yield* Path.Path;
     const raw = yield* fs.readFileString(
-      yield* path.fromFileUrl(
-        new URL("./bluegreen-worker-raw.mjs", import.meta.url),
-      ),
+      yield* path.fromFileUrl(new URL("./bluegreen-worker-raw.mjs", import.meta.url)),
     );
     const deploy = (
       options: WorkerOptions & {
@@ -180,14 +170,10 @@ export const makeScenario = (stack: ScratchStack) =>
             app: ledgerApp,
             type: "shared_v4",
           });
-          const ledger = yield* Ledger.pipe(
-            Effect.provide(ledgerLayer(ledgerSecret.digest)),
-          );
+          const ledger = yield* Ledger.pipe(Effect.provide(ledgerLayer(ledgerSecret.digest)));
           const ledgerUrl = ledger.url.pipe(
             Output.mapEffect((url) =>
-              url
-                ? Effect.succeed(url)
-                : Effect.die(new Error("Ledger service URL missing")),
+              url ? Effect.succeed(url) : Effect.die(new Error("Ledger service URL missing")),
             ),
           );
           const workerApp = yield* WorkerSite;
@@ -224,9 +210,7 @@ export const makeScenario = (stack: ScratchStack) =>
                     LEDGER_URL: ledgerUrl,
                     SECRET_READY: workerSecret.digest.pipe(
                       Output.mapEffect((digest) =>
-                        requireValue(digest, "worker secret digest").pipe(
-                          Effect.orDie,
-                        ),
+                        requireValue(digest, "worker secret digest").pipe(Effect.orDie),
                       ),
                     ),
                   },
@@ -276,10 +260,7 @@ export const makeScenario = (stack: ScratchStack) =>
               diagnoseMachines(observed.ledgerApp.appName, "ledger"),
               snapshot(observed.ledgerUrl).pipe(
                 Effect.flatMap((value) =>
-                  Effect.logError(
-                    "Worker lifecycle ledger at failure",
-                    value.events.slice(-30),
-                  ),
+                  Effect.logError("Worker lifecycle ledger at failure", value.events.slice(-30)),
                 ),
                 Effect.catchCause(() =>
                   Effect.logWarning(
@@ -312,9 +293,7 @@ export const makeScenario = (stack: ScratchStack) =>
         Effect.map((body) => (body as { result: unknown }).result),
         Effect.timeout(requestTimeout),
         Effect.catchTag("TimeoutError", () =>
-          Effect.fail(
-            new Error(`Ledger ${operation} request exceeded ${requestTimeout}`),
-          ),
+          Effect.fail(new Error(`Ledger ${operation} request exceeded ${requestTimeout}`)),
         ),
       );
     const snapshot = (url: string) =>
@@ -328,18 +307,14 @@ export const makeScenario = (stack: ScratchStack) =>
               (event) => JSON.parse(event) as LedgerEvent,
             ),
             results: Array.isArray(value.results) ? value.results : [],
-            checkpoints: Array.isArray(value.checkpoints)
-              ? value.checkpoints
-              : [],
+            checkpoints: Array.isArray(value.checkpoints) ? value.checkpoints : [],
             produced: Array.isArray(value.produced) ? value.produced : [],
           };
         }),
       );
     const wait = (
       url: string,
-      predicate: (
-        value: Effect.Success<ReturnType<typeof snapshot>>,
-      ) => boolean,
+      predicate: (value: Effect.Success<ReturnType<typeof snapshot>>) => boolean,
     ) =>
       snapshot(url).pipe(
         Effect.repeat({
@@ -349,37 +324,26 @@ export const makeScenario = (stack: ScratchStack) =>
         }),
         Effect.timeout("45 seconds"),
         Effect.catchTag("TimeoutError", () =>
-          Effect.fail(
-            new Error("Ledger predicate observation exceeded 45 seconds"),
-          ),
+          Effect.fail(new Error("Ledger predicate observation exceeded 45 seconds")),
         ),
-        Effect.tap((value) =>
-          Effect.sync(() => expect(predicate(value)).toBe(true)),
-        ),
+        Effect.tap((value) => Effect.sync(() => expect(predicate(value)).toBe(true))),
       );
     const settle = (url: string) =>
       Effect.gen(function* () {
         yield* call(url, "pause");
         const ledger = yield* wait(
           url,
-          (value) =>
-            value.pending === 0 &&
-            value.results.length === value.produced.length * 2,
+          (value) => value.pending === 0 && value.results.length === value.produced.length * 2,
         );
         expect(ledger.entries).toBe(ledger.produced.length);
-        const completed = ledger.results.filter(
-          (_value, index) => index % 2 === 0,
-        );
+        const completed = ledger.results.filter((_value, index) => index % 2 === 0);
         expect([...completed].sort()).toEqual([...ledger.produced].sort());
         return ledger;
       });
     const cleanup = Effect.gen(function* () {
       yield* stack.destroy();
       if (!inventory) return;
-      for (const appName of [
-        inventory.workerApp.appName,
-        inventory.ledgerApp.appName,
-      ]) {
+      for (const appName of [inventory.workerApp.appName, inventory.ledgerApp.appName]) {
         const gone = yield* machines.getApp({ app_name: appName }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
@@ -409,13 +373,9 @@ export const assertOrder = (
   worker?: string,
 ) => {
   const selected = events.filter(
-    (event) =>
-      event.machine === machine &&
-      (worker === undefined || event.worker === worker),
+    (event) => event.machine === machine && (worker === undefined || event.worker === worker),
   );
-  expect(
-    selected.findIndex((event) => event.event === first),
-  ).toBeGreaterThanOrEqual(0);
+  expect(selected.findIndex((event) => event.event === first)).toBeGreaterThanOrEqual(0);
   expect(selected.findIndex((event) => event.event === second)).toBeGreaterThan(
     selected.findIndex((event) => event.event === first),
   );
@@ -430,16 +390,11 @@ export const assertStopped = (events: LedgerEvent[], machine: string) => {
       .slice(stopped + 1)
       .filter(
         (event) =>
-          event.machine === machine &&
-          ["claimed", "reclaimed", "producer"].includes(event.event),
+          event.machine === machine && ["claimed", "reclaimed", "producer"].includes(event.event),
       ),
   ).toEqual([]);
 };
-export const assertReplacement = (
-  appName: string,
-  oldId: string,
-  newId: string,
-) =>
+export const assertReplacement = (appName: string, oldId: string, newId: string) =>
   Effect.gen(function* () {
     expect(newId).not.toBe(oldId);
     const live = (yield* machines.listMachines({ app_name: appName })).filter(

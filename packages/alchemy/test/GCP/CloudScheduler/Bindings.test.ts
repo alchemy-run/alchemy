@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import SchedulerBindingsHost, {
   PausedJob,
@@ -34,9 +34,7 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({ role: binding.role, condition: binding.condition }))
     .sort((a, b) => (a.role ?? "").localeCompare(b.role ?? ""));
   expect(roles).toEqual([
@@ -50,12 +48,7 @@ const getJob = (name: string) => scheduler.getProjectsLocationsJobs({ name });
 describe.skipIf(!dockerAvailable)(
   "CloudScheduler Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:cloudscheduler",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:cloudscheduler", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(

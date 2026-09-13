@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
+import type { Output } from "../../Output.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
-import type { Output } from "../../Output.ts";
 
 /**
  * Shared HTTP scaffolding for Oracle Database@Google Cloud bindings.

@@ -19,9 +19,7 @@ it(
           name: "log-level",
           aliases: [],
           type: "all|trace|debug|info|warn|warning|error|fatal|none",
-          description: Option.some(
-            "Sets the minimum log level for every command and provider.",
-          ),
+          description: Option.some("Sets the minimum log level for every command and provider."),
           required: false,
         },
       ],

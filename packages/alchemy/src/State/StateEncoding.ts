@@ -38,9 +38,7 @@ const decodeDate = (encoded: unknown): Date | undefined => {
  * `{_id,_tag,millis?,nanos?}` shape. Shared by state persistence and the
  * RPC sidecar — that JSON is not a valid `Duration.Input`.
  */
-export const decodeDuration = (
-  encoded: unknown,
-): Duration.Duration | undefined => {
+export const decodeDuration = (encoded: unknown): Duration.Duration | undefined => {
   if (encoded === null || typeof encoded !== "object") return undefined;
   const json = encoded as {
     _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
@@ -49,13 +47,9 @@ export const decodeDuration = (
   };
   switch (json._tag) {
     case "Millis":
-      return json.millis !== undefined
-        ? Duration.millis(json.millis)
-        : undefined;
+      return json.millis !== undefined ? Duration.millis(json.millis) : undefined;
     case "Nanos":
-      return json.nanos !== undefined
-        ? Duration.nanos(BigInt(json.nanos))
-        : undefined;
+      return json.nanos !== undefined ? Duration.nanos(BigInt(json.nanos)) : undefined;
     case "Infinity":
       return Duration.infinity;
     case "NegativeInfinity":

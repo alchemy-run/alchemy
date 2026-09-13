@@ -12,13 +12,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Ordering an advanced certificate pack requires the Advanced Certificate
 // Manager subscription ($10/mo add-on per zone). The standard testing zone
@@ -73,8 +69,7 @@ test.provider(
         })
         .pipe(
           Effect.retry({
-            while: (e) =>
-              e._tag === "Forbidden" || e._tag === "TooManyRequests",
+            while: (e) => e._tag === "Forbidden" || e._tag === "TooManyRequests",
             schedule: transientRetrySchedule,
             times: 8,
           }),
@@ -93,20 +88,13 @@ test.provider(
       }
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(result.failure._tag).toEqual(
-          "AdvancedCertificateManagerRequired",
-        );
+        expect(result.failure._tag).toEqual("AdvancedCertificateManagerRequired");
       }
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ssl",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ssl", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -120,9 +108,7 @@ test.provider(
       // exact `read` Attributes shape for each advanced pack. The standard
       // testing zone has no ACM subscription (so no advanced packs), but
       // list() must still return a well-typed, exhaustively-paginated array.
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Ssl.CertificatePack,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Ssl.CertificatePack);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -162,24 +148,15 @@ test.provider.skipIf(!acmZoneName)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Ssl.CertificatePack,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Ssl.CertificatePack);
       const all = yield* provider.list();
 
-      expect(
-        all.some((p) => p.certificatePackId === pack.certificatePackId),
-      ).toBe(true);
+      expect(all.some((p) => p.certificatePackId === pack.certificatePackId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ssl",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ssl", "provider:cloudflare:zone", "live"],
     timeout: 120_000,
   },
 );
@@ -247,12 +224,7 @@ test.provider.skipIf(!acmZoneName)(
       expect(gone === undefined || gone.status === "deleted").toBe(true);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ssl",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ssl", "provider:cloudflare:zone", "live"],
     timeout: 120_000,
   },
 );

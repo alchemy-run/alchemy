@@ -21,11 +21,7 @@ import {
   typeLabels,
   updateMaskOf,
 } from "./internal.ts";
-import {
-  resourceNameFromOperation,
-  waitForOperation,
-  waitUntilPresent,
-} from "./operations.ts";
+import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from "./operations.ts";
 
 export type GroupEntityKey = {
   /** Email address (Google-managed) or identity-source id. */
@@ -36,9 +32,7 @@ export type GroupEntityKey = {
 
 export type GroupDynamicGroupQuery = {
   /** Resource type for the query. Currently `USER`. */
-  resourceType?:
-    | cloudidentity.DynamicGroupQueryResourceTypeEnum
-    | (string & {});
+  resourceType?: cloudidentity.DynamicGroupQueryResourceTypeEnum | (string & {});
   /** CEL membership query. */
   query?: string;
 };
@@ -92,9 +86,7 @@ export type GroupProps = {
    * Initial membership config on create.
    * @default "EMPTY"
    */
-  initialGroupConfig?:
-    | cloudidentity.CreateGroupsInitialGroupConfigEnum
-    | (string & {});
+  initialGroupConfig?: cloudidentity.CreateGroupsInitialGroupConfigEnum | (string & {});
   /**
    * Dynamic group queries. Sets the dynamic type label.
    */
@@ -174,9 +166,7 @@ export type Group = Resource<
  */
 export const Group = Resource<Group>("GCP.CloudIdentity.Group");
 
-export class GroupNotResolved extends Data.TaggedError(
-  "GCP.CloudIdentity.GroupNotResolved",
-)<{
+export class GroupNotResolved extends Data.TaggedError("GCP.CloudIdentity.GroupNotResolved")<{
   name: string;
 }> {}
 
@@ -210,10 +200,7 @@ const observeGroup = (input: {
   Effect.gen(function* () {
     const byName = yield* getGroup(input.name ?? "");
     if (byName !== undefined) return byName;
-    const byKey = yield* getGroupByKey(
-      input.groupKeyId ?? "",
-      input.groupKeyNamespace,
-    );
+    const byKey = yield* getGroupByKey(input.groupKeyId ?? "", input.groupKeyNamespace);
     return byKey;
   });
 
@@ -225,9 +212,7 @@ export const GroupProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousParent = olds?.parent ?? output?.parent;
       const nextParent =
-        news.parent !== undefined
-          ? normalizeCustomer(news.parent)
-          : previousParent;
+        news.parent !== undefined ? normalizeCustomer(news.parent) : previousParent;
       const previousKey = olds?.groupKeyId ?? output?.groupKeyId;
       return replaceOnIdentity({
         previousId: previousKey,
@@ -258,21 +243,13 @@ export const GroupProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
       // State or the generated group key proves ownership.
-      return output !== undefined || olds?.groupKeyId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.groupKeyId === undefined ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const parent = normalizeCustomer(news.parent ?? output?.parent);
-      const groupKeyId = yield* toGroupKeyId(
-        id,
-        news.groupKeyId,
-        output?.groupKeyId,
-        news.domain,
-      );
-      const groupKeyNamespace =
-        news.groupKeyNamespace ?? output?.groupKeyNamespace;
+      const groupKeyId = yield* toGroupKeyId(id, news.groupKeyId, output?.groupKeyId, news.domain);
+      const groupKeyNamespace = news.groupKeyNamespace ?? output?.groupKeyNamespace;
       const displayName = yield* toPhysicalId(
         id,
         news.displayName,
@@ -314,10 +291,7 @@ export const GroupProvider = () =>
           );
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.CloudIdentity.OperationPending",
-              () => Effect.void,
-            ),
+            Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
           );
           const createdName = resourceNameFromOperation(created);
           if (createdName !== undefined) {
@@ -375,10 +349,7 @@ export const GroupProvider = () =>
           },
         });
         yield* waitForOperation(patched).pipe(
-          Effect.catchTag(
-            "GCP.CloudIdentity.OperationPending",
-            () => Effect.void,
-          ),
+          Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
         );
         current = (yield* getGroup(name)) ?? current;
       }

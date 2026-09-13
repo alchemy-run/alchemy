@@ -6,10 +6,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import NeptuneGraphTestFunctionLive, {
-  FixtureGraph,
-  NeptuneGraphTestFunction,
-} from "./handler.ts";
+import NeptuneGraphTestFunctionLive, { FixtureGraph, NeptuneGraphTestFunction } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -73,17 +70,10 @@ test.provider(
 const assertGraphGone = (graphId: string) =>
   neptunegraph.getGraph({ graphIdentifier: graphId }).pipe(
     Effect.flatMap((graph) =>
-      Effect.fail(
-        new Error(`graph '${graphId}' still exists (status: ${graph.status})`),
-      ),
+      Effect.fail(new Error(`graph '${graphId}' still exists (status: ${graph.status})`)),
     ),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]) }),
   );
 
 // A Neptune Analytics graph takes ~5-10 minutes to provision and bills per
@@ -115,9 +105,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(graph.endpoint).toContain("neptune-graph");
 
       // Out-of-band verification via distilled.
-      const observed = yield* neptunegraph.getGraph({
-        graphIdentifier: graph.graphId,
-      });
+      const observed = yield* neptunegraph.getGraph({ graphIdentifier: graph.graphId });
       expect(observed.status).toBe("AVAILABLE");
       expect(observed.name).toBe(graph.graphName);
 
@@ -127,56 +115,38 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const graphInfo = yield* HttpClient.get(`${baseUrl}/graph`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`/graph returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`/graph returned ${res.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
         }),
       );
       expect((graphInfo as { graphId: string }).graphId).toBe(graph.graphId);
 
       // openCypher through the ExecuteQuery binding: write a node, read it
       // back.
-      const query = (body: {
-        query: string;
-        parameters?: Record<string, unknown>;
-      }) =>
+      const query = (body: { query: string; parameters?: Record<string, unknown> }) =>
         HttpClient.execute(
-          HttpClientRequest.post(`${baseUrl}/query`).pipe(
-            HttpClientRequest.bodyJsonUnsafe(body),
-          ),
+          HttpClientRequest.post(`${baseUrl}/query`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
         ).pipe(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
               : res.text.pipe(
                   Effect.flatMap((text) =>
-                    Effect.fail(
-                      new Error(`/query returned ${res.status}: ${text}`),
-                    ),
+                    Effect.fail(new Error(`/query returned ${res.status}: ${text}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
 
-      yield* query({
-        query: "CREATE (n:Person {name: $name})",
-        parameters: { name: "Ada" },
-      });
-      const read = (yield* query({
-        query: "MATCH (n:Person) RETURN n.name AS name",
-      })) as { results: Array<{ name: string }> };
+      yield* query({ query: "CREATE (n:Person {name: $name})", parameters: { name: "Ada" } });
+      const read = (yield* query({ query: "MATCH (n:Person) RETURN n.name AS name" })) as {
+        results: Array<{ name: string }>;
+      };
       expect(read.results).toEqual([{ name: "Ada" }]);
 
       const getJson = (path: string) =>
@@ -186,36 +156,25 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               ? res.json
               : res.text.pipe(
                   Effect.flatMap((text) =>
-                    Effect.fail(
-                      new Error(`${path} returned ${res.status}: ${text}`),
-                    ),
+                    Effect.fail(new Error(`${path} returned ${res.status}: ${text}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
 
       // GetGraphSummary binding: the summary document reflects the graph.
-      const summary = (yield* getJson("/summary")) as {
-        graphSummary?: { numNodes?: number };
-      };
+      const summary = (yield* getJson("/summary")) as { graphSummary?: { numNodes?: number } };
       expect(summary.graphSummary).toBeDefined();
 
       // ListQueries binding: returns a well-formed (usually empty) list.
-      const queries = (yield* getJson("/queries")) as {
-        queries: unknown[];
-      };
+      const queries = (yield* getJson("/queries")) as { queries: unknown[] };
       expect(Array.isArray(queries.queries)).toBe(true);
 
       // ListGraphSnapshots binding: fresh graph has no snapshots.
-      const snapshots = (yield* getJson("/snapshots")) as {
-        graphSnapshots: unknown[];
-      };
+      const snapshots = (yield* getJson("/snapshots")) as { graphSnapshots: unknown[] };
       expect(Array.isArray(snapshots.graphSnapshots)).toBe(true);
 
       // Destroy immediately — the graph bills while it exists — and verify
@@ -225,12 +184,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     }),
   // graph create (~5-10 min) + lambda deploy + delete-until-gone, one test.
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:neptunegraph",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:neptunegraph", "live"],
     timeout: 1_500_000,
   },
 );

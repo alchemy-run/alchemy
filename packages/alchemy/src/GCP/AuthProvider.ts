@@ -16,18 +16,13 @@ import {
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
 import * as Interaction from "../Interaction.ts";
-import {
-  mintAccessToken,
-  parseServiceAccountKey,
-  type ServiceAccountKey,
-} from "./Token.ts";
+import { mintAccessToken, parseServiceAccountKey, type ServiceAccountKey } from "./Token.ts";
 
 export const GCP_AUTH_PROVIDER_NAME = "GCP";
 export const GOOGLE_ACCESS_TOKEN_ENV = "GOOGLE_ACCESS_TOKEN";
 export const GOOGLE_PROJECT_ID_ENV = "GOOGLE_PROJECT_ID";
 export const GOOGLE_CLOUD_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT";
-export const GOOGLE_APPLICATION_CREDENTIALS_ENV =
-  "GOOGLE_APPLICATION_CREDENTIALS";
+export const GOOGLE_APPLICATION_CREDENTIALS_ENV = "GOOGLE_APPLICATION_CREDENTIALS";
 /** Region when neither the environment nor the profile names one. */
 export const DEFAULT_GCP_REGION = "us-central1";
 
@@ -95,10 +90,7 @@ const options: Array<{
 
 const REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
-export const GcpAuth = AuthProviderLayer<
-  GcpAuthConfig,
-  GcpResolvedCredentials
->()(
+export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>()(
   GCP_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const store = yield* CredentialsStore;
@@ -108,9 +100,7 @@ export const GcpAuth = AuthProviderLayer<
       { accessToken: string; expirationMs: number; project: string } | undefined
     >(undefined);
 
-    const readKeyFile = (
-      path: string,
-    ): Effect.Effect<ServiceAccountKey, AuthError> =>
+    const readKeyFile = (path: string): Effect.Effect<ServiceAccountKey, AuthError> =>
       fs.readFileString(path).pipe(
         Effect.flatMap(parseServiceAccountKey),
         Effect.mapError(
@@ -129,11 +119,7 @@ export const GcpAuth = AuthProviderLayer<
       Effect.gen(function* () {
         const now = yield* Effect.sync(() => Date.now());
         const cached = yield* Ref.get(tokenCache);
-        if (
-          cached &&
-          cached.project === project &&
-          cached.expirationMs - now > REFRESH_WINDOW_MS
-        ) {
+        if (cached && cached.project === project && cached.expirationMs - now > REFRESH_WINDOW_MS) {
           return {
             type: "token" as const,
             accessToken: Redacted.make(cached.accessToken),
@@ -184,8 +170,7 @@ export const GcpAuth = AuthProviderLayer<
             {
               value: "token" as const,
               label: "Access token",
-              description:
-                "paste a bearer token from gcloud auth print-access-token",
+              description: "paste a bearer token from gcloud auth print-access-token",
             },
             {
               value: "serviceAccount" as const,
@@ -210,16 +195,11 @@ export const GcpAuth = AuthProviderLayer<
             validate: (v) => (v.length === 0 ? "Required" : undefined),
           })
           .pipe(mapPromptCancellation);
-        yield* store.write(
-          profileName,
-          GCP_AUTH_PROVIDER_NAME,
-          GcpStoredCredentialsSchema,
-          {
-            type: "token",
-            accessToken,
-            project,
-          },
-        );
+        yield* store.write(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema, {
+          type: "token",
+          accessToken,
+          project,
+        });
       } else {
         const json = yield* interaction.prompt
           .password({
@@ -228,16 +208,11 @@ export const GcpAuth = AuthProviderLayer<
           })
           .pipe(mapPromptCancellation);
         yield* parseServiceAccountKey(json);
-        yield* store.write(
-          profileName,
-          GCP_AUTH_PROVIDER_NAME,
-          GcpStoredCredentialsSchema,
-          {
-            type: "serviceAccount",
-            json,
-            project,
-          },
-        );
+        yield* store.write(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema, {
+          type: "serviceAccount",
+          json,
+          project,
+        });
       }
       yield* interaction.output.success("GCP: credentials saved.");
       return { method: "stored" as const };
@@ -253,9 +228,7 @@ export const GcpAuth = AuthProviderLayer<
           mapPromptCancellation,
           Effect.flatMap((method) =>
             Match.value(method).pipe(
-              Match.when("env", () =>
-                Effect.succeed({ method: "env" as const }),
-              ),
+              Match.when("env", () => Effect.succeed({ method: "env" as const })),
               Match.when("serviceAccount", () =>
                 interaction.prompt
                   .text({
@@ -268,9 +241,7 @@ export const GcpAuth = AuthProviderLayer<
                       const trimmed = (path ?? "").trim();
                       return {
                         method: "serviceAccount" as const,
-                        ...(trimmed.length > 0
-                          ? { credentialsFile: trimmed }
-                          : {}),
+                        ...(trimmed.length > 0 ? { credentialsFile: trimmed } : {}),
                       };
                     }),
                   ),
@@ -359,14 +330,10 @@ export const GcpAuth = AuthProviderLayer<
       );
     };
 
-    const resolveFromEnv = (): Effect.Effect<
-      Omit<GcpResolvedCredentials, "region">,
-      AuthError
-    > =>
+    const resolveFromEnv = (): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> =>
       Effect.gen(function* () {
         const project =
-          (yield* getEnv(GOOGLE_PROJECT_ID_ENV)) ??
-          (yield* getEnv(GOOGLE_CLOUD_PROJECT_ENV));
+          (yield* getEnv(GOOGLE_PROJECT_ID_ENV)) ?? (yield* getEnv(GOOGLE_CLOUD_PROJECT_ENV));
         const token = yield* getEnvRedacted(GOOGLE_ACCESS_TOKEN_ENV);
         if (token) {
           if (!project) {
@@ -404,17 +371,13 @@ export const GcpAuth = AuthProviderLayer<
         }
         const sa = yield* readKeyFile(path);
         const project =
-          (yield* getEnv(GOOGLE_PROJECT_ID_ENV)) ??
-          (yield* getEnv(GOOGLE_CLOUD_PROJECT_ENV));
+          (yield* getEnv(GOOGLE_PROJECT_ID_ENV)) ?? (yield* getEnv(GOOGLE_CLOUD_PROJECT_ENV));
         return yield* resolveFromServiceAccount(sa, project);
       });
 
     const resolveFromStored = (
       profileName: string,
-    ): Effect.Effect<
-      Omit<GcpResolvedCredentials, "region">,
-      AuthError | NeedsReauth
-    > =>
+    ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError | NeedsReauth> =>
       Effect.gen(function* () {
         const creds = yield* store.read(
           profileName,
@@ -443,10 +406,7 @@ export const GcpAuth = AuthProviderLayer<
     const resolveToken = (
       profileName: string,
       config: GcpAuthConfig,
-    ): Effect.Effect<
-      Omit<GcpResolvedCredentials, "region">,
-      AuthError | NeedsReauth
-    > => {
+    ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError | NeedsReauth> => {
       switch (config.method) {
         case "env":
           return resolveFromEnv();
@@ -476,11 +436,7 @@ export const GcpAuth = AuthProviderLayer<
         Match.when({ method: "stored" }, () =>
           store
             .delete(profileName, GCP_AUTH_PROVIDER_NAME)
-            .pipe(
-              Effect.andThen(
-                interaction.output.success("GCP: stored credentials removed"),
-              ),
-            ),
+            .pipe(Effect.andThen(interaction.output.success("GCP: stored credentials removed"))),
         ),
         Match.exhaustive,
       );
@@ -488,21 +444,13 @@ export const GcpAuth = AuthProviderLayer<
     const login = (profileName: string, config: GcpAuthConfig) =>
       Match.value(config)
         .pipe(
-          Match.when({ method: "env" }, () =>
-            resolveFromEnv().pipe(Effect.as(config)),
-          ),
+          Match.when({ method: "env" }, () => resolveFromEnv().pipe(Effect.as(config))),
           Match.when({ method: "serviceAccount" }, (cfg) =>
-            resolveFromServiceAccountFile(cfg.credentialsFile).pipe(
-              Effect.as(cfg),
-            ),
+            resolveFromServiceAccountFile(cfg.credentialsFile).pipe(Effect.as(cfg)),
           ),
           Match.when({ method: "stored" }, () =>
             store
-              .read(
-                profileName,
-                GCP_AUTH_PROVIDER_NAME,
-                GcpStoredCredentialsSchema,
-              )
+              .read(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema)
               .pipe(
                 Effect.flatMap((creds) =>
                   creds == null
@@ -515,11 +463,7 @@ export const GcpAuth = AuthProviderLayer<
           ),
           Match.exhaustive,
         )
-        .pipe(
-          Effect.mapError(
-            (e) => new AuthError({ message: "login failed", cause: e }),
-          ),
-        );
+        .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
 
     const details = (
       profileName: string,
@@ -563,8 +507,7 @@ export const GcpAuth = AuthProviderLayer<
           name: GOOGLE_ACCESS_TOKEN_ENV,
           required: false,
           secret: true,
-          description:
-            "Bearer access token (alternative to a service-account key).",
+          description: "Bearer access token (alternative to a service-account key).",
         },
         {
           name: GOOGLE_APPLICATION_CREDENTIALS_ENV,

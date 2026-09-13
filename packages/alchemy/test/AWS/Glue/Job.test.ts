@@ -113,13 +113,7 @@ test.provider(
       expect(gone).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:glue",
-      "provider:aws:iam",
-      "provider:aws:s3",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:glue", "provider:aws:iam", "provider:aws:s3", "live"],
   },
 );
 
@@ -177,9 +171,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               times: 20,
             }),
           );
-        yield* Effect.log(
-          `job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`,
-        );
+        yield* Effect.log(`job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`);
         if (
           finalRun?.JobRunState !== "SUCCEEDED" &&
           finalRun?.ErrorMessage?.includes("assume role permissions")
@@ -197,13 +189,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:glue",
-      "provider:aws:iam",
-      "provider:aws:s3",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:glue", "provider:aws:iam", "provider:aws:s3", "live"],
     timeout: 420_000,
   },
 );

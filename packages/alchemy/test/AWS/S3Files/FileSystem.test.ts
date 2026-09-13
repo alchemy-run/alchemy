@@ -108,9 +108,7 @@ test.provider(
                       "events:PutTargets",
                       "events:RemoveTargets",
                     ],
-                    Resource: [
-                      "arn:aws:events:*:*:rule/DO-NOT-DELETE-S3-Files*",
-                    ],
+                    Resource: ["arn:aws:events:*:*:rule/DO-NOT-DELETE-S3-Files*"],
                   },
                   {
                     Effect: "Allow",
@@ -150,9 +148,7 @@ test.provider(
       expect(created.fileSystem.fileSystemId).toContain("fs-");
       expect(created.fileSystem.fileSystemArn).toContain(":file-system/");
       expect(created.fileSystem.status).toBe("available");
-      expect(created.accessPoint.fileSystemId).toBe(
-        created.fileSystem.fileSystemId,
-      );
+      expect(created.accessPoint.fileSystemId).toBe(created.fileSystem.fileSystemId);
       expect(created.accessPoint.status).toBe("available");
 
       // Out-of-band verification via distilled.
@@ -173,19 +169,11 @@ test.provider(
 
       // Destroy and verify the file system is gone out-of-band.
       yield* stack.destroy();
-      const gone = yield* waitUntilFileSystemGone(
-        created.fileSystem.fileSystemId,
-      );
+      const gone = yield* waitUntilFileSystemGone(created.fileSystem.fileSystemId);
       expect(gone).toBe(true);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:s3",
-      "provider:aws:s3files",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:s3", "provider:aws:s3files", "live"],
     timeout: 600_000,
   },
 );

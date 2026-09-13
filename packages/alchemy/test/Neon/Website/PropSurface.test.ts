@@ -74,8 +74,7 @@ const contracts = [
 it(
   "exports all thirteen constructors with restricted Neon deployment controls",
   () => {
-    for (const name of constructors)
-      expect(typeof Website[name]).toBe("function");
+    for (const name of constructors) expect(typeof Website[name]).toBe("function");
     expect(contracts.length).toBeGreaterThan(constructors.length);
   },
   { tags: ["unit", "provider:neon", "provider:neon:website", "local"] },

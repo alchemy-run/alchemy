@@ -116,36 +116,25 @@ export const SmartRoutingProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           argo.getSmartRouting({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, toValue(observed.value)),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, toValue(observed.value))),
             // Argo Smart Routing is a paid add-on — zones without the
             // subscription reject every read with the typed entitlement
             // tag (code 1015); skip them. Zones deleted out-of-band
             // surface InvalidObjectIdentifier.
             Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
-            Effect.catchTag("InvalidObjectIdentifier", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is SmartRoutingAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SmartRoutingAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SmartRoutingProps;
       const n = news as SmartRoutingProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -156,9 +145,7 @@ export const SmartRoutingProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
         // Argo subscription removed out-of-band — the setting is no
         // longer visible or manageable on the zone.
         Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
@@ -168,8 +155,7 @@ export const SmartRoutingProvider = () =>
       // default — there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : toValue(observed.value);
+      const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
       return toAttributes(zoneId, observed, initialValue);
     }),
 
@@ -186,8 +172,7 @@ export const SmartRoutingProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : toValue(observed.value);
+      const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
 
       // 3. Sync — patch only when the observed value differs.
       if (toValue(observed.value) === desired) {
@@ -205,9 +190,7 @@ export const SmartRoutingProvider = () =>
       // Observe — if the zone is gone, or the Argo subscription was
       // removed out-of-band, the setting is no longer ours to restore.
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
-        Effect.catchTag("InvalidObjectIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
         Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return;
@@ -226,8 +209,7 @@ export const SmartRoutingProvider = () =>
  * value to the closed pair — Cloudflare only ever returns the two
  * literals for this setting.
  */
-const toValue = (value: string): "on" | "off" =>
-  value === "on" ? "on" : "off";
+const toValue = (value: string): "on" | "off" => (value === "on" ? "on" : "off");
 
 const toAttributes = (
   zoneId: string,

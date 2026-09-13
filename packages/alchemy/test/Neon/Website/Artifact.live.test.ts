@@ -9,11 +9,7 @@ import { Project } from "@/Neon/Project.ts";
 import { providers } from "@/Neon/Providers.ts";
 import { packageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import {
-  bodyContaining,
-  buildPortableExample,
-  exampleRoot,
-} from "./Fixture.ts";
+import { bodyContaining, buildPortableExample, exampleRoot } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -29,14 +25,11 @@ for (const slug of ["nextjs", "vocs"] as const)
         const next = slug === "nextjs";
         const pixel = path.join(root, "public/neon-artifact-pixel.png");
         if (next) {
-          const original = (yield* fs.exists(pixel))
-            ? yield* fs.readFile(pixel)
-            : undefined;
+          const original = (yield* fs.exists(pixel)) ? yield* fs.readFile(pixel) : undefined;
           yield* Effect.addFinalizer(() =>
-            (original
-              ? fs.writeFile(pixel, original)
-              : fs.remove(pixel, { force: true })
-            ).pipe(Effect.orDie),
+            (original ? fs.writeFile(pixel, original) : fs.remove(pixel, { force: true })).pipe(
+              Effect.orDie,
+            ),
           );
           yield* fs.writeFile(
             pixel,
@@ -48,9 +41,7 @@ for (const slug of ["nextjs", "vocs"] as const)
             ),
           );
         }
-        const artifact = yield* packageWebsiteArtifact(
-          yield* buildPortableExample(slug, root),
-        );
+        const artifact = yield* packageWebsiteArtifact(yield* buildPortableExample(slug, root));
         const directory = yield* fs.makeTempDirectoryScoped();
         const zip = path.join(directory, "site.zip");
         yield* fs.writeFile(zip, artifact.archive);
@@ -78,9 +69,7 @@ for (const slug of ["nextjs", "vocs"] as const)
           if (method === "HEAD") expect(body).toBe("");
           else expect(body).toContain("framework");
         }
-        const assets = [
-          ...html.matchAll(/(?:src|href)="([^" ]+\.(?:js|css)(?:\?[^" ]*)?)"/g),
-        ]
+        const assets = [...html.matchAll(/(?:src|href)="([^" ]+\.(?:js|css)(?:\?[^" ]*)?)"/g)]
           .map((match) => match[1]!)
           .filter((url) => url.startsWith("/"));
         expect(assets.length).toBeGreaterThan(0);

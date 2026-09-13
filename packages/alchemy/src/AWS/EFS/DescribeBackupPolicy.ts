@@ -30,10 +30,7 @@ export interface DescribeBackupPolicy extends Binding.Service<
   (
     fileSystem: FileSystem,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      efs.BackupPolicyDescription,
-      efs.DescribeBackupPolicyError
-    >
+    () => Effect.Effect<efs.BackupPolicyDescription, efs.DescribeBackupPolicyError>
   >
 > {}
 export const DescribeBackupPolicy = Binding.Service<DescribeBackupPolicy>(

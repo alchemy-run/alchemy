@@ -62,10 +62,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.listKxChangesets({
-          environmentId: missingEnvironmentId,
-          databaseName: "nodb",
-        }),
+        finspace.listKxChangesets({ environmentId: missingEnvironmentId, databaseName: "nodb" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -108,10 +105,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.getKxUser({
-          environmentId: missingEnvironmentId,
-          userName: "nouser",
-        }),
+        finspace.getKxUser({ environmentId: missingEnvironmentId, userName: "nouser" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),

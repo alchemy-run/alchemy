@@ -149,9 +149,7 @@ test.provider(
       const drifted = yield* deployStack();
       expect(yield* getStatus("app-migrate")).toEqual("updated");
       expect(drifted.migrate.markerHash).toEqual(drifted.contract.contractHash);
-      expect(drifted.migrate.markerHash).not.toEqual(
-        initial.migrate.markerHash,
-      );
+      expect(drifted.migrate.markerHash).not.toEqual(initial.migrate.markerHash);
 
       const driftedTables = yield* queryTables(drifted.branch.connectionUri);
       expect(driftedTables).toContain("user");

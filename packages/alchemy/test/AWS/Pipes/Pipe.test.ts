@@ -7,18 +7,10 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const unwrap = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
-const firstFilterPattern = (
-  described: pipes.DescribePipeResponse,
-): string | undefined =>
+const firstFilterPattern = (described: pipes.DescribePipeResponse): string | undefined =>
   unwrap(described.SourceParameters?.FilterCriteria?.Filters?.[0]?.Pattern);
 
 // Read/receive statements the pipes.amazonaws.com role needs on the source
@@ -41,39 +33,21 @@ const pipeRole = (source: AWS.SQS.Queue, target: AWS.SQS.Queue) =>
         Statement: [
           {
             Effect: "Allow",
-            Action: [
-              "sqs:ReceiveMessage",
-              "sqs:DeleteMessage",
-              "sqs:GetQueueAttributes",
-            ],
+            Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
             Resource: [source.queueArn],
           },
         ],
       },
       PipeTarget: {
         Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Action: ["sqs:SendMessage"],
-            Resource: [target.queueArn],
-          },
-        ],
+        Statement: [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [target.queueArn] }],
       },
     },
   });
 
 describe(
   "AWS.Pipes.Pipe",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:pipes",
-      "provider:aws:sqs",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:pipes", "provider:aws:sqs", "live"] },
   () => {
     test.provider(
       "lifecycle: create SQS→SQS pipe with filter, update filter, destroy",
@@ -108,33 +82,25 @@ describe(
           expect(created.currentState).toEqual("RUNNING");
 
           // Out-of-band verification via distilled.
-          const describedA = yield* pipes.describePipe({
-            Name: created.pipeName,
-          });
+          const describedA = yield* pipes.describePipe({ Name: created.pipeName });
           expect(describedA.CurrentState).toEqual("RUNNING");
           expect(firstFilterPattern(describedA)).toEqual(filterA);
-          expect(
-            describedA.SourceParameters?.SqsQueueParameters?.BatchSize,
-          ).toEqual(1);
+          expect(describedA.SourceParameters?.SqsQueueParameters?.BatchSize).toEqual(1);
 
           // Update the filter criteria in place (same source → no replace).
           const updated = yield* deployPipe(filterB);
           expect(updated.pipeArn).toEqual(created.pipeArn);
-          const describedB = yield* pipes.describePipe({
-            Name: updated.pipeName,
-          });
+          const describedB = yield* pipes.describePipe({ Name: updated.pipeName });
           expect(firstFilterPattern(describedB)).toEqual(filterB);
           expect(describedB.CurrentState).toEqual("RUNNING");
 
           // Destroy — the provider's delete waits until describePipe reports
           // NotFound, so a single typed check suffices here.
           yield* stack.destroy();
-          const gone = yield* pipes
-            .describePipe({ Name: created.pipeName })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
-            );
+          const gone = yield* pipes.describePipe({ Name: created.pipeName }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
+          );
           expect(gone).toBe(true);
         }),
       { timeout: 240_000 },
@@ -205,18 +171,14 @@ describe(
           // Replacement mints a new instance: new physical name + ARN.
           expect(second.pipe.pipeArn).not.toEqual(first.pipe.pipeArn);
 
-          const described = yield* pipes.describePipe({
-            Name: second.pipe.pipeName,
-          });
+          const described = yield* pipes.describePipe({ Name: second.pipe.pipeName });
           expect(described.Source).toEqual(second.sourceB.queueArn);
 
           // The replaced pipe is deleted.
-          const oldGone = yield* pipes
-            .describePipe({ Name: first.pipe.pipeName })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
-            );
+          const oldGone = yield* pipes.describePipe({ Name: first.pipe.pipeName }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
+          );
           expect(oldGone).toBe(true);
 
           yield* stack.destroy();

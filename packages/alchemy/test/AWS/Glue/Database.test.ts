@@ -30,9 +30,7 @@ test.provider(
       );
 
       expect(created.databaseName).toBeDefined();
-      expect(created.databaseArn).toContain(
-        `:database/${created.databaseName}`,
-      );
+      expect(created.databaseArn).toContain(`:database/${created.databaseName}`);
       expect(created.catalogId).toBeDefined();
 
       // out-of-band verification

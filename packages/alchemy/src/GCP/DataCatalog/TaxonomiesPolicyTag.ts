@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -29,7 +30,6 @@ import {
   toDisplayName,
   updateMaskOf,
 } from "./internal.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
 export type TaxonomiesPolicyTagProps = {
   /**
@@ -133,16 +133,12 @@ const toAttrs = (
     displayName: tag.displayName,
     description: ownership.text,
     parentPolicyTag:
-      tag.parentPolicyTag && tag.parentPolicyTag.length > 0
-        ? tag.parentPolicyTag
-        : undefined,
+      tag.parentPolicyTag && tag.parentPolicyTag.length > 0 ? tag.parentPolicyTag : undefined,
     childPolicyTags: [...(tag.childPolicyTags ?? [])],
   };
 };
 
-const getByName = missingGet(
-  datacatalog.getProjectsLocationsTaxonomiesPolicyTags,
-);
+const getByName = missingGet(datacatalog.getProjectsLocationsTaxonomiesPolicyTags);
 
 const listPolicyTagsAt = (
   parent: string,
@@ -202,24 +198,17 @@ export const TaxonomiesPolicyTagProvider = () =>
       return replaceOnIdentity({
         previousParent: olds?.taxonomy ?? output?.taxonomy,
         nextParent: taxonomyOf(news.taxonomy, env.project, location),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         extra:
           (olds?.parentPolicyTag ?? output?.parentPolicyTag) !== undefined &&
-          (news.parentPolicyTag ?? "") !==
-            (olds?.parentPolicyTag ?? output?.parentPolicyTag ?? ""),
+          (news.parentPolicyTag ?? "") !== (olds?.parentPolicyTag ?? output?.parentPolicyTag ?? ""),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const taxonomy =
         olds?.taxonomy !== undefined
           ? taxonomyOf(olds.taxonomy, env.project, location)
@@ -227,19 +216,13 @@ export const TaxonomiesPolicyTagProvider = () =>
       const existing = yield* observe(id, output?.name, taxonomy);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const taxonomies = yield* listAtLocation(
-          env.project,
-          env.region,
-          listTaxonomiesAt,
-        );
+        const taxonomies = yield* listAtLocation(env.project, env.region, listTaxonomiesAt);
         const groups = yield* Effect.forEach(
           taxonomies.filter((item) => (item.name ?? "").length > 0),
           (taxonomy) => listPolicyTagsAt(taxonomy.name!),
@@ -253,18 +236,11 @@ export const TaxonomiesPolicyTagProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const taxonomy = taxonomyOf(news.taxonomy, env.project, location);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const parentPolicyTag = news.parentPolicyTag;
 
       let current = yield* observe(id, output?.name, taxonomy);
@@ -323,8 +299,7 @@ export const TaxonomiesPolicyTagProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) =>
-                error._tag === "Conflict" || isTransientGcpError(error),
+              while: (error) => error._tag === "Conflict" || isTransientGcpError(error),
               times: 8,
               schedule: Schedule.exponential("500 millis"),
             }),

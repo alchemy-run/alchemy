@@ -29,13 +29,10 @@ describe(
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
               const user = yield* User("SigningCertListOwner", {});
-              const certificate = yield* SigningCertificate(
-                "SigningCertListCert",
-                {
-                  userName: user.userName,
-                  certificateBody: testCertificateBody,
-                },
-              );
+              const certificate = yield* SigningCertificate("SigningCertListCert", {
+                userName: user.userName,
+                certificateBody: testCertificateBody,
+              });
               return { user, certificate };
             }),
           );
@@ -44,8 +41,7 @@ describe(
           const all = yield* provider.list();
 
           const found = all.find(
-            (entry) =>
-              entry.certificateId === deployed.certificate.certificateId,
+            (entry) => entry.certificateId === deployed.certificate.certificateId,
           );
           expect(found).toBeDefined();
           expect(found?.userName).toBe(deployed.user.userName);
@@ -55,9 +51,9 @@ describe(
           yield* stack.destroy();
 
           // The user (and with it the signing certificate) is gone.
-          const deletedUser = yield* IAM.getUser({
-            UserName: deployed.user.userName,
-          }).pipe(Effect.option);
+          const deletedUser = yield* IAM.getUser({ UserName: deployed.user.userName }).pipe(
+            Effect.option,
+          );
           expect(deletedUser._tag).toBe("None");
         }),
       ),

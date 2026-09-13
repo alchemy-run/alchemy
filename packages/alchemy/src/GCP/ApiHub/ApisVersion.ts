@@ -146,8 +146,7 @@ export type ApisVersion = Resource<
  */
 export const ApisVersion = Resource<ApisVersion>("GCP.ApiHub.ApisVersion");
 
-const resourceName = (api: string, versionId: string) =>
-  `${api}/versions/${versionId}`;
+const resourceName = (api: string, versionId: string) => `${api}/versions/${versionId}`;
 
 const parentApi = (value: string, project: string, location: string) =>
   expandParent(value, project, location, "apis");
@@ -217,10 +216,7 @@ export const ApisVersionProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.versionId ?? output?.versionId,
         nextId: news.versionId ?? olds?.versionId ?? output?.versionId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.api ?? output?.api,
         nextParent: news.api ?? olds?.api ?? output?.api,
@@ -229,35 +225,20 @@ export const ApisVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const api = parentApi(
-        olds?.api ?? output?.api ?? "",
-        env.project,
-        location,
-      );
-      const versionId = yield* toPhysicalId(
-        id,
-        olds?.versionId,
-        output?.versionId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const api = parentApi(olds?.api ?? output?.api ?? "", env.project, location);
+      const versionId = yield* toPhysicalId(id, olds?.versionId, output?.versionId);
       const name = output?.name ?? resourceName(api, versionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apis = yield* listApis(
-          `projects/${env.project}/locations/${env.region}`,
-        );
+        const apis = yield* listApis(`projects/${env.project}/locations/${env.region}`);
         const versions = yield* listChildResources(apis, listVersions);
         return versions
           .filter((item) => hasOwnershipMarker(item.description))
@@ -266,16 +247,9 @@ export const ApisVersionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const api = parentApi(news.api, env.project, location);
-      const versionId = yield* toPhysicalId(
-        id,
-        news.versionId,
-        output?.versionId,
-      );
+      const versionId = yield* toPhysicalId(id, news.versionId, output?.versionId);
       const name = output?.name ?? resourceName(api, versionId);
       const ownership = yield* createOwnership(id);
       const description = encodeOwnership(ownership, news.description);
@@ -303,21 +277,12 @@ export const ApisVersionProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
       const docsChanged = !sameJson(current.documentation, news.documentation);
-      const selectedChanged = !sameText(
-        current.selectedDeployment,
-        news.selectedDeployment,
-      );
-      const deploymentsChanged = !sameStringList(
-        current.deployments,
-        news.deployments,
-      );
+      const selectedChanged = !sameText(current.selectedDeployment, news.selectedDeployment);
+      const deploymentsChanged = !sameStringList(current.deployments, news.deployments);
       const attributesChanged = !sameJson(current.attributes, news.attributes);
       const lifecycleChanged = !sameJson(current.lifecycle, news.lifecycle);
       const complianceChanged = !sameJson(current.compliance, news.compliance);
-      const accreditationChanged = !sameJson(
-        current.accreditation,
-        news.accreditation,
-      );
+      const accreditationChanged = !sameJson(current.accreditation, news.accreditation);
 
       if (
         displayChanged ||

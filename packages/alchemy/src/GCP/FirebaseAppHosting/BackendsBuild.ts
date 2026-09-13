@@ -113,9 +113,7 @@ export type EnvironmentVariable = {
    * Where the variable is available (`BUILD`, `RUNTIME`). Unspecified
    * means both.
    */
-  availability?: Array<
-    firebaseapphosting.EnvironmentVariableAvailabilityItemEnum | (string & {})
-  >;
+  availability?: Array<firebaseapphosting.EnvironmentVariableAvailabilityItemEnum | (string & {})>;
 };
 
 export type BuildConfig = {
@@ -248,12 +246,9 @@ export type BackendsBuild = Resource<
  * @resource
  * @category FirebaseAppHosting
  */
-export const BackendsBuild = Resource<BackendsBuild>(
-  "GCP.FirebaseAppHosting.BackendsBuild",
-);
+export const BackendsBuild = Resource<BackendsBuild>("GCP.FirebaseAppHosting.BackendsBuild");
 
-const resourceName = (backend: string, buildId: string) =>
-  `${backend}/builds/${buildId}`;
+const resourceName = (backend: string, buildId: string) => `${backend}/builds/${buildId}`;
 
 const toCodebaseSource = (
   value: firebaseapphosting.CodebaseSource | undefined,
@@ -280,12 +275,9 @@ const toArchiveSource = (
 
 const toContainerSource = (
   value: firebaseapphosting.ContainerSource | undefined,
-): ContainerSource | undefined =>
-  value === undefined ? undefined : { image: value.image };
+): ContainerSource | undefined => (value === undefined ? undefined : { image: value.image });
 
-const toSource = (
-  value: firebaseapphosting.BuildSource | undefined,
-): BuildSource | undefined =>
+const toSource = (value: firebaseapphosting.BuildSource | undefined): BuildSource | undefined =>
   value === undefined
     ? undefined
     : {
@@ -294,9 +286,7 @@ const toSource = (
         container: toContainerSource(value.container),
       };
 
-const toConfig = (
-  value: firebaseapphosting.Config | undefined,
-): BuildConfig | undefined =>
+const toConfig = (value: firebaseapphosting.Config | undefined): BuildConfig | undefined =>
   value === undefined
     ? undefined
     : {
@@ -362,15 +352,7 @@ const listOwned = (project: string) =>
 
 export const BackendsBuildProvider = () =>
   Provider.succeed(BackendsBuild, {
-    stables: [
-      "name",
-      "buildId",
-      "backend",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "buildId", "backend", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -379,10 +361,7 @@ export const BackendsBuildProvider = () =>
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const previousParent =
         (olds?.backend ?? output?.backend)
           ? expandParent(
@@ -392,12 +371,7 @@ export const BackendsBuildProvider = () =>
               "backends",
             )
           : undefined;
-      const nextParent = expandParent(
-        news.backend,
-        env.project,
-        location,
-        "backends",
-      );
+      const nextParent = expandParent(news.backend, env.project, location, "backends");
       return replaceOnIdentity({
         previousId: olds?.buildId ?? output?.buildId,
         nextId: news.buildId ?? olds?.buildId ?? output?.buildId,
@@ -406,10 +380,8 @@ export const BackendsBuildProvider = () =>
         previousParent,
         nextParent,
         extra:
-          fingerprint(olds?.source ?? output?.source) !==
-            fingerprint(news.source) ||
-          fingerprint(olds?.config ?? output?.config) !==
-            fingerprint(news.config),
+          fingerprint(olds?.source ?? output?.source) !== fingerprint(news.source) ||
+          fingerprint(olds?.config ?? output?.config) !== fingerprint(news.config),
       });
     }),
 
@@ -422,24 +394,16 @@ export const BackendsBuildProvider = () =>
         "build",
         MAX_BACKEND_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const backend =
         output?.backend ??
-        (olds?.backend
-          ? expandParent(olds.backend, env.project, location, "backends")
-          : undefined);
-      const name =
-        output?.name ?? (backend ? resourceName(backend, buildId) : undefined);
+        (olds?.backend ? expandParent(olds.backend, env.project, location, "backends") : undefined);
+      const name = output?.name ?? (backend ? resourceName(backend, buildId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -458,16 +422,8 @@ export const BackendsBuildProvider = () =>
         "build",
         MAX_BACKEND_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const backend = expandParent(
-        news.backend,
-        env.project,
-        location,
-        "backends",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const backend = expandParent(news.backend, env.project, location, "backends");
       const name = resourceName(backend, buildId);
       const desiredLabels = {
         ...toLabels(news.labels),

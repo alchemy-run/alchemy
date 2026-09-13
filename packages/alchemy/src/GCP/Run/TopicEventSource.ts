@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { Subscription } from "../PubSub/Subscription.ts";
@@ -74,9 +74,7 @@ export const TopicEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       topic: Topic,
       props: TopicEventSourceProps,
-      process: (
-        messages: Stream.Stream<TopicMessage>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (messages: Stream.Stream<TopicMessage>) => Effect.Effect<void, never, Req>,
     ) {
       const host = yield* pushHost("GCP.PubSub.TopicEventSource");
       const path = topicPushPath(topic, props);
@@ -106,9 +104,9 @@ export const TopicEventSource = Layer.effect(
 
       yield* listenForDeliveries(host, path, (request) =>
         Effect.gen(function* () {
-          const envelope = (yield* request.json.pipe(
-            Effect.orElseSucceed(() => undefined),
-          )) as PushEnvelope | undefined;
+          const envelope = (yield* request.json.pipe(Effect.orElseSucceed(() => undefined))) as
+            | PushEnvelope
+            | undefined;
           if (envelope?.message === undefined) {
             // Malformed deliveries can never succeed; ack so they don't loop.
             return HttpServerResponse.empty({ status: 204 });

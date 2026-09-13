@@ -19,11 +19,7 @@ const CSV_V2 = ["en,es", "Alchemy,Alquimia", "Stack,Pila"].join("\n");
 const getTerminology = (name: string) =>
   translate
     .getTerminology({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "lifecycle: create named terminology, update terms, destroy",
@@ -44,9 +40,7 @@ test.provider(
         }),
       );
       expect(deployed.terminologyName).toBe(terminologyName);
-      expect(deployed.terminologyArn).toContain(
-        `:terminology/${terminologyName}`,
-      );
+      expect(deployed.terminologyArn).toContain(`:terminology/${terminologyName}`);
       expect(deployed.sourceLanguageCode).toBe("en");
       expect(deployed.targetLanguageCodes).toContain("es");
       expect(deployed.termCount).toBe(1);
@@ -57,9 +51,7 @@ test.provider(
       const tags = yield* translate.listTagsForResource({
         ResourceArn: deployed.terminologyArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagRecord = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.purpose).toBe("alchemy-test");
       expect(tagRecord["alchemy::stack"]).toBeTruthy();
 

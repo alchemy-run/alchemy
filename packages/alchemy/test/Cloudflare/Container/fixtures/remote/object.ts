@@ -53,9 +53,7 @@ export class RemoteContainerObject extends Cloudflare.DurableObject<RemoteContai
       return {
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
         // The proxy pattern from #1334: forward the incoming request to the

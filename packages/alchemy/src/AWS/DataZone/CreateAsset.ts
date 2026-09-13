@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface CreateAssetRequest extends Omit<
-  datazone.CreateAssetInput,
-  "domainIdentifier"
-> {}
+export interface CreateAssetRequest extends Omit<datazone.CreateAssetInput, "domainIdentifier"> {}
 
 /**
  * Runtime binding for `datazone:CreateAsset`.
@@ -41,6 +38,4 @@ export interface CreateAsset extends Binding.Service<
     ) => Effect.Effect<datazone.CreateAssetOutput, datazone.CreateAssetError>
   >
 > {}
-export const CreateAsset = Binding.Service<CreateAsset>(
-  "AWS.DataZone.CreateAsset",
-);
+export const CreateAsset = Binding.Service<CreateAsset>("AWS.DataZone.CreateAsset");

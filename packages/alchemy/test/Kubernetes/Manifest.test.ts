@@ -28,11 +28,6 @@ test.provider(
       expect(all).toEqual([]);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:kubernetes",
-      "provider:kubernetes:manifest",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:manifest", "live"],
   },
 );

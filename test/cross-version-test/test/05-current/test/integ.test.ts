@@ -44,9 +44,7 @@ test(
     const res = yield* getOk(url);
     expect(res.status).toBe(200);
 
-    const body = yield* Effect.tryPromise(
-      () => res.json() as Promise<{ marker: string }>,
-    );
+    const body = yield* Effect.tryPromise(() => res.json() as Promise<{ marker: string }>);
     expect(body.marker).toBe(MARKER);
   }),
   { timeout: 120_000 },

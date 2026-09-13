@@ -108,9 +108,7 @@ export type DomainsUser = Resource<
  * @resource
  * @category Gmail Postmaster Tools
  */
-export const DomainsUser = Resource<DomainsUser>(
-  "GCP.GmailPostmasterTools.DomainsUser",
-);
+export const DomainsUser = Resource<DomainsUser>("GCP.GmailPostmasterTools.DomainsUser");
 
 export class DomainsUserNotResolved extends Data.TaggedError(
   "GCP.GmailPostmasterTools.DomainsUserNotResolved",
@@ -118,13 +116,8 @@ export class DomainsUserNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  user: gmailpostmastertools.User,
-  parent: string,
-  project: string,
-) => {
-  const resolvedParent =
-    parentOfUserName(user.name ?? "") || toDomainName(parent);
+const toAttrs = (user: gmailpostmastertools.User, parent: string, project: string) => {
+  const resolvedParent = parentOfUserName(user.name ?? "") || toDomainName(parent);
   const name = fullUserName(resolvedParent, user);
   return {
     name,
@@ -165,16 +158,10 @@ export const DomainsUserProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = olds?.parent ?? output?.parent ?? "";
       const userId = olds?.userId ?? output?.userId ?? "";
-      const existing = yield* findUser(
-        parent,
-        userId,
-        output?.name ?? toUserName(parent, userId),
-      );
+      const existing = yield* findUser(parent, userId, output?.name ?? toUserName(parent, userId));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, parent, env.project);
-      return output !== undefined || isAlchemyEmail(attrs.userId)
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || isAlchemyEmail(attrs.userId) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -201,9 +188,7 @@ export const DomainsUserProvider = () =>
             parent,
             body: { userId, permission },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findUser(parent, userId, name)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findUser(parent, userId, name)));
         current = created ?? undefined;
       }
 
@@ -212,10 +197,7 @@ export const DomainsUserProvider = () =>
       }
 
       const resourceName = fullUserName(parent, current);
-      if (
-        isPatchablePermission(permission) &&
-        !sameText(current.permission, permission)
-      ) {
+      if (isPatchablePermission(permission) && !sameText(current.permission, permission)) {
         current = yield* gmailpostmastertools.patchDomainsUsers({
           name: resourceName,
           updateMask: "permission",

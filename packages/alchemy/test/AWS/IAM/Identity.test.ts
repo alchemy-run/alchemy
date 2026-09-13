@@ -27,11 +27,7 @@ test.provider(
               ],
             },
           });
-          const user = yield* User("IamUser", {
-            tags: {
-              env: "test",
-            },
-          });
+          const user = yield* User("IamUser", { tags: { env: "test" } });
           const group = yield* Group("IamGroup", {});
           const membership = yield* GroupMembership("IamMembership", {
             groupName: group.groupName,
@@ -39,47 +35,39 @@ test.provider(
           });
           const profile = yield* InstanceProfile("IamInstanceProfile", {
             roleName: role.roleName,
-            tags: {
-              env: "test",
-            },
+            tags: { env: "test" },
           });
 
           return { user, group, membership, profile, role };
         }),
       );
 
-      const group = yield* IAM.getGroup({
-        GroupName: resources.group.groupName,
-      });
-      expect(
-        group.Users.some((user) => user.UserName === resources.user.userName),
-      ).toBe(true);
+      const group = yield* IAM.getGroup({ GroupName: resources.group.groupName });
+      expect(group.Users.some((user) => user.UserName === resources.user.userName)).toBe(true);
 
       const profile = yield* IAM.getInstanceProfile({
         InstanceProfileName: resources.profile.instanceProfileName,
       });
-      expect(profile.InstanceProfile.Roles[0]?.RoleName).toBe(
-        resources.role.roleName,
-      );
+      expect(profile.InstanceProfile.Roles[0]?.RoleName).toBe(resources.role.roleName);
 
       yield* stack.destroy();
 
       // Everything the stack created is gone.
-      const deletedUser = yield* IAM.getUser({
-        UserName: resources.user.userName,
-      }).pipe(Effect.option);
+      const deletedUser = yield* IAM.getUser({ UserName: resources.user.userName }).pipe(
+        Effect.option,
+      );
       expect(deletedUser._tag).toBe("None");
-      const deletedGroup = yield* IAM.getGroup({
-        GroupName: resources.group.groupName,
-      }).pipe(Effect.option);
+      const deletedGroup = yield* IAM.getGroup({ GroupName: resources.group.groupName }).pipe(
+        Effect.option,
+      );
       expect(deletedGroup._tag).toBe("None");
       const deletedProfile = yield* IAM.getInstanceProfile({
         InstanceProfileName: resources.profile.instanceProfileName,
       }).pipe(Effect.option);
       expect(deletedProfile._tag).toBe("None");
-      const deletedRole = yield* IAM.getRole({
-        RoleName: resources.role.roleName,
-      }).pipe(Effect.option);
+      const deletedRole = yield* IAM.getRole({ RoleName: resources.role.roleName }).pipe(
+        Effect.option,
+      );
       expect(deletedRole._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },

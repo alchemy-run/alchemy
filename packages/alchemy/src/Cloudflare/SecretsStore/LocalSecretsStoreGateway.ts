@@ -23,9 +23,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName } from "../LocalGateway.ts";
 
-export class LocalSecretsStoreError extends Data.TaggedError(
-  "LocalSecretsStoreError",
-)<{
+export class LocalSecretsStoreError extends Data.TaggedError("LocalSecretsStoreError")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -46,18 +44,13 @@ export const withLocalSecretsStore = <A, E, R>(
         name: gatewayName("alchemy-secrets-store-gateway", storeId),
         bindings: [SecretsStore.admin({ binding: "STORE", storeId })],
       });
-      const store = (proxy.env as Record<string, unknown>)
-        .STORE as runtime.KVNamespace<string>;
+      const store = (proxy.env as Record<string, unknown>).STORE as runtime.KVNamespace<string>;
       return yield* use(store);
     }),
   );
 
 /** Write a secret value into the local store (idempotent overwrite). */
-export const seedLocalSecret = (
-  storeId: string,
-  secretName: string,
-  value: string,
-) =>
+export const seedLocalSecret = (storeId: string, secretName: string, value: string) =>
   withLocalSecretsStore(storeId, (store) =>
     Effect.tryPromise({
       try: () => store.put(secretName, value),

@@ -3,12 +3,7 @@ import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import {
-  EntriesDatabase,
-  entryPath,
-  GuestbookCluster,
-  GuestbookNamespace,
-} from "./infra.ts";
+import { EntriesDatabase, entryPath, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
 
 /**
  * The guestbook API: a `Kubernetes.Deployment` in the TAGGED form — the class
@@ -104,10 +99,7 @@ export default Api.make(
         if (request.method === "GET" && match) {
           const document = yield* db.get(entryPath(match[1]!));
           if (document === undefined) {
-            return yield* HttpServerResponse.json(
-              { error: "not found" },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
           }
           return yield* HttpServerResponse.json({
             id: match[1],

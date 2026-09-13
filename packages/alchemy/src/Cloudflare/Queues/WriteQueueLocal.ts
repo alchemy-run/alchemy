@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { Queue } from "./Queue.ts";
@@ -43,9 +43,7 @@ export const WriteQueueLocal = Layer.effect(
     // providers layer). Capture the full context so the bulk-push effect can
     // run with the current credentials instead of a scoped token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     return Effect.fn(function* (queue: Queue) {
       // Deferred accessor — resolves the queueId against the tracker at apply

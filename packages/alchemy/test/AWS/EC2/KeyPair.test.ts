@@ -33,9 +33,7 @@ test.provider(
       expect(Redacted.value(keyPair.privateKey!)).toContain("PRIVATE KEY");
 
       // Verify out-of-band.
-      const described = yield* ec2.describeKeyPairs({
-        KeyPairIds: [keyPair.keyPairId],
-      });
+      const described = yield* ec2.describeKeyPairs({ KeyPairIds: [keyPair.keyPairId] });
       expect(described.KeyPairs?.[0]?.KeyName).toBe(keyPair.keyName);
       expect(described.KeyPairs?.[0]?.KeyType).toBe("ed25519");
 
@@ -44,11 +42,7 @@ test.provider(
       // Confirm deletion.
       const after = yield* ec2
         .describeKeyPairs({ KeyNames: [keyPair.keyName] })
-        .pipe(
-          Effect.catchTag("InvalidKeyPair.NotFound", () =>
-            Effect.succeed({ KeyPairs: [] }),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.succeed({ KeyPairs: [] })));
       expect(after.KeyPairs ?? []).toHaveLength(0);
     }),
   { tags: ["provider:aws", "provider:aws:ec2", "live"] },

@@ -1,6 +1,6 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as GCP from "@/GCP";
 import { DataBucket, Tweets } from "./bound-resources.ts";
 
 /**
@@ -26,12 +26,8 @@ export default class BoundService extends GCP.Function<BoundService>()(
         const { messageIds } = yield* publish({
           body: { messages: [{ data: btoa("hello") }] },
         }).pipe(Effect.orDie);
-        yield* putObject({ name: "probe.txt", body: "stored" }).pipe(
-          Effect.orDie,
-        );
-        const { body } = yield* getObject({ object: "probe.txt" }).pipe(
-          Effect.orDie,
-        );
+        yield* putObject({ name: "probe.txt", body: "stored" }).pipe(Effect.orDie);
+        const { body } = yield* getObject({ object: "probe.txt" }).pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           published: (messageIds?.length ?? 0) > 0,
           read: new TextDecoder().decode(body),

@@ -30,10 +30,7 @@ export default class PostgresFn extends Function<PostgresFn>()(
       fetch: db.execute("select 1 as ok", "objects").pipe(
         Effect.flatMap((rows) => HttpServerResponse.json({ rows })),
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

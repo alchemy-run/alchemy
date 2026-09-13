@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class ResourceStillExists extends Data.TaggedError("ResourceStillExists") {}
 
@@ -72,9 +69,7 @@ test.provider(
         TypeName: "AWS::SSM::Parameter",
         Identifier: paramName,
       });
-      expect(readValue(described.ResourceDescription?.Properties)).toBe(
-        "hello",
-      );
+      expect(readValue(described.ResourceDescription?.Properties)).toBe("hello");
 
       // Update the value — a JSON Patch is computed over just the Value key.
       const { param: updated } = yield* stack.deploy(resourceDef("world"));
@@ -85,9 +80,7 @@ test.provider(
         TypeName: "AWS::SSM::Parameter",
         Identifier: paramName,
       });
-      expect(readValue(reDescribed.ResourceDescription?.Properties)).toBe(
-        "world",
-      );
+      expect(readValue(reDescribed.ResourceDescription?.Properties)).toBe("world");
 
       // Delete + wait gone.
       yield* stack.destroy();

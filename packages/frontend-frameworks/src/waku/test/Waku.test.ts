@@ -19,12 +19,9 @@ import framework, {
   type WakuTarget,
 } from "../index.ts";
 
-const ADAPTER =
-  "/project/node_modules/@alchemy.run/frontend-frameworks/dist/waku/adapter.js";
+const ADAPTER = "/project/node_modules/@alchemy.run/frontend-frameworks/dist/waku/adapter.js";
 
-const flatten = (
-  plugins: Array<ViteModule.PluginOption> | undefined,
-): Array<ViteModule.Plugin> =>
+const flatten = (plugins: Array<ViteModule.PluginOption> | undefined): Array<ViteModule.Plugin> =>
   ((plugins ?? []) as Array<unknown>)
     .flat(8)
     .filter(
@@ -55,12 +52,8 @@ describe("makeWakuConfigInput", () => {
       userConfig: { vite: { plugins: [userPlugin] } },
     });
     const plugins = flatten(config.vite?.plugins);
-    const targetIndex = plugins.findIndex(
-      (plugin) => plugin.name === "target-plugin",
-    );
-    const userIndex = plugins.findIndex(
-      (plugin) => plugin.name === "user-plugin",
-    );
+    const targetIndex = plugins.findIndex((plugin) => plugin.name === "target-plugin");
+    const userIndex = plugins.findIndex((plugin) => plugin.name === "user-plugin");
     expect(targetIndex).toBeGreaterThanOrEqual(0);
     expect(userIndex).toBeGreaterThan(targetIndex);
   });
@@ -80,14 +73,9 @@ describe("makeWakuConfigInput", () => {
 
   it("applies the rsc/ssr optimizeDeps includes and neutral platform", () => {
     const config = makeWakuConfigInput({ adapterPath: ADAPTER });
-    const environments = config.vite?.environments as Record<
-      string,
-      ViteModule.EnvironmentOptions
-    >;
+    const environments = config.vite?.environments as Record<string, ViteModule.EnvironmentOptions>;
     expect(environments.rsc?.optimizeDeps?.include).toContain("hono/tiny");
-    expect(environments.ssr?.optimizeDeps?.include).toContain(
-      "waku > rsc-html-stream/server",
-    );
+    expect(environments.ssr?.optimizeDeps?.include).toContain("waku > rsc-html-stream/server");
     expect(environments.rsc?.build?.rolldownOptions?.platform).toBe("neutral");
     expect(environments.ssr?.build?.rolldownOptions?.platform).toBe("neutral");
   });
@@ -104,14 +92,8 @@ describe("makeWakuConfigInput", () => {
         },
       },
     });
-    const environments = config.vite?.environments as Record<
-      string,
-      ViteModule.EnvironmentOptions
-    >;
-    expect(environments.rsc?.optimizeDeps?.include).toEqual([
-      "hono/tiny",
-      "extra-dep",
-    ]);
+    const environments = config.vite?.environments as Record<string, ViteModule.EnvironmentOptions>;
+    expect(environments.rsc?.optimizeDeps?.include).toEqual(["hono/tiny", "extra-dep"]);
     expect(environments.custom?.optimizeDeps?.include).toEqual(["custom-dep"]);
   });
 });
@@ -136,18 +118,14 @@ describe("mergeUserWakuConfig", () => {
   });
 
   it("merges inline options over the file config per key", () => {
-    expect(
-      merge({ basePath: "/docs/", srcDir: "app" }, { srcDir: "source" }),
-    ).toEqual({
+    expect(merge({ basePath: "/docs/", srcDir: "app" }, { srcDir: "source" })).toEqual({
       basePath: "/docs/",
       srcDir: "source",
     });
   });
 
   it("does not let explicit undefined inline keys clobber file values", () => {
-    expect(
-      merge({ srcDir: "app" }, { srcDir: undefined, distDir: "out" }),
-    ).toEqual({
+    expect(merge({ srcDir: "app" }, { srcDir: undefined, distDir: "out" })).toEqual({
       srcDir: "app",
       distDir: "out",
     });
@@ -163,9 +141,7 @@ describe("mergeUserWakuConfig", () => {
     expect(merged?.vite?.base).toBe("/docs/");
     const names = flatten(merged?.vite?.plugins).map((plugin) => plugin.name);
     expect(names.indexOf("file-plugin")).toBeGreaterThanOrEqual(0);
-    expect(names.indexOf("inline-plugin")).toBeGreaterThan(
-      names.indexOf("file-plugin"),
-    );
+    expect(names.indexOf("inline-plugin")).toBeGreaterThan(names.indexOf("file-plugin"));
   });
 
   it("keeps the only vite config present", () => {

@@ -33,11 +33,7 @@ export interface GetUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetUserRequest,
-    ) => Effect.Effect<
-      alloydb.User,
-      alloydb.GetProjectsLocationsClustersUsersError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<alloydb.User, alloydb.GetProjectsLocationsClustersUsersError, RuntimeContext>
   >
 > {}
 

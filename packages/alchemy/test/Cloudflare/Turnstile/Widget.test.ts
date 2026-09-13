@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = "alchemy-test-2.us";
 
@@ -39,10 +36,7 @@ const expectGone = (accountId: string, sitekey: string) =>
     Effect.catchTag("WidgetNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WidgetNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -55,10 +49,7 @@ test.provider(
       yield* stack.destroy();
 
       const widget = yield* stack.deploy(
-        Cloudflare.Turnstile.Widget("DefaultWidget", {
-          domains: [zoneName],
-          mode: "managed",
-        }),
+        Cloudflare.Turnstile.Widget("DefaultWidget", { domains: [zoneName], mode: "managed" }),
       );
 
       expect(widget.sitekey).toBeDefined();
@@ -111,16 +102,12 @@ test.provider(
       expect(updated.sitekey).toEqual(initial.sitekey);
       expect(updated.name).toEqual("alchemy-turnstile-update-v2");
       expect(updated.mode).toEqual("invisible");
-      expect([...updated.domains].sort()).toEqual(
-        [zoneName, `www.${zoneName}`].sort(),
-      );
+      expect([...updated.domains].sort()).toEqual([zoneName, `www.${zoneName}`].sort());
 
       const live = yield* getWidget(accountId, updated.sitekey);
       expect(live.name).toEqual("alchemy-turnstile-update-v2");
       expect(live.mode).toEqual("invisible");
-      expect([...live.domains].sort()).toEqual(
-        [zoneName, `www.${zoneName}`].sort(),
-      );
+      expect([...live.domains].sort()).toEqual([zoneName, `www.${zoneName}`].sort());
 
       // Redeploying identical props is a no-op (still the same widget).
       const noop = yield* stack.deploy(
@@ -158,15 +145,13 @@ test.provider(
       // Delete the widget out-of-band. A redeploy with identical props is a
       // planner no-op, so change a prop to force reconcile — it must observe
       // the widget as missing and recreate it instead of failing on a 404.
-      yield* turnstile
-        .deleteWidget({ accountId, sitekey: widget.sitekey })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
-          }),
-        );
+      yield* turnstile.deleteWidget({ accountId, sitekey: widget.sitekey }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
 
       const healed = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("HealWidget", {
@@ -203,9 +188,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Turnstile.Widget,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Turnstile.Widget);
       const all = yield* provider.list();
 
       const found = all.find((w) => w.sitekey === widget.sitekey);

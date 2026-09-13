@@ -10,13 +10,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Custom detection locations are plan-gated — on the testing account's free
 // zone the quota is zero and every create fails with the typed
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -64,13 +58,7 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
 // Both cases mutate the same zone-level Leaked Credential Check singleton; run them serially so they don't corrupt each other's captured `initialEnabled` under the global concurrent test config.
 describe.sequential(
   "LeakedCredentialCheck",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:leakedcredentialcheck",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:leakedcredentialcheck", "live"] },
   () => {
     test.provider(
       "enables leaked credential checks and restores the baseline on destroy",
@@ -84,12 +72,9 @@ describe.sequential(
 
           const check = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                "Lcc",
-                {
-                  zoneId,
-                },
-              );
+              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+                zoneId,
+              });
             }),
           );
 
@@ -105,13 +90,10 @@ describe.sequential(
           // Update in place — same singleton, initialEnabled survives.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                "Lcc",
-                {
-                  zoneId,
-                  enabled: false,
-                },
-              );
+              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+                zoneId,
+                enabled: false,
+              });
             }),
           );
           expect(updated.enabled).toEqual(false);
@@ -123,13 +105,10 @@ describe.sequential(
           // Flip back on so destroy has something to restore.
           const reEnabled = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                "Lcc",
-                {
-                  zoneId,
-                  enabled: true,
-                },
-              );
+              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+                zoneId,
+                enabled: true,
+              });
             }),
           );
           expect(reEnabled.enabled).toEqual(true);
@@ -216,30 +195,21 @@ describe.sequential(
 
           yield* stack.destroy();
 
-          const usernameExpr =
-            'lookup_json_string(http.request.body.raw, "user")';
-          const passwordExpr =
-            'lookup_json_string(http.request.body.raw, "pass")';
+          const usernameExpr = 'lookup_json_string(http.request.body.raw, "user")';
+          const passwordExpr = 'lookup_json_string(http.request.body.raw, "pass")';
 
           const detection = yield* stack.deploy(
             Effect.gen(function* () {
-              const check =
-                yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                  "Lcc",
-                  {
-                    zoneId,
-                    enabled: true,
-                  },
-                );
-              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection(
-                "Det",
-                {
-                  // Depend on the check so the toggle deploys first.
-                  zoneId: check.zoneId,
-                  username: usernameExpr,
-                  password: passwordExpr,
-                },
-              );
+              const check = yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+                zoneId,
+                enabled: true,
+              });
+              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("Det", {
+                // Depend on the check so the toggle deploys first.
+                zoneId: check.zoneId,
+                username: usernameExpr,
+                password: passwordExpr,
+              });
             }),
           );
 
@@ -249,33 +219,22 @@ describe.sequential(
           expect(detection.password).toEqual(passwordExpr);
 
           // Out-of-band verification via the distilled API.
-          const live = yield* lcc.getDetection({
-            zoneId,
-            detectionId: detection.detectionId,
-          });
+          const live = yield* lcc.getDetection({ zoneId, detectionId: detection.detectionId });
           expect(live.username).toEqual(usernameExpr);
 
           // In-place update — the PUT keeps the same detection id.
-          const newPasswordExpr =
-            'lookup_json_string(http.request.body.raw, "secret")';
+          const newPasswordExpr = 'lookup_json_string(http.request.body.raw, "secret")';
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              const check =
-                yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                  "Lcc",
-                  {
-                    zoneId,
-                    enabled: true,
-                  },
-                );
-              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection(
-                "Det",
-                {
-                  zoneId: check.zoneId,
-                  username: usernameExpr,
-                  password: newPasswordExpr,
-                },
-              );
+              const check = yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+                zoneId,
+                enabled: true,
+              });
+              return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("Det", {
+                zoneId: check.zoneId,
+                username: usernameExpr,
+                password: newPasswordExpr,
+              });
             }),
           );
           expect(updated.detectionId).toEqual(detection.detectionId);
@@ -287,10 +246,7 @@ describe.sequential(
           const error = yield* lcc
             .getDetection({ zoneId, detectionId: detection.detectionId })
             .pipe(Effect.flip);
-          expect([
-            "DetectionNotFound",
-            "LeakedCredentialChecksDisabled",
-          ]).toContain(error._tag);
+          expect(["DetectionNotFound", "LeakedCredentialChecksDisabled"]).toContain(error._tag);
         }).pipe(logLevel),
     );
   },

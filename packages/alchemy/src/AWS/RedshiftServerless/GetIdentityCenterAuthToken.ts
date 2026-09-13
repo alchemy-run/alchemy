@@ -36,7 +36,6 @@ export interface GetIdentityCenterAuthToken extends Binding.Service<
     >
   >
 > {}
-export const GetIdentityCenterAuthToken =
-  Binding.Service<GetIdentityCenterAuthToken>(
-    "AWS.RedshiftServerless.GetIdentityCenterAuthToken",
-  );
+export const GetIdentityCenterAuthToken = Binding.Service<GetIdentityCenterAuthToken>(
+  "AWS.RedshiftServerless.GetIdentityCenterAuthToken",
+);

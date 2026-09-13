@@ -14,10 +14,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloudflare's edge intermittently 403s ("Unable to authenticate request")
 // even for established tokens. The blip can hit engine-side calls mid-deploy
@@ -106,17 +103,12 @@ const getJob = (accountId: string, jobId: number) =>
 const waitForDelete = (accountId: string, jobId: number) =>
   getJob(accountId, jobId).pipe(
     Effect.flatMap((job) =>
-      job.id === jobId
-        ? Effect.fail({ _tag: "JobNotDeleted" } as const)
-        : Effect.void,
+      job.id === jobId ? Effect.fail({ _tag: "JobNotDeleted" } as const) : Effect.void,
     ),
     Effect.catchTag("JobNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "JobNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -189,12 +181,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:logpush",
-      "provider:cloudflare:r2",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:logpush", "provider:cloudflare:r2", "live"],
     timeout: 180_000,
   },
 );
@@ -235,12 +222,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:logpush",
-      "provider:cloudflare:r2",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:logpush", "provider:cloudflare:r2", "live"],
     timeout: 180_000,
   },
 );
@@ -287,12 +269,7 @@ test.provider.skip(
       yield* waitForDelete(accountId, replaced.job.jobId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:logpush",
-      "provider:cloudflare:r2",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:logpush", "provider:cloudflare:r2", "live"],
     timeout: 180_000,
   },
 );

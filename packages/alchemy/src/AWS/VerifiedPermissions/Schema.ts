@@ -90,11 +90,7 @@ export const SchemaProvider = () =>
           if (policyStoreId === undefined) return undefined;
           const schema = yield* avp
             .getSchema({ policyStoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (schema === undefined) return undefined;
           return { policyStoreId };
         }),

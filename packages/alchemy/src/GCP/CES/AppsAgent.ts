@@ -154,21 +154,13 @@ export type AppsAgent = Resource<
  */
 export const AppsAgent = Resource<AppsAgent>("GCP.CES.AppsAgent");
 
-export class AppsAgentNotResolved extends Data.TaggedError(
-  "GCP.CES.AppsAgentNotResolved",
-)<{
+export class AppsAgentNotResolved extends Data.TaggedError("GCP.CES.AppsAgentNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (app: string, agentId: string) =>
-  `${app}/agents/${agentId}`;
+const resourceName = (app: string, agentId: string) => `${app}/agents/${agentId}`;
 
-const toAttrs = (
-  agent: ces.Agent,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (agent: ces.Agent, project: string, region: string, appHint?: string) => {
   const name = agent.name ?? "";
   const parsed = parseResourceName(name, "agents", region);
   return {
@@ -204,11 +196,7 @@ const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsAgents.pages({ parent, pageSize: 100 }),
     (page) => page.agents,
-  ).pipe(
-    Effect.map((agents) =>
-      agents.map((agent) => toAttrs(agent, project, region, parent)),
-    ),
-  );
+  ).pipe(Effect.map((agents) => agents.map((agent) => toAttrs(agent, project, region, parent))));
 
 export const AppsAgentProvider = () =>
   Provider.succeed(AppsAgent, {
@@ -236,22 +224,14 @@ export const AppsAgentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
       const agentId = yield* toPhysicalId(id, olds?.agentId, output?.agentId);
-      const name =
-        output?.name ?? (app !== undefined ? resourceName(app, agentId) : "");
+      const name = output?.name ?? (app !== undefined ? resourceName(app, agentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return output !== undefined || olds?.agentId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.agentId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -266,17 +246,13 @@ export const AppsAgentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
       const agentId = yield* toPhysicalId(id, news.agentId, output?.agentId);
       const name = output?.name ?? resourceName(app, agentId);
       const description = news.description;
       const displayName = news.displayName ?? agentId;
-      const llmAgent =
-        news.remoteDialogflowAgent === undefined ? {} : undefined;
+      const llmAgent = news.remoteDialogflowAgent === undefined ? {} : undefined;
 
       let current = yield* getByName(name);
 
@@ -310,20 +286,14 @@ export const AppsAgentProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const instructionChanged = !sameText(
-        current.instruction,
-        news.instruction,
-      );
+      const instructionChanged = !sameText(current.instruction, news.instruction);
       const modelChanged = !sameJson(current.modelSettings, news.modelSettings);
       const toolsChanged = !sameJson(current.tools, news.tools);
       const toolsetsChanged = !sameJson(current.toolsets, news.toolsets);
       const childrenChanged = !sameJson(current.childAgents, news.childAgents);
       const guardrailsChanged = !sameJson(current.guardrails, news.guardrails);
       const rulesChanged = !sameJson(current.transferRules, news.transferRules);
-      const remoteChanged = !sameJson(
-        current.remoteDialogflowAgent,
-        news.remoteDialogflowAgent,
-      );
+      const remoteChanged = !sameJson(current.remoteDialogflowAgent, news.remoteDialogflowAgent);
 
       if (
         displayChanged ||

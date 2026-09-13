@@ -4,9 +4,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
@@ -28,10 +28,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (
-  name: string,
-  fallback = "developerconnect",
-): string => {
+export const rfc1035 = (name: string, fallback = "developerconnect"): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -44,10 +41,8 @@ export const rfc1035 = (
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -71,26 +66,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -116,14 +101,11 @@ export const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => tagRecord(annotations);
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -146,21 +128,16 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? false) === (right ?? false);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -211,8 +188,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&
-          (error.code === 6 ||
-            (options?.notFoundOk === true && error.code === 5))) ||
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
         (options?.notFoundOk === true && error._tag === "NotFound"),
       () => Effect.succeed(operation),
     ),
@@ -271,9 +247,7 @@ export const listAtNested = <A, E, R>(
   // Prefer the all-locations wildcard; fall back to the default region
   // (whose error, if any, propagates).
   list(`projects/${project}/locations/-/${nested}`).pipe(
-    Effect.catch(() =>
-      list(`projects/${project}/locations/${region}/${nested}`),
-    ),
+    Effect.catch(() => list(`projects/${project}/locations/${region}/${nested}`)),
   );
 
 export const listLabeledPages = <Page, A, E, R>(

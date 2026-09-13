@@ -168,13 +168,7 @@ export interface StreamAttributes {
   modifiedAt: string;
 }
 
-export type Stream = Resource<
-  StreamTypeId,
-  StreamProps,
-  StreamAttributes,
-  never,
-  Providers
->;
+export type Stream = Resource<StreamTypeId, StreamProps, StreamAttributes, never, Providers>;
 
 /**
  * A Cloudflare Pipelines stream — the ingestion endpoint of the Pipelines
@@ -314,9 +308,7 @@ export const StreamProvider = () =>
           .pipe(
             Effect.catchTag("StreamAlreadyExists", (error) =>
               findStreamByName(accountId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
+                Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
               ),
             ),
           );
@@ -367,10 +359,7 @@ export const StreamProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "StreamInUse",
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
           }),
           Effect.catchTag("StreamNotFound", () => Effect.void),
           Effect.catchTag("InvalidStreamId", () => Effect.void),
@@ -461,8 +450,7 @@ const sameOrigins = (
   if (desired === undefined) return true;
   const have = observed ?? [];
   return (
-    desired.length === have.length &&
-    [...desired].sort().join(",") === [...have].sort().join(",")
+    desired.length === have.length && [...desired].sort().join(",") === [...have].sort().join(",")
   );
 };
 
@@ -470,33 +458,25 @@ const sameOrigins = (
  * Key-order-insensitive structural equality for plain JSON-ish prop
  * values (schemas, formats).
  */
-const stableEquals = (a: unknown, b: unknown): boolean =>
-  stableStringify(a) === stableStringify(b);
+const stableEquals = (a: unknown, b: unknown): boolean => stableStringify(a) === stableStringify(b);
 
 const stableStringify = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
     v !== null && typeof v === "object" && !Array.isArray(v)
       ? Object.fromEntries(
-          Object.entries(v as Record<string, unknown>).sort(([x], [y]) =>
-            x.localeCompare(y),
-          ),
+          Object.entries(v as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y)),
         )
       : v,
   ) ?? "undefined";
 
-const toAttributes = (
-  observed: ObservedStream,
-  accountId: string,
-): StreamAttributes => ({
+const toAttributes = (observed: ObservedStream, accountId: string): StreamAttributes => ({
   streamId: observed.id,
   accountId,
   name: observed.name,
   endpoint: observed.endpoint ?? undefined,
   httpEnabled: observed.http.enabled,
   httpAuthentication: observed.http.authentication,
-  corsOrigins: observed.http.cors?.origins
-    ? [...observed.http.cors.origins]
-    : undefined,
+  corsOrigins: observed.http.cors?.origins ? [...observed.http.cors.origins] : undefined,
   workerBindingEnabled: observed.workerBinding.enabled,
   version: observed.version,
   createdAt: observed.createdAt,

@@ -17,26 +17,20 @@ const AGGREGATOR_ACCOUNT = "123456789012";
 const findAuthorization = (accountId: string, region: string) =>
   config.describeAggregationAuthorizations.items({}).pipe(
     Stream.filter(
-      (auth) =>
-        auth.AuthorizedAccountId === accountId &&
-        auth.AuthorizedAwsRegion === region,
+      (auth) => auth.AuthorizedAccountId === accountId && auth.AuthorizedAwsRegion === region,
     ),
     Stream.runHead,
     Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
   );
 
-class AuthorizationStillExists extends Data.TaggedError(
-  "AuthorizationStillExists",
-)<{
+class AuthorizationStillExists extends Data.TaggedError("AuthorizationStillExists")<{
   readonly region: string;
 }> {}
 
 const assertAuthorizationDeleted = (accountId: string, region: string) =>
   findAuthorization(accountId, region).pipe(
     Effect.flatMap((auth) =>
-      auth === undefined
-        ? Effect.void
-        : Effect.fail(new AuthorizationStillExists({ region })),
+      auth === undefined ? Effect.void : Effect.fail(new AuthorizationStillExists({ region })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AuthorizationStillExists",
@@ -62,24 +56,16 @@ test.provider(
 
       expect(auth.authorizedAccountId).toBe(AGGREGATOR_ACCOUNT);
       expect(auth.authorizedAwsRegion).toBe("us-east-1");
-      expect(auth.aggregationAuthorizationArn).toContain(
-        ":aggregation-authorization/",
-      );
+      expect(auth.aggregationAuthorizationArn).toContain(":aggregation-authorization/");
 
       // Out-of-band verification via distilled.
       const created = yield* findAuthorization(AGGREGATOR_ACCOUNT, "us-east-1");
-      expect(created?.AggregationAuthorizationArn).toBe(
-        auth.aggregationAuthorizationArn,
-      );
+      expect(created?.AggregationAuthorizationArn).toBe(auth.aggregationAuthorizationArn);
       const tags = yield* config
         .listTagsForResource({
           ResourceArn: auth.aggregationAuthorizationArn,
         })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestAuth");
 
@@ -94,18 +80,12 @@ test.provider(
           });
         }),
       );
-      expect(updated.aggregationAuthorizationArn).toBe(
-        auth.aggregationAuthorizationArn,
-      );
+      expect(updated.aggregationAuthorizationArn).toBe(auth.aggregationAuthorizationArn);
       const updatedTags = yield* config
         .listTagsForResource({
           ResourceArn: auth.aggregationAuthorizationArn,
         })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.Environment).toBe("prod");
 
       // Changing the authorized region replaces the authorization.
@@ -119,9 +99,7 @@ test.provider(
         }),
       );
       expect(replaced.authorizedAwsRegion).toBe("us-west-2");
-      expect(replaced.aggregationAuthorizationArn).not.toBe(
-        auth.aggregationAuthorizationArn,
-      );
+      expect(replaced.aggregationAuthorizationArn).not.toBe(auth.aggregationAuthorizationArn);
       yield* assertAuthorizationDeleted(AGGREGATOR_ACCOUNT, "us-east-1");
 
       yield* stack.destroy();

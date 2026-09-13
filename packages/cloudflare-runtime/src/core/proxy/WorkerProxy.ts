@@ -9,12 +9,9 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Port from "../internal/Port.ts";
-import {
-  CONTINUE_RESPONSE,
-  makeExpectContinueObserver,
-} from "./ExpectContinue.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
+import { CONTINUE_RESPONSE, makeExpectContinueObserver } from "./ExpectContinue.ts";
 
 /**
  * A stable local address for a Worker whose runtime comes and goes.
@@ -178,9 +175,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   }>();
 
   const settle = (
-    complete: (
-      deferred: Deferred.Deferred<Upstream, SystemError>,
-    ) => Effect.Effect<boolean>,
+    complete: (deferred: Deferred.Deferred<Upstream, SystemError>) => Effect.Effect<boolean>,
   ) =>
     Effect.gen(function* () {
       const waiting = current;
@@ -319,10 +314,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     }),
     fail: (message) =>
       settle((deferred) =>
-        Deferred.fail(
-          deferred,
-          new SystemError({ subtag: "WorkerProxyUpstream", message }),
-        ),
+        Deferred.fail(deferred, new SystemError({ subtag: "WorkerProxyUpstream", message })),
       ),
     close: Fiber.interruptAll(connections),
   };
@@ -349,9 +341,7 @@ const listen = (relay: Relay, host: string, port: number) =>
           ),
         );
       });
-      server.listen({ host, port, exclusive: true }, () =>
-        resume(Effect.succeed(server)),
-      );
+      server.listen({ host, port, exclusive: true }, () => resume(Effect.succeed(server)));
       return Effect.sync(() => server.close());
     }),
     (server) =>
@@ -382,9 +372,7 @@ export const WorkerProxyLive = Layer.effect(
       return Effect.sync(() => server.close());
     });
 
-    const normalizeOptions = Effect.fnUntraced(function* (
-      options: ServeOptions,
-    ) {
+    const normalizeOptions = Effect.fnUntraced(function* (options: ServeOptions) {
       const host = options.host ?? "127.0.0.1";
       const strictPort = options.strictPort ?? false;
       return {
@@ -407,9 +395,7 @@ export const WorkerProxyLive = Layer.effect(
         // Dual-bind only for the loopback default — an explicit host is
         // served verbatim.
         ipv6: options.host === undefined && ipv6Loopback,
-        pendingTimeout: Duration.fromInputUnsafe(
-          options.pendingTimeout ?? DEFAULT_PENDING_TIMEOUT,
-        ),
+        pendingTimeout: Duration.fromInputUnsafe(options.pendingTimeout ?? DEFAULT_PENDING_TIMEOUT),
       };
     });
     type ResolvedOptions = Effect.Success<ReturnType<typeof normalizeOptions>>;
@@ -434,9 +420,7 @@ export const WorkerProxyLive = Layer.effect(
       yield* Effect.addFinalizer(() => relay.close);
       return {
         relay,
-        url: new URL(
-          `http://${host === "127.0.0.1" ? "localhost" : host}:${port}`,
-        ),
+        url: new URL(`http://${host === "127.0.0.1" ? "localhost" : host}:${port}`),
       };
     });
 
@@ -446,9 +430,7 @@ export const WorkerProxyLive = Layer.effect(
     // caller's. Every attempt is a plain bind, so retrying is cheap, but it
     // MUST stay bounded: an environmental failure that keeps reporting the
     // port as taken would otherwise scan forever.
-    const serveWithRetry = Effect.fnUntraced(function* (
-      options: ResolvedOptions,
-    ) {
+    const serveWithRetry = Effect.fnUntraced(function* (options: ResolvedOptions) {
       const parent = yield* Effect.scope;
       let port: number | undefined;
       return yield* Effect.gen(function* () {
@@ -475,11 +457,7 @@ export const WorkerProxyLive = Layer.effect(
       serve: Effect.fn("WorkerProxy.serve")(function* (options = {}) {
         const resolved = yield* normalizeOptions(options);
         const { relay, url } = yield* serveWithRetry(resolved);
-        if (
-          options.port !== undefined &&
-          options.port !== 0 &&
-          Number(url.port) !== options.port
-        ) {
+        if (options.port !== undefined && options.port !== 0 && Number(url.port) !== options.port) {
           yield* Effect.logWarning(
             `Port ${options.port} is in use by another process; serving on ${url.port} instead. Stop the other process, pick a different port, or set \`strictPort: true\` to fail instead.`,
           );

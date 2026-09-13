@@ -8,9 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import MediaPackageV2TestFunctionLive, {
-  MediaPackageV2TestFunction,
-} from "./fixtures/handler";
+import MediaPackageV2TestFunctionLive, { MediaPackageV2TestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "MediaPackageV2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -41,31 +36,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "MediaPackageV2 Bindings",
@@ -81,9 +67,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "MediaPackageV2 test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("MediaPackageV2 test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("MediaPackageV2 test setup: deploying fixture");
@@ -98,16 +82,12 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `MediaPackageV2 test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`MediaPackageV2 test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -120,9 +100,7 @@ describe.sequential(
       { timeout: 300_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 240_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 240_000 });
 
     describe("binding registration", () => {
       test.provider("all six capabilities initialize in the runtime", () =>
@@ -136,18 +114,13 @@ describe.sequential(
     describe("ResetChannelState", () => {
       test.provider("resetting the idle channel's ingest state succeeds", () =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/reset-channel")) as {
-            arn?: string;
-            tag?: string;
-          };
+          const response = (yield* postJson("/reset-channel")) as { arn?: string; tag?: string };
           // A retained stack (NO_DESTROY) can hit MediaPackage's reset rate
           // limit; the typed tag is then the observable outcome.
           if (response.tag === undefined) {
             expect(response.arn).toContain("/channel/");
           } else {
-            expect(["ConflictException", "ThrottlingException"]).toContain(
-              response.tag,
-            );
+            expect(["ConflictException", "ThrottlingException"]).toContain(response.tag);
           }
         }),
       );
@@ -156,16 +129,11 @@ describe.sequential(
     describe("ResetOriginEndpointState", () => {
       test.provider("resetting the idle endpoint's state succeeds", () =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/reset-endpoint")) as {
-            arn?: string;
-            tag?: string;
-          };
+          const response = (yield* postJson("/reset-endpoint")) as { arn?: string; tag?: string };
           if (response.tag === undefined) {
             expect(response.arn).toContain("/originEndpoint/");
           } else {
-            expect(["ConflictException", "ThrottlingException"]).toContain(
-              response.tag,
-            );
+            expect(["ConflictException", "ThrottlingException"]).toContain(response.tag);
           }
         }),
       );
@@ -174,62 +142,46 @@ describe.sequential(
     describe("ListHarvestJobs", () => {
       test.provider("enumerating the group's harvest jobs succeeds", () =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/harvest-jobs")) as {
-            count: number;
-          };
+          const response = (yield* getJson("/harvest-jobs")) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
       );
     });
 
     describe("CreateHarvestJob + GetHarvestJob + CancelHarvestJob", () => {
-      test.provider(
-        "create → get → cancel roundtrips (or typed rejection)",
-        () =>
-          Effect.gen(function* () {
-            const response = (yield* postJson("/harvest-cycle")) as {
-              created: boolean;
-              status?: string;
-              cancelled: boolean;
-              tag?: string;
-            };
-            if (response.created) {
-              expect([
-                "QUEUED",
-                "IN_PROGRESS",
-                "CANCELLED",
-                "COMPLETED",
-                "FAILED",
-              ]).toContain(response.status);
-            } else {
-              // The idle channel has no harvestable content; MediaPackage may
-              // reject the job upfront with the typed ValidationException.
-              expect(["ValidationException", "ConflictException"]).toContain(
-                response.tag,
-              );
-            }
-          }),
+      test.provider("create → get → cancel roundtrips (or typed rejection)", () =>
+        Effect.gen(function* () {
+          const response = (yield* postJson("/harvest-cycle")) as {
+            created: boolean;
+            status?: string;
+            cancelled: boolean;
+            tag?: string;
+          };
+          if (response.created) {
+            expect(["QUEUED", "IN_PROGRESS", "CANCELLED", "COMPLETED", "FAILED"]).toContain(
+              response.status,
+            );
+          } else {
+            // The idle channel has no harvestable content; MediaPackage may
+            // reject the job upfront with the typed ValidationException.
+            expect(["ValidationException", "ConflictException"]).toContain(response.tag);
+          }
+        }),
       );
     });
 
-    describe(
-      "consumeHarvestJobEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          () =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeHarvestJobEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeHarvestJobEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", () =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeHarvestJobEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

@@ -208,9 +208,7 @@ export type Coupon = Resource<
  */
 export const Coupon = Resource<Coupon>("Stripe.Coupon");
 
-export class CouponNotResolved extends Data.TaggedError(
-  "Stripe.CouponNotResolved",
-)<{
+export class CouponNotResolved extends Data.TaggedError("Stripe.CouponNotResolved")<{
   couponId: string | undefined;
 }> {}
 
@@ -237,10 +235,7 @@ const toWireCurrencyOptions = (
 ): CreateCouponRequestCurrencyOptionsMap | undefined => {
   if (options === undefined) return undefined;
   return Object.fromEntries(
-    Object.entries(options).map(([currency, value]) => [
-      currency,
-      { amount_off: value.amountOff },
-    ]),
+    Object.entries(options).map(([currency, value]) => [currency, { amount_off: value.amountOff }]),
   );
 };
 
@@ -273,9 +268,7 @@ const toAttrs = (coupon: StripeCoupon): CouponAttributes => ({
 const isMissingCoupon = isMissingStripeResource;
 
 const getById = (coupon: string) =>
-  GetCoupon({ coupon }).pipe(
-    Effect.catchIf(isMissingCoupon, () => Effect.succeed(undefined)),
-  );
+  GetCoupon({ coupon }).pipe(Effect.catchIf(isMissingCoupon, () => Effect.succeed(undefined)));
 
 const listAllCoupons = Effect.fn(function* () {
   const coupons: StripeCoupon[] = [];
@@ -309,10 +302,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -335,10 +325,7 @@ const replaceOnCreateOnlyChange = (
   news: CouponProps,
   output: CouponAttributes | undefined,
 ): boolean => {
-  if (
-    news.couponId !== undefined &&
-    news.couponId !== (output?.id ?? olds?.couponId)
-  ) {
+  if (news.couponId !== undefined && news.couponId !== (output?.id ?? olds?.couponId)) {
     return true;
   }
   if (
@@ -354,8 +341,7 @@ const replaceOnCreateOnlyChange = (
     return true;
   }
   if (
-    (news.currency ?? output?.currency ?? olds?.currency) !==
-    (output?.currency ?? olds?.currency)
+    (news.currency ?? output?.currency ?? olds?.currency) !== (output?.currency ?? olds?.currency)
   ) {
     return true;
   }
@@ -366,9 +352,7 @@ const replaceOnCreateOnlyChange = (
     return true;
   }
   if (
-    (news.durationInMonths ??
-      output?.durationInMonths ??
-      olds?.durationInMonths) !==
+    (news.durationInMonths ?? output?.durationInMonths ?? olds?.durationInMonths) !==
     (output?.durationInMonths ?? olds?.durationInMonths)
   ) {
     return true;
@@ -380,8 +364,7 @@ const replaceOnCreateOnlyChange = (
     return true;
   }
   if (
-    (news.redeemBy ?? output?.redeemBy ?? olds?.redeemBy) !==
-    (output?.redeemBy ?? olds?.redeemBy)
+    (news.redeemBy ?? output?.redeemBy ?? olds?.redeemBy) !== (output?.redeemBy ?? olds?.redeemBy)
   ) {
     return true;
   }
@@ -429,9 +412,7 @@ export const CouponProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -457,23 +438,15 @@ export const CouponProvider = () =>
         current = yield* CreateCoupon({
           ...(news.couponId !== undefined ? { id: news.couponId } : {}),
           ...(news.name !== undefined ? { name: news.name } : {}),
-          ...(news.percentOff !== undefined
-            ? { percent_off: news.percentOff }
-            : {}),
-          ...(news.amountOff !== undefined
-            ? { amount_off: news.amountOff }
-            : {}),
+          ...(news.percentOff !== undefined ? { percent_off: news.percentOff } : {}),
+          ...(news.amountOff !== undefined ? { amount_off: news.amountOff } : {}),
           ...(news.currency !== undefined ? { currency: news.currency } : {}),
-          ...(currencyOptions !== undefined
-            ? { currency_options: currencyOptions }
-            : {}),
+          ...(currencyOptions !== undefined ? { currency_options: currencyOptions } : {}),
           ...(news.duration !== undefined ? { duration: news.duration } : {}),
           ...(news.durationInMonths !== undefined
             ? { duration_in_months: news.durationInMonths }
             : {}),
-          ...(news.maxRedemptions !== undefined
-            ? { max_redemptions: news.maxRedemptions }
-            : {}),
+          ...(news.maxRedemptions !== undefined ? { max_redemptions: news.maxRedemptions } : {}),
           ...(news.redeemBy !== undefined ? { redeem_by: news.redeemBy } : {}),
           ...(news.appliesTo?.products !== undefined
             ? { applies_to: { products: news.appliesTo.products } }
@@ -493,11 +466,8 @@ export const CouponProvider = () =>
       const observedMetadata = tagRecord(current.metadata);
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
-      const nameChanged =
-        news.name !== undefined && (current.name ?? undefined) !== news.name;
-      const observedCurrencyOptions = fromWireCurrencyOptions(
-        current.currency_options,
-      );
+      const nameChanged = news.name !== undefined && (current.name ?? undefined) !== news.name;
+      const observedCurrencyOptions = fromWireCurrencyOptions(current.currency_options);
       const currencyOptionsChanged =
         news.currencyOptions !== undefined &&
         !deepEqual(news.currencyOptions, observedCurrencyOptions, {
@@ -511,15 +481,11 @@ export const CouponProvider = () =>
       const updated = yield* UpdateCoupon({
         coupon: current.id,
         ...(nameChanged ? { name: news.name } : {}),
-        ...(currencyOptionsChanged
-          ? { currency_options: currencyOptions }
-          : {}),
+        ...(currencyOptionsChanged ? { currency_options: currencyOptions } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

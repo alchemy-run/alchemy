@@ -24,8 +24,7 @@ export class Object extends Cloudflare.DurableObject<Object>()(
       return {
         // Seed R2 through the DO's NATIVE binding so the container (which reads
         // over its HTTP token) sees a value written by a different binding.
-        put: (key: string, value: string) =>
-          bucket.put(key, value).pipe(Effect.asVoid),
+        put: (key: string, value: string) => bucket.put(key, value).pipe(Effect.asVoid),
         get: (key: string) => bucket.get(key),
         ping: () => container.ping(),
         // The env var a `Binding.Service` injected into the container.
@@ -36,17 +35,13 @@ export class Object extends Cloudflare.DurableObject<Object>()(
         readObjectFetch: (key: string) =>
           Effect.gen(function* () {
             const response = yield* conn.fetch(
-              HttpClientRequest.get(
-                `http://container/object?key=${encodeURIComponent(key)}`,
-              ),
+              HttpClientRequest.get(`http://container/object?key=${encodeURIComponent(key)}`),
             );
             return (yield* response.json) as { value: string | null };
           }).pipe(Effect.orDie),
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* conn.fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* conn.fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };

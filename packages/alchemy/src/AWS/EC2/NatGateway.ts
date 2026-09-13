@@ -22,12 +22,10 @@ import type { AllocationId } from "./EIP.ts";
 import type { SubnetId } from "./Subnet.ts";
 
 export type NatGatewayId<ID extends string = string> = `nat-${ID}`;
-export const NatGatewayId = <ID extends string>(
-  id: ID,
-): ID & NatGatewayId<ID> => `nat-${id}` as ID & NatGatewayId<ID>;
+export const NatGatewayId = <ID extends string>(id: ID): ID & NatGatewayId<ID> =>
+  `nat-${id}` as ID & NatGatewayId<ID>;
 
-export type NatGatewayArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
+export type NatGatewayArn = `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
 
 export interface NatGatewayProps {
   /**
@@ -241,10 +239,7 @@ export const NatGatewayProvider = () =>
   Provider.effect(
     NatGateway,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -265,8 +260,7 @@ export const NatGatewayProvider = () =>
       const toAttrs = Effect.fn(function* (gw: ec2.NatGateway) {
         const { accountId, region } = yield* AWSEnvironment.current;
         const primaryAddress =
-          gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
-          gw.NatGatewayAddresses?.[0];
+          gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ?? gw.NatGatewayAddresses?.[0];
         return {
           natGatewayId: gw.NatGatewayId as NatGatewayId,
           natGatewayArn:
@@ -315,9 +309,7 @@ export const NatGatewayProvider = () =>
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
             // We have the NAT Gateway ID, use it directly
-            return yield* toAttrs(
-              yield* describeNatGateway(output.natGatewayId),
-            );
+            return yield* toAttrs(yield* describeNatGateway(output.natGatewayId));
           }
 
           // No output - try to find by tags (recovery from incomplete create)
@@ -334,9 +326,7 @@ export const NatGatewayProvider = () =>
           Effect.gen(function* () {
             // describeNatGateways enumerates every NAT gateway in the
             // account/region; paginate exhaustively and drop deleted ones.
-            const pages = yield* ec2.describeNatGateways
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* ec2.describeNatGateways.pages({}).pipe(Stream.runCollect);
             const gateways = Array.from(pages).flatMap((page) =>
               (page.NatGateways ?? []).filter(
                 (gw): gw is ec2.NatGateway & { NatGatewayId: string } =>
@@ -371,9 +361,7 @@ export const NatGatewayProvider = () =>
             const lookup = yield* ec2
               .describeNatGateways({ NatGatewayIds: [output.natGatewayId] })
               .pipe(
-                Effect.catchTag("NatGatewayNotFound", () =>
-                  Effect.succeed({ NatGateways: [] }),
-                ),
+                Effect.catchTag("NatGatewayNotFound", () => Effect.succeed({ NatGateways: [] })),
               );
             gw = lookup.NatGateways?.[0];
           } else {
@@ -381,12 +369,7 @@ export const NatGatewayProvider = () =>
           }
 
           // Treat a deleted/deleting NAT as if it doesn't exist so we recreate.
-          if (
-            gw &&
-            (gw.State === "deleted" ||
-              gw.State === "deleting" ||
-              gw.State === "failed")
-          ) {
+          if (gw && (gw.State === "deleted" || gw.State === "deleting" || gw.State === "failed")) {
             gw = undefined;
           }
 
@@ -398,12 +381,9 @@ export const NatGatewayProvider = () =>
               AllocationId: news.allocationId as string | undefined,
               ConnectivityType: news.connectivityType ?? "public",
               PrivateIpAddress: news.privateIpAddress,
-              SecondaryAllocationIds: news.secondaryAllocationIds as
-                | string[]
-                | undefined,
+              SecondaryAllocationIds: news.secondaryAllocationIds as string[] | undefined,
               SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
-              SecondaryPrivateIpAddressCount:
-                news.secondaryPrivateIpAddressCount,
+              SecondaryPrivateIpAddressCount: news.secondaryPrivateIpAddressCount,
               TagSpecifications: [
                 {
                   ResourceType: "natgateway",
@@ -431,9 +411,10 @@ export const NatGatewayProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);
@@ -499,10 +480,7 @@ class NatGatewayNotFound extends Data.TaggedError("NatGatewayNotFound")<{
 /**
  * Wait for NAT Gateway to be in available state
  */
-const waitForNatGatewayAvailable = (
-  natGatewayId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForNatGatewayAvailable = (natGatewayId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeNatGateways({
       NatGatewayIds: [natGatewayId],
@@ -533,9 +511,7 @@ const waitForNatGatewayAvailable = (
       while: (e) => e._tag === "NatGatewayPending",
       schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(
-            `Waiting for NAT Gateway to be available... (${attempt * 5}s)`,
-          ),
+          session.note(`Waiting for NAT Gateway to be available... (${attempt * 5}s)`),
         ),
       ),
     }),
@@ -550,18 +526,11 @@ class NatGatewayDeleting extends Data.TaggedError("NatGatewayDeleting")<{
 /**
  * Wait for NAT Gateway to be deleted
  */
-const waitForNatGatewayDeleted = (
-  natGatewayId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForNatGatewayDeleted = (natGatewayId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeNatGateways({ NatGatewayIds: [natGatewayId] })
-      .pipe(
-        Effect.catchTag("NatGatewayNotFound", () =>
-          Effect.succeed({ NatGateways: [] }),
-        ),
-      );
+      .pipe(Effect.catchTag("NatGatewayNotFound", () => Effect.succeed({ NatGateways: [] })));
 
     const gw = result.NatGateways?.[0];
 

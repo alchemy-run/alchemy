@@ -38,8 +38,7 @@ const waitUntilAvailable = (fileSystemId: string) =>
   describeById(fileSystemId).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("15 seconds"),
-      until: (fs) =>
-        fs?.Lifecycle === "AVAILABLE" || fs?.Lifecycle === "FAILED",
+      until: (fs) => fs?.Lifecycle === "AVAILABLE" || fs?.Lifecycle === "FAILED",
       times: 60,
     }),
   );
@@ -87,9 +86,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         });
 
       // --- create ---
-      const created = yield* stack.deploy(
-        build({ purpose: "alchemy-fsx-test" }),
-      );
+      const created = yield* stack.deploy(build({ purpose: "alchemy-fsx-test" }));
       expect(created.scratch.fileSystemId).toContain("fs-");
       expect(created.scratch.fileSystemArn).toContain(":file-system/fs-");
       expect(created.scratch.fileSystemType).toBe("LUSTRE");
@@ -104,9 +101,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(tags["alchemy::id"]).toBe("Scratch");
 
       // --- update: tags sync in place, identity preserved ---
-      const updated = yield* stack.deploy(
-        build({ purpose: "alchemy-fsx-test", stage: "prod" }),
-      );
+      const updated = yield* stack.deploy(build({ purpose: "alchemy-fsx-test", stage: "prod" }));
       expect(updated.scratch.fileSystemId).toBe(fileSystemId);
       const observed = yield* describeById(fileSystemId);
       expect(fsxTags(observed?.Tags).stage).toBe("prod");

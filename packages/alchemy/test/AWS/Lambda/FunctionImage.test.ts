@@ -46,9 +46,7 @@ describe("Lambda Function images", (it) => {
           `123456789012.dkr.ecr.us-east-1.amazonaws.com/worker@${digest}`,
         );
         expect(pinned.imageId).toEqual({ imageDigest: digest });
-        expect(pinned.repositoryUri).toBe(
-          "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker",
-        );
+        expect(pinned.repositoryUri).toBe("123456789012.dkr.ecr.us-east-1.amazonaws.com/worker");
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -69,16 +67,11 @@ describe("Lambda Function images", (it) => {
         }
 
         const untagged = yield* Effect.result(
-          parseFunctionImageUri(
-            "Untagged",
-            "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker",
-          ),
+          parseFunctionImageUri("Untagged", "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker"),
         );
         expect(Result.isFailure(untagged)).toBe(true);
         if (Result.isFailure(untagged)) {
-          expect(untagged.failure.message).toContain(
-            "explicit ECR tag or digest",
-          );
+          expect(untagged.failure.message).toContain("explicit ECR tag or digest");
         }
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
@@ -97,9 +90,7 @@ describe("Lambda Function images", (it) => {
         );
         expect(Result.isFailure(mixedSource)).toBe(true);
         if (Result.isFailure(mixedSource)) {
-          expect(mixedSource.failure.message).toContain(
-            "exactly one image source",
-          );
+          expect(mixedSource.failure.message).toContain("exactly one image source");
         }
 
         const mixedPackage = yield* Effect.result(
@@ -112,9 +103,7 @@ describe("Lambda Function images", (it) => {
         );
         expect(Result.isFailure(mixedPackage)).toBe(true);
         if (Result.isFailure(mixedPackage)) {
-          expect(mixedPackage.failure.message).toContain(
-            "main, runtime, layers",
-          );
+          expect(mixedPackage.failure.message).toContain("main, runtime, layers");
         }
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
@@ -126,44 +115,23 @@ describe("Lambda Function images", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const context = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-lambda-image-hash-",
-        });
-        yield* fs.writeFileString(
-          path.join(context, "Dockerfile"),
-          "FROM scratch\nCOPY . /app\n",
-        );
-        yield* fs.makeDirectory(path.join(context, "ignored"), {
-          recursive: true,
-        });
+        const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-lambda-image-hash-" });
+        yield* fs.writeFileString(path.join(context, "Dockerfile"), "FROM scratch\nCOPY . /app\n");
+        yield* fs.makeDirectory(path.join(context, "ignored"), { recursive: true });
         yield* fs.writeFileString(
           path.join(context, ".dockerignore"),
           "ignored/**\n!ignored/included.txt\n",
         );
-        yield* fs.writeFileString(
-          path.join(context, "ignored", "excluded.txt"),
-          "one",
-        );
-        yield* fs.writeFileString(
-          path.join(context, "ignored", "included.txt"),
-          "one",
-        );
+        yield* fs.writeFileString(path.join(context, "ignored", "excluded.txt"), "one");
+        yield* fs.writeFileString(path.join(context, "ignored", "included.txt"), "one");
 
         const source = { context, dockerfile: "Dockerfile" };
         const initial = yield* hashFunctionImageBuild(source, "x86_64");
-        yield* fs.writeFileString(
-          path.join(context, "ignored", "excluded.txt"),
-          "two",
-        );
+        yield* fs.writeFileString(path.join(context, "ignored", "excluded.txt"), "two");
         expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
 
-        yield* fs.writeFileString(
-          path.join(context, "ignored", "included.txt"),
-          "two",
-        );
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          initial,
-        );
+        yield* fs.writeFileString(path.join(context, "ignored", "included.txt"), "two");
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -177,14 +145,8 @@ describe("Lambda Function images", (it) => {
         const context = yield* fs.makeTempDirectoryScoped({
           prefix: "alchemy-lambda-image-ignore-escape-",
         });
-        yield* fs.writeFileString(
-          path.join(context, "Dockerfile"),
-          "FROM scratch\nCOPY . /app\n",
-        );
-        yield* fs.writeFileString(
-          path.join(context, ".dockerignore"),
-          "file\\?.txt\n",
-        );
+        yield* fs.writeFileString(path.join(context, "Dockerfile"), "FROM scratch\nCOPY . /app\n");
+        yield* fs.writeFileString(path.join(context, ".dockerignore"), "file\\?.txt\n");
         yield* fs.writeFileString(path.join(context, "file?.txt"), "one");
         yield* fs.makeDirectory(path.join(context, "file"));
         yield* fs.writeFileString(path.join(context, "file", "a.txt"), "one");
@@ -195,9 +157,7 @@ describe("Lambda Function images", (it) => {
         expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
 
         yield* fs.writeFileString(path.join(context, "file", "a.txt"), "two");
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          initial,
-        );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -208,9 +168,7 @@ describe("Lambda Function images", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({
-          prefix: "alchemy-lambda-image-inputs-",
-        });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-lambda-image-inputs-" });
         const first = path.join(root, "first");
         const second = path.join(root, "second");
         yield* fs.makeDirectory(first, { recursive: true });
@@ -232,34 +190,23 @@ describe("Lambda Function images", (it) => {
         const initial = yield* hashFunctionImageBuild(source, "x86_64");
         expect(
           yield* hashFunctionImageBuild(
-            {
-              context: second,
-              dockerfile: "Dockerfile",
-              buildArgs: { A: "one", B: "two" },
-            },
+            { context: second, dockerfile: "Dockerfile", buildArgs: { A: "one", B: "two" } },
             "x86_64",
           ),
         ).toBe(initial);
         expect(
           yield* hashFunctionImageBuild(
-            {
-              ...source,
-              buildArgs: { A: "changed", B: "two" },
-            },
+            { ...source, buildArgs: { A: "changed", B: "two" } },
             "x86_64",
           ),
         ).not.toBe(initial);
-        expect(yield* hashFunctionImageBuild(source, "arm64")).not.toBe(
-          initial,
-        );
+        expect(yield* hashFunctionImageBuild(source, "arm64")).not.toBe(initial);
 
         yield* fs.writeFileString(
           path.join(first, "Dockerfile"),
           "FROM scratch\nCOPY app.txt /renamed.txt\n",
         );
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          initial,
-        );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -274,10 +221,7 @@ describe("Lambda Function images", (it) => {
           prefix: "alchemy-lambda-image-metadata-",
         });
         const bootstrap = path.join(context, "bootstrap");
-        yield* fs.writeFileString(
-          path.join(context, "Dockerfile"),
-          "FROM scratch\nCOPY . /app\n",
-        );
+        yield* fs.writeFileString(path.join(context, "Dockerfile"), "FROM scratch\nCOPY . /app\n");
         yield* fs.writeFileString(bootstrap, "#!/bin/sh\n");
         yield* fs.chmod(bootstrap, 0o644);
 
@@ -289,9 +233,7 @@ describe("Lambda Function images", (it) => {
         expect(executable).not.toBe(initial);
 
         yield* fs.makeDirectory(path.join(context, "empty"));
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          executable,
-        );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(executable);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -305,10 +247,7 @@ describe("Lambda Function images", (it) => {
         const context = yield* fs.makeTempDirectoryScoped({
           prefix: "alchemy-lambda-image-symlink-",
         });
-        yield* fs.writeFileString(
-          path.join(context, "Dockerfile"),
-          "FROM scratch\nCOPY . /app\n",
-        );
+        yield* fs.writeFileString(path.join(context, "Dockerfile"), "FROM scratch\nCOPY . /app\n");
         yield* fs.writeFileString(path.join(context, "target-a"), "same");
         yield* fs.writeFileString(path.join(context, "target-b"), "same");
         const link = path.join(context, "current");
@@ -319,9 +258,7 @@ describe("Lambda Function images", (it) => {
 
         yield* fs.remove(link);
         yield* fs.symlink("target-b", link);
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          initial,
-        );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -339,32 +276,21 @@ describe("Lambda Function images", (it) => {
           path.join(context, "Lambda.Dockerfile"),
           "FROM scratch\nCOPY . /app\n",
         );
-        yield* fs.writeFileString(
-          path.join(context, ".dockerignore"),
-          "root-only.txt\n",
-        );
+        yield* fs.writeFileString(path.join(context, ".dockerignore"), "root-only.txt\n");
         yield* fs.writeFileString(
           path.join(context, "Lambda.Dockerfile.dockerignore"),
           "specific-only.txt\n",
         );
-        yield* fs.writeFileString(
-          path.join(context, "specific-only.txt"),
-          "one",
-        );
+        yield* fs.writeFileString(path.join(context, "specific-only.txt"), "one");
         yield* fs.writeFileString(path.join(context, "root-only.txt"), "one");
 
         const source = { context, dockerfile: "Lambda.Dockerfile" };
         const initial = yield* hashFunctionImageBuild(source, "x86_64");
-        yield* fs.writeFileString(
-          path.join(context, "specific-only.txt"),
-          "two",
-        );
+        yield* fs.writeFileString(path.join(context, "specific-only.txt"), "two");
         expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
 
         yield* fs.writeFileString(path.join(context, "root-only.txt"), "two");
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          initial,
-        );
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
@@ -382,28 +308,17 @@ describe("Lambda Function images", (it) => {
         const dockerfile = path.join(root, "Lambda.Dockerfile");
         yield* fs.makeDirectory(context);
         yield* fs.writeFileString(dockerfile, "FROM scratch\nCOPY . /app\n");
-        yield* fs.writeFileString(
-          `${dockerfile}.dockerignore`,
-          "ignored.txt\n",
-        );
+        yield* fs.writeFileString(`${dockerfile}.dockerignore`, "ignored.txt\n");
         yield* fs.writeFileString(path.join(context, "ignored.txt"), "one");
-        yield* fs.writeFileString(
-          path.join(context, "Lambda.Dockerfile.dockerignore"),
-          "one",
-        );
+        yield* fs.writeFileString(path.join(context, "Lambda.Dockerfile.dockerignore"), "one");
 
         const source = { context, dockerfile };
         const initial = yield* hashFunctionImageBuild(source, "x86_64");
         yield* fs.writeFileString(path.join(context, "ignored.txt"), "two");
         expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
 
-        yield* fs.writeFileString(
-          path.join(context, "Lambda.Dockerfile.dockerignore"),
-          "two",
-        );
-        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
-          initial,
-        );
+        yield* fs.writeFileString(path.join(context, "Lambda.Dockerfile.dockerignore"), "two");
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
       }),
     { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );

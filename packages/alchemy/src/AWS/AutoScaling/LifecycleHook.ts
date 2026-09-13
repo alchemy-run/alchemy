@@ -152,9 +152,7 @@ export interface LifecycleHook extends Resource<
  *
  * @resource
  */
-export const LifecycleHook = Resource<LifecycleHook>(
-  "AWS.AutoScaling.LifecycleHook",
-);
+export const LifecycleHook = Resource<LifecycleHook>("AWS.AutoScaling.LifecycleHook");
 
 // Derive the group name from either spelling of `autoScalingGroup`. A whole
 // AutoScalingGroup resource resolves to its bare Attributes before reaching the
@@ -165,20 +163,16 @@ const toAutoScalingGroupName = (
 ): string | undefined =>
   typeof input === "string"
     ? input
-    : typeof (input as { autoScalingGroupName?: unknown } | undefined)
-          ?.autoScalingGroupName === "string"
-      ? (input as unknown as { autoScalingGroupName: string })
-          .autoScalingGroupName
+    : typeof (input as { autoScalingGroupName?: unknown } | undefined)?.autoScalingGroupName ===
+        "string"
+      ? (input as unknown as { autoScalingGroupName: string }).autoScalingGroupName
       : undefined;
 
 export const LifecycleHookProvider = () =>
   Provider.effect(
     LifecycleHook,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { lifecycleHookName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { lifecycleHookName?: string } = {}) =>
         props.lifecycleHookName
           ? Effect.succeed(props.lifecycleHookName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
@@ -201,14 +195,10 @@ export const LifecycleHookProvider = () =>
             // `ValidationError: AutoScalingGroup ... not found` (typed
             // `AutoScalingGroupNotFound` via the auto-scaling patch); treat it
             // as "hook gone" so refresh/read converge instead of failing.
-            Effect.catchTag("AutoScalingGroupNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.succeed(undefined)),
           );
 
-      const toAttributes = (
-        hook: autoscaling.LifecycleHook,
-      ): LifecycleHook["Attributes"] => ({
+      const toAttributes = (hook: autoscaling.LifecycleHook): LifecycleHook["Attributes"] => ({
         lifecycleHookName: hook.LifecycleHookName!,
         autoScalingGroupName: hook.AutoScalingGroupName!,
         lifecycleTransition: hook.LifecycleTransition!,
@@ -238,9 +228,7 @@ export const LifecycleHookProvider = () =>
           // lost an Output-valued `autoScalingGroup`.
           if (
             oldName !== newName ||
-            (oldGroup !== undefined &&
-              newGroup !== undefined &&
-              oldGroup !== newGroup)
+            (oldGroup !== undefined && newGroup !== undefined && oldGroup !== newGroup)
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
@@ -254,10 +242,8 @@ export const LifecycleHookProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const autoScalingGroupName =
-            output?.autoScalingGroupName ??
-            toAutoScalingGroupName(olds?.autoScalingGroup);
-          const lifecycleHookName =
-            output?.lifecycleHookName ?? (yield* toName(id, olds ?? {}));
+            output?.autoScalingGroupName ?? toAutoScalingGroupName(olds?.autoScalingGroup);
+          const lifecycleHookName = output?.lifecycleHookName ?? (yield* toName(id, olds ?? {}));
           if (!autoScalingGroupName) return undefined;
           const hook = yield* describeHook({
             autoScalingGroupName,
@@ -267,17 +253,13 @@ export const LifecycleHookProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const autoScalingGroupName =
-            output?.autoScalingGroupName ??
-            toAutoScalingGroupName(news.autoScalingGroup);
+            output?.autoScalingGroupName ?? toAutoScalingGroupName(news.autoScalingGroup);
           if (!autoScalingGroupName) {
             return yield* Effect.die(
-              new Error(
-                "LifecycleHook requires a resolvable autoScalingGroup name",
-              ),
+              new Error("LifecycleHook requires a resolvable autoScalingGroup name"),
             );
           }
-          const lifecycleHookName =
-            output?.lifecycleHookName ?? (yield* toName(id, news));
+          const lifecycleHookName = output?.lifecycleHookName ?? (yield* toName(id, news));
 
           // Ensure + Sync — `putLifecycleHook` is the single create-or-update
           // API. It overwrites the whole hook configuration, so we issue it
@@ -321,10 +303,7 @@ export const LifecycleHookProvider = () =>
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "ResourceContentionFault",
-                schedule: Schedule.max([
-                  Schedule.recurs(5),
-                  Schedule.exponential("250 millis"),
-                ]),
+                schedule: Schedule.max([Schedule.recurs(5), Schedule.exponential("250 millis")]),
               }),
             );
         }),

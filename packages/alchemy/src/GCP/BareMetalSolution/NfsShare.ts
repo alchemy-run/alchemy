@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_SIZE_GIB,
@@ -53,9 +48,7 @@ export type AllowedClientProps = {
    * Mount permissions for the client.
    * @default "READ_WRITE"
    */
-  mountPermissions?:
-    | baremetalsolution.AllowedClientMountPermissionsEnum
-    | (string & {});
+  mountPermissions?: baremetalsolution.AllowedClientMountPermissionsEnum | (string & {});
   /**
    * Allow creation of devices (`allow_dev`).
    */
@@ -233,9 +226,7 @@ export const NfsShare = Resource<NfsShare>("GCP.BareMetalSolution.NfsShare");
 const resourceName = (project: string, location: string, nfsShareId: string) =>
   `${parentOf(project, location)}/nfsShares/${nfsShareId}`;
 
-const toAllowedClient = (
-  client: baremetalsolution.AllowedClient,
-): AllowedClient => ({
+const toAllowedClient = (client: baremetalsolution.AllowedClient): AllowedClient => ({
   network: client.network,
   allowedClientsCidr: client.allowedClientsCidr,
   mountPermissions: client.mountPermissions,
@@ -259,11 +250,7 @@ const desiredClient = (
   noRootSquash: client.noRootSquash,
 });
 
-const toAttrs = (
-  item: baremetalsolution.NfsShare,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: baremetalsolution.NfsShare, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "nfsShares", region);
   return {
@@ -318,44 +305,26 @@ export const NfsShareProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.nfsShareId ?? output?.nfsShareId,
         nextId: news.nfsShareId ?? olds?.nfsShareId ?? output?.nfsShareId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          (previousType !== undefined &&
-            nextType !== undefined &&
-            previousType !== nextType) ||
-          (previousPod !== undefined &&
-            nextPod !== undefined &&
-            previousPod !== nextPod),
+          (previousType !== undefined && nextType !== undefined && previousType !== nextType) ||
+          (previousPod !== undefined && nextPod !== undefined && previousPod !== nextPod),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const nfsShareId = yield* toPhysicalId(
-        id,
-        olds?.nfsShareId,
-        output?.nfsShareId,
-        "nfsshare",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, nfsShareId);
+      const nfsShareId = yield* toPhysicalId(id, olds?.nfsShareId, output?.nfsShareId, "nfsshare");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, nfsShareId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -367,16 +336,8 @@ export const NfsShareProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const nfsShareId = yield* toPhysicalId(
-        id,
-        news.nfsShareId,
-        output?.nfsShareId,
-        "nfsshare",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const nfsShareId = yield* toPhysicalId(id, news.nfsShareId, output?.nfsShareId, "nfsshare");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, nfsShareId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -391,10 +352,7 @@ export const NfsShareProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current !== undefined && isDeletingState(current.state)) {
-        yield* waitUntilGone(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        yield* waitUntilGone(getByName(current.name ?? name), current.name ?? name);
         current = undefined;
       }
 
@@ -450,17 +408,16 @@ export const NfsShareProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* baremetalsolution.patchProjectsLocationsNfsShares({
+        const operation = yield* baremetalsolution.patchProjectsLocationsNfsShares({
+          name: ready.name ?? name,
+          updateMask: mask,
+          body: {
             name: ready.name ?? name,
-            updateMask: mask,
-            body: {
-              name: ready.name ?? name,
-              labels: desiredLabels,
-              allowedClients: desiredClients,
-              requestedSizeGib: size,
-            },
-          });
+            labels: desiredLabels,
+            allowedClients: desiredClients,
+            requestedSizeGib: size,
+          },
+        });
         yield* waitForOperation(operation);
         const patched = yield* waitUntilReady(
           getByName(ready.name ?? name),

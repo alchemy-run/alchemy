@@ -109,10 +109,8 @@ export default TranslateTestFunction.make(
     const listTerminologies = yield* Translate.ListTerminologies();
     const getParallelData = yield* Translate.GetParallelData();
     const listParallelData = yield* Translate.ListParallelData();
-    const startTextTranslationJob =
-      yield* Translate.StartTextTranslationJob(dataAccessRole);
-    const describeTextTranslationJob =
-      yield* Translate.DescribeTextTranslationJob();
+    const startTextTranslationJob = yield* Translate.StartTextTranslationJob(dataAccessRole);
+    const describeTextTranslationJob = yield* Translate.DescribeTextTranslationJob();
     const stopTextTranslationJob = yield* Translate.StopTextTranslationJob();
     const listTextTranslationJobs = yield* Translate.ListTextTranslationJobs();
     const putObject = yield* S3.PutObject(bucket);
@@ -147,9 +145,7 @@ export default TranslateTestFunction.make(
           return yield* HttpServerResponse.json({
             basic: basic.TranslatedText,
             withTerminology: withTerminology.TranslatedText,
-            appliedTerminologies: (
-              withTerminology.AppliedTerminologies ?? []
-            ).map((t) => t.Name),
+            appliedTerminologies: (withTerminology.AppliedTerminologies ?? []).map((t) => t.Name),
           });
         }
 
@@ -164,9 +160,7 @@ export default TranslateTestFunction.make(
             TargetLanguageCode: "es",
           });
           const content = result.TranslatedDocument.Content;
-          const bytes = Redacted.isRedacted(content)
-            ? Redacted.value(content)
-            : content;
+          const bytes = Redacted.isRedacted(content) ? Redacted.value(content) : content;
           return yield* HttpServerResponse.json({
             translated: new TextDecoder().decode(bytes),
             sourceLanguageCode: result.SourceLanguageCode,
@@ -189,12 +183,10 @@ export default TranslateTestFunction.make(
           return yield* HttpServerResponse.json({
             name: got.TerminologyProperties?.Name ?? null,
             termCount: got.TerminologyProperties?.TermCount ?? null,
-            sourceLanguageCode:
-              got.TerminologyProperties?.SourceLanguageCode ?? null,
-            downloadLocation:
-              got.TerminologyDataLocation?.RepositoryType ?? null,
-            listedNames: (listed.TerminologyPropertiesList ?? []).flatMap(
-              (t) => (t.Name ? [t.Name] : []),
+            sourceLanguageCode: got.TerminologyProperties?.SourceLanguageCode ?? null,
+            downloadLocation: got.TerminologyDataLocation?.RepositoryType ?? null,
+            listedNames: (listed.TerminologyPropertiesList ?? []).flatMap((t) =>
+              t.Name ? [t.Name] : [],
             ),
           });
         }
@@ -206,9 +198,7 @@ export default TranslateTestFunction.make(
             Name: "alchemy-nonexistent-parallel-data",
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({
             listedCount: (listed.ParallelDataPropertiesList ?? []).length,
@@ -223,17 +213,13 @@ export default TranslateTestFunction.make(
             JobId: BOGUS_JOB_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           const stopTag = yield* stopTextTranslationJob({
             JobId: BOGUS_JOB_ID,
           }).pipe(
             Effect.map(() => "Stopped"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({
             listedCount: (listed.TextTranslationJobPropertiesList ?? []).length,
@@ -269,8 +255,7 @@ export default TranslateTestFunction.make(
           }).pipe(
             Effect.retry({
               while: (e): boolean =>
-                e._tag === "InvalidParameterValueException" ||
-                e._tag === "InvalidRequestException",
+                e._tag === "InvalidParameterValueException" || e._tag === "InvalidRequestException",
               schedule: Schedule.spaced("5 seconds"),
               times: 8,
             }),
@@ -283,8 +268,7 @@ export default TranslateTestFunction.make(
           return yield* HttpServerResponse.json({
             jobId,
             startStatus: started.JobStatus ?? null,
-            describedStatus:
-              described.TextTranslationJobProperties?.JobStatus ?? null,
+            describedStatus: described.TextTranslationJobProperties?.JobStatus ?? null,
             stopStatus: stopped.JobStatus ?? null,
           });
         }
@@ -296,9 +280,7 @@ export default TranslateTestFunction.make(
       }).pipe(
         // Surface every failure (typed error or defect) to the test as JSON
         // instead of an opaque 500 — the test asserts `error` is absent.
-        Effect.catchCause((cause) =>
-          HttpServerResponse.json({ error: Cause.pretty(cause) }),
-        ),
+        Effect.catchCause((cause) => HttpServerResponse.json({ error: Cause.pretty(cause) })),
       ),
     };
   }).pipe(

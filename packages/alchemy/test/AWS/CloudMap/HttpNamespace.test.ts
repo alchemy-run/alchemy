@@ -28,10 +28,7 @@ const assertNamespaceDeleted = (namespaceId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "NamespaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -60,11 +57,7 @@ test.provider(
       expect(created?.Description).toBe("initial description");
       const tags = yield* sd
         .listTagsForResource({ ResourceARN: namespace.namespaceArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestHttpNamespace");
 
@@ -84,11 +77,7 @@ test.provider(
       expect(afterUpdate?.Description).toBe("updated description");
       const tagsAfter = yield* sd
         .listTagsForResource({ ResourceARN: namespace.namespaceArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tagsAfter.Extra).toBe("yes");
 
       yield* stack.destroy();

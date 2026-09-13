@@ -12,11 +12,8 @@ import type { Providers } from "../Providers.ts";
 import {
   normalizePolicyRules,
   type PolicyDecision,
-  type PolicyExcludeRule,
   type PolicyExcludeRuleInput,
-  type PolicyRequireRule,
   type PolicyRequireRuleInput,
-  type PolicyRule,
   type PolicyRuleInput,
 } from "./Policy.ts";
 
@@ -446,9 +443,7 @@ export type Application = Resource<
  * @product Access
  * @category Cloudflare One (Zero Trust)
  */
-export const Application = Resource<Application>(
-  "Cloudflare.Access.Application",
-);
+export const Application = Resource<Application>("Cloudflare.Access.Application");
 
 // Ride out the two transient failure modes Cloudflare's Access endpoints
 // exhibit under load:
@@ -470,13 +465,9 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (e) =>
-        e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
+      while: (e) => e._tag === "AccessReferenceNotFound" || e._tag === "Forbidden",
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("1 second", 1.5),
-          Schedule.spaced("5 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("1 second", 1.5), Schedule.spaced("5 seconds")]),
         Schedule.recurs(12),
       ]),
     }),
@@ -488,9 +479,7 @@ export const ApplicationProvider = () =>
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       if ((olds as ApplicationProps).type !== undefined) {
-        if (
-          (olds as ApplicationProps).type !== (news as ApplicationProps).type
-        ) {
+        if ((olds as ApplicationProps).type !== (news as ApplicationProps).type) {
           return { action: "replace" } as const;
         }
       }
@@ -556,12 +545,8 @@ export const ApplicationProvider = () =>
       const resolvedPolicies = resolvePolicies(news.policies);
       if (
         resolvedPolicies !== undefined &&
-        resolvedPolicies.some(
-          (p) => typeof p !== "string" && isInlinePolicy(p),
-        ) &&
-        resolvedPolicies.some(
-          (p) => typeof p === "string" || !isInlinePolicy(p),
-        )
+        resolvedPolicies.some((p) => typeof p !== "string" && isInlinePolicy(p)) &&
+        resolvedPolicies.some((p) => typeof p === "string" || !isInlinePolicy(p))
       ) {
         return yield* Effect.fail(
           new Error(
@@ -571,12 +556,7 @@ export const ApplicationProvider = () =>
           ),
         );
       }
-      const body = buildMutableBody(
-        news,
-        resolvedName,
-        resolvedIdps,
-        resolvedPolicies,
-      );
+      const body = buildMutableBody(news, resolvedName, resolvedIdps, resolvedPolicies);
       // Destinations contributed through the binding contract (e.g. Workers
       // enrolling via their `access` prop) extend the declared ones. The
       // engine dedupes and sid-sorts bindings, so the merged order is
@@ -585,10 +565,7 @@ export const ApplicationProvider = () =>
         (b) => (b.data.destinations ?? []) as ApplicationDestination[],
       );
       if (boundDestinations.length > 0) {
-        body.destinations = [
-          ...(body.destinations ?? []),
-          ...boundDestinations,
-        ];
+        body.destinations = [...(body.destinations ?? []), ...boundDestinations];
       }
 
       // 1. Observe
@@ -610,21 +587,14 @@ export const ApplicationProvider = () =>
             type: news.type,
             name: resolvedName,
             sessionDuration: body.sessionDuration,
-            allowedIdps:
-              body.allowedIdps === undefined
-                ? undefined
-                : Array.from(body.allowedIdps),
+            allowedIdps: body.allowedIdps === undefined ? undefined : Array.from(body.allowedIdps),
             autoRedirectToIdentity: body.autoRedirectToIdentity,
             appLauncherVisible: body.appLauncherVisible,
             tags: body.tags === undefined ? undefined : Array.from(body.tags),
             policies: toRequestPolicies(body.policies),
             destinations:
-              body.destinations === undefined
-                ? undefined
-                : Array.from(body.destinations),
-            oauthConfiguration: toRequestOAuthConfiguration(
-              body.oauthConfiguration,
-            ),
+              body.destinations === undefined ? undefined : Array.from(body.destinations),
+            oauthConfiguration: toRequestOAuthConfiguration(body.oauthConfiguration),
           })
           .pipe(
             // A referenced policy may be propagating, or the call may be
@@ -649,9 +619,7 @@ export const ApplicationProvider = () =>
       // full desired body whenever any mutable field differs.
       if (!observed.id) {
         return yield* Effect.fail(
-          new Error(
-            "Cloudflare did not return an application id for Access application",
-          ),
+          new Error("Cloudflare did not return an application id for Access application"),
         );
       }
       if (!bodyEqualsObserved(body, observed)) {
@@ -663,28 +631,18 @@ export const ApplicationProvider = () =>
             type: news.type,
             name: resolvedName,
             sessionDuration: body.sessionDuration,
-            allowedIdps:
-              body.allowedIdps === undefined
-                ? undefined
-                : Array.from(body.allowedIdps),
+            allowedIdps: body.allowedIdps === undefined ? undefined : Array.from(body.allowedIdps),
             autoRedirectToIdentity: body.autoRedirectToIdentity,
             appLauncherVisible: body.appLauncherVisible,
             tags: body.tags === undefined ? undefined : Array.from(body.tags),
-            policies: toRequestPolicies(
-              attachObservedPolicyIds(body.policies, observed.policies),
-            ),
+            policies: toRequestPolicies(attachObservedPolicyIds(body.policies, observed.policies)),
             destinations:
-              body.destinations === undefined
-                ? undefined
-                : Array.from(body.destinations),
+              body.destinations === undefined ? undefined : Array.from(body.destinations),
             // Preserve a live managed OAuth configuration when the caller
             // does not manage it but another mutable field triggers this
             // PUT-style update.
             oauthConfiguration: toRequestOAuthConfiguration(
-              mergeOAuthConfiguration(
-                observed.oauthConfiguration,
-                body.oauthConfiguration,
-              ),
+              mergeOAuthConfiguration(observed.oauthConfiguration, body.oauthConfiguration),
             ),
           })
           // A just-added policy reference may still be propagating, or the
@@ -696,9 +654,7 @@ export const ApplicationProvider = () =>
       // 4. Return
       if (!observed.id || !observed.aud || !observed.type) {
         return yield* Effect.fail(
-          new Error(
-            "Cloudflare returned an Access application without id/aud/type",
-          ),
+          new Error("Cloudflare returned an Access application without id/aud/type"),
         );
       }
       return {
@@ -724,39 +680,37 @@ export const ApplicationProvider = () =>
     // the mandatory id/aud/type triplet are skipped (typed per-item drop).
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessApplicationsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          // The list hydrates each app's `policies`; Cloudflare rejects the
-          // whole enumeration with the typed `AccessReferenceNotFound` (400
-          // "policy ... not found") while a sibling app references a policy
-          // that is still propagating or mid-deletion, and 403s the call when
-          // throttling. Ride out both.
-          retryTransientAccessError,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).flatMap((raw) => {
-                const app = narrowApp(raw as Parameters<typeof narrowApp>[0]);
-                if (!app.id || !app.aud || !app.type) return [];
-                return [
-                  {
-                    applicationId: app.id,
-                    aud: app.aud,
-                    domain: app.domain ?? "",
-                    destinations: app.destinations,
-                    oauthConfiguration: app.oauthConfiguration,
-                    type: app.type,
-                    name: app.name ?? "",
-                    accountId,
-                    createdAt: app.createdAt,
-                    updatedAt: app.updatedAt,
-                  } satisfies ApplicationAttributes,
-                ];
-              }),
-            ),
+      return yield* zeroTrust.listAccessApplicationsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        // The list hydrates each app's `policies`; Cloudflare rejects the
+        // whole enumeration with the typed `AccessReferenceNotFound` (400
+        // "policy ... not found") while a sibling app references a policy
+        // that is still propagating or mid-deletion, and 403s the call when
+        // throttling. Ride out both.
+        retryTransientAccessError,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((raw) => {
+              const app = narrowApp(raw as Parameters<typeof narrowApp>[0]);
+              if (!app.id || !app.aud || !app.type) return [];
+              return [
+                {
+                  applicationId: app.id,
+                  aud: app.aud,
+                  domain: app.domain ?? "",
+                  destinations: app.destinations,
+                  oauthConfiguration: app.oauthConfiguration,
+                  type: app.type,
+                  name: app.name ?? "",
+                  accountId,
+                  createdAt: app.createdAt,
+                  updatedAt: app.updatedAt,
+                } satisfies ApplicationAttributes,
+              ];
+            }),
           ),
-        );
+        ),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -796,14 +750,10 @@ const findWarpApp = (accountId: string) =>
     // throttling — same transient windows `list` rides out.
     retryTransientAccessError,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (a) => (a as { type?: string | null }).type === "warp",
-      ),
+      Array.from(chunk).find((a) => (a as { type?: string | null }).type === "warp"),
     ),
     Effect.map((found) =>
-      found === undefined
-        ? undefined
-        : narrowApp(found as Parameters<typeof narrowApp>[0]),
+      found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
     ),
   );
 
@@ -820,30 +770,22 @@ const findByDomain = (accountId: string, domain: string) =>
     // Cloudflare's `application_already_exists` Conflict.
     retryTransientAccessError,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (a) => (a as { domain?: string | null }).domain === domain,
-      ),
+      Array.from(chunk).find((a) => (a as { domain?: string | null }).domain === domain),
     ),
     Effect.map((found) =>
-      found === undefined
-        ? undefined
-        : narrowApp(found as Parameters<typeof narrowApp>[0]),
+      found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
     ),
   );
 
 const observeById = (accountId: string, appId: string) =>
   Effect.gen(function* () {
-    const r = yield* zeroTrust
-      .getAccessApplicationForAccount({ accountId, appId })
-      .pipe(
-        // A missing application is typed (404 → AccessApplicationNotFound):
-        // observe falls through to recreate. Transient 403 back-pressure is
-        // retried; anything else is a real failure and propagates.
-        retryTransientAccessError,
-        Effect.catchTag("AccessApplicationNotFound", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+    const r = yield* zeroTrust.getAccessApplicationForAccount({ accountId, appId }).pipe(
+      // A missing application is typed (404 → AccessApplicationNotFound):
+      // observe falls through to recreate. Transient 403 back-pressure is
+      // retried; anything else is a real failure and propagates.
+      retryTransientAccessError,
+      Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed(undefined)),
+    );
     if (r === undefined) return undefined;
     return narrowApp(r as Parameters<typeof narrowApp>[0]);
   });
@@ -890,8 +832,7 @@ interface ObservedApp {
   readonly updatedAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const undefArr = <T>(
   v: ReadonlyArray<T | null> | null | undefined,
@@ -931,15 +872,11 @@ const narrowOAuthConfiguration = (
             ? undefined
             : {
                 enabled: undef(raw.dynamicClientRegistration.enabled),
-                allowedUris: undefArr(
-                  raw.dynamicClientRegistration.allowedUris,
-                ) as string[] | undefined,
-                allowAnyOnLocalhost: undef(
-                  raw.dynamicClientRegistration.allowAnyOnLocalhost,
-                ),
-                allowAnyOnLoopback: undef(
-                  raw.dynamicClientRegistration.allowAnyOnLoopback,
-                ),
+                allowedUris: undefArr(raw.dynamicClientRegistration.allowedUris) as
+                  | string[]
+                  | undefined,
+                allowAnyOnLocalhost: undef(raw.dynamicClientRegistration.allowAnyOnLocalhost),
+                allowAnyOnLoopback: undef(raw.dynamicClientRegistration.allowAnyOnLoopback),
               },
       };
 
@@ -975,10 +912,7 @@ const narrowApp = (raw: {
   appLauncherVisible: undef(raw.appLauncherVisible),
   sessionDuration: undef(raw.sessionDuration),
   tags: undefArr(raw.tags ?? undefined),
-  policies:
-    raw.policies == null
-      ? undefined
-      : (raw.policies as ReadonlyArray<ObservedPolicy>),
+  policies: raw.policies == null ? undefined : (raw.policies as ReadonlyArray<ObservedPolicy>),
   createdAt: undef(raw.createdAt),
   updatedAt: undef(raw.updatedAt),
 });
@@ -1045,8 +979,7 @@ interface AppMutableBody {
   policies?: ReadonlyArray<ResolvedPolicy>;
 }
 
-const policyIdOf = (p: ResolvedPolicy): string | undefined =>
-  typeof p === "string" ? p : p.id;
+const policyIdOf = (p: ResolvedPolicy): string | undefined => (typeof p === "string" ? p : p.id);
 
 const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
   if (typeof p === "string") return p;
@@ -1056,15 +989,9 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
       // application-owned policy in place (attachObservedPolicyIds).
       id: p.id,
       decision: p.decision,
-      include: normalizePolicyRules(
-        p.include,
-      ) as zeroTrust.InlineAccessPolicy["include"],
-      exclude: normalizePolicyRules(
-        p.exclude,
-      ) as zeroTrust.InlineAccessPolicy["exclude"],
-      require: normalizePolicyRules(
-        p.require,
-      ) as zeroTrust.InlineAccessPolicy["require"],
+      include: normalizePolicyRules(p.include) as zeroTrust.InlineAccessPolicy["include"],
+      exclude: normalizePolicyRules(p.exclude) as zeroTrust.InlineAccessPolicy["exclude"],
+      require: normalizePolicyRules(p.require) as zeroTrust.InlineAccessPolicy["require"],
       name: p.name,
       precedence: p.precedence,
       sessionDuration: p.sessionDuration,
@@ -1075,9 +1002,7 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
           : p.approvalGroups.map((g) => ({
               approvalsNeeded: g.approvalsNeeded,
               emailAddresses:
-                g.emailAddresses === undefined
-                  ? undefined
-                  : Array.from(g.emailAddresses),
+                g.emailAddresses === undefined ? undefined : Array.from(g.emailAddresses),
               emailListUuid: g.emailListUuid,
             })),
       isolationRequired: p.isolationRequired,
@@ -1115,9 +1040,7 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
         : rich.approvalGroups.map((g) => ({
             approvalsNeeded: g.approvalsNeeded,
             emailAddresses:
-              g.emailAddresses === undefined
-                ? undefined
-                : Array.from(g.emailAddresses),
+              g.emailAddresses === undefined ? undefined : Array.from(g.emailAddresses),
             emailListUuid: g.emailListUuid,
           })),
   };
@@ -1140,10 +1063,8 @@ const mergeOAuthConfiguration = (
         ? observed?.grant
         : {
             accessTokenLifetime:
-              desired.grant.accessTokenLifetime ??
-              observed?.grant?.accessTokenLifetime,
-            sessionDuration:
-              desired.grant.sessionDuration ?? observed?.grant?.sessionDuration,
+              desired.grant.accessTokenLifetime ?? observed?.grant?.accessTokenLifetime,
+            sessionDuration: desired.grant.sessionDuration ?? observed?.grant?.sessionDuration,
           },
     dynamicClientRegistration:
       desired.dynamicClientRegistration === undefined
@@ -1194,8 +1115,8 @@ const resolvePolicies = (
       // before the reconciler ran. A whole `Access.Policy` resource resolves
       // to its Attributes; normalize it to the bare policy id so everything
       // downstream (diffing, request building) sees one shape.
-      (policies as ReadonlyArray<ResolvedPolicy | { policyId: string }>).map(
-        (p) => (typeof p !== "string" && "policyId" in p ? p.policyId : p),
+      (policies as ReadonlyArray<ResolvedPolicy | { policyId: string }>).map((p) =>
+        typeof p !== "string" && "policyId" in p ? p.policyId : p,
       );
 
 const buildMutableBody = (
@@ -1243,8 +1164,7 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const jsonEq = <T>(x: T, y: T): boolean =>
-  JSON.stringify(x) === JSON.stringify(y);
+const jsonEq = <T>(x: T, y: T): boolean => JSON.stringify(x) === JSON.stringify(y);
 
 const oauthConfigurationEquals = (
   desired: OAuthConfiguration | undefined,
@@ -1258,9 +1178,7 @@ const oauthConfigurationEquals = (
 
   const desiredGrant = desired.grant;
   if (desiredGrant?.accessTokenLifetime !== undefined) {
-    if (
-      desiredGrant.accessTokenLifetime !== observed.grant?.accessTokenLifetime
-    ) {
+    if (desiredGrant.accessTokenLifetime !== observed.grant?.accessTokenLifetime) {
       return false;
     }
   }
@@ -1280,15 +1198,13 @@ const oauthConfigurationEquals = (
   }
   if (
     desiredRegistration?.allowAnyOnLocalhost !== undefined &&
-    desiredRegistration.allowAnyOnLocalhost !==
-      observedRegistration?.allowAnyOnLocalhost
+    desiredRegistration.allowAnyOnLocalhost !== observedRegistration?.allowAnyOnLocalhost
   ) {
     return false;
   }
   if (
     desiredRegistration?.allowAnyOnLoopback !== undefined &&
-    desiredRegistration.allowAnyOnLoopback !==
-      observedRegistration?.allowAnyOnLoopback
+    desiredRegistration.allowAnyOnLoopback !== observedRegistration?.allowAnyOnLoopback
   ) {
     return false;
   }
@@ -1334,17 +1250,11 @@ const policiesEq = (
         return false;
       }
       const exclude = normalizePolicyRules(d.exclude);
-      if (
-        exclude !== undefined &&
-        !jsonEq(exclude, (o.exclude ?? []) as typeof exclude)
-      ) {
+      if (exclude !== undefined && !jsonEq(exclude, (o.exclude ?? []) as typeof exclude)) {
         return false;
       }
       const require = normalizePolicyRules(d.require);
-      if (
-        require !== undefined &&
-        !jsonEq(require, (o.require ?? []) as typeof require)
-      ) {
+      if (require !== undefined && !jsonEq(require, (o.require ?? []) as typeof require)) {
         return false;
       }
       if (d.name !== undefined && d.name !== o.name) return false;
@@ -1355,10 +1265,7 @@ const policiesEq = (
       ) {
         return false;
       }
-      if (
-        d.sessionDuration !== undefined &&
-        d.sessionDuration !== o.sessionDuration
-      ) {
+      if (d.sessionDuration !== undefined && d.sessionDuration !== o.sessionDuration) {
         return false;
       }
       if (
@@ -1375,8 +1282,7 @@ const policiesEq = (
       }
       if (
         d.purposeJustificationRequired !== undefined &&
-        d.purposeJustificationRequired !==
-          (o.purposeJustificationRequired ?? false)
+        d.purposeJustificationRequired !== (o.purposeJustificationRequired ?? false)
       ) {
         return false;
       }
@@ -1426,10 +1332,7 @@ const attachObservedPolicyIds = (
           : p;
       });
 
-const bodyEqualsObserved = (
-  desired: AppMutableBody,
-  observed: ObservedApp,
-): boolean => {
+const bodyEqualsObserved = (desired: AppMutableBody, observed: ObservedApp): boolean => {
   if (desired.name !== undefined && desired.name !== observed.name) {
     return false;
   }
@@ -1443,17 +1346,11 @@ const bodyEqualsObserved = (
   // explicitly set them.
   if (
     desired.destinations !== undefined &&
-    JSON.stringify(desired.destinations) !==
-      JSON.stringify(observed.destinations ?? [])
+    JSON.stringify(desired.destinations) !== JSON.stringify(observed.destinations ?? [])
   ) {
     return false;
   }
-  if (
-    !oauthConfigurationEquals(
-      desired.oauthConfiguration,
-      observed.oauthConfiguration,
-    )
-  ) {
+  if (!oauthConfigurationEquals(desired.oauthConfiguration, observed.oauthConfiguration)) {
     return false;
   }
   if (
@@ -1480,10 +1377,7 @@ const bodyEqualsObserved = (
   ) {
     return false;
   }
-  if (
-    desired.tags !== undefined &&
-    !arrayEquals(desired.tags, observed.tags, jsonEq)
-  ) {
+  if (desired.tags !== undefined && !arrayEquals(desired.tags, observed.tags, jsonEq)) {
     return false;
   }
   if (!policiesEq(desired.policies, observed.policies)) {

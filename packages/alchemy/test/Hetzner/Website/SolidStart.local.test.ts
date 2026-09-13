@@ -17,18 +17,9 @@ const { test } = Test.make({ providers: Hetzner.providers(), dev: true });
  */
 const runDevSsr = process.env.ALCHEMY_TEST_SOLIDSTART_DEV_SSR === "1";
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/solidstart-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/solidstart-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 describe(
   "Hetzner.Website.SolidStart local",
@@ -48,9 +39,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Hetzner.Website.SolidStart("Web", {
-                rootDir,
-              });
+              const site = yield* Hetzner.Website.SolidStart("Web", { rootDir });
               return { site };
             }),
           );
@@ -79,9 +68,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* Hetzner.Website.SolidStart("Web", {
-                rootDir,
-              });
+              const site = yield* Hetzner.Website.SolidStart("Web", { rootDir });
               return { site };
             }),
           );
@@ -91,16 +78,12 @@ describe(
             timeout: "90 seconds",
             label: "dev home page",
           });
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=roundtrip`,
-            "SOLIDSTART_AWS_API_MARKER",
-            { label: "api route (dev)" },
-          );
-          yield* expectUrlContains(
-            `${url}/prerendered`,
-            "SOLIDSTART_AWS_PRERENDERED_MARKER",
-            { label: "extra route (dev)" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "SOLIDSTART_AWS_API_MARKER", {
+            label: "api route (dev)",
+          });
+          yield* expectUrlContains(`${url}/prerendered`, "SOLIDSTART_AWS_PRERENDERED_MARKER", {
+            label: "extra route (dev)",
+          });
 
           yield* stack.destroy();
         }),

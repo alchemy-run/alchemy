@@ -50,8 +50,7 @@ export default LicenseManagerSellerFunction.make(
     const listLicenses = yield* LicenseManager.ListLicenses();
     const getAccessToken = yield* LicenseManager.GetAccessToken();
     const checkoutLicense = yield* LicenseManager.CheckoutLicense();
-    const extendLicenseConsumption =
-      yield* LicenseManager.ExtendLicenseConsumption();
+    const extendLicenseConsumption = yield* LicenseManager.ExtendLicenseConsumption();
     const checkInLicense = yield* LicenseManager.CheckInLicense();
 
     const bound = {
@@ -73,9 +72,8 @@ export default LicenseManagerSellerFunction.make(
     const deleteLicenseQuietly = (arn: string, version: string) =>
       deleteLicense({ LicenseArn: arn, SourceVersion: version }).pipe(
         Effect.map(() => undefined),
-        Effect.catchTag(
-          ["InvalidParameterValueException", "ConflictException"],
-          () => Effect.succeed(undefined),
+        Effect.catchTag(["InvalidParameterValueException", "ConflictException"], () =>
+          Effect.succeed(undefined),
         ),
       );
 
@@ -96,18 +94,13 @@ export default LicenseManagerSellerFunction.make(
         if (request.method === "POST" && pathname === "/lifecycle") {
           const beneficiary = url.searchParams.get("account");
           if (beneficiary === null) {
-            return yield* HttpServerResponse.json(
-              { error: "missing ?account=" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing ?account=" }, { status: 400 });
           }
           const region = yield* Effect.sync(() => process.env.AWS_REGION!);
           const now = yield* Effect.sync(() => Date.now());
           const begin = new Date(now - 24 * 3600 * 1000).toISOString();
           const end = new Date(now + 365 * 24 * 3600 * 1000).toISOString();
-          const bumpedEnd = new Date(
-            now + 2 * 365 * 24 * 3600 * 1000,
-          ).toISOString();
+          const bumpedEnd = new Date(now + 2 * 365 * 24 * 3600 * 1000).toISOString();
           const entitlements = [
             {
               Name: "seats",
@@ -293,11 +286,7 @@ export default LicenseManagerSellerFunction.make(
           }).pipe(
             Effect.map(() => "Ok"),
             Effect.catchTag(
-              [
-                "InvalidParameterValueException",
-                "ValidationException",
-                "AuthorizationException",
-              ],
+              ["InvalidParameterValueException", "ValidationException", "AuthorizationException"],
               (e) => Effect.succeed(e._tag),
             ),
           );

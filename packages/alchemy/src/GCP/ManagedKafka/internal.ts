@@ -3,15 +3,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, createInternalLabels, stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 /** The API rejects longer cluster and Connect cluster ids. */
@@ -20,28 +16,20 @@ export const DEFAULT_VCPU_COUNT = 3;
 export const DEFAULT_MEMORY_BYTES = 3_221_225_472;
 export const OWNERSHIP_SUBJECT = "alchemy_ownership";
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.ManagedKafka.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.ManagedKafka.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.ManagedKafka.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.ManagedKafka.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.ManagedKafka.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.ManagedKafka.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.ManagedKafka.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.ManagedKafka.ResourceFailed")<{
   name: string;
   state: string;
 }> {}
@@ -52,11 +40,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (
-  name: string,
-  fallback = "kafka",
-  maxLength = MAX_NAME_LENGTH,
-): string => {
+export const rfc1035 = (name: string, fallback = "kafka", maxLength = MAX_NAME_LENGTH): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -69,10 +53,7 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const schemaRegistryIdOf = (
-  name: string,
-  fallback = "schema",
-): string => {
+export const schemaRegistryIdOf = (name: string, fallback = "schema"): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, "_")
@@ -83,10 +64,8 @@ export const schemaRegistryIdOf = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -157,11 +136,9 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     // API resource names always carry a `locations/{location}` segment.
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts.slice(collectionAt + 1).join("/")
@@ -187,9 +164,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const stringMapOf = (
   value: Record<string, string | undefined> | null | undefined,
@@ -203,27 +179,19 @@ export const stringMapOf = (
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(value ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(value ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
-export const asCount = (
-  value: number | string | undefined,
-  fallback: number,
-) => {
+export const asCount = (value: number | string | undefined, fallback: number) => {
   if (value === undefined) return fallback;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-export const asCountString = (
-  value: number | string | undefined,
-  fallback: number,
-) => String(asCount(value, fallback));
+export const asCountString = (value: number | string | undefined, fallback: number) =>
+  String(asCount(value, fallback));
 
 export const replaceOnIdentity = (input: {
   previousId?: string;
@@ -246,9 +214,7 @@ export const replaceOnIdentity = (input: {
     input.previousId !== undefined &&
     input.nextId !== undefined &&
     input.previousId !== input.nextId;
-  if (
-    !(input.extra === true || parentChanged || locationChanged || idChanged)
-  ) {
+  if (!(input.extra === true || parentChanged || locationChanged || idChanged)) {
     return undefined;
   }
   const samePhysical =
@@ -277,10 +243,7 @@ export const isFailedState = (state: string | undefined) =>
  * `ALREADY_EXISTS` (6) is a lost create race; `notFoundOk` also accepts
  * `NOT_FOUND` (5).
  */
-export const waitForOperation = (
-  operation: kafka.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+export const waitForOperation = (operation: kafka.Operation, options?: { notFoundOk?: boolean }) =>
   waitForGcpOperation(
     operation,
     (name) =>
@@ -298,8 +261,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
@@ -327,9 +289,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ManagedKafka.ResourceStillExists",
@@ -389,9 +349,7 @@ export const listClusters = (project: string, region: string) =>
     collectPages(
       kafka.listProjectsLocationsClusters.pages({ parent, pageSize: 1000 }),
       (page) => page.clusters,
-    ).pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed([] as kafka.Cluster[])),
-    ),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as kafka.Cluster[]))),
   );
 
 export const listAlchemyClusters = (project: string, region: string) =>
@@ -409,11 +367,7 @@ export const listConnectClusters = (project: string, region: string) =>
         pageSize: 1000,
       }),
       (page) => page.connectClusters,
-    ).pipe(
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as kafka.ConnectCluster[]),
-      ),
-    ),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as kafka.ConnectCluster[]))),
   );
 
 export const listAlchemyConnectClusters = (project: string, region: string) =>
@@ -494,19 +448,13 @@ export const parseHttpJson = (body: kafka.HttpBody | undefined) =>
       /* base64 */
     }
     try {
-      return JSON.parse(
-        Buffer.from(data, "base64").toString("utf8"),
-      ) as unknown;
+      return JSON.parse(Buffer.from(data, "base64").toString("utf8")) as unknown;
     } catch {
       return undefined;
     }
   });
 
-export const subjectParent = (
-  schemaRegistry: string,
-  subject: string,
-  context?: string,
-) =>
+export const subjectParent = (schemaRegistry: string, subject: string, context?: string) =>
   context !== undefined && context.length > 0
     ? `${schemaRegistry}/contexts/${context}/subjects/${subject}`
     : `${schemaRegistry}/subjects/${subject}`;
@@ -560,11 +508,7 @@ export const getAcl = (name: string) =>
     ? Effect.succeed(undefined)
     : kafka
         .getProjectsLocationsClustersAcls({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "AclClusterNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "AclClusterNotFound"], () => Effect.succeed(undefined)));
 
 export const getTopic = (name: string) =>
   name.length === 0
@@ -601,11 +545,7 @@ export const getSchemaVersion = (name: string, deleted = false) =>
         })
         .pipe(
           Effect.catchTag(
-            [
-              "NotFound",
-              "SchemaRegistryRequiresCluster",
-              "SchemaRegistryPathNotFound",
-            ],
+            ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
             () => Effect.succeed(undefined),
           ),
         );
@@ -620,11 +560,7 @@ export const getContextSchemaVersion = (name: string, deleted = false) =>
         })
         .pipe(
           Effect.catchTag(
-            [
-              "NotFound",
-              "SchemaRegistryRequiresCluster",
-              "SchemaRegistryPathNotFound",
-            ],
+            ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
             () => Effect.succeed(undefined),
           ),
         );
@@ -652,14 +588,11 @@ export const stampSchemaRegistryOwnership = (
   });
 
 export const schemaRegistryOwnership = (schemaRegistry: string) =>
-  getSchemaVersion(
-    versionName(subjectParent(schemaRegistry, OWNERSHIP_SUBJECT), "latest"),
-  ).pipe(Effect.map((version) => parseOwnership(version?.schema)));
+  getSchemaVersion(versionName(subjectParent(schemaRegistry, OWNERSHIP_SUBJECT), "latest")).pipe(
+    Effect.map((version) => parseOwnership(version?.schema)),
+  );
 
-export const hasSchemaRegistryOwnership = Effect.fn(function* (
-  id: string,
-  schemaRegistry: string,
-) {
+export const hasSchemaRegistryOwnership = Effect.fn(function* (id: string, schemaRegistry: string) {
   const expected = yield* createInternalLabels(id);
   const observed = yield* schemaRegistryOwnership(schemaRegistry);
   return (

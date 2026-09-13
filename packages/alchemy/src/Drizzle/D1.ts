@@ -46,11 +46,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  *
  * @binding
  */
-export const D1 = <
-  TRelations extends AnyRelations = EmptyRelations,
-  E = never,
-  R = never,
->(
+export const D1 = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
   database: D1DatabaseSource<E, R>,
   config?: SQLiteD1Drizzle.EffectDrizzleSQLiteD1Config<TRelations>,
 ) =>
@@ -60,8 +56,7 @@ export const D1 = <
         const db = yield* Effect.isEffect(database) ? database : database.raw;
         const d1Ctx = yield* Layer.build(D1Client.layer({ db }));
         return yield* SQLiteD1Drizzle.makeWithDefaults(
-          config ??
-            ({} as SQLiteD1Drizzle.EffectDrizzleSQLiteD1Config<TRelations>),
+          config ?? ({} as SQLiteD1Drizzle.EffectDrizzleSQLiteD1Config<TRelations>),
         ).pipe(Effect.provideContext(d1Ctx));
       }),
     ),

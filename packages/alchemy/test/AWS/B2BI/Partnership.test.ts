@@ -89,14 +89,10 @@ const assertPartnershipGone = (partnershipId: string) =>
   Effect.gen(function* () {
     const result = yield* b2bi.getPartnership({ partnershipId }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
-      return yield* Effect.fail(
-        new Error(`Partnership '${partnershipId}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`Partnership '${partnershipId}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -113,9 +109,7 @@ test.provider(
       yield* stack.destroy();
 
       // Create.
-      const created = yield* stack.deploy(
-        partnershipProgram("alchemy-b2bi-partnership"),
-      );
+      const created = yield* stack.deploy(partnershipProgram("alchemy-b2bi-partnership"));
       expect(created.partnershipId).toMatch(/^ps-/);
       expect(created.profileId).toMatch(/^p-/);
       expect(created.partnershipArn).toContain(":b2bi:");
@@ -128,9 +122,7 @@ test.provider(
       expect(described.capabilities ?? []).toHaveLength(1);
 
       // Update the partnership name in place.
-      const updated = yield* stack.deploy(
-        partnershipProgram("alchemy-b2bi-partnership-renamed"),
-      );
+      const updated = yield* stack.deploy(partnershipProgram("alchemy-b2bi-partnership-renamed"));
       expect(updated.partnershipId).toBe(created.partnershipId);
       const reDescribed = yield* b2bi.getPartnership({
         partnershipId: created.partnershipId,

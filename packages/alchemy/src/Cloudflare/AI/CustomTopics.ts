@@ -137,29 +137,21 @@ export const CustomTopicsProvider = () =>
             }),
             // AI Security is entitlement-gated and zones may be partial
             // or deleted out-of-band — skip any zone we can't read.
-            Effect.catchTag(
-              ["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"], () =>
+              Effect.succeed(undefined),
             ),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is CustomTopicsAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is CustomTopicsAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as CustomTopicsProps;
       const n = news as CustomTopicsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -178,8 +170,7 @@ export const CustomTopicsProvider = () =>
       // `Unowned`). The observed list at adoption time becomes the
       // `initialTopics` restored on destroy.
       const topics = normalizeTopics(observed.topics);
-      const initialTopics =
-        output !== undefined ? output.initialTopics : topics;
+      const initialTopics = output !== undefined ? output.initialTopics : topics;
       return { zoneId, topics, initialTopics };
     }),
 
@@ -196,8 +187,7 @@ export const CustomTopicsProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed list is
       //    the zone's original.
-      const initialTopics =
-        output !== undefined ? output.initialTopics : observedTopics;
+      const initialTopics = output !== undefined ? output.initialTopics : observedTopics;
 
       // 3. Sync — PUT the full desired list only when it differs.
       if (topicsEqual(observedTopics, desired)) {
@@ -221,9 +211,7 @@ export const CustomTopicsProvider = () =>
       // nothing we can restore.
       const observed = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
         Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
-        Effect.catchTag("AiSecurityNotEntitled", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return;
       // Restore the pre-management list; skip the call when it already
@@ -238,9 +226,8 @@ export const CustomTopicsProvider = () =>
 /**
  * Normalize the API's `topics ?? null` into a concrete (mutable) array.
  */
-const normalizeTopics = (
-  topics: readonly Topic[] | null | undefined,
-): Topic[] => (topics ?? []).map((t) => ({ ...t }));
+const normalizeTopics = (topics: readonly Topic[] | null | undefined): Topic[] =>
+  (topics ?? []).map((t) => ({ ...t }));
 
 /**
  * Order-insensitive structural equality on the `topic` key — the PUT

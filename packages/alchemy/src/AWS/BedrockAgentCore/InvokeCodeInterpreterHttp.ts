@@ -11,10 +11,7 @@ export const InvokeCodeInterpreterHttp = Layer.effect(
     operation: agentcore.invokeCodeInterpreter,
     actions: ["bedrock-agentcore:InvokeCodeInterpreter"],
     requestKey: "codeInterpreterIdentifier",
-    identifier: (codeInterpreter: CodeInterpreter) =>
-      codeInterpreter.codeInterpreterId,
-    arns: (codeInterpreter: CodeInterpreter) => [
-      codeInterpreter.codeInterpreterArn,
-    ],
+    identifier: (codeInterpreter: CodeInterpreter) => codeInterpreter.codeInterpreterId,
+    arns: (codeInterpreter: CodeInterpreter) => [codeInterpreter.codeInterpreterArn],
   }),
 );

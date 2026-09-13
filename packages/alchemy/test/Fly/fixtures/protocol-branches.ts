@@ -70,11 +70,8 @@ export const withControlledClient =
       ),
     );
 
-export const reply = (
-  request: HttpClientRequest.HttpClientRequest,
-  body: unknown,
-  status = 200,
-) => HttpClientResponse.fromWeb(request, Response.json(body, { status }));
+export const reply = (request: HttpClientRequest.HttpClientRequest, body: unknown, status = 200) =>
+  HttpClientResponse.fromWeb(request, Response.json(body, { status }));
 
 const Body = Schema.Struct({
   name: Schema.optional(Schema.String),
@@ -125,8 +122,7 @@ export const protocolClient = (
               return reply(request, visible ? [current] : []);
             }
             if (request.method === "POST") {
-              if (current)
-                throw new Error("Controller replayed candidate creation");
+              if (current) throw new Error("Controller replayed candidate creation");
               current = {
                 id: candidateId,
                 instance_id: "controlled-machine-version",
@@ -142,9 +138,7 @@ export const protocolClient = (
                     : {
                         registry: "registry.test",
                         repository:
-                          options.missingImageRef === "repository"
-                            ? undefined
-                            : "fixture",
+                          options.missingImageRef === "repository" ? undefined : "fixture",
                         digest:
                           options.missingImageRef === "digest"
                             ? undefined
@@ -166,13 +160,8 @@ export const protocolClient = (
               });
             if (request.method === "DELETE") return reply(request, {});
           }
-          if (
-            path === `/v1/apps/${appName}/machines/${candidateId}` &&
-            request.method === "GET"
-          )
-            return current
-              ? reply(request, current)
-              : reply(request, { error: "not found" }, 404);
+          if (path === `/v1/apps/${appName}/machines/${candidateId}` && request.method === "GET")
+            return current ? reply(request, current) : reply(request, { error: "not found" }, 404);
           if (
             path === `/v1/apps/${appName}/machines/${candidateId}/wait` &&
             request.method === "GET"
@@ -197,9 +186,7 @@ export const protocolClient = (
             current = { ...current, cordoned: false };
             return reply(request, {});
           }
-          throw new Error(
-            `Unexpected controlled request: ${request.method} ${path}`,
-          );
+          throw new Error(`Unexpected controlled request: ${request.method} ${path}`);
         });
       }),
     );

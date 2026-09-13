@@ -13,10 +13,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "InitIOTestStack",
@@ -64,10 +61,7 @@ test(
         ),
         Effect.retry({
           while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
         }),
       );
       return (yield* res.json) as unknown as InitIOBody;

@@ -8,9 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import SecurityHubTestFunctionLive, {
-  SecurityHubTestFunction,
-} from "./handler";
+import SecurityHubTestFunctionLive, { SecurityHubTestFunction } from "./handler";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -23,10 +21,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 // The Hub is an account/region singleton. If the account already runs a Hub
@@ -39,8 +34,7 @@ let accountId = "";
 let region = "";
 
 const findingId = "alchemy/securityhub-bindings/test-finding-1";
-const productArn = () =>
-  `arn:aws:securityhub:${region}:${accountId}:product/${accountId}/default`;
+const productArn = () => `arn:aws:securityhub:${region}:${accountId}:product/${accountId}/default`;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -57,31 +51,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -97,9 +82,9 @@ const describeHub = securityhub.describeHub({}).pipe(
 
 const skipForeign = () =>
   foreignHub
-    ? Effect.logInfo(
-        "Security Hub is already enabled by someone else — skipping",
-      ).pipe(Effect.as(true))
+    ? Effect.logInfo("Security Hub is already enabled by someone else — skipping").pipe(
+        Effect.as(true),
+      )
     : Effect.succeed(false);
 
 describe.sequential(
@@ -120,9 +105,7 @@ describe.sequential(
         // fixture's own Hub enabled, which must not be mistaken for a foreign
         // one. Destroying the scratch stack disables Security Hub only if the
         // Hub is tracked in our state.
-        yield* Effect.logInfo(
-          "SecurityHub test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("SecurityHub test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         // Never take over a Hub this fixture did not create — any Hub that
@@ -155,21 +138,15 @@ describe.sequential(
         accountId = hubAccount!;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `SecurityHub test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`SecurityHub test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `SecurityHub test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`SecurityHub test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -218,9 +195,7 @@ describe.sequential(
 
             // The imported finding surfaces asynchronously — poll bounded to
             // ~45s; the write above already proved the binding + IAM wiring.
-            const findings = (yield* getJson(
-              `/findings?id=${encodeURIComponent(findingId)}`,
-            ).pipe(
+            const findings = (yield* getJson(`/findings?id=${encodeURIComponent(findingId)}`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
                 until: (r): boolean => (r as { count: number }).count > 0,
@@ -229,9 +204,7 @@ describe.sequential(
             )) as { count: number; title?: string };
 
             if (findings.count > 0) {
-              expect(findings.title).toBe(
-                "Alchemy SecurityHub bindings test finding",
-              );
+              expect(findings.title).toBe("Alchemy SecurityHub bindings test finding");
 
               // Update customer-editable fields on the finding.
               const resolved = (yield* postJson(
@@ -268,14 +241,10 @@ describe.sequential(
           expect(standards.count).toBeGreaterThan(0);
 
           // The fixture enables the Hub without default standards.
-          const enabled = (yield* getJson("/enabled-standards")) as {
-            count: number;
-          };
+          const enabled = (yield* getJson("/enabled-standards")) as { count: number };
           expect(enabled.count).toBe(0);
 
-          const definitions = (yield* getJson("/control-definitions")) as {
-            count: number;
-          };
+          const definitions = (yield* getJson("/control-definitions")) as { count: number };
           expect(definitions.count).toBeGreaterThan(0);
 
           const control = (yield* getJson("/control")) as {
@@ -295,9 +264,7 @@ describe.sequential(
           const products = (yield* getJson("/products")) as { count: number };
           expect(products.count).toBeGreaterThan(0);
 
-          const enabled = (yield* getJson("/enabled-products")) as {
-            count: number;
-          };
+          const enabled = (yield* getJson("/enabled-products")) as { count: number };
           expect(enabled.count).toBeGreaterThanOrEqual(0);
         }),
       );
@@ -307,19 +274,13 @@ describe.sequential(
       test.provider("a fresh Hub has no user configuration", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const actions = (yield* getJson("/action-targets")) as {
-            count: number;
-          };
+          const actions = (yield* getJson("/action-targets")) as { count: number };
           expect(actions.count).toBe(0);
 
-          const rules = (yield* getJson("/automation-rules")) as {
-            count: number;
-          };
+          const rules = (yield* getJson("/automation-rules")) as { count: number };
           expect(rules.count).toBe(0);
 
-          const aggregators = (yield* getJson("/aggregators")) as {
-            count: number;
-          };
+          const aggregators = (yield* getJson("/aggregators")) as { count: number };
           expect(aggregators.count).toBe(0);
 
           const insights = (yield* getJson("/insights")) as { count: number };
@@ -337,10 +298,9 @@ describe.sequential(
             errorTag?: string;
           };
           if (admin.errorTag) {
-            expect([
-              "ResourceNotFoundException",
-              "InvalidAccessException",
-            ]).toContain(admin.errorTag);
+            expect(["ResourceNotFoundException", "InvalidAccessException"]).toContain(
+              admin.errorTag,
+            );
           } else {
             expect(admin.administrator ?? null).toBeNull();
           }
@@ -348,14 +308,10 @@ describe.sequential(
           const members = (yield* getJson("/members")) as { count: number };
           expect(members.count).toBe(0);
 
-          const invitations = (yield* getJson("/invitations")) as {
-            count: number;
-          };
+          const invitations = (yield* getJson("/invitations")) as { count: number };
           expect(invitations.count).toBeGreaterThanOrEqual(0);
 
-          const count = (yield* getJson("/invitations-count")) as {
-            count: number;
-          };
+          const count = (yield* getJson("/invitations-count")) as { count: number };
           expect(count.count).toBeGreaterThanOrEqual(0);
         }),
       );
@@ -372,10 +328,9 @@ describe.sequential(
               errorTag?: string;
             };
             if (admins.errorTag) {
-              expect([
-                "AccessDeniedException",
-                "InvalidAccessException",
-              ]).toContain(admins.errorTag);
+              expect(["AccessDeniedException", "InvalidAccessException"]).toContain(
+                admins.errorTag,
+              );
             } else {
               expect(admins.admins).toBeGreaterThanOrEqual(0);
             }
@@ -385,10 +340,9 @@ describe.sequential(
               errorTag?: string;
             };
             if (orgConfig.errorTag) {
-              expect([
-                "AccessDeniedException",
-                "InvalidAccessException",
-              ]).toContain(orgConfig.errorTag);
+              expect(["AccessDeniedException", "InvalidAccessException"]).toContain(
+                orgConfig.errorTag,
+              );
             } else {
               expect(typeof orgConfig.autoEnable).toBe("boolean");
             }

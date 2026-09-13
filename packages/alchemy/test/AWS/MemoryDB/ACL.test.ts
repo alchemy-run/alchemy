@@ -29,12 +29,7 @@ const assertGone = (name: string) =>
   memorydb.describeACLs({ ACLName: name }).pipe(
     Effect.flatMap(() => Effect.fail(new Error(`acl '${name}' still exists`))),
     Effect.catchTag("ACLNotFoundFault", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]) }),
   );
 
 // Single-deploy lifecycle: create an ACL with a custom user, verify, destroy.
@@ -56,10 +51,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const { acl, user } = yield* stack.deploy(
         Effect.gen(function* () {
           const user = yield* User("AclUser", {
-            authenticationMode: {
-              type: "password",
-              passwords: [TEST_PASSWORD],
-            },
+            authenticationMode: { type: "password", passwords: [TEST_PASSWORD] },
             accessString: "on ~* +@all",
           });
           const acl = yield* ACL("AppAcl", {

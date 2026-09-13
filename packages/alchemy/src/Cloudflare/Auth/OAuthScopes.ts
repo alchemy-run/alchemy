@@ -450,8 +450,7 @@ export const OAUTH_SCOPE_GROUPS = [
   },
 ] as const;
 
-export type OAuthScopeId =
-  (typeof OAUTH_SCOPE_GROUPS)[number]["scopes"][number];
+export type OAuthScopeId = (typeof OAUTH_SCOPE_GROUPS)[number]["scopes"][number];
 
 /** Human-readable names from Cloudflare's OAuth scope catalog. */
 export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
@@ -501,8 +500,7 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "workers-kv-storage.read": "Workers KV Storage Read",
   "workers-kv-storage.write": "Workers KV Storage Write",
   "workers-observability.read": "Workers Observability Read",
-  "workers-observability-telemetry.write":
-    "Workers Observability Telemetry Write",
+  "workers-observability-telemetry.write": "Workers Observability Telemetry Write",
   "workers-observability.write": "Workers Observability Write",
   "r2-catalog.read": "Workers R2 Data Catalog Read",
   "r2-catalog.write": "Workers R2 Data Catalog Write",
@@ -564,15 +562,12 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "fraud-detection-pii.read": "Account Abuse Protection PII Read",
   "account-firewall-access-rules.read": "Account Firewall Access Rules Read",
   "account-firewall-access-rules.write": "Account Firewall Access Rules Write",
-  "account-security-center-insights.read":
-    "Account Security Center Insights Read",
-  "account-security-center-insights.write":
-    "Account Security Center Insights Write",
+  "account-security-center-insights.read": "Account Security Center Insights Read",
+  "account-security-center-insights.write": "Account Security Center Insights Write",
   "account-waf.read": "Account WAF Read",
   "account-waf.write": "Account WAF Write",
   "request-tracer.read": "Allow Request Tracer Read",
-  "reports-application-security-report.read":
-    "Application Security Reports Read",
+  "reports-application-security-report.read": "Application Security Reports Read",
   "bot-management-feedback.read": "Bot Management Feedback Report Read",
   "bot-management-feedback.write": "Bot Management Feedback Report Write",
   "bot-management.read": "Bot Management Read",
@@ -686,12 +681,9 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "access-org.read": "Access: Organizations Read",
   "access-org.revoke": "Access: Organizations Revoke",
   "access-org.write": "Access: Organizations Write",
-  "access-acct.read":
-    "Access: Organizations, Identity Providers, and Groups Read",
-  "access-acct.revoke":
-    "Access: Organizations, Identity Providers, and Groups Revoke",
-  "access-acct.write":
-    "Access: Organizations, Identity Providers, and Groups Write",
+  "access-acct.read": "Access: Organizations, Identity Providers, and Groups Read",
+  "access-acct.revoke": "Access: Organizations, Identity Providers, and Groups Revoke",
+  "access-acct.write": "Access: Organizations, Identity Providers, and Groups Write",
   "access-policy.read": "Access: Policies Read",
   "access-policy.write": "Access: Policies Write",
   "access-policy-test.read": "Access: Policy Test Read",
@@ -715,14 +707,11 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "teams-cds-compute-account.write": "Cloudflare CDS Compute Account Write",
   "teams-dex.read": "Cloudflare DEX Read",
   "teams-dex.write": "Cloudflare DEX Write",
-  "teams-connector-cloudflared.monitoring":
-    "Cloudflare One Connector Monitoring: cloudflared",
+  "teams-connector-cloudflared.monitoring": "Cloudflare One Connector Monitoring: cloudflared",
   "teams-connector-warp.read": "Cloudflare One Connector: WARP Read",
   "teams-connector-warp.write": "Cloudflare One Connector: WARP Write",
-  "teams-connector-cloudflared.read":
-    "Cloudflare One Connector: cloudflared Read",
-  "teams-connector-cloudflared.write":
-    "Cloudflare One Connector: cloudflared Write",
+  "teams-connector-cloudflared.read": "Cloudflare One Connector: cloudflared Read",
+  "teams-connector-cloudflared.write": "Cloudflare One Connector: cloudflared Write",
   "teams-connectors.read": "Cloudflare One Connectors Read",
   "teams-connectors.write": "Cloudflare One Connectors Write",
   "teams-networks.read": "Cloudflare One Networks Read",
@@ -766,10 +755,8 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "load-balancers-account.write": "Load Balancers Account Write",
   "load-balancers.read": "Load Balancers Read",
   "load-balancers.write": "Load Balancers Write",
-  "load-balancing-monitors-and-pools.read":
-    "Load Balancing: Monitors and Pools Read",
-  "load-balancing-monitors-and-pools.write":
-    "Load Balancing: Monitors and Pools Write",
+  "load-balancing-monitors-and-pools.read": "Load Balancing: Monitors and Pools Read",
+  "load-balancing-monitors-and-pools.write": "Load Balancing: Monitors and Pools Write",
   "pcaps-api.read": "Magic Firewall Packet Captures - Read PCAPs API",
   "pcaps-api.write": "Magic Firewall Packet Captures - Write PCAPs API",
   "magic-firewall.read": "Magic Firewall Read",
@@ -841,14 +828,13 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
 
 /** Flat lookup retained for consumers that do not need grouping metadata. */
 export const ALL_SCOPES = Object.fromEntries(
-  OAUTH_SCOPE_GROUPS.flatMap((group) =>
-    group.scopes.map((scope) => [scope, group.label]),
-  ),
+  OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes.map((scope) => [scope, group.label])),
 ) as Readonly<Record<OAuthScopeId, string>>;
 
 /** Every scope available to the public Alchemy OAuth client. */
-export const ALL_SCOPE_IDS: ReadonlyArray<OAuthScopeId> =
-  OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes);
+export const ALL_SCOPE_IDS: ReadonlyArray<OAuthScopeId> = OAUTH_SCOPE_GROUPS.flatMap(
+  (group) => group.scopes,
+);
 
 /**
  * Split stored scopes into those the current OAuth client offers and those
@@ -917,5 +903,4 @@ export const OAUTH_SCOPE_TEMPLATES = {
   ],
 } as const satisfies Readonly<Record<string, ReadonlyArray<OAuthScopeId>>>;
 
-export const BASIC_SCOPES: ReadonlyArray<OAuthScopeId> =
-  OAUTH_SCOPE_TEMPLATES.basic;
+export const BASIC_SCOPES: ReadonlyArray<OAuthScopeId> = OAUTH_SCOPE_TEMPLATES.basic;

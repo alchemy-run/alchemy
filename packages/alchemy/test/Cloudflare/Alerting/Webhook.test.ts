@@ -12,21 +12,14 @@ import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/webhook-receiver.ts");
 
 // Cloudflare fires a test POST at the webhook URL on create/update, so the
 // destination worker must be deployed and serving before the webhook
 // resource is created.
-const Receiver = () =>
-  Cloudflare.Worker("WebhookReceiver", {
-    main,
-    workersDev: true,
-  });
+const Receiver = () => Cloudflare.Worker("WebhookReceiver", { main, workersDev: true });
 
 test.provider(
   "create, update, delete webhook destination",
@@ -41,20 +34,15 @@ test.provider(
       // seconds to propagate; the webhook test POST must hit a live 200).
       const receiver = yield* stack.deploy(Receiver());
       expect(receiver.url).toBeDefined();
-      yield* expectUrlContains(receiver.url!, "webhook-ok", {
-        label: "webhook receiver",
-      });
+      yield* expectUrlContains(receiver.url!, "webhook-ok", { label: "webhook receiver" });
 
       // Phase 2: create the webhook destination pointing at the worker.
       const webhook = yield* stack.deploy(
         Effect.gen(function* () {
           const worker = yield* Receiver();
-          return yield* Cloudflare.Alerting.NotificationWebhook(
-            "AlertWebhook",
-            {
-              url: worker.url.as<string>(),
-            },
-          );
+          return yield* Cloudflare.Alerting.NotificationWebhook("AlertWebhook", {
+            url: worker.url.as<string>(),
+          });
         }),
       );
 
@@ -75,13 +63,10 @@ test.provider(
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
           const worker = yield* Receiver();
-          return yield* Cloudflare.Alerting.NotificationWebhook(
-            "AlertWebhook",
-            {
-              name: "alchemy-test-alerting-webhook-renamed",
-              url: worker.url.as<string>(),
-            },
-          );
+          return yield* Cloudflare.Alerting.NotificationWebhook("AlertWebhook", {
+            name: "alchemy-test-alerting-webhook-renamed",
+            url: worker.url.as<string>(),
+          });
         }),
       );
       expect(renamed.webhookId).toEqual(webhook.webhookId);
@@ -117,9 +102,7 @@ test.provider(
       // webhook destination pointing at it.
       const receiver = yield* stack.deploy(Receiver());
       expect(receiver.url).toBeDefined();
-      yield* expectUrlContains(receiver.url!, "webhook-ok", {
-        label: "webhook receiver",
-      });
+      yield* expectUrlContains(receiver.url!, "webhook-ok", { label: "webhook receiver" });
 
       const webhook = yield* stack.deploy(
         Effect.gen(function* () {
@@ -130,9 +113,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Alerting.NotificationWebhook,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Alerting.NotificationWebhook);
       const all = yield* provider.list();
 
       const match = all.find((w) => w.webhookId === webhook.webhookId);
@@ -160,9 +141,6 @@ const waitForWebhookDeleted = (accountId: string, webhookId: string) =>
     Effect.catchTag("WebhookNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WebhookNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

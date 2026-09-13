@@ -3,11 +3,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const DEFAULT_LOCALE = "en-US";
 export const DEFAULT_DISPLAY_MODE = "standalone";
@@ -19,9 +15,7 @@ const listSetting = (keys: readonly string[]) =>
   Effect.gen(function* () {
     const values: string[] = [];
     for (const key of keys) {
-      const raw = Option.getOrUndefined(
-        yield* Config.option(Config.String(key)),
-      )?.trim();
+      const raw = Option.getOrUndefined(yield* Config.option(Config.String(key)))?.trim();
       if (!raw) continue;
       for (const part of raw.split(/[,\s]+/)) {
         if (part.length > 0) values.push(part);
@@ -40,9 +34,7 @@ const configuredEnterpriseIds = () =>
 
 /** Domain whose enterprises `list` sweeps: `GCP_ANDROIDENTERPRISE_DOMAIN`. */
 const configuredDomain = () =>
-  listSetting(["GCP_ANDROIDENTERPRISE_DOMAIN"]).pipe(
-    Effect.map((values) => values[0] ?? ""),
-  );
+  listSetting(["GCP_ANDROIDENTERPRISE_DOMAIN"]).pipe(Effect.map((values) => values[0] ?? ""));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -53,18 +45,13 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  jsonEqual(
-    [...(left ?? [])].slice().sort(),
-    [...(right ?? [])].slice().sort(),
-  );
+) => jsonEqual([...(left ?? [])].slice().sort(), [...(right ?? [])].slice().sort());
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
 const isMissing = <E extends { readonly _tag: string }>(
   error: E,
-): error is Extract<E, { readonly _tag: "NotFound" }> =>
-  error._tag === "NotFound";
+): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound";
 
 export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
@@ -77,12 +64,7 @@ export const ignoreList =
   ): Effect.Effect<A1 | A, E, R> =>
     self.pipe(Effect.catchIf(isMissing, () => Effect.succeed(fallback)));
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -90,10 +72,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -114,10 +93,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -145,14 +121,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -162,18 +134,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -196,9 +159,7 @@ export const toDisplayName = (
       lowercase: true,
       delimiter: "-",
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `a${generated}`.slice(0, maxLength);
+    return /^[a-z]/.test(generated) ? generated : `a${generated}`.slice(0, maxLength);
   });
 
 /**
@@ -237,15 +198,9 @@ export const defaultTitle = (title: string | undefined, fallback: string) =>
 export const getPage = (enterpriseId: string, pageId: string) =>
   enterpriseId.length === 0 || pageId.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        androidenterprise.getStorelayoutpages({ enterpriseId, pageId }),
-      );
+    : catchMissing(androidenterprise.getStorelayoutpages({ enterpriseId, pageId }));
 
-export const getCluster = (
-  enterpriseId: string,
-  pageId: string,
-  clusterId: string,
-) =>
+export const getCluster = (enterpriseId: string, pageId: string, clusterId: string) =>
   enterpriseId.length === 0 || pageId.length === 0 || clusterId.length === 0
     ? Effect.succeed(undefined)
     : catchMissing(
@@ -316,11 +271,7 @@ export const findOwnedPage = (id: string, enterpriseId: string) =>
     return undefined;
   });
 
-export const findOwnedCluster = (
-  id: string,
-  enterpriseId: string,
-  pageId?: string,
-) =>
+export const findOwnedCluster = (id: string, enterpriseId: string, pageId?: string) =>
   Effect.gen(function* () {
     const pageIds = pageId
       ? [pageId]
@@ -358,9 +309,7 @@ export const listOwnedPages = () =>
         listPagesAt(enterpriseId).pipe(
           Effect.map((items) =>
             items
-              .filter((page) =>
-                hasOwnershipMarker(ownershipTextFromNames(page.name)),
-              )
+              .filter((page) => hasOwnershipMarker(ownershipTextFromNames(page.name)))
               .map((page) => ({ page, enterpriseId })),
           ),
         ),
@@ -385,9 +334,7 @@ export const listOwnedClusters = () =>
                     Effect.map((items) =>
                       items
                         .filter((cluster) =>
-                          hasOwnershipMarker(
-                            ownershipTextFromNames(cluster.name),
-                          ),
+                          hasOwnershipMarker(ownershipTextFromNames(cluster.name)),
                         )
                         .map((cluster) => ({
                           cluster,

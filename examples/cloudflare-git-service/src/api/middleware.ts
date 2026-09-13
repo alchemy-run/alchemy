@@ -40,9 +40,7 @@ export class Authentication extends HttpApiMiddleware.Service<
       const registry = yield* Git.RegistryStore;
 
       const resolve = Effect.gen(function* () {
-        const { password } = yield* HttpApiBuilder.securityDecode(
-          HttpApiSecurity.basic,
-        );
+        const { password } = yield* HttpApiBuilder.securityDecode(HttpApiSecurity.basic);
         const key = Redacted.value(password);
         if (key !== "") {
           const verified = yield* auth.api
@@ -52,18 +50,12 @@ export class Authentication extends HttpApiMiddleware.Service<
                 Effect.succeed({ valid: false as const, key: null }),
               ),
             );
-          return verified.valid && verified.key
-            ? { id: verified.key.referenceId }
-            : undefined;
+          return verified.valid && verified.key ? { id: verified.key.referenceId } : undefined;
         }
         const session = yield* auth
           .getSession()
-          .pipe(
-            Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
-          );
-        return session
-          ? { id: session.user.id, name: session.user.name }
-          : undefined;
+          .pipe(Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)));
+        return session ? { id: session.user.id, name: session.user.name } : undefined;
       });
 
       /**
@@ -85,9 +77,7 @@ export class Authentication extends HttpApiMiddleware.Service<
         Effect.gen(function* () {
           const user = yield* resolve;
           const { owner } = yield* HttpRouter.params;
-          const own =
-            owner === undefined ||
-            owner.toLowerCase() === user?.id.toLowerCase();
+          const own = owner === undefined || owner.toLowerCase() === user?.id.toLowerCase();
           if (user !== undefined && own) {
             return yield* Effect.provideService(httpEffect, Session, { user });
           }

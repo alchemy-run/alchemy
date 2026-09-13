@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -21,13 +21,7 @@ const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../../../../examples/cloudflare-website-vocs",
 );
-const fixtureEntries = [
-  "package.json",
-  "public",
-  "src",
-  "tsconfig.json",
-  "vocs.config.ts",
-];
+const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
 test.provider.skipIf(!dockerAvailable)(
   "Vocs: deploy, GET /, destroy, gone",
@@ -46,13 +40,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.Vocs("Web", {
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "tsconfig.json",
-                "vocs.config.ts",
-              ],
+              include: ["src/**", "public/**", "package.json", "tsconfig.json", "vocs.config.ts"],
             },
           });
           return { site };

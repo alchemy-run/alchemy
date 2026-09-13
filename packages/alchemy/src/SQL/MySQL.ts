@@ -13,18 +13,13 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * with `url` widened to also accept an Effect (e.g. a Hyperdrive connection
  * string, which resolves from the Worker environment at runtime).
  */
-export type MySQLConfig<E = never, R = never> = Omit<
-  MysqlClient.MysqlClientConfig,
-  "url"
-> & {
-  readonly url:
-    | Redacted.Redacted<string>
-    | Effect.Effect<Redacted.Redacted<string>, E, R>;
+export type MySQLConfig<E = never, R = never> = Omit<MysqlClient.MysqlClientConfig, "url"> & {
+  readonly url: Redacted.Redacted<string> | Effect.Effect<Redacted.Redacted<string>, E, R>;
 };
 
 const isWorkerd = () =>
-  (globalThis as { navigator?: { userAgent?: string } }).navigator
-    ?.userAgent === "Cloudflare-Workers" || "WebSocketPair" in globalThis;
+  (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ===
+    "Cloudflare-Workers" || "WebSocketPair" in globalThis;
 
 // Query-string params are JSON-parsed into poolConfig entries (mysql2's own
 // URI convention), so `mysql://...?ssl={"rejectUnauthorized":true}` works.
@@ -45,17 +40,12 @@ const parseMySQLUrl = (url: Redacted.Redacted<string>) =>
         host: u.hostname,
         port: u.port === "" ? 3306 : Number(u.port),
         database: database === "" ? undefined : database,
-        username:
-          u.username === "" ? undefined : decodeURIComponent(u.username),
-        password:
-          u.password === ""
-            ? undefined
-            : Redacted.make(decodeURIComponent(u.password)),
+        username: u.username === "" ? undefined : decodeURIComponent(u.username),
+        password: u.password === "" ? undefined : Redacted.make(decodeURIComponent(u.password)),
         poolConfig: poolConfig as Mysql.PoolOptions,
       };
     },
-    catch: (cause) =>
-      new Error(`SQL.MySQL: failed to parse connection url: ${cause}`),
+    catch: (cause) => new Error(`SQL.MySQL: failed to parse connection url: ${cause}`),
   }).pipe(Effect.orDie);
 
 /**
@@ -156,6 +146,4 @@ export const MySQLLayer = <E = never, R = never>(config: MySQLConfig<E, R>) =>
     Effect.gen(function* () {
       return yield* MysqlClient.MysqlClient;
     }),
-  ).pipe(
-    Layer.provideMerge(Layer.effect(MysqlClient.MysqlClient, MySQL(config))),
-  );
+  ).pipe(Layer.provideMerge(Layer.effect(MysqlClient.MysqlClient, MySQL(config))));

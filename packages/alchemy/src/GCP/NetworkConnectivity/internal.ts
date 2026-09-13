@@ -23,9 +23,7 @@ export class NetworkConnectivityStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class NetworkConnectivityFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.Failed",
-)<{
+export class NetworkConnectivityFailed extends Data.TaggedError("GCP.NetworkConnectivity.Failed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -54,10 +52,8 @@ export const rfc1035 = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -69,26 +65,16 @@ export const parentOfName = (name: string, collection: string) => {
   return parts.slice(0, at).join("/");
 };
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -145,19 +131,14 @@ export const toNetworkResource = (project: string, network: string) => {
   return `projects/${project}/global/networks/${trimmed}`;
 };
 
-export const toSubnetworkResource = (
-  project: string,
-  region: string,
-  subnetwork: string,
-) => {
+export const toSubnetworkResource = (project: string, region: string, subnetwork: string) => {
   const trimmed = canonicalizeLink(subnetwork);
   if (trimmed.includes("/")) return trimmed;
   return `projects/${project}/regions/${region}/subnetworks/${trimmed}`;
 };
 
-export const changedFields = (
-  pairs: ReadonlyArray<readonly [string, boolean]>,
-) => pairs.filter(([, changed]) => changed).map(([field]) => field);
+export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) =>
+  pairs.filter(([, changed]) => changed).map(([field]) => field);
 
 /**
  * Wait for a Network Connectivity Center long-running operation. Transports,
@@ -178,8 +159,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.catchIf(
@@ -230,21 +210,12 @@ const PENDING_STATES = new Set([
   "REJECTING",
 ]);
 
-const FAILED_STATES = new Set([
-  "FAILED",
-  "DELETE_FAILED",
-  "OBSOLETE",
-  "FAILED_DEPROGRAMMING",
-]);
+const FAILED_STATES = new Set(["FAILED", "DELETE_FAILED", "OBSOLETE", "FAILED_DEPROGRAMMING"]);
 
 export const waitUntilReady = <A extends { state?: string }, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
-): Effect.Effect<
-  A,
-  E | NetworkConnectivityNotResolved | NetworkConnectivityFailed,
-  R
-> =>
+): Effect.Effect<A, E | NetworkConnectivityNotResolved | NetworkConnectivityFailed, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
@@ -266,12 +237,7 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   );
 
 /** Collect every page; a missing parent (`NotFound`) lists as empty. */
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>

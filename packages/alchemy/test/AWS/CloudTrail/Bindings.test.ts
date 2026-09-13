@@ -19,10 +19,7 @@ const sharedStack = Core.scratchStack(testOptions, "CloudTrailBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -41,19 +38,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -74,9 +66,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "CloudTrail test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("CloudTrail test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("CloudTrail test setup: deploying fixture");
@@ -120,10 +110,7 @@ describe.sequential(
                 },
               ],
             });
-            yield* Trail("BindingsTrail", {
-              trailName,
-              s3BucketName: logBucket.bucketName,
-            });
+            yield* Trail("BindingsTrail", { trailName, s3BucketName: logBucket.bucketName });
             return yield* CloudTrailTestFunction;
           }).pipe(Effect.provide(CloudTrailTestFunctionLive)),
         );
@@ -132,16 +119,12 @@ describe.sequential(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/info`;
 
-        yield* Effect.logInfo(
-          `CloudTrail test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`CloudTrail test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -149,9 +132,7 @@ describe.sequential(
       { timeout: 300_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 240_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 240_000 });
 
     describe("LookupEvents", () => {
       test.provider("reads the 90-day management event history", () =>
@@ -227,12 +208,10 @@ describe.sequential(
             // bucket's existing tags, then checks for the marker the event
             // handler wrote to S3.
             const probe = Effect.gen(function* () {
-              const existing = yield* s3
-                .getBucketTagging({ Bucket: bucketName })
-                .pipe(
-                  Effect.map((r) => r.TagSet ?? []),
-                  Effect.catchTag("NoSuchTagSet", () => Effect.succeed([])),
-                );
+              const existing = yield* s3.getBucketTagging({ Bucket: bucketName }).pipe(
+                Effect.map((r) => r.TagSet ?? []),
+                Effect.catchTag("NoSuchTagSet", () => Effect.succeed([])),
+              );
               yield* s3.putBucketTagging({
                 Bucket: bucketName,
                 Tagging: {
@@ -243,9 +222,7 @@ describe.sequential(
                 },
               });
               yield* Effect.sleep("5 seconds");
-              const body = (yield* getJson(
-                `${baseUrl}/events/check?bucket=${bucketName}`,
-              )) as any;
+              const body = (yield* getJson(`${baseUrl}/events/check?bucket=${bucketName}`)) as any;
               return body.seen as boolean;
             });
 

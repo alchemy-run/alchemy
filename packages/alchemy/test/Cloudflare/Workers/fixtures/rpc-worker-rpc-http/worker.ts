@@ -25,12 +25,9 @@ export default class RpcWorkerRpcHttpWorker extends Cloudflare.RpcWorker<RpcWork
     const objects = yield* RpcWorkerRpcHttpObject;
 
     const handlers = WorkerRpcs.toLayer({
-      Ping: ({ message }) =>
-        Effect.sync(() => ({ echo: message, n: ++counter })),
+      Ping: ({ message }) => Effect.sync(() => ({ echo: message, n: ++counter })),
       Count: ({ upto }) =>
-        Stream.fromIterable(
-          Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1),
-        ),
+        Stream.fromIterable(Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1)),
       PingDO: ({ message }) =>
         Effect.gen(function* () {
           const client = yield* objects.getByName("default");

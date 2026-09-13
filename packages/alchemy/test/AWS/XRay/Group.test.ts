@@ -22,9 +22,7 @@ class GroupStillExists extends Data.TaggedError("GroupStillExists")<{
 const assertGroupDeleted = (groupName: string) =>
   findGroup(groupName).pipe(
     Effect.flatMap((group) =>
-      group === undefined
-        ? Effect.void
-        : Effect.fail(new GroupStillExists({ groupName })),
+      group === undefined ? Effect.void : Effect.fail(new GroupStillExists({ groupName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "GroupStillExists",
@@ -56,11 +54,7 @@ test.provider(
       expect(created?.InsightsConfiguration?.InsightsEnabled).toBe(false);
       const tags = yield* xray
         .listTagsForResource({ ResourceARN: group.groupArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestGroup");
 
@@ -68,8 +62,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Group("TestGroup", {
-            filterExpression:
-              'service("alchemy-xray-test") AND responsetime > 2',
+            filterExpression: 'service("alchemy-xray-test") AND responsetime > 2',
             insightsEnabled: true,
             tags: { Environment: "test" },
           });
@@ -88,8 +81,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Group("TestGroup", {
-            filterExpression:
-              'service("alchemy-xray-test") AND responsetime > 2',
+            filterExpression: 'service("alchemy-xray-test") AND responsetime > 2',
             tags: { Environment: "test" },
           });
         }),

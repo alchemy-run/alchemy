@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = "alchemy-test-2.us";
 
@@ -39,10 +36,7 @@ const expectGone = (accountId: string, siteTag: string) =>
     Effect.catchTag("SiteNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SiteNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -55,9 +49,7 @@ test.provider(
       yield* stack.destroy();
 
       const site = yield* stack.deploy(
-        Cloudflare.Rum.Site("HostSite", {
-          host: `create.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("HostSite", { host: `create.${zoneName}` }),
       );
 
       expect(site.siteTag).toBeTruthy();
@@ -88,9 +80,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.Rum.Site("UpdateSite", {
-          host: `update.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("UpdateSite", { host: `update.${zoneName}` }),
       );
 
       expect(initial.host).toEqual(`update.${zoneName}`);
@@ -98,9 +88,7 @@ test.provider(
 
       // Changing the hostname is an in-place update of the same site.
       const updated = yield* stack.deploy(
-        Cloudflare.Rum.Site("UpdateSite", {
-          host: `update-v2.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("UpdateSite", { host: `update-v2.${zoneName}` }),
       );
 
       expect(updated.siteTag).toEqual(initial.siteTag);
@@ -112,9 +100,7 @@ test.provider(
 
       // Redeploying identical props is a no-op (still the same site).
       const noop = yield* stack.deploy(
-        Cloudflare.Rum.Site("UpdateSite", {
-          host: `update-v2.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("UpdateSite", { host: `update-v2.${zoneName}` }),
       );
       expect(noop.siteTag).toEqual(initial.siteTag);
 
@@ -132,18 +118,13 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zone = yield* findZoneByName({ accountId, name: zoneName });
       if (!zone) {
-        return yield* Effect.die(
-          new Error(`zone "${zoneName}" not found in account`),
-        );
+        return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
       }
 
       yield* stack.destroy();
 
       const zoneSite = yield* stack.deploy(
-        Cloudflare.Rum.Site("FlipSite", {
-          zoneTag: zone.id,
-          autoInstall: true,
-        }),
+        Cloudflare.Rum.Site("FlipSite", { zoneTag: zone.id, autoInstall: true }),
       );
 
       expect(zoneSite.siteTag).toBeTruthy();
@@ -154,10 +135,7 @@ test.provider(
 
       // Toggle autoInstall in place — same site.
       const toggled = yield* stack.deploy(
-        Cloudflare.Rum.Site("FlipSite", {
-          zoneTag: zone.id,
-          autoInstall: false,
-        }),
+        Cloudflare.Rum.Site("FlipSite", { zoneTag: zone.id, autoInstall: false }),
       );
       expect(toggled.siteTag).toEqual(zoneSite.siteTag);
       expect(toggled.autoInstall).toEqual(false);
@@ -165,9 +143,7 @@ test.provider(
       // Switching to host-based measurement changes the identity model —
       // the site must be replaced (new siteTag) and the old one deleted.
       const replaced = yield* stack.deploy(
-        Cloudflare.Rum.Site("FlipSite", {
-          host: `flip.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("FlipSite", { host: `flip.${zoneName}` }),
       );
       expect(replaced.siteTag).not.toEqual(zoneSite.siteTag);
       expect(replaced.host).toEqual(`flip.${zoneName}`);
@@ -178,14 +154,7 @@ test.provider(
 
       yield* expectGone(accountId, replaced.siteTag);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:rum",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:rum", "provider:cloudflare:zone", "live"] },
 );
 
 test.provider(
@@ -195,9 +164,7 @@ test.provider(
       yield* stack.destroy();
 
       const deployed = yield* stack.deploy(
-        Cloudflare.Rum.Site("ListSite", {
-          host: `list.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("ListSite", { host: `list.${zoneName}` }),
       );
 
       const provider = yield* Provider.findProvider(Cloudflare.Rum.Site);
@@ -219,9 +186,7 @@ test.provider(
       yield* stack.destroy();
 
       const site = yield* stack.deploy(
-        Cloudflare.Rum.Site("HealSite", {
-          host: `heal.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("HealSite", { host: `heal.${zoneName}` }),
       );
 
       // Delete the site out-of-band. A redeploy with identical props is a
@@ -236,9 +201,7 @@ test.provider(
       );
 
       const healed = yield* stack.deploy(
-        Cloudflare.Rum.Site("HealSite", {
-          host: `heal-v2.${zoneName}`,
-        }),
+        Cloudflare.Rum.Site("HealSite", { host: `heal-v2.${zoneName}` }),
       );
 
       expect(healed.siteTag).not.toEqual(site.siteTag);

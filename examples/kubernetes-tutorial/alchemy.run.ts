@@ -3,8 +3,8 @@ import { Stage } from "alchemy";
 import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import HealthCheck from "./src/HealthCheck.ts";
-import SmokeTest from "./src/SmokeTest.ts";
 import { Cluster, Web } from "./src/infra.ts";
+import SmokeTest from "./src/SmokeTest.ts";
 
 export default Alchemy.Stack(
   "MyCluster",

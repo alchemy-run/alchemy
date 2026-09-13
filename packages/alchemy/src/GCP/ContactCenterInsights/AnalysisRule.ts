@@ -158,9 +158,7 @@ export type AnalysisRule = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const AnalysisRule = Resource<AnalysisRule>(
-  "GCP.ContactCenterInsights.AnalysisRule",
-);
+export const AnalysisRule = Resource<AnalysisRule>("GCP.ContactCenterInsights.AnalysisRule");
 
 export class AnalysisRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AnalysisRuleNotResolved",
@@ -168,11 +166,8 @@ export class AnalysisRuleNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  analysisRuleId: string,
-) => `${locationParent(project, location)}/analysisRules/${analysisRuleId}`;
+const resourceName = (project: string, location: string, analysisRuleId: string) =>
+  `${locationParent(project, location)}/analysisRules/${analysisRuleId}`;
 
 const selectorOf = (
   selector: cci.GoogleCloudContactcenterinsightsV1AnnotatorSelector | undefined,
@@ -194,10 +189,7 @@ const selectorOf = (
   };
 };
 
-const toAttrs = (
-  rule: cci.GoogleCloudContactcenterinsightsV1AnalysisRule,
-  project: string,
-) => {
+const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AnalysisRule, project: string) => {
   const name = rule.name ?? "";
   const parsed = parseOwnership(rule.displayName);
   return {
@@ -271,63 +263,36 @@ export const AnalysisRuleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const analysisRuleId = yield* toResourceId(
-        id,
-        olds?.analysisRuleId,
-        output?.analysisRuleId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, analysisRuleId);
+      const analysisRuleId = yield* toResourceId(id, olds?.analysisRuleId, output?.analysisRuleId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, analysisRuleId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         const ownership = yield* createInternalLabels(id);
         existing = yield* findByDisplayName(
           locationParent(env.project, location),
-          encodeOwnershipLine(
-            ownership,
-            olds?.displayName,
-            MAX_RULE_DISPLAY_NAME,
-          ),
+          encodeOwnershipLine(ownership, olds?.displayName, MAX_RULE_DISPLAY_NAME),
         );
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
-      const analysisRuleId = yield* toResourceId(
-        id,
-        news.analysisRuleId,
-        output?.analysisRuleId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, analysisRuleId);
+      const analysisRuleId = yield* toResourceId(id, news.analysisRuleId, output?.analysisRuleId);
+      const name = output?.name ?? resourceName(env.project, location, analysisRuleId);
       const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName,
-        MAX_RULE_DISPLAY_NAME,
-      );
+      const displayName = encodeOwnershipLine(ownership, news.displayName, MAX_RULE_DISPLAY_NAME);
       const active = news.active === true;
       const analysisPercentage = news.analysisPercentage ?? 0;
       const annotatorSelector = news.annotatorSelector;
@@ -364,17 +329,10 @@ export const AnalysisRuleProvider = () =>
 
       const currentName = current.name ?? name;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const filterChanged = !sameText(
-        current.conversationFilter,
-        news.conversationFilter,
-      );
+      const filterChanged = !sameText(current.conversationFilter, news.conversationFilter);
       const activeChanged = (current.active === true) !== active;
-      const percentageChanged =
-        (current.analysisPercentage ?? 0) !== analysisPercentage;
-      const selectorChanged = !jsonEqual(
-        selectorOf(current.annotatorSelector),
-        annotatorSelector,
-      );
+      const percentageChanged = (current.analysisPercentage ?? 0) !== analysisPercentage;
+      const selectorChanged = !jsonEqual(selectorOf(current.annotatorSelector), annotatorSelector);
 
       if (
         displayChanged ||

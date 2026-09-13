@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   probeAccountName,
@@ -84,18 +84,12 @@ test.provider.skipIf(!runLifecycle)(
             parent: probeAccountName,
             orgDisplayName: "Acme Billing",
           });
-          const config =
-            yield* GCP.CloudChannel.CustomersCustomerRepricingConfig(
-              "AcmeRule",
-              {
-                parent: customer.name,
-                effectiveInvoiceMonth: probeMonth,
-                adjustmentPercentage: "0.00",
-                entitlement:
-                  entitlement ??
-                  Output.interpolate`${customer.name}/entitlements/alchemy`,
-              },
-            );
+          const config = yield* GCP.CloudChannel.CustomersCustomerRepricingConfig("AcmeRule", {
+            parent: customer.name,
+            effectiveInvoiceMonth: probeMonth,
+            adjustmentPercentage: "0.00",
+            entitlement: entitlement ?? Output.interpolate`${customer.name}/entitlements/alchemy`,
+          });
           return { customer, config };
         }),
       );
@@ -103,10 +97,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.config.name).toContain("/customerRepricingConfigs/");
       expect(created.config.parent).toEqual(created.customer.name);
 
-      const fetched =
-        yield* cloudchannel.getAccountsCustomersCustomerRepricingConfigs({
-          name: created.config.name,
-        });
+      const fetched = yield* cloudchannel.getAccountsCustomersCustomerRepricingConfigs({
+        name: created.config.name,
+      });
       expect(fetched.name).toEqual(created.config.name);
 
       const updated = yield* stack.deploy(
@@ -117,19 +110,13 @@ test.provider.skipIf(!runLifecycle)(
             orgDisplayName: "Acme Billing",
             domain: created.customer.domain,
           });
-          const config =
-            yield* GCP.CloudChannel.CustomersCustomerRepricingConfig(
-              "AcmeRule",
-              {
-                parent: customer.name,
-                configId: created.config.configId,
-                effectiveInvoiceMonth: probeMonth,
-                adjustmentPercentage: "1.00",
-                entitlement:
-                  entitlement ??
-                  Output.interpolate`${customer.name}/entitlements/alchemy`,
-              },
-            );
+          const config = yield* GCP.CloudChannel.CustomersCustomerRepricingConfig("AcmeRule", {
+            parent: customer.name,
+            configId: created.config.configId,
+            effectiveInvoiceMonth: probeMonth,
+            adjustmentPercentage: "1.00",
+            entitlement: entitlement ?? Output.interpolate`${customer.name}/entitlements/alchemy`,
+          });
           return { customer, config };
         }),
       );

@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -33,17 +30,12 @@ const getVnet = (accountId: string, virtualNetworkId: string) =>
 const expectGone = (accountId: string, virtualNetworkId: string) =>
   getVnet(accountId, virtualNetworkId).pipe(
     Effect.flatMap((vnet) =>
-      vnet.deletedAt
-        ? Effect.void
-        : Effect.fail({ _tag: "VnetNotDeleted" } as const),
+      vnet.deletedAt ? Effect.void : Effect.fail({ _tag: "VnetNotDeleted" } as const),
     ),
     Effect.catchTag("VirtualNetworkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "VnetNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -140,10 +132,7 @@ test.provider(
       );
 
       yield* zeroTrust
-        .deleteNetworkVirtualNetwork({
-          accountId,
-          virtualNetworkId: vnet.virtualNetworkId,
-        })
+        .deleteNetworkVirtualNetwork({ accountId, virtualNetworkId: vnet.virtualNetworkId })
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
@@ -185,17 +174,11 @@ test.provider(
         }).pipe(adopt(true)),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Tunnel.VirtualNetwork,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Tunnel.VirtualNetwork);
       const all = yield* provider.list();
 
-      expect(
-        all.some((v) => v.virtualNetworkId === deployed.virtualNetworkId),
-      ).toBe(true);
-      const found = all.find(
-        (v) => v.virtualNetworkId === deployed.virtualNetworkId,
-      );
+      expect(all.some((v) => v.virtualNetworkId === deployed.virtualNetworkId)).toBe(true);
+      const found = all.find((v) => v.virtualNetworkId === deployed.virtualNetworkId);
       expect(found?.name).toEqual("alchemy-zt-vnet-list");
 
       yield* stack.destroy();

@@ -90,22 +90,14 @@ export interface PublicDnsNamespace extends Resource<
  *
  * @resource
  */
-export const PublicDnsNamespace = Resource<PublicDnsNamespace>(
-  "AWS.CloudMap.PublicDnsNamespace",
-);
+export const PublicDnsNamespace = Resource<PublicDnsNamespace>("AWS.CloudMap.PublicDnsNamespace");
 
 export const PublicDnsNamespaceProvider = () =>
   Provider.effect(
     PublicDnsNamespace,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 253, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 253, lowercase: true }));
       });
 
       const toAttributes = (namespace: sd.Namespace) => ({
@@ -122,19 +114,12 @@ export const PublicDnsNamespaceProvider = () =>
           Effect.gen(function* () {
             const pages = yield* sd.listNamespaces
               .pages({
-                Filters: [
-                  { Name: "TYPE", Values: ["DNS_PUBLIC"], Condition: "EQ" },
-                ],
+                Filters: [{ Name: "TYPE", Values: ["DNS_PUBLIC"], Condition: "EQ" }],
               })
               .pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Namespaces ?? [])
-              .filter(
-                (n) =>
-                  n.Id !== undefined &&
-                  n.Arn !== undefined &&
-                  n.Name !== undefined,
-              )
+              .filter((n) => n.Id !== undefined && n.Arn !== undefined && n.Name !== undefined)
               .map((n) => ({
                 namespaceId: n.Id!,
                 namespaceArn: n.Arn!,
@@ -144,13 +129,8 @@ export const PublicDnsNamespaceProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.namespaceName ?? (yield* createName(id, olds ?? {}));
-          const namespace = yield* observeNamespace(
-            "DNS_PUBLIC",
-            name,
-            output?.namespaceId,
-          );
+          const name = output?.namespaceName ?? (yield* createName(id, olds ?? {}));
+          const namespace = yield* observeNamespace("DNS_PUBLIC", name, output?.namespaceId);
           if (namespace?.Id === undefined) {
             return undefined;
           }
@@ -176,19 +156,13 @@ export const PublicDnsNamespaceProvider = () =>
           const desiredTtl = toWireSeconds(news.ttl);
 
           // 1. OBSERVE
-          let namespace = yield* observeNamespace(
-            "DNS_PUBLIC",
-            name,
-            output?.namespaceId,
-          );
+          let namespace = yield* observeNamespace("DNS_PUBLIC", name, output?.namespaceId);
 
           // 2. ENSURE — create if missing (async operation); the created
           // namespace is observed by the operation's target id, riding out
           // a same-name predecessor still deleting (see ensureNamespace)
           if (namespace === undefined) {
-            yield* session.note(
-              `creating public DNS namespace ${name} (async)...`,
-            );
+            yield* session.note(`creating public DNS namespace ${name} (async)...`);
             namespace = yield* ensureNamespace(
               "DNS_PUBLIC",
               name,
@@ -217,18 +191,14 @@ export const PublicDnsNamespaceProvider = () =>
           // 3. SYNC — description + SOA TTL, observed vs desired
           const observedTtl = namespace.Properties?.DnsProperties?.SOA?.TTL;
           const descriptionDelta =
-            news.description !== undefined &&
-            news.description !== namespace.Description;
-          const ttlDelta =
-            desiredTtl !== undefined && desiredTtl !== observedTtl;
+            news.description !== undefined && news.description !== namespace.Description;
+          const ttlDelta = desiredTtl !== undefined && desiredTtl !== observedTtl;
           if (descriptionDelta || ttlDelta) {
             const update = yield* sd.updatePublicDnsNamespace({
               Id: namespace.Id,
               Namespace: {
                 Description: descriptionDelta ? news.description : undefined,
-                Properties: ttlDelta
-                  ? { DnsProperties: { SOA: { TTL: desiredTtl! } } }
-                  : undefined,
+                Properties: ttlDelta ? { DnsProperties: { SOA: { TTL: desiredTtl! } } } : undefined,
               },
             });
             if (update.OperationId !== undefined) {
@@ -248,9 +218,7 @@ export const PublicDnsNamespaceProvider = () =>
           const deleted = yield* retryWhileResourceInUse(
             sd.deleteNamespace({ Id: output.namespaceId }),
           ).pipe(
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed({ OperationId: undefined }),
-            ),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed({ OperationId: undefined })),
             // an identical delete is already in flight — await THAT operation
             // instead of silently skipping the deletion
             Effect.catchTag("DuplicateRequest", (e) =>

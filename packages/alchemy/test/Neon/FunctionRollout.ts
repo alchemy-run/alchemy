@@ -63,10 +63,7 @@ export const functionRolloutSamples = <A, E, R>(
   });
 
 /** Compare the shared HTTP client with a fresh, proxy-bypassing connection. */
-export const functionTextSamples = (
-  url: string,
-  isCurrent: (body: string) => boolean,
-) =>
+export const functionTextSamples = (url: string, isCurrent: (body: string) => boolean) =>
   functionRolloutSamples(
     Effect.gen(function* () {
       const response = yield* HttpClient.get(url, {

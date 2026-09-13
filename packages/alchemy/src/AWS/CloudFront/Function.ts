@@ -105,20 +105,13 @@ export const FunctionProvider = () =>
   Provider.effect(
     Function,
     Effect.gen(function* () {
-      const describe = Effect.fn(function* (
-        name: string,
-        stage?: cloudfront.FunctionStage,
-      ) {
+      const describe = Effect.fn(function* (name: string, stage?: cloudfront.FunctionStage) {
         return yield* cloudfront
           .describeFunction({
             Name: name,
             Stage: stage,
           })
-          .pipe(
-            Effect.catchTag("NoSuchFunctionExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.succeed(undefined)));
       });
 
       const getCurrent = Effect.fn(function* (name: string) {
@@ -134,15 +127,10 @@ export const FunctionProvider = () =>
         return current?.ETag;
       });
 
-      const publish = Effect.fn(function* (
-        name: string,
-        etag: string | undefined,
-      ) {
+      const publish = Effect.fn(function* (name: string, etag: string | undefined) {
         if (!etag) {
           return yield* Effect.fail(
-            new Error(
-              `CloudFront Function '${name}' is missing an ETag for publish`,
-            ),
+            new Error(`CloudFront Function '${name}' is missing an ETag for publish`),
           );
         }
         yield* cloudfront.publishFunction({
@@ -163,10 +151,9 @@ export const FunctionProvider = () =>
             const items: Function["Attributes"][] = [];
             let marker: string | undefined = undefined;
             do {
-              const listed: cloudfront.ListFunctionsResult =
-                yield* cloudfront.listFunctions({
-                  Marker: marker,
-                });
+              const listed: cloudfront.ListFunctionsResult = yield* cloudfront.listFunctions({
+                Marker: marker,
+              });
               for (const summary of listed.FunctionList?.Items ?? []) {
                 items.push(toAttrs(summary, undefined, summary.Name ?? ""));
               }
@@ -177,16 +164,12 @@ export const FunctionProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.functionName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.functionName ?? (yield* createName(id, olds ?? {}));
           const current = yield* getCurrent(name);
           if (!current?.FunctionSummary) {
             return undefined;
@@ -215,9 +198,7 @@ export const FunctionProvider = () =>
                     FunctionConfig: {
                       Comment: news.comment ?? "",
                       Runtime: news.runtime ?? "cloudfront-js-2.0",
-                      KeyValueStoreAssociations: toKvAssociations(
-                        news.keyValueStoreArns,
-                      ),
+                      KeyValueStoreAssociations: toKvAssociations(news.keyValueStoreArns),
                     },
                     FunctionCode: new TextEncoder().encode(news.code),
                   })
@@ -256,20 +237,16 @@ export const FunctionProvider = () =>
                   Comment: news.comment ?? "",
                   Runtime:
                     news.runtime ??
-                    observedDevelopment.FunctionSummary?.FunctionConfig
-                      .Runtime ??
+                    observedDevelopment.FunctionSummary?.FunctionConfig.Runtime ??
                     "cloudfront-js-2.0",
-                  KeyValueStoreAssociations: toKvAssociations(
-                    news.keyValueStoreArns,
-                  ),
+                  KeyValueStoreAssociations: toKvAssociations(news.keyValueStoreArns),
                 },
                 FunctionCode: new TextEncoder().encode(news.code),
               })
               .pipe(
                 Effect.retry({
                   while: (error) =>
-                    error._tag === "InvalidArgument" &&
-                    isKeyValueStoreAssociationPending(error),
+                    error._tag === "InvalidArgument" && isKeyValueStoreAssociationPending(error),
                   schedule: cappedCloudFrontRetrySchedule,
                 }),
               );
@@ -279,9 +256,7 @@ export const FunctionProvider = () =>
           // Publish DEVELOPMENT → LIVE so consumers see the desired code.
           const live = yield* publish(name, etagToPublish);
           if (!live?.FunctionSummary) {
-            return yield* Effect.die(
-              "publishFunction returned no function summary",
-            );
+            return yield* Effect.die("publishFunction returned no function summary");
           }
 
           yield* session.note(name);
@@ -289,9 +264,7 @@ export const FunctionProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.gen(function* () {
-            const developmentEtag = yield* getDevelopmentEtag(
-              output.functionName,
-            );
+            const developmentEtag = yield* getDevelopmentEtag(output.functionName);
             if (!developmentEtag) {
               yield* Effect.logInfo(
                 `CloudFront Function delete: ${output.functionName} already absent`,
@@ -346,9 +319,7 @@ const cappedCloudFrontRetrySchedule = Schedule.max([
 ]).pipe(
   Schedule.modifyDelay(({ duration }) =>
     Effect.succeed(
-      Duration.isGreaterThan(duration, Duration.seconds(2))
-        ? Duration.seconds(2)
-        : duration,
+      Duration.isGreaterThan(duration, Duration.seconds(2)) ? Duration.seconds(2) : duration,
     ),
   ),
 );

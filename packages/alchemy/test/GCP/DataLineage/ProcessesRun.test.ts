@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datalineage from "@distilled.cloud/gcp/datalineage_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   datalineage.getProjectsLocationsProcessesRuns({ name }).pipe(
@@ -61,9 +58,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(fetched.name).toEqual(created.run.name);
       expect(fetched.state).toEqual("STARTED");
       expect(
-        Object.keys(fetched.attributes ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(fetched.attributes ?? {}).some((key) => key.startsWith("alchemy-")),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(

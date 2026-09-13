@@ -14,12 +14,9 @@ export const SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING = {
   onByDefaultAfter: "2025-04-01",
 } satisfies CompatibilityFlag;
 
-const COMPATIBILITY_FLAGS = [
-  SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
-] as const;
+const COMPATIBILITY_FLAGS = [SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING] as const;
 
-export type ENABLEMENT_COMPATIBILITY_FLAGS =
-  (typeof COMPATIBILITY_FLAGS)[number]["enable"];
+export type ENABLEMENT_COMPATIBILITY_FLAGS = (typeof COMPATIBILITY_FLAGS)[number]["enable"];
 
 export const resolveCompatibilityOptions = (configuration?: AssetConfig) => {
   const compatibilityDate = configuration?.compatibility_date ?? "2021-11-02";
@@ -30,12 +27,8 @@ export const resolveCompatibilityOptions = (configuration?: AssetConfig) => {
     if (
       compatibilityFlag.onByDefaultAfter &&
       compatibilityDate >= compatibilityFlag.onByDefaultAfter &&
-      !resolvedCompatibilityFlags.find(
-        (flag) => flag === compatibilityFlag.disable,
-      ) &&
-      !resolvedCompatibilityFlags.find(
-        (flag) => flag === compatibilityFlag.enable,
-      )
+      !resolvedCompatibilityFlags.find((flag) => flag === compatibilityFlag.disable) &&
+      !resolvedCompatibilityFlags.find((flag) => flag === compatibilityFlag.enable)
     ) {
       resolvedCompatibilityFlags.push(compatibilityFlag.enable);
     }
@@ -51,7 +44,5 @@ export const flagIsEnabled = (
   configuration: Required<AssetConfig>,
   compatibilityFlag: (typeof COMPATIBILITY_FLAGS)[number],
 ) => {
-  return !!configuration.compatibility_flags.find(
-    (flag) => flag === compatibilityFlag.enable,
-  );
+  return !!configuration.compatibility_flags.find((flag) => flag === compatibilityFlag.enable);
 };

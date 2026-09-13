@@ -7,7 +7,6 @@ export class FunctionEnvironment extends Context.Service<
 >()("Neon.FunctionEnvironment") {}
 
 /** Native request retained for WebSocket upgrades and Fetch interoperability. */
-export class FunctionRequest extends Context.Service<
-  FunctionRequest,
-  Request
->()("Neon.FunctionRequest") {}
+export class FunctionRequest extends Context.Service<FunctionRequest, Request>()(
+  "Neon.FunctionRequest",
+) {}

@@ -9,10 +9,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Freshly-minted scoped API tokens propagate eventually-consistently across
 // Cloudflare's edge — ride out intermittent 403s on the test's own
@@ -68,12 +65,9 @@ describe.sequential(
           // Create — pin green compute to the opposite of the baseline.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Workers.AccountSetting(
-                "AccountSetting",
-                {
-                  greenCompute: flipped,
-                },
-              );
+              return yield* Cloudflare.Workers.AccountSetting("AccountSetting", {
+                greenCompute: flipped,
+              });
             }),
           );
 
@@ -89,12 +83,9 @@ describe.sequential(
           // singleton, no replacement; the captured initial value survives.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Workers.AccountSetting(
-                "AccountSetting",
-                {
-                  greenCompute: baselineGreen,
-                },
-              );
+              return yield* Cloudflare.Workers.AccountSetting("AccountSetting", {
+                greenCompute: baselineGreen,
+              });
             }),
           );
 
@@ -110,9 +101,7 @@ describe.sequential(
 
           const restored = yield* waitForGreenCompute(baselineGreen);
           expect(restored.greenCompute ?? false).toEqual(baselineGreen);
-          expect(restored.defaultUsageModel).toEqual(
-            baseline.defaultUsageModel,
-          );
+          expect(restored.defaultUsageModel).toEqual(baseline.defaultUsageModel);
         }).pipe(logLevel),
       { timeout: 120_000 },
     );
@@ -136,18 +125,10 @@ describe.sequential(
             }),
           );
 
-          expect(setting.defaultUsageModel).toEqual(
-            baseline.defaultUsageModel ?? undefined,
-          );
-          expect(setting.greenCompute).toEqual(
-            baseline.greenCompute ?? undefined,
-          );
-          expect(setting.initialDefaultUsageModel).toEqual(
-            baseline.defaultUsageModel ?? undefined,
-          );
-          expect(setting.initialGreenCompute).toEqual(
-            baseline.greenCompute ?? undefined,
-          );
+          expect(setting.defaultUsageModel).toEqual(baseline.defaultUsageModel ?? undefined);
+          expect(setting.greenCompute).toEqual(baseline.greenCompute ?? undefined);
+          expect(setting.initialDefaultUsageModel).toEqual(baseline.defaultUsageModel ?? undefined);
+          expect(setting.initialGreenCompute).toEqual(baseline.greenCompute ?? undefined);
 
           // Destroy — initial values match the live state, so restore is a
           // no-op and the account is left untouched.
@@ -170,18 +151,14 @@ describe.sequential(
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const provider = yield* Provider.findProvider(
-            Cloudflare.Workers.AccountSetting,
-          );
+          const provider = yield* Provider.findProvider(Cloudflare.Workers.AccountSetting);
           const all = yield* provider.list();
 
           expect(all.length).toEqual(1);
           expect(all[0].accountId).toEqual(accountId);
           // The element is a full Attributes shape (same as `read` produces).
           expect(all[0].initialGreenCompute).toEqual(all[0].greenCompute);
-          expect(all[0].initialDefaultUsageModel).toEqual(
-            all[0].defaultUsageModel,
-          );
+          expect(all[0].initialDefaultUsageModel).toEqual(all[0].defaultUsageModel);
 
           // `stack` is unused (the singleton always exists), but keep the destroy
           // bookend so the harness state stays clean.

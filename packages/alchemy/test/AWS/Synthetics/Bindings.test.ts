@@ -8,9 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import SyntheticsBindingsFunctionLive, {
-  SyntheticsBindingsFunction,
-} from "./handler";
+import SyntheticsBindingsFunctionLive, { SyntheticsBindingsFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "SyntheticsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -40,26 +35,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // The role policy granting synthetics:* is attached moments before the
 // tests — IAM propagation can lag ~10-30s, surfacing as AccessDenied from a
@@ -88,9 +76,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Synthetics test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Synthetics test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Synthetics test setup: deploying fixture");
@@ -105,21 +91,15 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Synthetics test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Synthetics test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Synthetics test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Synthetics test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -127,9 +107,7 @@ describe.sequential(
       { timeout: 420_000 },
     );
 
-    afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), {
-      timeout: 420_000,
-    });
+    afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), { timeout: 420_000 });
 
     describe("binding registration", () => {
       test.provider("all 5 capabilities initialize in the runtime", (_stack) =>
@@ -156,9 +134,7 @@ describe.sequential(
             };
             expect(response.tag).toBe("ok");
             // Never started → READY (STOPPED once a run has completed).
-            expect(["READY", "STOPPED", "RUNNING", "STARTING"]).toContain(
-              response.state,
-            );
+            expect(["READY", "STOPPED", "RUNNING", "STARTING"]).toContain(response.state);
           }),
         { timeout: 120_000 },
       );
@@ -167,10 +143,7 @@ describe.sequential(
     describe("GetCanaryRuns", () => {
       test.provider("lists runs on the bound canary", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJsonUntilGranted("/runs")) as {
-            tag: string;
-            count?: number;
-          };
+          const response = (yield* getJsonUntilGranted("/runs")) as { tag: string; count?: number };
           expect(response.tag).toBe("ok");
           // A never-started canary has no runs; a zero count still proves the
           // grant + name injection round-tripped.
@@ -195,18 +168,14 @@ describe.sequential(
     });
 
     describe("StopCanary", () => {
-      test.provider(
-        "typed rejection when the canary is not running (grant proven)",
-        (_stack) =>
-          Effect.gen(function* () {
-            // The canary was deployed stopped (READY); stopping it is a
-            // ConflictException — the typed tag proves synthetics:StopCanary
-            // reached the API.
-            const response = (yield* getJsonUntilGranted("/stop")) as {
-              tag: string;
-            };
-            expect(["ok", "ConflictException"]).toContain(response.tag);
-          }),
+      test.provider("typed rejection when the canary is not running (grant proven)", (_stack) =>
+        Effect.gen(function* () {
+          // The canary was deployed stopped (READY); stopping it is a
+          // ConflictException — the typed tag proves synthetics:StopCanary
+          // reached the API.
+          const response = (yield* getJsonUntilGranted("/stop")) as { tag: string };
+          expect(["ok", "ConflictException"]).toContain(response.tag);
+        }),
       );
     });
 
@@ -215,9 +184,7 @@ describe.sequential(
         "starts the canary for its single scheduled run",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* getJsonUntilGranted("/start")) as {
-              tag: string;
-            };
+            const response = (yield* getJsonUntilGranted("/start")) as { tag: string };
             expect(response.tag).toBe("ok");
             // A one-shot canary can traverse READY -> RUNNING -> READY between
             // state polls. Prove the accepted start by observing its run record
@@ -237,24 +204,18 @@ describe.sequential(
       );
     });
 
-    describe(
-      "consumeCanaryEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          (_stack) =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeCanaryEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeCanaryEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeCanaryEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

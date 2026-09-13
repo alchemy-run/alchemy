@@ -9,12 +9,7 @@ import {
   PLACEHOLDER_REGEX,
   SPLAT_REGEX,
 } from "./constants.ts";
-import type {
-  InvalidRedirectRule,
-  ParsedRedirects,
-  RedirectLine,
-  RedirectRule,
-} from "./types.ts";
+import type { InvalidRedirectRule, ParsedRedirects, RedirectLine, RedirectRule } from "./types.ts";
 import { urlHasHost, validateUrl } from "./validateURL.ts";
 
 export function parseRedirects(
@@ -81,11 +76,7 @@ export function parseRedirects(
     }
     const from = fromResult[0];
 
-    if (
-      canCreateStaticRule &&
-      !from.match(SPLAT_REGEX) &&
-      !from.match(PLACEHOLDER_REGEX)
-    ) {
+    if (canCreateStaticRule && !from.match(SPLAT_REGEX) && !from.match(PLACEHOLDER_REGEX)) {
       staticRules += 1;
 
       if (staticRules > maxStaticRules) {
@@ -136,14 +127,10 @@ export function parseRedirects(
     // redirect it back to `/` by removing the `/index.html`.
     // We only want to run this on relative URLs.
     const hasRelativePath = !urlHasHost(to);
-    const hasWildcardToIndex =
-      from.endsWith("/*") && /\/index(.html)?$/.test(to);
+    const hasWildcardToIndex = from.endsWith("/*") && /\/index(.html)?$/.test(to);
     const hasRootToIndex = from.endsWith("/") && /\/index(.html)?$/.test(to);
     const hasHTMLHandling = htmlHandling !== "none"; // HTML handling is enabled by default.
-    if (
-      hasRelativePath &&
-      (hasWildcardToIndex || (hasRootToIndex && hasHTMLHandling))
-    ) {
+    if (hasRelativePath && (hasWildcardToIndex || (hasRootToIndex && hasHTMLHandling))) {
       invalid.push({
         line,
         lineNumber: i + 1,

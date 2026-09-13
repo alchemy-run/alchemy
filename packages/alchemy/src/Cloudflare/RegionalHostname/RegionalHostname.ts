@@ -50,13 +50,7 @@ export interface Attributes {
   createdOn: string;
 }
 
-export type RegionalHostname = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type RegionalHostname = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Regional Hostname restricts which Cloudflare data centers decrypt and
@@ -135,9 +129,7 @@ export const RegionalHostnameProvider = () =>
             // reject the route, and zones the ambient token cannot access
             // return a 403 `Forbidden`; skip both rather than failing the
             // whole list.
-            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -173,9 +165,7 @@ export const RegionalHostnameProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       // The hostname is the identifier — cold reads are trivial.
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const hostname = output?.hostname ?? olds?.hostname;
       if (!zoneId || typeof hostname !== "string") return undefined;
       const observed = yield* getHostname(zoneId, hostname);
@@ -221,10 +211,7 @@ export const RegionalHostnameProvider = () =>
           hostname: output.hostname,
         })
         .pipe(
-          Effect.catchTag(
-            ["RegionalHostnameNotFound", "RegionalHostnameEmpty"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["RegionalHostnameNotFound", "RegionalHostnameEmpty"], () => Effect.void),
         );
     }),
   });
@@ -238,9 +225,8 @@ const getHostname = (zoneId: string, hostname: string) =>
   addressing
     .getRegionalHostname({ zoneId, hostname })
     .pipe(
-      Effect.catchTag(
-        ["RegionalHostnameNotFound", "RegionalHostnameEmpty"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["RegionalHostnameNotFound", "RegionalHostnameEmpty"], () =>
+        Effect.succeed(undefined),
       ),
     );
 

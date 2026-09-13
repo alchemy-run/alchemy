@@ -27,8 +27,7 @@ test.provider(
 
       const azResult = yield* EC2.describeAvailabilityZones({});
       const availableAzs =
-        azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
-        [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available") ?? [];
       const az1 = availableAzs[0]?.ZoneName!;
       const az2 = availableAzs[1]?.ZoneName!;
       const defaultVpc = yield* getDefaultVpc;
@@ -81,17 +80,13 @@ test.provider(
         ListenerArn: deployed.listener.listenerArn,
       });
       expect(
-        attrs.Attributes?.find(
-          (a) => a.Key === "routing.http.response.server.enabled",
-        )?.Value,
+        attrs.Attributes?.find((a) => a.Key === "routing.http.response.server.enabled")?.Value,
       ).toBe("false");
 
       const provider = yield* Provider.findProvider(Listener);
       const all = yield* provider.list();
 
-      expect(
-        all.some((l) => l.listenerArn === deployed.listener.listenerArn),
-      ).toBe(true);
+      expect(all.some((l) => l.listenerArn === deployed.listener.listenerArn)).toBe(true);
 
       yield* stack.destroy();
 

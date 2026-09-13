@@ -42,22 +42,12 @@ it.live(
             bindings: {},
             actions: {},
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
+          Layer.succeed(AlchemyContext, { dev: false, adopt: false, dotAlchemy: ".alchemy" }),
           Layer.succeed(
             ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-            }),
+            ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
           ),
-        ).pipe(
-          Layer.provideMerge(
-            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
-          ),
-        ),
+        ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))),
       ),
       Effect.scoped,
       Effect.provide(CliKit.layer({ input: false })),

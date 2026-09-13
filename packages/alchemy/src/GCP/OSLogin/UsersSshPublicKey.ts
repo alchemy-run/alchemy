@@ -109,9 +109,7 @@ export type UsersSshPublicKey = Resource<
  * @resource
  * @category OSLogin
  */
-export const UsersSshPublicKey = Resource<UsersSshPublicKey>(
-  "GCP.OSLogin.UsersSshPublicKey",
-);
+export const UsersSshPublicKey = Resource<UsersSshPublicKey>("GCP.OSLogin.UsersSshPublicKey");
 
 export class UsersSshPublicKeyNotResolved extends Data.TaggedError(
   "GCP.OSLogin.UsersSshPublicKeyNotResolved",
@@ -163,16 +161,13 @@ export const UsersSshPublicKeyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const user = toUserId(olds?.user, output?.user);
       const byName = yield* getSshPublicKey(
-        output?.name ??
-          (output?.fingerprint ? resourceName(user, output.fingerprint) : ""),
+        output?.name ?? (output?.fingerprint ? resourceName(user, output.fingerprint) : ""),
       );
       if (byName !== undefined) return toAttrs(byName, user, env.project);
       if (olds === undefined) return undefined;
       // No labels: an identical key without state may belong to anyone.
       const found = yield* findKeyByText(user, olds.key, env.project);
-      return found === undefined
-        ? undefined
-        : Unowned(toAttrs(found, user, env.project));
+      return found === undefined ? undefined : Unowned(toAttrs(found, user, env.project));
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -194,11 +189,7 @@ export const UsersSshPublicKeyProvider = () =>
               expirationTimeUsec: news.expirationTimeUsec,
             },
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () =>
-            findKeyByText(user, desiredKey, env.project),
-          ),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => findKeyByText(user, desiredKey, env.project)));
         current = created ?? undefined;
       }
 
@@ -209,8 +200,7 @@ export const UsersSshPublicKeyProvider = () =>
       }
 
       const name =
-        current.name ??
-        resourceName(user, current.fingerprint ?? output?.fingerprint ?? "");
+        current.name ?? resourceName(user, current.fingerprint ?? output?.fingerprint ?? "");
       // The fingerprint covers the full key text, so `key` is never patched.
       const expirationChanged =
         (current.expirationTimeUsec ?? "") !== (news.expirationTimeUsec ?? "");
@@ -233,12 +223,8 @@ export const UsersSshPublicKeyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const name =
         output.name ||
-        (output.fingerprint
-          ? resourceName(output.user || DEFAULT_USER, output.fingerprint)
-          : "");
+        (output.fingerprint ? resourceName(output.user || DEFAULT_USER, output.fingerprint) : "");
       if (name.length === 0) return;
-      yield* ignoreMissing(
-        retryConflict(oslogin.deleteUsersSshPublicKeys({ name })),
-      );
+      yield* ignoreMissing(retryConflict(oslogin.deleteUsersSshPublicKeys({ name })));
     }),
   });

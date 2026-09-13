@@ -24,11 +24,7 @@ import { runBuildChild } from "../core/BuildChild.ts";
  * the deploy target (same shape as `nextjs/aws`).
  */
 import * as FrameworkCore from "../core/index.ts";
-import {
-  DeployTargetError,
-  makeDeployTarget,
-  type DeployTarget,
-} from "../core/index.ts";
+import { DeployTargetError, makeDeployTarget, type DeployTarget } from "../core/index.ts";
 import { resolveProjectPackageDirectory } from "../core/Loader.ts";
 import {
   awaitVinextDevReady,
@@ -102,10 +98,7 @@ export const handler = ${wrap}(fetchHandler);
 };
 
 const resolveLambdaAdapterPath = Effect.try({
-  try: () =>
-    fileURLToPath(
-      import.meta.resolve("@alchemy.run/frontend-frameworks/aws-lambda"),
-    ),
+  try: () => fileURLToPath(import.meta.resolve("@alchemy.run/frontend-frameworks/aws-lambda")),
   catch: (cause) =>
     failFramework(
       'Failed to resolve "@alchemy.run/frontend-frameworks/aws-lambda" — is the package built (its exports map serves dist/)?',
@@ -134,22 +127,14 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
     const adapterPath = yield* resolveLambdaAdapterPath;
     const adapterSource = yield* fs
       .readFileString(adapterPath)
-      .pipe(
-        Effect.mapError(
-          failFramework("Failed to read the aws-lambda adapter module"),
-        ),
-      );
+      .pipe(Effect.mapError(failFramework("Failed to read the aws-lambda adapter module")));
     yield* fs
       .writeFileString(
         path.join(dist.serverDir, LAMBDA_ADAPTER_FILE_NAME),
         adapterSource.replace(/^\/\/# sourceMappingURL=.*$/m, ""),
       )
       .pipe(
-        Effect.mapError(
-          failFramework(
-            "Failed to write the aws-lambda adapter into dist/server",
-          ),
-        ),
+        Effect.mapError(failFramework("Failed to write the aws-lambda adapter into dist/server")),
       );
     const output = yield* pinServeModule(
       dist,
@@ -157,13 +142,10 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
       makeLambdaEntrySource(config.config.streaming !== false),
     );
     // Preserve vinext's separate RSC/SSR module graphs and package its externals.
-    const vinextRoot = yield* resolveProjectPackageDirectory(
-      root,
-      "vinext",
-    ).pipe(Effect.flatMap((directory) => fs.realPath(directory)));
-    const standaloneUrl = yield* path.toFileUrl(
-      path.join(vinextRoot, "dist/build/standalone.js"),
+    const vinextRoot = yield* resolveProjectPackageDirectory(root, "vinext").pipe(
+      Effect.flatMap((directory) => fs.realPath(directory)),
     );
+    const standaloneUrl = yield* path.toFileUrl(path.join(vinextRoot, "dist/build/standalone.js"));
     const standalone = yield* Effect.tryPromise({
       try: () =>
         import(/* @vite-ignore */ standaloneUrl.href) as Promise<{
@@ -184,25 +166,18 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
           outDir: dist.distDirectory!,
           vinextPackageRoot: vinextRoot,
         }),
-      catch: failFramework(
-        "Failed to package vinext Lambda runtime dependencies",
-      ),
+      catch: failFramework("Failed to package vinext Lambda runtime dependencies"),
     });
     yield* fs.rename(
       path.join(packaged.standaloneDir, "node_modules"),
       path.join(dist.serverDir, "node_modules"),
     );
     yield* fs.remove(packaged.standaloneDir, { recursive: true });
-    yield* fs.writeFileString(
-      path.join(dist.serverDir, "package.json"),
-      '{"type":"module"}',
-    );
+    yield* fs.writeFileString(path.join(dist.serverDir, "package.json"), '{"type":"module"}');
     return output;
   });
 
-const makeAwsChildTarget = (
-  config: VinextAwsTargetConfig = {},
-): VinextAwsTarget =>
+const makeAwsChildTarget = (config: VinextAwsTargetConfig = {}): VinextAwsTarget =>
   makeDeployTarget({
     platform: "aws",
     config,
@@ -215,9 +190,7 @@ const makeAwsChildTarget = (
 /**
  * Create the AWS Lambda {@link VinextAwsTarget}. See the module doc.
  */
-export const makeAwsTarget = (
-  config: VinextAwsTargetConfig = {},
-): VinextAwsTarget => ({
+export const makeAwsTarget = (config: VinextAwsTargetConfig = {}): VinextAwsTarget => ({
   ...makeAwsChildTarget(config),
   build: (context) =>
     runBuildChild({
@@ -238,9 +211,7 @@ export const target = makeAwsTarget;
 export default makeAwsTarget;
 
 export interface VinextAwsService {
-  readonly build: (
-    options?: FrameworkCore.FrameworkBuildOptions,
-  ) => Effect.Effect<
+  readonly build: (options?: FrameworkCore.FrameworkBuildOptions) => Effect.Effect<
     {
       readonly distDirectory: string;
       readonly clientDirectory: string | undefined;
@@ -250,11 +221,7 @@ export interface VinextAwsService {
   >;
   readonly dev: (
     options?: FrameworkCore.FrameworkDevOptions,
-  ) => Effect.Effect<
-    FrameworkCore.FrameworkDevServer,
-    FrameworkCore.FrameworkError,
-    Scope.Scope
-  >;
+  ) => Effect.Effect<FrameworkCore.FrameworkDevServer, FrameworkCore.FrameworkError, Scope.Scope>;
 }
 
 /**
@@ -263,14 +230,12 @@ export interface VinextAwsService {
  */
 export const make: (
   options?: VinextAwsOptions,
-) => Effect.Effect<VinextAwsService, never, FileSystem.FileSystem | Path.Path> =
-  Effect.fnUntraced(function* (options?: VinextAwsOptions) {
+) => Effect.Effect<VinextAwsService, never, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
+  function* (options?: VinextAwsOptions) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const resolveRoot = (override: string | undefined) =>
-      Effect.sync(() =>
-        path.resolve(override ?? options?.root ?? process.cwd()),
-      );
+      Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
 
     const build: VinextAwsService["build"] = Effect.fn(function* (
       buildOptions?: FrameworkCore.FrameworkBuildOptions,
@@ -312,4 +277,5 @@ export const make: (
     });
 
     return { build, dev };
-  });
+  },
+);

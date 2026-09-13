@@ -76,13 +76,7 @@ export interface OperationAttributes {
   lastUpdated: string;
 }
 
-export type Operation = Resource<
-  TypeId,
-  OperationProps,
-  OperationAttributes,
-  never,
-  Providers
->;
+export type Operation = Resource<TypeId, OperationProps, OperationAttributes, never, Providers>;
 
 /**
  * A Cloudflare API Shield operation — a registered API endpoint on a zone,
@@ -163,9 +157,7 @@ export const OperationProvider = () =>
               schedule: Schedule.exponential("500 millis"),
               times: 5,
             }),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as OperationAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as OperationAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -186,11 +178,7 @@ export const OperationProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -288,28 +276,20 @@ const getOperation = (zoneId: string, operationId: string) =>
  * tuple is the operation's identity, so at most one can match. Endpoint
  * comparison uses Cloudflare's normalized form.
  */
-const findByTuple = (
-  zoneId: string,
-  tuple: { method: string; host: string; endpoint: string },
-) =>
-  apiGateway.listOperations
-    .items({ zoneId, host: [tuple.host], method: [tuple.method] })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).find(
-          (op): op is ObservedOperation & typeof op =>
-            op.method === tuple.method &&
-            op.host === tuple.host &&
-            op.endpoint === normalizeEndpoint(tuple.endpoint),
-        ),
+const findByTuple = (zoneId: string, tuple: { method: string; host: string; endpoint: string }) =>
+  apiGateway.listOperations.items({ zoneId, host: [tuple.host], method: [tuple.method] }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).find(
+        (op): op is ObservedOperation & typeof op =>
+          op.method === tuple.method &&
+          op.host === tuple.host &&
+          op.endpoint === normalizeEndpoint(tuple.endpoint),
       ),
-    );
+    ),
+  );
 
-const toAttributes = (
-  op: ObservedOperation,
-  zoneId: string,
-): OperationAttributes => ({
+const toAttributes = (op: ObservedOperation, zoneId: string): OperationAttributes => ({
   operationId: op.operationId,
   zoneId,
   // Distilled widens generated string enums to open unions (`string & {}`).

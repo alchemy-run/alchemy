@@ -57,9 +57,7 @@ const retryWhileRolePropagating = <A, E extends { readonly _tag: string }, R>(
  * Raised when a MediaLive channel lands in `CREATE_FAILED` or `UPDATE_FAILED`
  * instead of settling into `IDLE`.
  */
-export class MediaLiveChannelFailed extends Data.TaggedError(
-  "MediaLiveChannelFailed",
-)<{
+export class MediaLiveChannelFailed extends Data.TaggedError("MediaLiveChannelFailed")<{
   message: string;
 }> {}
 
@@ -195,10 +193,7 @@ export const ChannelProvider = () =>
   Provider.effect(
     Channel,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
@@ -218,11 +213,7 @@ export const ChannelProvider = () =>
       const getChannel = Effect.fn(function* (channelId: string) {
         const channel = yield* medialive
           .describeChannel({ ChannelId: channelId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         if (channel === undefined || isGone(channel.State)) return undefined;
         return yield* ensureIdentified(channel, "DescribeChannel Id/Arn");
       });
@@ -236,9 +227,7 @@ export const ChannelProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const match = channels.find(
-          (channel) => channel.Name === name && !isGone(channel.State),
-        );
+        const match = channels.find((channel) => channel.Name === name && !isGone(channel.State));
         if (match === undefined) return undefined;
         return yield* ensureIdentified(match, "ListChannels item Id/Arn");
       });
@@ -253,10 +242,7 @@ export const ChannelProvider = () =>
             const channel = yield* medialive.describeChannel({
               ChannelId: channelId,
             });
-            if (
-              channel.State === "CREATE_FAILED" ||
-              channel.State === "UPDATE_FAILED"
-            ) {
+            if (channel.State === "CREATE_FAILED" || channel.State === "UPDATE_FAILED") {
               return yield* Effect.fail(
                 new MediaLiveChannelFailed({
                   message: `channel ${channelId} is in state ${channel.State}`,
@@ -284,12 +270,8 @@ export const ChannelProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk)
                 .filter(
-                  (
-                    channel,
-                  ): channel is medialive.ChannelSummary & IdentifiedChannel =>
-                    channel.Id !== undefined &&
-                    channel.Arn !== undefined &&
-                    !isGone(channel.State),
+                  (channel): channel is medialive.ChannelSummary & IdentifiedChannel =>
+                    channel.Id !== undefined && channel.Arn !== undefined && !isGone(channel.State),
                 )
                 .map(toAttrs),
             ),
@@ -302,18 +284,13 @@ export const ChannelProvider = () =>
               : yield* findByName(yield* createName(id, olds ?? {}));
           if (channel === undefined) return undefined;
           const attrs = toAttrs(channel);
-          return (yield* hasAlchemyTags(id, toTagRecord(channel.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(channel.Tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           // The channel class and VPC placement are fixed at creation.
-          if (
-            (olds.channelClass ?? "STANDARD") !==
-            (news.channelClass ?? "STANDARD")
-          ) {
+          if ((olds.channelClass ?? "STANDARD") !== (news.channelClass ?? "STANDARD")) {
             return { action: "replace" } as const;
           }
           if (JSON.stringify(olds.vpc) !== JSON.stringify(news.vpc)) {
@@ -338,8 +315,7 @@ export const ChannelProvider = () =>
             const found = yield* findByName(name);
             channel =
               found !== undefined &&
-              (found.ChannelClass ?? "STANDARD") ===
-                (news.channelClass ?? "STANDARD")
+              (found.ChannelClass ?? "STANDARD") === (news.channelClass ?? "STANDARD")
                 ? found
                 : undefined;
           }
@@ -362,10 +338,7 @@ export const ChannelProvider = () =>
                 Tags: desiredTags,
               })
               .pipe(retryWhileRolePropagating);
-            const fresh = yield* ensureIdentified(
-              created.Channel,
-              "CreateChannel Channel Id/Arn",
-            );
+            const fresh = yield* ensureIdentified(created.Channel, "CreateChannel Channel Id/Arn");
             channel = yield* awaitSettled(fresh.Id);
           } else {
             // 3. Sync — cheap scalars are diffed against OBSERVED state; the
@@ -373,10 +346,8 @@ export const ChannelProvider = () =>
             // a no-op hint (Describe echoes them back default-expanded, so an
             // observed-vs-desired deep compare would always report drift).
             const nameDrift = channel.Name !== name;
-            const logDrift =
-              news.logLevel !== undefined && channel.LogLevel !== news.logLevel;
-            const roleDrift =
-              news.roleArn !== undefined && channel.RoleArn !== news.roleArn;
+            const logDrift = news.logLevel !== undefined && channel.LogLevel !== news.logLevel;
+            const roleDrift = news.roleArn !== undefined && channel.RoleArn !== news.roleArn;
             const deepDrift =
               olds === undefined
                 ? true
@@ -409,8 +380,7 @@ export const ChannelProvider = () =>
                   Maintenance: news.maintenance
                     ? {
                         MaintenanceDay: news.maintenance.MaintenanceDay,
-                        MaintenanceStartTime:
-                          news.maintenance.MaintenanceStartTime,
+                        MaintenanceStartTime: news.maintenance.MaintenanceStartTime,
                       }
                     : undefined,
                 })
@@ -421,10 +391,7 @@ export const ChannelProvider = () =>
 
           // Both the ensure and sync branches leave `channel` assigned from a
           // typed describe; guard with a typed failure so TS sees it defined.
-          const settled = yield* ensurePresent(
-            channel,
-            "reconciled channel state",
-          );
+          const settled = yield* ensurePresent(channel, "reconciled channel state");
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
           yield* syncMlTags(settled.Arn, desiredTags);
@@ -444,22 +411,20 @@ export const ChannelProvider = () =>
           // conflict-retry loops; if the channel is still draining after the
           // window, deletion is initiated and irreversible — let downstream
           // retries absorb the tail.
-          yield* medialive
-            .describeChannel({ ChannelId: output.channelId })
-            .pipe(
-              Effect.flatMap((channel) =>
-                channel.State === "DELETED"
-                  ? Effect.void
-                  : Effect.fail(
-                      new MediaLiveResourcePending({
-                        message: `channel ${output.channelId} is still ${channel.State}`,
-                      }),
-                    ),
-              ),
-              retryWhilePending,
-              Effect.catchTag("NotFoundException", () => Effect.void),
-              Effect.catchTag("MediaLiveResourcePending", () => Effect.void),
-            );
+          yield* medialive.describeChannel({ ChannelId: output.channelId }).pipe(
+            Effect.flatMap((channel) =>
+              channel.State === "DELETED"
+                ? Effect.void
+                : Effect.fail(
+                    new MediaLiveResourcePending({
+                      message: `channel ${output.channelId} is still ${channel.State}`,
+                    }),
+                  ),
+            ),
+            retryWhilePending,
+            Effect.catchTag("NotFoundException", () => Effect.void),
+            Effect.catchTag("MediaLiveResourcePending", () => Effect.void),
+          );
         }),
       });
     }),

@@ -12,9 +12,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-class WebACLStillExists extends Data.TaggedError("WebACLStillExists")<{
-  readonly name: string;
-}> {}
+class WebACLStillExists extends Data.TaggedError("WebACLStillExists")<{ readonly name: string }> {}
 
 class AssociationPending extends Data.TaggedError("AssociationPending")<{
   readonly resourceArn: string;
@@ -40,19 +38,12 @@ const assertAssociated = (resourceArn: string, expected: string | undefined) =>
       response.WebACL?.ARN === expected
         ? Effect.void
         : Effect.fail(
-            new AssociationPending({
-              resourceArn,
-              expected,
-              actual: response.WebACL?.ARN,
-            }),
+            new AssociationPending({ resourceArn, expected, actual: response.WebACL?.ARN }),
           ),
     ),
     Effect.retry({
       while: (e) => e._tag === "AssociationPending",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -128,11 +119,7 @@ test.provider.skipIf(!process.env.AWS_TEST_WAF_ASSOCIATION)(
             webAclArn: aclB.webAclArn,
             resourceArn: api.apiArn,
           });
-          return {
-            aclBName: aclB.webAclName,
-            aclBId: aclB.webAclId,
-            aclBArn: aclB.webAclArn,
-          };
+          return { aclBName: aclB.webAclName, aclBId: aclB.webAclId, aclBArn: aclB.webAclArn };
         }),
       );
 
@@ -148,12 +135,7 @@ test.provider.skipIf(!process.env.AWS_TEST_WAF_ASSOCIATION)(
   // First associate can wait up to ~150s for the fresh user pool to
   // propagate to WAF (retryUnavailableEntityLong).
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:appsync",
-      "provider:aws:wafv2",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:appsync", "provider:aws:wafv2", "live"],
     timeout: 240_000,
   },
 );

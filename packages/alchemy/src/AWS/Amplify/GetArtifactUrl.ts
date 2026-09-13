@@ -39,13 +39,8 @@ export interface GetArtifactUrl extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetArtifactUrlRequest,
-    ) => Effect.Effect<
-      amplify.GetArtifactUrlResult,
-      amplify.GetArtifactUrlError
-    >
+    ) => Effect.Effect<amplify.GetArtifactUrlResult, amplify.GetArtifactUrlError>
   >
 > {}
 
-export const GetArtifactUrl = Binding.Service<GetArtifactUrl>(
-  "AWS.Amplify.GetArtifactUrl",
-);
+export const GetArtifactUrl = Binding.Service<GetArtifactUrl>("AWS.Amplify.GetArtifactUrl");

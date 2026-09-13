@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gkeonprem from "@distilled.cloud/gcp/gkeonprem_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   bareMetalControlPlane,
   bareMetalLoadBalancer,
@@ -19,23 +19,18 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
-  gkeonprem
-    .getProjectsLocationsBareMetalClustersBareMetalNodePools({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  gkeonprem.getProjectsLocationsBareMetalClustersBareMetalNodePools({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsBareMetalClustersBareMetalNodePools on a missing pool fails with a typed tag",
@@ -68,17 +63,14 @@ test.provider.skipIf(runBareMetalLifecycle)(
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool(
-              "Workers",
-              {
-                bareMetalCluster: missingBareMetalCluster(project),
-                nodePoolConfig: {
-                  nodeConfigs: [{ nodeIp: "10.200.0.11" }],
-                },
-                displayName: "alchemy-test-bmnp",
-                labels: { env: "test" },
+            return yield* GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool("Workers", {
+              bareMetalCluster: missingBareMetalCluster(project),
+              nodePoolConfig: {
+                nodeConfigs: [{ nodeIp: "10.200.0.11" }],
               },
-            );
+              displayName: "alchemy-test-bmnp",
+              labels: { env: "test" },
+            });
           }),
         ),
       );
@@ -100,8 +92,7 @@ test.provider.skipIf(!runBareMetalLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const cluster = yield* GCP.GKEOnPrem.BareMetalCluster("Workload", {
-            adminClusterMembership:
-              bareMetalAdminMembership ?? missingMembership(project),
+            adminClusterMembership: bareMetalAdminMembership ?? missingMembership(project),
             bareMetalVersion: "1.28.0-gke.1",
             controlPlane: bareMetalControlPlane,
             storage: bareMetalStorage,
@@ -109,17 +100,14 @@ test.provider.skipIf(!runBareMetalLifecycle)(
             loadBalancer: bareMetalLoadBalancer,
             description: "node pool parent",
           });
-          const pool = yield* GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool(
-            "Workers",
-            {
-              bareMetalCluster: cluster.name,
-              nodePoolConfig: {
-                nodeConfigs: [{ nodeIp: "10.200.0.11" }],
-              },
-              displayName: "alchemy-test-bmnp",
-              labels: { env: "test" },
+          const pool = yield* GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool("Workers", {
+            bareMetalCluster: cluster.name,
+            nodePoolConfig: {
+              nodeConfigs: [{ nodeIp: "10.200.0.11" }],
             },
-          );
+            displayName: "alchemy-test-bmnp",
+            labels: { env: "test" },
+          });
           return { cluster, pool };
         }),
       );
@@ -128,10 +116,9 @@ test.provider.skipIf(!runBareMetalLifecycle)(
       expect(created.pool.bareMetalCluster).toEqual(created.cluster.name);
       expect(created.pool.displayName).toEqual("alchemy-test-bmnp");
 
-      const fetched =
-        yield* gkeonprem.getProjectsLocationsBareMetalClustersBareMetalNodePools(
-          { name: created.pool.name },
-        );
+      const fetched = yield* gkeonprem.getProjectsLocationsBareMetalClustersBareMetalNodePools({
+        name: created.pool.name,
+      });
       expect(fetched.name).toEqual(created.pool.name);
       expect(fetched.displayName).toContain("alchemy-id=");
       expect(fetched.annotations?.["alchemy-id"]).toBeDefined();
@@ -145,36 +132,27 @@ test.provider.skipIf(!runBareMetalLifecycle)(
               created.cluster.adminClusterMembership ??
               bareMetalAdminMembership ??
               missingMembership(project),
-            bareMetalVersion:
-              created.cluster.bareMetalVersion ?? "1.28.0-gke.1",
+            bareMetalVersion: created.cluster.bareMetalVersion ?? "1.28.0-gke.1",
             controlPlane: created.cluster.controlPlane ?? bareMetalControlPlane,
             storage: created.cluster.storage ?? bareMetalStorage,
             networkConfig: created.cluster.networkConfig ?? bareMetalNetwork,
             loadBalancer: created.cluster.loadBalancer ?? bareMetalLoadBalancer,
             description: "node pool parent",
           });
-          const pool = yield* GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool(
-            "Workers",
-            {
-              bareMetalNodePoolId: created.pool.bareMetalNodePoolId,
-              bareMetalCluster: cluster.name,
-              nodePoolConfig: {
-                nodeConfigs: [
-                  { nodeIp: "10.200.0.11" },
-                  { nodeIp: "10.200.0.12" },
-                ],
-              },
-              displayName: "alchemy-test-bmnp-v2",
+          const pool = yield* GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool("Workers", {
+            bareMetalNodePoolId: created.pool.bareMetalNodePoolId,
+            bareMetalCluster: cluster.name,
+            nodePoolConfig: {
+              nodeConfigs: [{ nodeIp: "10.200.0.11" }, { nodeIp: "10.200.0.12" }],
             },
-          );
+            displayName: "alchemy-test-bmnp-v2",
+          });
           return { cluster, pool };
         }),
       );
 
       expect(updated.pool.displayName).toEqual("alchemy-test-bmnp-v2");
-      expect(updated.pool.bareMetalNodePoolId).toEqual(
-        created.pool.bareMetalNodePoolId,
-      );
+      expect(updated.pool.bareMetalNodePoolId).toEqual(created.pool.bareMetalNodePoolId);
 
       yield* stack.destroy();
       yield* waitUntilGone(created.pool.name);

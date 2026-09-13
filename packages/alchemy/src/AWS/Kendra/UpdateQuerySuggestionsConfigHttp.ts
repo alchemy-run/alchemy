@@ -11,10 +11,7 @@ export const UpdateQuerySuggestionsConfigHttp = Layer.effect(
     tag: "AWS.Kendra.UpdateQuerySuggestionsConfig",
     operation: kendra.updateQuerySuggestionsConfig,
     actions: ["kendra:UpdateQuerySuggestionsConfig"],
-    prepare: ({
-      queryLogLookBackWindow,
-      ...rest
-    }: UpdateQuerySuggestionsConfigRequest = {}) => ({
+    prepare: ({ queryLogLookBackWindow, ...rest }: UpdateQuerySuggestionsConfigRequest = {}) => ({
       ...rest,
       QueryLogLookBackWindowInDays: toWireDays(queryLogLookBackWindow),
     }),

@@ -1,39 +1,29 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import {
-  CERT_A_PEM,
-  CERT_B_PEM,
-  KEY_A_PEM,
-  KEY_B_PEM,
-} from "./fixtures/https-proxy-cert.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { CERT_A_PEM, CERT_B_PEM, KEY_A_PEM, KEY_B_PEM } from "./fixtures/https-proxy-cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (targetSslProxyName: string) =>
   GcpEnvironment.current.pipe(
     Effect.flatMap(({ project }) =>
-      compute
-        .getTargetSslProxies({ project, targetSslProxy: targetSslProxyName })
-        .pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (status) => status === "gone",
-            times: 10,
-          }),
-        ),
+      compute.getTargetSslProxies({ project, targetSslProxy: targetSslProxyName }).pipe(
+        Effect.as("found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (status) => status === "gone",
+          times: 10,
+        }),
+      ),
     ),
   );
 
@@ -80,8 +70,7 @@ test.provider(
       expect(created.proxy.targetSslProxyName).toEqual(expect.any(String));
       expect(created.proxy.description).toEqual("ssl frontend");
       expect(
-        created.proxy.proxyHeader === "NONE" ||
-          created.proxy.proxyHeader === undefined,
+        created.proxy.proxyHeader === "NONE" || created.proxy.proxyHeader === undefined,
       ).toEqual(true);
       expect(resourceTail(created.proxy.service)).toEqual(created.backend.name);
       expect(created.proxy.sslCertificates.map(resourceTail)).toContain(
@@ -93,9 +82,7 @@ test.provider(
         targetSslProxy: created.proxy.targetSslProxyName,
       });
       expect(fetched.name).toEqual(created.proxy.targetSslProxyName);
-      expect(resourceTail(fetched.service)).toEqual(
-        resourceTail(created.proxy.service),
-      );
+      expect(resourceTail(fetched.service)).toEqual(resourceTail(created.proxy.service));
       expect(fetched.description).toContain("[alchemy ");
       expect(fetched.description).toContain("ssl frontend");
       expect((fetched.sslCertificates ?? []).map(resourceTail)).toContain(
@@ -145,9 +132,7 @@ test.provider(
         }),
       );
 
-      expect(updated.proxy.targetSslProxyName).toEqual(
-        created.proxy.targetSslProxyName,
-      );
+      expect(updated.proxy.targetSslProxyName).toEqual(created.proxy.targetSslProxyName);
       expect(updated.proxy.description).toEqual("ssl frontend");
       expect(updated.proxy.proxyHeader).toEqual("PROXY_V1");
       expect(resourceTail(updated.proxy.service)).toEqual(updated.other.name);
@@ -164,12 +149,8 @@ test.provider(
       });
       expect(refetched.description).toContain("ssl frontend");
       expect(refetched.proxyHeader).toEqual("PROXY_V1");
-      expect(resourceTail(refetched.service)).toEqual(
-        resourceTail(updated.proxy.service),
-      );
-      expect(resourceTail(refetched.service)).not.toEqual(
-        resourceTail(created.proxy.service),
-      );
+      expect(resourceTail(refetched.service)).toEqual(resourceTail(updated.proxy.service));
+      expect(resourceTail(refetched.service)).not.toEqual(resourceTail(created.proxy.service));
       expect((refetched.sslCertificates ?? []).map(resourceTail)).toContain(
         updated.certB.sslCertificateName,
       );

@@ -16,9 +16,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        finspace.getKxEnvironment({
-          environmentId: "zzzzzzzzzzzzzzzzzzzzzzzzzz",
-        }),
+        finspace.getKxEnvironment({ environmentId: "zzzzzzzzzzzzzzzzzzzzzzzzzz" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -92,9 +90,7 @@ const assertKxEnvironmentDeleting = (environmentId: string) =>
   Effect.gen(function* () {
     const status = yield* finspace.getKxEnvironment({ environmentId }).pipe(
       Effect.map((r) => r.status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (
       status !== "gone" &&
@@ -103,18 +99,11 @@ const assertKxEnvironmentDeleting = (environmentId: string) =>
       status !== "DELETE_REQUESTED"
     ) {
       return yield* Effect.fail(
-        new Error(
-          `kdb environment '${environmentId}' still exists (${status})`,
-        ),
+        new Error(`kdb environment '${environmentId}' still exists (${status})`),
       );
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A managed kdb environment takes tens of minutes to provision and FinSpace
@@ -131,9 +120,7 @@ test.provider.skipIf(!process.env.AWS_TEST_FINSPACE)(
 
       const { env, db } = yield* stack.deploy(
         Effect.gen(function* () {
-          const key = yield* Key("KdbKey", {
-            description: "alchemy finspace kdb test key",
-          });
+          const key = yield* Key("KdbKey", { description: "alchemy finspace kdb test key" });
           const env = yield* KxEnvironment("Kdb", {
             kmsKeyId: key.keyArn,
             description: "alchemy kdb test environment",
@@ -162,9 +149,7 @@ test.provider.skipIf(!process.env.AWS_TEST_FINSPACE)(
       // Update the database description in place (no replacement).
       const { db: updated } = yield* stack.deploy(
         Effect.gen(function* () {
-          const key = yield* Key("KdbKey", {
-            description: "alchemy finspace kdb test key",
-          });
+          const key = yield* Key("KdbKey", { description: "alchemy finspace kdb test key" });
           const env = yield* KxEnvironment("Kdb", {
             kmsKeyId: key.keyArn,
             description: "alchemy kdb test environment",

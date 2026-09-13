@@ -119,10 +119,9 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
  * @resource
  * @category Composer
  */
-export const EnvironmentsUserWorkloadsConfigMap =
-  Resource<EnvironmentsUserWorkloadsConfigMap>(
-    "GCP.Composer.EnvironmentsUserWorkloadsConfigMap",
-  );
+export const EnvironmentsUserWorkloadsConfigMap = Resource<EnvironmentsUserWorkloadsConfigMap>(
+  "GCP.Composer.EnvironmentsUserWorkloadsConfigMap",
+);
 
 export class EnvironmentsUserWorkloadsConfigMapNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsConfigMapNotResolved",
@@ -139,10 +138,7 @@ export class EnvironmentsUserWorkloadsConfigMapStillExists extends Data.TaggedEr
 const resourceName = (environmentName: string, configMapId: string) =>
   `${environmentParent(environmentName)}/userWorkloadsConfigMaps/${configMapId}`;
 
-const toAttrs = (
-  configMap: composer.UserWorkloadsConfigMap,
-  environmentName: string,
-) => {
+const toAttrs = (configMap: composer.UserWorkloadsConfigMap, environmentName: string) => {
   const name = configMap.name ?? resourceName(environmentName, "");
   const parsed = parseWorkloadName(name);
   const parent = environmentParent(environmentName || name);
@@ -167,14 +163,10 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((current) =>
       current === undefined
         ? Effect.void
-        : Effect.fail(
-            new EnvironmentsUserWorkloadsConfigMapStillExists({ name }),
-          ),
+        : Effect.fail(new EnvironmentsUserWorkloadsConfigMapStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.Composer.EnvironmentsUserWorkloadsConfigMapStillExists",
+      while: (error) => error._tag === "GCP.Composer.EnvironmentsUserWorkloadsConfigMapStillExists",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -182,14 +174,7 @@ const waitUntilGone = (name: string) =>
 
 export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
   Provider.succeed(EnvironmentsUserWorkloadsConfigMap, {
-    stables: [
-      "name",
-      "configMapId",
-      "environmentName",
-      "project",
-      "location",
-      "environmentId",
-    ],
+    stables: ["name", "configMapId", "environmentName", "project", "location", "environmentId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -201,8 +186,7 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
       const previousParent = olds?.environmentName ?? output?.environmentName;
       const parentChanged =
         previousParent !== undefined &&
-        environmentParent(news.environmentName) !==
-          environmentParent(previousParent);
+        environmentParent(news.environmentName) !== environmentParent(previousParent);
       if (!idChanged && !parentChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -210,11 +194,7 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const environmentName = olds?.environmentName ?? output?.environmentName;
       if (environmentName === undefined) return undefined;
-      const configMapId = yield* toPhysicalId(
-        id,
-        olds?.configMapId,
-        output?.configMapId,
-      );
+      const configMapId = yield* toPhysicalId(id, olds?.configMapId, output?.configMapId);
       const name = output?.name ?? resourceName(environmentName, configMapId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -222,17 +202,11 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
       // No labels: a generated id embeds stack/stage/id, and a row we
       // created is in state. Only an explicit id found without state is
       // ambiguous.
-      return output === undefined && olds?.configMapId !== undefined
-        ? Unowned(attrs)
-        : attrs;
+      return output === undefined && olds?.configMapId !== undefined ? Unowned(attrs) : attrs;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const configMapId = yield* toPhysicalId(
-        id,
-        news.configMapId,
-        output?.configMapId,
-      );
+      const configMapId = yield* toPhysicalId(id, news.configMapId, output?.configMapId);
       const parent = environmentParent(news.environmentName);
       const name = resourceName(parent, configMapId);
       const desiredData = mapOf(news.data);
@@ -259,16 +233,13 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
       }
 
       if (dataKey(current.data) !== dataKey(desiredData)) {
-        current =
-          yield* composer.updateProjectsLocationsEnvironmentsUserWorkloadsConfigMaps(
-            {
-              name: current.name ?? name,
-              body: {
-                name: current.name ?? name,
-                data: desiredData,
-              },
-            },
-          );
+        current = yield* composer.updateProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({
+          name: current.name ?? name,
+          body: {
+            name: current.name ?? name,
+            data: desiredData,
+          },
+        });
       }
 
       return toAttrs(current, parent);

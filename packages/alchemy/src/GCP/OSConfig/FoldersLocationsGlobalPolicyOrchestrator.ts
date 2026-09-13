@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ACTION,
@@ -162,10 +157,7 @@ export const FoldersLocationsGlobalPolicyOrchestrator =
     "GCP.OSConfig.FoldersLocationsGlobalPolicyOrchestrator",
   );
 
-const toAttrs = (
-  item: osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator,
-  project: string,
-) => {
+const toAttrs = (item: osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name);
   return {
@@ -204,22 +196,14 @@ const desiredBody = (
   description: news.description,
   labels: desiredLabels,
   orchestratedResource: orchestratedPayload(
-    news.orchestratedResource ??
-      defaultOrchestratedResource(policyOrchestratorId.slice(0, 63)),
+    news.orchestratedResource ?? defaultOrchestratedResource(policyOrchestratorId.slice(0, 63)),
   ),
   orchestrationScope: news.orchestrationScope,
 });
 
 export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
   Provider.succeed(FoldersLocationsGlobalPolicyOrchestrator, {
-    stables: [
-      "name",
-      "policyOrchestratorId",
-      "parent",
-      "folderId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "policyOrchestratorId", "parent", "folderId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -229,16 +213,11 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
           : output?.folderId
             ? folderParent(output.folderId)
             : "";
-      const nextFolder =
-        news.folderId !== undefined
-          ? folderParent(news.folderId)
-          : previousFolder;
+      const nextFolder = news.folderId !== undefined ? folderParent(news.folderId) : previousFolder;
       return replaceOnIdentity({
         previousId: olds?.policyOrchestratorId ?? output?.policyOrchestratorId,
         nextId:
-          news.policyOrchestratorId ??
-          olds?.policyOrchestratorId ??
-          output?.policyOrchestratorId,
+          news.policyOrchestratorId ?? olds?.policyOrchestratorId ?? output?.policyOrchestratorId,
         previousParent: previousFolder,
         nextParent: nextFolder,
       });
@@ -265,9 +244,7 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -326,19 +303,15 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const actionChanged =
-        (current.action ?? DEFAULT_ACTION) !==
-        (desired.action ?? DEFAULT_ACTION);
-      const stateChanged =
-        (current.state ?? DEFAULT_STATE) !== (desired.state ?? DEFAULT_STATE);
-      const descriptionChanged =
-        (current.description ?? "") !== (desired.description ?? "");
+        (current.action ?? DEFAULT_ACTION) !== (desired.action ?? DEFAULT_ACTION);
+      const stateChanged = (current.state ?? DEFAULT_STATE) !== (desired.state ?? DEFAULT_STATE);
+      const descriptionChanged = (current.description ?? "") !== (desired.description ?? "");
       const resourceChanged =
         fingerprint(orchestratedPayload(current.orchestratedResource)) !==
         fingerprint(desired.orchestratedResource);
       const scopeChanged =
         desired.orchestrationScope !== undefined &&
-        fingerprint(current.orchestrationScope) !==
-          fingerprint(desired.orchestrationScope);
+        fingerprint(current.orchestrationScope) !== fingerprint(desired.orchestrationScope);
       const mask = fieldMask([
         labelsChanged && "labels",
         actionChanged && "action",
@@ -349,21 +322,17 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* osconfig.patchFoldersLocationsGlobalPolicyOrchestrators({
+        const operation = yield* osconfig.patchFoldersLocationsGlobalPolicyOrchestrators({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            ...desired,
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              ...desired,
-              name: current.name ?? name,
-              etag: current.etag,
-            },
-          });
+            etag: current.etag,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

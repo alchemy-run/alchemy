@@ -1,15 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import TpuBindingsHost, {
-  QueuedTrainer,
-  Trainer,
-} from "./fixtures/bindings-host.ts";
+import TpuBindingsHost, { QueuedTrainer, Trainer } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -36,9 +33,7 @@ const projectRoles = () =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,
@@ -81,9 +76,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
     // Cloud TPU has no resource-level IAM: both bindings grant tpu.viewer
     // on the project.
     const expectTpuViewerOnly = Effect.gen(function* () {
-      expect(yield* projectRoles()).toEqual([
-        { role: "roles/tpu.viewer", condition: undefined },
-      ]);
+      expect(yield* projectRoles()).toEqual([{ role: "roles/tpu.viewer", condition: undefined }]);
     });
 
     describe("GetNode", () => {
@@ -114,10 +107,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the bound queued resource as the host",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ name: string }>(
-              baseUrl,
-              "getQueuedResource",
-            );
+            const out = yield* expectProbe<{ name: string }>(baseUrl, "getQueuedResource");
             const live = yield* tpu.getProjectsLocationsQueuedResources({
               name: queuedResourceName,
             });

@@ -39,9 +39,7 @@ test.provider(
 // (AWS_TEST_EKS_SUBNET_IDS, comma-separated). An account with that standing
 // infrastructure runs this unchanged: it deploys a cluster, waits for ACTIVE,
 // asserts it appears in the exhaustively-paginated `list()`, then tears down.
-test.provider.skipIf(
-  !process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST_EKS_SUBNET_IDS,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST_EKS_SUBNET_IDS)(
   "list enumerates the deployed cluster",
   (stack) =>
     Effect.gen(function* () {

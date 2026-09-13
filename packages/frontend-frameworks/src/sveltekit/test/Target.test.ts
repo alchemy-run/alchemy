@@ -27,12 +27,7 @@ describe("makeCloudflareTarget", () => {
 
   it("declares workerd bundle conditions and cloudflare: externals", () => {
     const cloudflare = makeCloudflareTarget();
-    expect(cloudflare.bundle?.conditions).toEqual([
-      "workerd",
-      "worker",
-      "module",
-      "browser",
-    ]);
+    expect(cloudflare.bundle?.conditions).toEqual(["workerd", "worker", "module", "browser"]);
     expect(cloudflare.bundle?.external).toEqual(["cloudflare:"]);
   });
 
@@ -87,9 +82,7 @@ describe("makeCloudflareTarget", () => {
       _tag: "DeployTargetError",
       platform: "cloudflare",
     });
-    expect(String((error as { message: string }).message)).toContain(
-      "worker entry",
-    );
+    expect(String((error as { message: string }).message)).toContain("worker entry");
   });
 });
 
@@ -108,9 +101,7 @@ describe("resolveDeployTarget interop", () => {
     const value = makeCloudflareTarget({
       compatibilityFlags: ["nodejs_compat"],
     });
-    const resolved = await Effect.runPromise(
-      resolveDeployTarget("/tmp/project", value, {}),
-    );
+    const resolved = await Effect.runPromise(resolveDeployTarget("/tmp/project", value, {}));
     expect(resolved).toBe(value);
   });
 

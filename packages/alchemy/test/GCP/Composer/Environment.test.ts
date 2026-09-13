@@ -1,20 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as composer from "@distilled.cloud/gcp/composer_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
-import { defaultComputeServiceAccount } from "./serviceAccount.ts";
+import * as Test from "@/Test/Alchemy";
 import { CAPACITY_REGION } from "../zones.ts";
+import { defaultComputeServiceAccount } from "./serviceAccount.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Composer environments take 20-45 minutes to provision.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -48,9 +45,7 @@ test.provider(
         parent: `projects/${project}/locations/${CAPACITY_REGION}`,
         pageSize: 10,
       });
-      expect(
-        (page.environments ?? []).map((environment) => environment.name),
-      ).not.toContain(
+      expect((page.environments ?? []).map((environment) => environment.name)).not.toContain(
         `projects/${project}/locations/${CAPACITY_REGION}/environments/alchemy-composer-missing`,
       );
 
@@ -92,9 +87,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.state).toEqual("RUNNING");
-      expect(fetched.config?.nodeConfig?.serviceAccount).toEqual(
-        serviceAccount,
-      );
+      expect(fetched.config?.nodeConfig?.serviceAccount).toEqual(serviceAccount);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

@@ -19,13 +19,7 @@ export default async function Home({ searchParams }) {
         title="Styled with Tailwind CSS"
         body="This card is a React component styled with Tailwind utilities."
       />
-      <Image
-        src="/logo.svg"
-        alt="Neon Website"
-        width={160}
-        height={48}
-        unoptimized
-      />
+      <Image src="/logo.svg" alt="Neon Website" width={160} height={48} unoptimized />
       <Counter />
       <form action={submitName}>
         <label htmlFor="name">Your name</label>

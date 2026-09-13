@@ -86,14 +86,7 @@ export interface PlannedResource {
   readonly logicalId: string;
   readonly resourceType: string;
   /** The action the plan decided for this resource. */
-  readonly action:
-    | "create"
-    | "update"
-    | "adopted"
-    | "replace"
-    | "delete"
-    | "orphaned"
-    | "noop";
+  readonly action: "create" | "update" | "adopted" | "replace" | "delete" | "orphaned" | "noop";
   /** Binding rows the node carries; empty when the resource has none. */
   readonly bindings: ReadonlyArray<PlannedBinding>;
   /** Mode the node's provider resolved for; absent for mode-agnostic providers. */
@@ -163,10 +156,7 @@ export interface PlanPhaseChanged {
 }
 
 /** A per-node planning event (one resource or action diffed). */
-export type PlanNodeEvent =
-  | ResourceDiffStarted
-  | ResourcePlanned
-  | ActionPlanned;
+export type PlanNodeEvent = ResourceDiffStarted | ResourcePlanned | ActionPlanned;
 
 export type PlanEvent = PlanPhaseChanged | PlanNodeEvent;
 
@@ -267,12 +257,7 @@ export type ProviderEvent =
  * Every progress event the engine and the Alchemist routes can report — one
  * flat union, one `_tag` discriminator, tags namespaced `domain.subject.verb`.
  */
-export type ProgressEvent =
-  | PlanEvent
-  | ApplyEvent
-  | StateEvent
-  | NukeEvent
-  | ProviderEvent;
+export type ProgressEvent = PlanEvent | ApplyEvent | StateEvent | NukeEvent | ProviderEvent;
 
 export type ProgressReporter = (event: ProgressEvent) => Effect.Effect<void>;
 
@@ -283,12 +268,9 @@ export type ProgressReporter = (event: ProgressEvent) => Effect.Effect<void>;
  * a caller that only wants the result provides nothing; a renderer provides
  * its own handler for the events it wants to observe.
  */
-export const Progress = Context.Reference<ProgressReporter>(
-  "alchemy/Progress",
-  {
-    defaultValue: (): ProgressReporter => () => Effect.void,
-  },
-);
+export const Progress = Context.Reference<ProgressReporter>("alchemy/Progress", {
+  defaultValue: (): ProgressReporter => () => Effect.void,
+});
 
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
@@ -329,10 +311,7 @@ export interface PlanningStatusSession {
 }
 
 export interface ScopedPlanStatusSession extends PlanStatusSession {
-  note: (
-    note: string,
-    options?: { readonly kind?: NoteKind },
-  ) => Effect.Effect<void>;
+  note: (note: string, options?: { readonly kind?: NoteKind }) => Effect.Effect<void>;
 }
 
 export interface PlanDisplayOptions {
@@ -354,10 +333,7 @@ export interface CLIService {
     plan: P,
     options?: PlanDisplayOptions,
   ) => Effect.Effect<boolean, NonInteractiveTerminal>;
-  displayPlan: <P extends Plan>(
-    plan: P,
-    options?: PlanDisplayOptions,
-  ) => Effect.Effect<void>;
+  displayPlan: <P extends Plan>(plan: P, options?: PlanDisplayOptions) => Effect.Effect<void>;
   startApplySession: <P extends Plan>(
     plan: P,
     options?: PlanDisplayOptions,

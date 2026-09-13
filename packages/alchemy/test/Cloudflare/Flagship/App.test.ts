@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class AppStillExists extends Data.TaggedError("AppStillExists") {}
 
@@ -27,10 +24,7 @@ const expectAppGone = (accountId: string, appId: string) =>
     Effect.flatMap(() => Effect.fail(new AppStillExists())),
     Effect.retry({
       while: (e): e is AppStillExists => e instanceof AppStillExists,
-      schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("FlagshipAppNotFound", () => Effect.void),
   );
@@ -45,9 +39,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.Flagship.App("App", {
-            name: "alchemy-test-flagship-app",
-          });
+          const app = yield* Cloudflare.Flagship.App("App", { name: "alchemy-test-flagship-app" });
           return { app };
         }),
       );
@@ -57,10 +49,7 @@ test.provider(
       expect(initial.app.name).toEqual("alchemy-test-flagship-app");
 
       // Verify out-of-band via the API.
-      const live = yield* flagship.getApp({
-        accountId,
-        appId: initial.app.appId,
-      });
+      const live = yield* flagship.getApp({ accountId, appId: initial.app.appId });
       expect(live.name).toEqual("alchemy-test-flagship-app");
 
       // Rename in place — same app id.
@@ -75,10 +64,7 @@ test.provider(
       expect(renamed.app.appId).toEqual(initial.app.appId);
       expect(renamed.app.name).toEqual("alchemy-test-flagship-app-v2");
 
-      const liveRenamed = yield* flagship.getApp({
-        accountId,
-        appId: initial.app.appId,
-      });
+      const liveRenamed = yield* flagship.getApp({ accountId, appId: initial.app.appId });
       expect(liveRenamed.name).toEqual("alchemy-test-flagship-app-v2");
 
       // Redeploying identical props is a no-op (still the same app).
@@ -133,10 +119,7 @@ test.provider(
       expect(healed.app.appId).not.toEqual(initial.app.appId);
       expect(healed.app.name).toEqual("alchemy-test-flagship-heal-v2");
 
-      const live = yield* flagship.getApp({
-        accountId,
-        appId: healed.app.appId,
-      });
+      const live = yield* flagship.getApp({ accountId, appId: healed.app.appId });
       expect(live.name).toEqual("alchemy-test-flagship-heal-v2");
 
       yield* stack.destroy();
@@ -174,10 +157,7 @@ test.provider(
         ),
         Effect.retry({
           while: (e): e is AppNotListedYet => e instanceof AppNotListedYet,
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
         }),
       );
 

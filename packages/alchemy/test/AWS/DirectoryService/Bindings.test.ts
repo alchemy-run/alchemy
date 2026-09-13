@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import DirectoryServiceTestFunctionLive, {
-  DirectoryServiceTestFunction,
-} from "./handler";
+import DirectoryServiceTestFunctionLive, { DirectoryServiceTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "DirectoryServiceBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,43 +34,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "DirectoryService Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:directoryservice",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:directoryservice", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "DirectoryService test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("DirectoryService test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("DirectoryService test setup: deploying fixture");
@@ -89,16 +68,12 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `DirectoryService test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`DirectoryService test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -138,9 +113,7 @@ describe.sequential(
     describe("DescribeDirectories", () => {
       test.provider("enumerates the account's directories", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/directories")) as {
-            ids: string[];
-          };
+          const response = (yield* getJson("/directories")) as { ids: string[] };
           // The testing account usually has no standing directories; every id
           // that IS present must be directory-shaped.
           for (const id of response.ids) {

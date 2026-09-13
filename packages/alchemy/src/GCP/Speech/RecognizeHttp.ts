@@ -24,10 +24,9 @@ export const RecognizeHttp = Layer.effect(
       const body = request?.body ?? {};
       const config = body.config ?? {};
       const adaptation = config.adaptation ?? {};
-      const references = [
-        ...(adaptation.phraseSetReferences ?? []),
-        name,
-      ].filter((value, index, all) => all.indexOf(value) === index);
+      const references = [...(adaptation.phraseSetReferences ?? []), name].filter(
+        (value, index, all) => all.indexOf(value) === index,
+      );
       return {
         body: {
           ...body,

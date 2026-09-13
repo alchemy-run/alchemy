@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import AppSyncBindingsFunctionLive, {
-  AppSyncBindingsFunction,
-} from "./fixtures/bindings-handler";
+import AppSyncBindingsFunctionLive, { AppSyncBindingsFunction } from "./fixtures/bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -31,43 +29,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
 describe(
   "AppSync Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:appsync",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:appsync", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "AppSync bindings setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("AppSync bindings setup: destroying previous resources");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "AppSync bindings setup: deploying api -> resolvers -> Lambda",
-        );
+        yield* Effect.logInfo("AppSync bindings setup: deploying api -> resolvers -> Lambda");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* AppSyncBindingsFunction;
@@ -82,15 +64,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(75),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
           }),
         );
       }),
@@ -113,21 +90,14 @@ describe(
             ).pipe(
               Effect.flatMap((response) => response.json),
               Effect.map(
-                (json) =>
-                  json as {
-                    data?: { add?: number };
-                    errors?: Array<{ message: string }>;
-                  },
+                (json) => json as { data?: { add?: number }; errors?: Array<{ message: string }> },
               ),
               Effect.filterOrFail(
                 (json) => json.data?.add !== undefined,
                 (json) => new Error(`no data.add: ${JSON.stringify(json)}`),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
               }),
             );
             expect(result.data?.add).toBe(5);
@@ -141,15 +111,11 @@ describe(
           Effect.gen(function* () {
             const result = yield* send(
               HttpClientRequest.post(`${baseUrl}/graphql`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({
-                  query: "query { nonexistentField }",
-                }),
+                HttpClientRequest.bodyJsonUnsafe({ query: "query { nonexistentField }" }),
               ),
             ).pipe(
               Effect.flatMap((response) => response.json),
-              Effect.map(
-                (json) => json as { errors?: Array<{ message: string }> },
-              ),
+              Effect.map((json) => json as { errors?: Array<{ message: string }> }),
             );
             expect(result.errors?.length).toBeGreaterThan(0);
           }),
@@ -162,23 +128,17 @@ describe(
           Effect.gen(function* () {
             const result = yield* send(
               HttpClientRequest.post(`${baseUrl}/graphql`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({
-                  query: "query { greeting }",
-                }),
+                HttpClientRequest.bodyJsonUnsafe({ query: "query { greeting }" }),
               ),
             ).pipe(
               Effect.flatMap((response) => response.json),
               Effect.map((json) => json as { data?: { greeting?: string } }),
               Effect.filterOrFail(
                 (json) => json.data?.greeting != null,
-                (json) =>
-                  new Error(`no data.greeting: ${JSON.stringify(json)}`),
+                (json) => new Error(`no data.greeting: ${JSON.stringify(json)}`),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
               }),
             );
             expect(result.data?.greeting).toBe("hello from ctx.env");
@@ -192,9 +152,7 @@ describe(
         "the Lambda reads the API's live SDL through the binding",
         () =>
           Effect.gen(function* () {
-            const result = yield* send(
-              HttpClientRequest.get(`${baseUrl}/schema`),
-            ).pipe(
+            const result = yield* send(HttpClientRequest.get(`${baseUrl}/schema`)).pipe(
               Effect.flatMap((response) => response.json),
               Effect.map((json) => json as { sdl?: string }),
               Effect.filterOrFail(
@@ -202,10 +160,7 @@ describe(
                 (json) => new Error(`no sdl: ${JSON.stringify(json)}`),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
               }),
             );
             expect(result.sdl).toContain("add(a: Int!, b: Int!): Int!");
@@ -220,32 +175,20 @@ describe(
         "the Lambda evaluates APPSYNC_JS resolver code through the binding",
         () =>
           Effect.gen(function* () {
-            const result = yield* send(
-              HttpClientRequest.post(`${baseUrl}/evaluate`),
-            ).pipe(
+            const result = yield* send(HttpClientRequest.post(`${baseUrl}/evaluate`)).pipe(
               Effect.flatMap((response) => response.json),
               Effect.map(
-                (json) =>
-                  json as {
-                    evaluationResult?: string;
-                    error?: { message?: string };
-                  },
+                (json) => json as { evaluationResult?: string; error?: { message?: string } },
               ),
               Effect.filterOrFail(
                 (json) => json.evaluationResult != null,
-                (json) =>
-                  new Error(`no evaluationResult: ${JSON.stringify(json)}`),
+                (json) => new Error(`no evaluationResult: ${JSON.stringify(json)}`),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
               }),
             );
-            expect(JSON.parse(result.evaluationResult!)).toMatchObject({
-              payload: 5,
-            });
+            expect(JSON.parse(result.evaluationResult!)).toMatchObject({ payload: 5 });
           }),
         { timeout: 120_000 },
       );
@@ -256,32 +199,20 @@ describe(
         "the Lambda renders a VTL mapping template through the binding",
         () =>
           Effect.gen(function* () {
-            const result = yield* send(
-              HttpClientRequest.post(`${baseUrl}/evaluate-template`),
-            ).pipe(
+            const result = yield* send(HttpClientRequest.post(`${baseUrl}/evaluate-template`)).pipe(
               Effect.flatMap((response) => response.json),
               Effect.map(
-                (json) =>
-                  json as {
-                    evaluationResult?: string;
-                    error?: { message?: string };
-                  },
+                (json) => json as { evaluationResult?: string; error?: { message?: string } },
               ),
               Effect.filterOrFail(
                 (json) => json.evaluationResult != null,
-                (json) =>
-                  new Error(`no evaluationResult: ${JSON.stringify(json)}`),
+                (json) => new Error(`no evaluationResult: ${JSON.stringify(json)}`),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
               }),
             );
-            expect(JSON.parse(result.evaluationResult!)).toMatchObject({
-              sum: 5,
-            });
+            expect(JSON.parse(result.evaluationResult!)).toMatchObject({ sum: 5 });
           }),
         { timeout: 120_000 },
       );
@@ -296,28 +227,16 @@ describe(
             // hourly): a typed NotFoundException proves the binding executed
             // with the granted appsync:FlushApiCache; an IAM denial surfaces
             // a different tag. Repeat briefly through IAM propagation.
-            const outcome = yield* send(
-              HttpClientRequest.post(`${baseUrl}/flush`),
-            ).pipe(
+            const outcome = yield* send(HttpClientRequest.post(`${baseUrl}/flush`)).pipe(
               Effect.flatMap((response) => response.json),
-              Effect.map(
-                (json) =>
-                  json as {
-                    flushed: boolean;
-                    reason?: string;
-                    message?: string;
-                  },
-              ),
+              Effect.map((json) => json as { flushed: boolean; reason?: string; message?: string }),
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (json): boolean => json.reason === "NotFoundException",
                 times: 10,
               }),
             );
-            expect(outcome).toMatchObject({
-              flushed: false,
-              reason: "NotFoundException",
-            });
+            expect(outcome).toMatchObject({ flushed: false, reason: "NotFoundException" });
           }),
         { timeout: 90_000 },
       );

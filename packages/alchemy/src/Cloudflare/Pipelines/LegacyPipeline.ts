@@ -48,9 +48,7 @@ export interface LegacyPipelineBindingSource {
 /**
  * An ingest source of a legacy pipeline.
  */
-export type LegacyPipelineSource =
-  | LegacyPipelineHttpSource
-  | LegacyPipelineBindingSource;
+export type LegacyPipelineSource = LegacyPipelineHttpSource | LegacyPipelineBindingSource;
 
 /**
  * R2 destination configuration of a legacy pipeline.
@@ -248,15 +246,11 @@ export const LegacyPipelineProvider = () =>
         summaries,
         (summary) =>
           getLegacyPipeline(accountId, summary.name).pipe(
-            Effect.map((observed) =>
-              observed ? toAttributes(observed, accountId) : undefined,
-            ),
+            Effect.map((observed) => (observed ? toAttributes(observed, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is LegacyPipelineAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is LegacyPipelineAttributes => row !== undefined);
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -283,10 +277,7 @@ export const LegacyPipelineProvider = () =>
 
       // 1. Observe — the name is the API identifier, so a single get
       //    covers both the cached-output and cold-recovery cases.
-      let observed = yield* getLegacyPipeline(
-        output?.accountId ?? accountId,
-        output?.name ?? name,
-      );
+      let observed = yield* getLegacyPipeline(output?.accountId ?? accountId, output?.name ?? name);
 
       // 2. Ensure — create when missing.
       if (!observed) {
@@ -403,26 +394,20 @@ const listLegacyPipelineSummaries = (accountId: string) => {
         page: String(page),
         perPage: String(perPage),
       });
-      const results = (response.results ?? []).map(
-        (p): LegacyPipelineSummary => ({
-          id: p.id,
-          name: p.name ?? "",
-          endpoint: p.endpoint ?? "",
-        }),
-      );
+      const results = (response.results ?? []).map((p): LegacyPipelineSummary => ({
+        id: p.id,
+        name: p.name ?? "",
+        endpoint: p.endpoint ?? "",
+      }));
       const next = [...acc, ...results];
       const total = response.resultInfo?.totalCount;
-      const done =
-        results.length < perPage || (total != null && next.length >= total);
+      const done = results.length < perPage || (total != null && next.length >= total);
       return done ? next : yield* collect(page + 1, next);
     });
   return collect(1, []);
 };
 
-const defaultSources: LegacyPipelineSource[] = [
-  { type: "http" },
-  { type: "binding" },
-];
+const defaultSources: LegacyPipelineSource[] = [{ type: "http" }, { type: "binding" }];
 
 const toRequestSource = (source: LegacyPipelineSource[] | undefined) =>
   (source ?? defaultSources).map((s) =>
@@ -436,10 +421,7 @@ const toRequestSource = (source: LegacyPipelineSource[] | undefined) =>
       : { format: "json" as const, type: s.type },
   );
 
-const toRequestDestination = (
-  accountId: string,
-  destination: LegacyPipelineDestination,
-) => ({
+const toRequestDestination = (accountId: string, destination: LegacyPipelineDestination) => ({
   type: "r2" as const,
   format: "json" as const,
   batch: destination.batch ?? {},
@@ -447,9 +429,7 @@ const toRequestDestination = (
   credentials: {
     accessKeyId: Redacted.value(destination.credentials.accessKeyId),
     secretAccessKey: Redacted.value(destination.credentials.secretAccessKey),
-    endpoint:
-      destination.credentials.endpoint ??
-      `https://${accountId}.r2.cloudflarestorage.com`,
+    endpoint: destination.credentials.endpoint ?? `https://${accountId}.r2.cloudflarestorage.com`,
   },
   path: {
     bucket: destination.bucket as string,
@@ -464,10 +444,7 @@ const toRequestDestination = (
  * user-declared optional fields are diffed so we don't fight server-side
  * defaults; credentials are write-only and handled separately.
  */
-const drifted = (
-  observed: ObservedLegacyPipeline,
-  news: LegacyPipelineProps,
-): boolean => {
+const drifted = (observed: ObservedLegacyPipeline, news: LegacyPipelineProps): boolean => {
   const d = news.destination;
   const path = observed.destination.path;
   if (path.bucket !== (d.bucket as string)) return true;
@@ -480,20 +457,14 @@ const drifted = (
   if (d.filename !== undefined && d.filename !== (path.filename ?? undefined)) {
     return true;
   }
-  if (
-    d.compression !== undefined &&
-    d.compression !== observed.destination.compression.type
-  ) {
+  if (d.compression !== undefined && d.compression !== observed.destination.compression.type) {
     return true;
   }
   const batch = observed.destination.batch;
   if (d.batch?.maxBytes !== undefined && d.batch.maxBytes !== batch.maxBytes) {
     return true;
   }
-  if (
-    d.batch?.maxDurationS !== undefined &&
-    d.batch.maxDurationS !== batch.maxDurationS
-  ) {
+  if (d.batch?.maxDurationS !== undefined && d.batch.maxDurationS !== batch.maxDurationS) {
     return true;
   }
   if (d.batch?.maxRows !== undefined && d.batch.maxRows !== batch.maxRows) {
@@ -505,9 +476,7 @@ const drifted = (
   const observedTypes = observed.source.map((s) => s.type).sort();
   const desiredTypes = desired.map((s) => s.type).sort();
   if (observedTypes.join(",") !== desiredTypes.join(",")) return true;
-  const desiredHttp = desired.find(
-    (s): s is LegacyPipelineHttpSource => s.type === "http",
-  );
+  const desiredHttp = desired.find((s): s is LegacyPipelineHttpSource => s.type === "http");
   const observedHttp = observed.source.find((s) => s.type === "http");
   if (desiredHttp && observedHttp) {
     if (

@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const TEST_URL = "https://example.com/alchemy-stripe-webhook";
 const UPDATED_URL = "https://example.com/alchemy-stripe-webhook/updated";
@@ -22,9 +19,7 @@ const UPDATED_URL = "https://example.com/alchemy-stripe-webhook/updated";
 const waitUntilGone = (id: string) =>
   GetWebhookEndpoint({ webhook_endpoint: id }).pipe(
     Effect.as("found" as const),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -75,12 +70,8 @@ test.provider(
       expect(fetched.description).toEqual("Alchemy charge webhook");
       expect(fetched.status).toEqual("enabled");
       expect(fetched.metadata?.purpose).toEqual("charges");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -97,10 +88,7 @@ test.provider(
 
       expect(updated.id).toEqual(created.id);
       expect(updated.url).toEqual(UPDATED_URL);
-      expect(updated.enabledEvents).toEqual([
-        "charge.succeeded",
-        "charge.failed",
-      ]);
+      expect(updated.enabledEvents).toEqual(["charge.succeeded", "charge.failed"]);
       expect(updated.description).toEqual("Alchemy charge webhook updated");
       expect(updated.status).toEqual("disabled");
       expect(updated.metadata).toEqual({ purpose: "charges", env: "test" });
@@ -110,10 +98,7 @@ test.provider(
         webhook_endpoint: updated.id,
       });
       expect(refetched.url).toEqual(UPDATED_URL);
-      expect(refetched.enabled_events).toEqual([
-        "charge.succeeded",
-        "charge.failed",
-      ]);
+      expect(refetched.enabled_events).toEqual(["charge.succeeded", "charge.failed"]);
       expect(refetched.description).toEqual("Alchemy charge webhook updated");
       expect(refetched.status).toEqual("disabled");
       expect(refetched.metadata?.purpose).toEqual("charges");

@@ -7,10 +7,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Canonical `list()` test (account-scoped collection): deploy a real D1
 // database, resolve the provider from context via the typed
@@ -31,9 +28,7 @@ test.provider(
       const provider = yield* Provider.findProvider(Cloudflare.D1.Database);
       const all = yield* provider.list();
 
-      expect(all.some((db) => db.databaseId === database.databaseId)).toBe(
-        true,
-      );
+      expect(all.some((db) => db.databaseId === database.databaseId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

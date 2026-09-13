@@ -11,24 +11,15 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const redisCommand = (...args: Parameters<typeof Railway.runRedisCommand>) =>
   Railway.runRedisCommand(...args).pipe(Effect.timeout("5 seconds"));
 
 const REDIS_VALUE = "alchemy-railway-redis";
 
-const readVariables = Query.fn(
-  (projectId: string, environmentId: string, serviceId: string) =>
-    RailwayApi.variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    }),
+const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
+  RailwayApi.variables({ projectId, environmentId, serviceId, unrendered: true }),
 );
 
 const readServiceDeletedAt = Query.fn((id: string) => ({
@@ -45,15 +36,10 @@ const readService = Query.fn((id: string) => {
   };
 });
 
-const readServiceInstance = Query.fn(
-  (environmentId: string, serviceId: string) => {
-    const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
-    return {
-      serviceId: instance.serviceId,
-      image: instance.source.image,
-    };
-  },
-);
+const readServiceInstance = Query.fn((environmentId: string, serviceId: string) => {
+  const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
+  return { serviceId: instance.serviceId, image: instance.source.image };
+});
 
 const readTcpProxies = Query.fn((environmentId: string, serviceId: string) =>
   RailwayApi.tcpProxies({ environmentId, serviceId }).pipe(
@@ -81,23 +67,15 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const readServiceVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const readServiceVariables = (projectId: string, environmentId: string, serviceId: string) =>
   readVariables(projectId, environmentId, serviceId).pipe(
     Effect.map(asVariableMap),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed({} as Record<string, string>),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed({} as Record<string, string>)),
   );
 
 const waitUntilGone = (serviceId: string) =>
   readServiceDeletedAt(serviceId).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -106,18 +84,11 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-const waitUntilProxyGone = (
-  environmentId: string,
-  serviceId: string,
-  id: string,
-) =>
+const waitUntilProxyGone = (environmentId: string, serviceId: string, id: string) =>
   readTcpProxies(environmentId, serviceId).pipe(
     Effect.map((items) =>
       items.some(
-        (proxy) =>
-          proxy.id === id &&
-          proxy.deletedAt == null &&
-          proxy.syncStatus !== "DELETED",
+        (proxy) => proxy.id === id && proxy.deletedAt == null && proxy.syncStatus !== "DELETED",
       )
         ? ("found" as const)
         : ("gone" as const),
@@ -152,17 +123,13 @@ test.provider(
       expect(created.cache.serviceId).toEqual(expect.any(String));
       expect(created.cache.serviceId.length).toBeGreaterThan(0);
       expect(created.cache.projectId).toEqual(created.project.projectId);
-      expect(created.cache.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.cache.environmentId).toEqual(created.environment.environmentId);
       expect(created.cache.name).toEqual(expect.any(String));
       expect(created.cache.name.length).toBeGreaterThan(0);
       expect(created.cache.name.length).toBeLessThanOrEqual(32);
       expect(created.cache.name).toMatch(/^[a-z][a-z0-9-]*$/);
       expect(created.cache.port).toEqual(6379);
-      expect(created.cache.privateHost).toEqual(
-        `${created.cache.name}.railway.internal`,
-      );
+      expect(created.cache.privateHost).toEqual(`${created.cache.name}.railway.internal`);
       expect(created.cache.image).toEqual(expect.stringContaining("redis"));
       expect(created.proxy.applicationPort).toEqual(6379);
       expect(created.proxy.serviceId).toEqual(created.cache.serviceId);
@@ -199,10 +166,7 @@ test.provider(
 
       yield* Effect.logDebug("Redis test: PING started");
       const pong = yield* redisCommand(url, "PING").pipe(
-        Effect.retry({
-          schedule: Schedule.spaced("2 seconds"),
-          times: 3,
-        }),
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 3 }),
       );
       yield* Effect.logDebug("Redis test: PING completed");
       expect(String(pong).toUpperCase()).toContain("PONG");
@@ -215,26 +179,19 @@ test.provider(
       yield* Effect.logDebug("Redis test: provider.list started");
       const listed = yield* provider.list();
       yield* Effect.logDebug("Redis test: provider.list completed");
-      const found = listed.find(
-        (row) => row.serviceId === created.cache.serviceId,
-      );
+      const found = listed.find((row) => row.serviceId === created.cache.serviceId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.cache.name);
       expect(found?.projectId).toEqual(created.cache.projectId);
 
       const nextName =
-        created.cache.name.slice(0, -1) +
-        (created.cache.name.endsWith("z") ? "y" : "z");
+        created.cache.name.slice(0, -1) + (created.cache.name.endsWith("z") ? "y" : "z");
 
       yield* Effect.logDebug("Redis test: update started");
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const { project, environment } = yield* suitePartition;
-          const cache = yield* Railway.Redis("Cache", {
-            project,
-            environment,
-            name: nextName,
-          });
+          const cache = yield* Railway.Redis("Cache", { project, environment, name: nextName });
           const proxy = yield* Railway.TcpProxy("CacheProxy", {
             redis: cache,
             environment,

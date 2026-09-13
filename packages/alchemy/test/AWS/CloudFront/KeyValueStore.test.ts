@@ -21,18 +21,14 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* KeyValueStore("ListKeyValueStore", {
-                comment: "list",
-              });
+              return yield* KeyValueStore("ListKeyValueStore", { comment: "list" });
             }),
           );
 
           const provider = yield* Provider.findProvider(KeyValueStore);
           const all = yield* provider.list();
 
-          expect(
-            all.some((s) => s.keyValueStoreId === deployed.keyValueStoreId),
-          ).toBe(true);
+          expect(all.some((s) => s.keyValueStoreId === deployed.keyValueStoreId)).toBe(true);
 
           yield* stack.destroy();
           yield* assertKeyValueStoreDeleted(deployed.keyValueStoreName);
@@ -47,11 +43,7 @@ const assertKeyValueStoreDeleted = (name: string) =>
     Effect.flatMap(() => Effect.fail(new Error("KeyValueStoreStillExists"))),
     Effect.catchTag("EntityNotFound", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "KeyValueStoreStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      while: (error) => error instanceof Error && error.message === "KeyValueStoreStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

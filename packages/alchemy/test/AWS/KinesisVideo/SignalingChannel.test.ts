@@ -12,9 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findChannel = (channelName: string) =>
   kv.describeSignalingChannel({ ChannelName: channelName }).pipe(
     Effect.map((r) => r.ChannelInfo),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class ChannelStillExists extends Data.TaggedError("ChannelStillExists")<{
@@ -32,10 +30,7 @@ const assertChannelDeleted = (channelName: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "ChannelStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -79,9 +74,7 @@ test.provider(
       expect(updated.channelArn).toBe(channel.channelArn);
 
       const afterUpdate = yield* findChannel(channel.channelName);
-      expect(afterUpdate?.SingleMasterConfiguration?.MessageTtlSeconds).toBe(
-        30,
-      );
+      expect(afterUpdate?.SingleMasterConfiguration?.MessageTtlSeconds).toBe(30);
       const tagsAfter = yield* kv
         .listTagsForResource({ ResourceARN: channel.channelArn })
         .pipe(Effect.map((r) => r.Tags ?? {}));

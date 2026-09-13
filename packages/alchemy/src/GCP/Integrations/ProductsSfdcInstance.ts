@@ -135,12 +135,7 @@ export class ProductsSfdcInstanceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  product: string,
-  sfdcInstanceId: string,
-) =>
+const resourceName = (project: string, location: string, product: string, sfdcInstanceId: string) =>
   `${productParent(project, location, product)}/sfdcInstances/${sfdcInstanceId}`;
 
 const toAttrs = (
@@ -174,51 +169,33 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  integrations.listProjectsLocationsProductsSfdcInstances
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.sfdcInstances ?? [])),
-      Stream.filter((instance) => hasOwnershipMarker(instance.description)),
-      Stream.map((instance) => toAttrs(instance, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  integrations.listProjectsLocationsProductsSfdcInstances.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.sfdcInstances ?? [])),
+    Stream.filter((instance) => hasOwnershipMarker(instance.description)),
+    Stream.map((instance) => toAttrs(instance, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, id: string) =>
-  integrations.listProjectsLocationsProductsSfdcInstances
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.sfdcInstances ?? [])),
-      Stream.filterEffect((instance) =>
-        ownedByAlchemy(id, instance.description),
-      ),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  integrations.listProjectsLocationsProductsSfdcInstances.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.sfdcInstances ?? [])),
+    Stream.filterEffect((instance) => ownedByAlchemy(id, instance.description)),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const ProductsSfdcInstanceProvider = () =>
   Provider.succeed(ProductsSfdcInstance, {
-    stables: [
-      "name",
-      "sfdcInstanceId",
-      "location",
-      "product",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "sfdcInstanceId", "location", "product", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(
-        news.location,
-        previousLocation ?? env.region,
-      );
+      const nextLocation = normalizeLocation(news.location, previousLocation ?? env.region);
       if (
         previousLocation !== undefined &&
         normalizeLocation(previousLocation, env.region) !== nextLocation
@@ -227,10 +204,7 @@ export const ProductsSfdcInstanceProvider = () =>
       }
       const previousProduct = olds?.product ?? output?.product;
       const nextProduct = normalizeProduct(news.product);
-      if (
-        previousProduct !== undefined &&
-        normalizeProduct(previousProduct) !== nextProduct
-      ) {
+      if (previousProduct !== undefined && normalizeProduct(previousProduct) !== nextProduct) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.sfdcInstanceId ?? output?.sfdcInstanceId;
@@ -246,31 +220,17 @@ export const ProductsSfdcInstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sfdcInstanceId = yield* toResourceId(
-        id,
-        olds?.sfdcInstanceId,
-        output?.sfdcInstanceId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const sfdcInstanceId = yield* toResourceId(id, olds?.sfdcInstanceId, output?.sfdcInstanceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const product = normalizeProduct(olds?.product ?? output?.product);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, product, sfdcInstanceId);
+      const name = output?.name ?? resourceName(env.project, location, product, sfdcInstanceId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
-        existing = yield* findOwned(
-          productParent(env.project, location, product),
-          id,
-        );
+        existing = yield* findOwned(productParent(env.project, location, product), id);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -285,22 +245,11 @@ export const ProductsSfdcInstanceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const product = normalizeProduct(
-        news.product ?? output?.product ?? DEFAULT_PRODUCT,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const product = normalizeProduct(news.product ?? output?.product ?? DEFAULT_PRODUCT);
       const parent = productParent(env.project, location, product);
-      const sfdcInstanceId = yield* toResourceId(
-        id,
-        news.sfdcInstanceId,
-        output?.sfdcInstanceId,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, product, sfdcInstanceId);
+      const sfdcInstanceId = yield* toResourceId(id, news.sfdcInstanceId, output?.sfdcInstanceId);
+      const name = output?.name ?? resourceName(env.project, location, product, sfdcInstanceId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? sfdcInstanceId;
@@ -334,40 +283,29 @@ export const ProductsSfdcInstanceProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
       const orgChanged = !sameText(current.sfdcOrgId, news.sfdcOrgId);
-      const authorityChanged = !sameText(
-        current.serviceAuthority,
-        news.serviceAuthority,
-      );
+      const authorityChanged = !sameText(current.serviceAuthority, news.serviceAuthority);
       const authChanged =
-        JSON.stringify(current.authConfigId ?? null) !==
-        JSON.stringify(news.authConfigId ?? null);
+        JSON.stringify(current.authConfigId ?? null) !== JSON.stringify(news.authConfigId ?? null);
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        orgChanged ||
-        authorityChanged ||
-        authChanged
-      ) {
-        current =
-          yield* integrations.patchProjectsLocationsProductsSfdcInstances({
+      if (displayChanged || descriptionChanged || orgChanged || authorityChanged || authChanged) {
+        current = yield* integrations.patchProjectsLocationsProductsSfdcInstances({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            orgChanged ? "sfdc_org_id" : undefined,
+            authorityChanged ? "service_authority" : undefined,
+            authChanged ? "auth_config_id" : undefined,
+          ),
+          body: {
             name: currentName,
-            updateMask: updateMaskOf(
-              displayChanged ? "display_name" : undefined,
-              descriptionChanged ? "description" : undefined,
-              orgChanged ? "sfdc_org_id" : undefined,
-              authorityChanged ? "service_authority" : undefined,
-              authChanged ? "auth_config_id" : undefined,
-            ),
-            body: {
-              name: currentName,
-              displayName,
-              description,
-              sfdcOrgId: news.sfdcOrgId,
-              authConfigId: news.authConfigId,
-              serviceAuthority: news.serviceAuthority,
-            },
-          });
+            displayName,
+            description,
+            sfdcOrgId: news.sfdcOrgId,
+            authConfigId: news.authConfigId,
+            serviceAuthority: news.serviceAuthority,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

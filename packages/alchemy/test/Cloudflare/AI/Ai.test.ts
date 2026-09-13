@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AiBindingStack",
@@ -61,14 +58,12 @@ test(
     const out = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
-      .get(`${out.url}/run?prompt=${encodeURIComponent("Say pong.")}`)
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-      );
+    const res = yield* client.get(`${out.url}/run?prompt=${encodeURIComponent("Say pong.")}`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
     expect(res.status).toBe(200);
 
     // Workers AI answers either the native shape (`{ response }`) or the
@@ -82,12 +77,7 @@ test(
     expect((text as string).length).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -111,12 +101,7 @@ test(
     expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -155,12 +140,7 @@ test(
     expect(body.finishReason).toBe("stop");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -189,18 +169,12 @@ test(
       };
     };
     expect(body.mode).toBe("async");
-    const text =
-      body.result.response ?? body.result.choices?.[0]?.message?.content;
+    const text = body.result.response ?? body.result.choices?.[0]?.message?.content;
     expect(typeof text).toBe("string");
     expect((text as string).length).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -229,12 +203,7 @@ test(
     expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -254,8 +223,7 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.map(parseSse),
         Effect.flatMap((parts) =>
-          parts.some((p) => p.type === "text-delta") &&
-          parts.some((p) => p.type === "finish")
+          parts.some((p) => p.type === "text-delta") && parts.some((p) => p.type === "finish")
             ? Effect.succeed(parts)
             : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
         ),
@@ -276,12 +244,7 @@ test(
     expect(finish).toBeDefined();
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );

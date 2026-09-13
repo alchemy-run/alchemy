@@ -18,25 +18,16 @@ import HeadObjectTestFunctionLive, {
 import PresignGetOnlyTestFunctionLive, {
   PresignGetOnlyTestFunction,
 } from "./fixtures/presign-get-only-handler.ts";
-import S3PresignTestFunctionLive, {
-  S3PresignTestFunction,
-} from "./fixtures/presign-handler";
+import S3PresignTestFunctionLive, { S3PresignTestFunction } from "./fixtures/presign-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "S3Bindings",
-  "test/AWS/S3/Bindings.test.ts",
-);
+const sharedStack = Core.scratchStack(testOptions, "S3Bindings", "test/AWS/S3/Bindings.test.ts");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load. Budget ~150s
 // of readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let bucketName: string;
@@ -67,55 +58,32 @@ const s3RolePermissions = Effect.fn(function* (roleName: string) {
     .pages({ RoleName: roleName })
     .pipe(Stream.runCollect);
   expect(
-    attached
-      .flatMap((page) => page.AttachedPolicies ?? [])
-      .map((policy) => policy.PolicyArn),
-  ).toEqual([
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-  ]);
-  const pages = yield* IAM.listRolePolicies
-    .pages({ RoleName: roleName })
-    .pipe(Stream.runCollect);
+    attached.flatMap((page) => page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
+  ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
+  const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
     pages.flatMap((page) => page.PolicyNames),
     Effect.fn(function* (PolicyName) {
-      const policy = yield* IAM.getRolePolicy({
-        RoleName: roleName,
-        PolicyName,
-      });
-      const decoded = yield* Effect.try(() =>
-        decodeURIComponent(policy.PolicyDocument),
+      const policy = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });
+      const decoded = yield* Effect.try(() => decodeURIComponent(policy.PolicyDocument));
+      return yield* Schema.decodeUnknownEffect(policyDocument, { onExcessProperty: "error" })(
+        decoded,
       );
-      return yield* Schema.decodeUnknownEffect(policyDocument, {
-        onExcessProperty: "error",
-      })(decoded);
     }),
   );
   return policies
     .flatMap((policy) =>
       policy.Statement.flatMap((statement) => {
         const actions =
-          typeof statement.Action === "string"
-            ? [statement.Action]
-            : statement.Action;
+          typeof statement.Action === "string" ? [statement.Action] : statement.Action;
         const resources =
-          typeof statement.Resource === "string"
-            ? [statement.Resource]
-            : statement.Resource;
+          typeof statement.Resource === "string" ? [statement.Resource] : statement.Resource;
         return actions.flatMap((action) =>
-          resources.map((resource) => ({
-            effect: statement.Effect,
-            action,
-            resource,
-          })),
+          resources.map((resource) => ({ effect: statement.Effect, action, resource })),
         );
       }),
     )
-    .sort(
-      (a, b) =>
-        a.action.localeCompare(b.action) ||
-        a.resource.localeCompare(b.resource),
-    );
+    .sort((a, b) => a.action.localeCompare(b.action) || a.resource.localeCompare(b.resource));
 });
 
 const readBucketInfo = (url: string) =>
@@ -127,10 +95,7 @@ const readBucketInfo = (url: string) =>
     ),
     Effect.flatMap(
       Schema.decodeUnknownEffect(
-        Schema.Struct({
-          bucketName: Schema.String,
-          bucketArn: Schema.String,
-        }),
+        Schema.Struct({ bucketName: Schema.String, bucketArn: Schema.String }),
       ),
     ),
     Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
@@ -150,19 +115,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -192,10 +152,7 @@ const getTag = (path: string) =>
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "IamNotPropagated",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -212,9 +169,7 @@ const presign = (
     if (params.contentType !== undefined) {
       search.set("contentType", params.contentType);
     }
-    const response = yield* send(
-      HttpClientRequest.get(`${baseUrl}/${op}?${search.toString()}`),
-    );
+    const response = yield* send(HttpClientRequest.get(`${baseUrl}/${op}?${search.toString()}`));
     expect(response.status).toBe(200);
     const body = (yield* response.json) as { url: string };
     expect(body.url).toContain("X-Amz-Signature=");
@@ -251,19 +206,14 @@ const sendPresigned = (request: HttpClientRequest.HttpClientRequest) =>
       response.status === 403
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new IamNotPropagated({ status: response.status, body }),
-              ),
+              Effect.fail(new IamNotPropagated({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "IamNotPropagated",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -305,9 +255,7 @@ describe(
         getOnlyBucket = yield* readBucketInfo(getOnlyUrl);
         const readinessUrl = `${baseUrl}/bucket-name`;
 
-        yield* Effect.logInfo(
-          `S3 test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`S3 test setup: probing readiness at ${readinessUrl}`);
         // The fixture answers 503 until the runtime hydrates resource
         // Outputs (first-event race after a cold start) — keep retrying
         // until it serves the bucket name.
@@ -315,22 +263,16 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `S3 test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`S3 test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
         bucketName = (ready as { bucketName: string }).bucketName;
         expect(bucketName).toBeTruthy();
-        yield* Effect.logInfo(
-          `S3 test setup: fixture ready (bucket ${bucketName})`,
-        );
+        yield* Effect.logInfo(`S3 test setup: fixture ready (bucket ${bucketName})`);
       }),
       { timeout: 240_000 },
     );
@@ -342,17 +284,9 @@ describe(
         // (bucketName is captured in beforeAll; skip if setup never got there).
         // afterAll lacks the providers layer test bodies get, so provide it for
         // the out-of-band distilled call.
-        for (const name of [
-          bucketName,
-          headBucket?.bucketName,
-          getOnlyBucket?.bucketName,
-        ]) {
+        for (const name of [bucketName, headBucket?.bucketName, getOnlyBucket?.bucketName]) {
           if (name) {
-            yield* Core.withProviders(
-              assertBucketDeleted(name),
-              testOptions,
-              "S3Bindings",
-            );
+            yield* Core.withProviders(assertBucketDeleted(name), testOptions, "S3Bindings");
           }
         }
       }),
@@ -367,15 +301,10 @@ describe(
             const key = "presign/upload.txt";
             const body = "uploaded through a presigned PUT URL";
 
-            const url = yield* presign("presign-put", {
-              key,
-              contentType: "text/plain",
-            });
+            const url = yield* presign("presign-put", { key, contentType: "text/plain" });
 
             const putResponse = yield* sendPresigned(
-              HttpClientRequest.put(url).pipe(
-                HttpClientRequest.bodyText(body, "text/plain"),
-              ),
+              HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText(body, "text/plain")),
             );
             expect(putResponse.status).toBe(200);
 
@@ -399,9 +328,7 @@ describe(
             // Signed for text/plain but sent as application/json — the
             // signature no longer matches, so S3 must reject it.
             const response = yield* HttpClient.execute(
-              HttpClientRequest.put(url).pipe(
-                HttpClientRequest.bodyText("{}", "application/json"),
-              ),
+              HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText("{}", "application/json")),
             );
             expect(response.status).toBe(403);
           }),
@@ -417,21 +344,14 @@ describe(
             const key = "presign/round-trip.txt";
             const body = "presigned round trip payload";
 
-            const putUrl = yield* presign("presign-put", {
-              key,
-              contentType: "text/plain",
-            });
+            const putUrl = yield* presign("presign-put", { key, contentType: "text/plain" });
             const putResponse = yield* sendPresigned(
-              HttpClientRequest.put(putUrl).pipe(
-                HttpClientRequest.bodyText(body, "text/plain"),
-              ),
+              HttpClientRequest.put(putUrl).pipe(HttpClientRequest.bodyText(body, "text/plain")),
             );
             expect(putResponse.status).toBe(200);
 
             const getUrl = yield* presign("presign-get", { key });
-            const getResponse = yield* sendPresigned(
-              HttpClientRequest.get(getUrl),
-            );
+            const getResponse = yield* sendPresigned(HttpClientRequest.get(getUrl));
             expect(getResponse.status).toBe(200);
             expect(yield* getResponse.text).toBe(body);
           }),
@@ -456,13 +376,9 @@ describe(
               key,
               contentType: "application/octet-stream",
             });
-            const getResponse = yield* sendPresigned(
-              HttpClientRequest.get(getUrl),
-            );
+            const getResponse = yield* sendPresigned(HttpClientRequest.get(getUrl));
             expect(getResponse.status).toBe(200);
-            expect(getResponse.headers["content-type"]).toBe(
-              "application/octet-stream",
-            );
+            expect(getResponse.headers["content-type"]).toBe("application/octet-stream");
             expect(yield* getResponse.text).toBe("override me");
           }),
         { timeout: 120_000 },
@@ -473,23 +389,14 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             const key = "presign/expiring.txt";
-            yield* S3.putObject({
-              Bucket: bucketName,
-              Key: key,
-              Body: "short lived",
-            });
+            yield* S3.putObject({ Bucket: bucketName, Key: key, Body: "short lived" });
 
-            const getUrl = yield* presign("presign-get", {
-              key,
-              expiresIn: 1,
-            });
+            const getUrl = yield* presign("presign-get", { key, expiresIn: 1 });
 
             // Poll until S3 reports the URL expired (bounded — expiry is 1s,
             // allow a little clock skew between the Lambda signer and S3).
             const status = yield* Effect.gen(function* () {
-              const response = yield* HttpClient.execute(
-                HttpClientRequest.get(getUrl),
-              );
+              const response = yield* HttpClient.execute(HttpClientRequest.get(getUrl));
               return response.status;
             }).pipe(
               Effect.repeat({
@@ -510,85 +417,72 @@ describe(
         () =>
           Effect.gen(function* () {
             expect(yield* s3RolePermissions(headRoleName)).toEqual([
-              {
-                effect: "Allow",
-                action: "s3:GetObject",
-                resource: `${headBucket.bucketArn}/*`,
-              },
+              { effect: "Allow", action: "s3:GetObject", resource: `${headBucket.bucketArn}/*` },
               {
                 effect: "Allow",
                 action: "s3:GetObjectVersion",
                 resource: `${headBucket.bucketArn}/*`,
               },
-              {
-                effect: "Allow",
-                action: "s3:ListBucket",
-                resource: headBucket.bucketArn,
-              },
+              { effect: "Allow", action: "s3:ListBucket", resource: headBucket.bucketArn },
             ]);
           }),
         { tags: ["provider:aws:iam"] },
       );
 
-      test.provider(
-        "reads current and non-current metadata with only HeadObject bound",
-        () =>
-          Effect.gen(function* () {
-            const key = "head/versions.txt";
-            const oldBody = "original metadata";
-            const currentBody =
-              "updated metadata with a different content length";
-            const oldVersion = yield* S3.putObject({
-              Bucket: headBucket.bucketName,
-              Key: key,
-              Body: oldBody,
-              ContentType: "text/plain",
-            });
-            const currentVersion = yield* S3.putObject({
-              Bucket: headBucket.bucketName,
-              Key: key,
-              Body: currentBody,
-              ContentType: "text/markdown",
-            });
-            expect(oldVersion.VersionId).toBeTruthy();
-            expect(currentVersion.VersionId).not.toBe(oldVersion.VersionId);
-            for (const [params, expected] of [
-              [
-                { key },
-                {
-                  contentLength: currentBody.length,
-                  contentType: "text/markdown",
-                  versionId: currentVersion.VersionId,
-                },
-              ],
-              [
-                { key, versionId: oldVersion.VersionId! },
-                {
-                  contentLength: oldBody.length,
-                  contentType: "text/plain",
-                  versionId: oldVersion.VersionId,
-                },
-              ],
-            ] as const) {
-              const response = yield* send(
-                HttpClientRequest.get(`${headUrl}${route("/head", params)}`),
-              );
-              expect(response.status).toBe(200);
-              expect(yield* response.json).toEqual(expected);
-            }
-          }),
+      test.provider("reads current and non-current metadata with only HeadObject bound", () =>
+        Effect.gen(function* () {
+          const key = "head/versions.txt";
+          const oldBody = "original metadata";
+          const currentBody = "updated metadata with a different content length";
+          const oldVersion = yield* S3.putObject({
+            Bucket: headBucket.bucketName,
+            Key: key,
+            Body: oldBody,
+            ContentType: "text/plain",
+          });
+          const currentVersion = yield* S3.putObject({
+            Bucket: headBucket.bucketName,
+            Key: key,
+            Body: currentBody,
+            ContentType: "text/markdown",
+          });
+          expect(oldVersion.VersionId).toBeTruthy();
+          expect(currentVersion.VersionId).not.toBe(oldVersion.VersionId);
+          for (const [params, expected] of [
+            [
+              { key },
+              {
+                contentLength: currentBody.length,
+                contentType: "text/markdown",
+                versionId: currentVersion.VersionId,
+              },
+            ],
+            [
+              { key, versionId: oldVersion.VersionId! },
+              {
+                contentLength: oldBody.length,
+                contentType: "text/plain",
+                versionId: oldVersion.VersionId,
+              },
+            ],
+          ] as const) {
+            const response = yield* send(
+              HttpClientRequest.get(`${headUrl}${route("/head", params)}`),
+            );
+            expect(response.status).toBe(200);
+            expect(yield* response.json).toEqual(expected);
+          }
+        }),
       );
 
-      test.provider(
-        "returns typed NotFound for a missing key with only HeadObject bound",
-        () =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${headUrl}/head?key=head/never-created`),
-            );
-            expect(response.status).toBe(404);
-            expect(yield* response.json).toEqual({ tag: "NotFound" });
-          }),
+      test.provider("returns typed NotFound for a missing key with only HeadObject bound", () =>
+        Effect.gen(function* () {
+          const response = yield* send(
+            HttpClientRequest.get(`${headUrl}/head?key=head/never-created`),
+          );
+          expect(response.status).toBe(404);
+          expect(yield* response.json).toEqual({ tag: "NotFound" });
+        }),
       );
     });
 
@@ -613,16 +507,10 @@ describe(
                     ...(versionId === undefined ? {} : { versionId }),
                   }),
                 );
-                const response = yield* send(
-                  HttpClientRequest.get(`${getOnlyUrl}${path}`),
-                );
+                const response = yield* send(HttpClientRequest.get(`${getOnlyUrl}${path}`));
                 expect(response.status).toBe(200);
                 return (yield* response.json.pipe(
-                  Effect.flatMap(
-                    Schema.decodeUnknownEffect(
-                      Schema.Struct({ url: Schema.String }),
-                    ),
-                  ),
+                  Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ url: Schema.String }))),
                 )).url;
               });
             const pinned = yield* mint(old.VersionId!);
@@ -659,11 +547,7 @@ describe(
         () =>
           Effect.gen(function* () {
             expect(yield* s3RolePermissions(getOnlyRoleName)).toEqual([
-              {
-                effect: "Allow",
-                action: "s3:GetObject",
-                resource: `${getOnlyBucket.bucketArn}/*`,
-              },
+              { effect: "Allow", action: "s3:GetObject", resource: `${getOnlyBucket.bucketArn}/*` },
               {
                 effect: "Allow",
                 action: "s3:GetObjectVersion",
@@ -709,56 +593,30 @@ describe(
             expect(currentVersion.VersionId).not.toBe(oldVersion.VersionId);
             for (const [versionId, body, expectedVersionId] of [
               [undefined, currentBody, currentVersion.VersionId],
-              [
-                currentVersion.VersionId!,
-                currentBody,
-                currentVersion.VersionId,
-              ],
+              [currentVersion.VersionId!, currentBody, currentVersion.VersionId],
               [oldVersion.VersionId!, oldBody, oldVersion.VersionId],
               ["null", "null version", "null"],
             ] as const) {
               const path = yield* Effect.sync(() =>
-                route("/presign", {
-                  key,
-                  ...(versionId === undefined ? {} : { versionId }),
-                }),
+                route("/presign", { key, ...(versionId === undefined ? {} : { versionId }) }),
               );
-              const signed = yield* send(
-                HttpClientRequest.get(`${getOnlyUrl}${path}`),
-              );
+              const signed = yield* send(HttpClientRequest.get(`${getOnlyUrl}${path}`));
               expect(signed.status).toBe(200);
               const result = yield* signed.json.pipe(
-                Effect.flatMap(
-                  Schema.decodeUnknownEffect(
-                    Schema.Struct({ url: Schema.String }),
-                  ),
-                ),
+                Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ url: Schema.String }))),
               );
               const parsed = yield* Effect.sync(() => new URL(result.url));
-              expect(parsed.searchParams.get("versionId")).toBe(
-                versionId ?? null,
-              );
-              expect(parsed.searchParams.get("X-Amz-Signature")).toMatch(
-                /^[0-9a-f]{64}$/,
-              );
-              expect(
-                yield* Effect.sync(() => decodeURIComponent(parsed.pathname)),
-              ).toBe(`/${key}`);
+              expect(parsed.searchParams.get("versionId")).toBe(versionId ?? null);
+              expect(parsed.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
+              expect(yield* Effect.sync(() => decodeURIComponent(parsed.pathname))).toBe(`/${key}`);
               expect(parsed.hash).toBe("");
               if (versionId === oldVersion.VersionId) {
-                yield* S3.deleteObject({
-                  Bucket: getOnlyBucket.bucketName,
-                  Key: key,
-                });
+                yield* S3.deleteObject({ Bucket: getOnlyBucket.bucketName, Key: key });
               }
-              const downloaded = yield* sendPresigned(
-                HttpClientRequest.get(result.url),
-              );
+              const downloaded = yield* sendPresigned(HttpClientRequest.get(result.url));
               expect(downloaded.status).toBe(200);
               expect(yield* downloaded.text).toBe(body);
-              expect(downloaded.headers["x-amz-version-id"]).toBe(
-                expectedVersionId,
-              );
+              expect(downloaded.headers["x-amz-version-id"]).toBe(expectedVersionId);
 
               const tamperedUrl = yield* Effect.sync(() => {
                 const url = new URL(result.url);
@@ -772,9 +630,7 @@ describe(
               });
               const tampered = yield* send(HttpClientRequest.get(tamperedUrl));
               expect(tampered.status).toBe(403);
-              expect(yield* tampered.text).toContain(
-                "<Code>SignatureDoesNotMatch</Code>",
-              );
+              expect(yield* tampered.text).toContain("<Code>SignatureDoesNotMatch</Code>");
 
               if (versionId !== undefined) {
                 const withoutVersion = yield* Effect.sync(() => {
@@ -782,13 +638,9 @@ describe(
                   url.searchParams.delete("versionId");
                   return url.toString();
                 });
-                const removed = yield* send(
-                  HttpClientRequest.get(withoutVersion),
-                );
+                const removed = yield* send(HttpClientRequest.get(withoutVersion));
                 expect(removed.status).toBe(403);
-                expect(yield* removed.text).toContain(
-                  "<Code>SignatureDoesNotMatch</Code>",
-                );
+                expect(yield* removed.text).toContain("<Code>SignatureDoesNotMatch</Code>");
               }
             }
           }),
@@ -806,10 +658,7 @@ describe(
             yield* seed("batch/one.txt", "first");
             yield* seed("batch/two.txt", "second");
 
-            const result = yield* getJson<{
-              deleted: string[];
-              errors: string[];
-            }>(
+            const result = yield* getJson<{ deleted: string[]; errors: string[] }>(
               route("/delete-objects", { keys: "batch/one.txt,batch/two.txt" }),
             );
             expect(result.errors).toEqual([]);
@@ -817,14 +666,9 @@ describe(
             expect(result.deleted).toContain("batch/two.txt");
 
             // out-of-band verification via distilled — the objects are gone
-            const head = yield* S3.headObject({
-              Bucket: bucketName,
-              Key: "batch/one.txt",
-            }).pipe(
+            const head = yield* S3.headObject({ Bucket: bucketName, Key: "batch/one.txt" }).pipe(
               Effect.map(() => "found" as const),
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed("not-found" as const),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
             );
             expect(head).toBe("not-found");
           }),
@@ -840,18 +684,11 @@ describe(
             yield* seed("tagging/put.txt", "tag me");
 
             yield* getJson<{ ok: boolean }>(
-              route("/put-tagging", {
-                key: "tagging/put.txt",
-                tagKey: "env",
-                tagValue: "prod",
-              }),
+              route("/put-tagging", { key: "tagging/put.txt", tagKey: "env", tagValue: "prod" }),
             );
 
             // out-of-band verification via distilled
-            const tags = yield* S3.getObjectTagging({
-              Bucket: bucketName,
-              Key: "tagging/put.txt",
-            });
+            const tags = yield* S3.getObjectTagging({ Bucket: bucketName, Key: "tagging/put.txt" });
             expect(tags.TagSet).toEqual([{ Key: "env", Value: "prod" }]);
           }),
         { timeout: 120_000 },
@@ -914,10 +751,9 @@ describe(
             const body = "attribute probe body";
             yield* seed("attrs/object.txt", body);
 
-            const result = yield* getJson<{
-              size: number;
-              storageClass: string;
-            }>(route("/attributes", { key: "attrs/object.txt" }));
+            const result = yield* getJson<{ size: number; storageClass: string }>(
+              route("/attributes", { key: "attrs/object.txt" }),
+            );
             expect(result.size).toBe(body.length);
             expect(result.storageClass).toBe("STANDARD");
           }),
@@ -932,10 +768,9 @@ describe(
           Effect.gen(function* () {
             yield* seed("versions/a.txt", "v1");
 
-            const result = yield* getJson<{
-              versions: string[];
-              deleteMarkers: number;
-            }>(route("/versions", { prefix: "versions/" }));
+            const result = yield* getJson<{ versions: string[]; deleteMarkers: number }>(
+              route("/versions", { prefix: "versions/" }),
+            );
             expect(result.versions).toContain("versions/a.txt");
           }),
         { timeout: 120_000 },
@@ -947,10 +782,9 @@ describe(
         "lists the uploaded parts of an in-progress multipart upload",
         (_stack) =>
           Effect.gen(function* () {
-            const result = yield* getJson<{
-              parts: number[];
-              uploads: string[];
-            }>(route("/multipart-list", { key: "mpu/list.bin" }));
+            const result = yield* getJson<{ parts: number[]; uploads: string[] }>(
+              route("/multipart-list", { key: "mpu/list.bin" }),
+            );
             expect(result.parts).toEqual([1]);
           }),
         { timeout: 120_000 },
@@ -962,10 +796,9 @@ describe(
         "lists in-progress multipart uploads",
         (_stack) =>
           Effect.gen(function* () {
-            const result = yield* getJson<{
-              parts: number[];
-              uploads: string[];
-            }>(route("/multipart-list", { key: "mpu/uploads.bin" }));
+            const result = yield* getJson<{ parts: number[]; uploads: string[] }>(
+              route("/multipart-list", { key: "mpu/uploads.bin" }),
+            );
             expect(result.uploads).toContain("mpu/uploads.bin");
           }),
         { timeout: 120_000 },
@@ -981,18 +814,12 @@ describe(
             yield* seed("mpu/src.txt", body);
 
             const result = yield* getJson<{ etag: string | undefined }>(
-              route("/multipart-copy", {
-                src: "mpu/src.txt",
-                dest: "mpu/dest.txt",
-              }),
+              route("/multipart-copy", { src: "mpu/src.txt", dest: "mpu/dest.txt" }),
             );
             expect(result.etag).toBeTruthy();
 
             // out-of-band verification via distilled — the copy landed intact
-            const head = yield* S3.headObject({
-              Bucket: bucketName,
-              Key: "mpu/dest.txt",
-            });
+            const head = yield* S3.headObject({ Bucket: bucketName, Key: "mpu/dest.txt" });
             expect(head.ContentLength).toBe(body.length);
           }),
         { timeout: 120_000 },
@@ -1006,15 +833,10 @@ describe(
           Effect.gen(function* () {
             yield* seed("restore/std.txt", "not archived");
 
-            const tag = yield* getTag(
-              route("/restore", { key: "restore/std.txt" }),
-            );
+            const tag = yield* getTag(route("/restore", { key: "restore/std.txt" }));
             // STANDARD objects are not restorable — the binding must surface
             // the *typed* platform rejection, proving IAM + wiring works.
-            expect([
-              "InvalidObjectState",
-              "ObjectAlreadyInActiveTierError",
-            ]).toContain(tag);
+            expect(["InvalidObjectState", "ObjectAlreadyInActiveTierError"]).toContain(tag);
           }),
         { timeout: 120_000 },
       );
@@ -1026,9 +848,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed("lock/get-retention.txt", "no lock");
-            const tag = yield* getTag(
-              route("/retention", { key: "lock/get-retention.txt" }),
-            );
+            const tag = yield* getTag(route("/retention", { key: "lock/get-retention.txt" }));
             expect(tag).toBe("InvalidRequest");
           }),
         { timeout: 120_000 },
@@ -1041,9 +861,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed("lock/put-retention.txt", "no lock");
-            const tag = yield* getTag(
-              route("/retention-put", { key: "lock/put-retention.txt" }),
-            );
+            const tag = yield* getTag(route("/retention-put", { key: "lock/put-retention.txt" }));
             expect(tag).toBe("InvalidRequest");
           }),
         { timeout: 120_000 },
@@ -1056,9 +874,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed("lock/get-hold.txt", "no lock");
-            const tag = yield* getTag(
-              route("/legal-hold", { key: "lock/get-hold.txt" }),
-            );
+            const tag = yield* getTag(route("/legal-hold", { key: "lock/get-hold.txt" }));
             expect(tag).toBe("InvalidRequest");
           }),
         { timeout: 120_000 },
@@ -1071,9 +887,7 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed("lock/put-hold.txt", "no lock");
-            const tag = yield* getTag(
-              route("/legal-hold-put", { key: "lock/put-hold.txt" }),
-            );
+            const tag = yield* getTag(route("/legal-hold-put", { key: "lock/put-hold.txt" }));
             expect(tag).toBe("InvalidRequest");
           }),
         { timeout: 120_000 },

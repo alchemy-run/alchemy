@@ -81,9 +81,7 @@ export type SchemaRegistry = Resource<
  * @resource
  * @category ManagedKafka
  */
-export const SchemaRegistry = Resource<SchemaRegistry>(
-  "GCP.ManagedKafka.SchemaRegistry",
-);
+export const SchemaRegistry = Resource<SchemaRegistry>("GCP.ManagedKafka.SchemaRegistry");
 
 export class SchemaRegistryNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistryNotResolved",
@@ -91,11 +89,7 @@ export class SchemaRegistryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  schemaRegistryId: string,
-) =>
+const resourceName = (project: string, location: string, schemaRegistryId: string) =>
   `projects/${project}/locations/${location}/schemaRegistries/${schemaRegistryId}`;
 
 const toAttrs = (registry: kafka.SchemaRegistry, project: string) => {
@@ -122,14 +116,8 @@ export const SchemaRegistryProvider = () =>
         nextId: news.schemaRegistryId
           ? schemaRegistryIdOf(news.schemaRegistryId)
           : (olds?.schemaRegistryId ?? output?.schemaRegistryId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
-        nextLocation: normalizeLocation(
-          news.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
+        nextLocation: normalizeLocation(news.location ?? output?.location, env.region),
       });
     }),
 
@@ -140,18 +128,12 @@ export const SchemaRegistryProvider = () =>
         olds?.schemaRegistryId,
         output?.schemaRegistryId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, schemaRegistryId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, schemaRegistryId);
       const existing = yield* getSchemaRegistry(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasSchemaRegistryOwnership(id, name))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasSchemaRegistryOwnership(id, name)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -163,16 +145,12 @@ export const SchemaRegistryProvider = () =>
           (registry) =>
             schemaRegistryOwnership(registry.name!).pipe(
               Effect.map((labels) =>
-                hasAlchemyLabelMap(labels)
-                  ? toAttrs(registry, env.project)
-                  : undefined,
+                hasAlchemyLabelMap(labels) ? toAttrs(registry, env.project) : undefined,
               ),
             ),
           { concurrency: 4 },
         );
-        return owned.filter(
-          (attrs): attrs is NonNullable<typeof attrs> => attrs !== undefined,
-        );
+        return owned.filter((attrs): attrs is NonNullable<typeof attrs> => attrs !== undefined);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -182,12 +160,8 @@ export const SchemaRegistryProvider = () =>
         news.schemaRegistryId,
         output?.schemaRegistryId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, schemaRegistryId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, schemaRegistryId);
       const labels = yield* createInternalLabels(id);
 
       let current = yield* getSchemaRegistry(name);
@@ -218,11 +192,6 @@ export const SchemaRegistryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* kafka
         .deleteProjectsLocationsSchemaRegistries({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "SchemaRegistryRequiresCluster"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () => Effect.void));
     }),
   });

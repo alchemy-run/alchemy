@@ -12,9 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findMonitor = (name: string) =>
   rum.getAppMonitor({ Name: name }).pipe(
     Effect.map((r) => r.AppMonitor),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class AppMonitorStillExists extends Data.TaggedError("AppMonitorStillExists")<{
@@ -24,9 +22,7 @@ class AppMonitorStillExists extends Data.TaggedError("AppMonitorStillExists")<{
 const assertMonitorDeleted = (name: string) =>
   findMonitor(name).pipe(
     Effect.flatMap((monitor) =>
-      monitor === undefined
-        ? Effect.void
-        : Effect.fail(new AppMonitorStillExists({ name })),
+      monitor === undefined ? Effect.void : Effect.fail(new AppMonitorStillExists({ name })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AppMonitorStillExists",
@@ -77,9 +73,10 @@ test.provider(
       expect(created?.Id).toBe(monitor.appMonitorId);
       expect(created?.Domain).toBe("example.com");
       expect(created?.AppMonitorConfiguration?.SessionSampleRate).toBe(0.5);
-      expect(
-        [...(created?.AppMonitorConfiguration?.Telemetries ?? [])].sort(),
-      ).toEqual(["errors", "http"]);
+      expect([...(created?.AppMonitorConfiguration?.Telemetries ?? [])].sort()).toEqual([
+        "errors",
+        "http",
+      ]);
       expect(created?.AppMonitorConfiguration?.AllowCookies).toBe(true);
       expect(created?.DataStorage?.CwLog?.CwLogEnabled ?? false).toBe(false);
       expect(created?.CustomEvents?.Status ?? "DISABLED").toBe("DISABLED");
@@ -109,9 +106,7 @@ test.provider(
       const afterUpdate = yield* findMonitor(monitor.appMonitorName);
       expect(afterUpdate?.Domain).toBe("updated.example.com");
       expect(afterUpdate?.AppMonitorConfiguration?.SessionSampleRate).toBe(1);
-      expect(afterUpdate?.AppMonitorConfiguration?.Telemetries).toEqual([
-        "errors",
-      ]);
+      expect(afterUpdate?.AppMonitorConfiguration?.Telemetries).toEqual(["errors"]);
       expect(afterUpdate?.AppMonitorConfiguration?.AllowCookies).toBe(false);
       expect(afterUpdate?.DataStorage?.CwLog?.CwLogEnabled).toBe(true);
       expect(afterUpdate?.CustomEvents?.Status).toBe("ENABLED");
@@ -161,10 +156,7 @@ test.provider(
       expect(first.appMonitorName).toBe("alchemy-test-rum-monitor-a");
 
       const observed = yield* findMonitor(first.appMonitorName);
-      expect([...(observed?.DomainList ?? [])].sort()).toEqual([
-        "app.example.com",
-        "example.com",
-      ]);
+      expect([...(observed?.DomainList ?? [])].sort()).toEqual(["app.example.com", "example.com"]);
 
       // rename replaces the monitor
       const second = yield* stack.deploy(

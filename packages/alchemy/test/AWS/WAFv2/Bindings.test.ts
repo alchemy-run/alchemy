@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "Wafv2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,45 +33,32 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "WAFv2 Bindings",
-  {
-    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:wafv2", "live"],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:wafv2", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "WAFv2 test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("WAFv2 test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("WAFv2 test setup: deploying fixture");
@@ -88,21 +72,15 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `WAFv2 test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`WAFv2 test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `WAFv2 test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`WAFv2 test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -110,9 +88,7 @@ describe.sequential(
       { timeout: 600_000 },
     );
 
-    afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), {
-      timeout: 600_000,
-    });
+    afterAll(process.env.NO_DESTROY ? Effect.void : sharedStack.destroy(), { timeout: 600_000 });
 
     describe("binding registration", () => {
       test.provider("all 20 capabilities initialize in the runtime", (_stack) =>
@@ -142,15 +118,12 @@ describe.sequential(
             const updated = (yield* postJson("/ip-set", {
               addresses: ["192.0.2.44/32", "198.51.100.7/32"],
             })) as { addresses: string[] };
-            expect(updated.addresses).toEqual([
-              "192.0.2.44/32",
-              "198.51.100.7/32",
-            ]);
+            expect(updated.addresses).toEqual(["192.0.2.44/32", "198.51.100.7/32"]);
 
             // restore for idempotent re-runs
-            const restored = (yield* postJson("/ip-set", {
-              addresses: ["192.0.2.44/32"],
-            })) as { addresses: string[] };
+            const restored = (yield* postJson("/ip-set", { addresses: ["192.0.2.44/32"] })) as {
+              addresses: string[];
+            };
             expect(restored.addresses).toEqual(["192.0.2.44/32"]);
           }),
         { timeout: 120_000 },
@@ -185,9 +158,7 @@ describe.sequential(
     describe("ListResourcesForWebACL", () => {
       test.provider("lists no associated resources", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/resources")) as {
-            resources: string[];
-          };
+          const response = (yield* getJson("/resources")) as { resources: string[] };
           expect(response.resources).toEqual([]);
         }),
       );
@@ -196,10 +167,7 @@ describe.sequential(
     describe("GetTopPathStatisticsByTraffic", () => {
       test.provider("returns data or the typed pricing-plan gate", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/top-paths")) as {
-            ok: boolean;
-            tag: string | null;
-          };
+          const response = (yield* getJson("/top-paths")) as { ok: boolean; tag: string | null };
           if (!response.ok) {
             // account without the bot-statistics pricing plan — the typed
             // tag proves the grant + wiring reached WAF
@@ -231,55 +199,46 @@ describe.sequential(
     describe("CheckCapacity", () => {
       test.provider("computes the WCU cost of a geo-match rule", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/capacity")) as {
-            capacity: number;
-          };
+          const response = (yield* getJson("/capacity")) as { capacity: number };
           expect(response.capacity).toBeGreaterThan(0);
         }),
       );
     });
 
     describe("CAPTCHA API keys", () => {
-      test.provider(
-        "mints, lists, decrypts, and deletes an API key",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/api-keys")) as {
-              created: boolean;
-              listed: number;
-              domains: string[];
-              deleted: boolean;
-            };
-            expect(response.created).toBe(true);
-            expect(response.listed).toBeGreaterThan(0);
-            expect(response.domains).toContain("example.com");
-            expect(response.deleted).toBe(true);
-          }),
+      test.provider("mints, lists, decrypts, and deletes an API key", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/api-keys")) as {
+            created: boolean;
+            listed: number;
+            domains: string[];
+            deleted: boolean;
+          };
+          expect(response.created).toBe(true);
+          expect(response.listed).toBeGreaterThan(0);
+          expect(response.domains).toContain("example.com");
+          expect(response.deleted).toBe(true);
+        }),
       );
     });
 
     describe("managed rule group catalog", () => {
-      test.provider(
-        "lists groups and describes the common rule set",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/managed")) as {
-              groups: number;
-              capacity: number;
-              currentDefaultVersion: string | null;
-            };
-            expect(response.groups).toBeGreaterThan(0);
-            expect(response.capacity).toBeGreaterThan(0);
-            expect(response.currentDefaultVersion).toBeTruthy();
-          }),
+      test.provider("lists groups and describes the common rule set", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/managed")) as {
+            groups: number;
+            capacity: number;
+            currentDefaultVersion: string | null;
+          };
+          expect(response.groups).toBeGreaterThan(0);
+          expect(response.capacity).toBeGreaterThan(0);
+          expect(response.currentDefaultVersion).toBeTruthy();
+        }),
       );
 
       test.provider("reads the managed products catalog", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/products")) as {
-            all: number;
-            aws: number;
-          };
+          const response = (yield* getJson("/products")) as { all: number; aws: number };
           expect(response.all).toBeGreaterThan(0);
           expect(response.aws).toBeGreaterThan(0);
         }),
@@ -287,15 +246,11 @@ describe.sequential(
     });
 
     describe("GetWebACLForResource", () => {
-      test.provider(
-        "returns not-found for an unassociated resource (typed)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/waf-for-resource")) as {
-              found: boolean;
-            };
-            expect(response.found).toBe(false);
-          }),
+      test.provider("returns not-found for an unassociated resource (typed)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/waf-for-resource")) as { found: boolean };
+          expect(response.found).toBe(false);
+        }),
       );
     });
   },

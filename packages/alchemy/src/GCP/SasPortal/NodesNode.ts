@@ -108,18 +108,12 @@ export type NodesNode = Resource<
  */
 export const NodesNode = Resource<NodesNode>("GCP.SasPortal.NodesNode");
 
-export class NodesNodeNotResolved extends Data.TaggedError(
-  "GCP.SasPortal.NodesNodeNotResolved",
-)<{
+export class NodesNodeNotResolved extends Data.TaggedError("GCP.SasPortal.NodesNodeNotResolved")<{
   parent: string;
   name: string;
 }> {}
 
-const toAttrs = (
-  node: sasportal.SasPortalNode,
-  parent: string,
-  project: string,
-) => {
+const toAttrs = (node: sasportal.SasPortalNode, parent: string, project: string) => {
   const name = node.name ?? "";
   return {
     name,
@@ -150,9 +144,7 @@ export const NodesNodeProvider = () =>
       const parent = expandNode(olds?.parent ?? output?.parent ?? "");
       const name = olds?.name ?? output?.name ?? "";
       let existing = yield* getNodeNode(name);
-      let locatedParent = existing
-        ? parentOf(existing.name ?? "") || parent
-        : parent;
+      let locatedParent = existing ? parentOf(existing.name ?? "") || parent : parent;
       if (existing === undefined) {
         const found = yield* scanOwnedNodeNode(id, parent);
         existing = found?.row;
@@ -160,9 +152,7 @@ export const NodesNodeProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, locatedParent, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -205,8 +195,7 @@ export const NodesNodeProvider = () =>
       let current = yield* getNodeNode(news.name ?? output?.name ?? "");
       if (current === undefined) {
         const found =
-          (yield* findOwnedNodeNode(id, parent)) ??
-          (yield* scanOwnedNodeNode(id, parent));
+          (yield* findOwnedNodeNode(id, parent)) ?? (yield* scanOwnedNodeNode(id, parent));
         current = found?.row;
       }
 
@@ -218,9 +207,7 @@ export const NodesNodeProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              findOwnedNodeNode(id, parent).pipe(
-                Effect.map((found) => found?.row),
-              ),
+              findOwnedNodeNode(id, parent).pipe(Effect.map((found) => found?.row)),
             ),
           );
         current = created ?? undefined;
@@ -236,8 +223,7 @@ export const NodesNodeProvider = () =>
       const name = current.name ?? news.name ?? output?.name ?? "";
       const nameChanged = !sameText(current.displayName, displayName);
       const usersChanged =
-        news.sasUserIds !== undefined &&
-        !sameStringList(current.sasUserIds, news.sasUserIds);
+        news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchNodesNodes({
           name,
@@ -254,9 +240,9 @@ export const NodesNodeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryDelete(
-        sasportal.deleteNodesNodes({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryDelete(sasportal.deleteNodesNodes({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getNodeNode(output.name));
     }),
   });

@@ -6,9 +6,7 @@ import * as Kubernetes from "@/Kubernetes";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
-const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
-};
+const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
 const { test } = Test.make(testOptions);
 
 // Ungated probe: `Job` is a composite host (in-cluster batch/v1 Job or
@@ -27,12 +25,5 @@ test.provider(
       expect(Array.isArray(all)).toBe(true);
       expect(all).toEqual([]);
     }),
-  {
-    tags: [
-      "provider:aws",
-      "provider:kubernetes",
-      "provider:kubernetes:job",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:job", "live"] },
 );

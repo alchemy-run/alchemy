@@ -202,23 +202,14 @@ export type QueuedResource = Resource<
  * @resource
  * @category TPU
  */
-export const QueuedResource = Resource<QueuedResource>(
-  "GCP.TPU.QueuedResource",
-);
+export const QueuedResource = Resource<QueuedResource>("GCP.TPU.QueuedResource");
 
-const resourceName = (
-  project: string,
-  location: string,
-  queuedResourceId: string,
-) =>
+const resourceName = (project: string, location: string, queuedResourceId: string) =>
   `projects/${project}/locations/${location}/queuedResources/${queuedResourceId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
-const intervalOf = (
-  interval: tpu.Interval | QueueingPolicy["validInterval"] | undefined,
-) => {
+const intervalOf = (interval: tpu.Interval | QueueingPolicy["validInterval"] | undefined) => {
   if (interval === undefined) return undefined;
   return { startTime: interval.startTime, endTime: interval.endTime };
 };
@@ -266,16 +257,11 @@ const networkTagsOf = (node: tpu.Node | NodeProps) => {
 const stringRecordOf = (map: Record<string, string | undefined> | undefined) =>
   map
     ? Object.fromEntries(
-        Object.entries(map).filter(
-          (entry): entry is [string, string] => entry[1] !== undefined,
-        ),
+        Object.entries(map).filter((entry): entry is [string, string] => entry[1] !== undefined),
       )
     : undefined;
 
-const nodeSpecOf = (
-  spec: tpu.NodeSpec | NodeSpec,
-  parent: string,
-): NodeSpec => ({
+const nodeSpecOf = (spec: tpu.NodeSpec | NodeSpec, parent: string): NodeSpec => ({
   parent: spec.parent ?? parent,
   nodeId: spec.nodeId,
   multisliceParams: spec.multisliceParams
@@ -317,11 +303,9 @@ const nodeSpecKey = (spec: NodeSpec) =>
     cidr: spec.node?.cidrBlock ?? "",
   });
 
-const specsKey = (specs: readonly NodeSpec[]) =>
-  JSON.stringify(specs.map(nodeSpecKey));
+const specsKey = (specs: readonly NodeSpec[]) => JSON.stringify(specs.map(nodeSpecKey));
 
-const nestedNodes = (resource: tpu.QueuedResource) =>
-  resource.tpu?.nodeSpec ?? [];
+const nestedNodes = (resource: tpu.QueuedResource) => resource.tpu?.nodeSpec ?? [];
 
 const nestedOwnershipLabels = (resource: tpu.QueuedResource) => {
   const labels: Record<string, string> = {};
@@ -383,9 +367,7 @@ const toAttrs = (resource: tpu.QueuedResource, project: string) => {
           description: parseDescription(mapped.node.description).description,
           labels: mapped.node.labels
             ? Object.fromEntries(
-                Object.entries(mapped.node.labels).filter(
-                  ([key]) => !key.startsWith("alchemy-"),
-                ),
+                Object.entries(mapped.node.labels).filter(([key]) => !key.startsWith("alchemy-")),
               )
             : undefined,
         };
@@ -402,9 +384,7 @@ const toAttrs = (resource: tpu.QueuedResource, project: string) => {
 const isPlaceholder = (resource: tpu.QueuedResource) => {
   const name = resource.name ?? "";
   return (
-    name.length === 0 ||
-    name.endsWith("/queuedResources/-") ||
-    name.endsWith("/queuedResources/")
+    name.length === 0 || name.endsWith("/queuedResources/-") || name.endsWith("/queuedResources/")
   );
 };
 
@@ -418,9 +398,7 @@ const specIdentityChanged = (
   next: QueuedResourceProps,
   parent: string,
 ) => {
-  const previousSpecs = (previous?.nodeSpec ?? []).map((spec) =>
-    nodeSpecOf(spec, parent),
-  );
+  const previousSpecs = (previous?.nodeSpec ?? []).map((spec) => nodeSpecOf(spec, parent));
   const nextSpecs =
     next.nodeSpec !== undefined && next.nodeSpec.length > 0
       ? next.nodeSpec.map((spec) => nodeSpecOf(spec, parent))
@@ -438,28 +416,23 @@ export const QueuedResourceProvider = () =>
 
       const previousId = olds?.queuedResourceId ?? output?.queuedResourceId;
       const nextId = news.queuedResourceId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(news.location ?? output?.location);
       const parent = `projects/_/locations/${nextLocation}`;
-      const previousReservation =
-        olds?.reservationName ?? output?.reservationName ?? "";
+      const previousReservation = olds?.reservationName ?? output?.reservationName ?? "";
       const nextReservation = news.reservationName ?? previousReservation;
       const previousSpot = olds?.spot ?? output?.spot ?? false;
       const nextSpot = news.spot ?? previousSpot;
       const previousGuaranteed =
         guaranteedOf(olds?.guaranteed ?? output?.guaranteed)?.minDuration ?? "";
       const nextGuaranteed =
-        guaranteedOf(news.guaranteed ?? olds?.guaranteed ?? output?.guaranteed)
-          ?.minDuration ?? previousGuaranteed;
+        guaranteedOf(news.guaranteed ?? olds?.guaranteed ?? output?.guaranteed)?.minDuration ??
+        previousGuaranteed;
       const previousQueueing = queueingKey(
         queueingOf(olds?.queueingPolicy ?? output?.queueingPolicy),
       );
       const nextQueueing = queueingKey(
-        queueingOf(
-          news.queueingPolicy ?? olds?.queueingPolicy ?? output?.queueingPolicy,
-        ),
+        queueingOf(news.queueingPolicy ?? olds?.queueingPolicy ?? output?.queueingPolicy),
       );
 
       return replaceOnIdentity({
@@ -484,8 +457,7 @@ export const QueuedResourceProvider = () =>
         output?.queuedResourceId,
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, queuedResourceId);
+      const name = output?.name ?? resourceName(env.project, location, queuedResourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -502,13 +474,8 @@ export const QueuedResourceProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.queuedResources ?? []),
-            ),
-            Stream.filter(
-              (resource) =>
-                !isPlaceholder(resource) && hasNestedOwnership(resource),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.queuedResources ?? [])),
+            Stream.filter((resource) => !isPlaceholder(resource) && hasNestedOwnership(resource)),
             Stream.map((resource) => toAttrs(resource, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),

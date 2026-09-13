@@ -67,11 +67,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CONFIG_RECORDER)(
       // The recorder assumes the Config service-linked role.
       yield* iam
         .createServiceLinkedRole({ AWSServiceName: "config.amazonaws.com" })
-        .pipe(
-          Effect.catchTag("InvalidInputException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidInputException", () => Effect.succeed(undefined)));
       const role = yield* iam.getRole({ RoleName: "AWSServiceRoleForConfig" });
       const roleArn = role.Role.Arn;
       const { Account: accountId } = yield* sts.getCallerIdentity({});
@@ -95,11 +91,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CONFIG_RECORDER)(
                 Principal: { Service: "config.amazonaws.com" },
                 Action: ["s3:PutObject"],
                 Resource: [`${bucketArn}/AWSLogs/${accountId}/Config/*`],
-                Condition: {
-                  StringEquals: {
-                    "s3:x-amz-acl": "bucket-owner-full-control",
-                  },
-                },
+                Condition: { StringEquals: { "s3:x-amz-acl": "bucket-owner-full-control" } },
               },
             ],
           });
@@ -107,17 +99,13 @@ test.provider.skipIf(!process.env.AWS_TEST_CONFIG_RECORDER)(
             roleArn,
             recordingGroup: { resourceTypes: ["AWS::S3::Bucket"] },
           });
-          const channel = yield* DeliveryChannel("Channel", {
-            s3BucketName: bucket.bucketName,
-          });
+          const channel = yield* DeliveryChannel("Channel", { s3BucketName: bucket.bucketName });
           return { recorder, channel };
         }),
       );
 
       expect(outputs.recorder.recorderName).toBeDefined();
-      expect(outputs.recorder.recorderArn).toContain(
-        ":configuration-recorder/",
-      );
+      expect(outputs.recorder.recorderArn).toContain(":configuration-recorder/");
       expect(outputs.channel.deliveryChannelName).toBeDefined();
       expect(outputs.channel.s3BucketName).toBe(bucketName);
 
@@ -127,64 +115,46 @@ test.provider.skipIf(!process.env.AWS_TEST_CONFIG_RECORDER)(
       });
       const observed = (described.ConfigurationRecorders ?? []).at(0);
       expect(observed?.roleARN).toBe(roleArn);
-      expect(observed?.recordingGroup?.resourceTypes).toEqual([
-        "AWS::S3::Bucket",
-      ]);
+      expect(observed?.recordingGroup?.resourceTypes).toEqual(["AWS::S3::Bucket"]);
       const channels = yield* config.describeDeliveryChannels({
         DeliveryChannelNames: [outputs.channel.deliveryChannelName],
       });
-      expect((channels.DeliveryChannels ?? []).at(0)?.s3BucketName).toBe(
-        bucketName,
-      );
+      expect((channels.DeliveryChannels ?? []).at(0)?.s3BucketName).toBe(bucketName);
 
       // Start recording (requires the delivery channel), verify, stop.
       yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Bucket("DeliveryBucket", {
-            bucketName,
-            forceDestroy: true,
-          });
+          const bucket = yield* Bucket("DeliveryBucket", { bucketName, forceDestroy: true });
           const recorder = yield* ConfigurationRecorder("Recorder", {
             roleArn,
             recordingGroup: { resourceTypes: ["AWS::S3::Bucket"] },
             recording: true,
           });
-          const channel = yield* DeliveryChannel("Channel", {
-            s3BucketName: bucket.bucketName,
-          });
+          const channel = yield* DeliveryChannel("Channel", { s3BucketName: bucket.bucketName });
           return { recorder, channel };
         }),
       );
       const startedStatus = yield* config.describeConfigurationRecorderStatus({
         ConfigurationRecorderNames: [outputs.recorder.recorderName],
       });
-      expect(
-        (startedStatus.ConfigurationRecordersStatus ?? []).at(0)?.recording,
-      ).toBe(true);
+      expect((startedStatus.ConfigurationRecordersStatus ?? []).at(0)?.recording).toBe(true);
 
       yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Bucket("DeliveryBucket", {
-            bucketName,
-            forceDestroy: true,
-          });
+          const bucket = yield* Bucket("DeliveryBucket", { bucketName, forceDestroy: true });
           const recorder = yield* ConfigurationRecorder("Recorder", {
             roleArn,
             recordingGroup: { resourceTypes: ["AWS::S3::Bucket"] },
             recording: false,
           });
-          const channel = yield* DeliveryChannel("Channel", {
-            s3BucketName: bucket.bucketName,
-          });
+          const channel = yield* DeliveryChannel("Channel", { s3BucketName: bucket.bucketName });
           return { recorder, channel };
         }),
       );
       const stoppedStatus = yield* config.describeConfigurationRecorderStatus({
         ConfigurationRecorderNames: [outputs.recorder.recorderName],
       });
-      expect(
-        (stoppedStatus.ConfigurationRecordersStatus ?? []).at(0)?.recording,
-      ).toBe(false);
+      expect((stoppedStatus.ConfigurationRecordersStatus ?? []).at(0)?.recording).toBe(false);
 
       // Destroy and verify both singletons are gone (deletion is
       // synchronous for recorder and channel).
@@ -201,18 +171,9 @@ test.provider.skipIf(!process.env.AWS_TEST_CONFIG_RECORDER)(
         }),
       );
       expect(channelGone._tag).toBe("NoSuchDeliveryChannelException");
-    }).pipe(
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.orDie)),
-      testLease.use,
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.orDie)), testLease.use),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:config",
-      "provider:aws:iam",
-      "provider:aws:s3",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:config", "provider:aws:iam", "provider:aws:s3", "live"],
     timeout: 240_000,
   },
 );

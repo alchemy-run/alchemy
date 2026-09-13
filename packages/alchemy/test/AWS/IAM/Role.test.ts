@@ -32,19 +32,11 @@ test.provider(
           return yield* Role("IamRole", {
             assumeRolePolicyDocument: assumeRolePolicy,
             maxSessionDuration: "2 hours",
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"],
             inlinePolicies: {
               AllowLogs: {
                 Version: "2012-10-17",
-                Statement: [
-                  {
-                    Effect: "Allow",
-                    Action: ["logs:CreateLogGroup"],
-                    Resource: "*",
-                  },
-                ],
+                Statement: [{ Effect: "Allow", Action: ["logs:CreateLogGroup"], Resource: "*" }],
               },
             },
             tags: { env: "test" },
@@ -66,13 +58,7 @@ test.provider(
             inlinePolicies: {
               AllowLogs: {
                 Version: "2012-10-17",
-                Statement: [
-                  {
-                    Effect: "Allow",
-                    Action: ["logs:CreateLogStream"],
-                    Resource: "*",
-                  },
-                ],
+                Statement: [{ Effect: "Allow", Action: ["logs:CreateLogStream"], Resource: "*" }],
               },
             },
             tags: { env: "prod" },
@@ -82,9 +68,7 @@ test.provider(
 
       const updatedTags = yield* IAM.listRoleTags({ RoleName: role.roleName });
       expect(
-        Object.fromEntries(
-          (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-        ),
+        Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
       ).toMatchObject({ env: "prod" });
 
       // The reconcile sync path applies the changed Duration prop.
@@ -93,9 +77,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(
-        Effect.option,
-      );
+      const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
@@ -111,9 +93,7 @@ test.provider(
       // folds them into the synthesized `alchemy-bindings` inline policy.
       const role = yield* stack.deploy(
         Effect.gen(function* () {
-          const role = yield* Role("BoundRole", {
-            assumeRolePolicyDocument: assumeRolePolicy,
-          });
+          const role = yield* Role("BoundRole", { assumeRolePolicyDocument: assumeRolePolicy });
           yield* role.bind`Allow(test, s3:GetObject)`({
             policyStatements: [
               {
@@ -146,9 +126,7 @@ test.provider(
       // Phase 2: re-deploy without the binding; the inline policy is removed.
       yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Role("BoundRole", {
-            assumeRolePolicyDocument: assumeRolePolicy,
-          });
+          return yield* Role("BoundRole", { assumeRolePolicyDocument: assumeRolePolicy });
         }),
       );
 
@@ -188,14 +166,12 @@ test.provider(
       );
 
       const live = yield* IAM.getRole({ RoleName: role.roleName });
-      const trust = JSON.parse(
-        decodeURIComponent(live.Role.AssumeRolePolicyDocument!),
-      ) as { Statement: Array<{ Principal?: { Service?: string } }> };
+      const trust = JSON.parse(decodeURIComponent(live.Role.AssumeRolePolicyDocument!)) as {
+        Statement: Array<{ Principal?: { Service?: string } }>;
+      };
       expect(trust.Statement).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({
-            Principal: { Service: "lambda.amazonaws.com" },
-          }),
+          expect.objectContaining({ Principal: { Service: "lambda.amazonaws.com" } }),
         ]),
       );
 
@@ -228,9 +204,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(
-        Effect.option,
-      );
+      const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
@@ -278,11 +252,7 @@ test.provider(
       // Wipe state — the role stays in IAM.
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableRole",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableRole" });
       }).pipe(Effect.provide(stack.state));
 
       const adopted = yield* stack.deploy(
@@ -299,9 +269,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getRole({ RoleName: roleName }).pipe(
-        Effect.option,
-      );
+      const deleted = yield* IAM.getRole({ RoleName: roleName }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-adopt"))),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
@@ -330,11 +298,7 @@ test.provider(
 
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Original",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Original" });
       }).pipe(Effect.provide(stack.state));
 
       const takenOver = yield* stack
@@ -352,16 +316,12 @@ test.provider(
 
       // After adoption, tags should now identify this stack/stage/id.
       const tagsResp = yield* IAM.listRoleTags({ RoleName: sharedRoleName });
-      const tagMap = Object.fromEntries(
-        (tagsResp.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagMap = Object.fromEntries((tagsResp.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagMap["alchemy::id"]).toEqual("Different");
 
       yield* stack.destroy();
 
-      const deleted = yield* IAM.getRole({ RoleName: sharedRoleName }).pipe(
-        Effect.option,
-      );
+      const deleted = yield* IAM.getRole({ RoleName: sharedRoleName }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }).pipe(Effect.ensuring(deleteRoleIfExists("alchemy-test-role-takeover"))),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },

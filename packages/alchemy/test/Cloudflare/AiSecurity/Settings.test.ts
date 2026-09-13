@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // AI Security for Apps (Firewall for AI) is entitlement-gated — on the
 // standard testing account every call fails with "not entitled to access
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -73,9 +67,7 @@ test.provider(
       // unentitled path still has to surface the typed tag (never the
       // catch-all); an entitled zone returns the singleton instead.
       const settings = yield* getSettings(zoneId).pipe(
-        Effect.catchTag("AiSecurityNotEntitled", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("AiSecurityNotEntitled", () => Effect.succeed(undefined)),
       );
       if (settings !== undefined) {
         expect(typeof (settings.enabled ?? false)).toBe("boolean");
@@ -106,9 +98,7 @@ test.provider(
   "list enumerates the setting across all entitled zones",
   (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.AI.SecuritySettings,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.AI.SecuritySettings);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -140,10 +130,7 @@ test.provider.skipIf(!entitledZoneId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AI.SecuritySettings("AiSecurity", {
-            zoneId,
-            enabled: true,
-          });
+          return yield* Cloudflare.AI.SecuritySettings("AiSecurity", { zoneId, enabled: true });
         }),
       );
 
@@ -159,10 +146,7 @@ test.provider.skipIf(!entitledZoneId)(
       // Update in place — same singleton, initial value survives.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.AI.SecuritySettings("AiSecurity", {
-            zoneId,
-            enabled: false,
-          });
+          return yield* Cloudflare.AI.SecuritySettings("AiSecurity", { zoneId, enabled: false });
         }),
       );
       expect(updated.enabled).toEqual(false);
@@ -177,8 +161,5 @@ test.provider.skipIf(!entitledZoneId)(
       const restored = yield* getSettings(zoneId);
       expect(restored.enabled ?? false).toEqual(false);
     }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"], timeout: 120_000 },
 );

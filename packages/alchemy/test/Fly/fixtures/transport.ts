@@ -8,14 +8,7 @@ import * as Fly from "@/Fly";
 
 export interface TransportEvent {
   sequence: number;
-  stage:
-    | "request"
-    | "completed"
-    | "forwarded"
-    | "dropped"
-    | "cut"
-    | "held"
-    | "upstream-error";
+  stage: "request" | "completed" | "forwarded" | "dropped" | "cut" | "held" | "upstream-error";
   method: string;
   path: string;
   machineId?: string;
@@ -49,20 +42,14 @@ export const transportProxy = (upstream = "https://api.machines.dev") =>
         clear: () => void;
         release: () => void;
         dropHeld: () => void;
-        wait: (
-          match: (event: TransportEvent) => boolean,
-        ) => Effect.Effect<TransportEvent, Error>;
+        wait: (match: (event: TransportEvent) => boolean) => Effect.Effect<TransportEvent, Error>;
         close: () => void;
       },
       Error
     >((resume) => {
       const origin = new URL(upstream);
       if (origin.protocol !== "https:") {
-        resume(
-          Effect.fail(
-            new Error("The fault proxy requires a real HTTPS upstream"),
-          ),
-        );
+        resume(Effect.fail(new Error("The fault proxy requires a real HTTPS upstream")));
         return;
       }
       const events: TransportEvent[] = [];
@@ -90,29 +77,22 @@ export const transportProxy = (upstream = "https://api.machines.dev") =>
             machineId: path.match(/\/machines\/([^/]+)/)?.[1],
           };
           // Only allowlisted identity/phase fields survive request inspection.
-          if (
-            body.length &&
-            incoming.headers["content-type"]?.includes("json")
-          ) {
+          if (body.length && incoming.headers["content-type"]?.includes("json")) {
             try {
               const value = JSON.parse(body.toString());
               if (typeof value.name === "string") event.name = value.name;
-              if (typeof value.config?.image === "string")
-                event.image = value.config.image;
+              if (typeof value.config?.image === "string") event.image = value.config.image;
               if (typeof value.min_secrets_version === "number")
                 event.minSecretsVersion = value.min_secrets_version;
               const phase =
-                value.metadata?.["alchemy.phase"] ??
-                value.config?.metadata?.["alchemy.phase"];
+                value.metadata?.["alchemy.phase"] ?? value.config?.metadata?.["alchemy.phase"];
               if (typeof phase === "string") event.phase = phase;
             } catch {
               // Forward malformed payloads unchanged; the real API decides their validity.
             }
           }
           record(event);
-          const rule = rules.find(
-            (rule) => rule.remaining > 0 && rule.match(event),
-          );
+          const rule = rules.find((rule) => rule.remaining > 0 && rule.match(event));
           if (rule) rule.remaining--;
           if (rule?.action === "cut-request") {
             record({ ...event, stage: "cut" });
@@ -144,39 +124,26 @@ export const transportProxy = (upstream = "https://api.machines.dev") =>
                 if (response.statusCode! >= 200 && response.statusCode! < 300) {
                   try {
                     const value = JSON.parse(bytes.toString());
-                    if (
-                      /\/machines(?:\/[^/]+)?$/.test(path) &&
-                      !Array.isArray(value)
-                    ) {
-                      if (typeof value.id === "string")
-                        completed.machineId = value.id;
+                    if (/\/machines(?:\/[^/]+)?$/.test(path) && !Array.isArray(value)) {
+                      if (typeof value.id === "string") completed.machineId = value.id;
                       if (typeof value.instance_id === "string")
                         completed.instanceId = value.instance_id;
                       if (typeof value.image_ref?.digest === "string")
                         completed.digest = value.image_ref.digest;
-                      if (typeof value.state === "string")
-                        completed.state = value.state;
-                      if (typeof value.cordoned === "boolean")
-                        completed.cordoned = value.cordoned;
+                      if (typeof value.state === "string") completed.state = value.state;
+                      if (typeof value.cordoned === "boolean") completed.cordoned = value.cordoned;
                       if (Array.isArray(value.checks)) {
                         completed.checks = value.checks.map(
                           (check: { name?: string; status?: string }) => ({
-                            name:
-                              typeof check.name === "string"
-                                ? check.name
-                                : undefined,
-                            status:
-                              typeof check.status === "string"
-                                ? check.status
-                                : undefined,
+                            name: typeof check.name === "string" ? check.name : undefined,
+                            status: typeof check.status === "string" ? check.status : undefined,
                           }),
                         );
                       }
                     }
                     if (/\/secrets(?:\/[^/]+)?$/.test(path)) {
                       const version = value.version ?? value.Version;
-                      if (typeof version === "number")
-                        completed.secretsVersion = version;
+                      if (typeof version === "number") completed.secretsVersion = version;
                     }
                   } catch {
                     // Response bytes are never altered to accommodate the observer.
@@ -263,10 +230,7 @@ export const transportProxy = (upstream = "https://api.machines.dev") =>
               }).pipe(
                 Effect.timeout("120 seconds"),
                 Effect.mapError(
-                  () =>
-                    new Error(
-                      "Real API operation barrier was not reached within 120 seconds",
-                    ),
+                  () => new Error("Real API operation barrier was not reached within 120 seconds"),
                 ),
               ),
             close,
@@ -277,10 +241,7 @@ export const transportProxy = (upstream = "https://api.machines.dev") =>
     }),
     (proxy) =>
       Effect.forEach(
-        Array.from(
-          { length: Math.ceil(proxy.events.length / 50) },
-          (_, index) => index,
-        ),
+        Array.from({ length: Math.ceil(proxy.events.length / 50) }, (_, index) => index),
         (index) =>
           Effect.logInfo("Fly transport journal", {
             endpoint: proxy.url,
@@ -300,10 +261,7 @@ export const throughProxy = (endpoint: () => string | undefined) =>
       return HttpClient.mapRequest(client, (request) => {
         const url = endpoint();
         return url && request.url.startsWith("https://api.machines.dev/")
-          ? HttpClientRequest.setUrl(
-              request,
-              request.url.replace("https://api.machines.dev", url),
-            )
+          ? HttpClientRequest.setUrl(request, request.url.replace("https://api.machines.dev", url))
           : request;
       });
     }),

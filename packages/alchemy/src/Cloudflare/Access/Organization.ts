@@ -186,12 +186,9 @@ export type Organization = Resource<
  * @product Access
  * @category Cloudflare One (Zero Trust)
  */
-export const Organization = Resource<Organization>(
-  "Cloudflare.Access.Organization",
-  {
-    aliases: ["Cloudflare.AccessOrganization"],
-  },
-);
+export const Organization = Resource<Organization>("Cloudflare.Access.Organization", {
+  aliases: ["Cloudflare.AccessOrganization"],
+});
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
@@ -233,9 +230,7 @@ export const OrganizationProvider = () =>
             ...(news.allowAuthenticateViaWarp !== undefined
               ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
               : {}),
-            ...(news.isUiReadOnly !== undefined
-              ? { isUiReadOnly: news.isUiReadOnly }
-              : {}),
+            ...(news.isUiReadOnly !== undefined ? { isUiReadOnly: news.isUiReadOnly } : {}),
             ...(news.autoRedirectToIdentity !== undefined
               ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
               : {}),
@@ -244,8 +239,7 @@ export const OrganizationProvider = () =>
               : {}),
             ...(news.userSeatExpirationInactiveTime !== undefined
               ? {
-                  userSeatExpirationInactiveTime:
-                    news.userSeatExpirationInactiveTime,
+                  userSeatExpirationInactiveTime: news.userSeatExpirationInactiveTime,
                 }
               : {}),
             ...(news.warpAuthSessionDuration !== undefined
@@ -275,15 +269,11 @@ export const OrganizationProvider = () =>
         accountId,
         authDomain: news.authDomain,
         name: desiredName,
-        ...(news.sessionDuration !== undefined
-          ? { sessionDuration: news.sessionDuration }
-          : {}),
+        ...(news.sessionDuration !== undefined ? { sessionDuration: news.sessionDuration } : {}),
         ...(news.allowAuthenticateViaWarp !== undefined
           ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
           : {}),
-        ...(news.isUiReadOnly !== undefined
-          ? { isUiReadOnly: news.isUiReadOnly }
-          : {}),
+        ...(news.isUiReadOnly !== undefined ? { isUiReadOnly: news.isUiReadOnly } : {}),
         ...(news.autoRedirectToIdentity !== undefined
           ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
           : {}),
@@ -292,8 +282,7 @@ export const OrganizationProvider = () =>
           : {}),
         ...(news.userSeatExpirationInactiveTime !== undefined
           ? {
-              userSeatExpirationInactiveTime:
-                news.userSeatExpirationInactiveTime,
+              userSeatExpirationInactiveTime: news.userSeatExpirationInactiveTime,
             }
           : {}),
         ...(news.warpAuthSessionDuration !== undefined
@@ -356,9 +345,7 @@ const observe = Effect.fn(function* () {
       return typed && typed.authDomain ? typed : undefined;
     }),
     Effect.catchTag("OrganizationNotFound", () =>
-      Effect.succeed<zeroTrust.ListOrganizationsResponse | undefined>(
-        undefined,
-      ),
+      Effect.succeed<zeroTrust.ListOrganizationsResponse | undefined>(undefined),
     ),
   );
 });
@@ -398,8 +385,7 @@ const toAttrs = (
   isUiReadOnly: org.isUiReadOnly ?? undefined,
   autoRedirectToIdentity: org.autoRedirectToIdentity ?? undefined,
   uiReadOnlyToggleReason: org.uiReadOnlyToggleReason ?? undefined,
-  userSeatExpirationInactiveTime:
-    org.userSeatExpirationInactiveTime ?? undefined,
+  userSeatExpirationInactiveTime: org.userSeatExpirationInactiveTime ?? undefined,
   warpAuthSessionDuration: org.warpAuthSessionDuration ?? undefined,
   loginDesign: observedLoginDesign(org.loginDesign),
   customPages: observedCustomPages(org.customPages),
@@ -424,8 +410,7 @@ const buildLoginDesign = (
     logoPath?: string;
     textColor?: string;
   } = {};
-  if (design.backgroundColor !== undefined)
-    out.backgroundColor = design.backgroundColor;
+  if (design.backgroundColor !== undefined) out.backgroundColor = design.backgroundColor;
   if (design.footerText !== undefined) out.footerText = design.footerText;
   if (design.headerText !== undefined) out.headerText = design.headerText;
   if (design.logoPath !== undefined) out.logoPath = design.logoPath;
@@ -456,10 +441,7 @@ const observedLoginDesign = (
 };
 
 const observedCustomPages = (
-  pages:
-    | { forbidden?: string | null; identityDenied?: string | null }
-    | null
-    | undefined,
+  pages: { forbidden?: string | null; identityDenied?: string | null } | null | undefined,
 ): Organization.CustomPages | undefined => {
   if (!pages) return undefined;
   return {

@@ -49,20 +49,14 @@ export default class MySQLHyperdriveWorker extends Cloudflare.Worker<MySQLHyperd
             .insert(Widgets)
             .values({ id: body.id, name: body.name })
             .onDuplicateKeyUpdate({ set: { name: body.name } });
-          const [inserted] = yield* db
-            .select()
-            .from(Widgets)
-            .where(eq(Widgets.id, body.id));
+          const [inserted] = yield* db.select().from(Widgets).where(eq(Widgets.id, body.id));
           return yield* HttpServerResponse.json({ widget: inserted });
         }
 
         const idMatch = url.pathname.match(/^\/widgets\/(\d+)$/);
         if (request.method === "DELETE" && idMatch) {
           const id = Number(idMatch[1]);
-          const [existing] = yield* db
-            .select()
-            .from(Widgets)
-            .where(eq(Widgets.id, id));
+          const [existing] = yield* db.select().from(Widgets).where(eq(Widgets.id, id));
           yield* db.delete(Widgets).where(eq(Widgets.id, id));
           return yield* HttpServerResponse.json({ widget: existing ?? null });
         }
@@ -70,10 +64,7 @@ export default class MySQLHyperdriveWorker extends Cloudflare.Worker<MySQLHyperd
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catch((cause: any) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(cause) }, { status: 500 }),
         ),
       ),
     };

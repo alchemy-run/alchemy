@@ -11,10 +11,10 @@
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { layer as fetchHttpClientLayer } from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
 import { seedStoreFromPrerenderLogged } from "./seed.ts";
 import { readEnvString } from "./shared.ts";
@@ -101,11 +101,7 @@ const createS3DataCacheAdapter = ({
     async get(key: string, ctx?: Record<string, unknown>) {
       return (handler ?? (await ready)).get(key, ctx);
     },
-    async set(
-      key: string,
-      data: Record<string, unknown> | null,
-      ctx?: Record<string, unknown>,
-    ) {
+    async set(key: string, data: Record<string, unknown> | null, ctx?: Record<string, unknown>) {
       return (handler ?? (await ready)).set(key, data, ctx);
     },
     async revalidateTag(tags: string | Array<string>) {

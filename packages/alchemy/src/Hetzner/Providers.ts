@@ -1,5 +1,5 @@
-import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
@@ -14,10 +14,7 @@ import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { FloatingIp, FloatingIpProvider } from "./FloatingIp.ts";
-import {
-  FloatingIpAssignment,
-  FloatingIpAssignmentProvider,
-} from "./FloatingIpAssignment.ts";
+import { FloatingIpAssignment, FloatingIpAssignmentProvider } from "./FloatingIpAssignment.ts";
 import { Image, ImageProvider } from "./Image.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 import { MountVolumeLive } from "./MountVolume.ts";
@@ -32,16 +29,11 @@ import { Service, ServiceProvider } from "./Service.ts";
 import { SshLive } from "./Ssh.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
-import {
-  VolumeAttachment,
-  VolumeAttachmentProvider,
-} from "./VolumeAttachment.ts";
+import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
 import { WriteDnsHttp } from "./WriteDnsHttp.ts";
 import { Zone, ZoneProvider } from "./Zone.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Hetzner",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Hetzner") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

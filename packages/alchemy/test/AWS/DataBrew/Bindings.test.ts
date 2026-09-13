@@ -8,11 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import DataBrewTestFunctionLive, {
-  DataBrewTestFunction,
-  foundation,
-  SOURCE_KEY,
-} from "./handler";
+import DataBrewTestFunctionLive, { DataBrewTestFunction, foundation, SOURCE_KEY } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -20,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "DataBrewBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -42,19 +35,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -62,12 +50,11 @@ const getJson = (url: string) =>
   send(HttpClientRequest.get(url)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (url: string, body: unknown) =>
-  send(
-    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
-const post = (url: string) =>
-  send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
+const post = (url: string) => send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
 
 /**
  * A route answered with a typed error tag. The tag being present proves the
@@ -90,18 +77,13 @@ class RunStillActive extends Data.TaggedError("RunStillActive") {}
 const waitForInactive = (runId: string) =>
   getJson(`${baseUrl}/run/get?id=${encodeURIComponent(runId)}`).pipe(
     Effect.flatMap((body: any) =>
-      body.state === undefined ||
-      body.state === "STARTING" ||
-      body.state === "RUNNING"
+      body.state === undefined || body.state === "STARTING" || body.state === "RUNNING"
         ? Effect.fail(new RunStillActive())
         : Effect.succeed(body.state as string),
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "RunStillActive",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -154,9 +136,7 @@ describe.sequential(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/run/list`;
 
-        yield* Effect.logInfo(
-          `DataBrew test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`DataBrew test setup: probing readiness at ${readinessUrl}`);
         // Ready = the function answers 200 AND the freshly attached databrew
         // policy has propagated (an AccessDeniedException errorTag means IAM
         // is still converging — keep probing).
@@ -164,9 +144,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body: any) =>
             body.errorTag === undefined
@@ -179,9 +157,7 @@ describe.sequential(
       { timeout: 480_000 },
     );
 
-    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-      timeout: 240_000,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 240_000 });
 
     describe("StartJobRun + ListJobRuns + DescribeJobRun + StopJobRun", () => {
       test.provider(
@@ -207,16 +183,12 @@ describe.sequential(
             expect(typeof described.state).toBe("string");
 
             // StopJobRun — don't leave managed Spark capacity spinning.
-            const stopped = (yield* postJson(`${baseUrl}/run/stop`, {
-              id: runId,
-            })) as any;
+            const stopped = (yield* postJson(`${baseUrl}/run/stop`, { id: runId })) as any;
             expectAuthorized(stopped);
 
             // The run leaves STARTING/RUNNING (bounded poll).
             const state = yield* waitForInactive(runId);
-            expect(["STOPPING", "STOPPED", "FAILED", "TIMEOUT"]).toContain(
-              state,
-            );
+            expect(["STOPPING", "STOPPED", "FAILED", "TIMEOUT"]).toContain(state);
           }),
         { timeout: 240_000 },
       );

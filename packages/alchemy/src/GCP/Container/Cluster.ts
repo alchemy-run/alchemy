@@ -4,22 +4,18 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import {
-  deleteObjects,
-  reconcileObjects,
-} from "../../Kubernetes/internal/client.ts";
+import type { Connection } from "../../Kubernetes/Connection.ts";
+import { deleteObjects, reconcileObjects } from "../../Kubernetes/internal/client.ts";
 import {
   type KubernetesObjectBinding,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
 } from "../../Kubernetes/internal/objects.ts";
-import type { Connection } from "../../Kubernetes/Connection.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -27,6 +23,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 import {
   apiServerEndpoint,
@@ -289,15 +286,11 @@ export type Cluster = Resource<
  */
 export const Cluster = Resource<Cluster>("GCP.Container.Cluster");
 
-export class ClusterNotResolved extends Data.TaggedError(
-  "GCP.Container.ClusterNotResolved",
-)<{
+export class ClusterNotResolved extends Data.TaggedError("GCP.Container.ClusterNotResolved")<{
   name: string;
 }> {}
 
-export class ClusterNotReady extends Data.TaggedError(
-  "GCP.Container.ClusterNotReady",
-)<{
+export class ClusterNotReady extends Data.TaggedError("GCP.Container.ClusterNotReady")<{
   name: string;
   status: string;
 }> {}
@@ -309,9 +302,7 @@ export class ClusterOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class ClusterStillExists extends Data.TaggedError(
-  "GCP.Container.ClusterStillExists",
-)<{
+export class ClusterStillExists extends Data.TaggedError("GCP.Container.ClusterStillExists")<{
   name: string;
 }> {}
 
@@ -358,16 +349,11 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     clusterId:
-      clustersAt >= 0 && parts[clustersAt + 1]
-        ? parts[clustersAt + 1]!
-        : lastSegment(name),
+      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : lastSegment(name),
   };
 };
 
@@ -396,9 +382,7 @@ const toAttrs = (
   kubernetesObjects: KubernetesObjectRef[] = [],
 ) => {
   const selfLink = cluster.selfLink ?? "";
-  const parsed = parseName(
-    selfLink.length > 0 ? selfLink : (cluster.name ?? ""),
-  );
+  const parsed = parseName(selfLink.length > 0 ? selfLink : (cluster.name ?? ""));
   const clusterId = cluster.name || parsed.clusterId;
   const location = lastSegment(cluster.location ?? parsed.location);
   const resolvedProject = parsed.project || project;
@@ -450,10 +434,7 @@ const getDesiredKubernetesObjects = (
     .map((binding) => binding.data.object);
 
 const getKubernetesTransport = (
-  state: Pick<
-    Cluster["Attributes"],
-    "clusterId" | "endpoint" | "certificateAuthorityData"
-  >,
+  state: Pick<Cluster["Attributes"], "clusterId" | "endpoint" | "certificateAuthorityData">,
 ) =>
   Effect.suspend(() => {
     if (!state.endpoint || !state.certificateAuthorityData) {
@@ -493,10 +474,7 @@ const operationResourceName = (
 
 // Cluster create / delete runs 5–10 min (Autopilot included) and most
 // updates several minutes; bounded at 15 min.
-const clusterOperationSchedule = Schedule.max([
-  Schedule.spaced("10 seconds"),
-  Schedule.recurs(90),
-]);
+const clusterOperationSchedule = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(90)]);
 
 /**
  * Wait for a GKE operation (create/delete runs 5–10 min, Autopilot and
@@ -521,8 +499,7 @@ const waitForOperation = (
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&
-          (error.code === 6 ||
-            (options?.notFoundOk === true && error.code === 5))) ||
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
         (options?.notFoundOk === true && error._tag === "NotFound"),
       () => Effect.succeed(operation),
     ),
@@ -577,9 +554,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined
-        ? Effect.void
-        : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterStillExists",
@@ -622,9 +597,7 @@ const toCreateBody = (
     autopilot: autopilot ? { enabled: true } : undefined,
     workloadIdentityConfig: { workloadPool: workloadPoolOf(project) },
     releaseChannel:
-      channel.length > 0
-        ? { channel: channel as container.ReleaseChannelChannelEnum }
-        : undefined,
+      channel.length > 0 ? { channel: channel as container.ReleaseChannelChannelEnum } : undefined,
     ipAllocationPolicy: { useIpAliases: true },
     nodePools: autopilot ? undefined : [defaultPool(news)],
   };
@@ -648,23 +621,18 @@ export const ClusterProvider = () =>
 
       const previousId = olds?.clusterId ?? output?.clusterId;
       const nextId = news.clusterId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(news.location ?? output?.location);
-      const previousAutopilot =
-        olds?.autopilot === true || output?.autopilot === true;
+      const previousAutopilot = olds?.autopilot === true || output?.autopilot === true;
       const nextAutopilot = news.autopilot === true;
       const previousNetwork = olds?.network ?? output?.network ?? "";
       const nextNetwork = news.network ?? previousNetwork;
       const previousSubnetwork = olds?.subnetwork ?? output?.subnetwork ?? "";
       const nextSubnetwork = news.subnetwork ?? previousSubnetwork;
       const previousAlpha =
-        olds?.enableKubernetesAlpha === true ||
-        output?.enableKubernetesAlpha === true;
+        olds?.enableKubernetesAlpha === true || output?.enableKubernetesAlpha === true;
       const nextAlpha = news.enableKubernetesAlpha === true;
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? previousDescription;
       const nodeShapeChanged =
         !nextAutopilot &&
@@ -673,17 +641,14 @@ export const ClusterProvider = () =>
           (news.initialNodeCount ?? DEFAULT_NODE_COUNT) ||
           (olds.machineType ?? DEFAULT_MACHINE_TYPE) !==
             (news.machineType ?? DEFAULT_MACHINE_TYPE) ||
-          (olds.diskSizeGb ?? DEFAULT_DISK_SIZE_GB) !==
-            (news.diskSizeGb ?? DEFAULT_DISK_SIZE_GB) ||
+          (olds.diskSizeGb ?? DEFAULT_DISK_SIZE_GB) !== (news.diskSizeGb ?? DEFAULT_DISK_SIZE_GB) ||
           (olds.diskType ?? DEFAULT_DISK_TYPE).toLowerCase() !==
             (news.diskType ?? DEFAULT_DISK_TYPE).toLowerCase() ||
           (olds.spot === true) !== (news.spot === true) ||
           (olds.preemptible === true) !== (news.preemptible === true));
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousAutopilot !== nextAutopilot ||
         previousNetwork !== nextNetwork ||
@@ -696,9 +661,7 @@ export const ClusterProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -706,15 +669,10 @@ export const ClusterProvider = () =>
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, olds?.clusterId, output?.clusterId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, clusterId);
+      const name = output?.name ?? resourceName(env.project, location, clusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        env.project,
-        output?.kubernetesObjects ?? [],
-      );
+      const attrs = toAttrs(existing, env.project, output?.kubernetesObjects ?? []);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.resourceLabels)))
         ? attrs
         : Unowned(attrs);
@@ -736,9 +694,7 @@ export const ClusterProvider = () =>
           );
         return (page.clusters ?? [])
           .filter((cluster) =>
-            Object.keys(cluster.resourceLabels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
-            ),
+            Object.keys(cluster.resourceLabels ?? {}).some((key) => key.startsWith("alchemy-")),
           )
           .map((cluster) => toAttrs(cluster, env.project));
       }),
@@ -764,13 +720,7 @@ export const ClusterProvider = () =>
             .createProjectsLocationsClusters({
               parent: `projects/${env.project}/locations/${location}`,
               body: {
-                cluster: toCreateBody(
-                  news,
-                  clusterId,
-                  desiredLabels,
-                  autopilot,
-                  env.project,
-                ),
+                cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
               },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -781,16 +731,14 @@ export const ClusterProvider = () =>
         // GKE intermittently fails a create with INTERNAL ("Failed to create
         // cluster") and leaves the cluster in ERROR; delete it and try again.
         const removeFailed = Effect.gen(function* () {
-          const operation = yield* container
-            .deleteProjectsLocationsClusters({ name })
-            .pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              Effect.retry({
-                while: (error) => error._tag === "Conflict",
-                times: 8,
-                schedule: Schedule.spaced("5 seconds"),
-              }),
-            );
+          const operation = yield* container.deleteProjectsLocationsClusters({ name }).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              times: 8,
+              schedule: Schedule.spaced("5 seconds"),
+            }),
+          );
           if (operation !== undefined) {
             yield* waitForOperation(env.project, location, operation, {
               notFoundOk: true,
@@ -801,9 +749,7 @@ export const ClusterProvider = () =>
         const isInternal = (error: { _tag: string; code?: number }) =>
           error._tag === "GCP.OperationFailed" && error.code === 13;
         yield* create.pipe(
-          Effect.tapError((error) =>
-            isInternal(error) ? removeFailed : Effect.void,
-          ),
+          Effect.tapError((error) => (isInternal(error) ? removeFailed : Effect.void)),
           Effect.retry({
             while: isInternal,
             times: 2,
@@ -827,14 +773,13 @@ export const ClusterProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (labelsChanged) {
-        const labeled =
-          yield* container.setResourceLabelsProjectsLocationsClusters({
-            name,
-            body: {
-              resourceLabels: desiredLabels,
-              labelFingerprint: live.labelFingerprint,
-            },
-          });
+        const labeled = yield* container.setResourceLabelsProjectsLocationsClusters({
+          name,
+          body: {
+            resourceLabels: desiredLabels,
+            labelFingerprint: live.labelFingerprint,
+          },
+        });
         yield* waitForOperation(env.project, location, labeled);
         live = yield* waitUntilReady(name);
       }
@@ -842,8 +787,7 @@ export const ClusterProvider = () =>
       // GKE rejects a logging-only or monitoring-only change that would
       // implicitly flip the other service, so both are always sent together.
       const desiredLogging = news.loggingService ?? live.loggingService;
-      const desiredMonitoring =
-        news.monitoringService ?? live.monitoringService;
+      const desiredMonitoring = news.monitoringService ?? live.monitoringService;
       if (
         (live.loggingService ?? "") !== (desiredLogging ?? "") ||
         (live.monitoringService ?? "") !== (desiredMonitoring ?? "")
@@ -865,10 +809,8 @@ export const ClusterProvider = () =>
       const observedChannel = normalizeChannel(live.releaseChannel?.channel);
       const desiredLocations = news.nodeLocations;
       const locationsChanged =
-        desiredLocations !== undefined &&
-        !sameLocations(live.locations ?? [], desiredLocations);
-      const channelChanged =
-        desiredChannel.length > 0 && desiredChannel !== observedChannel;
+        desiredLocations !== undefined && !sameLocations(live.locations ?? [], desiredLocations);
+      const channelChanged = desiredChannel.length > 0 && desiredChannel !== observedChannel;
 
       if (channelChanged || locationsChanged) {
         const update: container.ClusterUpdate = {};

@@ -13,13 +13,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test configuration values (TEST-NET-2). A rule's
 // configuration is its identity within a scope, so each test owns a disjoint
@@ -35,9 +31,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -53,26 +47,17 @@ const forbiddenRetry = {
 } as const;
 
 const getZoneRule = (zoneId: string, ruleId: string) =>
-  firewall
-    .getAccessRuleForZone({ zoneId, ruleId })
-    .pipe(Effect.retry(forbiddenRetry));
+  firewall.getAccessRuleForZone({ zoneId, ruleId }).pipe(Effect.retry(forbiddenRetry));
 
 const getAccountRule = (accountId: string, ruleId: string) =>
-  firewall
-    .getAccessRuleForAccount({ accountId, ruleId })
-    .pipe(Effect.retry(forbiddenRetry));
+  firewall.getAccessRuleForAccount({ accountId, ruleId }).pipe(Effect.retry(forbiddenRetry));
 
-const listByIp = (
-  scope: { zoneId: string } | { accountId: string },
-  ip: string,
-) =>
+const listByIp = (scope: { zoneId: string } | { accountId: string }, ip: string) =>
   ("zoneId" in scope
     ? firewall.listAccessRulesForZone.items({ zoneId: scope.zoneId })
     : firewall.listAccessRulesForAccount.items({ accountId: scope.accountId })
   ).pipe(
-    Stream.filter(
-      (r) => r.configuration.target === "ip" && r.configuration.value === ip,
-    ),
+    Stream.filter((r) => r.configuration.target === "ip" && r.configuration.value === ip),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.retry(forbiddenRetry),
@@ -81,22 +66,13 @@ const listByIp = (
 // Delete every rule matching the ip — used to purge leftovers from
 // interrupted runs so each test starts from a clean slate (a leaked rule
 // would surface as Unowned/duplicate because configuration is identity).
-const purgeRules = (
-  scope: { zoneId: string } | { accountId: string },
-  ip: string,
-) =>
+const purgeRules = (scope: { zoneId: string } | { accountId: string }, ip: string) =>
   listByIp(scope, ip).pipe(
     Effect.flatMap(
       Effect.forEach((r) =>
         ("zoneId" in scope
-          ? firewall.deleteAccessRuleForZone({
-              zoneId: scope.zoneId,
-              ruleId: r.id,
-            })
-          : firewall.deleteAccessRuleForAccount({
-              accountId: scope.accountId,
-              ruleId: r.id,
-            })
+          ? firewall.deleteAccessRuleForZone({ zoneId: scope.zoneId, ruleId: r.id })
+          : firewall.deleteAccessRuleForAccount({ accountId: scope.accountId, ruleId: r.id })
         ).pipe(
           Effect.retry(forbiddenRetry),
           Effect.catchTag("AccessRuleNotFound", () => Effect.void),
@@ -113,10 +89,7 @@ const expectZoneRuleGone = (zoneId: string, ruleId: string) =>
     Effect.catchTag("AccessRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RuleNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -126,10 +99,7 @@ const expectAccountRuleGone = (accountId: string, ruleId: string) =>
     Effect.catchTag("AccessRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RuleNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -327,9 +297,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Firewall.AccessRule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Firewall.AccessRule);
       const all = yield* provider.list();
 
       const found = all.find((r) => r.ruleId === rule.ruleId);

@@ -9,20 +9,14 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const CONTACT_TYPE = "OPERATIONS" as const;
 
 const captureContact = () =>
   account.getAlternateContact({ AlternateContactType: CONTACT_TYPE }).pipe(
     Effect.map((r) => r.AlternateContact),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 // Account alternate contacts are account-global singletons — one per type. This
@@ -53,12 +47,7 @@ describe.sequential(
             } else {
               yield* account
                 .deleteAlternateContact({ AlternateContactType: CONTACT_TYPE })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             }
           });
 
@@ -80,9 +69,7 @@ describe.sequential(
 
             // Out-of-band verification.
             const live = yield* captureContact();
-            expect(unwrap(live?.EmailAddress)).toBe(
-              "alchemy-test-ops@example.com",
-            );
+            expect(unwrap(live?.EmailAddress)).toBe("alchemy-test-ops@example.com");
             expect(unwrap(live?.Name)).toBe("Alchemy Test Ops");
 
             // Destroy removes the contact.
@@ -93,9 +80,7 @@ describe.sequential(
 
           // Confirm restoration matches the captured original.
           const restored = yield* captureContact();
-          expect(unwrap(restored?.EmailAddress)).toBe(
-            unwrap(original?.EmailAddress),
-          );
+          expect(unwrap(restored?.EmailAddress)).toBe(unwrap(original?.EmailAddress));
         }),
       { timeout: 120_000 },
     );

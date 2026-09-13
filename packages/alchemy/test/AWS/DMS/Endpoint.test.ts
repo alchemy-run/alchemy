@@ -31,10 +31,7 @@ const assertGone = (identifier: string) =>
         : Effect.fail(new Error(`endpoint '${identifier}' status: ${status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -126,9 +123,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Endpoint);
       const all = yield* provider.list();
-      expect(all.some((e) => e.endpointArn === endpoint.endpointArn)).toBe(
-        true,
-      );
+      expect(all.some((e) => e.endpointArn === endpoint.endpointArn)).toBe(true);
 
       yield* stack.destroy();
       yield* assertGone(endpoint.endpointIdentifier);

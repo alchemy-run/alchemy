@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -37,9 +37,7 @@ test.provider(
         parent: `projects/${project}/locations/global`,
         pageSize: 10,
       });
-      expect(
-        (page.securityGateways ?? []).map((item) => item.name),
-      ).not.toContain(
+      expect((page.securityGateways ?? []).map((item) => item.name)).not.toContain(
         `projects/${project}/locations/global/securityGateways/alchemy-missing-sg`,
       );
 

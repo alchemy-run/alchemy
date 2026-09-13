@@ -9,12 +9,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { StreamArn } from "./Stream.ts";
 
@@ -88,9 +83,7 @@ export interface StreamConsumer extends Resource<
  *
  * @resource
  */
-export const StreamConsumer = Resource<StreamConsumer>(
-  "AWS.Kinesis.StreamConsumer",
-);
+export const StreamConsumer = Resource<StreamConsumer>("AWS.Kinesis.StreamConsumer");
 
 const createConsumerName = (
   id: string,
@@ -108,15 +101,10 @@ const createConsumerName = (
     });
   });
 
-const toTagRecord = (
-  tags: Array<{ Key: string; Value?: string }> | undefined,
-) =>
+const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
   Object.fromEntries(
     (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Value === "string",
-      )
+      .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")
       .map((tag) => [tag.Key, tag.Value]),
   );
 
@@ -150,11 +138,7 @@ const readConsumer = Effect.fn(function* ({
       ConsumerName: consumerName,
       ConsumerARN: consumerArn,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
   if (!response) {
     return undefined;
@@ -175,16 +159,11 @@ const readConsumer = Effect.fn(function* ({
 // registry is eventually consistent — describeStreamConsumer can briefly
 // return ResourceNotFoundException for a consumer the registry just
 // confirmed exists. Poll up to ~10s before giving up.
-class ConsumerRegistryNotConsistent extends Data.TaggedError(
-  "ConsumerRegistryNotConsistent",
-)<{
+class ConsumerRegistryNotConsistent extends Data.TaggedError("ConsumerRegistryNotConsistent")<{
   consumerName: string;
 }> {}
 
-const adoptExistingConsumer = Effect.fn(function* (
-  streamArn: string,
-  consumerName: string,
-) {
+const adoptExistingConsumer = Effect.fn(function* (streamArn: string, consumerName: string) {
   return yield* Effect.gen(function* () {
     const state = yield* readConsumer({
       streamArn,
@@ -212,10 +191,7 @@ const adoptExistingConsumer = Effect.fn(function* (
   );
 });
 
-const waitForConsumerStatus = (
-  consumerArn: string,
-  expectedStatus: ConsumerStatus,
-) =>
+const waitForConsumerStatus = (consumerArn: string, expectedStatus: ConsumerStatus) =>
   Effect.gen(function* () {
     yield* Effect.sleep("2 seconds");
     const response = yield* kinesis.describeStreamConsumer({
@@ -241,8 +217,7 @@ const waitForConsumerDeleted = (consumerArn: string) =>
     return yield* Effect.fail({ _tag: "ConsumerStillExists" as const });
   }).pipe(
     Effect.retry({
-      while: (e: { _tag: string }) =>
-        e._tag === "ConsumerStillExists" || e._tag === "ParseError",
+      while: (e: { _tag: string }) => e._tag === "ConsumerStillExists" || e._tag === "ParseError",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(60)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -252,8 +227,7 @@ export const StreamConsumerProvider = () =>
   Provider.succeed(StreamConsumer, {
     stables: ["consumerArn", "consumerName"],
     read: Effect.fn(function* ({ id, olds, output }) {
-      const consumerName =
-        output?.consumerName ?? (yield* createConsumerName(id, olds ?? {}));
+      const consumerName = output?.consumerName ?? (yield* createConsumerName(id, olds ?? {}));
       const streamArn = output?.streamArn ?? olds?.streamArn;
       // describeStreamConsumer rejects with InvalidArgumentException unless
       // either consumerARN, or both streamARN + consumerName, are provided.
@@ -268,9 +242,7 @@ export const StreamConsumerProvider = () =>
         consumerArn: output?.consumerArn,
       });
       if (!state) return undefined;
-      return (yield* hasAlchemyTags(id, state.tags as Tags))
-        ? state
-        : Unowned(state);
+      return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
@@ -288,8 +260,7 @@ export const StreamConsumerProvider = () =>
       }
     }),
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
-      const consumerName =
-        output?.consumerName ?? (yield* createConsumerName(id, news));
+      const consumerName = output?.consumerName ?? (yield* createConsumerName(id, news));
       const streamArn = news.streamArn as string;
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
@@ -324,16 +295,11 @@ export const StreamConsumerProvider = () =>
             // propagation window before giving up.
             Effect.retry({
               while: (e) => e._tag === "ResourceNotFoundException",
-              schedule: Schedule.max([
-                Schedule.exponential(500),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
             }),
             Effect.asVoid,
             Effect.catchTag("ResourceInUseException", () =>
-              adoptExistingConsumer(streamArn, consumerName).pipe(
-                Effect.asVoid,
-              ),
+              adoptExistingConsumer(streamArn, consumerName).pipe(Effect.asVoid),
             ),
           );
 
@@ -346,9 +312,7 @@ export const StreamConsumerProvider = () =>
           consumerName,
         });
         if (state === undefined) {
-          return yield* Effect.fail(
-            new Error(`failed to read created consumer ${consumerName}`),
-          );
+          return yield* Effect.fail(new Error(`failed to read created consumer ${consumerName}`));
         }
       }
 
@@ -382,9 +346,7 @@ export const StreamConsumerProvider = () =>
         consumerArn: state.consumerArn,
       });
       if (!final) {
-        return yield* Effect.fail(
-          new Error(`failed to read reconciled consumer ${consumerName}`),
-        );
+        return yield* Effect.fail(new Error(`failed to read reconciled consumer ${consumerName}`));
       }
 
       yield* session.note(final.consumerArn);
@@ -429,9 +391,7 @@ export const StreamConsumerProvider = () =>
             ),
             // A stream may be deleted mid-enumeration; skip it.
             Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(
-                [] as { streamArn: string; consumer: kinesis.Consumer }[],
-              ),
+              Effect.succeed([] as { streamArn: string; consumer: kinesis.Consumer }[]),
             ),
           ),
         { concurrency: 10 },
@@ -440,27 +400,21 @@ export const StreamConsumerProvider = () =>
       const hydrated = yield* Effect.forEach(
         consumers,
         ({ streamArn, consumer }) =>
-          kinesis
-            .listTagsForResource({ ResourceARN: consumer.ConsumerARN })
-            .pipe(
-              Effect.map((tagsResponse): StreamConsumer["Attributes"] => ({
-                consumerName: consumer.ConsumerName,
-                consumerArn: consumer.ConsumerARN,
-                consumerStatus: consumer.ConsumerStatus as ConsumerStatus,
-                streamArn: streamArn as StreamArn,
-                consumerCreationTimestamp: consumer.ConsumerCreationTimestamp,
-                tags: toTagRecord(tagsResponse.Tags),
-              })),
-              // A consumer may be deregistered between list and tag fetch.
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          kinesis.listTagsForResource({ ResourceARN: consumer.ConsumerARN }).pipe(
+            Effect.map((tagsResponse): StreamConsumer["Attributes"] => ({
+              consumerName: consumer.ConsumerName,
+              consumerArn: consumer.ConsumerARN,
+              consumerStatus: consumer.ConsumerStatus as ConsumerStatus,
+              streamArn: streamArn as StreamArn,
+              consumerCreationTimestamp: consumer.ConsumerCreationTimestamp,
+              tags: toTagRecord(tagsResponse.Tags),
+            })),
+            // A consumer may be deregistered between list and tag fetch.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          ),
         { concurrency: 10 },
       );
 
-      return hydrated.filter(
-        (row): row is StreamConsumer["Attributes"] => row !== undefined,
-      );
+      return hydrated.filter((row): row is StreamConsumer["Attributes"] => row !== undefined);
     }),
   });

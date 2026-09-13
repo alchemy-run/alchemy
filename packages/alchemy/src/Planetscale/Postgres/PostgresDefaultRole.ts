@@ -106,9 +106,7 @@ export type PostgresDefaultRole = Resource<
 >;
 
 /** @resource */
-export const PostgresDefaultRole = Resource<PostgresDefaultRole>(
-  "Planetscale.PostgresDefaultRole",
-);
+export const PostgresDefaultRole = Resource<PostgresDefaultRole>("Planetscale.PostgresDefaultRole");
 
 export const PostgresDefaultRoleProvider = () =>
   Provider.succeed(PostgresDefaultRole, {
@@ -117,9 +115,7 @@ export const PostgresDefaultRoleProvider = () =>
       if (!isResolved(news)) return undefined;
 
       const newDb = resolveDatabaseName(news.database);
-      const oldDb = olds.database
-        ? resolveDatabaseName(olds.database)
-        : undefined;
+      const oldDb = olds.database ? resolveDatabaseName(olds.database) : undefined;
       if (oldDb && newDb !== oldDb) {
         return { action: "replace" } as const;
       }
@@ -190,8 +186,7 @@ export const PostgresDefaultRoleProvider = () =>
         return {
           ...output,
           privateHost: observed.private_access_host_url,
-          privateConnectionServiceName:
-            observed.private_connection_service_name,
+          privateConnectionServiceName: observed.private_connection_service_name,
         };
       }
 
@@ -219,9 +214,7 @@ export const PostgresDefaultRoleProvider = () =>
       });
 
       if (!data.password) {
-        return yield* Effect.die(
-          `Planetscale did not return a password for Default Role.`,
-        );
+        return yield* Effect.die(`Planetscale did not return a password for Default Role.`);
       }
 
       const password = Redacted.isRedacted(data.password)
@@ -265,74 +258,64 @@ export const PostgresDefaultRoleProvider = () =>
     list: Effect.fn(function* () {
       const { organization } = yield* yield* Credentials;
 
-      const roles = yield* planetscale.listDatabases
-        .pages({ organization })
-        .pipe(
-          Stream.map((page) =>
-            page.data.filter((db) => db.kind === "postgresql"),
-          ),
-          Stream.flattenIterable,
-          Stream.flatMap(
-            (db) =>
-              planetscale.listBranches
-                .pages({ organization, database: db.name })
-                .pipe(
-                  Stream.map((page) =>
-                    page.data.filter((branch) => branch.kind === "postgresql"),
-                  ),
-                  Stream.flattenIterable,
-                  Stream.catchTag("NotFound", () =>
-                    Stream.succeed({ name: db.default_branch ?? "main" }),
-                  ),
-                  Stream.flatMap(
-                    (branch) =>
-                      planetscale.listRoles
-                        .pages({
-                          organization,
-                          database: db.name,
-                          branch: branch.name,
-                        })
-                        .pipe(
-                          Stream.map((page) =>
-                            page.data
-                              .filter((role) => role.default)
-                              .map(
-                                (role) =>
-                                  ({
-                                    id: role.id,
-                                    name: role.name,
-                                    expiresAt: role.expires_at,
-                                    host: role.access_host_url,
-                                    username: role.username,
-                                    password: Redacted.make(""),
-                                    ttl: role.ttl,
-                                    databaseName: role.database_name,
-                                    connectionUrl: Redacted.make(""),
-                                    connectionUrlPooled: Redacted.make(""),
-                                    privateHost: role.private_access_host_url,
-                                    privateConnectionServiceName:
-                                      role.private_connection_service_name,
-                                    inheritedRoles:
-                                      role.inherited_roles as InheritedRole[],
-                                    organization,
-                                    database: db.name,
-                                    branch: branch.name,
-                                  }) satisfies PostgresDefaultRoleAttributes as PostgresDefaultRoleAttributes,
-                              ),
+      const roles = yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.map((page) => page.data.filter((db) => db.kind === "postgresql")),
+        Stream.flattenIterable,
+        Stream.flatMap(
+          (db) =>
+            planetscale.listBranches.pages({ organization, database: db.name }).pipe(
+              Stream.map((page) => page.data.filter((branch) => branch.kind === "postgresql")),
+              Stream.flattenIterable,
+              Stream.catchTag("NotFound", () =>
+                Stream.succeed({ name: db.default_branch ?? "main" }),
+              ),
+              Stream.flatMap(
+                (branch) =>
+                  planetscale.listRoles
+                    .pages({
+                      organization,
+                      database: db.name,
+                      branch: branch.name,
+                    })
+                    .pipe(
+                      Stream.map((page) =>
+                        page.data
+                          .filter((role) => role.default)
+                          .map(
+                            (role) =>
+                              ({
+                                id: role.id,
+                                name: role.name,
+                                expiresAt: role.expires_at,
+                                host: role.access_host_url,
+                                username: role.username,
+                                password: Redacted.make(""),
+                                ttl: role.ttl,
+                                databaseName: role.database_name,
+                                connectionUrl: Redacted.make(""),
+                                connectionUrlPooled: Redacted.make(""),
+                                privateHost: role.private_access_host_url,
+                                privateConnectionServiceName: role.private_connection_service_name,
+                                inheritedRoles: role.inherited_roles as InheritedRole[],
+                                organization,
+                                database: db.name,
+                                branch: branch.name,
+                              }) satisfies PostgresDefaultRoleAttributes as PostgresDefaultRoleAttributes,
                           ),
-                          Stream.flattenIterable,
-                          Stream.catchTags({
-                            NotFound: () => Stream.empty,
-                            Forbidden: () => Stream.empty,
-                          }),
-                        ),
-                    { concurrency: 10 },
-                  ),
-                ),
-            { concurrency: 10 },
-          ),
-          Stream.runCollect,
-        );
+                      ),
+                      Stream.flattenIterable,
+                      Stream.catchTags({
+                        NotFound: () => Stream.empty,
+                        Forbidden: () => Stream.empty,
+                      }),
+                    ),
+                { concurrency: 10 },
+              ),
+            ),
+          { concurrency: 10 },
+        ),
+        Stream.runCollect,
+      );
 
       return Array.from(roles);
     }),
@@ -348,16 +331,12 @@ const resolveDatabaseName = (database: string | PostgresDatabase): string => {
   return typeof ref === "string" ? ref : ref.name;
 };
 
-const resolveDatabaseOrg = (
-  database: string | PostgresDatabase,
-): string | undefined => {
+const resolveDatabaseOrg = (database: string | PostgresDatabase): string | undefined => {
   const ref = database as unknown as DatabaseRef;
   return typeof ref === "string" ? undefined : ref.organization;
 };
 
-const resolveBranchName = (
-  branch: string | PostgresBranch | undefined,
-): string => {
+const resolveBranchName = (branch: string | PostgresBranch | undefined): string => {
   const ref = branch as unknown as BranchRef | undefined;
   return !ref ? "main" : typeof ref === "string" ? ref : ref.name;
 };

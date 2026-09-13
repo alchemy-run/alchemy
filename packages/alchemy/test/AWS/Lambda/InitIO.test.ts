@@ -49,10 +49,7 @@ test.provider(
           ),
           Effect.retry({
             while: (e): e is FunctionNotReady => e instanceof FunctionNotReady,
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
           }),
         );
         return (yield* res.json) as unknown as InitIOBody;
@@ -78,15 +75,10 @@ test.provider(
 
       // Out-of-band proof the destroy removed the function from the cloud.
       yield* Lambda.getFunction({ FunctionName: fn.functionName }).pipe(
-        Effect.flatMap(() =>
-          Effect.fail(new Error(`Function ${fn.functionName} still exists`)),
-        ),
+        Effect.flatMap(() => Effect.fail(new Error(`Function ${fn.functionName} still exists`))),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
     }),

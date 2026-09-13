@@ -41,10 +41,7 @@ export default class PostgresApi extends Railway.Service<PostgresApi>()(
         return yield* HttpServerResponse.json({ rows }, { status: 404 });
       }).pipe(
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

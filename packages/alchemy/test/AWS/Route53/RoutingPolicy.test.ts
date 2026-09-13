@@ -9,14 +9,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
-const findSet = (
-  sets: route53.ResourceRecordSet[],
-  name: string,
-  setId: string,
-) =>
-  sets.find(
-    (s) => s.Name === name && s.SetIdentifier === setId && s.Type === "A",
-  );
+const findSet = (sets: route53.ResourceRecordSet[], name: string, setId: string) =>
+  sets.find((s) => s.Name === name && s.SetIdentifier === setId && s.Type === "A");
 
 const zoneName = "alchemy-route53-routing.alchemy.";
 

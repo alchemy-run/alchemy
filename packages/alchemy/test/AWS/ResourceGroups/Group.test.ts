@@ -11,16 +11,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const assertGroupGone = (groupName: string) =>
   resourcegroups.getGroup({ Group: groupName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`group ${groupName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`group ${groupName} still exists`))),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -50,33 +45,22 @@ describe(
                 },
                 tags: { purpose: "alchemy-test" },
               });
-              return {
-                groupName: group.groupName,
-                groupArn: group.groupArn,
-              };
+              return { groupName: group.groupName, groupArn: group.groupArn };
             }),
           );
 
           // Verify out-of-band via distilled.
-          const observed = yield* resourcegroups.getGroup({
-            Group: created.groupName,
-          });
+          const observed = yield* resourcegroups.getGroup({ Group: created.groupName });
           expect(observed.Group.GroupArn).toEqual(created.groupArn);
-          expect(observed.Group.Description).toEqual(
-            "Alchemy resource-groups test",
-          );
+          expect(observed.Group.Description).toEqual("Alchemy resource-groups test");
 
-          const query = yield* resourcegroups.getGroupQuery({
-            Group: created.groupName,
-          });
+          const query = yield* resourcegroups.getGroupQuery({ Group: created.groupName });
           expect(query.GroupQuery?.ResourceQuery).toEqual({
             Type: "TAG_FILTERS_1_0",
             Query: tagQuery("alchemy-rg-test", "v1"),
           });
 
-          const tags = yield* resourcegroups.getTags({
-            Arn: created.groupArn,
-          });
+          const tags = yield* resourcegroups.getTags({ Arn: created.groupArn });
           expect(tags.Tags?.purpose).toEqual("alchemy-test");
           expect(tags.Tags?.["alchemy::id"]).toEqual("TagGroup");
 
@@ -86,9 +70,7 @@ describe(
             .pages({ Group: created.groupName })
             .pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Resources ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Resources ?? [])),
             );
           expect(members).toEqual([]);
 
@@ -104,29 +86,20 @@ describe(
                 },
                 tags: { purpose: "alchemy-test-updated" },
               });
-              return {
-                groupName: group.groupName,
-                groupArn: group.groupArn,
-              };
+              return { groupName: group.groupName, groupArn: group.groupArn };
             }),
           );
           expect(updated.groupArn).toEqual(created.groupArn);
 
-          const afterUpdate = yield* resourcegroups.getGroup({
-            Group: created.groupName,
-          });
-          expect(afterUpdate.Group.Description).toEqual(
-            "Alchemy resource-groups test updated",
-          );
+          const afterUpdate = yield* resourcegroups.getGroup({ Group: created.groupName });
+          expect(afterUpdate.Group.Description).toEqual("Alchemy resource-groups test updated");
           const queryAfterUpdate = yield* resourcegroups.getGroupQuery({
             Group: created.groupName,
           });
           expect(queryAfterUpdate.GroupQuery?.ResourceQuery.Query).toEqual(
             tagQuery("alchemy-rg-test", "v2"),
           );
-          const tagsAfterUpdate = yield* resourcegroups.getTags({
-            Arn: created.groupArn,
-          });
+          const tagsAfterUpdate = yield* resourcegroups.getTags({ Arn: created.groupArn });
           expect(tagsAfterUpdate.Tags?.purpose).toEqual("alchemy-test-updated");
 
           yield* stack.destroy();
@@ -173,9 +146,7 @@ describe(
           // The old group is deleted by the replacement.
           yield* assertGroupGone("alchemy-test-rg-original");
 
-          const observed = yield* resourcegroups.getGroup({
-            Group: "alchemy-test-rg-renamed",
-          });
+          const observed = yield* resourcegroups.getGroup({ Group: "alchemy-test-rg-renamed" });
           expect(observed.Group.Name).toEqual("alchemy-test-rg-renamed");
 
           yield* stack.destroy();
@@ -197,28 +168,20 @@ describe(
                   {
                     type: "AWS::ResourceGroups::Generic",
                     parameters: [
-                      {
-                        name: "allowed-resource-types",
-                        values: ["AWS::EC2::CapacityReservation"],
-                      },
+                      { name: "allowed-resource-types", values: ["AWS::EC2::CapacityReservation"] },
                     ],
                   },
                   { type: "AWS::EC2::CapacityReservationPool" },
                 ],
               });
-              return {
-                groupName: group.groupName,
-                groupArn: group.groupArn,
-              };
+              return { groupName: group.groupName, groupArn: group.groupArn };
             }),
           );
 
           const observed = yield* resourcegroups.getGroupConfiguration({
             Group: created.groupName,
           });
-          const types = (observed.GroupConfiguration?.Configuration ?? []).map(
-            (item) => item.Type,
-          );
+          const types = (observed.GroupConfiguration?.Configuration ?? []).map((item) => item.Type);
           expect(types).toContain("AWS::EC2::CapacityReservationPool");
           expect(types).toContain("AWS::ResourceGroups::Generic");
 
@@ -232,10 +195,7 @@ describe(
                   {
                     type: "AWS::ResourceGroups::Generic",
                     parameters: [
-                      {
-                        name: "allowed-resource-types",
-                        values: ["AWS::EC2::CapacityReservation"],
-                      },
+                      { name: "allowed-resource-types", values: ["AWS::EC2::CapacityReservation"] },
                     ],
                   },
                   { type: "AWS::EC2::CapacityReservationPool" },

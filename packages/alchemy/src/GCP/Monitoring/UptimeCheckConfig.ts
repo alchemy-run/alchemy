@@ -295,9 +295,7 @@ export type UptimeCheckConfig = Resource<
  * @resource
  * @category Monitoring
  */
-export const UptimeCheckConfig = Resource<UptimeCheckConfig>(
-  "GCP.Monitoring.UptimeCheckConfig",
-);
+export const UptimeCheckConfig = Resource<UptimeCheckConfig>("GCP.Monitoring.UptimeCheckConfig");
 
 export class UptimeCheckConfigNotResolved extends Data.TaggedError(
   "GCP.Monitoring.UptimeCheckConfigNotResolved",
@@ -351,14 +349,9 @@ const subsetEqual = (observed: unknown, desired: unknown): boolean => {
   return observed === desired;
 };
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].sort();
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       displayName ??
@@ -388,15 +381,11 @@ const defaultMonitoredResource = (project: string): MonitoredResource => ({
   labels: { project_id: project, host: DEFAULT_HOST },
 });
 
-const desiredHttpCheck = (
-  news: UptimeCheckConfigProps,
-): HttpCheck | undefined => {
+const desiredHttpCheck = (news: UptimeCheckConfigProps): HttpCheck | undefined => {
   if (news.tcpCheck !== undefined || news.syntheticMonitor !== undefined) {
     return news.httpCheck;
   }
-  const check =
-    news.httpCheck ??
-    (hasExplicitTarget(news) ? undefined : defaultHttpCheck());
+  const check = news.httpCheck ?? (hasExplicitTarget(news) ? undefined : defaultHttpCheck());
   if (check === undefined) return undefined;
   const useSsl = check.useSsl !== false;
   return {
@@ -431,9 +420,7 @@ const desiredMonitoredResource = (
   };
 };
 
-const toHttpCheck = (
-  check: monitoring.HttpCheck | undefined,
-): HttpCheck | undefined => {
+const toHttpCheck = (check: monitoring.HttpCheck | undefined): HttpCheck | undefined => {
   if (check === undefined) return undefined;
   const useSsl = check.useSsl !== false;
   const headers = tagRecord(check.headers);
@@ -451,9 +438,7 @@ const toHttpCheck = (
     authInfo: check.authInfo,
     serviceAgentAuthentication: check.serviceAgentAuthentication,
     contentType:
-      check.contentType && check.contentType !== "TYPE_UNSPECIFIED"
-        ? check.contentType
-        : undefined,
+      check.contentType && check.contentType !== "TYPE_UNSPECIFIED" ? check.contentType : undefined,
     customContentType: check.customContentType,
     body: check.body,
     pingConfig: check.pingConfig,
@@ -506,13 +491,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.uptimeCheckConfigs ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.uptimeCheckConfigs ?? [])),
       Stream.filter((config) =>
-        Object.keys(config.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(config.userLabels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((config) => toAttrs(config, project)),
       Stream.runCollect,
@@ -528,9 +509,7 @@ const findOwned = (project: string, id: string) =>
         pageSize: 1000,
       })
       .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.uptimeCheckConfigs ?? []),
-        ),
+        Stream.flatMap((page) => Stream.fromIterable(page.uptimeCheckConfigs ?? [])),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -552,9 +531,7 @@ const observe = (project: string, id: string, name: string | undefined) =>
     return yield* findOwned(project, id);
   });
 
-const toApiHttpCheck = (
-  check: HttpCheck | undefined,
-): monitoring.HttpCheck | undefined => {
+const toApiHttpCheck = (check: HttpCheck | undefined): monitoring.HttpCheck | undefined => {
   if (check === undefined) return undefined;
   return {
     path: check.path,
@@ -593,9 +570,7 @@ export const UptimeCheckConfigProvider = () =>
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -606,11 +581,7 @@ export const UptimeCheckConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -665,38 +636,27 @@ export const UptimeCheckConfigProvider = () =>
       const timeoutChanged = (current.timeout ?? "") !== timeout;
       const periodChanged = (current.period ?? DEFAULT_PERIOD) !== period;
       const httpChanged =
-        httpCheck !== undefined &&
-        !subsetEqual(toHttpCheck(current.httpCheck), httpCheck);
+        httpCheck !== undefined && !subsetEqual(toHttpCheck(current.httpCheck), httpCheck);
       const tcpChanged =
-        news.tcpCheck !== undefined &&
-        !subsetEqual(current.tcpCheck, news.tcpCheck);
+        news.tcpCheck !== undefined && !subsetEqual(current.tcpCheck, news.tcpCheck);
       const syntheticChanged =
         news.syntheticMonitor !== undefined &&
         !subsetEqual(current.syntheticMonitor, news.syntheticMonitor);
       const resourceChanged =
         monitoredResource !== undefined &&
-        !subsetEqual(
-          toMonitoredResource(current.monitoredResource),
-          monitoredResource,
-        );
+        !subsetEqual(toMonitoredResource(current.monitoredResource), monitoredResource);
       const groupChanged =
-        news.resourceGroup !== undefined &&
-        !jsonEqual(current.resourceGroup, news.resourceGroup);
+        news.resourceGroup !== undefined && !jsonEqual(current.resourceGroup, news.resourceGroup);
       const matchersChanged =
         news.contentMatchers !== undefined &&
         !jsonEqual(current.contentMatchers ?? [], news.contentMatchers);
       const regionsChanged =
         news.selectedRegions !== undefined &&
-        !jsonEqual(
-          sorted(current.selectedRegions),
-          sorted(news.selectedRegions),
-        );
+        !jsonEqual(sorted(current.selectedRegions), sorted(news.selectedRegions));
       const checkerChanged =
-        news.checkerType !== undefined &&
-        (current.checkerType ?? "") !== news.checkerType;
+        news.checkerType !== undefined && (current.checkerType ?? "") !== news.checkerType;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
-      const logChanged =
-        (current.logCheckFailures === true) !== desiredLogFailures;
+      const logChanged = (current.logCheckFailures === true) !== desiredLogFailures;
 
       const updateMask = [
         displayNameChanged ? "display_name" : undefined,

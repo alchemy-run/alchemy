@@ -36,9 +36,7 @@ const assertConfigGone = (name: string) =>
     // App Runner returns lowercase statuses ("active") despite documenting
     // uppercase — compare case-insensitively.
     const active = (page.AutoScalingConfigurationSummaryList ?? []).filter(
-      (s) =>
-        s.AutoScalingConfigurationName === name &&
-        s.Status?.toUpperCase() === "ACTIVE",
+      (s) => s.AutoScalingConfigurationName === name && s.Status?.toUpperCase() === "ACTIVE",
     );
     if (active.length > 0) {
       return yield* Effect.fail(
@@ -71,9 +69,7 @@ test.provider(
       };
 
       // Create.
-      const created = yield* stack.deploy(
-        AutoScalingConfiguration("Asc", props),
-      );
+      const created = yield* stack.deploy(AutoScalingConfiguration("Asc", props));
       expect(created.autoScalingConfigurationName).toBe("alchemy-test-asc");
       expect(created.autoScalingConfigurationArn).toContain(
         ":autoscalingconfiguration/alchemy-test-asc/",
@@ -85,18 +81,14 @@ test.provider(
       const described = yield* apprunner.describeAutoScalingConfiguration({
         AutoScalingConfigurationArn: created.autoScalingConfigurationArn,
       });
-      expect(described.AutoScalingConfiguration.Status?.toUpperCase()).toBe(
-        "ACTIVE",
-      );
+      expect(described.AutoScalingConfiguration.Status?.toUpperCase()).toBe("ACTIVE");
       expect(described.AutoScalingConfiguration.MaxConcurrency).toBe(50);
       expect(described.AutoScalingConfiguration.MinSize).toBe(1);
       expect(described.AutoScalingConfiguration.MaxSize).toBe(3);
 
       // No-op redeploy must not create a new revision.
       const noop = yield* stack.deploy(AutoScalingConfiguration("Asc", props));
-      expect(noop.autoScalingConfigurationRevision).toBe(
-        created.autoScalingConfigurationRevision,
-      );
+      expect(noop.autoScalingConfigurationRevision).toBe(created.autoScalingConfigurationRevision);
 
       // Settings change → new revision under the same name.
       const revised = yield* stack.deploy(
@@ -106,9 +98,7 @@ test.provider(
       expect(revised.autoScalingConfigurationRevision).toBe(
         created.autoScalingConfigurationRevision + 1,
       );
-      expect(revised.autoScalingConfigurationArn).not.toBe(
-        created.autoScalingConfigurationArn,
-      );
+      expect(revised.autoScalingConfigurationArn).not.toBe(created.autoScalingConfigurationArn);
       expect(revised.maxConcurrency).toBe(80);
 
       // Name change → replace; every revision of the old name is deleted.

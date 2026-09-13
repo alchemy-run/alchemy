@@ -202,19 +202,12 @@ export const DBProxyProvider = () =>
           .describeDBProxies({
             DBProxyName: name,
           })
-          .pipe(
-            Effect.catchTag("DBProxyNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBProxies?.[0];
       });
 
       const waitForProxy = Effect.fn(function* (name: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(30),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]);
         return yield* readProxy(name).pipe(
           Effect.flatMap((proxy) =>
             proxy?.DBProxyArn
@@ -237,9 +230,7 @@ export const DBProxyProvider = () =>
           Effect.gen(function* () {
             const proxies = yield* rds.describeDBProxies.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.DBProxies ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.DBProxies ?? [])),
             );
             const rows = yield* Effect.forEach(
               proxies,
@@ -248,34 +239,22 @@ export const DBProxyProvider = () =>
                   if (!proxy.DBProxyArn) return undefined;
                   const tagResponse = yield* rds
                     .listTagsForResource({ ResourceName: proxy.DBProxyArn })
-                    .pipe(
-                      Effect.catchTag("DBProxyNotFoundFault", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    );
+                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
                   if (tagResponse === undefined) return undefined;
                   const tags = Object.fromEntries(
                     (tagResponse.TagList ?? [])
-                      .filter(
-                        (tag): tag is rds.Tag & { Key: string } =>
-                          tag.Key != null,
-                      )
+                      .filter((tag): tag is rds.Tag & { Key: string } => tag.Key != null)
                       .map((tag) => [tag.Key, tag.Value ?? ""] as const),
                   );
                   return toAttrs({ proxy, tags });
                 }),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is DBProxy["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is DBProxy["Attributes"] => row !== undefined);
           }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? ({} as DBProxyProps))) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? ({} as DBProxyProps))) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
           if (olds?.engineFamily !== news.engineFamily) {
@@ -306,9 +285,7 @@ export const DBProxyProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Duration prop → the wire unit the RDS API expects (whole seconds).
-          const idleClientTimeoutSeconds = toWireSeconds(
-            news.idleClientTimeout,
-          );
+          const idleClientTimeoutSeconds = toWireSeconds(news.idleClientTimeout);
 
           // Observe — fetch live proxy state.
           let observed = yield* readProxy(name);
@@ -334,9 +311,7 @@ export const DBProxyProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("DBProxyAlreadyExistsFault", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("DBProxyAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForProxy(name);
           } else {
@@ -352,9 +327,7 @@ export const DBProxyProvider = () =>
               IdleClientTimeout: idleClientTimeoutSeconds,
               DebugLogging: news.debugLogging,
               NewDBProxyName:
-                news.dbProxyName && news.dbProxyName !== name
-                  ? news.dbProxyName
-                  : undefined,
+                news.dbProxyName && news.dbProxyName !== name ? news.dbProxyName : undefined,
             });
             observed = yield* waitForProxy(news.dbProxyName ?? name);
           }

@@ -55,10 +55,7 @@ export default class PostgresApi extends Fly.Service<PostgresApi>()(
           return yield* HttpServerResponse.json(
             {
               ok: false,
-              error:
-                error instanceof Error
-                  ? `${error.name}: ${error.message}`
-                  : String(error),
+              error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
             },
             { status: 500 },
           );

@@ -105,13 +105,7 @@ export interface MemberAttributes {
   userId: string | undefined;
 }
 
-export type Member = Resource<
-  TypeId,
-  MemberProps,
-  MemberAttributes,
-  never,
-  Providers
->;
+export type Member = Resource<TypeId, MemberProps, MemberAttributes, never, Providers>;
 
 /**
  * A member of a Cloudflare account — an invitation for a user (by email) to
@@ -193,9 +187,7 @@ export const MemberProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? [])
-              .map((member) => member.id)
-              .filter((id): id is string => id != null),
+            (page.result ?? []).map((member) => member.id).filter((id): id is string => id != null),
           ),
         ),
       );
@@ -203,9 +195,7 @@ export const MemberProvider = () =>
         ids,
         (memberId) =>
           getMember(accountId, memberId).pipe(
-            Effect.map((member) =>
-              member ? toAttributes(member, accountId) : undefined,
-            ),
+            Effect.map((member) => (member ? toAttributes(member, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
@@ -259,9 +249,7 @@ export const MemberProvider = () =>
       // 1. Observe — the membership id cached on `output` is a hint, not
       //    a guarantee: a missing member falls through to the email scan
       //    and then to create.
-      let observed = output?.memberId
-        ? yield* getMember(accountId, output.memberId)
-        : undefined;
+      let observed = output?.memberId ? yield* getMember(accountId, output.memberId) : undefined;
 
       // 2. Fall back to scanning the account for the email. Ownership has
       //    already been verified upstream — `read` reports existing
@@ -287,14 +275,12 @@ export const MemberProvider = () =>
             status: news.status,
           })
           .pipe(
-            Effect.catchTag(
-              ["ValidationError", "AccountMemberAlreadyExists"],
-              (error) =>
-                findByEmail(accountId, news.email).pipe(
-                  Effect.flatMap((existing) =>
-                    existing ? Effect.succeed(existing) : Effect.fail(error),
-                  ),
+            Effect.catchTag(["ValidationError", "AccountMemberAlreadyExists"], (error) =>
+              findByEmail(accountId, news.email).pipe(
+                Effect.flatMap((existing) =>
+                  existing ? Effect.succeed(existing) : Effect.fail(error),
                 ),
+              ),
             ),
           );
         observed = created;
@@ -312,8 +298,7 @@ export const MemberProvider = () =>
           desiredRoles,
         );
       const policiesDirty =
-        news.policies !== undefined &&
-        !samePolicies(observed.policies ?? [], news.policies);
+        news.policies !== undefined && !samePolicies(observed.policies ?? [], news.policies);
       if (rolesDirty || policiesDirty) {
         observed = yield* accounts.updateMember({
           accountId,
@@ -384,9 +369,7 @@ const findByEmail = (accountId: string, email: string) =>
       );
       // The list payload omits nothing we need, but re-read through
       // `getMember` so every code path observes the same response shape.
-      return match?.id != null
-        ? getMember(accountId, match.id)
-        : Effect.succeed(undefined);
+      return match?.id != null ? getMember(accountId, match.id) : Effect.succeed(undefined);
     }),
   );
 
@@ -432,10 +415,7 @@ const idList = (groups: readonly { id: string }[]) =>
     .sort()
     .join(",");
 
-const toAttributes = (
-  member: ObservedMember,
-  accountId: string,
-): MemberAttributes => ({
+const toAttributes = (member: ObservedMember, accountId: string): MemberAttributes => ({
   memberId: member.id ?? "",
   accountId,
   email: member.email ?? "",

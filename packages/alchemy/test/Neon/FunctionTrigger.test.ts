@@ -24,8 +24,7 @@ test.provider(
             });
             const api = yield* Function("Api", {
               project,
-              main: new URL("./fixtures/function-trigger.ts", import.meta.url)
-                .href,
+              main: new URL("./fixtures/function-trigger.ts", import.meta.url).href,
             });
             const trigger = yield* FunctionTrigger("Schedule", {
               function: api,
@@ -34,9 +33,7 @@ test.provider(
               path: "/jobs",
               enabled,
             });
-            const preview = child
-              ? yield* Branch("Preview", { project })
-              : undefined;
+            const preview = child ? yield* Branch("Preview", { project }) : undefined;
             return { project, api, trigger, preview };
           }),
         );
@@ -85,8 +82,7 @@ test.provider(
           });
           yield* Function("Api", {
             project,
-            main: new URL("./fixtures/function-trigger.ts", import.meta.url)
-              .href,
+            main: new URL("./fixtures/function-trigger.ts", import.meta.url).href,
           });
           yield* Branch("Preview", { project });
         }),

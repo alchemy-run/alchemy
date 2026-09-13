@@ -67,20 +67,14 @@ export const dispatchByMode = <Client extends object>(
     }
     return native!;
   };
-  const pick = (id: string): Client =>
-    isLocalId(id) ? nativeFor(id) : httpClient;
+  const pick = (id: string): Client => (isLocalId(id) ? nativeFor(id) : httpClient);
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(httpClient)) {
     out[key] =
       typeof value === "function"
         ? (...args: unknown[]) =>
-            Effect.flatMap(resourceId, (id) =>
-              (pick(id) as Record<string, any>)[key](...args),
-            )
-        : Effect.flatMap(
-            resourceId,
-            (id) => (pick(id) as Record<string, any>)[key],
-          );
+            Effect.flatMap(resourceId, (id) => (pick(id) as Record<string, any>)[key](...args))
+        : Effect.flatMap(resourceId, (id) => (pick(id) as Record<string, any>)[key]);
   }
   return out as Client;
 };

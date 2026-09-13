@@ -21,8 +21,7 @@ export const WriteFileR2 = Layer.effect(
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage);
 
-    return ({ path, contents }) =>
-      bucket.put(path, contents).pipe(Effect.orDie);
+    return ({ path, contents }) => bucket.put(path, contents).pipe(Effect.orDie);
   }),
 );
 

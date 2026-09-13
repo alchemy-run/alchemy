@@ -17,10 +17,7 @@ export const GitHubLive = HttpApiBuilder.group(GitApi, "github", (h) =>
           const caller = yield* Effect.serviceOption(TestCaller);
           const user = Option.isSome(caller) ? caller.value.user : null;
           return user === null
-            ? HttpServerResponse.jsonUnsafe(
-                { message: "Requires authentication" },
-                { status: 401 },
-              )
+            ? HttpServerResponse.jsonUnsafe({ message: "Requires authentication" }, { status: 401 })
             : HttpServerResponse.jsonUnsafe({
                 login: user.name,
                 id: 1,

@@ -42,7 +42,6 @@ export interface ListApplicationAssociations extends Binding.Service<
     >
   >
 > {}
-export const ListApplicationAssociations =
-  Binding.Service<ListApplicationAssociations>(
-    "AWS.AppIntegrations.ListApplicationAssociations",
-  );
+export const ListApplicationAssociations = Binding.Service<ListApplicationAssociations>(
+  "AWS.AppIntegrations.ListApplicationAssociations",
+);

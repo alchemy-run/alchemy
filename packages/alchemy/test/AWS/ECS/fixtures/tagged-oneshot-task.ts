@@ -15,9 +15,7 @@ import { Task } from "@/AWS/ECS/Task.ts";
  * The `{ run }` impl logs a marker and completes, so a successful boot is
  * observable as the Fargate task stopping with container exit code 0.
  */
-export class TaggedOneShotTask extends Task<TaggedOneShotTask>()(
-  "EcsTaggedOneShotTask",
-) {}
+export class TaggedOneShotTask extends Task<TaggedOneShotTask>()("EcsTaggedOneShotTask") {}
 
 export default TaggedOneShotTask.make(
   {

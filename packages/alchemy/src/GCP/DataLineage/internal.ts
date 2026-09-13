@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  createInternalLabels,
-  hasAlchemyLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_ID_LENGTH = 200;
@@ -32,10 +28,8 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -45,30 +39,17 @@ export const parentOf = (name: string) => {
   return parts.slice(0, Math.max(0, parts.length - 2)).join("/");
 };
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
-    parent:
-      collectionAt > 0
-        ? parts.slice(0, collectionAt).join("/")
-        : parentOf(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
+    parent: collectionAt > 0 ? parts.slice(0, collectionAt).join("/") : parentOf(name),
   };
 };
 
@@ -143,11 +124,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const replaceOnIdentity = (input: {
   previousId?: string;
@@ -191,9 +170,7 @@ export const userAttributes = (
   attributes: datalineage.DocumentMap | null | undefined,
 ): Record<string, unknown> => {
   const next: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(
-    stripInternalLabels(attributeTags(attributes)),
-  )) {
+  for (const [key, value] of Object.entries(stripInternalLabels(attributeTags(attributes)))) {
     const raw = attributes?.[key];
     next[key] = raw !== undefined ? raw : value;
   }
@@ -208,9 +185,8 @@ export const desiredAttributes = (
   ...ownership,
 });
 
-export const hasAlchemyAttributeMap = (
-  attributes: datalineage.DocumentMap | null | undefined,
-) => Object.keys(attributes ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyAttributeMap = (attributes: datalineage.DocumentMap | null | undefined) =>
+  Object.keys(attributes ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (
   id: string,
@@ -280,16 +256,10 @@ export const listLineageEvents = (parent: string) =>
 
 export const listOwnedProcesses = (project: string, location: string) =>
   listProcesses(locationParent(project, location)).pipe(
-    Effect.map((rows) =>
-      rows.filter((row) => hasAlchemyAttributeMap(row.attributes)),
-    ),
+    Effect.map((rows) => rows.filter((row) => hasAlchemyAttributeMap(row.attributes))),
   );
 
-export const findOwnedProcess = (
-  id: string,
-  project: string,
-  location: string,
-) =>
+export const findOwnedProcess = (id: string, project: string, location: string) =>
   Effect.gen(function* () {
     const rows = yield* listProcesses(locationParent(project, location));
     for (const row of rows) {

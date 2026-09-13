@@ -107,8 +107,7 @@ const makeBuildStaticMiddleware = (root: string): MiddlewareHandler => {
       return next();
     }
     const contentType =
-      MIME_TYPES[NodePath.extname(filePath).toLowerCase()] ??
-      "application/octet-stream";
+      MIME_TYPES[NodePath.extname(filePath).toLowerCase()] ?? "application/octet-stream";
     return c.body(data as never, 200, { "content-type": contentType });
   };
 };
@@ -156,14 +155,10 @@ const awsLambdaAdapter: ReturnType<
       // SSG pass only (runs in Node during `waku build`): serve the already
       // emitted static files so prerender requests resolve assets. Never on
       // Lambda — there the CDN serves `dist/public`.
-      app.use(
-        makeBuildStaticMiddleware(NodePath.join(config.distDir, DIST_PUBLIC)),
-      );
+      app.use(makeBuildStaticMiddleware(NodePath.join(config.distDir, DIST_PUBLIC)));
     }
     if (bodyLimitOptions !== false) {
-      app.use(
-        bodyLimit(bodyLimitOptions ?? { maxSize: DEFAULT_BODY_LIMIT_MAX_SIZE }),
-      );
+      app.use(bodyLimit(bodyLimitOptions ?? { maxSize: DEFAULT_BODY_LIMIT_MAX_SIZE }));
     }
     for (const middlewareFn of middlewareFns) {
       app.use(middlewareFn({ app }));

@@ -45,8 +45,7 @@ export interface ScheduleEvent {
  * by `consumeSchedule`.
  */
 export const isScheduleEvent = (event: any): event is ScheduleEvent =>
-  event?.source === "alchemy.scheduler" &&
-  typeof event?.scheduleId === "string";
+  event?.source === "alchemy.scheduler" && typeof event?.scheduleId === "string";
 
 export interface ScheduleRouteProps {
   /**
@@ -202,10 +201,7 @@ const toScheduleDescriptor = (
  * id. Computed identically at deploy time (to name the backing resources) and
  * at runtime (to match incoming events to the handler).
  */
-export const createScheduleRouteId = (
-  descriptor: ScheduleDescriptor,
-  fn: LambdaFunction,
-): string =>
+export const createScheduleRouteId = (descriptor: ScheduleDescriptor, fn: LambdaFunction): string =>
   descriptor.id ??
   `Scheduler${createHash("sha1")
     .update(

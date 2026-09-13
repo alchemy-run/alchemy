@@ -180,9 +180,7 @@ export type LocationsBucket = Resource<
  * @resource
  * @category Logging
  */
-export const LocationsBucket = Resource<LocationsBucket>(
-  "GCP.Logging.LocationsBucket",
-);
+export const LocationsBucket = Resource<LocationsBucket>("GCP.Logging.LocationsBucket");
 
 export class LocationsBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.LocationsBucketNotResolved",
@@ -190,9 +188,7 @@ export class LocationsBucketNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class LocationsBucketFailed extends Data.TaggedError(
-  "GCP.Logging.LocationsBucketFailed",
-)<{
+export class LocationsBucketFailed extends Data.TaggedError("GCP.Logging.LocationsBucketFailed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -215,11 +211,7 @@ const normalizeParent = (project: string, parent: string | undefined) => {
   return `projects/${parent}`;
 };
 
-const toAttrs = (
-  bucket: logging.LogBucket,
-  parent: string,
-  location: string,
-) => {
+const toAttrs = (bucket: logging.LogBucket, parent: string, location: string) => {
   const parsed = parseLoggingName(bucket.name ?? "");
   const bucketId = parsed.bucketId ?? lastSegment(bucket.name ?? "");
   const resolvedParent = parsed.parent || parent;
@@ -227,11 +219,7 @@ const toAttrs = (
   const description = parseDescription(bucket.description);
   const cmekKey = bucket.cmekSettings?.kmsKeyName;
   return {
-    name:
-      bucket.name ??
-      (bucketId
-        ? resourceName(resolvedParent, resolvedLocation, bucketId)
-        : ""),
+    name: bucket.name ?? (bucketId ? resourceName(resolvedParent, resolvedLocation, bucketId) : ""),
     bucketId,
     parent: resolvedParent,
     location: resolvedLocation,
@@ -285,9 +273,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeletedBucket(bucket)
-        ? Effect.void
-        : Effect.fail(new LocationsBucketNotResolved({ name })),
+      isDeletedBucket(bucket) ? Effect.void : Effect.fail(new LocationsBucketNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.LocationsBucketNotResolved",
@@ -296,10 +282,7 @@ const waitUntilDeleted = (name: string) =>
     }),
   );
 
-const toCreateBody = (
-  props: LocationsBucketProps,
-  description: string,
-): logging.LogBucket => ({
+const toCreateBody = (props: LocationsBucketProps, description: string): logging.LogBucket => ({
   description,
   retentionDays: props.retentionDays,
   locked: props.locked === true ? true : undefined,
@@ -315,9 +298,7 @@ const toCreateBody = (
           type: config.type,
         }))
       : undefined,
-  cmekSettings: props.cmekSettings
-    ? { kmsKeyName: props.cmekSettings.kmsKeyName }
-    : undefined,
+  cmekSettings: props.cmekSettings ? { kmsKeyName: props.cmekSettings.kmsKeyName } : undefined,
 });
 
 export const LocationsBucketProvider = () =>
@@ -328,9 +309,7 @@ export const LocationsBucketProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.bucketId ?? output?.bucketId;
       const idChanged =
-        previousId !== undefined &&
-        news.bucketId !== undefined &&
-        news.bucketId !== previousId;
+        previousId !== undefined && news.bucketId !== undefined && news.bucketId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -338,26 +317,16 @@ export const LocationsBucketProvider = () =>
         news.location !== previousLocation;
       const previousParent = olds?.parent ?? output?.parent;
       const parentChanged =
-        news.parent !== undefined &&
-        previousParent !== undefined &&
-        news.parent !== previousParent;
+        news.parent !== undefined && previousParent !== undefined && news.parent !== previousParent;
       if (!idChanged && !locationChanged && !parentChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = normalizeParent(
-        env.project,
-        olds?.parent ?? output?.parent,
-      );
+      const parent = normalizeParent(env.project, olds?.parent ?? output?.parent);
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const bucketId = yield* toPhysicalId(
-        id,
-        olds?.bucketId,
-        output?.bucketId,
-        "b",
-      );
+      const bucketId = yield* toPhysicalId(id, olds?.bucketId, output?.bucketId, "b");
       const name = output?.name ?? resourceName(parent, location, bucketId);
       const existing = yield* getByName(name);
       if (isDeletedBucket(existing)) return undefined;
@@ -377,17 +346,13 @@ export const LocationsBucketProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
             Stream.filter(
-              (bucket) =>
-                !isDeletedBucket(bucket) &&
-                hasOwnershipMarker(bucket.description),
+              (bucket) => !isDeletedBucket(bucket) && hasOwnershipMarker(bucket.description),
             ),
             Stream.map((bucket) =>
               toAttrs(
                 bucket,
-                parseLoggingName(bucket.name ?? "").parent ||
-                  `projects/${env.project}`,
-                parseLoggingName(bucket.name ?? "").location ??
-                  DEFAULT_LOCATION,
+                parseLoggingName(bucket.name ?? "").parent || `projects/${env.project}`,
+                parseLoggingName(bucket.name ?? "").location ?? DEFAULT_LOCATION,
               ),
             ),
             Stream.runCollect,
@@ -397,27 +362,16 @@ export const LocationsBucketProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = normalizeParent(
-        env.project,
-        news.parent ?? output?.parent,
-      );
+      const parent = normalizeParent(env.project, news.parent ?? output?.parent);
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const bucketId = yield* toPhysicalId(
-        id,
-        news.bucketId,
-        output?.bucketId,
-        "b",
-      );
+      const bucketId = yield* toPhysicalId(id, news.bucketId, output?.bucketId, "b");
       const name = resourceName(parent, location, bucketId);
       const ownership = yield* createOwnership(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         yield* undelete(current.name ?? name);
         current = yield* waitUntilActive(current.name ?? name);
       }
@@ -431,16 +385,10 @@ export const LocationsBucketProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
-        if (
-          current !== undefined &&
-          current.lifecycleState === "DELETE_REQUESTED"
-        ) {
+        if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
           yield* undelete(current.name ?? name);
           current = yield* waitUntilActive(current.name ?? name);
-        } else if (
-          current !== undefined &&
-          isPendingBucket(current.lifecycleState)
-        ) {
+        } else if (current !== undefined && isPendingBucket(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);
         }
       }
@@ -451,13 +399,11 @@ export const LocationsBucketProvider = () =>
 
       const desiredLocked = news.locked === true;
       const desiredAnalytics = news.analyticsEnabled === true;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const retentionChanged =
         news.retentionDays !== undefined &&
         current.locked !== true &&
-        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !==
-          news.retentionDays;
+        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !== news.retentionDays;
       const restrictedChanged =
         news.restrictedFields !== undefined &&
         !jsonEqual(
@@ -466,20 +412,15 @@ export const LocationsBucketProvider = () =>
         );
       const indexChanged =
         news.indexConfigs !== undefined &&
-        !jsonEqual(
-          canonIndexConfigs(current.indexConfigs),
-          canonIndexConfigs(news.indexConfigs),
-        );
+        !jsonEqual(canonIndexConfigs(current.indexConfigs), canonIndexConfigs(news.indexConfigs));
       const analyticsChanged =
         news.analyticsEnabled !== undefined &&
         desiredAnalytics &&
         current.analyticsEnabled !== true;
       const cmekChanged =
         news.cmekSettings !== undefined &&
-        (current.cmekSettings?.kmsKeyName ?? "") !==
-          news.cmekSettings.kmsKeyName;
-      const lockedChanged =
-        news.locked !== undefined && desiredLocked && current.locked !== true;
+        (current.cmekSettings?.kmsKeyName ?? "") !== news.cmekSettings.kmsKeyName;
+      const lockedChanged = news.locked !== undefined && desiredLocked && current.locked !== true;
 
       const syncMask = [
         descriptionChanged ? "description" : undefined,
@@ -536,8 +477,7 @@ export const LocationsBucketProvider = () =>
       yield* logging.deleteLocationsBuckets({ name: output.name }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
-          while: (error) =>
-            error._tag === "BadRequest" || error._tag === "Conflict",
+          while: (error) => error._tag === "BadRequest" || error._tag === "Conflict",
           times: 10,
           schedule: Schedule.spaced("3 seconds"),
         }),

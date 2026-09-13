@@ -15,14 +15,9 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const { key, plan } = yield* stack.deploy(
         Effect.gen(function* () {
-          const key = yield* AWS.ApiGateway.ApiKey("AgUpkKey", {
-            generateDistinctId: true,
-          });
+          const key = yield* AWS.ApiGateway.ApiKey("AgUpkKey", { generateDistinctId: true });
           const plan = yield* AWS.ApiGateway.UsagePlan("AgUpkPlan", {});
-          yield* AWS.ApiGateway.UsagePlanKey("AgUpkLink", {
-            usagePlanId: plan.id,
-            keyId: key.id,
-          });
+          yield* AWS.ApiGateway.UsagePlanKey("AgUpkLink", { usagePlanId: plan.id, keyId: key.id });
           return { key, plan };
         }),
       );
@@ -45,9 +40,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const { key, plan } = yield* stack.deploy(
         Effect.gen(function* () {
-          const key = yield* AWS.ApiGateway.ApiKey("AgUpkListKey", {
-            generateDistinctId: true,
-          });
+          const key = yield* AWS.ApiGateway.ApiKey("AgUpkListKey", { generateDistinctId: true });
           const plan = yield* AWS.ApiGateway.UsagePlan("AgUpkListPlan", {});
           yield* AWS.ApiGateway.UsagePlanKey("AgUpkListLink", {
             usagePlanId: plan.id,
@@ -57,14 +50,10 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.UsagePlanKey,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.UsagePlanKey);
       const all = yield* provider.list();
 
-      expect(
-        all.some((x) => x.usagePlanId === plan.id && x.keyId === key.id),
-      ).toBe(true);
+      expect(all.some((x) => x.usagePlanId === plan.id && x.keyId === key.id)).toBe(true);
 
       yield* stack.destroy();
       yield* assertApiKeyDeleted(key.id);

@@ -135,19 +135,11 @@ export const scanPart = (
     const lenient = options.resync === true;
     // Content of resolved entries in this buffer, by absolute offset and by
     // oid, for in-buffer delta bases. Bounded; a miss becomes unresolved.
-    const byOffset = new Map<
-      number,
-      { type: ObjectType; content: Uint8Array }
-    >();
+    const byOffset = new Map<number, { type: ObjectType; content: Uint8Array }>();
     const byOid = new Map<string, { type: ObjectType; content: Uint8Array }>();
     let cached = 0;
     const budget = options.cacheBytes ?? 20 * 1024 * 1024;
-    const remember = (
-      offset: number,
-      oid: Oid,
-      type: ObjectType,
-      content: Uint8Array,
-    ) => {
+    const remember = (offset: number, oid: Oid, type: ObjectType, content: Uint8Array) => {
       if (content.length > budget / 4) return;
       while (cached + content.length > budget && byOffset.size > 0) {
         const oldest = byOffset.keys().next().value!;
@@ -241,10 +233,7 @@ export const scanPart = (
         });
         remember(offset, oid, type, payload);
       } else {
-        const found =
-          baseOffset !== undefined
-            ? byOffset.get(baseOffset)
-            : byOid.get(baseOid!);
+        const found = baseOffset !== undefined ? byOffset.get(baseOffset) : byOid.get(baseOid!);
         if (found === undefined) {
           unresolved.push({
             offset,
@@ -271,9 +260,7 @@ export const scanPart = (
           }
           const oid = hashObjectSync(found.type, content);
           const zdata = yield* deflate(content).pipe(
-            Effect.mapError(
-              (error) => new PackFormatError({ reason: error.reason }),
-            ),
+            Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
           );
           entries.push({
             oid,
@@ -294,8 +281,7 @@ export const scanPart = (
       count += 1;
     }
     return {
-      firstOffset:
-        firstOffset >= 0 ? firstOffset : entries.length > 0 ? options.base : -1,
+      firstOffset: firstOffset >= 0 ? firstOffset : entries.length > 0 ? options.base : -1,
       entries,
       unresolved,
       consumedTo: options.base + pos,
@@ -431,17 +417,11 @@ export const hashBounds = (
   Effect.gen(function* () {
     const entries: Array<ScannedEntry> = [];
     const unresolved: Array<UnresolvedDelta> = [];
-    const byOffset = new Map<
-      number,
-      { type: ObjectType; content: Uint8Array }
-    >();
+    const byOffset = new Map<number, { type: ObjectType; content: Uint8Array }>();
     const byOid = new Map<string, { type: ObjectType; content: Uint8Array }>();
     const inflateExact = (b: EntryBounds) =>
       inflateExactSpan(
-        buf.subarray(
-          b.dataOffset - options.base,
-          b.dataOffset - options.base + b.span,
-        ),
+        buf.subarray(b.dataOffset - options.base, b.dataOffset - options.base + b.span),
         b.size,
       ).pipe(
         Effect.mapError(
@@ -469,10 +449,7 @@ export const hashBounds = (
         byOid.set(oid, { type, content: payload });
         continue;
       }
-      const found =
-        b.baseOffset !== undefined
-          ? byOffset.get(b.baseOffset)
-          : byOid.get(b.baseOid!);
+      const found = b.baseOffset !== undefined ? byOffset.get(b.baseOffset) : byOid.get(b.baseOid!);
       if (found === undefined) {
         unresolved.push({
           offset: b.offset,
@@ -500,9 +477,7 @@ export const hashBounds = (
       }
       const oid = hashObjectSync(found.type, content);
       const zdata = yield* deflate(content).pipe(
-        Effect.mapError(
-          (error) => new PackFormatError({ reason: error.reason }),
-        ),
+        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
       );
       entries.push({
         oid,
@@ -522,8 +497,7 @@ export const hashBounds = (
       firstOffset: bounds[0]?.offset ?? -1,
       entries,
       unresolved,
-      consumedTo:
-        last === undefined ? options.base : last.dataOffset + last.span,
+      consumedTo: last === undefined ? options.base : last.dataOffset + last.span,
       count: bounds.length,
     };
   });
@@ -557,10 +531,7 @@ export const findBoundary = (
   const isZlibHeader = (i: number) =>
     i + 1 < buf.length &&
     buf[i] === 0x78 &&
-    (buf[i + 1] === 0x01 ||
-      buf[i + 1] === 0x5e ||
-      buf[i + 1] === 0x9c ||
-      buf[i + 1] === 0xda);
+    (buf[i + 1] === 0x01 || buf[i + 1] === 0x5e || buf[i + 1] === 0x9c || buf[i + 1] === 0xda);
   const parses = (pos: number): number | undefined => {
     let header;
     try {
@@ -585,8 +556,7 @@ export const findBoundary = (
       maxOutput: options.maxObjectSize,
       expectedSize: header.size,
     });
-    if (inflated === undefined || inflated.content.length !== header.size)
-      return undefined;
+    if (inflated === undefined || inflated.content.length !== header.size) return undefined;
     const end = at + inflated.bytesConsumed;
     return end >= buf.length ? undefined : end;
   };
@@ -661,9 +631,7 @@ export const resolveDeltas = (
         const content = base.isContent
           ? base.bytes
           : yield* inflate(base.bytes).pipe(
-              Effect.mapError(
-                (error) => new PackFormatError({ reason: error.reason }),
-              ),
+              Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
             );
         inflated.set(index, content);
         return content;
@@ -672,14 +640,10 @@ export const resolveDeltas = (
     for (const job of jobs) {
       const base = yield* baseContent(job.base);
       const delta = yield* inflate(job.delta).pipe(
-        Effect.mapError(
-          (error) => new PackFormatError({ reason: error.reason }),
-        ),
+        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
       );
       const content = yield* applyDelta(base, delta).pipe(
-        Effect.mapError(
-          (error) => new PackFormatError({ reason: error.reason }),
-        ),
+        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
       );
       if (content.length > options.maxObjectSize) {
         return yield* new ObjectTooLargeError({
@@ -689,9 +653,7 @@ export const resolveDeltas = (
       }
       const oid = hashObjectSync(job.type, content);
       const zdata = yield* deflate(content).pipe(
-        Effect.mapError(
-          (error) => new PackFormatError({ reason: error.reason }),
-        ),
+        Effect.mapError((error) => new PackFormatError({ reason: error.reason })),
       );
       out.push({
         id: job.id,

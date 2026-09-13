@@ -18,9 +18,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        sagemaker.describeCluster({
-          ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe",
-        }),
+        sagemaker.describeCluster({ ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe" }),
       );
       expect(error._tag).toBe("ResourceNotFound");
     }),
@@ -47,10 +45,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       const bucketName = `sagemaker-alchemy-hyperpod-test-${accountId}`;
 
       const supporting = Effect.gen(function* () {
-        const bucket = yield* Bucket("HyperPodLifecycleBucket", {
-          bucketName,
-          forceDestroy: true,
-        });
+        const bucket = yield* Bucket("HyperPodLifecycleBucket", { bucketName, forceDestroy: true });
         const role = yield* Role("HyperPodInstanceRole", {
           assumeRolePolicyDocument: {
             Version: "2012-10-17",
@@ -62,9 +57,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
               },
             ],
           },
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy",
-          ],
+          managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy"],
         });
         return { bucket, role };
       });
@@ -113,9 +106,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       // Out-of-band verification via distilled.
       const described = yield* findCluster(cluster.clusterName);
       expect(described?.ClusterStatus).toBe("InService");
-      expect(
-        described?.InstanceGroups?.map((g) => g.InstanceGroupName),
-      ).toEqual(["controller"]);
+      expect(described?.InstanceGroups?.map((g) => g.InstanceGroupName)).toEqual(["controller"]);
 
       // Destroy and verify gone.
       yield* stack.destroy();
@@ -123,13 +114,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       expect(gone).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:s3",
-      "provider:aws:sagemaker",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:s3", "provider:aws:sagemaker", "live"],
     timeout: 3_600_000,
   },
 );

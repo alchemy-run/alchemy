@@ -11,10 +11,7 @@ export const GetCodeInterpreterSessionHttp = Layer.effect(
     operation: agentcore.getCodeInterpreterSession,
     actions: ["bedrock-agentcore:GetCodeInterpreterSession"],
     requestKey: "codeInterpreterIdentifier",
-    identifier: (codeInterpreter: CodeInterpreter) =>
-      codeInterpreter.codeInterpreterId,
-    arns: (codeInterpreter: CodeInterpreter) => [
-      codeInterpreter.codeInterpreterArn,
-    ],
+    identifier: (codeInterpreter: CodeInterpreter) => codeInterpreter.codeInterpreterId,
+    arns: (codeInterpreter: CodeInterpreter) => [codeInterpreter.codeInterpreterArn],
   }),
 );

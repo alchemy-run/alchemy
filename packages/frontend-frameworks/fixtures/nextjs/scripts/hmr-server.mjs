@@ -41,9 +41,7 @@ const server = await runtime.runPromise(
 console.log(`DEV_URL ${server.url}`);
 
 const shutdown = async () => {
-  await runtime
-    .runPromise(Scope.close(scope, Exit.void))
-    .catch(() => undefined);
+  await runtime.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined);
   await runtime.dispose().catch(() => undefined);
   process.exit(0);
 };

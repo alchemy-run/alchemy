@@ -55,11 +55,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
 
       const subnetsResult = yield* EC2.describeSubnets({});
       const available = (subnetsResult.Subnets ?? []).filter(
-        (s) =>
-          s.State === "available" &&
-          !!s.SubnetId &&
-          !!s.VpcId &&
-          !!s.AvailabilityZone,
+        (s) => s.State === "available" && !!s.SubnetId && !!s.VpcId && !!s.AvailabilityZone,
       );
 
       // Group available subnets by VPC, keeping one subnet per AZ, then pick a
@@ -88,9 +84,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
         // Exact reason for a clean skip:
         // "no existing VPC has available subnets in >= 2 distinct AZs".
         return yield* Effect.fail(
-          new Error(
-            "no existing VPC has available subnets in >= 2 distinct AZs",
-          ),
+          new Error("no existing VPC has available subnets in >= 2 distinct AZs"),
         );
       }
 
@@ -110,9 +104,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBSUBNETGROUP)(
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
-      expect(
-        all.some((g) => g.dbSubnetGroupName === group.dbSubnetGroupName),
-      ).toBe(true);
+      expect(all.some((g) => g.dbSubnetGroupName === group.dbSubnetGroupName)).toBe(true);
 
       yield* stack.destroy();
     }),

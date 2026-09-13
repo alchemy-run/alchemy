@@ -20,9 +20,7 @@ const implementation = {
   logout: () => Effect.void,
   details: () => Effect.succeed({ lines: [] }),
   read: () => Effect.void,
-  readEnvironment: getEnvRedactedRequired("CUSTOM_PROVIDER_TOKEN").pipe(
-    Effect.asVoid,
-  ),
+  readEnvironment: getEnvRedactedRequired("CUSTOM_PROVIDER_TOKEN").pipe(Effect.asVoid),
   environment: [
     { name: "CUSTOM_PROVIDER_TOKEN", required: true, secret: true },
     {
@@ -37,20 +35,14 @@ it.effect(
   "auth providers expose their declared environment contract",
   () =>
     Effect.gen(function* () {
-      yield* AuthProvider<{ method: "custom" }, void>()(
-        "CustomProvider",
-        implementation,
-      );
+      yield* AuthProvider<{ method: "custom" }, void>()("CustomProvider", implementation);
       const provider = yield* getAuthProvider("CustomProvider");
 
       expect(provider.environment).toEqual(implementation.environment);
       expect(describeEnvironment(provider.environment)).toBe(
         "CUSTOM_PROVIDER_TOKEN, [CUSTOM_PROVIDER_REGION | CUSTOM_PROVIDER_DEFAULT_REGION]",
       );
-    }).pipe(
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
+    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
   { tags: ["unit", "local"] },
 );
 
@@ -58,23 +50,13 @@ it.effect(
   "providers without environment credentials declare nothing",
   () =>
     Effect.gen(function* () {
-      const {
-        readEnvironment: _,
-        environment: __,
-        ...profileOnly
-      } = implementation;
-      yield* AuthProvider<{ method: "custom" }, void>()(
-        "ProfileOnlyProvider",
-        profileOnly,
-      );
+      const { readEnvironment: _, environment: __, ...profileOnly } = implementation;
+      yield* AuthProvider<{ method: "custom" }, void>()("ProfileOnlyProvider", profileOnly);
       const provider = yield* getAuthProvider("ProfileOnlyProvider");
 
       expect(provider.readEnvironment).toBeUndefined();
       expect(provider.environment).toEqual([]);
-    }).pipe(
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
+    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
   { tags: ["unit", "local"] },
 );
 
@@ -90,14 +72,9 @@ it.effect(
 
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
-        expect(String(Cause.squash(exit.cause))).toContain(
-          "declare its `environment` variables",
-        );
+        expect(String(Cause.squash(exit.cause))).toContain("declare its `environment` variables");
       }
-    }).pipe(
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
+    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
   { tags: ["unit", "local"] },
 );
 
@@ -136,9 +113,7 @@ it.effect(
         configure: () =>
           Effect.gen(function* () {
             const interaction = yield* Interaction;
-            yield* interaction.prompt
-              .text({ message: "token" })
-              .pipe(Effect.orDie);
+            yield* interaction.prompt.text({ message: "token" }).pipe(Effect.orDie);
             return { method: "custom" as const };
           }),
       }).pipe(Effect.provideService(Interaction, scripted("registration")));
@@ -149,9 +124,6 @@ it.effect(
         .pipe(Effect.provideService(Interaction, scripted("call-time")));
 
       expect(answered).toEqual(["call-time"]);
-    }).pipe(
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
+    }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
   { tags: ["unit", "local"] },
 );

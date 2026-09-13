@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const EMAIL = "test@alchemy.run";
 
@@ -38,10 +35,7 @@ test.provider(
       expect(policy.enabled).toBe(true);
 
       // Verify out-of-band via the API.
-      const actual = yield* alerting.getPolicy({
-        accountId,
-        policyId: policy.policyId,
-      });
+      const actual = yield* alerting.getPolicy({ accountId, policyId: policy.policyId });
       expect(actual.name).toEqual(policy.name);
       expect(actual.alertType).toEqual("universal_ssl_event_type");
       expect(actual.mechanisms?.email?.[0]?.id).toEqual(EMAIL);
@@ -58,10 +52,7 @@ test.provider(
       expect(updated.policyId).toEqual(policy.policyId);
       expect(updated.enabled).toBe(false);
 
-      const afterUpdate = yield* alerting.getPolicy({
-        accountId,
-        policyId: policy.policyId,
-      });
+      const afterUpdate = yield* alerting.getPolicy({ accountId, policyId: policy.policyId });
       expect(afterUpdate.enabled).toBe(false);
       expect(afterUpdate.description).toEqual("paused during migration");
 
@@ -100,10 +91,7 @@ test.provider(
       // The replaced (old) policy must be gone.
       yield* waitForPolicyDeleted(accountId, policy.policyId);
 
-      const actual = yield* alerting.getPolicy({
-        accountId,
-        policyId: replaced.policyId,
-      });
+      const actual = yield* alerting.getPolicy({ accountId, policyId: replaced.policyId });
       expect(actual.alertType).toEqual("incident_alert");
 
       yield* stack.destroy();
@@ -128,9 +116,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Alerting.NotificationPolicy,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Alerting.NotificationPolicy);
       const all = yield* provider.list();
 
       expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
@@ -146,9 +132,6 @@ const waitForPolicyDeleted = (accountId: string, policyId: string) =>
     Effect.catchTag("PolicyNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PolicyNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

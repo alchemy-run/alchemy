@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   connectorSource,
   location,
@@ -43,14 +43,11 @@ test.provider(
       );
       expect(error._tag).toEqual("NotFound");
 
-      const page =
-        yield* firebasedataconnect.listProjectsLocationsServicesConnectors({
-          parent: `projects/${project}/locations/${location}/services/-`,
-          pageSize: 10,
-        });
-      expect((page.connectors ?? []).map((item) => item.name)).not.toContain(
-        missing,
-      );
+      const page = yield* firebasedataconnect.listProjectsLocationsServicesConnectors({
+        parent: `projects/${project}/locations/${location}/services/-`,
+        pageSize: 10,
+      });
+      expect((page.connectors ?? []).map((item) => item.name)).not.toContain(missing);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -78,15 +75,12 @@ test.provider(
             datasources: unlinkedDatasources,
             labels: { env: "test" },
           });
-          const connector = yield* GCP.FirebaseDataConnect.ServicesConnector(
-            "Queries",
-            {
-              service: schema.service,
-              source: connectorSource,
-              displayName: "alchemy-test-connector",
-              labels: { env: "test" },
-            },
-          );
+          const connector = yield* GCP.FirebaseDataConnect.ServicesConnector("Queries", {
+            service: schema.service,
+            source: connectorSource,
+            displayName: "alchemy-test-connector",
+            labels: { env: "test" },
+          });
           return { service, schema, connector };
         }),
       );
@@ -99,10 +93,9 @@ test.provider(
       expect(created.connector.service).toEqual(created.service.name);
       expect(created.connector.reconciling).toEqual(false);
 
-      const fetched =
-        yield* firebasedataconnect.getProjectsLocationsServicesConnectors({
-          name: created.connector.name,
-        });
+      const fetched = yield* firebasedataconnect.getProjectsLocationsServicesConnectors({
+        name: created.connector.name,
+      });
       expect(fetched.name).toEqual(created.connector.name);
       expect(fetched.displayName).toEqual("alchemy-test-connector");
       expect(fetched.labels?.env).toEqual("test");
@@ -120,16 +113,13 @@ test.provider(
             datasources: unlinkedDatasources,
             labels: { env: "prod" },
           });
-          const connector = yield* GCP.FirebaseDataConnect.ServicesConnector(
-            "Queries",
-            {
-              service: schema.service,
-              connectorId: created.connector.connectorId,
-              source: connectorSource,
-              displayName: "alchemy-prod-connector",
-              labels: { env: "prod", role: "query" },
-            },
-          );
+          const connector = yield* GCP.FirebaseDataConnect.ServicesConnector("Queries", {
+            service: schema.service,
+            connectorId: created.connector.connectorId,
+            source: connectorSource,
+            displayName: "alchemy-prod-connector",
+            labels: { env: "prod", role: "query" },
+          });
           return { service, schema, connector };
         }),
       );
@@ -141,10 +131,9 @@ test.provider(
         role: "query",
       });
 
-      const refetched =
-        yield* firebasedataconnect.getProjectsLocationsServicesConnectors({
-          name: created.connector.name,
-        });
+      const refetched = yield* firebasedataconnect.getProjectsLocationsServicesConnectors({
+        name: created.connector.name,
+      });
       expect(refetched.displayName).toEqual("alchemy-prod-connector");
       expect(refetched.labels?.env).toEqual("prod");
 

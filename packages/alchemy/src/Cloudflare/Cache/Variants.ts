@@ -64,13 +64,7 @@ export interface VariantsAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Variants = Resource<
-  TypeId,
-  VariantsProps,
-  VariantsAttributes,
-  never,
-  Providers
->;
+export type Variants = Resource<TypeId, VariantsProps, VariantsAttributes, never, Providers>;
 
 /**
  * The Variants cache setting of a Cloudflare zone
@@ -163,9 +157,7 @@ const desiredValue = (props: VariantsProps): VariantsValue => {
  * Normalize an observed `value` (whose entries may be `null` or readonly)
  * into the attribute shape: `null`/empty entries dropped, arrays copied.
  */
-const normalizeValue = (
-  observed: cache.GetVariantResponse["value"],
-): VariantsValue => {
+const normalizeValue = (observed: cache.GetVariantResponse["value"]): VariantsValue => {
   const value: VariantsValue = {};
   for (const key of EXTENSION_KEYS) {
     const types = observed[key];
@@ -198,15 +190,11 @@ export const VariantsProvider = () =>
           cache.getVariant({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Setting never configured on this zone — nothing to enumerate.
-            Effect.catchTag("VariantsNotConfigured", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("VariantsNotConfigured", () => Effect.succeed(undefined)),
             // Plan-gated zones reject the setting (`Forbidden`, code 1135
             // "not available for your plan type") or the route entirely
             // (`InvalidRoute`); skip them.
-            Effect.catchTag(["Forbidden", "InvalidRoute"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["Forbidden", "InvalidRoute"], () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -217,13 +205,8 @@ export const VariantsProvider = () =>
       const o = olds as VariantsProps;
       const n = news as VariantsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -234,9 +217,7 @@ export const VariantsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* cache.getVariant({ zoneId }).pipe(
         // The setting has never been written (or was deleted) — gone.
-        Effect.catchTag("VariantsNotConfigured", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("VariantsNotConfigured", () => Effect.succeed(undefined)),
         // Zone deleted out-of-band — the setting is gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
       );
@@ -253,20 +234,13 @@ export const VariantsProvider = () =>
       // 1. Observe — the setting may not exist yet (typed 404).
       const observed = yield* cache
         .getVariant({ zoneId })
-        .pipe(
-          Effect.catchTag("VariantsNotConfigured", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("VariantsNotConfigured", () => Effect.succeed(undefined)));
 
       // 2. Sync — PATCH both creates and replaces the full value, so a
       //    single upsert call converges missing and divergent states.
       //    Skip the API entirely when the observed value already matches.
       const desired = desiredValue(news);
-      if (
-        observed !== undefined &&
-        valuesEqual(normalizeValue(observed.value), desired)
-      ) {
+      if (observed !== undefined && valuesEqual(normalizeValue(observed.value), desired)) {
         return toAttributes(zoneId, observed);
       }
       const patched = yield* cache.patchVariant({ zoneId, value: desired });

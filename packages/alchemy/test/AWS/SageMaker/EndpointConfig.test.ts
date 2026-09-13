@@ -29,11 +29,7 @@ test.provider(
 const findConfig = (name: string) =>
   sagemaker
     .describeEndpointConfig({ EndpointConfigName: name })
-    .pipe(
-      Effect.catchTag("EndpointConfigNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.succeed(undefined)));
 
 test.provider(
   "create serverless endpoint config, verify out-of-band, destroy",
@@ -57,9 +53,7 @@ test.provider(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
           });
           const model = yield* Model("ConfigTestModel", {
             executionRoleArn: role.roleArn,
@@ -101,12 +95,7 @@ test.provider(
       expect(yield* findConfig(config.endpointConfigName)).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:sagemaker",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:sagemaker", "live"],
     timeout: 240_000,
   },
 );

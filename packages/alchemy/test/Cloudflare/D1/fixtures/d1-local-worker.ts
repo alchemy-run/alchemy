@@ -23,20 +23,12 @@ export default {
         "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
       );
       await env.DB.prepare("DELETE FROM users").run();
-      await env.DB.prepare("INSERT INTO users (name) VALUES (?)")
-        .bind("alice")
-        .run();
-      await env.DB.prepare("INSERT INTO users (name) VALUES (?)")
-        .bind("bob")
-        .run();
-      const all = await env.DB.prepare(
-        "SELECT name FROM users ORDER BY name",
-      ).all<{
+      await env.DB.prepare("INSERT INTO users (name) VALUES (?)").bind("alice").run();
+      await env.DB.prepare("INSERT INTO users (name) VALUES (?)").bind("bob").run();
+      const all = await env.DB.prepare("SELECT name FROM users ORDER BY name").all<{
         name: string;
       }>();
-      const first = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM users",
-      ).first<{ n: number }>();
+      const first = await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<{ n: number }>();
       return Response.json({
         names: all.results.map((r) => r.name),
         count: first?.n ?? null,
@@ -55,9 +47,7 @@ export default {
       return Response.json({ migrations: rows.results });
     }
     if (url.pathname === "/users") {
-      const rows = await env.DB.prepare(
-        "SELECT name FROM users ORDER BY name",
-      ).all<{
+      const rows = await env.DB.prepare("SELECT name FROM users ORDER BY name").all<{
         name: string;
       }>();
       return Response.json({ users: rows.results.map((r) => r.name) });

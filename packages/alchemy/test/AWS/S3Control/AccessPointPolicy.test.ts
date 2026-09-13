@@ -21,9 +21,7 @@ const findPolicy = (name: string) =>
     ),
   );
 
-class AccessPointStillExists extends Data.TaggedError(
-  "AccessPointStillExists",
-)<{
+class AccessPointStillExists extends Data.TaggedError("AccessPointStillExists")<{
   readonly name: string;
 }> {}
 
@@ -80,16 +78,12 @@ test.provider(
       // AWS normalizes stored policies (single-element arrays collapse to
       // plain strings), so compare the normalized form.
       const actions = parsed.Statement[0].Action;
-      expect(Array.isArray(actions) ? actions : [actions]).toEqual([
-        "s3:GetObject",
-      ]);
+      expect(Array.isArray(actions) ? actions : [actions]).toEqual(["s3:GetObject"]);
 
       // re-deploy the identical PolicyDocument — must be a clean no-op:
       // the stored policy is byte-for-byte unchanged afterwards.
       yield* stack.deploy(singleStatementStack);
-      const redeployedPolicy = yield* findPolicy(
-        deployed.accessPoint.accessPointName,
-      );
+      const redeployedPolicy = yield* findPolicy(deployed.accessPoint.accessPointName);
       expect(redeployedPolicy).toBe(policy);
 
       // update the policy document in place
@@ -123,9 +117,7 @@ test.provider(
         }),
       );
 
-      const updatedPolicy = yield* findPolicy(
-        deployed.accessPoint.accessPointName,
-      );
+      const updatedPolicy = yield* findPolicy(deployed.accessPoint.accessPointName);
       const updatedParsed = JSON.parse(updatedPolicy!) as {
         Statement: unknown[];
       };
@@ -133,9 +125,7 @@ test.provider(
 
       yield* stack.destroy();
       // policy (and its access point) are gone after destroy
-      const afterDestroy = yield* findPolicy(
-        deployed.accessPoint.accessPointName,
-      );
+      const afterDestroy = yield* findPolicy(deployed.accessPoint.accessPointName);
       expect(afterDestroy).toBeUndefined();
       yield* assertAccessPointDeleted(deployed.accessPoint.accessPointName);
     }),

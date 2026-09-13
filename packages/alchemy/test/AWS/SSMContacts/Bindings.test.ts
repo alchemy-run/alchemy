@@ -8,9 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Alchemy";
-import ContactsBindingsFunctionLive, {
-  ContactsBindingsFunction,
-} from "./bindings-handler.ts";
+import ContactsBindingsFunctionLive, { ContactsBindingsFunction } from "./bindings-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,10 +29,7 @@ test.provider(
           EngagementId: `arn:aws:ssm-contacts:${region}:${accountId}:engagement/alchemy-nonexistent-probe/00000000-0000-0000-0000-000000000000`,
         }),
       );
-      expect([
-        "ResourceNotFoundException",
-        "IncidentManagerNotOnboarded",
-      ]).toContain(error._tag);
+      expect(["ResourceNotFoundException", "IncidentManagerNotOnboarded"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:ssmcontacts", "live"] },
 );
@@ -72,10 +67,7 @@ test.provider(
           ContactChannelId: `arn:aws:ssm-contacts:${region}:${accountId}:contact-channel/alchemy-nonexistent-probe/11111111-1111-1111-1111-111111111111`,
         }),
       );
-      expect([
-        "ResourceNotFoundException",
-        "IncidentManagerNotOnboarded",
-      ]).toContain(error._tag);
+      expect(["ResourceNotFoundException", "IncidentManagerNotOnboarded"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:ssmcontacts", "live"] },
 );
@@ -101,12 +93,8 @@ const ensureReplicationSet = Effect.gen(function* () {
   const status = yield* incidents.getReplicationSet({ arn }).pipe(
     Effect.map((r) => r.replicationSet.status),
     Effect.repeat({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(60),
-      ]),
-      until: (status): boolean =>
-        status !== "CREATING" && status !== "UPDATING",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
+      until: (status): boolean => status !== "CREATING" && status !== "UPDATING",
     }),
   );
   expect(status).toBe("ACTIVE");
@@ -147,9 +135,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
               response.status === 200
                 ? response.json
                 : Effect.flatMap(response.text, (body) =>
-                    Effect.fail(
-                      new Error(`GET ${path} -> ${response.status}: ${body}`),
-                    ),
+                    Effect.fail(new Error(`GET ${path} -> ${response.status}: ${body}`)),
                   ),
             ),
           );
@@ -157,18 +143,12 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // Lambda URL cold-start + IAM propagation on the fresh policy.
       const bindings = (yield* getJson("/bindings").pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential("2 seconds"),
-            Schedule.recurs(30),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(30)]),
         }),
       )) as { bound: string[] };
       expect(bindings.bound).toHaveLength(19);
 
-      const shifts = (yield* getJson("/shifts")) as {
-        shifts: number;
-        previewShifts: number;
-      };
+      const shifts = (yield* getJson("/shifts")) as { shifts: number; previewShifts: number };
       expect(shifts.previewShifts).toBeGreaterThanOrEqual(0);
 
       const override = (yield* getJson("/override")) as {
@@ -187,10 +167,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       expect(engage.engagementArn).toContain(":engagement/");
       expect(engage.subject).toBe("alchemy bindings fixture engagement");
 
-      const pages = (yield* getJson("/pages")) as {
-        engagements: number;
-        pages: number;
-      };
+      const pages = (yield* getJson("/pages")) as { engagements: number; pages: number };
       expect(pages.engagements).toBeGreaterThanOrEqual(1);
 
       const channel = (yield* getJson("/channel")) as { ok: boolean };

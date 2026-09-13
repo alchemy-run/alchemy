@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -16,17 +16,12 @@ const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT?.trim().replace(
 );
 const account = billingAccountId ?? "";
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getBillingAccountsLocationsBuckets({ name }).pipe(
     Effect.map((bucket) =>
-      bucket.lifecycleState === "DELETE_REQUESTED"
-        ? ("gone" as const)
-        : ("found" as const),
+      bucket.lifecycleState === "DELETE_REQUESTED" ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({

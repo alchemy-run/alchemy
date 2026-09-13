@@ -7,15 +7,9 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
-});
+const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update rules, and delete group",
@@ -50,10 +44,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.Group("BasicGroup", {
-            include: [
-              { emailDomain: { domain: "example.com" } },
-              { geo: { countryCode: "US" } },
-            ],
+            include: [{ emailDomain: { domain: "example.com" } }, { geo: { countryCode: "US" } }],
             exclude: [{ email: { email: "intern@example.com" } }],
             require: [{ emailDomain: { domain: "example.com" } }],
           });
@@ -73,11 +64,7 @@ test.provider(
 
       const afterDestroy = yield* zeroTrust
         .getAccessGroupForAccount({ accountId, groupId: group.groupId })
-        .pipe(
-          Effect.catchTag("AccessGroupNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy?.id ?? undefined).toBeUndefined();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
@@ -171,13 +158,8 @@ test.provider(
         }),
       );
 
-      const actual = yield* zeroTrust.getAccessPolicy({
-        accountId,
-        policyId: policy.policyId,
-      });
-      const includes = (actual.include ?? []) as Array<{
-        group?: { id: string };
-      }>;
+      const actual = yield* zeroTrust.getAccessPolicy({ accountId, policyId: policy.policyId });
+      const includes = (actual.include ?? []) as Array<{ group?: { id: string } }>;
       expect(includes[0]?.group?.id).toEqual(group.groupId);
 
       yield* stack.destroy();

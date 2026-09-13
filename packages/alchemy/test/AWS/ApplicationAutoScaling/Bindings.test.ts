@@ -16,17 +16,11 @@ import ApplicationAutoScalingTestFunctionLive, {
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "ApplicationAutoScalingBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "ApplicationAutoScalingBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -45,19 +39,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -75,14 +64,10 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "ApplicationAutoScaling test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("ApplicationAutoScaling test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "ApplicationAutoScaling test setup: deploying fixture",
-        );
+        yield* Effect.logInfo("ApplicationAutoScaling test setup: deploying fixture");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* ApplicationAutoScalingTestFunction;
@@ -100,9 +85,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -120,9 +103,9 @@ describe.sequential(
     describe("binding registration", () => {
       test.provider("both capabilities initialize in the runtime", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/bindings`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).bound).toEqual([
             "describeScalingActivities",
             "getPredictiveScalingForecast",
@@ -134,9 +117,9 @@ describe.sequential(
     describe("DescribeScalingActivities", () => {
       test.provider("lists the fixture target's scaling activities", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/scaling-activities`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/scaling-activities`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           // A fresh target typically has zero activities — assert the call
           // round-trips with a well-formed page (the identity triple was
           // injected and the IAM grant works).
@@ -145,46 +128,38 @@ describe.sequential(
       );
     });
 
-    describe(
-      "ScalingActivityEventSource",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "consumeScalingActivityEvents created the EventBridge rule",
-          (_stack) =>
-            Effect.gen(function* () {
-              // The rule's physical name starts with the stack name but the
-              // 64-char rule-name budget truncates the long
-              // `BindingsTarget-ScalingActivityEvents` logical id, so scope by
-              // NamePrefix and match on the rule's event pattern instead
-              // (bounded manual pagination).
-              let rule: eventbridge.Rule | undefined;
-              let nextToken: string | undefined;
-              for (let page = 0; page < 10 && !rule; page++) {
-                const result = yield* eventbridge.listRules({
-                  NamePrefix: "ApplicationAutoScalingBindings",
-                  NextToken: nextToken,
-                });
-                rule = (result.Rules ?? []).find((candidate) =>
-                  candidate.EventPattern?.includes(
-                    "aws.application-autoscaling",
-                  ),
-                );
-                nextToken = result.NextToken;
-                if (!nextToken) break;
-              }
-              expect(rule).toBeDefined();
-              expect(rule?.EventPattern).toContain(
-                "aws.application-autoscaling",
+    describe("ScalingActivityEventSource", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider(
+        "consumeScalingActivityEvents created the EventBridge rule",
+        (_stack) =>
+          Effect.gen(function* () {
+            // The rule's physical name starts with the stack name but the
+            // 64-char rule-name budget truncates the long
+            // `BindingsTarget-ScalingActivityEvents` logical id, so scope by
+            // NamePrefix and match on the rule's event pattern instead
+            // (bounded manual pagination).
+            let rule: eventbridge.Rule | undefined;
+            let nextToken: string | undefined;
+            for (let page = 0; page < 10 && !rule; page++) {
+              const result = yield* eventbridge.listRules({
+                NamePrefix: "ApplicationAutoScalingBindings",
+                NextToken: nextToken,
+              });
+              rule = (result.Rules ?? []).find((candidate) =>
+                candidate.EventPattern?.includes("aws.application-autoscaling"),
               );
-              expect(rule?.EventPattern).toContain(
-                "Application Auto Scaling Scaling Activity State Change",
-              );
-            }),
-          { timeout: 60_000 },
-        );
-      },
-    );
+              nextToken = result.NextToken;
+              if (!nextToken) break;
+            }
+            expect(rule).toBeDefined();
+            expect(rule?.EventPattern).toContain("aws.application-autoscaling");
+            expect(rule?.EventPattern).toContain(
+              "Application Auto Scaling Scaling Activity State Change",
+            );
+          }),
+        { timeout: 60_000 },
+      );
+    });
 
     describe("GetPredictiveScalingForecast", () => {
       // Ungated probe (runs in the test process, which resolves distilled from
@@ -210,9 +185,7 @@ describe.sequential(
             );
             expect(Result.isFailure(result)).toBe(true);
             if (Result.isFailure(result)) {
-              expect(result.failure._tag).toBe(
-                "PredictiveScalingForecastNotSupported",
-              );
+              expect(result.failure._tag).toBe("PredictiveScalingForecastNotSupported");
             }
           }),
       );
@@ -226,18 +199,15 @@ describe.sequential(
       // in the bundle) or its base wire tag (the deployed bundle resolves
       // distilled's built `lib/`, which only picks up the patch after the
       // coordinator rebuilds distilled).
-      test.provider(
-        "runtime binding surfaces the typed rejection through the Lambda",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/forecast`),
-            ).pipe(Effect.flatMap((r) => r.json));
-            expect([
-              "PredictiveScalingForecastNotSupported",
-              "AccessDeniedException",
-            ]).toContain((response as any).tag);
-          }),
+      test.provider("runtime binding surfaces the typed rejection through the Lambda", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/forecast`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
+          expect(["PredictiveScalingForecastNotSupported", "AccessDeniedException"]).toContain(
+            (response as any).tag,
+          );
+        }),
       );
     });
   },

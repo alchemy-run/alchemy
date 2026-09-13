@@ -34,9 +34,7 @@ export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(
         if (action === "serialization" && request.method === "POST") {
           const client = yield* objects.getByName(name);
           return yield* HttpServerResponse.json({
-            changed: yield* client
-              .invalidateSocketSerialization()
-              .pipe(Effect.orDie),
+            changed: yield* client.invalidateSocketSerialization().pipe(Effect.orDie),
           });
         }
         if (action === "abort" && request.method === "POST") {
@@ -44,24 +42,19 @@ export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(
           return yield* client.abort().pipe(
             Effect.matchCause({
               onFailure: () => HttpServerResponse.json({ aborted: true }),
-              onSuccess: () =>
-                HttpServerResponse.json({ aborted: false }, { status: 500 }),
+              onSuccess: () => HttpServerResponse.json({ aborted: false }, { status: 500 }),
             }),
             Effect.flatten,
           );
         }
         if (action === "stats") {
           const client = yield* objects.getByName(name);
-          return yield* HttpServerResponse.json(
-            yield* client.stats().pipe(Effect.orDie),
-          );
+          return yield* HttpServerResponse.json(yield* client.stats().pipe(Effect.orDie));
         }
         return HttpServerResponse.text("ready");
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
         ),
       ),
     };

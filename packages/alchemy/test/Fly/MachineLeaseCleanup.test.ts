@@ -57,9 +57,7 @@ test.provider(
           yield* Effect.gen(function* () {
             const scope = yield* Scope.make();
             yield* Effect.addFinalizer((exit) =>
-              Deferred.succeed(resume, undefined).pipe(
-                Effect.andThen(Scope.close(scope, exit)),
-              ),
+              Deferred.succeed(resume, undefined).pipe(Effect.andThen(Scope.close(scope, exit))),
             );
             const leases = yield* makeMachineLeases(target.appName).pipe(
               Effect.provideService(Scope.Scope, scope),
@@ -121,10 +119,7 @@ test.provider(
                 Effect.timeout("10 seconds"),
               );
             expect(absent).toBe(true);
-          }).pipe(
-            Effect.provideService(HttpClient.HttpClient, observed),
-            Effect.scoped,
-          );
+          }).pipe(Effect.provideService(HttpClient.HttpClient, observed), Effect.scoped);
         }).pipe(Effect.scoped);
       } finally {
         yield* stack.destroy();

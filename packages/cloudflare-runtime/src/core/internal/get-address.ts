@@ -22,9 +22,7 @@ const UNSPECIFIED_ADDRESSES: ReadonlySet<string> = new Set([
 export const toConnectableHost = (host: string): string =>
   UNSPECIFIED_ADDRESSES.has(host) ? "127.0.0.1" : host;
 
-export const getAddress = (
-  server: NodeHttp.Server,
-): Effect.Effect<string, SystemError> => {
+export const getAddress = (server: NodeHttp.Server): Effect.Effect<string, SystemError> => {
   const address = server.address();
   if (address === null) {
     return Effect.fail(
@@ -38,7 +36,5 @@ export const getAddress = (
   if (typeof address === "string") {
     return Effect.succeed(address);
   }
-  return Effect.succeed(
-    `${toConnectableHost(address.address)}:${address.port}`,
-  );
+  return Effect.succeed(`${toConnectableHost(address.address)}:${address.port}`);
 };

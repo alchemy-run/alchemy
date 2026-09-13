@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import { GcpEnvironment } from "./Environment.ts";
 
-export type {
-  RegionalEndpointMode,
-  RegionName,
-} from "@distilled.cloud/gcp/Region";
+export type { RegionalEndpointMode, RegionName } from "@distilled.cloud/gcp/Region";
 
 /**
  * Override the default GCP region — the region regional resources land in
@@ -35,9 +32,8 @@ export type {
  * );
  * ```
  */
-export const Region = (
-  region: DistilledRegion.RegionName,
-): Layer.Layer<DistilledRegion.Region> => DistilledRegion.of(region);
+export const Region = (region: DistilledRegion.RegionName): Layer.Layer<DistilledRegion.Region> =>
+  DistilledRegion.of(region);
 
 /**
  * Route requests to Google's regional endpoints
@@ -60,8 +56,7 @@ export const Region = (
  */
 export const RegionalEndpoints = (
   mode: DistilledRegion.RegionalEndpointMode,
-): Layer.Layer<DistilledRegion.RegionalEndpoints> =>
-  DistilledRegion.regionalEndpoints(mode);
+): Layer.Layer<DistilledRegion.RegionalEndpoints> => DistilledRegion.regionalEndpoints(mode);
 
 /** The effective default region in the current scope. */
 export const currentRegion = Effect.suspend(() =>

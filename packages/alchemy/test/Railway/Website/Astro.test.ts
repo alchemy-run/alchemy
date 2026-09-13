@@ -14,33 +14,17 @@ import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/astro-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/astro-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "astro.config.mjs",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "astro.config.mjs", "src", "public"];
 
-const readService = Query.fn((id: string) => ({
-  deletedAt: RailwayApi.service({ id }).deletedAt,
-}));
+const readService = Query.fn((id: string) => ({ deletedAt: RailwayApi.service({ id }).deletedAt }));
 
 const waitUntilGone = (serviceId: string) =>
   readService(serviceId).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -68,14 +52,7 @@ test.provider(
             project,
             environment,
             rootDir,
-            memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "astro.config.mjs",
-              ],
-            },
+            memo: { include: ["src/**", "public/**", "package.json", "astro.config.mjs"] },
           });
           return { site };
         }),
@@ -90,26 +67,17 @@ test.provider(
         timeout: "90 seconds",
         label: "astro ssr home",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "ASTRO_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "astro api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "ASTRO_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "astro api route",
+      });
 
       const client = yield* HttpClient.HttpClient;
       const health = yield* client.get(`${url!}/health`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`health returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 6,
-        }),
+        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }),
       );
       expect(health).toContain("ok");
 

@@ -16,11 +16,7 @@ type TypeId = typeof TypeId;
  * The cloud-provider object storage a Cloud Connector rule routes matching
  * traffic to.
  */
-export type CloudConnectorProvider =
-  | "aws_s3"
-  | "cloudflare_r2"
-  | "gcp_storage"
-  | "azure_storage";
+export type CloudConnectorProvider = "aws_s3" | "cloudflare_r2" | "gcp_storage" | "azure_storage";
 
 /**
  * A single Cloud Connector rule routing matching traffic directly to a
@@ -92,13 +88,7 @@ export interface RulesAttributes {
   rules: RuleAttribute[];
 }
 
-export type Rules = Resource<
-  TypeId,
-  RulesProps,
-  RulesAttributes,
-  never,
-  Providers
->;
+export type Rules = Resource<TypeId, RulesProps, RulesAttributes, never, Providers>;
 
 /**
  * The ordered list of Cloud Connector rules for a Cloudflare zone.
@@ -198,13 +188,8 @@ export const RulesProvider = () =>
       const n = news as RulesProps;
       // zoneId is the resource's identity; compare only once both sides
       // are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        typeof n.zoneId === "string" &&
-        oldZoneId !== undefined &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (typeof n.zoneId === "string" && oldZoneId !== undefined && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -273,9 +258,7 @@ const listObservedRules = (zoneId: string) =>
     Stream.runCollect,
     Effect.map((chunk): RuleAttribute[] =>
       Array.from(chunk).flatMap((rule) =>
-        rule.expression == null ||
-        rule.provider == null ||
-        rule.parameters?.host == null
+        rule.expression == null || rule.provider == null || rule.parameters?.host == null
           ? []
           : [
               {
@@ -292,9 +275,7 @@ const listObservedRules = (zoneId: string) =>
     // A zone that has never had Cloud Connector rules configured reports
     // "could not find entrypoint ruleset" (code 10003) — that's just an
     // empty list.
-    Effect.catchTag("CloudConnectorRulesNotFound", () =>
-      Effect.succeed([] as RuleAttribute[]),
-    ),
+    Effect.catchTag("CloudConnectorRulesNotFound", () => Effect.succeed([] as RuleAttribute[])),
   );
 
 const rulesEqual = (

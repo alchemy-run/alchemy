@@ -19,11 +19,7 @@ import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import ApiLive, { Api } from "./src/Api.ts";
-import {
-  EntriesTable,
-  GuestbookCluster,
-  GuestbookNamespace,
-} from "./src/infra.ts";
+import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./src/infra.ts";
 import SeedJob from "./src/SeedJob.ts";
 
 export default Alchemy.Stack(

@@ -132,13 +132,7 @@ export type ShareAttributes = {
   modified: string;
 };
 
-export type Share = Resource<
-  TypeId,
-  ShareProps,
-  ShareAttributes,
-  never,
-  Providers
->;
+export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Providers>;
 
 /**
  * A Cloudflare resource share — shares account-level configuration (gateway
@@ -334,9 +328,7 @@ export const ShareProvider = () =>
       );
       for (const desired of desiredResources) {
         const match = liveResources.find(
-          (r) =>
-            r.resourceType === desired.resourceType &&
-            r.resourceId === desired.resourceId,
+          (r) => r.resourceType === desired.resourceType && r.resourceId === desired.resourceId,
         );
         if (!match) {
           yield* resourceSharing.createResource({
@@ -347,10 +339,7 @@ export const ShareProvider = () =>
             resourceAccountId: desired.resourceAccountId,
             meta: desired.meta,
           });
-        } else if (
-          JSON.stringify(match.meta ?? {}) !==
-          JSON.stringify(desired.meta ?? {})
-        ) {
+        } else if (JSON.stringify(match.meta ?? {}) !== JSON.stringify(desired.meta ?? {})) {
           yield* resourceSharing.updateResource({
             accountId: acct,
             shareId: observed.id,
@@ -361,9 +350,7 @@ export const ShareProvider = () =>
       }
       for (const live of liveResources) {
         const wanted = desiredResources.some(
-          (d) =>
-            d.resourceType === live.resourceType &&
-            d.resourceId === live.resourceId,
+          (d) => d.resourceType === live.resourceType && d.resourceId === live.resourceId,
         );
         if (!wanted) {
           yield* resourceSharing
@@ -411,16 +398,14 @@ const getShare = (accountId: string, shareId: string) =>
  * pick the oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  resourceSharing
-    .listResourceSharings({ accountId, kind: "sent", perPage: 50 })
-    .pipe(
-      Effect.map((list) =>
-        list.result
-          .filter((s) => s.name === name && s.status !== "deleted")
-          .sort((a, b) => a.created.localeCompare(b.created))
-          .at(0),
-      ),
-    );
+  resourceSharing.listResourceSharings({ accountId, kind: "sent", perPage: 50 }).pipe(
+    Effect.map((list) =>
+      list.result
+        .filter((s) => s.name === name && s.status !== "deleted")
+        .sort((a, b) => a.created.localeCompare(b.created))
+        .at(0),
+    ),
+  );
 
 const createShareName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

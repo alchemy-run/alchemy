@@ -15,9 +15,7 @@ const testLease = makeGuardDutyTestLease();
 beforeAll(testLease.acquire, { timeout: 240_000 });
 afterAll(testLease.release);
 
-const firstDetectorId = guardduty
-  .listDetectors({})
-  .pipe(Effect.map((r) => r.DetectorIds?.[0]));
+const firstDetectorId = guardduty.listDetectors({}).pipe(Effect.map((r) => r.DetectorIds?.[0]));
 
 // The GuardDuty detector is an account/region singleton. This test only runs
 // when the account has no detector — it must never disable a detector the user

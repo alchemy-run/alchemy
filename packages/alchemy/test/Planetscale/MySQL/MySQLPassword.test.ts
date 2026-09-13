@@ -10,14 +10,9 @@ import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({
-  providers: Planetscale.providers(),
-});
+const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
@@ -29,9 +24,7 @@ describe
       // passwords) against the live org, without provisioning anything.
       test.provider("list enumerates passwords (read-only)", () =>
         Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(
-            Planetscale.MySQLPassword,
-          );
+          const provider = yield* Provider.findProvider(Planetscale.MySQLPassword);
           const all = yield* provider.list();
 
           expect(Array.isArray(all)).toBe(true);
@@ -60,20 +53,15 @@ describe
                   name: "alchemy-mysql-pw-list",
                   clusterSize: "PS_10",
                 });
-                const password = yield* Planetscale.MySQLPassword(
-                  "ListPassword",
-                  {
-                    database,
-                    role: "reader",
-                  },
-                );
+                const password = yield* Planetscale.MySQLPassword("ListPassword", {
+                  database,
+                  role: "reader",
+                });
                 return { database, password };
               }),
             );
 
-            const provider = yield* Provider.findProvider(
-              Planetscale.MySQLPassword,
-            );
+            const provider = yield* Provider.findProvider(Planetscale.MySQLPassword);
             const all = yield* provider.list();
 
             expect(
@@ -86,10 +74,7 @@ describe
             ).toBe(true);
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -148,12 +133,9 @@ describe
             // Update the password (only name and cidrs should trigger update, not replace)
             const { updatedPassword } = yield* stack.deploy(
               Effect.gen(function* () {
-                const sameDatabase = yield* Planetscale.MySQLDatabase(
-                  "Database",
-                  {
-                    clusterSize: "PS_10",
-                  },
-                );
+                const sameDatabase = yield* Planetscale.MySQLDatabase("Database", {
+                  clusterSize: "PS_10",
+                });
 
                 const sameBranch = yield* Planetscale.MySQLBranch("Branch", {
                   database: sameDatabase,
@@ -161,15 +143,12 @@ describe
                   isProduction: false,
                 });
 
-                const updatedPassword = yield* Planetscale.MySQLPassword(
-                  "Password",
-                  {
-                    name: "test-updated-password-name",
-                    database: sameDatabase.name,
-                    branch: sameBranch.name,
-                    role: "reader",
-                  },
-                );
+                const updatedPassword = yield* Planetscale.MySQLPassword("Password", {
+                  name: "test-updated-password-name",
+                  database: sameDatabase.name,
+                  branch: sameBranch.name,
+                  role: "reader",
+                });
 
                 return { updatedPassword };
               }),
@@ -191,10 +170,7 @@ describe
 
             yield* stack.destroy();
 
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -245,16 +221,13 @@ describe
                   isProduction: false,
                 });
 
-                const replacedPassword = yield* Planetscale.MySQLPassword(
-                  "Password",
-                  {
-                    database,
-                    branch,
-                    role: "writer",
-                    ttl: 3600,
-                    cidrs: ["0.0.0.0/0"],
-                  },
-                );
+                const replacedPassword = yield* Planetscale.MySQLPassword("Password", {
+                  database,
+                  branch,
+                  role: "writer",
+                  ttl: 3600,
+                  cidrs: ["0.0.0.0/0"],
+                });
                 return { replacedPassword };
               }),
             );
@@ -288,10 +261,7 @@ describe
             expect(newFetched.role).toEqual("writer");
 
             yield* stack.destroy();
-            yield* waitForDatabaseToBeDeleted(
-              database.name,
-              database.organization,
-            );
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
       );
@@ -337,10 +307,7 @@ describe
             const { organization } = yield* yield* Planetscale.Credentials;
 
             // Database should still exist and be ready.
-            const liveDb = yield* Planetscale.waitForDatabaseReady(
-              organization,
-              dbName,
-            );
+            const liveDb = yield* Planetscale.waitForDatabaseReady(organization, dbName);
             expect(liveDb.name).toEqual(dbName);
 
             // Password should still exist (was not deleted via API).
@@ -355,19 +322,11 @@ describe
 
             // Manual cleanup for the test.
             yield* ps
-              .deletePassword({
-                organization,
-                database: dbName,
-                branch: "main",
-                id: password.id,
-              })
+              .deletePassword({ organization, database: dbName, branch: "main", id: password.id })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
             yield* ps
-              .deleteDatabase({
-                organization,
-                database: dbName,
-              })
+              .deleteDatabase({ organization, database: dbName })
               .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
             yield* waitForDatabaseToBeDeleted(dbName, organization);
@@ -377,24 +336,15 @@ describe
     },
   );
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
-  yield* ps
-    .getDatabase({
-      organization,
-      database,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
-      Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
+  yield* ps.getDatabase({ organization, database }).pipe(
+    Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
+    Effect.retry({
+      while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 });
 
 class DatabaseStillExists extends Data.TaggedError("DatabaseStillExists") {}

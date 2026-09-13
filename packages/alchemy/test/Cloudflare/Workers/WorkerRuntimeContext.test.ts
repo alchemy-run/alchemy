@@ -5,12 +5,7 @@ import { makeWorkerRuntimeContext } from "@/Cloudflare/Workers/WorkerRuntimeCont
 describe(
   "WorkerRuntimeContext",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"],
   },
   () => {
     it("dispatches an event to every listener for that event type", async () => {

@@ -20,9 +20,7 @@ export interface SignGetObjectUrlRequest {
 }
 
 /** The runtime could not resolve its own service account to sign with. */
-export class SignedUrlFailed extends Data.TaggedError(
-  "GCP.Storage.SignedUrlFailed",
-)<{
+export class SignedUrlFailed extends Data.TaggedError("GCP.Storage.SignedUrlFailed")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -76,6 +74,4 @@ export interface SignGetObjectUrl extends Binding.Service<
   >
 > {}
 
-export const SignGetObjectUrl = Binding.Service<SignGetObjectUrl>(
-  "GCP.Storage.SignGetObjectUrl",
-);
+export const SignGetObjectUrl = Binding.Service<SignGetObjectUrl>("GCP.Storage.SignGetObjectUrl");

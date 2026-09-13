@@ -36,12 +36,7 @@ export type TlsFeatureProfile =
   | "PROFILE_CUSTOM"
   | (string & {});
 
-export type MinTlsVersion =
-  | "TLS_1_0"
-  | "TLS_1_1"
-  | "TLS_1_2"
-  | "TLS_1_3"
-  | (string & {});
+export type MinTlsVersion = "TLS_1_0" | "TLS_1_1" | "TLS_1_2" | "TLS_1_3" | (string & {});
 
 export type TlsInspectionPolicyProps = {
   /**
@@ -210,22 +205,14 @@ const caPoolName = (project: string, location: string, caPool: string) => {
   return `projects/${project}/locations/${location}/caPools/${trimmed}`;
 };
 
-const trustConfigName = (
-  project: string,
-  location: string,
-  trustConfig: string | undefined,
-) => {
+const trustConfigName = (project: string, location: string, trustConfig: string | undefined) => {
   if (trustConfig === undefined || trustConfig.length === 0) return undefined;
   const trimmed = toResourcePath(trustConfig);
   if (trimmed.includes("/")) return trimmed;
   return `projects/${project}/locations/${location}/trustConfigs/${trimmed}`;
 };
 
-const toAttrs = (
-  policy: networksecurity.TlsInspectionPolicy,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (policy: networksecurity.TlsInspectionPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const owned = parseDescription(policy.description);
@@ -254,13 +241,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy
-        ? Effect.succeed(policy)
-        : Effect.fail(new TlsInspectionPolicyNotResolved({ name })),
+      policy ? Effect.succeed(policy) : Effect.fail(new TlsInspectionPolicyNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -274,8 +258,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new TlsInspectionPolicyStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -288,9 +271,7 @@ const listOwned = (project: string, region: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.tlsInspectionPolicies ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.tlsInspectionPolicies ?? [])),
       Stream.filter((policy) => hasOwnershipMarker(policy.description)),
       Stream.map((policy) => toAttrs(policy, project, region)),
       Stream.runCollect,
@@ -300,32 +281,20 @@ const listOwned = (project: string, region: string) =>
 
 export const TlsInspectionPolicyProvider = () =>
   Provider.succeed(TlsInspectionPolicy, {
-    stables: [
-      "name",
-      "tlsInspectionPolicyId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "tlsInspectionPolicyId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.tlsInspectionPolicyId ?? output?.tlsInspectionPolicyId;
+      const previousId = olds?.tlsInspectionPolicyId ?? output?.tlsInspectionPolicyId;
       const nextId = news.tlsInspectionPolicyId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -341,13 +310,9 @@ export const TlsInspectionPolicyProvider = () =>
         output?.tlsInspectionPolicyId,
         "tlsinsp",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, tlsInspectionPolicyId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, tlsInspectionPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -369,24 +334,12 @@ export const TlsInspectionPolicyProvider = () =>
         output?.tlsInspectionPolicyId,
         "tlsinsp",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        tlsInspectionPolicyId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, tlsInspectionPolicyId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const caPool = caPoolName(env.project, location, news.caPool);
-      const trustConfig = trustConfigName(
-        env.project,
-        location,
-        news.trustConfig,
-      );
+      const trustConfig = trustConfigName(env.project, location, news.trustConfig);
       const excludePublicCaSet = news.excludePublicCaSet === true;
       const customTlsFeatures = news.customTlsFeatures ?? [];
 
@@ -404,8 +357,7 @@ export const TlsInspectionPolicyProvider = () =>
               excludePublicCaSet,
               tlsFeatureProfile: news.tlsFeatureProfile,
               minTlsVersion: news.minTlsVersion,
-              customTlsFeatures:
-                customTlsFeatures.length > 0 ? customTlsFeatures : undefined,
+              customTlsFeatures: customTlsFeatures.length > 0 ? customTlsFeatures : undefined,
             },
           })
           .pipe(
@@ -426,22 +378,16 @@ export const TlsInspectionPolicyProvider = () =>
         return yield* new TlsInspectionPolicyNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const caPoolChanged = (current.caPool ?? "") !== caPool;
       const trustChanged = (current.trustConfig ?? "") !== (trustConfig ?? "");
-      const excludeChanged =
-        (current.excludePublicCaSet === true) !== excludePublicCaSet;
-      const profileChanged =
-        (current.tlsFeatureProfile ?? "") !== (news.tlsFeatureProfile ?? "");
-      const minTlsChanged =
-        (current.minTlsVersion ?? "") !== (news.minTlsVersion ?? "");
+      const excludeChanged = (current.excludePublicCaSet === true) !== excludePublicCaSet;
+      const profileChanged = (current.tlsFeatureProfile ?? "") !== (news.tlsFeatureProfile ?? "");
+      const minTlsChanged = (current.minTlsVersion ?? "") !== (news.minTlsVersion ?? "");
       const featuresChanged =
         !sameStringList(
           current.customTlsFeatures,
-          customTlsFeatures.length > 0
-            ? customTlsFeatures
-            : current.customTlsFeatures,
+          customTlsFeatures.length > 0 ? customTlsFeatures : current.customTlsFeatures,
         ) && news.customTlsFeatures !== undefined;
 
       if (
@@ -462,24 +408,21 @@ export const TlsInspectionPolicyProvider = () =>
           minTlsChanged ? "minTlsVersion" : undefined,
           featuresChanged ? "customTlsFeatures" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsTlsInspectionPolicies({
+        const operation = yield* networksecurity.patchProjectsLocationsTlsInspectionPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              caPool,
-              trustConfig,
-              excludePublicCaSet,
-              tlsFeatureProfile: news.tlsFeatureProfile,
-              minTlsVersion: news.minTlsVersion,
-              customTlsFeatures:
-                news.customTlsFeatures !== undefined
-                  ? customTlsFeatures
-                  : current.customTlsFeatures,
-            },
-          });
+            description: desiredDescription,
+            caPool,
+            trustConfig,
+            excludePublicCaSet,
+            tlsFeatureProfile: news.tlsFeatureProfile,
+            minTlsVersion: news.minTlsVersion,
+            customTlsFeatures:
+              news.customTlsFeatures !== undefined ? customTlsFeatures : current.customTlsFeatures,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);
       }

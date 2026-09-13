@@ -44,7 +44,6 @@ export interface ListManagedNotificationEvents extends Binding.Service<
   >
 > {}
 
-export const ListManagedNotificationEvents =
-  Binding.Service<ListManagedNotificationEvents>(
-    "AWS.Notifications.ListManagedNotificationEvents",
-  );
+export const ListManagedNotificationEvents = Binding.Service<ListManagedNotificationEvents>(
+  "AWS.Notifications.ListManagedNotificationEvents",
+);

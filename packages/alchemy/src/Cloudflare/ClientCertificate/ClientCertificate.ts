@@ -96,13 +96,7 @@ export interface Attributes {
   certificateAuthorityName: string | undefined;
 }
 
-export type ClientCertificate = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type ClientCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A zone-level API Shield mTLS client certificate signed by the Cloudflare
@@ -169,9 +163,7 @@ export const ClientCertificate = Resource<ClientCertificate>(TypeId, {
 /**
  * Returns true if the given value is a ClientCertificate resource.
  */
-export const isClientCertificate = (
-  value: unknown,
-): value is ClientCertificate =>
+export const isClientCertificate = (value: unknown): value is ClientCertificate =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ClientCertificateProvider = () =>
@@ -212,19 +204,17 @@ export const ClientCertificateProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          clientCertificates.listClientCertificates
-            .pages({ zoneId: zone.id, status: "all" })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .filter((cert) => !isGone(cert.status))
-                    .map((cert): Attributes => toAttributes(cert, zone.id)),
-                ),
+          clientCertificates.listClientCertificates.pages({ zoneId: zone.id, status: "all" }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((cert) => !isGone(cert.status))
+                  .map((cert): Attributes => toAttributes(cert, zone.id)),
               ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -243,11 +233,7 @@ export const ClientCertificateProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -261,10 +247,7 @@ export const ClientCertificateProvider = () =>
       // asynchronously revoking) certificate stays listed on the zone forever
       // — revocation is the delete semantic, so report it as gone.
       if (output?.clientCertificateId) {
-        const observed = yield* getCertificate(
-          zoneId,
-          output.clientCertificateId,
-        );
+        const observed = yield* getCertificate(zoneId, output.clientCertificateId);
         if (observed && !isGone(observed.status)) {
           return toAttributes(observed, zoneId);
         }
@@ -328,10 +311,7 @@ export const ClientCertificateProvider = () =>
       // DELETE revokes the certificate. Revoked certificates remain listed
       // on the zone — observe first and treat already-revoked (or already
       // revoking) as done so delete is idempotent.
-      const observed = yield* getCertificate(
-        output.zoneId,
-        output.clientCertificateId,
-      );
+      const observed = yield* getCertificate(output.zoneId, output.clientCertificateId);
       if (!observed || isGone(observed.status)) {
         return;
       }
@@ -363,9 +343,7 @@ type ObservedCertificate = clientCertificates.GetClientCertificateResponse;
 const getCertificate = (zoneId: string, clientCertificateId: string) =>
   clientCertificates.getClientCertificate({ zoneId, clientCertificateId }).pipe(
     Effect.map((cert): ObservedCertificate | undefined => cert),
-    Effect.catchTag("ClientCertificateNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ClientCertificateNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -377,20 +355,18 @@ const getCertificate = (zoneId: string, clientCertificateId: string) =>
  * outgoing certificate for the desired one.
  */
 const findByCsr = (zoneId: string, csr: string, validityDays: number) =>
-  clientCertificates.listClientCertificates
-    .items({ zoneId, status: "all" })
-    .pipe(
-      Stream.filter(
-        (cert) =>
-          !isGone(cert.status) &&
-          cert.validityDays === validityDays &&
-          typeof cert.csr === "string" &&
-          normalizePem(cert.csr) === normalizePem(csr),
-      ),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-      Effect.map((cert): ObservedCertificate | undefined => cert),
-    );
+  clientCertificates.listClientCertificates.items({ zoneId, status: "all" }).pipe(
+    Stream.filter(
+      (cert) =>
+        !isGone(cert.status) &&
+        cert.validityDays === validityDays &&
+        typeof cert.csr === "string" &&
+        normalizePem(cert.csr) === normalizePem(csr),
+    ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((cert): ObservedCertificate | undefined => cert),
+  );
 
 /**
  * A certificate is "gone" once it is `revoked` or asynchronously transitioning
@@ -407,10 +383,7 @@ const isGone = (status: string | null | undefined): boolean =>
 const normalizePem = (pem: string | undefined): string | undefined =>
   pem?.replace(/\r\n/g, "\n").trim();
 
-const toAttributes = (
-  cert: ObservedCertificate,
-  zoneId: string,
-): Attributes => ({
+const toAttributes = (cert: ObservedCertificate, zoneId: string): Attributes => ({
   clientCertificateId: cert.id!,
   zoneId,
   certificate: cert.certificate ?? "",

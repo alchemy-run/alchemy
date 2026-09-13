@@ -37,10 +37,7 @@ export interface BatchDeleteDocument extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchDeleteDocumentRequest,
-    ) => Effect.Effect<
-      qbusiness.BatchDeleteDocumentResponse,
-      qbusiness.BatchDeleteDocumentError
-    >
+    ) => Effect.Effect<qbusiness.BatchDeleteDocumentResponse, qbusiness.BatchDeleteDocumentError>
   >
 > {}
 export const BatchDeleteDocument = Binding.Service<BatchDeleteDocument>(

@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vmmigration from "@distilled.cloud/gcp/vmmigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  dummyAws,
-  logLevel,
-  currentProject,
-  runSourceLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { dummyAws, logLevel, currentProject, runSourceLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -46,13 +40,10 @@ test.provider.skipIf(!runSourceLifecycle)(
           const source = yield* GCP.VMMigration.Source("ConnectorSource", {
             aws: dummyAws,
           });
-          return yield* GCP.VMMigration.SourcesDatacenterConnector(
-            "Appliance",
-            {
-              source: source.name,
-              version: "1.0.0",
-            },
-          );
+          return yield* GCP.VMMigration.SourcesDatacenterConnector("Appliance", {
+            source: source.name,
+            version: "1.0.0",
+          });
         }),
       );
 
@@ -61,10 +52,9 @@ test.provider.skipIf(!runSourceLifecycle)(
       expect(created.source).toContain("/sources/");
       expect(created.version).toEqual("1.0.0");
 
-      const fetched =
-        yield* vmmigration.getProjectsLocationsSourcesDatacenterConnectors({
-          name: created.name,
-        });
+      const fetched = yield* vmmigration.getProjectsLocationsSourcesDatacenterConnectors({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.version).toContain("alchemy-id=");
 

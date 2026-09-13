@@ -5,10 +5,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import { orgParent, organizationOf } from "./names.ts";
 import { hasOwnershipMarker } from "./ownership.ts";
 
-export const currentOrganization = (
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const currentOrganization = (explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     const env = yield* GcpEnvironment.current;
     return organizationOf(explicit, existing, env.project);

@@ -73,9 +73,7 @@ const rawD1Binding = (databaseId: string): BindingHook =>
 export const withLocalD1Query = <A, E, R>(
   databaseId: string,
   use: (
-    query: (
-      body: D1QueryBody,
-    ) => Effect.Effect<D1QueryResult, LocalD1QueryError>,
+    query: (body: D1QueryBody) => Effect.Effect<D1QueryResult, LocalD1QueryError>,
   ) => Effect.Effect<A, E, R>,
 ) =>
   Effect.scoped(

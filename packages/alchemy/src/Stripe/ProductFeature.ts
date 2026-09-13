@@ -98,10 +98,7 @@ export const ProductFeature = Resource<ProductFeature>("Stripe.ProductFeature");
 
 type ProductFeatureAttributes = ProductFeature["Attributes"];
 
-const toAttrs = (
-  product: string,
-  feature: StripeProductFeature,
-): ProductFeatureAttributes => ({
+const toAttrs = (product: string, feature: StripeProductFeature): ProductFeatureAttributes => ({
   id: feature.id,
   product,
   entitlementFeature: feature.entitlement_feature.id,
@@ -188,9 +185,7 @@ const observe = Effect.fn(function* (input: {
   }
   if (input.product !== undefined && input.entitlementFeature !== undefined) {
     const features = yield* listFeatures(input.product);
-    return features.find(
-      (feature) => feature.entitlement_feature.id === input.entitlementFeature,
-    );
+    return features.find((feature) => feature.entitlement_feature.id === input.entitlementFeature);
   }
   return undefined;
 });
@@ -220,13 +215,10 @@ export const ProductFeatureProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const product =
-        output?.product ??
-        (typeof olds?.product === "string" ? olds.product : undefined);
+        output?.product ?? (typeof olds?.product === "string" ? olds.product : undefined);
       const entitlementFeature =
         output?.entitlementFeature ??
-        (typeof olds?.entitlementFeature === "string"
-          ? olds.entitlementFeature
-          : undefined);
+        (typeof olds?.entitlementFeature === "string" ? olds.entitlementFeature : undefined);
       const existing = yield* observe({
         product,
         id: output?.id,
@@ -244,9 +236,7 @@ export const ProductFeatureProvider = () =>
         products,
         (product) =>
           listFeatures(product.id).pipe(
-            Effect.map((features) =>
-              features.map((feature) => toAttrs(product.id, feature)),
-            ),
+            Effect.map((features) => features.map((feature) => toAttrs(product.id, feature))),
           ),
         { concurrency: LIST_CONCURRENCY },
       );
@@ -259,10 +249,7 @@ export const ProductFeatureProvider = () =>
         id: output?.id,
         entitlementFeature: news.entitlementFeature,
       });
-      if (
-        current !== undefined &&
-        shouldReplace(news, toAttrs(news.product, current))
-      ) {
+      if (current !== undefined && shouldReplace(news, toAttrs(news.product, current))) {
         current = undefined;
       }
 

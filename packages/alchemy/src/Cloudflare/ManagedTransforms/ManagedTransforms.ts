@@ -100,13 +100,7 @@ export interface Attributes {
   initialResponseHeaders: Record<string, boolean>;
 }
 
-export type ManagedTransforms = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type ManagedTransforms = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * The managed request/response header transforms of a Cloudflare zone
@@ -179,9 +173,7 @@ export const ManagedTransforms = Resource<ManagedTransforms>(TypeId, {
 /**
  * Returns true if the given value is a ManagedTransforms resource.
  */
-export const isManagedTransforms = (
-  value: unknown,
-): value is ManagedTransforms =>
+export const isManagedTransforms = (value: unknown): value is ManagedTransforms =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ManagedTransformsProvider = () =>
@@ -222,11 +214,7 @@ export const ManagedTransformsProvider = () =>
       const n = news as Props;
       // zoneId is Input<string>; compare only when both sides are concrete.
       const oldZone = output?.zoneId ?? o.zoneId;
-      if (
-        typeof oldZone === "string" &&
-        typeof n.zoneId === "string" &&
-        oldZone !== n.zoneId
-      ) {
+      if (typeof oldZone === "string" && typeof n.zoneId === "string" && oldZone !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -244,10 +232,8 @@ export const ManagedTransformsProvider = () =>
       return toAttributes(
         zoneId,
         observed,
-        output?.initialRequestHeaders ??
-          snapshot(observed.managedRequestHeaders),
-        output?.initialResponseHeaders ??
-          snapshot(observed.managedResponseHeaders),
+        output?.initialRequestHeaders ?? snapshot(observed.managedRequestHeaders),
+        output?.initialResponseHeaders ?? snapshot(observed.managedResponseHeaders),
       );
     }),
 
@@ -256,30 +242,20 @@ export const ManagedTransformsProvider = () =>
       const zoneId = news.zoneId as string;
 
       // 1. Observe — the singleton always exists for a live zone.
-      let observed = normalize(
-        yield* managedTransforms.listManagedTransforms({ zoneId }),
-      );
+      let observed = normalize(yield* managedTransforms.listManagedTransforms({ zoneId }));
 
       // 2. Snapshot — capture pre-management enabled states once; `output`
       //    acts as the cache that keeps the very first observation sticky.
       const initialRequestHeaders =
-        output?.initialRequestHeaders ??
-        snapshot(observed.managedRequestHeaders);
+        output?.initialRequestHeaders ?? snapshot(observed.managedRequestHeaders);
       const initialResponseHeaders =
-        output?.initialResponseHeaders ??
-        snapshot(observed.managedResponseHeaders);
+        output?.initialResponseHeaders ?? snapshot(observed.managedResponseHeaders);
 
       // 3. Sync — diff the managed ids' desired enabled flags against the
       //    observed states and PATCH only the deltas. Unnamed transforms
       //    are never sent, so they stay exactly as found.
-      const requestDelta = delta(
-        news.requestHeaders ?? {},
-        observed.managedRequestHeaders,
-      );
-      const responseDelta = delta(
-        news.responseHeaders ?? {},
-        observed.managedResponseHeaders,
-      );
+      const requestDelta = delta(news.requestHeaders ?? {}, observed.managedRequestHeaders);
+      const responseDelta = delta(news.responseHeaders ?? {}, observed.managedResponseHeaders);
       if (requestDelta.length > 0 || responseDelta.length > 0) {
         observed = normalize(
           yield* managedTransforms.patchManagedTransform({
@@ -291,12 +267,7 @@ export const ManagedTransformsProvider = () =>
       }
 
       // 4. Return fresh attributes.
-      return toAttributes(
-        zoneId,
-        observed,
-        initialRequestHeaders,
-        initialResponseHeaders,
-      );
+      return toAttributes(zoneId, observed, initialRequestHeaders, initialResponseHeaders);
     }),
 
     delete: Effect.fn(function* ({ output, olds }) {
@@ -369,9 +340,7 @@ const observe = (zoneId: string) =>
 /**
  * Project an observed transform list onto an id → enabled snapshot map.
  */
-const snapshot = (
-  transforms: readonly ObservedTransform[],
-): Record<string, boolean> => {
+const snapshot = (transforms: readonly ObservedTransform[]): Record<string, boolean> => {
   const out: Record<string, boolean> = {};
   for (const t of transforms) out[t.id] = t.enabled;
   return out;

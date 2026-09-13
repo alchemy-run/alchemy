@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Canonical `list()` test (parent fan-out): secrets are sub-resources of a
 // Secrets Store and there is no account-wide secret enumeration API, so
@@ -33,9 +30,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.SecretsStore.Secret,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.SecretsStore.Secret);
       const all = yield* provider.list();
 
       expect(all.some((s) => s.secretId === deployed.secretId)).toBe(true);
@@ -58,17 +53,12 @@ test.provider(
   "read treats an unresolved parent store reference as missing",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.SecretsStore.Secret,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.SecretsStore.Secret);
       const attr = yield* provider.read!({
         id: "OrphanSecret",
         fqn: "OrphanSecret",
         instanceId: "orphan-instance",
-        olds: {
-          store: {} as never,
-          value: Redacted.make("sk-orphan"),
-        },
+        olds: { store: {} as never, value: Redacted.make("sk-orphan") },
         output: undefined,
       });
       expect(attr).toBeUndefined();

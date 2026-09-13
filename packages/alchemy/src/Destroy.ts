@@ -27,12 +27,10 @@ export const destroy = ({
 }) =>
   include !== undefined || exclude !== undefined
     ? Effect.die(
-        new Plan.InvalidResourceSelection({
-          message: "Filtered destroy is not supported.",
-        }),
+        new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
       )
-    : evalStack(
-        stack,
-        (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)),
-        { stage, dev, scope },
-      );
+    : evalStack(stack, (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)), {
+        stage,
+        dev,
+        scope,
+      });

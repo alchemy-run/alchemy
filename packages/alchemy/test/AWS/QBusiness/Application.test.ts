@@ -3,13 +3,7 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import {
-  Application,
-  DataSource,
-  Index,
-  Retriever,
-  WebExperience,
-} from "@/AWS/QBusiness";
+import { Application, DataSource, Index, Retriever, WebExperience } from "@/AWS/QBusiness";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -29,9 +23,7 @@ describe(
       (_stack) =>
         Effect.gen(function* () {
           const error = yield* qbusiness
-            .getApplication({
-              applicationId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-            })
+            .getApplication({ applicationId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" })
             .pipe(Effect.flip);
           expect(error._tag).toBe("ResourceNotFoundException");
         }),
@@ -70,8 +62,7 @@ describe(
           const created = yield* qbusiness
             .createApplication({
               displayName,
-              identityCenterInstanceArn:
-                "arn:aws:sso:::instance/ssoins-0000000000000000",
+              identityCenterInstanceArn: "arn:aws:sso:::instance/ssoins-0000000000000000",
             })
             .pipe(
               Effect.map((r) => r.applicationId),
@@ -82,41 +73,33 @@ describe(
                     Effect.map(
                       (r) =>
                         r.applications?.find(
-                          (a) =>
-                            a.displayName === displayName &&
-                            a.status !== "DELETING",
+                          (a) => a.displayName === displayName && a.status !== "DELETING",
                         )?.applicationId,
                     ),
                   ),
               ),
             );
           if (created === undefined) {
-            return yield* Effect.die(
-              new Error("no probe applicationId available"),
-            );
+            return yield* Effect.die(new Error("no probe applicationId available"));
           }
           const applicationId = created;
 
           yield* Effect.gen(function* () {
             // Converges to FAILED with a typed error detail.
-            const failed = yield* qbusiness
-              .getApplication({ applicationId })
-              .pipe(
-                Effect.repeat({
-                  schedule: Schedule.spaced("5 seconds"),
-                  until: (r) => r.status === "FAILED",
-                  times: 24,
-                }),
-              );
+            const failed = yield* qbusiness.getApplication({ applicationId }).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("5 seconds"),
+                until: (r) => r.status === "FAILED",
+                times: 24,
+              }),
+            );
             expect(failed.status).toBe("FAILED");
             expect(failed.error?.errorMessage).toContain("Identity Center");
           }).pipe(
             // Always delete the probe application, even if assertions fail.
             Effect.ensuring(
               qbusiness.deleteApplication({ applicationId }).pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed({}),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
                 Effect.ignore,
               ),
             ),
@@ -125,9 +108,7 @@ describe(
           // Deletion initiated — DELETING or gone.
           const after = yield* qbusiness.getApplication({ applicationId }).pipe(
             Effect.map((r) => r.status ?? "gone"),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("gone" as const),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
           );
           expect(["DELETING", "gone"]).toContain(after);
         }),
@@ -140,13 +121,10 @@ describe(
         Effect.gen(function* () {
           yield* stack.destroy();
 
-          const identityCenterInstanceArn =
-            process.env.QBUSINESS_IDC_INSTANCE_ARN;
+          const identityCenterInstanceArn = process.env.QBUSINESS_IDC_INSTANCE_ARN;
           if (!identityCenterInstanceArn) {
             return yield* Effect.die(
-              new Error(
-                "AWS_TEST_QBUSINESS runs require QBUSINESS_IDC_INSTANCE_ARN",
-              ),
+              new Error("AWS_TEST_QBUSINESS runs require QBUSINESS_IDC_INSTANCE_ARN"),
             );
           }
 
@@ -159,16 +137,12 @@ describe(
                   tags: { Environment: "test" },
                 });
 
-                const index = yield* Index("Docs", {
-                  applicationId: app.applicationId,
-                });
+                const index = yield* Index("Docs", { applicationId: app.applicationId });
 
                 const retriever = yield* Retriever("Docs", {
                   applicationId: app.applicationId,
                   type: "NATIVE_INDEX",
-                  configuration: {
-                    nativeIndexConfiguration: { indexId: index.indexId },
-                  },
+                  configuration: { nativeIndexConfiguration: { indexId: index.indexId } },
                 });
 
                 // Role the data source connector assumes; CUSTOM sources need
@@ -190,10 +164,7 @@ describe(
                       Statement: [
                         {
                           Effect: "Allow",
-                          Action: [
-                            "qbusiness:BatchPutDocument",
-                            "qbusiness:BatchDeleteDocument",
-                          ],
+                          Action: ["qbusiness:BatchPutDocument", "qbusiness:BatchDeleteDocument"],
                           Resource: ["*"],
                         },
                       ],
@@ -231,41 +202,30 @@ describe(
           expect(web.defaultEndpoint).toBeDefined();
 
           // Out-of-band verification via distilled.
-          const described = yield* qbusiness.getApplication({
-            applicationId: app.applicationId,
-          });
+          const described = yield* qbusiness.getApplication({ applicationId: app.applicationId });
           expect(described.status).toBe("ACTIVE");
 
           // Update in place — description flows through UpdateApplication.
           const updated = yield* deploy({ description: "updated by test" });
           expect(updated.app.applicationId).toBe(app.applicationId);
-          const redescribed = yield* qbusiness.getApplication({
-            applicationId: app.applicationId,
-          });
+          const redescribed = yield* qbusiness.getApplication({ applicationId: app.applicationId });
           expect(redescribed.description).toBe("updated by test");
 
           yield* stack.destroy();
 
           // Typed wait-until-gone.
           yield* Effect.gen(function* () {
-            const gone = yield* qbusiness
-              .getApplication({ applicationId: app.applicationId })
-              .pipe(
-                Effect.map((d) => d.status === "DELETING"),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
-              );
+            const gone = yield* qbusiness.getApplication({ applicationId: app.applicationId }).pipe(
+              Effect.map((d) => d.status === "DELETING"),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+            );
             if (!gone) {
               return yield* Effect.fail({ _tag: "StillExists" as const });
             }
           }).pipe(
             Effect.retry({
               while: (e: { _tag: string }) => e._tag === "StillExists",
-              schedule: Schedule.max([
-                Schedule.spaced("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(40)]),
             }),
           );
         }),
