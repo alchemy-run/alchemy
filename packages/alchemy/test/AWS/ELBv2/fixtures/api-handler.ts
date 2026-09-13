@@ -7,9 +7,7 @@ import * as Lambda from "@/AWS/Lambda";
 const main = import.meta.url;
 
 /** ALB Lambda target answering the `/api/*` path rule. */
-export class ApiTargetFunction extends Lambda.Function<Lambda.Function>()(
-  "ApiTargetFunction",
-) {}
+export class ApiTargetFunction extends Lambda.Function<Lambda.Function>()("ApiTargetFunction") {}
 
 export const ApiTargetFunctionLive = ApiTargetFunction.make(
   {

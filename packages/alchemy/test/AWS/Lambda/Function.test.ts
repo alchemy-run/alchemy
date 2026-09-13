@@ -13,19 +13,12 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
-const timeoutHandlerPath = fileURLToPath(
-  new URL("./timeout-handler.ts", import.meta.url),
-);
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
 );
 const lockfilePinnedHandlerPath = (format: "npm" | "bun" | "pnpm" | "yarn") =>
-  fileURLToPath(
-    new URL(
-      `./fixtures/lockfile-pinning/${format}/handler.ts`,
-      import.meta.url,
-    ),
-  );
+  fileURLToPath(new URL(`./fixtures/lockfile-pinning/${format}/handler.ts`, import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -59,26 +52,18 @@ test.provider(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Function URL returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`Function URL returned ${response.status}`)),
         ),
         Effect.tapError((error) => Effect.logError(error)),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
 
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("Hello, world!");
 
-      const invokePolicy = yield* getPolicyStatement(
-        functionName,
-        "FunctionURLAllowPublicInvoke",
-      );
+      const invokePolicy = yield* getPolicyStatement(functionName, "FunctionURLAllowPublicInvoke");
       expect(invokePolicy.Condition).toEqual({
         Bool: {
           "lambda:InvokedViaFunctionUrl": "true",
@@ -140,10 +125,7 @@ test.provider(
           () => new Error("Timeout update has not propagated yet"),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
       expect(updatedConfig.Configuration?.Timeout).toBe(45);
@@ -179,15 +161,10 @@ test.provider(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Function URL returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`Function URL returned ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
 
@@ -244,15 +221,10 @@ test.provider(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function URL returned ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function URL returned ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
           }),
         );
 
@@ -388,9 +360,7 @@ test.provider(
       const provider = yield* Provider.findProvider(AWS.Lambda.Function);
       const all = yield* provider.list();
 
-      expect(all.some((f) => f.functionName === deployed.functionName)).toBe(
-        true,
-      );
+      expect(all.some((f) => f.functionName === deployed.functionName)).toBe(true);
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(deployed.functionName);
@@ -448,10 +418,7 @@ test.provider(
       expect(updated.functionName).toBe(initial.functionName);
       expect(updated.functionUrl).toBeTruthy();
 
-      const config = yield* getFunctionUrlConfigWithAuth(
-        updated.functionName,
-        "AWS_IAM",
-      );
+      const config = yield* getFunctionUrlConfigWithAuth(updated.functionName, "AWS_IAM");
       expect(config.AuthType).toBe("AWS_IAM");
       expect(config.InvokeMode).toBe("RESPONSE_STREAM");
       expect(config.Cors).toEqual({
@@ -462,28 +429,17 @@ test.provider(
         MaxAge: 300,
       });
 
-      yield* waitForPolicyStatementAbsent(
-        updated.functionName,
-        "FunctionURLAllowPublicAccess",
-      );
-      yield* waitForPolicyStatementAbsent(
-        updated.functionName,
-        "FunctionURLAllowPublicInvoke",
-      );
+      yield* waitForPolicyStatementAbsent(updated.functionName, "FunctionURLAllowPublicAccess");
+      yield* waitForPolicyStatementAbsent(updated.functionName, "FunctionURLAllowPublicInvoke");
 
       const response = yield* HttpClient.get(updated.functionUrl!).pipe(
         Effect.flatMap((response) =>
           response.status === 403
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`IAM Function URL returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`IAM Function URL returned ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
       expect(response.status).toBe(403);
@@ -497,10 +453,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-const assertFunctionReady = Effect.fn(function* (
-  functionName: string,
-  marker: string,
-) {
+const assertFunctionReady = Effect.fn(function* (functionName: string, marker: string) {
   // Deploy must finish configuration propagation; these checks never retry.
   const { Configuration } = yield* Lambda.getFunction({
     FunctionName: functionName,
@@ -508,9 +461,7 @@ const assertFunctionReady = Effect.fn(function* (
   expect(Configuration?.State).toBe("Active");
   expect(Configuration?.LastUpdateStatus).toBe("Successful");
   const observed = Configuration?.Environment?.Variables?.READINESS_MARKER;
-  expect(
-    Redacted.isRedacted(observed) ? Redacted.value(observed) : observed,
-  ).toBe(marker);
+  expect(Redacted.isRedacted(observed) ? Redacted.value(observed) : observed).toBe(marker);
 
   const response = yield* Lambda.invoke({
     FunctionName: functionName,
@@ -544,9 +495,7 @@ const assertFunctionReady = Effect.fn(function* (
 // from the cloud (bounded retry to ride out delete propagation).
 const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
   yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`Function ${functionName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`Function ${functionName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -558,9 +507,7 @@ const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
 // stranded when deletion also waits for Lambda's asynchronous log flush.
 const assertRoleDeleted = Effect.fn(function* (roleName: string) {
   yield* iam.getRole({ RoleName: roleName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`Role ${roleName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`Role ${roleName} still exists`))),
     Effect.catchTag("NoSuchEntityException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
@@ -569,10 +516,7 @@ const assertRoleDeleted = Effect.fn(function* (roleName: string) {
   );
 });
 
-const getPolicyStatement = Effect.fn(function* (
-  functionName: string,
-  statementId: string,
-) {
+const getPolicyStatement = Effect.fn(function* (functionName: string, statementId: string) {
   return yield* findPolicyStatement(functionName, statementId).pipe(
     Effect.flatMap((statement) =>
       statement
@@ -601,10 +545,7 @@ const waitForPolicyStatementAbsent = Effect.fn(function* (
   );
 });
 
-const findPolicyStatement = Effect.fn(function* (
-  functionName: string,
-  statementId: string,
-) {
+const findPolicyStatement = Effect.fn(function* (functionName: string, statementId: string) {
   return yield* Lambda.getPolicy({ FunctionName: functionName }).pipe(
     Effect.flatMap(({ Policy }) =>
       Effect.try({
@@ -615,17 +556,12 @@ const findPolicyStatement = Effect.fn(function* (
               Condition?: unknown;
             }>;
           };
-          return policy.Statement?.find(
-            (statement) => statement.Sid === statementId,
-          );
+          return policy.Statement?.find((statement) => statement.Sid === statementId);
         },
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
       }),
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 });
 
@@ -654,9 +590,7 @@ const waitForReservedConcurrency = Effect.fn(function* (
     FunctionName: functionName,
   }).pipe(
     Effect.map((config) => config.ReservedConcurrentExecutions),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.filterOrFail(
       (actual) => actual === expected,
       () => new Error("Reserved concurrency update has not propagated yet"),

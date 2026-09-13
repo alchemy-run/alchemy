@@ -134,9 +134,7 @@ const tagRecordOf = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 const identityPoolArnOf = (region: string, accountId: string, id: string) =>
@@ -169,27 +167,19 @@ const canonical = (value: unknown) =>
       : v,
   );
 
-const hasDrift = (
-  name: string,
-  news: IdentityPoolProps,
-  observed: ci.IdentityPool,
-) => {
+const hasDrift = (name: string, news: IdentityPoolProps, observed: ci.IdentityPool) => {
   const desired = desiredConfig(name, news);
   const observedSubset = {
     IdentityPoolName: observed.IdentityPoolName,
     AllowUnauthenticatedIdentities: observed.AllowUnauthenticatedIdentities,
     AllowClassicFlow:
-      desired.AllowClassicFlow === undefined
-        ? undefined
-        : (observed.AllowClassicFlow ?? false),
+      desired.AllowClassicFlow === undefined ? undefined : (observed.AllowClassicFlow ?? false),
     SupportedLoginProviders:
       desired.SupportedLoginProviders === undefined
         ? undefined
         : tagRecordOf(observed.SupportedLoginProviders),
     DeveloperProviderName:
-      desired.DeveloperProviderName === undefined
-        ? undefined
-        : observed.DeveloperProviderName,
+      desired.DeveloperProviderName === undefined ? undefined : observed.DeveloperProviderName,
     OpenIdConnectProviderARNs:
       desired.OpenIdConnectProviderARNs === undefined
         ? undefined
@@ -203,9 +193,7 @@ const hasDrift = (
             ServerSideTokenCheck: p.ServerSideTokenCheck ?? undefined,
           })),
     SamlProviderARNs:
-      desired.SamlProviderARNs === undefined
-        ? undefined
-        : (observed.SamlProviderARNs ?? []),
+      desired.SamlProviderARNs === undefined ? undefined : (observed.SamlProviderARNs ?? []),
   };
   const normalizedDesired = {
     ...desired,
@@ -216,12 +204,10 @@ const hasDrift = (
   };
   const normalizedObserved = {
     ...observedSubset,
-    CognitoIdentityProviders: observedSubset.CognitoIdentityProviders?.map(
-      (p) => ({
-        ...p,
-        ServerSideTokenCheck: p.ServerSideTokenCheck ?? false,
-      }),
-    ),
+    CognitoIdentityProviders: observedSubset.CognitoIdentityProviders?.map((p) => ({
+      ...p,
+      ServerSideTokenCheck: p.ServerSideTokenCheck ?? false,
+    })),
   };
   return canonical(normalizedDesired) !== canonical(normalizedObserved);
 };
@@ -234,33 +220,20 @@ export const IdentityPoolProvider = () =>
         id: string,
         props: Pick<IdentityPoolProps, "identityPoolName">,
       ) {
-        return (
-          props.identityPoolName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.identityPoolName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const describePool = Effect.fn(function* (identityPoolId: string) {
         return yield* ci
           .describeIdentityPool({ IdentityPoolId: identityPoolId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const findPoolsByName = Effect.fn(function* (name: string) {
-        const pages = yield* ci.listIdentityPools
-          .pages({ MaxResults: 60 })
-          .pipe(Stream.runCollect);
+        const pages = yield* ci.listIdentityPools.pages({ MaxResults: 60 }).pipe(Stream.runCollect);
         const candidates = Array.from(pages)
           .flatMap((page) => page.IdentityPools ?? [])
-          .filter(
-            (pool) =>
-              pool.IdentityPoolName === name &&
-              pool.IdentityPoolId !== undefined,
-          );
+          .filter((pool) => pool.IdentityPoolName === name && pool.IdentityPoolId !== undefined);
         return yield* Effect.forEach(
           candidates,
           (candidate) => describePool(candidate.IdentityPoolId!),
@@ -282,11 +255,7 @@ export const IdentityPoolProvider = () =>
               .filter((pool) => pool.IdentityPoolId !== undefined)
               .map((pool) => ({
                 identityPoolId: pool.IdentityPoolId!,
-                identityPoolArn: identityPoolArnOf(
-                  region,
-                  accountId,
-                  pool.IdentityPoolId!,
-                ),
+                identityPoolArn: identityPoolArnOf(region, accountId, pool.IdentityPoolId!),
                 identityPoolName: pool.IdentityPoolName ?? "",
               }));
           }),
@@ -295,11 +264,7 @@ export const IdentityPoolProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const attributesOf = (pool: ci.IdentityPool) => ({
             identityPoolId: pool.IdentityPoolId,
-            identityPoolArn: identityPoolArnOf(
-              region,
-              accountId,
-              pool.IdentityPoolId,
-            ),
+            identityPoolArn: identityPoolArnOf(region, accountId, pool.IdentityPoolId),
             identityPoolName: pool.IdentityPoolName,
           });
           if (output?.identityPoolId !== undefined) {
@@ -334,12 +299,7 @@ export const IdentityPoolProvider = () =>
           if (observed === undefined) {
             const candidates = yield* findPoolsByName(name);
             for (const candidate of candidates) {
-              if (
-                yield* hasAlchemyTags(
-                  id,
-                  tagRecordOf(candidate.IdentityPoolTags),
-                )
-              ) {
+              if (yield* hasAlchemyTags(id, tagRecordOf(candidate.IdentityPoolTags))) {
                 observed = candidate;
                 break;
               }
@@ -362,21 +322,15 @@ export const IdentityPoolProvider = () =>
           }
 
           const identityPoolId = observed.IdentityPoolId;
-          const identityPoolArn = identityPoolArnOf(
-            region,
-            accountId,
-            identityPoolId,
-          );
+          const identityPoolArn = identityPoolArnOf(region, accountId, identityPoolId);
 
           // 3b. SYNC TAGS against OBSERVED cloud tags.
-          const observedTags = yield* ci
-            .listTagsForResource({ ResourceArn: identityPoolArn })
-            .pipe(
-              Effect.map((r) => tagRecordOf(r.Tags)),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed({} as Record<string, string>),
-              ),
-            );
+          const observedTags = yield* ci.listTagsForResource({ ResourceArn: identityPoolArn }).pipe(
+            Effect.map((r) => tagRecordOf(r.Tags)),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* ci.tagResource({
@@ -402,9 +356,7 @@ export const IdentityPoolProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* ci
             .deleteIdentityPool({ IdentityPoolId: output.identityPoolId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

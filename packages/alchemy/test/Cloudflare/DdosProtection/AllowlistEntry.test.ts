@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Advanced TCP Protection is a Magic Transit (Enterprise add-on)
 // entitlement. The testing account does not have it, so the full lifecycle
@@ -138,24 +135,20 @@ test.provider.skipIf(!magicTransit)(
 // Advanced TCP Protection entitlement the enumeration API rejects with the
 // typed `AdvancedTcpProtectionNotEntitled` error (Cloudflare code 8888), which
 // `list()` maps to a well-typed empty array — assert that here, ungated.
-test.provider(
-  "list returns a well-typed empty array without Magic Transit",
-  (stack) =>
-    Effect.gen(function* () {
-      if (magicTransit) return;
+test.provider("list returns a well-typed empty array without Magic Transit", (stack) =>
+  Effect.gen(function* () {
+    if (magicTransit) return;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.DdosAllowlistEntry,
-      );
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.DdosAllowlistEntry);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      expect(all).toEqual([]);
+    expect(Array.isArray(all)).toBe(true);
+    expect(all).toEqual([]);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Entitled accounts (CLOUDFLARE_TEST_MAGIC_TRANSIT set): deploy an entry and
@@ -168,25 +161,18 @@ test.provider.skipIf(!magicTransit)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry(
-            "ListEntry",
-            {
-              prefix: "203.0.113.0/24",
-              comment: "alchemy ddos allowlist list test",
-              enabled: false,
-            },
-          );
+          return yield* Cloudflare.DdosProtection.DdosAllowlistEntry("ListEntry", {
+            prefix: "203.0.113.0/24",
+            comment: "alchemy ddos allowlist list test",
+            enabled: false,
+          });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.DdosAllowlistEntry,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.DdosAllowlistEntry);
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.allowlistId === deployed.allowlistId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.allowlistId === deployed.allowlistId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

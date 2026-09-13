@@ -34,10 +34,7 @@ export function toDiscordBody(rawBody: string): string {
  * between entries, or at the next `## ` heading if the separator is
  * missing. Returns `undefined` if the tag isn't present.
  */
-export function extractTagBody(
-  changelog: string,
-  tag: string,
-): string | undefined {
+export function extractTagBody(changelog: string, tag: string): string | undefined {
   const heading = `## ${tag}\n`;
   const start = changelog.indexOf(heading);
   if (start === -1) return undefined;

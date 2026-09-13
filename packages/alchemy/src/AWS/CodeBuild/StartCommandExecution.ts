@@ -28,10 +28,7 @@ export interface StartCommandExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.StartCommandExecutionInput,
-    ) => Effect.Effect<
-      SVC.StartCommandExecutionOutput,
-      SVC.StartCommandExecutionError
-    >
+    ) => Effect.Effect<SVC.StartCommandExecutionOutput, SVC.StartCommandExecutionError>
   >
 > {}
 export const StartCommandExecution = Binding.Service<StartCommandExecution>(

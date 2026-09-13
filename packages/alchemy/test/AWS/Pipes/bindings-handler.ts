@@ -13,10 +13,9 @@ export class PipesBindingsFunction extends AWS.Lambda.Function<AWS.Lambda.Functi
   "PipesBindingsFunction",
 ) {}
 
-export class BoundPipe extends Context.Service<
-  BoundPipe,
-  { pipe: AWS.Pipes.Pipe }
->()("BoundPipe") {}
+export class BoundPipe extends Context.Service<BoundPipe, { pipe: AWS.Pipes.Pipe }>()(
+  "BoundPipe",
+) {}
 
 export const BoundPipeLive = Layer.effect(
   BoundPipe,
@@ -40,11 +39,7 @@ export const BoundPipeLive = Layer.effect(
           Statement: [
             {
               Effect: "Allow",
-              Action: [
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes",
-              ],
+              Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
               Resource: [source.queueArn],
             },
             {
@@ -112,9 +107,7 @@ export default PipesBindingsFunction.make(
             NamePrefix: yield* pipeName,
           });
           return yield* HttpServerResponse.json({
-            names: (Pipes ?? []).flatMap((p) =>
-              p.Name !== undefined ? [p.Name] : [],
-            ),
+            names: (Pipes ?? []).flatMap((p) => (p.Name !== undefined ? [p.Name] : [])),
           });
         }
 

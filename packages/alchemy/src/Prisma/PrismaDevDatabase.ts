@@ -38,8 +38,7 @@ const importPrismaDev = Effect.tryPromise({
   catch: toError("Failed to load @prisma/dev"),
 });
 
-const stableJson = (value: unknown) =>
-  Effect.sync(() => JSON.stringify(value) ?? "");
+const stableJson = (value: unknown) => Effect.sync(() => JSON.stringify(value) ?? "");
 
 const sanitizeName = (value: string) =>
   value.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "alchemy";
@@ -65,11 +64,7 @@ const parseUrl = (label: string, value: string) =>
 
 const normalizeConnectionString = Effect.fn(function* (value: string) {
   const url = yield* parseUrl("local Prisma", value);
-  if (
-    url.hostname === "localhost" ||
-    url.hostname === "::1" ||
-    url.hostname === "[::1]"
-  ) {
+  if (url.hostname === "localhost" || url.hostname === "::1" || url.hostname === "[::1]") {
     url.hostname = "127.0.0.1";
   }
   return url.toString();
@@ -81,20 +76,15 @@ const detailsFrom = Effect.fn(function* (value: string) {
     try: () => ({
       host: url.hostname || null,
       user: url.username ? decodeURIComponent(url.username) : null,
-      password: url.password
-        ? Redacted.make(decodeURIComponent(url.password))
-        : undefined,
+      password: url.password ? Redacted.make(decodeURIComponent(url.password)) : undefined,
     }),
     catch: toError("Invalid direct Prisma credentials"),
   });
 });
 
-export const prismaDevDatabaseAttrsFromServer = Effect.fn(function* (
-  server: Server,
-) {
+export const prismaDevDatabaseAttrsFromServer = Effect.fn(function* (server: Server) {
   const direct = yield* normalizeConnectionString(
-    server.database.prismaORMConnectionString ??
-      server.database.connectionString,
+    server.database.prismaORMConnectionString ?? server.database.connectionString,
   );
   const pooled = server.ppg.url;
   const details = yield* detailsFrom(direct);
@@ -108,10 +98,7 @@ export const prismaDevDatabaseAttrsFromServer = Effect.fn(function* (
   };
 });
 
-const startServer = Effect.fn(function* (
-  databaseId: string,
-  options: ServerOptions,
-) {
+const startServer = Effect.fn(function* (databaseId: string, options: ServerOptions) {
   const prismaDev = yield* importPrismaDev;
   return yield* Semaphore.withPermits(
     startMutex,
@@ -187,10 +174,7 @@ const sensitiveValuesFromUrl = (value: string) => {
   }
 };
 
-const redactMigrationOutput = (
-  output: string,
-  attrs: PrismaDevDatabaseAttrs,
-) => {
+const redactMigrationOutput = (output: string, attrs: PrismaDevDatabaseAttrs) => {
   const password = attrs.password ? Redacted.value(attrs.password) : undefined;
   const connectionStrings = [
     Redacted.value(attrs.directConnectionString),
@@ -286,27 +270,19 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
   const config: DatabaseDev = dev ?? {};
   if (config.provider !== undefined && config.provider !== "@prisma/dev") {
     return yield* Effect.fail(
-      new Error(
-        `Unsupported Prisma local database provider ${config.provider}`,
-      ),
+      new Error(`Unsupported Prisma local database provider ${config.provider}`),
     );
   }
   const migrateTimeoutSeconds = config.migrateTimeoutSeconds ?? 900;
   if (!Number.isFinite(migrateTimeoutSeconds) || migrateTimeoutSeconds <= 0) {
-    return yield* Effect.fail(
-      new Error("migrateTimeoutSeconds must be a positive finite number."),
-    );
+    return yield* Effect.fail(new Error("migrateTimeoutSeconds must be a positive finite number."));
   }
 
   const options = optionsFrom(databaseId, config);
   const optionsKey = yield* stableJson(options);
   const cached = servers.get(databaseId);
   let entry = cached;
-  if (
-    entry === undefined ||
-    entry.optionsKey !== optionsKey ||
-    entry.attrs === undefined
-  ) {
+  if (entry === undefined || entry.optionsKey !== optionsKey || entry.attrs === undefined) {
     if (entry !== undefined) {
       // Keep the handle tracked when close fails so a later cleanup can retry
       // instead of leaking an unreachable local database process.
@@ -317,9 +293,7 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
     // `@prisma/dev` binds Postgres/HTTP to 127.0.0.1. Native Linux Docker
     // must not SYN the bridge IP (UFW INPUT). The workerd sidecar proxy
     // unix-socket-tunnels these ports into the container netns.
-    const attrsResult = yield* Effect.result(
-      prismaDevDatabaseAttrsFromServer(server),
-    );
+    const attrsResult = yield* Effect.result(prismaDevDatabaseAttrsFromServer(server));
     if (Result.isFailure(attrsResult)) {
       const closeResult = yield* Effect.result(
         Effect.tryPromise({
@@ -394,10 +368,7 @@ export const closePrismaDevDatabases = Effect.fn(function* () {
   }
   if (failures.length > 1) {
     return yield* Effect.fail(
-      new AggregateError(
-        failures,
-        `Failed to stop ${failures.length} local Prisma databases`,
-      ),
+      new AggregateError(failures, `Failed to stop ${failures.length} local Prisma databases`),
     );
   }
 });

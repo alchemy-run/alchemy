@@ -17,9 +17,7 @@ import type { Revision } from "./Revision.ts";
  */
 
 /** The bound data set's own ARN (data-set-level actions). */
-export const dataSetArns = (dataSet: DataSet): OutputType<string>[] => [
-  dataSet.dataSetArn,
-];
+export const dataSetArns = (dataSet: DataSet): OutputType<string>[] => [dataSet.dataSetArn];
 
 /**
  * ARN matching every asset in the bound data set
@@ -38,17 +36,13 @@ export const dataSetAssetArns = (dataSet: DataSet): OutputType<string>[] => [
  * `AssetId` at runtime (e.g. a Lambda that publishes a fresh revision on a
  * schedule needs the grant to cover revisions that do not exist yet).
  */
-export const dataSetAndSubresourceArns = (
-  dataSet: DataSet,
-): OutputType<string>[] => [
+export const dataSetAndSubresourceArns = (dataSet: DataSet): OutputType<string>[] => [
   dataSet.dataSetArn,
   Output.interpolate`${dataSet.dataSetArn}/*`,
 ];
 
 /** The bound revision's own ARN (revision-level actions). */
-export const revisionArns = (revision: Revision): OutputType<string>[] => [
-  revision.revisionArn,
-];
+export const revisionArns = (revision: Revision): OutputType<string>[] => [revision.revisionArn];
 
 /**
  * ARN matching every asset in the bound revision
@@ -65,12 +59,7 @@ export const revisionAssetArns = (revision: Revision): OutputType<string>[] => [
  * (default: the data set's ARN), and the runtime half injects the data set's
  * `DataSetId` into every request.
  */
-export const makeDataSetHttpBinding = <
-  I extends { DataSetId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDataSetHttpBinding = <I extends { DataSetId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DataExchange.GetDataSet`. */
   tag: string;
   /** The distilled operation. */

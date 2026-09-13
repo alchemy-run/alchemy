@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MetricStream } from "./MetricStream.ts";
 
-export interface GetMetricStreamRequest extends Omit<
-  cloudwatch.GetMetricStreamInput,
-  "Name"
-> {}
+export interface GetMetricStreamRequest extends Omit<cloudwatch.GetMetricStreamInput, "Name"> {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricStream` — read the
@@ -36,13 +33,8 @@ export interface GetMetricStream extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetMetricStreamRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricStreamOutput,
-      cloudwatch.GetMetricStreamError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricStreamOutput, cloudwatch.GetMetricStreamError>
   >
 > {}
 
-export const GetMetricStream = Binding.Service<GetMetricStream>(
-  "AWS.CloudWatch.GetMetricStream",
-);
+export const GetMetricStream = Binding.Service<GetMetricStream>("AWS.CloudWatch.GetMetricStream");

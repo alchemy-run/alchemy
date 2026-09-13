@@ -214,11 +214,7 @@ const internalPrismaDeepImports = [
   "Refs",
 ] as const;
 
-const internalPrismaRootFiles = [
-  "Credentials",
-  "PrismaDevDatabase",
-  "Refs",
-] as const;
+const internalPrismaRootFiles = ["Credentials", "PrismaDevDatabase", "Refs"] as const;
 
 const removedPrismaDeepImports = [
   "ComputeApp",
@@ -227,8 +223,7 @@ const removedPrismaDeepImports = [
   "ComputeVersionObserve",
 ] as const;
 
-const importPackagePath = (specifier: string) =>
-  import(/* @vite-ignore */ specifier);
+const importPackagePath = (specifier: string) => import(/* @vite-ignore */ specifier);
 
 describe("Prisma public surface", () => {
   it("exports the user-facing resources, providers, and operations", () => {
@@ -254,15 +249,14 @@ describe("Prisma public surface", () => {
       expect(Object.keys(module as object).length).toBeGreaterThan(0);
     }
 
-    const [compute, operations, client, archive, types, postgres] =
-      await Promise.all([
-        import("alchemy/Prisma/Compute"),
-        import("alchemy/Prisma/Operations"),
-        import("alchemy/Prisma/Client"),
-        import("alchemy/Prisma/ComputeArchive"),
-        import("alchemy/Prisma/Types"),
-        import("alchemy/Prisma/Postgres"),
-      ]);
+    const [compute, operations, client, archive, types, postgres] = await Promise.all([
+      import("alchemy/Prisma/Compute"),
+      import("alchemy/Prisma/Operations"),
+      import("alchemy/Prisma/Client"),
+      import("alchemy/Prisma/ComputeArchive"),
+      import("alchemy/Prisma/Types"),
+      import("alchemy/Prisma/Postgres"),
+    ]);
 
     expect(compute.Compute.Type).toBe("Prisma.Compute");
     expect(typeof operations.listProjects).toBe("function");
@@ -275,17 +269,13 @@ describe("Prisma public surface", () => {
 
   it("does not expose removed Compute deep imports", async () => {
     for (const moduleName of removedPrismaDeepImports) {
-      await expect(
-        importPackagePath(`alchemy/Prisma/${moduleName}`),
-      ).rejects.toThrow();
+      await expect(importPackagePath(`alchemy/Prisma/${moduleName}`)).rejects.toThrow();
     }
   });
 
   it("does not expose internal Prisma deep imports", async () => {
     for (const moduleName of internalPrismaDeepImports) {
-      await expect(
-        importPackagePath(`alchemy/Prisma/${moduleName}`),
-      ).rejects.toThrow();
+      await expect(importPackagePath(`alchemy/Prisma/${moduleName}`)).rejects.toThrow();
     }
   });
 
@@ -293,10 +283,7 @@ describe("Prisma public surface", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const prismaSourceRoot = path.resolve(
-        import.meta.dirname,
-        "../../src/Prisma",
-      );
+      const prismaSourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
       const files = (yield* fs.readDirectory(prismaSourceRoot))
         .filter((file) => file.endsWith(".ts"))
         .sort();
@@ -311,37 +298,27 @@ describe("Prisma public surface", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect(
-    "blocks internal Prisma deep imports in the package export map",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const packageJsonPath = path.resolve(
-          import.meta.dirname,
-          "../../package.json",
-        );
-        const packageJson = JSON.parse(
-          yield* fs.readFileString(packageJsonPath),
-        );
+  it.effect("blocks internal Prisma deep imports in the package export map", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const packageJsonPath = path.resolve(import.meta.dirname, "../../package.json");
+      const packageJson = JSON.parse(yield* fs.readFileString(packageJsonPath));
 
-        for (const moduleName of internalPrismaDeepImports) {
-          const exportPath = moduleName.startsWith("Internal/")
-            ? "./Prisma/Internal/*"
-            : `./Prisma/${moduleName}`;
-          expect(packageJson.exports[exportPath]).toBeNull();
-        }
-      }).pipe(Effect.provide(NodeServices.layer)),
+      for (const moduleName of internalPrismaDeepImports) {
+        const exportPath = moduleName.startsWith("Internal/")
+          ? "./Prisma/Internal/*"
+          : `./Prisma/${moduleName}`;
+        expect(packageJson.exports[exportPath]).toBeNull();
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("pins Prisma package export map entries", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const packageJsonPath = path.resolve(
-        import.meta.dirname,
-        "../../package.json",
-      );
+      const packageJsonPath = path.resolve(import.meta.dirname, "../../package.json");
       const packageJson = JSON.parse(yield* fs.readFileString(packageJsonPath));
 
       expect(packageJson.exports["./Prisma"]).toEqual({

@@ -12,14 +12,8 @@ import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 
 const DEFAULT_PORT = 5439;
 
-const unwrap = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * SDK-backed implementation of {@link Connect}. Deploy half attaches the
@@ -33,13 +27,9 @@ export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
     const getClusterCredentials = yield* redshift.getClusterCredentials;
-    const getClusterCredentialsWithIAM =
-      yield* redshift.getClusterCredentialsWithIAM;
+    const getClusterCredentialsWithIAM = yield* redshift.getClusterCredentialsWithIAM;
 
-    return Effect.fn(function* (
-      cluster: Cluster,
-      options: ConnectOptions = {},
-    ) {
+    return Effect.fn(function* (cluster: Cluster, options: ConnectOptions = {}) {
       const ClusterIdentifier = yield* cluster.clusterIdentifier;
       const Host = yield* cluster.endpointAddress;
       const Port = yield* cluster.endpointPort;
@@ -65,9 +55,7 @@ export const ConnectHttp = Layer.effect(
                       Effect: "Allow" as const,
                       Action: [
                         "redshift:GetClusterCredentials",
-                        ...(options.autoCreate
-                          ? ["redshift:CreateClusterUser"]
-                          : []),
+                        ...(options.autoCreate ? ["redshift:CreateClusterUser"] : []),
                       ],
                       Resource: [
                         Output.interpolate`${arnBase}:dbuser:${cluster.clusterIdentifier}/${options.dbUser}`,
@@ -130,8 +118,7 @@ export const ConnectHttp = Layer.effect(
               });
         const username = unwrap(credentials.DbUser);
         const rawPassword = unwrap(credentials.DbPassword);
-        const password =
-          rawPassword === undefined ? undefined : Redacted.make(rawPassword);
+        const password = rawPassword === undefined ? undefined : Redacted.make(rawPassword);
         const ssl = options.ssl ?? true;
         return {
           host,

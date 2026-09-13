@@ -78,13 +78,10 @@ export default BedrockKbTestFunction.make(
 
     const knowledgeBaseId = yield* kb.knowledgeBaseId;
 
-    const ingestDocuments =
-      yield* Bedrock.IngestKnowledgeBaseDocuments(customSource);
+    const ingestDocuments = yield* Bedrock.IngestKnowledgeBaseDocuments(customSource);
     const getDocuments = yield* Bedrock.GetKnowledgeBaseDocuments(customSource);
-    const listDocuments =
-      yield* Bedrock.ListKnowledgeBaseDocuments(customSource);
-    const deleteDocuments =
-      yield* Bedrock.DeleteKnowledgeBaseDocuments(customSource);
+    const listDocuments = yield* Bedrock.ListKnowledgeBaseDocuments(customSource);
+    const deleteDocuments = yield* Bedrock.DeleteKnowledgeBaseDocuments(customSource);
     const startIngestionJob = yield* Bedrock.StartIngestionJob(s3Source);
     const getIngestionJob = yield* Bedrock.GetIngestionJob(s3Source);
     const listIngestionJobs = yield* Bedrock.ListIngestionJobs(s3Source);
@@ -127,9 +124,7 @@ export default BedrockKbTestFunction.make(
 
         if (request.method === "GET" && pathname === "/doc-status") {
           const { documentDetails } = yield* getDocuments({
-            documentIdentifiers: [
-              { dataSourceType: "CUSTOM", custom: { id: DOC_ID } },
-            ],
+            documentIdentifiers: [{ dataSourceType: "CUSTOM", custom: { id: DOC_ID } }],
           });
           return yield* HttpServerResponse.json({
             status: documentDetails?.[0]?.status,
@@ -145,9 +140,7 @@ export default BedrockKbTestFunction.make(
 
         if (request.method === "POST" && pathname === "/delete-doc") {
           const { documentDetails } = yield* deleteDocuments({
-            documentIdentifiers: [
-              { dataSourceType: "CUSTOM", custom: { id: DOC_ID } },
-            ],
+            documentIdentifiers: [{ dataSourceType: "CUSTOM", custom: { id: DOC_ID } }],
           });
           return yield* HttpServerResponse.json({
             status: documentDetails?.[0]?.status,

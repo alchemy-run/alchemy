@@ -43,13 +43,9 @@ export interface PutLifecycleConfiguration extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutLifecycleConfigurationRequest,
-    ) => Effect.Effect<
-      efs.LifecycleConfigurationDescription,
-      efs.PutLifecycleConfigurationError
-    >
+    ) => Effect.Effect<efs.LifecycleConfigurationDescription, efs.PutLifecycleConfigurationError>
   >
 > {}
-export const PutLifecycleConfiguration =
-  Binding.Service<PutLifecycleConfiguration>(
-    "AWS.EFS.PutLifecycleConfiguration",
-  );
+export const PutLifecycleConfiguration = Binding.Service<PutLifecycleConfiguration>(
+  "AWS.EFS.PutLifecycleConfiguration",
+);

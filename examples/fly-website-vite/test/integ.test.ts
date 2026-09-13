@@ -28,10 +28,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -82,10 +79,7 @@ test(
   Effect.gen(function* () {
     const { url } = yield* stack;
     if (!url) throw new Error("expected the site to expose a fly.dev url");
-    const html = yield* getBodyWhenReady(
-      String(url).replace(/\/+$/, ""),
-      "Notes — Fly",
-    );
+    const html = yield* getBodyWhenReady(String(url).replace(/\/+$/, ""), "Notes — Fly");
     expect(html).toContain("Notes — Fly");
   }),
   { timeout: 120_000 },

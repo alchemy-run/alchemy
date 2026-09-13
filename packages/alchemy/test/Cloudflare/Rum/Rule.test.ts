@@ -10,10 +10,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Use a different zone than Site.test.ts — both suites manage zone-scoped
 // Web Analytics sites, and Cloudflare keys those to the zone, so running
@@ -47,9 +44,7 @@ const listRules = (accountId: string, rulesetId: string) =>
 
 const findRule = (accountId: string, rulesetId: string, ruleId: string) =>
   listRules(accountId, rulesetId).pipe(
-    Effect.map((response) =>
-      (response.rules ?? []).find((rule) => rule.id === ruleId),
-    ),
+    Effect.map((response) => (response.rules ?? []).find((rule) => rule.id === ruleId)),
   );
 
 // A deleted rule disappears from the ruleset's rule list; once the parent
@@ -61,9 +56,7 @@ const findRule = (accountId: string, rulesetId: string, ruleId: string) =>
 const expectGone = (accountId: string, rulesetId: string, ruleId: string) =>
   findRule(accountId, rulesetId, ruleId).pipe(
     Effect.flatMap((rule) =>
-      rule === undefined
-        ? Effect.void
-        : Effect.fail({ _tag: "RuleNotDeleted", ruleId } as const),
+      rule === undefined ? Effect.void : Effect.fail({ _tag: "RuleNotDeleted", ruleId } as const),
     ),
     Effect.catchTag("RulesetNotFound", () => Effect.void),
     Effect.retry({
@@ -128,10 +121,7 @@ const cleanupLeftoverSites = (accountId: string, zoneTag: string) =>
 // ruleset) and the rule under it. The rule's `rulesetId` references the
 // site's output, so the engine orders rule-last on deploy (and first on
 // destroy).
-const program = (
-  zoneId: string,
-  rule: Omit<Cloudflare.Rum.RuleProps, "rulesetId">,
-) =>
+const program = (zoneId: string, rule: Omit<Cloudflare.Rum.RuleProps, "rulesetId">) =>
   Effect.gen(function* () {
     const site = yield* Cloudflare.Rum.Site("RuleSite", {
       zoneTag: zoneId,
@@ -151,9 +141,7 @@ describe.sequential("Rule", () => {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zone = yield* findZoneByName({ accountId, name: zoneName });
       if (!zone) {
-        return yield* Effect.die(
-          new Error(`zone "${zoneName}" not found in account`),
-        );
+        return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
       }
 
       yield* stack.destroy();
@@ -180,11 +168,7 @@ describe.sequential("Rule", () => {
       expect(initial.rule.isPaused).toEqual(false);
 
       // Verify out-of-band against the live API.
-      const live = yield* findRule(
-        accountId,
-        initial.rule.rulesetId,
-        initial.rule.id,
-      );
+      const live = yield* findRule(accountId, initial.rule.rulesetId, initial.rule.id);
       expect(live).toBeDefined();
       expect(live?.host).toEqual(zoneName);
       expect(live?.paths).toEqual(["/blog/*"]);
@@ -203,11 +187,7 @@ describe.sequential("Rule", () => {
       expect(updated.rule.paths).toEqual(["/blog/*", "/admin/*"]);
       expect(updated.rule.isPaused).toEqual(true);
 
-      const liveUpdated = yield* findRule(
-        accountId,
-        updated.rule.rulesetId,
-        updated.rule.id,
-      );
+      const liveUpdated = yield* findRule(accountId, updated.rule.rulesetId, updated.rule.id);
       expect(liveUpdated?.paths).toEqual(["/blog/*", "/admin/*"]);
       expect(liveUpdated?.isPaused).toEqual(true);
 
@@ -239,9 +219,7 @@ describe.sequential("Rule", () => {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zone = yield* findZoneByName({ accountId, name: zoneName });
       if (!zone) {
-        return yield* Effect.die(
-          new Error(`zone "${zoneName}" not found in account`),
-        );
+        return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
       }
 
       yield* stack.destroy();
@@ -262,11 +240,7 @@ describe.sequential("Rule", () => {
       const all = yield* provider.list();
 
       expect(
-        all.some(
-          (r) =>
-            r.id === deployed.rule.id &&
-            r.rulesetId === deployed.rule.rulesetId,
-        ),
+        all.some((r) => r.id === deployed.rule.id && r.rulesetId === deployed.rule.rulesetId),
       ).toBe(true);
 
       yield* stack.destroy();
@@ -278,9 +252,7 @@ describe.sequential("Rule", () => {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zone = yield* findZoneByName({ accountId, name: zoneName });
       if (!zone) {
-        return yield* Effect.die(
-          new Error(`zone "${zoneName}" not found in account`),
-        );
+        return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
       }
 
       yield* stack.destroy();
@@ -328,11 +300,7 @@ describe.sequential("Rule", () => {
       expect(healed.rule.id).not.toEqual(initial.rule.id);
       expect(healed.rule.paths).toEqual(["/heal-v2/*"]);
 
-      const live = yield* findRule(
-        accountId,
-        healed.rule.rulesetId,
-        healed.rule.id,
-      );
+      const live = yield* findRule(accountId, healed.rule.rulesetId, healed.rule.id);
       expect(live?.paths).toEqual(["/heal-v2/*"]);
 
       const rulesetId = healed.rule.rulesetId;

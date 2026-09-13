@@ -1,9 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import {
-  ModuleRunner,
-  ssrDynamicImportKey,
-  ssrModuleExportsKey,
-} from "vite/module-runner";
+import { ModuleRunner, ssrDynamicImportKey, ssrModuleExportsKey } from "vite/module-runner";
 import {
   ENVIRONMENT_NAME_HEADER,
   EXPORT_TYPES_EVENT,
@@ -14,10 +10,7 @@ import { stripInternalEnv, type Env } from "./env.worker.ts";
 
 declare global {
   // This global variable is accessed by `@vitejs/plugin-rsc`
-  var __VITE_ENVIRONMENT_RUNNER_IMPORT__: (
-    environmentName: string,
-    id: string,
-  ) => Promise<unknown>;
+  var __VITE_ENVIRONMENT_RUNNER_IMPORT__: (environmentName: string, id: string) => Promise<unknown>;
 }
 
 const callbacks = {
@@ -36,10 +29,7 @@ const callbacks = {
 /**
  * Retrieves a specific export from a Worker entry module using the module runner.
  */
-export async function getWorkerEntryExport<T>(
-  env: Env,
-  exportName: string,
-): Promise<T> {
+export async function getWorkerEntryExport<T>(env: Env, exportName: string): Promise<T> {
   const module = await globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__(
     env.__DISTILLED_ENVIRONMENT__.environmentName,
     env.__DISTILLED_ENVIRONMENT__.entryId,
@@ -69,10 +59,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
     if (pathname !== INIT_PATH) {
       throw new Error(`Invalid path: ${pathname}`);
     }
-    globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__ = async (
-      environmentName: string,
-      id: string,
-    ) => {
+    globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__ = async (environmentName: string, id: string) => {
       const moduleRunner = this.moduleRunners.get(environmentName);
       if (!moduleRunner) {
         throw new NotInitializedError(environmentName);
@@ -118,10 +105,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
     try {
       // Both imports run inside this object's IoContext, so they can go
       // straight to the module runner instead of through `callbacks`.
-      const { getExportTypes } = (await this.import(
-        environmentName,
-        exportTypesId,
-      )) as {
+      const { getExportTypes } = (await this.import(environmentName, exportTypesId)) as {
         getExportTypes: (module: unknown) => Record<string, string>;
       };
       data = getExportTypes(await this.import(environmentName, entryId));
@@ -131,16 +115,10 @@ export class ModuleRunnerDO extends DurableObject<Env> {
       // request that triggered it; the dev server keeps its current export
       // types.
       // oxlint-disable-next-line no-console
-      console.error(
-        "Failed to determine the Worker entry's export types:",
-        error,
-      );
+      console.error("Failed to determine the Worker entry's export types:", error);
       data = null;
     }
-    this.send(
-      environmentName,
-      JSON.stringify({ type: "custom", event: EXPORT_TYPES_EVENT, data }),
-    );
+    this.send(environmentName, JSON.stringify({ type: "custom", event: EXPORT_TYPES_EVENT, data }));
   }
 
   private async import(environmentName: string, id: string): Promise<unknown> {
@@ -198,9 +176,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
                 body: JSON.stringify(data),
               }),
             );
-            const result = await response.json<
-              { result: unknown } | { error: unknown }
-            >();
+            const result = await response.json<{ result: unknown } | { error: unknown }>();
 
             return result;
           },
@@ -226,10 +202,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
             Object.seal(context[ssrModuleExportsKey]);
           } catch (error) {
             // oxlint-disable-next-line no-console
-            console.error(
-              `[vite-plugin] Failed to evaluate inlined module "${module.id}":`,
-              error,
-            );
+            console.error(`[vite-plugin] Failed to evaluate inlined module "${module.id}":`, error);
             throw error;
           }
         },

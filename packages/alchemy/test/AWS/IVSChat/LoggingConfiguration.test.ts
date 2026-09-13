@@ -11,18 +11,12 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const assertLoggingConfigurationGone = (arn: string) =>
   Effect.gen(function* () {
-    const config = yield* ivschat
-      .getLoggingConfiguration({ identifier: arn })
-      .pipe(
-        Effect.map((r) => r.arn),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+    const config = yield* ivschat.getLoggingConfiguration({ identifier: arn }).pipe(
+      Effect.map((r) => r.arn),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    );
     if (config !== undefined) {
-      return yield* Effect.fail(
-        new Error(`logging configuration '${arn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`logging configuration '${arn}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -59,12 +53,8 @@ test.provider(
 
       // Create.
       const created = yield* stack.deploy(program);
-      expect(created.logging.loggingConfigurationName).toBe(
-        "alchemy-test-ivschat-logging",
-      );
-      expect(created.logging.loggingConfigurationArn).toContain(
-        ":logging-configuration/",
-      );
+      expect(created.logging.loggingConfigurationName).toBe("alchemy-test-ivschat-logging");
+      expect(created.logging.loggingConfigurationArn).toContain(":logging-configuration/");
       expect(created.logging.loggingConfigurationId).toBeDefined();
       expect(created.logging.state).toBe("ACTIVE");
 
@@ -74,8 +64,7 @@ test.provider(
       });
       expect(observed.state).toBe("ACTIVE");
       expect(
-        observed.destinationConfiguration &&
-          "cloudWatchLogs" in observed.destinationConfiguration
+        observed.destinationConfiguration && "cloudWatchLogs" in observed.destinationConfiguration
           ? observed.destinationConfiguration.cloudWatchLogs?.logGroupName
           : undefined,
       ).toBe("/alchemy-test/ivschat-logging");
@@ -91,15 +80,11 @@ test.provider(
 
       // No-op redeploy keeps the same configuration.
       const noop = yield* stack.deploy(program);
-      expect(noop.logging.loggingConfigurationArn).toBe(
-        created.logging.loggingConfigurationArn,
-      );
+      expect(noop.logging.loggingConfigurationArn).toBe(created.logging.loggingConfigurationArn);
 
       // Destroy and verify out-of-band with a typed wait-until-gone.
       yield* stack.destroy();
-      yield* assertLoggingConfigurationGone(
-        created.logging.loggingConfigurationArn,
-      );
+      yield* assertLoggingConfigurationGone(created.logging.loggingConfigurationArn);
     }),
   { timeout: 240_000 },
 );

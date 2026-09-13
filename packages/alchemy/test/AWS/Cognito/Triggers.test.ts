@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import CognitoTriggerFunctionLive, {
-  CognitoTriggerFunction,
-} from "./trigger-handler";
+import CognitoTriggerFunctionLive, { CognitoTriggerFunction } from "./trigger-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "CognitoTriggers");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,19 +32,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -59,9 +49,7 @@ const decodeJwtPayload = (token: string): Record<string, unknown> =>
 describe("Cognito UserPool Triggers", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Cognito triggers setup: destroying previous stack",
-      );
+      yield* Effect.logInfo("Cognito triggers setup: destroying previous stack");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Cognito triggers setup: deploying fixture");
@@ -75,9 +63,7 @@ describe("Cognito UserPool Triggers", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/config`;
 
-      yield* Effect.logInfo(
-        `Cognito triggers setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Cognito triggers setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -85,9 +71,7 @@ describe("Cognito UserPool Triggers", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Cognito triggers setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Cognito triggers setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -102,17 +86,15 @@ describe("Cognito UserPool Triggers", () => {
       "preSignUp auto-confirms sign-up; preTokenGeneration stamps a claim",
       (_stack) =>
         Effect.gen(function* () {
-          const config = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/config`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const config = (yield* send(HttpClientRequest.get(`${baseUrl}/config`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             userPoolId: string;
             clientId: string;
           };
 
           const response = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/sign-up-flow?username=trigger-user`,
-            ),
+            HttpClientRequest.post(`${baseUrl}/sign-up-flow?username=trigger-user`),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             userConfirmed: boolean | undefined;
             userStatus: string | undefined;

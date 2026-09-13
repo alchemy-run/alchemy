@@ -117,9 +117,7 @@ export const makeCodeBuildProjectHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${project.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${project.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });
@@ -207,9 +205,7 @@ export const makeCodeBuildReportGroupHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${reportGroup.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${reportGroup.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

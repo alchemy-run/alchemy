@@ -35,14 +35,8 @@ export interface CreateDBClusterSnapshot extends Binding.Service<
     cluster: DBCluster,
   ) => Effect.Effect<
     (
-      request: Omit<
-        docdb.CreateDBClusterSnapshotMessage,
-        "DBClusterIdentifier"
-      >,
-    ) => Effect.Effect<
-      docdb.CreateDBClusterSnapshotResult,
-      docdb.CreateDBClusterSnapshotError
-    >
+      request: Omit<docdb.CreateDBClusterSnapshotMessage, "DBClusterIdentifier">,
+    ) => Effect.Effect<docdb.CreateDBClusterSnapshotResult, docdb.CreateDBClusterSnapshotError>
   >
 > {}
 export const CreateDBClusterSnapshot = Binding.Service<CreateDBClusterSnapshot>(

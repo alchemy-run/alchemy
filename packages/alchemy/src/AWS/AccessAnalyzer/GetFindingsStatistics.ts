@@ -33,10 +33,7 @@ export interface GetFindingsStatistics extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetFindingsStatisticsRequest,
-    ) => Effect.Effect<
-      aa.GetFindingsStatisticsResponse,
-      aa.GetFindingsStatisticsError
-    >
+    ) => Effect.Effect<aa.GetFindingsStatisticsResponse, aa.GetFindingsStatisticsError>
   >
 > {}
 

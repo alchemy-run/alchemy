@@ -29,9 +29,7 @@ describe("validateAccountId", () => {
 
   it.effect("rejects undefined with an actionable message", () =>
     Effect.gen(function* () {
-      const error = yield* validateAccountId(undefined, "test").pipe(
-        Effect.flip,
-      );
+      const error = yield* validateAccountId(undefined, "test").pipe(Effect.flip);
       expect(error._tag).toBe("AuthError");
       expect(error.message).toContain("missing");
       expect(error.message).toContain("--reconfigure Cloudflare");
@@ -55,9 +53,7 @@ describe("validateAccountId", () => {
   for (const placeholder of ["-", "dummy", "test", "mock", "abc123"]) {
     it.effect(`rejects the placeholder value '${placeholder}'`, () =>
       Effect.gen(function* () {
-        const error = yield* validateAccountId(placeholder, "test").pipe(
-          Effect.flip,
-        );
+        const error = yield* validateAccountId(placeholder, "test").pipe(Effect.flip);
         expect(error._tag).toBe("AuthError");
         expect(error.message).toContain(placeholder);
         expect(error.message).toContain("32 hex characters");
@@ -67,10 +63,7 @@ describe("validateAccountId", () => {
 
   it.effect("names the source of the bad value in the message", () =>
     Effect.gen(function* () {
-      const error = yield* validateAccountId(
-        "dummy",
-        "stored for profile 'ci'",
-      ).pipe(Effect.flip);
+      const error = yield* validateAccountId("dummy", "stored for profile 'ci'").pipe(Effect.flip);
       expect(error.message).toContain("stored for profile 'ci'");
     }),
   );

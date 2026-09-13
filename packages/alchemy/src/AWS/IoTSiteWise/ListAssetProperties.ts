@@ -44,10 +44,7 @@ export interface ListAssetProperties extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListAssetPropertiesRequest,
-    ) => Effect.Effect<
-      sitewise.ListAssetPropertiesResponse,
-      sitewise.ListAssetPropertiesError
-    >
+    ) => Effect.Effect<sitewise.ListAssetPropertiesResponse, sitewise.ListAssetPropertiesError>
   >
 > {}
 export const ListAssetProperties = Binding.Service<ListAssetProperties>(

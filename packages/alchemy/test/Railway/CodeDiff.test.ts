@@ -11,10 +11,7 @@ import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { RailwayEnvironment } from "@/Railway/Environment";
 import { FunctionProvider } from "@/Railway/Function";
-import {
-  createRailwayFunctionSupport,
-  createRailwayHostedSupport,
-} from "@/Railway/hosted";
+import { createRailwayFunctionSupport, createRailwayHostedSupport } from "@/Railway/hosted";
 import { ServiceProvider } from "@/Railway/ServiceProvider";
 import { Stack } from "@/Stack";
 import * as Test from "@/Test/Alchemy";
@@ -23,19 +20,11 @@ const { test } = Test.make({
   providers: Layer.mergeAll(ServiceProvider(), FunctionProvider()).pipe(
     Layer.provide(
       Layer.mergeAll(
-        Layer.succeed(
-          Credentials,
-          Effect.die("Offline diff must not resolve credentials"),
-        ),
-        Layer.succeed(
-          RailwayEnvironment,
-          Effect.die("Offline diff must not resolve environment"),
-        ),
+        Layer.succeed(Credentials, Effect.die("Offline diff must not resolve credentials")),
+        Layer.succeed(RailwayEnvironment, Effect.die("Offline diff must not resolve environment")),
         Layer.succeed(
           HttpClient.HttpClient,
-          HttpClient.make(() =>
-            Effect.die("Offline diff must not make HTTP requests"),
-          ),
+          HttpClient.make(() => Effect.die("Offline diff must not make HTTP requests")),
         ),
       ),
     ),

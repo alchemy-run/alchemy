@@ -22,10 +22,7 @@ const sharedStack = Core.scratchStack(testOptions, "EventBridgeBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let customQueueUrl: string;
@@ -45,19 +42,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -75,17 +67,10 @@ interface DeliveredEvent {
 // re-publishes the marker event and long-polls the sink queue for it.
 // Worst case ~= 18 * (publish + 5s long poll) ~= 95s, within the 120s test
 // timeout.
-const publishUntilReceived = Effect.fn(function* (
-  route: string,
-  queueUrl: string,
-  marker: string,
-) {
+const publishUntilReceived = Effect.fn(function* (route: string, queueUrl: string, marker: string) {
   return yield* Effect.gen(function* () {
     const publishResponse = yield* send(
-      HttpClientRequest.bodyJsonUnsafe(
-        HttpClientRequest.post(`${baseUrl}${route}`),
-        { marker },
-      ),
+      HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}${route}`), { marker }),
     ).pipe(Effect.flatMap((r) => r.json));
     expect(publishResponse).toHaveProperty("failedEntryCount", 0);
 
@@ -95,9 +80,7 @@ const publishUntilReceived = Effect.fn(function* (
       WaitTimeSeconds: 5,
     });
     const match = (result.Messages ?? [])
-      .flatMap((message) =>
-        message.Body ? [JSON.parse(message.Body) as DeliveredEvent] : [],
-      )
+      .flatMap((message) => (message.Body ? [JSON.parse(message.Body) as DeliveredEvent] : []))
       .find((body) => body.detail?.marker === marker);
     if (!match) {
       yield* Effect.logInfo(
@@ -109,10 +92,7 @@ const publishUntilReceived = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "EventNotDelivered",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(17),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(17)]),
     }),
   );
 });
@@ -120,9 +100,7 @@ const publishUntilReceived = Effect.fn(function* (
 describe("EventBridge Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "EventBridge test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("EventBridge test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("EventBridge test setup: deploying fixture");
@@ -131,11 +109,7 @@ describe("EventBridge Bindings", () => {
           const { customQueue, defaultQueue } = yield* BusAndQueues;
           const fn = yield* EventBridgeTestFunction;
           return { fn, custom: customQueue, dflt: defaultQueue };
-        }).pipe(
-          Effect.provide(
-            Layer.mergeAll(EventBridgeTestFunctionLive, BusAndQueuesLive),
-          ),
-        ),
+        }).pipe(Effect.provide(Layer.mergeAll(EventBridgeTestFunctionLive, BusAndQueuesLive))),
       );
 
       expect(fn.functionUrl).toBeTruthy();
@@ -144,9 +118,7 @@ describe("EventBridge Bindings", () => {
       defaultQueueUrl = dflt.queueUrl;
       functionArn = fn.functionArn;
 
-      yield* Effect.logInfo(
-        `EventBridge test setup: probing readiness at ${baseUrl}/health`,
-      );
+      yield* Effect.logInfo(`EventBridge test setup: probing readiness at ${baseUrl}/health`);
       yield* HttpClient.get(`${baseUrl}/health`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -154,9 +126,7 @@ describe("EventBridge Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `EventBridge test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`EventBridge test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -173,20 +143,16 @@ describe("EventBridge Bindings", () => {
       // `withProviders` to satisfy Credentials/HttpClient/Region.
       Effect.andThen(
         Core.withProviders(
-          eventbridge
-            .describeEventBus({ Name: "alchemy-test-eb-bindings" })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
-              Effect.repeat({
-                schedule: Schedule.spaced("2 seconds"),
-                until: (isGone): boolean => isGone,
-                times: 10,
-              }),
-              Effect.map((gone) => expect(gone).toBe(true)),
-            ),
+          eventbridge.describeEventBus({ Name: "alchemy-test-eb-bindings" }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (isGone): boolean => isGone,
+              times: 10,
+            }),
+            Effect.map((gone) => expect(gone).toBe(true)),
+          ),
           testOptions,
           "EventBridgeBindings",
         ),
@@ -206,12 +172,9 @@ describe("EventBridge Bindings", () => {
     test.provider("publishes an event to the custom bus", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/publish-custom`),
-            {
-              marker: "put-events-custom-direct",
-            },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/publish-custom`), {
+            marker: "put-events-custom-direct",
+          }),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           failedEntryCount: number;
           entries: Array<{ EventId?: string }>;
@@ -226,12 +189,9 @@ describe("EventBridge Bindings", () => {
     test.provider("publishes an event to the default bus", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/publish-default`),
-            {
-              marker: "put-events-default-direct",
-            },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/publish-default`), {
+            marker: "put-events-default-direct",
+          }),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           failedEntryCount: number;
           entries: Array<{ EventId?: string }>;
@@ -249,9 +209,9 @@ describe("EventBridge Bindings", () => {
       "toggles the rule state and observes it via DescribeRule",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/rule-toggle`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/rule-toggle`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             afterDisable: string;
             afterEnable: string;
           };
@@ -288,9 +248,9 @@ describe("EventBridge Bindings", () => {
   describe("DescribeEventBus", () => {
     test.provider("describes the bound custom bus", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/bus-info`),
-        ).pipe(Effect.flatMap((r) => r.json))) as {
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/bus-info`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as {
           name: string;
           arn: string;
         };
@@ -304,9 +264,9 @@ describe("EventBridge Bindings", () => {
   describe("ListEventBuses", () => {
     test.provider("enumerates account buses including the default", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/event-buses`),
-        ).pipe(Effect.flatMap((r) => r.json))) as { names: string[] };
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/event-buses`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as { names: string[] };
 
         expect(response.names).toContain("default");
         expect(response.names).toContain("alchemy-test-eb-bindings");
@@ -317,9 +277,9 @@ describe("EventBridge Bindings", () => {
   describe("ListRules", () => {
     test.provider("lists the rules on the bound custom bus", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/rules`),
-        ).pipe(Effect.flatMap((r) => r.json))) as { ruleNames: string[] };
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/rules`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as { ruleNames: string[] };
 
         // The toggle rule and the custom-bus consume-loop rule live here.
         expect(response.ruleNames).toContain("alchemy-test-eb-toggle");
@@ -331,9 +291,9 @@ describe("EventBridge Bindings", () => {
   describe("ListTargetsByRule", () => {
     test.provider("lists the (empty) targets of the toggle rule", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/targets-by-rule`),
-        ).pipe(Effect.flatMap((r) => r.json))) as { targetCount: number };
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/targets-by-rule`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as { targetCount: number };
 
         expect(response.targetCount).toBe(0);
       }),
@@ -344,22 +304,16 @@ describe("EventBridge Bindings", () => {
     test.provider("matches and rejects events against a pattern", (_stack) =>
       Effect.gen(function* () {
         const matching = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/test-pattern`),
-            {
-              source: "alchemy.test.pattern",
-            },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/test-pattern`), {
+            source: "alchemy.test.pattern",
+          }),
         ).pipe(Effect.flatMap((r) => r.json))) as { matches: boolean };
         expect(matching.matches).toBe(true);
 
         const nonMatching = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/test-pattern`),
-            {
-              source: "other.source",
-            },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/test-pattern`), {
+            source: "other.source",
+          }),
         ).pipe(Effect.flatMap((r) => r.json))) as { matches: boolean };
         expect(nonMatching.matches).toBe(false);
       }),
@@ -369,9 +323,9 @@ describe("EventBridge Bindings", () => {
   describe("Replays", () => {
     test.provider("ListReplays enumerates account replays", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/replays`),
-        ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/replays`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as { count: number };
 
         expect(typeof response.count).toBe("number");
         expect(response.count).toBeGreaterThanOrEqual(0);
@@ -383,10 +337,7 @@ describe("EventBridge Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const res = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/replay`),
-              {},
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/replay`), {}),
           );
           const bodyText = yield* res.text;
           expect(res.status, bodyText).toBe(200);

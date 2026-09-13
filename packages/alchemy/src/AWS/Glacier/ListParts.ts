@@ -7,10 +7,7 @@ import type { Vault } from "./Vault.ts";
  * `ListParts` request with `accountId` and `vaultName` injected from the bound
  * {@link Vault}.
  */
-export interface ListPartsRequest extends Omit<
-  glacier.ListPartsInput,
-  "accountId" | "vaultName"
-> {}
+export interface ListPartsRequest extends Omit<glacier.ListPartsInput, "accountId" | "vaultName"> {}
 
 /**
  * Runtime binding for the `ListParts` operation (IAM action
@@ -37,9 +34,7 @@ export interface ListParts extends Binding.Service<
   (
     vault: Vault,
   ) => Effect.Effect<
-    (
-      request: ListPartsRequest,
-    ) => Effect.Effect<glacier.ListPartsOutput, glacier.ListPartsError>
+    (request: ListPartsRequest) => Effect.Effect<glacier.ListPartsOutput, glacier.ListPartsError>
   >
 > {}
 export const ListParts = Binding.Service<ListParts>("AWS.Glacier.ListParts");

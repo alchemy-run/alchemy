@@ -11,11 +11,8 @@ export const catalogArn = (region: string, accountId: string) =>
   `arn:${PARTITION}:glue:${region}:${accountId}:catalog`;
 
 /** `arn:aws:glue:{region}:{account}:database/{name}` */
-export const databaseArn = (
-  region: string,
-  accountId: string,
-  databaseName: string,
-) => `arn:${PARTITION}:glue:${region}:${accountId}:database/${databaseName}`;
+export const databaseArn = (region: string, accountId: string, databaseName: string) =>
+  `arn:${PARTITION}:glue:${region}:${accountId}:database/${databaseName}`;
 
 /** `arn:aws:glue:{region}:{account}:table/{database}/{table}` */
 export const tableArn = (
@@ -23,26 +20,18 @@ export const tableArn = (
   accountId: string,
   databaseName: string,
   tableName: string,
-) =>
-  `arn:${PARTITION}:glue:${region}:${accountId}:table/${databaseName}/${tableName}`;
+) => `arn:${PARTITION}:glue:${region}:${accountId}:table/${databaseName}/${tableName}`;
 
 /** `arn:aws:glue:{region}:{account}:crawler/{name}` */
-export const crawlerArn = (
-  region: string,
-  accountId: string,
-  crawlerName: string,
-) => `arn:${PARTITION}:glue:${region}:${accountId}:crawler/${crawlerName}`;
+export const crawlerArn = (region: string, accountId: string, crawlerName: string) =>
+  `arn:${PARTITION}:glue:${region}:${accountId}:crawler/${crawlerName}`;
 
 /** `arn:aws:glue:{region}:{account}:job/{name}` */
 export const jobArn = (region: string, accountId: string, jobName: string) =>
   `arn:${PARTITION}:glue:${region}:${accountId}:job/${jobName}`;
 
 /** `arn:aws:glue:{region}:{account}:connection/{name}` */
-export const connectionArn = (
-  region: string,
-  accountId: string,
-  connectionName: string,
-) =>
+export const connectionArn = (region: string, accountId: string, connectionName: string) =>
   `arn:${PARTITION}:glue:${region}:${accountId}:connection/${connectionName}`;
 
 /**
@@ -50,19 +39,17 @@ export const connectionArn = (
  * `GetTags` returns a `{ Tags: { key: value } }` map (not the array shape most
  * AWS services use). Tolerate a missing/untaggable resource as `{}`.
  */
-export const fetchObservedTags = Effect.fn("AWS.Glue.fetchObservedTags")(
-  function* (resourceArn: string) {
-    const response = yield* glue
-      .getTags({ ResourceArn: resourceArn })
-      .pipe(Effect.catch(() => Effect.succeed({ Tags: undefined })));
-    const tags = response.Tags ?? {};
-    return Object.fromEntries(
-      Object.entries(tags).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    );
-  },
-);
+export const fetchObservedTags = Effect.fn("AWS.Glue.fetchObservedTags")(function* (
+  resourceArn: string,
+) {
+  const response = yield* glue
+    .getTags({ ResourceArn: resourceArn })
+    .pipe(Effect.catch(() => Effect.succeed({ Tags: undefined })));
+  const tags = response.Tags ?? {};
+  return Object.fromEntries(
+    Object.entries(tags).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+});
 
 /**
  * Sync a Glue resource's tags: diff OBSERVED cloud tags against desired and
@@ -108,11 +95,7 @@ export const retryWhileCrawlerRunning = <A, E extends { _tag: string }, R>(
  * mutations occasionally race under concurrent reconciles. Explicitly typed
  * for the same declaration-emit reason as above.
  */
-export const retryWhileConcurrentModification = <
-  A,
-  E extends { _tag: string },
-  R,
->(
+export const retryWhileConcurrentModification = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -139,11 +122,7 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
  * a newly-created bucket. Retry only the distilled synthetic tag for the
  * observed InvalidAccessKeyId propagation failure.
  */
-export const retryWhileCrawlerTargetNotReady = <
-  A,
-  E extends { _tag: string },
-  R,
->(
+export const retryWhileCrawlerTargetNotReady = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -168,7 +147,5 @@ export const cleanMap = (
   map: Record<string, string | undefined> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(map ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );

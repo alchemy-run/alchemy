@@ -23,9 +23,7 @@ const CATALOG = "alchemy_athena_e2e_catalog";
 const STATEMENT = "alchemy_athena_e2e_stmt";
 const CSV = "1,alice\n2,bob\n3,carol\n";
 
-export class AthenaTestFunction extends Lambda.Function<Lambda.Function>()(
-  "AthenaTestFunction",
-) {}
+export class AthenaTestFunction extends Lambda.Function<Lambda.Function>()("AthenaTestFunction") {}
 
 export default AthenaTestFunction.make(
   {
@@ -54,11 +52,9 @@ export default AthenaTestFunction.make(
           { name: "name", type: "string" },
         ],
         inputFormat: "org.apache.hadoop.mapred.TextInputFormat",
-        outputFormat:
-          "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        outputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
         serdeInfo: {
-          serializationLibrary:
-            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          serializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
           parameters: { "field.delim": "," },
         },
       },
@@ -76,9 +72,7 @@ export default AthenaTestFunction.make(
       name: CATALOG,
       type: "GLUE",
       parameters: {
-        "catalog-id": workGroup.workGroupArn.pipe(
-          Output.map((arn) => arn.split(":")[4]!),
-        ),
+        "catalog-id": workGroup.workGroupArn.pipe(Output.map((arn) => arn.split(":")[4]!)),
       },
     });
 
@@ -112,14 +106,11 @@ export default AthenaTestFunction.make(
     const getQueryExecution = yield* Athena.GetQueryExecution(workGroup);
     const getQueryResults = yield* Athena.GetQueryResults(workGroup);
     const stopQueryExecution = yield* Athena.StopQueryExecution(workGroup);
-    const batchGetQueryExecution =
-      yield* Athena.BatchGetQueryExecution(workGroup);
+    const batchGetQueryExecution = yield* Athena.BatchGetQueryExecution(workGroup);
     const listQueryExecutions = yield* Athena.ListQueryExecutions(workGroup);
-    const getQueryRuntimeStatistics =
-      yield* Athena.GetQueryRuntimeStatistics(workGroup);
+    const getQueryRuntimeStatistics = yield* Athena.GetQueryRuntimeStatistics(workGroup);
     const listNamedQueries = yield* Athena.ListNamedQueries(workGroup);
-    const listPreparedStatements =
-      yield* Athena.ListPreparedStatements(workGroup);
+    const listPreparedStatements = yield* Athena.ListPreparedStatements(workGroup);
 
     // --- catalog-metadata bindings ---
     const listDatabases = yield* Athena.ListDatabases(dataCatalog);
@@ -207,9 +198,7 @@ export default AthenaTestFunction.make(
           });
           return yield* HttpServerResponse.json({
             rows: res.ResultSet?.Rows?.length ?? 0,
-            columns: (res.ResultSet?.ResultSetMetadata?.ColumnInfo ?? []).map(
-              (c) => c.Name,
-            ),
+            columns: (res.ResultSet?.ResultSetMetadata?.ColumnInfo ?? []).map((c) => c.Name),
           });
         }
 
@@ -226,8 +215,7 @@ export default AthenaTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json({
-            totalMillis:
-              res.QueryRuntimeStatistics?.Timeline?.TotalExecutionTimeInMillis,
+            totalMillis: res.QueryRuntimeStatistics?.Timeline?.TotalExecutionTimeInMillis,
           });
         }
 

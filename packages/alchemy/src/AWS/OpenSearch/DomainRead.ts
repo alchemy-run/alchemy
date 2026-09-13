@@ -20,17 +20,11 @@ export interface ReadDomainClient {
    */
   search<TDoc = unknown>(
     request?: SearchRequest,
-  ): Effect.Effect<
-    SearchResponse<TDoc>,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<SearchResponse<TDoc>, OpenSearchApiError | Credentials.CredentialsError>;
   /** Count documents matching a Query-DSL body (`GET …/_count`). */
   count(
     request?: CountRequest,
-  ): Effect.Effect<
-    CountResponse,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<CountResponse, OpenSearchApiError | Credentials.CredentialsError>;
   /**
    * Fetch one document by id (`GET /{index}/_doc/{id}`). A missing document
    * is not an error — the response carries `found: false`.
@@ -38,10 +32,7 @@ export interface ReadDomainClient {
   getDocument<TDoc = unknown>(
     index: string,
     id: string,
-  ): Effect.Effect<
-    GetDocumentResponse<TDoc>,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<GetDocumentResponse<TDoc>, OpenSearchApiError | Credentials.CredentialsError>;
   /** Check whether a document exists (`HEAD /{index}/_doc/{id}`). */
   existsDocument(
     index: string,
@@ -93,6 +84,4 @@ export interface DomainRead extends Binding.Service<
   "AWS.OpenSearch.DomainRead",
   (domain: Domain) => Effect.Effect<ReadDomainClient>
 > {}
-export const DomainRead = Binding.Service<DomainRead>(
-  "AWS.OpenSearch.DomainRead",
-);
+export const DomainRead = Binding.Service<DomainRead>("AWS.OpenSearch.DomainRead");

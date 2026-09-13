@@ -10,15 +10,9 @@ import * as FileSystem from "effect/FileSystem";
 // with ordinary ApiGateway tests in the other. Use one service-local,
 // cross-process lock directory instead. Unrelated AWS services remain fully
 // parallel.
-const profile = (process.env.ALCHEMY_PROFILE ?? "testing").replace(
-  /[^a-zA-Z0-9_.-]/g,
-  "-",
-);
+const profile = (process.env.ALCHEMY_PROFILE ?? "testing").replace(/[^a-zA-Z0-9_.-]/g, "-");
 const uid = process.getuid?.() ?? 0;
-const lockDirectory = join(
-  tmpdir(),
-  `alchemy-test-apigateway-${uid}-${profile}.lock`,
-);
+const lockDirectory = join(tmpdir(), `alchemy-test-apigateway-${uid}-${profile}.lock`);
 const ownerFile = join(lockDirectory, "owner");
 
 const processIsAlive = (pid: number) => {
@@ -57,12 +51,10 @@ export const makeApiGatewayTestLease = () => {
       Effect.as(true),
       Effect.catchCause(() => Effect.succeed(false)),
     );
-    const tryWriteOwner = fs
-      .writeFileString(ownerFile, String(process.pid))
-      .pipe(
-        Effect.as(true),
-        Effect.catchCause(() => Effect.succeed(false)),
-      );
+    const tryWriteOwner = fs.writeFileString(ownerFile, String(process.pid)).pipe(
+      Effect.as(true),
+      Effect.catchCause(() => Effect.succeed(false)),
+    );
     const tryReadOwnerPid = fs.readFileString(ownerFile).pipe(
       Effect.map((content) => Number.parseInt(content, 10)),
       Effect.catchCause(() => Effect.succeed<number | undefined>(undefined)),
@@ -92,11 +84,7 @@ export const makeApiGatewayTestLease = () => {
       // (e.g. EFAULT on a reboot-stale path). Inspect the recorded owner.
       const ownerPid = yield* tryReadOwnerPid;
 
-      if (
-        ownerPid !== undefined &&
-        Number.isFinite(ownerPid) &&
-        processIsAlive(ownerPid)
-      ) {
+      if (ownerPid !== undefined && Number.isFinite(ownerPid) && processIsAlive(ownerPid)) {
         unreadablePolls = 0;
         yield* Effect.sleep(pollInterval);
         continue;

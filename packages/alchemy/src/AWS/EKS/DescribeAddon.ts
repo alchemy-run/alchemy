@@ -33,6 +33,4 @@ export interface DescribeAddon extends Binding.Service<
     ) => Effect.Effect<eks.DescribeAddonResponse, eks.DescribeAddonError>
   >
 > {}
-export const DescribeAddon = Binding.Service<DescribeAddon>(
-  "AWS.EKS.DescribeAddon",
-);
+export const DescribeAddon = Binding.Service<DescribeAddon>("AWS.EKS.DescribeAddon");

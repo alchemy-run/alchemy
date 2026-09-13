@@ -24,10 +24,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // windows with one shared budget.
 const clientLayer = Test.rpcClientLayer;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cap exponential backoff at 3s so readiness retries poll densely instead of
 // sleeping tens of seconds past the propagation window (an uncapped
@@ -78,9 +75,7 @@ const stack = beforeAll(
       Effect.gen(function* () {
         const client = yield* RpcClient.make(WorkerRpcs);
         yield* client.PingDO({ message: "warmup" }).pipe(retryReadyN(40));
-        yield* client
-          .CountDO({ upto: 1 })
-          .pipe(Stream.runCollect, retryReadyN(40));
+        yield* client.CountDO({ upto: 1 }).pipe(Stream.runCollect, retryReadyN(40));
       }).pipe(Effect.scoped, Effect.provide(clientLayer(url))),
     ),
     // Let edge propagation settle before the (mostly un-retried) bodies run.
@@ -171,9 +166,7 @@ test(
           times: 10,
         }),
       );
-      expect(values).toEqual(
-        messages.map((message, index) => ({ index, message })),
-      );
+      expect(values).toEqual(messages.map((message, index) => ({ index, message })));
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
   { timeout: 30_000 },
@@ -253,9 +246,7 @@ test(
 
       expect(results).toHaveLength(N);
       for (let i = 0; i < N; i++) {
-        expect(results[i]).toEqual(
-          Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1),
-        );
+        expect(results[i]).toEqual(Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1));
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
@@ -296,9 +287,7 @@ test(
       // First DO streaming call can race edge propagation and hit a Cloudflare
       // HTML error page (or a `Worker not found.` defect); retry the whole
       // collect through a bounded, defect-promoting schedule.
-      const values = yield* client
-        .CountDO({ upto: 5 })
-        .pipe(Stream.runCollect, retryReadyN(10));
+      const values = yield* client.CountDO({ upto: 5 }).pipe(Stream.runCollect, retryReadyN(10));
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
@@ -316,12 +305,8 @@ test(
       // First streaming call can race edge propagation and hit a Cloudflare
       // HTML error page (or a `Worker not found.` defect); retry the whole
       // collect through a bounded, defect-promoting schedule.
-      const values = yield* client
-        .EchoDO({ messages })
-        .pipe(Stream.runCollect, retryReadyN(10));
-      expect(values).toEqual(
-        messages.map((message, index) => ({ index, message })),
-      );
+      const values = yield* client.EchoDO({ messages }).pipe(Stream.runCollect, retryReadyN(10));
+      expect(values).toEqual(messages.map((message, index) => ({ index, message })));
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
   { timeout: 30_000 },
@@ -339,9 +324,7 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client
-            .PingDO({ message: `m-${i}` })
-            .pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
+          client.PingDO({ message: `m-${i}` }).pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: 16 },
       );
 
@@ -368,19 +351,13 @@ test(
         (i) =>
           client
             .CountDO({ upto: 3 + (i % 3) })
-            .pipe(
-              Stream.runCollect,
-              Effect.timeout("10 seconds"),
-              retryReadyN(5),
-            ),
+            .pipe(Stream.runCollect, Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: N },
       );
 
       expect(results).toHaveLength(N);
       for (let i = 0; i < N; i++) {
-        expect(results[i]).toEqual(
-          Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1),
-        );
+        expect(results[i]).toEqual(Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1));
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),

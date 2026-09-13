@@ -33,11 +33,7 @@ export interface CancelJobRun extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: CancelJobRunInput,
-    ) => Effect.Effect<emr.CancelJobRunResponse, emr.CancelJobRunError>
+    (request: CancelJobRunInput) => Effect.Effect<emr.CancelJobRunResponse, emr.CancelJobRunError>
   >
 > {}
-export const CancelJobRun = Binding.Service<CancelJobRun>(
-  "AWS.EMRServerless.CancelJobRun",
-);
+export const CancelJobRun = Binding.Service<CancelJobRun>("AWS.EMRServerless.CancelJobRun");

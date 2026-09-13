@@ -11,10 +11,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Regression test for the secondary symptom of #1109: when no consumer is
 // registered for a queue, the dev registry's `ExternalQueueConsumer` accepts
@@ -31,10 +28,7 @@ test.provider(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue("DropProbeQueue");
           const worker = yield* Cloudflare.Worker("drop-probe-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/queue-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/queue-local-worker.ts"),
             env: { QUEUE: queue },
           });
           return { queue, worker };

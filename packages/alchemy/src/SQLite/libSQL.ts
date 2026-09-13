@@ -25,12 +25,7 @@ export const libSQL: Layer.Layer<SQLite> = Layer.sync(SQLite, () => ({
         await client.execute("PRAGMA busy_timeout = 30000;");
         return fromClient(client);
       },
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to open libsql database: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to open libsql database: ${e}`, e),
     }),
 }));
 
@@ -49,13 +44,10 @@ export const fromClient = (
   exec: (sql: string) =>
     Effect.tryPromise({
       try: () => executor.execute(sql),
-      catch: (e) =>
-        parseError(extractErrorCode(e), `Failed to execute SQL: ${e}`, e),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute SQL: ${e}`, e),
     }),
 
-  transaction: <A, E>(
-    fn: (conn: SQLiteConnection) => Effect.Effect<A, E, never>,
-  ) =>
+  transaction: <A, E>(fn: (conn: SQLiteConnection) => Effect.Effect<A, E, never>) =>
     Effect.tryPromise({
       try: async () => {
         const tx = await client.transaction("write");
@@ -70,13 +62,8 @@ export const fromClient = (
           throw e;
         }
       },
-      catch: (e) =>
-        parseError(extractErrorCode(e), `Transaction failed: ${e}`, e),
-    }) as Effect.Effect<
-      A,
-      E | import("./SQLiteError.ts").SQLiteErrorType,
-      never
-    >,
+      catch: (e) => parseError(extractErrorCode(e), `Transaction failed: ${e}`, e),
+    }) as Effect.Effect<A, E | import("./SQLiteError.ts").SQLiteErrorType, never>,
 
   batch: (statements: Array<{ sql: string; params?: unknown[] }>) =>
     Effect.tryPromise({
@@ -90,8 +77,7 @@ export const fromClient = (
           "write",
         );
       },
-      catch: (e) =>
-        parseError(extractErrorCode(e), `Batch execution failed: ${e}`, e),
+      catch: (e) => parseError(extractErrorCode(e), `Batch execution failed: ${e}`, e),
     }),
 });
 
@@ -117,12 +103,7 @@ const wrapStatement = <R>(
         });
         return resultSetToRows<T>(result);
       },
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to execute statement.all: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute statement.all: ${e}`, e),
     }),
 
   get: <T = R>(...params: unknown[]) =>
@@ -135,12 +116,7 @@ const wrapStatement = <R>(
         const rows = resultSetToRows<T>(result);
         return rows[0];
       },
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to execute statement.get: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute statement.get: ${e}`, e),
     }),
 
   run: (...params: unknown[]) =>
@@ -151,12 +127,7 @@ const wrapStatement = <R>(
           args: params as InArgs,
         });
       },
-      catch: (e) =>
-        parseError(
-          extractErrorCode(e),
-          `Failed to execute statement.run: ${e}`,
-          e,
-        ),
+      catch: (e) => parseError(extractErrorCode(e), `Failed to execute statement.run: ${e}`, e),
     }),
 });
 

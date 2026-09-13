@@ -284,9 +284,7 @@ export const RecordProvider = () =>
                 }),
               ),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as RecordAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as RecordAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -304,11 +302,7 @@ export const RecordProvider = () =>
       }
       // zoneId is Input<string>; by reconcile time both sides are
       // concrete strings.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -403,9 +397,7 @@ export const RecordProvider = () =>
             dnsRecordId: observed.id,
             ...body,
           });
-          observed = narrowRecord(
-            updated as Parameters<typeof narrowRecord>[0],
-          );
+          observed = narrowRecord(updated as Parameters<typeof narrowRecord>[0]);
         }
       }
 
@@ -417,9 +409,7 @@ export const RecordProvider = () =>
         observed.ttl === undefined
       ) {
         return yield* Effect.fail(
-          new Error(
-            "Cloudflare returned a DNS record without id/type/value/ttl",
-          ),
+          new Error("Cloudflare returned a DNS record without id/type/value/ttl"),
         );
       }
       return {
@@ -509,9 +499,7 @@ interface RecordMatch {
  * `content`/`data`/`priority` do not select exactly one of them — adoption must
  * never pick a record arbitrarily.
  */
-export class AmbiguousDnsRecordError extends Data.TaggedError(
-  "AmbiguousDnsRecordError",
-)<{
+export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecordError")<{
   readonly zoneId: string;
   readonly name: string;
   readonly type: RecordType;
@@ -536,12 +524,7 @@ export class AmbiguousDnsRecordError extends Data.TaggedError(
 //   - exactly one exact match -> that record
 //   - no exact match          -> `undefined` (a new sibling record is created)
 //   - several exact matches   -> fail with an actionable error
-const findByNameType = (
-  zoneId: string,
-  name: string,
-  type: RecordType,
-  match: RecordMatch,
-) =>
+const findByNameType = (zoneId: string, name: string, type: RecordType, match: RecordMatch) =>
   listExactByNameType(zoneId, name, type).pipe(
     Effect.flatMap((found) => {
       if (found.length > 0) return Effect.succeed(found);
@@ -562,8 +545,7 @@ const findByNameType = (
         const narrowed = candidates.filter(
           (r) =>
             (match.content === undefined || r.content === match.content) &&
-            (match.data === undefined ||
-              recordDataEquals(match.data, r.data)) &&
+            (match.data === undefined || recordDataEquals(match.data, r.data)) &&
             (match.priority === undefined || r.priority === match.priority),
         );
         if (narrowed.length === 1) return narrowed[0];
@@ -589,9 +571,7 @@ const findByNameType = (
               .map(
                 (r) =>
                   `  - id=${r.id} content=${JSON.stringify(r.content)}` +
-                  (r.data === undefined
-                    ? ""
-                    : ` data=${JSON.stringify(r.data)}`) +
+                  (r.data === undefined ? "" : ` data=${JSON.stringify(r.data)}`) +
                   (r.priority === undefined ? "" : ` priority=${r.priority}`),
               )
               .join("\n"),
@@ -637,8 +617,7 @@ interface ObservedRecord {
   readonly modifiedOn?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowRecord = (raw: {
   id?: string | null;
@@ -718,12 +697,7 @@ const buildMutableBody = (news: RecordProps): RecordMutableBody => {
     type: news.type,
     // Cloudflare rejects the string `"1"` even though distilled types
     // it as `number | "1"`; the API wants numeric 1 for "automatic".
-    ttl:
-      news.ttl === undefined
-        ? 1
-        : news.ttl === ("1" as unknown)
-          ? 1
-          : (news.ttl as number),
+    ttl: news.ttl === undefined ? 1 : news.ttl === ("1" as unknown) ? 1 : (news.ttl as number),
     proxied: news.proxied,
     comment: news.comment,
     tags: news.tags === undefined ? undefined : Array.from(news.tags),
@@ -738,43 +712,25 @@ const buildMutableBody = (news: RecordProps): RecordMutableBody => {
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const bodyEqualsObserved = (
-  desired: RecordMutableBody,
-  observed: ObservedRecord,
-): boolean => {
+const bodyEqualsObserved = (desired: RecordMutableBody, observed: ObservedRecord): boolean => {
   if (desired.content !== undefined && desired.content !== observed.content) {
     return false;
   }
-  if (
-    desired.data !== undefined &&
-    !recordDataEquals(desired.data, observed.data)
-  ) {
+  if (desired.data !== undefined && !recordDataEquals(desired.data, observed.data)) {
     return false;
   }
   // CF echoes ttl=1 for "automatic".
   if (desired.ttl !== observed.ttl) return false;
-  if (
-    desired.proxied !== undefined &&
-    desired.proxied !== (observed.proxied ?? false)
-  ) {
+  if (desired.proxied !== undefined && desired.proxied !== (observed.proxied ?? false)) {
     return false;
   }
-  if (
-    desired.comment !== undefined &&
-    desired.comment !== (observed.comment ?? "")
-  ) {
+  if (desired.comment !== undefined && desired.comment !== (observed.comment ?? "")) {
     return false;
   }
-  if (
-    desired.tags !== undefined &&
-    !arrayEqualsUnordered(desired.tags, observed.tags)
-  ) {
+  if (desired.tags !== undefined && !arrayEqualsUnordered(desired.tags, observed.tags)) {
     return false;
   }
-  if (
-    desired.priority !== undefined &&
-    desired.priority !== observed.priority
-  ) {
+  if (desired.priority !== undefined && desired.priority !== observed.priority) {
     return false;
   }
   return true;
@@ -789,23 +745,15 @@ const normalizeRecordData = (
   ) as RecordData;
 };
 
-const recordDataEquals = (
-  desired: RecordData,
-  observed: RecordData | undefined,
-): boolean => {
+const recordDataEquals = (desired: RecordData, observed: RecordData | undefined): boolean => {
   if (observed === undefined) return false;
-  const desiredEntries = Object.entries(desired).filter(
-    ([, value]) => value != null,
-  );
-  const observedEntries = Object.entries(observed).filter(
-    ([, value]) => value != null,
-  );
+  const desiredEntries = Object.entries(desired).filter(([, value]) => value != null);
+  const observedEntries = Object.entries(observed).filter(([, value]) => value != null);
   return (
     desiredEntries.length === observedEntries.length &&
     desiredEntries.every(([key, value]) =>
       observedEntries.some(
-        ([observedKey, observedValue]) =>
-          observedKey === key && observedValue === value,
+        ([observedKey, observedValue]) => observedKey === key && observedValue === value,
       ),
     )
   );

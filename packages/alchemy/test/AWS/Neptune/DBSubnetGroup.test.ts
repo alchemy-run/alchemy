@@ -24,24 +24,17 @@ const defaultSubnetIds = Effect.gen(function* () {
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .sort();
   if (ids.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 2 default-for-AZ subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 2 default-for-AZ subnets"));
   }
   return ids;
 });
 
 const assertGone = (name: string) =>
   neptune.describeDBSubnetGroups({ DBSubnetGroupName: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`subnet group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`subnet group '${name}' still exists`))),
     Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -73,9 +66,7 @@ test.provider(
         DBSubnetGroupName: group.dbSubnetGroupName,
       });
       const observed = described.DBSubnetGroups?.[0];
-      expect(observed?.DBSubnetGroupDescription).toBe(
-        "alchemy neptune subnet group",
-      );
+      expect(observed?.DBSubnetGroupDescription).toBe("alchemy neptune subnet group");
       expect(observed?.VpcId).toBeDefined();
 
       // Update the description in place (name unchanged).

@@ -28,9 +28,7 @@ describe("Alchemy.Stack error channel", () => {
     // The resulting effect surfaces `ConfigError` in its error channel rather
     // than `never` — the whole point of the change.
     type ErrorOf<T> = T extends Effect.Effect<any, infer E, any> ? E : never;
-    const _assertError: ErrorOf<typeof stack> extends ConfigError
-      ? true
-      : false = true;
+    const _assertError: ErrorOf<typeof stack> extends ConfigError ? true : false = true;
     expect(_assertError).toBe(true);
   });
 

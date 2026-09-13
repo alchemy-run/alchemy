@@ -11,10 +11,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/python/worker.py");
 
@@ -38,10 +35,7 @@ test.provider(
       );
 
       expect(worker.url).toBeDefined();
-      yield* expectUrlContains(
-        worker.url!,
-        "alchemy-python-worker-7c1f suffix=local",
-      );
+      yield* expectUrlContains(worker.url!, "alchemy-python-worker-7c1f suffix=local");
 
       yield* stack.destroy();
     }).pipe(logLevel),

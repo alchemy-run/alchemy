@@ -8,10 +8,7 @@ import {
   revokeCertificate,
   type AccountCredentials,
 } from "./Client.ts";
-import {
-  IssueCertificate,
-  type IssueCertificateClient,
-} from "./IssueCertificate.ts";
+import { IssueCertificate, type IssueCertificateClient } from "./IssueCertificate.ts";
 
 /**
  * Implementation of {@link IssueCertificate}: the account's directory
@@ -37,9 +34,7 @@ export const IssueCertificateHttp = Layer.succeed(
   Effect.fn(function* (account: Account) {
     const directoryUrl = yield* account.directoryUrl;
     const accountUrl = yield* account.accountUrl;
-    const trustedRoot = yield* account.trustedRoot.pipe(
-      Output.map((root) => root ?? ""),
-    );
+    const trustedRoot = yield* account.trustedRoot.pipe(Output.map((root) => root ?? ""));
     const privateKey = yield* account.privateKey;
     const credentials = Effect.all({
       directoryUrl,
@@ -59,15 +54,11 @@ export const IssueCertificateHttp = Layer.succeed(
     const client: IssueCertificateClient = {
       issue: Effect.fn("ACME.IssueCertificate.issue")(function* (request) {
         const creds = yield* credentials;
-        return yield* issueCertificate(request).pipe(
-          Effect.provide(accountLayer(creds)),
-        );
+        return yield* issueCertificate(request).pipe(Effect.provide(accountLayer(creds)));
       }),
       revoke: Effect.fn("ACME.IssueCertificate.revoke")(function* (request) {
         const creds = yield* credentials;
-        return yield* revokeCertificate(request).pipe(
-          Effect.provide(accountLayer(creds)),
-        );
+        return yield* revokeCertificate(request).pipe(Effect.provide(accountLayer(creds)));
       }),
     };
     return client;

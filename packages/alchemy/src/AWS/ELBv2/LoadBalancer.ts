@@ -5,9 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 /** Internal: the ALB is still visible after `deleteLoadBalancer`. */
-class LoadBalancerStillDeleting extends Data.TaggedError(
-  "LoadBalancerStillDeleting",
-)<{}> {}
+class LoadBalancerStillDeleting extends Data.TaggedError("LoadBalancerStillDeleting")<{}> {}
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -201,9 +199,7 @@ export const LoadBalancerProvider = () =>
               LoadBalancerArns: [output.loadBalancerArn],
             })
             .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
             );
           const loadBalancer = described?.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
@@ -227,14 +223,10 @@ export const LoadBalancerProvider = () =>
           Effect.gen(function* () {
             // Enumerate every load balancer in the account/region, paginating
             // exhaustively.
-            const loadBalancers = yield* elbv2.describeLoadBalancers
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.LoadBalancers ?? []),
-                ),
-              );
+            const loadBalancers = yield* elbv2.describeLoadBalancers.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.LoadBalancers ?? [])),
+            );
             const owned = loadBalancers.filter(
               (lb): lb is elbv2.LoadBalancer & { LoadBalancerArn: string } =>
                 lb.LoadBalancerArn != null,
@@ -270,8 +262,7 @@ export const LoadBalancerProvider = () =>
                             (desc.Tags ?? [])
                               .filter(
                                 (t): t is { Key: string; Value: string } =>
-                                  typeof t.Key === "string" &&
-                                  typeof t.Value === "string",
+                                  typeof t.Key === "string" && typeof t.Value === "string",
                               )
                               .map((t) => [t.Key, t.Value]),
                           ),
@@ -291,9 +282,8 @@ export const LoadBalancerProvider = () =>
               type: lb.Type!,
               securityGroups: lb.SecurityGroups ?? [],
               subnets:
-                lb.AvailabilityZones?.flatMap((zone) =>
-                  zone.SubnetId ? [zone.SubnetId] : [],
-                ) ?? [],
+                lb.AvailabilityZones?.flatMap((zone) => (zone.SubnetId ? [zone.SubnetId] : [])) ??
+                [],
               tags: tagsByArn.get(lb.LoadBalancerArn) ?? {},
             }));
           }),
@@ -310,9 +300,7 @@ export const LoadBalancerProvider = () =>
               Names: [name],
             })
             .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
             );
           let loadBalancer = described?.LoadBalancers?.[0];
 
@@ -345,29 +333,19 @@ export const LoadBalancerProvider = () =>
             });
             loadBalancer = created.LoadBalancers?.[0];
             if (!loadBalancer?.LoadBalancerArn) {
-              return yield* Effect.die(
-                new Error("createLoadBalancer returned no load balancer"),
-              );
+              return yield* Effect.die(new Error("createLoadBalancer returned no load balancer"));
             }
           }
 
-          const loadBalancerArn =
-            loadBalancer.LoadBalancerArn as LoadBalancerArn;
+          const loadBalancerArn = loadBalancer.LoadBalancerArn as LoadBalancerArn;
 
           // Sync subnets — diff observed against desired. Only applies to
           // application/network LBs that manage subnets in place.
           const observedSubnets =
-            loadBalancer.AvailabilityZones?.flatMap((z) =>
-              z.SubnetId ? [z.SubnetId] : [],
-            ) ?? [];
+            loadBalancer.AvailabilityZones?.flatMap((z) => (z.SubnetId ? [z.SubnetId] : [])) ?? [];
           if (news.subnets) {
             const desiredSubnets = news.subnets as string[];
-            if (
-              !deepEqual(
-                [...observedSubnets].sort(),
-                [...desiredSubnets].sort(),
-              )
-            ) {
+            if (!deepEqual([...observedSubnets].sort(), [...desiredSubnets].sort())) {
               yield* elbv2.setSubnets({
                 LoadBalancerArn: loadBalancerArn,
                 Subnets: desiredSubnets,
@@ -398,10 +376,7 @@ export const LoadBalancerProvider = () =>
           }
 
           // Sync IP address type — diff observed against desired.
-          if (
-            news.ipAddressType &&
-            news.ipAddressType !== loadBalancer.IpAddressType
-          ) {
+          if (news.ipAddressType && news.ipAddressType !== loadBalancer.IpAddressType) {
             yield* elbv2.setIpAddressType({
               LoadBalancerArn: loadBalancerArn,
               IpAddressType: news.ipAddressType,
@@ -415,12 +390,10 @@ export const LoadBalancerProvider = () =>
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyLoadBalancerAttributes({
               LoadBalancerArn: loadBalancerArn,
-              Attributes: Object.entries(news.attributes).map(
-                ([Key, Value]) => ({
-                  Key,
-                  Value,
-                }),
-              ),
+              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             });
           }
 
@@ -472,12 +445,7 @@ export const LoadBalancerProvider = () =>
             .deleteLoadBalancer({
               LoadBalancerArn: output.loadBalancerArn,
             })
-            .pipe(
-              Effect.catchTag(
-                "LoadBalancerNotFoundException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void));
 
           // `deleteLoadBalancer` returns immediately, but the ALB's ENIs
           // linger for a minute or two afterwards and block deletion of any
@@ -489,19 +457,11 @@ export const LoadBalancerProvider = () =>
               LoadBalancerArns: [output.loadBalancerArn],
             })
             .pipe(
-              Effect.flatMap(() =>
-                Effect.fail(new LoadBalancerStillDeleting()),
-              ),
-              Effect.catchTag(
-                "LoadBalancerNotFoundException",
-                () => Effect.void,
-              ),
+              Effect.flatMap(() => Effect.fail(new LoadBalancerStillDeleting())),
+              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "LoadBalancerStillDeleting",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(48),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(48)]),
               }),
               // Best-effort: if it is somehow still visible after ~4 min, let
               // the downstream deletes retry rather than fail the teardown.

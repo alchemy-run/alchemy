@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface DescribeTableRequest extends Omit<
-  DynamoDB.DescribeTableInput,
-  "TableName"
-> {}
+export interface DescribeTableRequest extends Omit<DynamoDB.DescribeTableInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:DescribeTable`.
@@ -33,13 +30,8 @@ export interface DescribeTable extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeTableRequest,
-    ) => Effect.Effect<
-      DynamoDB.DescribeTableOutput,
-      DynamoDB.DescribeTableError
-    >
+    ) => Effect.Effect<DynamoDB.DescribeTableOutput, DynamoDB.DescribeTableError>
   >
 > {}
 
-export const DescribeTable = Binding.Service<DescribeTable>(
-  "AWS.DynamoDB.DescribeTable",
-);
+export const DescribeTable = Binding.Service<DescribeTable>("AWS.DynamoDB.DescribeTable");

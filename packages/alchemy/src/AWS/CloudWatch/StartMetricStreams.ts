@@ -30,9 +30,7 @@ export interface StartMetricStreams extends Binding.Service<
   "AWS.CloudWatch.StartMetricStreams",
   (
     ...streams: MetricStreams
-  ) => Effect.Effect<
-    () => Effect.Effect<cloudwatch.StartMetricStreamsOutput, any>
-  >
+  ) => Effect.Effect<() => Effect.Effect<cloudwatch.StartMetricStreamsOutput, any>>
 > {}
 
 export const StartMetricStreams = Binding.Service<StartMetricStreams>(

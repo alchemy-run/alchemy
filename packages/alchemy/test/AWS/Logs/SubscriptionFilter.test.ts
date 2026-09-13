@@ -12,10 +12,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const describeFilter = Effect.fn(function* (
-  logGroupName: string,
-  filterName: string,
-) {
+const describeFilter = Effect.fn(function* (logGroupName: string, filterName: string) {
   const described = yield* logs
     .describeSubscriptionFilters({
       logGroupName,
@@ -26,14 +23,10 @@ const describeFilter = Effect.fn(function* (
         Effect.succeed({ subscriptionFilters: [] }),
       ),
     );
-  return (described.subscriptionFilters ?? []).find(
-    (filter) => filter.filterName === filterName,
-  );
+  return (described.subscriptionFilters ?? []).find((filter) => filter.filterName === filterName);
 });
 
-class SubscriptionFilterStillExists extends Data.TaggedError(
-  "SubscriptionFilterStillExists",
-)<{
+class SubscriptionFilterStillExists extends Data.TaggedError("SubscriptionFilterStillExists")<{
   readonly filterName: string;
 }> {}
 
@@ -105,24 +98,16 @@ test.provider(
       expect(created.destinationArn).toContain(":stream/");
 
       // out-of-band verification via distilled
-      const observedCreated = yield* describeFilter(
-        created.logGroupName,
-        created.filterName,
-      );
+      const observedCreated = yield* describeFilter(created.logGroupName, created.filterName);
       expect(observedCreated?.destinationArn).toBe(created.destinationArn);
       expect(observedCreated?.filterPattern ?? "").toBe("");
       expect(observedCreated?.distribution).toBe("ByLogStream");
 
       // update the pattern in place (same filter name — upsert semantics)
-      const updated = yield* stack.deploy(
-        infra({ filterPattern: "?ERROR ?Error" }),
-      );
+      const updated = yield* stack.deploy(infra({ filterPattern: "?ERROR ?Error" }));
       expect(updated.filterName).toBe(created.filterName);
 
-      const observedUpdated = yield* describeFilter(
-        updated.logGroupName,
-        updated.filterName,
-      );
+      const observedUpdated = yield* describeFilter(updated.logGroupName, updated.filterName);
       expect(observedUpdated?.filterPattern).toBe("?ERROR ?Error");
 
       // explicit filterName triggers a replacement
@@ -133,9 +118,7 @@ test.provider(
         }),
       );
       expect(replaced.filterName).toBe("alchemy-test-subscription-renamed");
-      expect(
-        yield* describeFilter(replaced.logGroupName, replaced.filterName),
-      ).toBeDefined();
+      expect(yield* describeFilter(replaced.logGroupName, replaced.filterName)).toBeDefined();
       yield* assertFilterDeleted(created.logGroupName, created.filterName);
 
       yield* stack.destroy();

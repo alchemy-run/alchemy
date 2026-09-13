@@ -9,12 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  deleteRestApiAndWait,
-  restApiArn,
-  retryOnApiStatusUpdating,
-  syncTags,
-} from "./common.ts";
+import { deleteRestApiAndWait, restApiArn, retryOnApiStatusUpdating, syncTags } from "./common.ts";
 
 export interface RestApiProps {
   /**
@@ -232,8 +227,7 @@ const patchReplace = (path: string, value: string): ag.PatchOperation => ({
   value,
 });
 
-const encodeJsonPointerSegment = (s: string) =>
-  s.replace(/~/g, "~0").replace(/\//g, "~1");
+const encodeJsonPointerSegment = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
 const binaryMediaTypePath = (mediaType: string) =>
   `/binaryMediaTypes/${encodeJsonPointerSegment(mediaType)}`;
@@ -276,18 +270,10 @@ const buildUpdatePatches = (
   if (news.version !== prev.version) {
     patches.push(patchReplace("/version", news.version ?? ""));
   }
-  patches.push(
-    ...buildBinaryMediaTypePatches(
-      prev.binaryMediaTypes,
-      news.binaryMediaTypes,
-    ),
-  );
+  patches.push(...buildBinaryMediaTypePatches(prev.binaryMediaTypes, news.binaryMediaTypes));
   if (news.minimumCompressionSize !== prev.minimumCompressionSize) {
     patches.push(
-      patchReplace(
-        "/minimumCompressionSize",
-        String(news.minimumCompressionSize ?? ""),
-      ),
+      patchReplace("/minimumCompressionSize", String(news.minimumCompressionSize ?? "")),
     );
   }
   if (news.apiKeySource !== prev.apiKeySource) {
@@ -298,21 +284,14 @@ const buildUpdatePatches = (
   }
   if (news.disableExecuteApiEndpoint !== prev.disableExecuteApiEndpoint) {
     patches.push(
-      patchReplace(
-        "/disableExecuteApiEndpoint",
-        String(!!news.disableExecuteApiEndpoint),
-      ),
+      patchReplace("/disableExecuteApiEndpoint", String(!!news.disableExecuteApiEndpoint)),
     );
   }
   if (news.securityPolicy !== prev.securityPolicy) {
-    patches.push(
-      patchReplace("/securityPolicy", news.securityPolicy ?? "TLS_1_0"),
-    );
+    patches.push(patchReplace("/securityPolicy", news.securityPolicy ?? "TLS_1_0"));
   }
   if (news.endpointAccessMode !== prev.endpointAccessMode) {
-    patches.push(
-      patchReplace("/endpointAccessMode", news.endpointAccessMode ?? ""),
-    );
+    patches.push(patchReplace("/endpointAccessMode", news.endpointAccessMode ?? ""));
   }
   return patches;
 };
@@ -330,10 +309,7 @@ export const RestApiProvider = () =>
             // Endpoint type, private endpoint IDs, and IP address type are part
             // of the REST API endpoint shape; replacing avoids partial endpoint
             // drift that API Gateway cannot consistently patch in place.
-            !deepEqual(
-              news.endpointConfiguration?.types,
-              olds.endpointConfiguration?.types,
-            ) ||
+            !deepEqual(news.endpointConfiguration?.types, olds.endpointConfiguration?.types) ||
             !deepEqual(
               news.endpointConfiguration?.vpcEndpointIds,
               olds.endpointConfiguration?.vpcEndpointIds,
@@ -356,9 +332,7 @@ export const RestApiProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.items ?? [])
-                  .filter(
-                    (api): api is ag.RestApi & { id: string } => api.id != null,
-                  )
+                  .filter((api): api is ag.RestApi & { id: string } => api.id != null)
                   .map((api) => snapshotFromApi(api)),
               ),
             ),
@@ -367,11 +341,7 @@ export const RestApiProvider = () =>
           if (!output?.restApiId) return undefined;
           const api = yield* ag
             .getRestApi({ restApiId: output.restApiId })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!api?.id) return undefined;
           return snapshotFromApi(api);
         }),
@@ -411,9 +381,7 @@ export const RestApiProvider = () =>
             }),
           );
           if (!created.id || !created.rootResourceId) {
-            return yield* Effect.die(
-              "createRestApi missing id or rootResourceId",
-            );
+            return yield* Effect.die("createRestApi missing id or rootResourceId");
           }
           yield* session.note(`Created REST API ${created.id}`);
           const full = yield* ag.getRestApi({ restApiId: created.id });
@@ -434,20 +402,14 @@ export const RestApiProvider = () =>
           // is populated; we never expect `output === undefined` here, but
           // we still handle it defensively.
           if (!output?.restApiId) {
-            return yield* Effect.die(
-              "RestApi reconcile reached without a precreate output",
-            );
+            return yield* Effect.die("RestApi reconcile reached without a precreate output");
           }
 
           // Observe — fetch live cloud state. `output` is treated as a
           // cache for the stable id only.
           const observed = yield* ag
             .getRestApi({ restApiId: output.restApiId })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!observed?.id) {
             return yield* Effect.die(
               `RestApi ${output.restApiId} disappeared between precreate and reconcile`,

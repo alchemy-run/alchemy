@@ -61,10 +61,7 @@ export interface StartMessageMoveTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StartMessageMoveTaskRequest,
-    ) => Effect.Effect<
-      sqs.StartMessageMoveTaskResult,
-      sqs.StartMessageMoveTaskError
-    >
+    ) => Effect.Effect<sqs.StartMessageMoveTaskResult, sqs.StartMessageMoveTaskError>
   >
 > {}
 

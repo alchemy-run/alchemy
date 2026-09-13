@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // as the AWS.CloudFront and AWS.Website.Vite suites).
 const runLive = !process.env.FAST;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "foldkit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "foldkit-app");
 
 // Clone under the alchemy package so `vite`, `foldkit`, and
 // `@foldkit/vite-plugin` resolve from the workspace's hoisted node_modules
@@ -88,13 +84,9 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Foldkit", () => {
         });
         // SPA fallback (the composite's default): a deep link boots the app
         // instead of 404ing, and the Foldkit router resolves the route.
-        yield* expectUrlContains(
-          `${url}/counter/42`,
-          "FOLDKIT_AWS_PAGE_MARKER",
-          {
-            label: "spa fallback",
-          },
-        );
+        yield* expectUrlContains(`${url}/counter/42`, "FOLDKIT_AWS_PAGE_MARKER", {
+          label: "spa fallback",
+        });
 
         yield* stack.destroy();
       }),

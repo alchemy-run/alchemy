@@ -27,10 +27,7 @@ export interface GetFindingStatistics extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetFindingStatisticsRequest,
-    ) => Effect.Effect<
-      macie2.GetFindingStatisticsResponse,
-      macie2.GetFindingStatisticsError
-    >
+    ) => Effect.Effect<macie2.GetFindingStatisticsResponse, macie2.GetFindingStatisticsError>
   >
 > {}
 export const GetFindingStatistics = Binding.Service<GetFindingStatistics>(

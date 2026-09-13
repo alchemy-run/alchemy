@@ -11,21 +11,15 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -48,9 +42,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const program = (
-        mitigationAction: Cloudflare.SchemaValidation.OperationMitigationAction,
-      ) =>
+      const program = (mitigationAction: Cloudflare.SchemaValidation.OperationMitigationAction) =>
         Effect.gen(function* () {
           const op = yield* Cloudflare.ApiShield.Operation("TestOp", {
             zoneId,
@@ -58,14 +50,11 @@ test.provider(
             host: zoneName,
             endpoint: "/alchemy-sv-operation-setting-test",
           });
-          const override = yield* Cloudflare.SchemaValidation.OperationSetting(
-            "TestOverride",
-            {
-              zoneId,
-              operationId: op.operationId,
-              mitigationAction,
-            },
-          );
+          const override = yield* Cloudflare.SchemaValidation.OperationSetting("TestOverride", {
+            zoneId,
+            operationId: op.operationId,
+            mitigationAction,
+          });
           return { op, override };
         });
 
@@ -121,21 +110,16 @@ test.provider(
             host: zoneName,
             endpoint: "/alchemy-sv-operation-setting-list-test",
           });
-          const override = yield* Cloudflare.SchemaValidation.OperationSetting(
-            "ListOverride",
-            {
-              zoneId,
-              operationId: op.operationId,
-              mitigationAction: "block",
-            },
-          );
+          const override = yield* Cloudflare.SchemaValidation.OperationSetting("ListOverride", {
+            zoneId,
+            operationId: op.operationId,
+            mitigationAction: "block",
+          });
           return { op, override };
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.SchemaValidation.OperationSetting,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.SchemaValidation.OperationSetting);
       const all = yield* provider.list();
 
       expect(

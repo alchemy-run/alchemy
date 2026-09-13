@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Firewall } from "./Firewall.ts";
 
-export interface StartFlowCaptureRequest extends Omit<
-  NFW.StartFlowCaptureRequest,
-  "FirewallArn"
-> {}
+export interface StartFlowCaptureRequest extends Omit<NFW.StartFlowCaptureRequest, "FirewallArn"> {}
 
 /**
  * Runtime binding for `network-firewall:StartFlowCapture` — begin a

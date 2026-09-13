@@ -35,6 +35,4 @@ export interface GetLogRecord extends Binding.Service<
     ) => Effect.Effect<Logs.GetLogRecordResponse, Logs.GetLogRecordError>
   >
 > {}
-export const GetLogRecord = Binding.Service<GetLogRecord>(
-  "AWS.Logs.GetLogRecord",
-);
+export const GetLogRecord = Binding.Service<GetLogRecord>("AWS.Logs.GetLogRecord");

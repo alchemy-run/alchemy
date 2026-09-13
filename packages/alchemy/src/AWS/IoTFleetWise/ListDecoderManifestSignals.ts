@@ -46,7 +46,6 @@ export interface ListDecoderManifestSignals extends Binding.Service<
     >
   >
 > {}
-export const ListDecoderManifestSignals =
-  Binding.Service<ListDecoderManifestSignals>(
-    "AWS.IoTFleetWise.ListDecoderManifestSignals",
-  );
+export const ListDecoderManifestSignals = Binding.Service<ListDecoderManifestSignals>(
+  "AWS.IoTFleetWise.ListDecoderManifestSignals",
+);

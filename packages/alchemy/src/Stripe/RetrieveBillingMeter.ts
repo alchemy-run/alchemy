@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { BillingMeter } from "./BillingMeter.ts";
 
-export interface RetrieveBillingMeterRequest extends Omit<
-  GetBillingMeterRequest,
-  "id"
-> {}
+export interface RetrieveBillingMeterRequest extends Omit<GetBillingMeterRequest, "id"> {}
 
 /**
  * Retrieve a bound Stripe Billing Meter over HTTP.

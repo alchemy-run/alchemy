@@ -3,13 +3,7 @@ import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  CliConfig,
-  CliError,
-  Command,
-  Flag,
-  GlobalFlag,
-} from "effect/unstable/cli";
+import { CliConfig, CliError, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import pkg from "../../package.json" with { type: "json" };
 import { Group, pack } from "./pack.ts";
@@ -73,17 +67,13 @@ export const publishCommand = Command.make(
   Command.withDescription(
     "Publish a pkg pack directory from the current GitHub Actions job, after its manifest artifact has been uploaded",
   ),
-  Command.withExamples([
-    { command: "pkg publish --registry https://pkg.alchemy.run" },
-  ]),
+  Command.withExamples([{ command: "pkg publish --registry https://pkg.alchemy.run" }]),
 );
 
 export const root = Command.make("pkg", {}, () =>
   Effect.fail(new CliError.ShowHelp({ commandPath: ["pkg"], errors: [] })),
 ).pipe(
-  Command.withDescription(
-    "Pack and publish preview packages for pull requests.",
-  ),
+  Command.withDescription("Pack and publish preview packages for pull requests."),
   Command.withSubcommands([packCommand, publishCommand]),
 );
 

@@ -35,10 +35,7 @@ export interface ListResourcesForWebACL extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListResourcesForWebACLRequest,
-    ) => Effect.Effect<
-      WAFV2.ListResourcesForWebACLResponse,
-      WAFV2.ListResourcesForWebACLError
-    >
+    ) => Effect.Effect<WAFV2.ListResourcesForWebACLResponse, WAFV2.ListResourcesForWebACLError>
   >
 > {}
 

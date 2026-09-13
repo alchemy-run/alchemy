@@ -42,16 +42,11 @@ const logDeliveryRole = (stream: AWS.Kinesis.Stream) =>
 
 const assertConfigGone = (name: string) =>
   cloudfront.getRealtimeLogConfig({ Name: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("realtime log config still exists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("realtime log config still exists"))),
     Effect.catchTag("NoSuchRealtimeLogConfig", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 

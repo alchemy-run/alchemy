@@ -30,10 +30,9 @@ const testLayer = (config: Record<string, string> = {}) => {
   return PrismaAuth.pipe(Layer.provideMerge(base));
 };
 
-const prismaAuthProvider = getAuthProvider<
-  PrismaAuthConfig,
-  PrismaResolvedCredentials
->(PRISMA_AUTH_PROVIDER_NAME);
+const prismaAuthProvider = getAuthProvider<PrismaAuthConfig, PrismaResolvedCredentials>(
+  PRISMA_AUTH_PROVIDER_NAME,
+);
 
 const readStoredCredentials = Effect.gen(function* () {
   const auth = yield* prismaAuthProvider;
@@ -46,9 +45,7 @@ const readStoredCredentials = Effect.gen(function* () {
 const readEnvironmentCredentials = Effect.gen(function* () {
   const auth = yield* prismaAuthProvider;
   if (auth.readEnvironment === undefined) {
-    return yield* Effect.die(
-      "Prisma does not expose CI environment credentials",
-    );
+    return yield* Effect.die("Prisma does not expose CI environment credentials");
   }
   return yield* auth.readEnvironment;
 });
@@ -62,9 +59,7 @@ describe("Prisma auth provider", () => {
         details: "PRISMA_SERVICE_TOKEN",
       });
       expect(Redacted.value(credentials.serviceToken)).toBe("service-token");
-    }).pipe(
-      Effect.provide(testLayer({ PRISMA_SERVICE_TOKEN: "service-token" })),
-    ),
+    }).pipe(Effect.provide(testLayer({ PRISMA_SERVICE_TOKEN: "service-token" }))),
   );
 
   it.effect("falls back to PRISMA_API_TOKEN for CI", () =>
@@ -96,9 +91,7 @@ describe("Prisma auth provider", () => {
         serviceToken: "stored-token",
       });
 
-      expect(details.lines).toEqual([
-        { key: "serviceToken", value: "stor****" },
-      ]);
+      expect(details.lines).toEqual([{ key: "serviceToken", value: "stor****" }]);
     }).pipe(Effect.provide(testLayer())),
   );
 
@@ -106,9 +99,7 @@ describe("Prisma auth provider", () => {
     Effect.gen(function* () {
       const auth = yield* prismaAuthProvider;
       if (auth.configureWith === undefined) {
-        return yield* Effect.die(
-          "Prisma does not expose flag-driven configuration",
-        );
+        return yield* Effect.die("Prisma does not expose flag-driven configuration");
       }
       const error = yield* auth
         .configureWith("default", {

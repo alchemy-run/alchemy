@@ -43,10 +43,7 @@ export interface CreatePresignedUrl extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreatePresignedUrlRequest,
-    ) => Effect.Effect<
-      qapps.CreatePresignedUrlOutput,
-      qapps.CreatePresignedUrlError
-    >
+    ) => Effect.Effect<qapps.CreatePresignedUrlOutput, qapps.CreatePresignedUrlError>
   >
 > {}
 

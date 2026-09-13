@@ -6,11 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readMailManagerTags,
@@ -129,18 +125,13 @@ export interface IngressPoint extends Resource<
  *
  * @resource
  */
-export const IngressPoint = Resource<IngressPoint>(
-  "AWS.MailManager.IngressPoint",
-);
+export const IngressPoint = Resource<IngressPoint>("AWS.MailManager.IngressPoint");
 
 export const IngressPointProvider = () =>
   Provider.effect(
     IngressPoint,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { ingressPointName?: string },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { ingressPointName?: string }) {
         return (
           props.ingressPointName ??
           (yield* createPhysicalName({ id, maxLength: 63, lowercase: true }))
@@ -150,11 +141,7 @@ export const IngressPointProvider = () =>
       const getById = (ingressPointId: string) =>
         mm
           .getIngressPoint({ IngressPointId: ingressPointId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (name: string) =>
         mm.listIngressPoints.pages({}).pipe(
@@ -184,14 +171,10 @@ export const IngressPointProvider = () =>
       const waitForStable = (ingressPointId: string) =>
         repeatUntilMailManagerStable(
           getById(ingressPointId),
-          (r) =>
-            r === undefined ||
-            (r.Status !== "PROVISIONING" && r.Status !== "UPDATING"),
+          (r) => r === undefined || (r.Status !== "PROVISIONING" && r.Status !== "UPDATING"),
         );
 
-      const toAttrs = Effect.fn(function* (
-        ingress: mm.GetIngressPointResponse,
-      ) {
+      const toAttrs = Effect.fn(function* (ingress: mm.GetIngressPointResponse) {
         if (ingress.IngressPointArn === undefined) {
           return yield* Effect.fail(
             new Error(
@@ -231,8 +214,7 @@ export const IngressPointProvider = () =>
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.ingressPointName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.ingressPointName ?? (yield* createName(id, olds ?? {}));
           const ingress = yield* observe(output, name);
           if (ingress === undefined) return undefined;
           const attrs = yield* toAttrs(ingress);
@@ -250,9 +232,7 @@ export const IngressPointProvider = () =>
           if (olds.type !== news.type) {
             return { action: "replace" } as const;
           }
-          if (
-            !sameShape(olds.networkConfiguration, news.networkConfiguration)
-          ) {
+          if (!sameShape(olds.networkConfiguration, news.networkConfiguration)) {
             return { action: "replace" } as const;
           }
           if (olds.tlsPolicy !== news.tlsPolicy) {
@@ -287,11 +267,7 @@ export const IngressPointProvider = () =>
                 TlsPolicy: news.tlsPolicy,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             ingress =
               created !== undefined
                 ? yield* getById(created.IngressPointId)
@@ -299,9 +275,7 @@ export const IngressPointProvider = () =>
           }
           if (ingress === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Mail Manager ingress point '${name}' not found after create`,
-              ),
+              new Error(`Mail Manager ingress point '${name}' not found after create`),
             );
           }
 
@@ -315,10 +289,7 @@ export const IngressPointProvider = () =>
           //    to push it when the prop changed.
           const configChanged =
             news.ingressPointConfiguration !== undefined &&
-            !sameShape(
-              olds?.ingressPointConfiguration,
-              news.ingressPointConfiguration,
-            );
+            !sameShape(olds?.ingressPointConfiguration, news.ingressPointConfiguration);
           // AWS rejects any update from or to FIPS — those transitions go
           // through replacement (see diff), so only non-FIPS deltas are
           // pushed here.
@@ -339,9 +310,7 @@ export const IngressPointProvider = () =>
               IngressPointName: name,
               RuleSetId: news.ruleSetId,
               TrafficPolicyId: news.trafficPolicyId,
-              IngressPointConfiguration: configChanged
-                ? news.ingressPointConfiguration
-                : undefined,
+              IngressPointConfiguration: configChanged ? news.ingressPointConfiguration : undefined,
               TlsPolicy: tlsChanged ? news.tlsPolicy : undefined,
             });
             const updated = yield* waitForStable(ingress.IngressPointId);

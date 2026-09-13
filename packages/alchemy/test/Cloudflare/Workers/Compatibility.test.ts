@@ -1,8 +1,5 @@
 import { describe, expect, test } from "alchemy-test";
-import {
-  getCompatibility,
-  getToolingCompatibility,
-} from "@/Cloudflare/Workers/Compatibility";
+import { getCompatibility, getToolingCompatibility } from "@/Cloudflare/Workers/Compatibility";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker";
 import * as Output from "@/Output";
 
@@ -103,27 +100,21 @@ describe("getCompatibility", () => {
 
 describe("getToolingCompatibility", () => {
   test("materializes date-default nodejs_compat for downstream tools", () => {
-    expect(
-      getToolingCompatibility({ date: "2026-08-31", flags: [] }, "worker.ts")
-        .flags,
-    ).toEqual(["nodejs_compat"]);
+    expect(getToolingCompatibility({ date: "2026-08-31", flags: [] }, "worker.ts").flags).toEqual([
+      "nodejs_compat",
+    ]);
   });
 
   test("preserves an explicit opt-out", () => {
     expect(
-      getToolingCompatibility(
-        { date: "2026-08-31", flags: ["no_nodejs_compat"] },
-        "worker.ts",
-      ).flags,
+      getToolingCompatibility({ date: "2026-08-31", flags: ["no_nodejs_compat"] }, "worker.ts")
+        .flags,
     ).toEqual(["no_nodejs_compat"]);
   });
 
   test("does not add Node compatibility to Python tooling", () => {
     expect(
-      getToolingCompatibility(
-        { date: "2026-08-31", flags: ["python_workers"] },
-        "worker.py",
-      ).flags,
+      getToolingCompatibility({ date: "2026-08-31", flags: ["python_workers"] }, "worker.py").flags,
     ).toEqual(["python_workers"]);
   });
 });

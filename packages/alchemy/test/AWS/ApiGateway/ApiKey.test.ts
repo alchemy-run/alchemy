@@ -43,36 +43,32 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       expect(key.id).toBeDefined();
-      expect(Object.keys(key as Record<string, unknown>)).not.toContain(
-        "value",
-      );
+      expect(Object.keys(key as Record<string, unknown>)).not.toContain("value");
 
       yield* stack.destroy();
       yield* assertApiKeyDeleted(key.id);
     }),
 );
 
-test.provider.skipIf(!!process.env.FAST)(
-  "list enumerates the deployed API key",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider.skipIf(!!process.env.FAST)("list enumerates the deployed API key", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const key = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* AWS.ApiGateway.ApiKey("AgApiKeyList", {
-            generateDistinctId: true,
-            enabled: true,
-          });
-        }),
-      );
+    const key = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* AWS.ApiGateway.ApiKey("AgApiKeyList", {
+          generateDistinctId: true,
+          enabled: true,
+        });
+      }),
+    );
 
-      const provider = yield* Provider.findProvider(AWS.ApiGateway.ApiKey);
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(AWS.ApiGateway.ApiKey);
+    const all = yield* provider.list();
 
-      expect(all.some((k) => k.id === key.id)).toBe(true);
+    expect(all.some((k) => k.id === key.id)).toBe(true);
 
-      yield* stack.destroy();
-      yield* assertApiKeyDeleted(key.id);
-    }),
+    yield* stack.destroy();
+    yield* assertApiKeyDeleted(key.id);
+  }),
 );

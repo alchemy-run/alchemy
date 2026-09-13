@@ -29,11 +29,7 @@ export interface GetExport extends Binding.Service<
   "AWS.BCMDataExports.GetExport",
   (
     dataExport: Export,
-  ) => Effect.Effect<
-    () => Effect.Effect<bcm.GetExportResponse, bcm.GetExportError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<bcm.GetExportResponse, bcm.GetExportError>>
 > {}
 
-export const GetExport = Binding.Service<GetExport>(
-  "AWS.BCMDataExports.GetExport",
-);
+export const GetExport = Binding.Service<GetExport>("AWS.BCMDataExports.GetExport");

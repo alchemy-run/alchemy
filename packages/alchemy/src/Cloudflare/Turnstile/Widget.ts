@@ -27,11 +27,7 @@ export type WidgetRegion = "world" | "china";
 /**
  * Clearance level granted when the widget is embedded on a Cloudflare zone.
  */
-export type ClearanceLevel =
-  | "no_clearance"
-  | "jschallenge"
-  | "managed"
-  | "interactive";
+export type ClearanceLevel = "no_clearance" | "jschallenge" | "managed" | "interactive";
 
 export type WidgetProps = {
   /**
@@ -137,13 +133,7 @@ export type WidgetAttributes = {
   modifiedOn: string;
 };
 
-export type Widget = Resource<
-  TypeId,
-  WidgetProps,
-  WidgetAttributes,
-  never,
-  Providers
->;
+export type Widget = Resource<TypeId, WidgetProps, WidgetAttributes, never, Providers>;
 
 /**
  * A Cloudflare Turnstile widget — Cloudflare's CAPTCHA alternative.
@@ -265,8 +255,7 @@ export const WidgetProvider = () =>
         domains: news.domains,
         mode: news.mode,
         botFightMode: news.botFightMode ?? observedBool(observed.botFightMode),
-        clearanceLevel:
-          news.clearanceLevel ?? (observed.clearanceLevel as ClearanceLevel),
+        clearanceLevel: news.clearanceLevel ?? (observed.clearanceLevel as ClearanceLevel),
         ephemeralId: news.ephemeralId ?? observedBool(observed.ephemeralId),
         offlabel: news.offlabel ?? observedBool(observed.offlabel),
       };
@@ -274,12 +263,9 @@ export const WidgetProvider = () =>
         observed.name !== desired.name ||
         observed.mode !== desired.mode ||
         !sameDomains(observed.domains, desired.domains) ||
-        (news.botFightMode !== undefined &&
-          observed.botFightMode !== news.botFightMode) ||
-        (news.clearanceLevel !== undefined &&
-          observed.clearanceLevel !== news.clearanceLevel) ||
-        (news.ephemeralId !== undefined &&
-          observed.ephemeralId !== news.ephemeralId) ||
+        (news.botFightMode !== undefined && observed.botFightMode !== news.botFightMode) ||
+        (news.clearanceLevel !== undefined && observed.clearanceLevel !== news.clearanceLevel) ||
+        (news.ephemeralId !== undefined && observed.ephemeralId !== news.ephemeralId) ||
         (news.offlabel !== undefined && observed.offlabel !== news.offlabel);
 
       if (!dirty) {
@@ -304,9 +290,7 @@ export const WidgetProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Enumerate every widget in the account, paginating exhaustively.
-      const pages = yield* turnstile.listWidgets
-        .pages({ accountId })
-        .pipe(Stream.runCollect);
+      const pages = yield* turnstile.listWidgets.pages({ accountId }).pipe(Stream.runCollect);
       const sitekeys = Array.from(pages).flatMap((page) =>
         (page.result ?? []).map((w) => w.sitekey),
       );

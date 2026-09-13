@@ -2,8 +2,7 @@ import type * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeReplayRequest
-  extends eventbridge.DescribeReplayRequest {}
+export interface DescribeReplayRequest extends eventbridge.DescribeReplayRequest {}
 
 /**
  * Reads the progress and state of an event replay
@@ -31,12 +30,7 @@ export interface DescribeReplay extends Binding.Service<
   () => Effect.Effect<
     (
       request: DescribeReplayRequest,
-    ) => Effect.Effect<
-      eventbridge.DescribeReplayResponse,
-      eventbridge.DescribeReplayError
-    >
+    ) => Effect.Effect<eventbridge.DescribeReplayResponse, eventbridge.DescribeReplayError>
   >
 > {}
-export const DescribeReplay = Binding.Service<DescribeReplay>(
-  "AWS.EventBridge.DescribeReplay",
-);
+export const DescribeReplay = Binding.Service<DescribeReplay>("AWS.EventBridge.DescribeReplay");

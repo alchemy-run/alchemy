@@ -1,6 +1,5 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -133,10 +132,7 @@ export const KvEntriesProvider = () =>
 
         while (remainingPuts.length > 0 || remainingDeletes.length > 0) {
           const batchPuts = remainingPuts.slice(0, BATCH_SIZE);
-          const batchDeletes = remainingDeletes.slice(
-            0,
-            BATCH_SIZE - batchPuts.length,
-          );
+          const batchDeletes = remainingDeletes.slice(0, BATCH_SIZE - batchPuts.length);
 
           // A precondition failure means a concurrent writer (another
           // KvEntries / KvRoutesUpdate on the same store) advanced the
@@ -148,17 +144,11 @@ export const KvEntriesProvider = () =>
           const resp = yield* Effect.gen(function* () {
             const attemptEtag = stale ?? (yield* getKvsEtag(store));
             stale = undefined;
-            return yield* sendBatch(
-              store,
-              attemptEtag,
-              batchPuts,
-              batchDeletes,
-            );
+            return yield* sendBatch(store, attemptEtag, batchPuts, batchDeletes);
           }).pipe(
             Effect.retry({
               while: (error) =>
-                error._tag === "ValidationException" &&
-                isKvsPreconditionFailed(error),
+                error._tag === "ValidationException" && isKvsPreconditionFailed(error),
               schedule: cappedKvsRetrySchedule,
             }),
           );
@@ -232,12 +222,7 @@ export const KvEntriesProvider = () =>
                     : undefined;
 
                 // Sync entries — push the changed keys.
-                yield* upload(
-                  news.store,
-                  news.namespace,
-                  entries,
-                  priorEntries,
-                );
+                yield* upload(news.store, news.namespace, entries, priorEntries);
 
                 // Sync stale keys — when `purge` is set, list every key
                 // under the namespace and delete anything not in the
@@ -258,9 +243,7 @@ export const KvEntriesProvider = () =>
         delete: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
             if (!output.store) return;
-            yield* retryForKvsReadiness(
-              purge(output.store, output.namespace, undefined),
-            ).pipe(
+            yield* retryForKvsReadiness(purge(output.store, output.namespace, undefined)).pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
           }),

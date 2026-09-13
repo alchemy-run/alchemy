@@ -53,8 +53,7 @@ export const makeEfsFileSystemHttpBinding = <
                 Action: [...options.actions],
                 Resource: [Output.interpolate`${fileSystem.fileSystemArn}`],
               },
-              ...(options.wildcardActions !== undefined &&
-              options.wildcardActions.length > 0
+              ...(options.wildcardActions !== undefined && options.wildcardActions.length > 0
                 ? [
                     {
                       Effect: "Allow" as const,

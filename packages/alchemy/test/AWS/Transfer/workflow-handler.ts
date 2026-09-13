@@ -34,9 +34,7 @@ export default TransferWorkflowTestFunction.make(
       { kinds: ["file-upload-completed", "file-upload-failed"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `transfer ${event["detail-type"]}: ${event.detail.username}`,
-          ),
+          Effect.log(`transfer ${event["detail-type"]}: ${event.detail.username}`),
         ),
     );
 
@@ -64,9 +62,7 @@ export default TransferWorkflowTestFunction.make(
             Status: "SUCCESS",
           }).pipe(Effect.result);
           return yield* HttpServerResponse.json(
-            sent._tag === "Success"
-              ? { ok: true }
-              : { ok: false, tag: sent.failure._tag },
+            sent._tag === "Success" ? { ok: true } : { ok: false, tag: sent.failure._tag },
           );
         }
 
@@ -76,9 +72,5 @@ export default TransferWorkflowTestFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(Lambda.EventSource, Transfer.SendWorkflowStepStateHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Lambda.EventSource, Transfer.SendWorkflowStepStateHttp))),
 );

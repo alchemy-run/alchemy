@@ -32,13 +32,9 @@ export interface ListSpeechSynthesisTasks extends Binding.Service<
   () => Effect.Effect<
     (
       request?: polly.ListSpeechSynthesisTasksInput,
-    ) => Effect.Effect<
-      polly.ListSpeechSynthesisTasksOutput,
-      polly.ListSpeechSynthesisTasksError
-    >
+    ) => Effect.Effect<polly.ListSpeechSynthesisTasksOutput, polly.ListSpeechSynthesisTasksError>
   >
 > {}
-export const ListSpeechSynthesisTasks =
-  Binding.Service<ListSpeechSynthesisTasks>(
-    "AWS.Polly.ListSpeechSynthesisTasks",
-  );
+export const ListSpeechSynthesisTasks = Binding.Service<ListSpeechSynthesisTasks>(
+  "AWS.Polly.ListSpeechSynthesisTasks",
+);

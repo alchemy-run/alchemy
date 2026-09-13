@@ -53,13 +53,7 @@ export type TurnKeyAttributes = {
   modified: string;
 };
 
-export type TurnKey = Resource<
-  TypeId,
-  TurnKeyProps,
-  TurnKeyAttributes,
-  never,
-  Providers
->;
+export type TurnKey = Resource<TypeId, TurnKeyProps, TurnKeyAttributes, never, Providers>;
 
 /**
  * A Cloudflare Realtime (formerly "Calls") TURN key.
@@ -123,9 +117,7 @@ export const TurnKeyProvider = () =>
       // adoption path.
       if (!output?.keyId) return undefined;
       const observed = yield* getTurnKey(output.accountId, output.keyId);
-      return observed
-        ? toAttributes(observed, output.accountId, output.key)
-        : undefined;
+      return observed ? toAttributes(observed, output.accountId, output.key) : undefined;
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -160,11 +152,7 @@ export const TurnKeyProvider = () =>
         // the create-only key. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createTurn({ accountId, name });
-        return toAttributes(
-          created,
-          accountId,
-          Redacted.make(created.key ?? ""),
-        );
+        return toAttributes(created, accountId, Redacted.make(created.key ?? ""));
       }
 
       // Sync — the only mutable aspect is `name`; diff observed cloud
@@ -201,10 +189,7 @@ const createTurnKeyName = (id: string, name: string | undefined) =>
   });
 
 const toAttributes = (
-  turnKey:
-    | calls.GetTurnResponse
-    | calls.CreateTurnResponse
-    | calls.UpdateTurnResponse,
+  turnKey: calls.GetTurnResponse | calls.CreateTurnResponse | calls.UpdateTurnResponse,
   accountId: string,
   key: Redacted.Redacted<string>,
 ): TurnKeyAttributes => ({

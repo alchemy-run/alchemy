@@ -11,13 +11,11 @@ import WorkerTagLive, { WorkerTag } from "./src/WorkerTag.ts";
 // Demo Action — runs at deploy time when its input (the resolved deployed
 // URL) changes. Logs the new URL and returns a tiny manifest used as the
 // stack output. Re-deploys with no changes skip the body.
-const AnnounceDeploy = Alchemy.Action(
-  "AnnounceDeploy",
-  (input: { url: string; bucket: string }) =>
-    Effect.gen(function* () {
-      yield* Effect.log(`Deployed ${input.url} (bucket: ${input.bucket})`);
-      return { deployedAt: new Date().toISOString(), url: input.url };
-    }),
+const AnnounceDeploy = Alchemy.Action("AnnounceDeploy", (input: { url: string; bucket: string }) =>
+  Effect.gen(function* () {
+    yield* Effect.log(`Deployed ${input.url} (bucket: ${input.bucket})`);
+    return { deployedAt: new Date().toISOString(), url: input.url };
+  }),
 );
 
 export default Alchemy.Stack(

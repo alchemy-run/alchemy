@@ -5,10 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Fly from "@/Fly";
 import * as Test from "@/Test/Alchemy";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../IsolatedProject.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../IsolatedProject.ts";
 import IsolatedProjectApi, {
   IsolatedSite,
   project as serviceProject,
@@ -19,17 +16,12 @@ import IsolatedProjectBox, {
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const healthOk = (url: string) =>
   HttpClient.get(new URL("/health", url)).pipe(
     Effect.flatMap((res) =>
-      res.status === 200
-        ? res.json
-        : Effect.fail(new Error(`/health returned ${res.status}`)),
+      res.status === 200 ? res.json : Effect.fail(new Error(`/health returned ${res.status}`)),
     ),
     Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 15 }),
   );

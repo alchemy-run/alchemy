@@ -2,10 +2,7 @@ import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "@/Bundle/Bundle.ts";
-import type {
-  SourceProvider,
-  WorkerSourceModule,
-} from "@/Cloudflare/Workers/Source.ts";
+import type { SourceProvider, WorkerSourceModule } from "@/Cloudflare/Workers/Source.ts";
 
 /**
  * Minimal external source-provider fixture for the loadSource unit
@@ -38,8 +35,7 @@ const make: WorkerSourceModule["make"] = (options) =>
             },
           })),
         ),
-      hash: () =>
-        bundle.pipe(Effect.map((output) => ({ bundle: output.hash }))),
+      hash: () => bundle.pipe(Effect.map((output) => ({ bundle: output.hash }))),
       dev: () =>
         bundle.pipe(
           Effect.map((output) => ({

@@ -45,9 +45,7 @@ export default QuickSightBindingsFunction.make(
     const dashboard = yield* QuickSight.Dashboard("BindingsDashboard", {
       name: "Alchemy QuickSight Bindings Dashboard",
       definition: {
-        DataSetIdentifierDeclarations: [
-          { Identifier: "probe", DataSetArn: dataSet.arn },
-        ],
+        DataSetIdentifierDeclarations: [{ Identifier: "probe", DataSetArn: dataSet.arn }],
         Sheets: [{ SheetId: "sheet1", Name: "Sheet 1" }],
       },
     });
@@ -56,10 +54,8 @@ export default QuickSightBindingsFunction.make(
     const describeIngestion = yield* QuickSight.DescribeIngestion(dataSet);
     const cancelIngestion = yield* QuickSight.CancelIngestion(dataSet);
     const listIngestions = yield* QuickSight.ListIngestions(dataSet);
-    const startSnapshotJob =
-      yield* QuickSight.StartDashboardSnapshotJob(dashboard);
-    const describeSnapshotJob =
-      yield* QuickSight.DescribeDashboardSnapshotJob(dashboard);
+    const startSnapshotJob = yield* QuickSight.StartDashboardSnapshotJob(dashboard);
+    const describeSnapshotJob = yield* QuickSight.DescribeDashboardSnapshotJob(dashboard);
     const describeSnapshotJobResult =
       yield* QuickSight.DescribeDashboardSnapshotJobResult(dashboard);
     const generateEmbedUrlForRegisteredUser =
@@ -111,9 +107,8 @@ export default QuickSightBindingsFunction.make(
             IngestionType: "FULL_REFRESH",
           }).pipe(
             Effect.map((r) => ({ started: true as const, id: r.IngestionId })),
-            Effect.catchTag(
-              ["InvalidParameterValueException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ started: false as const, error: e._tag }),
+            Effect.catchTag(["InvalidParameterValueException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ started: false as const, error: e._tag }),
             ),
           );
           if (!created.started) {
@@ -124,9 +119,7 @@ export default QuickSightBindingsFunction.make(
             IngestionId: ingestionId,
           }).pipe(
             Effect.map((r) => r.Ingestion?.IngestionStatus),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           yield* cancelIngestion({ IngestionId: ingestionId }).pipe(
             Effect.catchTag(
@@ -137,27 +130,21 @@ export default QuickSightBindingsFunction.make(
           return yield* HttpServerResponse.json({ ...created, status });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/snapshot-job/typed-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/snapshot-job/typed-not-found") {
           // Both describe ops on a nonexistent job id surface the typed
           // not-found, proving grant + DashboardId injection.
           const describe = yield* describeSnapshotJob({
             SnapshotJobId: "alchemy-nonexistent-snapshot-job",
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           const result = yield* describeSnapshotJobResult({
             SnapshotJobId: "alchemy-nonexistent-snapshot-job",
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed(true),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+              Effect.succeed(true),
             ),
           );
           return yield* HttpServerResponse.json({ describe, result });
@@ -177,9 +164,7 @@ export default QuickSightBindingsFunction.make(
                   Files: [
                     {
                       FormatType: "PDF",
-                      SheetSelections: [
-                        { SheetId: "sheet1", SelectionScope: "ALL_VISUALS" },
-                      ],
+                      SheetSelections: [{ SheetId: "sheet1", SelectionScope: "ALL_VISUALS" }],
                     },
                   ],
                 },

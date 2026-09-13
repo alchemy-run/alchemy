@@ -31,6 +31,4 @@ export interface CreateKxUser extends Binding.Service<
     ) => Effect.Effect<SVC.CreateKxUserResponse, SVC.CreateKxUserError>
   >
 > {}
-export const CreateKxUser = Binding.Service<CreateKxUser>(
-  "AWS.FinSpace.CreateKxUser",
-);
+export const CreateKxUser = Binding.Service<CreateKxUser>("AWS.FinSpace.CreateKxUser");

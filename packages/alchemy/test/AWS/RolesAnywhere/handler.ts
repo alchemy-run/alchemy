@@ -61,12 +61,8 @@ export default RolesAnywhereTestFunction.make(
           const tag = yield* getSubject({
             subjectId: NONEXISTENT_SUBJECT_ID,
           }).pipe(
-            Effect.map((r) =>
-              r.subject === undefined ? "NoSubject" : "Found",
-            ),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.map((r) => (r.subject === undefined ? "NoSubject" : "Found")),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -78,11 +74,6 @@ export default RolesAnywhereTestFunction.make(
       }).pipe(Effect.orDie),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        RolesAnywhere.GetSubjectHttp,
-        RolesAnywhere.ListSubjectsHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(RolesAnywhere.GetSubjectHttp, RolesAnywhere.ListSubjectsHttp)),
   ),
 );

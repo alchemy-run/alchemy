@@ -47,10 +47,7 @@ const FLOCI_ENDPOINT = "http://localhost:4566";
 // down). Sync probe at collection time — skipIf needs a plain boolean.
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -84,9 +81,7 @@ const rawAwsJson = Effect.fn(function* (options: {
         "x-amz-date": "20260101T000000Z",
         authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
       }),
-      HttpClientRequest.setBody(
-        HttpBody.text(JSON.stringify(options.body), options.contentType),
-      ),
+      HttpClientRequest.setBody(HttpBody.text(JSON.stringify(options.body), options.contentType)),
     ),
   );
 });
@@ -148,11 +143,9 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(listQueues.status).toBe(200);
       const queues = (yield* listQueues.json) as { QueueUrls?: string[] };
-      expect(
-        queues.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ),
-      ).toBe(true);
+      expect(queues.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`))).toBe(
+        true,
+      );
 
       const describeTable = yield* rawAwsJson({
         service: "dynamodb",
@@ -184,9 +177,7 @@ test.provider.skipIf(!dockerAvailable)(
         QueueUrls?: string[];
       };
       expect(
-        queuesAfter.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ) ?? false,
+        queuesAfter.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`)) ?? false,
       ).toBe(false);
 
       const describeTableAfter = yield* rawAwsJson({

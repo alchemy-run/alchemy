@@ -66,17 +66,13 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
               },
             });
           }
-          yield* host.bind`Allow(${host}, AWS.ComprehendMedical.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ComprehendMedical.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.ComprehendMedical.${options.capability}`)(
-        function* (request: I) {
-          return yield* op(request);
-        },
-      );
+      return Effect.fn(`AWS.ComprehendMedical.${options.capability}`)(function* (request: I) {
+        return yield* op(request);
+      });
     });
   });

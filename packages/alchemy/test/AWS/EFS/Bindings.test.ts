@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import EfsBindingsFunctionLive, {
-  EfsBindingsFunction,
-} from "./bindings-handler";
+import EfsBindingsFunctionLive, { EfsBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "EFSBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -72,9 +62,7 @@ describe.sequential("EFS Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `EFS test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`EFS test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -82,9 +70,7 @@ describe.sequential("EFS Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `EFS test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`EFS test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -97,9 +83,9 @@ describe.sequential("EFS Bindings", () => {
   describe("binding registration", () => {
     test.provider("all 10 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/bindings`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).bound).toHaveLength(10);
       }),
     );
@@ -108,9 +94,9 @@ describe.sequential("EFS Bindings", () => {
   describe("DescribeFileSystem", () => {
     test.provider("reads the bound file system's description", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/file-system`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/file-system`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.fileSystemId).toMatch(/^fs-/);
         expect(response.state).toBe("available");
         expect(response.encrypted).toBe(true);
@@ -121,9 +107,9 @@ describe.sequential("EFS Bindings", () => {
   describe("DescribeMountTargets", () => {
     test.provider("lists the file system's mount targets", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/mount-targets`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/mount-targets`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         // The fixture file system has no mount targets — assert the call
         // round-trips (FileSystemId injection + fs-scoped IAM).
         expect(response.count).toBe(0);
@@ -134,9 +120,9 @@ describe.sequential("EFS Bindings", () => {
   describe("DescribeAccessPoints", () => {
     test.provider("lists the file system's access points", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/access-points`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/access-points`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(typeof response.count).toBe("number");
       }),
     );
@@ -145,9 +131,9 @@ describe.sequential("EFS Bindings", () => {
   describe("PutBackupPolicy + DescribeBackupPolicy", () => {
     test.provider("enables then disables automatic backups", (_stack) =>
       Effect.gen(function* () {
-        const initial = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/backup-policy`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const initial = (yield* send(HttpClientRequest.get(`${baseUrl}/backup-policy`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(["NONE", "DISABLED", "DISABLING"]).toContain(initial.status);
 
         const enabled = (yield* send(
@@ -166,19 +152,19 @@ describe.sequential("EFS Bindings", () => {
   describe("PutLifecycleConfiguration + DescribeLifecycleConfiguration", () => {
     test.provider("sets, reads, and clears lifecycle policies", (_stack) =>
       Effect.gen(function* () {
-        const set = (yield* send(
-          HttpClientRequest.post(`${baseUrl}/lifecycle/set`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const set = (yield* send(HttpClientRequest.post(`${baseUrl}/lifecycle/set`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(set.count).toBe(1);
 
-        const read = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/lifecycle`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const read = (yield* send(HttpClientRequest.get(`${baseUrl}/lifecycle`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(read.count).toBe(1);
 
-        const cleared = (yield* send(
-          HttpClientRequest.post(`${baseUrl}/lifecycle/clear`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const cleared = (yield* send(HttpClientRequest.post(`${baseUrl}/lifecycle/clear`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(cleared.count).toBe(0);
       }),
     );
@@ -187,9 +173,9 @@ describe.sequential("EFS Bindings", () => {
   describe("CreateAccessPoint + DeleteAccessPoint", () => {
     test.provider("creates and deletes an access point at runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.post(`${baseUrl}/access-point`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.post(`${baseUrl}/access-point`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.accessPointId).toMatch(/^fsap-/);
         expect(response.deleted).toBe(true);
       }),
@@ -201,9 +187,9 @@ describe.sequential("EFS Bindings", () => {
       "returns the typed ReplicationNotFound for an unreplicated file system",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/replication`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/replication`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.hasReplication).toBe(false);
         }),
     );

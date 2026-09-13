@@ -68,8 +68,7 @@ export default class PrismaHyperdriveWorker extends Cloudflare.Worker<PrismaHype
         }
 
         if (request.method === "GET" && url.pathname === "/widgets") {
-          const widgets =
-            yield* sql`SELECT id, name FROM ${sql(TABLE)} ORDER BY id`;
+          const widgets = yield* sql`SELECT id, name FROM ${sql(TABLE)} ORDER BY id`;
           return yield* HttpServerResponse.json({ widgets });
         }
 

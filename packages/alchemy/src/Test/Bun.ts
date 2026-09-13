@@ -45,24 +45,12 @@ export interface TestApi {
 
 interface TestFn {
   (name: string, eff: TestEffect<void>, options?: bun.TestOptions): void;
-  skip: (
-    name: string,
-    eff: TestEffect<void>,
-    options?: bun.TestOptions,
-  ) => void;
+  skip: (name: string, eff: TestEffect<void>, options?: bun.TestOptions) => void;
   skipIf: (
     condition: boolean,
   ) => (name: string, eff: TestEffect<void>, options?: bun.TestOptions) => void;
-  only: (
-    name: string,
-    eff: TestEffect<void>,
-    options?: bun.TestOptions,
-  ) => void;
-  todo: (
-    name: string,
-    eff: TestEffect<void>,
-    options?: bun.TestOptions,
-  ) => void;
+  only: (name: string, eff: TestEffect<void>, options?: bun.TestOptions) => void;
+  todo: (name: string, eff: TestEffect<void>, options?: bun.TestOptions) => void;
   provider: ProviderFn;
 }
 
@@ -96,9 +84,7 @@ interface BeforeEachFn {
 
 interface AfterAllFn {
   (eff: TestEffect<any>, options?: HookOptions): void;
-  skipIf: (
-    predicate: boolean,
-  ) => (eff: TestEffect<any>, options?: HookOptions) => void;
+  skipIf: (predicate: boolean) => (eff: TestEffect<any>, options?: HookOptions) => void;
 }
 
 interface AfterEachFn {
@@ -135,8 +121,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // which `destroy(Stack)` closes mid-file in self-contained tests — and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
-  const runEff = <A>(eff: TestEffect<A>) =>
-    Core.run(eff, options, sharedScope, sidecar);
+  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope, sidecar);
 
   const test = ((name, eff, opts) => {
     bun.test(name, () => runEff(eff), opts);
@@ -179,15 +164,9 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
   test.provider = provider;
 
-  const beforeAll: BeforeAllFn = <A>(
-    eff: TestEffect<A>,
-    hookOptions?: HookOptions,
-  ) => {
+  const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: HookOptions) => {
     let result: A;
-    bun.beforeAll(
-      () => runEff(eff).then((v) => (result = v)),
-      hookOptions ?? DEFAULT_HOOK_TIMEOUT,
-    );
+    bun.beforeAll(() => runEff(eff).then((v) => (result = v)), hookOptions ?? DEFAULT_HOOK_TIMEOUT);
     return Effect.sync(() => result);
   };
 
@@ -224,9 +203,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // for each worker. We close the shared scope only AFTER destroy completes.
   // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
   // the destroy wrapper AND the fallback cleanup hook below to call it.
-  const closeScope = Effect.suspend(() =>
-    Scope.close(sharedScope, Exit.void),
-  ).pipe(Effect.ignore);
+  const closeScope = Effect.suspend(() => Scope.close(sharedScope, Exit.void)).pipe(Effect.ignore);
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
@@ -236,9 +213,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // registration to a microtask so it runs AFTER any user-registered
   // `afterAll` (including `destroy(Stack)`); bun runs afterAll hooks in
   // registration order.
-  const closeAll = sidecar
-    ? Effect.andThen(closeScope, sidecar.close)
-    : closeScope;
+  const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
   queueMicrotask(() => {
     bun.afterAll(() => Effect.runPromise(closeAll), DEFAULT_HOOK_TIMEOUT);
   });
@@ -249,8 +224,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     beforeEach,
     afterAll,
     afterEach,
-    deploy: (stack, callOpts) =>
-      Core.deploy(options, stack, { ...callOpts, scope: sharedScope }),
+    deploy: (stack, callOpts) => Core.deploy(options, stack, { ...callOpts, scope: sharedScope }),
     destroy: (stack, callOpts) =>
       Core.destroy(options, stack, { ...callOpts, scope: sharedScope }).pipe(
         Effect.ensuring(closeScope),

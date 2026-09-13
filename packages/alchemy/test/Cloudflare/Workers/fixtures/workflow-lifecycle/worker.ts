@@ -20,9 +20,7 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
   }),
 ) {}
 
-class Dependency extends Context.Service<Dependency, string>()(
-  "LifecycleDependency",
-) {}
+class Dependency extends Context.Service<Dependency, string>()("LifecycleDependency") {}
 
 export type Scenario = "success" | "retry" | "interrupt" | "rollback";
 
@@ -46,9 +44,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
             Effect.orDie,
           ),
         );
-        yield* journal.record(
-          `open:${context.attempt}:${dependency}:${scope !== runScope}`,
-        );
+        yield* journal.record(`open:${context.attempt}:${dependency}:${scope !== runScope}`);
         yield* Deferred.succeed(started, undefined);
         if (input.scenario === "interrupt") return yield* Effect.never;
         if (input.scenario === "retry" && context.attempt === 1) {
@@ -71,9 +67,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
                     Effect.orDie,
                   ),
                 );
-                yield* journal.record(
-                  `rollback-open:${dependency}:${scope !== runScope}`,
-                );
+                yield* journal.record(`rollback-open:${dependency}:${scope !== runScope}`);
                 yield* journal.record("rollback-body");
               }),
               rollbackConfig: { retries: { limit: 0, delay: "1 second" } },

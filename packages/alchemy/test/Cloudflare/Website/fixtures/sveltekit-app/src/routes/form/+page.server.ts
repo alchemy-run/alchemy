@@ -13,13 +13,7 @@ interface Platform {
  * see.
  */
 export const actions = {
-  greet: async ({
-    request,
-    platform,
-  }: {
-    request: Request;
-    platform?: Platform;
-  }) => {
+  greet: async ({ request, platform }: { request: Request; platform?: Platform }) => {
     const data = await request.formData();
     const name = data.get("name");
     if (typeof name !== "string" || name.length === 0) {

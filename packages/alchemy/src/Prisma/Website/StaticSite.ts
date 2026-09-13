@@ -9,17 +9,11 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
-import {
-  deployWebsite,
-  type FrameworkSiteProps,
-  type Website,
-} from "./FrameworkSite.ts";
+import { deployWebsite, type FrameworkSiteProps, type Website } from "./FrameworkSite.ts";
 
 /** A command-built website with the same build vocabulary as Fly and Railway. */
 export interface StaticSiteProps
-  extends
-    Omit<Command.BuildProps, "env">,
-    Omit<FrameworkSiteProps, "dev" | "memo"> {
+  extends Omit<Command.BuildProps, "env">, Omit<FrameworkSiteProps, "dev" | "memo"> {
   /** Local command; skips the production build. Without a command, a local static server serves the built output. */
   dev?: {
     /** Shell command that starts the native dev server. */
@@ -89,9 +83,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       } satisfies Website;
     }
     if (props.spa && props.errorPage !== undefined) {
-      return yield* Effect.die(
-        new Error("StaticSite spa and errorPage are mutually exclusive."),
-      );
+      return yield* Effect.die(new Error("StaticSite spa and errorPage are mutually exclusive."));
     }
     const build = yield* Command.Build("Build", {
       command: props.command,

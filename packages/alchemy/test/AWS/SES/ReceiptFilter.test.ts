@@ -17,16 +17,12 @@ const findFilter = (name: string) =>
   ses
     .listReceiptFilters({})
     .pipe(
-      Effect.map((response) =>
-        (response.Filters ?? []).find((filter) => filter.Name === name),
-      ),
+      Effect.map((response) => (response.Filters ?? []).find((filter) => filter.Name === name)),
     );
 
 const assertFilterDeleted = (name: string) =>
   findFilter(name).pipe(
-    Effect.flatMap((found) =>
-      found ? Effect.fail(new FilterStillExists({ name })) : Effect.void,
-    ),
+    Effect.flatMap((found) => (found ? Effect.fail(new FilterStillExists({ name })) : Effect.void)),
     Effect.retry({
       while: (e) => e._tag === "FilterStillExists",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),

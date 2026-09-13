@@ -6,24 +6,17 @@ import type * as Layer from "effect/Layer";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 
-class Marker extends Context.Service<Marker, { value: string }>()(
-  "alarm-callback/types/Marker",
-) {}
+class Marker extends Context.Service<Marker, { value: string }>()("alarm-callback/types/Marker") {}
 class TransactionFailure extends Data.TaggedError("TransactionFailure")<{
   value: string;
 }> {}
 
 type Assert<T extends true> = T;
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
-type SuccessOf<T> =
-  T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never;
-type ErrorOf<T> =
-  T extends Effect.Effect<infer _A, infer E, infer _R> ? E : never;
-type RequirementsOf<T> =
-  T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type SuccessOf<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never;
+type ErrorOf<T> = T extends Effect.Effect<infer _A, infer E, infer _R> ? E : never;
+type RequirementsOf<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never;
 
 const registration = Alchemy.makeCallback(
   "archive",
@@ -52,37 +45,25 @@ const scopedRegistration = Alchemy.makeCallback(
 type _PortableRegistration = Assert<
   Equal<RequirementsOf<typeof registration>, Alchemy.RuntimeContext>
 >;
-type _RegistrationHasNoTypedError = Assert<
-  Equal<ErrorOf<typeof registration>, never>
->;
+type _RegistrationHasNoTypedError = Assert<Equal<ErrorOf<typeof registration>, never>>;
 type _PreservesHandlerRequirements = Assert<
-  Equal<
-    RequirementsOf<typeof contextualRegistration>,
-    Alchemy.RuntimeContext | Marker
-  >
+  Equal<RequirementsOf<typeof contextualRegistration>, Alchemy.RuntimeContext | Marker>
 >;
 type _SuppliesHandlerScope = Assert<
   Equal<RequirementsOf<typeof scopedRegistration>, Alchemy.RuntimeContext>
 >;
 
 type Handle = SuccessOf<typeof registration>;
-type _PortableHandle = Assert<
-  Equal<Handle, Alchemy.Callback<{ value: string }>>
->;
+type _PortableHandle = Assert<Equal<Handle, Alchemy.Callback<{ value: string }>>>;
 type Options = Parameters<Handle["schedule"]>[1];
 type _PortableScheduleOptions = Assert<
   Equal<Options, Alchemy.CallbackScheduleOptions<{ value: string }>>
 >;
 type _PortableRegistrationOptions = Assert<
-  Equal<
-    Parameters<typeof Alchemy.makeCallback>[2],
-    Alchemy.CallbackOptions | undefined
-  >
+  Equal<Parameters<typeof Alchemy.makeCallback>[2], Alchemy.CallbackOptions | undefined>
 >;
 type _InfersPayload = Assert<Equal<Options["payload"], { value: string }>>;
-type _RequiresStringId = Assert<
-  Equal<Parameters<Handle["schedule"]>[0], string>
->;
+type _RequiresStringId = Assert<Equal<Parameters<Handle["schedule"]>[0], string>>;
 type _ScheduleIsRuntimeOnly = Assert<
   Equal<RequirementsOf<ReturnType<Handle["schedule"]>>, Alchemy.RuntimeContext>
 >;
@@ -175,9 +156,7 @@ const directTransaction = (storage: Cloudflare.DurableObjectStorage) =>
     Effect.gen(function* () {
       const marker = yield* Marker;
       yield* storage.put("value", marker.value);
-      return yield* Effect.fail(
-        new TransactionFailure({ value: marker.value }),
-      );
+      return yield* Effect.fail(new TransactionFailure({ value: marker.value }));
     }),
   );
 
@@ -186,9 +165,7 @@ const callbackTransaction = (storage: Cloudflare.DurableObjectStorage) =>
     Effect.fn(function* (transaction: Cloudflare.DurableObjectTransaction) {
       const marker = yield* Marker;
       yield* transaction.put("value", marker.value);
-      return yield* Effect.fail(
-        new TransactionFailure({ value: marker.value }),
-      );
+      return yield* Effect.fail(new TransactionFailure({ value: marker.value }));
     }),
   );
 
@@ -205,14 +182,8 @@ type _CallbackPreservesError = Assert<
   >
 >;
 type _DirectPreservesContext = Assert<
-  Equal<
-    RequirementsOf<ReturnType<typeof directTransaction>>,
-    Marker | Alchemy.RuntimeContext
-  >
+  Equal<RequirementsOf<ReturnType<typeof directTransaction>>, Marker | Alchemy.RuntimeContext>
 >;
 type _CallbackPreservesContext = Assert<
-  Equal<
-    RequirementsOf<ReturnType<typeof callbackTransaction>>,
-    Marker | Alchemy.RuntimeContext
-  >
+  Equal<RequirementsOf<ReturnType<typeof callbackTransaction>>, Marker | Alchemy.RuntimeContext>
 >;

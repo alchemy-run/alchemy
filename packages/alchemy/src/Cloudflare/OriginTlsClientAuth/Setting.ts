@@ -41,13 +41,7 @@ export type SettingAttributes = {
   initialEnabled: boolean;
 };
 
-export type Setting = Resource<
-  TypeId,
-  SettingProps,
-  SettingAttributes,
-  never,
-  Providers
->;
+export type Setting = Resource<TypeId, SettingProps, SettingAttributes, never, Providers>;
 
 /**
  * The zone-level Authenticated Origin Pulls (AOP) toggle
@@ -132,13 +126,8 @@ export const SettingProvider = () =>
       const o = olds as SettingProps;
       const n = news as SettingProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -153,8 +142,7 @@ export const SettingProvider = () =>
       // default — there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialEnabled` restored on destroy.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : enabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
       return { zoneId, enabled, initialEnabled };
     }),
 
@@ -170,8 +158,7 @@ export const SettingProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is the
       //    zone's original.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : observedEnabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
       // 3. Sync — put only when the observed value differs.
       if (observedEnabled === news.enabled) {

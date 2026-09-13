@@ -20,10 +20,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -40,9 +37,7 @@ interface WorkflowStatus {
 }
 
 const isTerminal = (status: WorkflowStatus): boolean =>
-  status.status === "complete" ||
-  status.status === "errored" ||
-  status.status === "terminated";
+  status.status === "complete" || status.status === "errored" || status.status === "terminated";
 
 /**
  * Start a workflow instance over HTTP, retrying while the freshly-served
@@ -63,10 +58,7 @@ const startInstance = (url: string) =>
         // Cap the exponential so a persistent non-200 fails fast instead of
         // looking like a hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("3 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
           Schedule.recurs(15),
         ]),
       }),
@@ -87,9 +79,7 @@ const waitForTerminal = (url: string, instanceId: string) =>
     return yield* client.get(`${url}/workflow/status/${instanceId}`).pipe(
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.json.pipe(
-              Effect.map((json) => json as unknown as WorkflowStatus),
-            )
+          ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
           : Effect.succeed({ status: "pending" } as WorkflowStatus),
       ),
       Effect.repeat({
@@ -115,11 +105,7 @@ const readWorkflowRow = (stack: Test.ScratchStack) =>
         stage: stack.stage,
         fqn,
       });
-      if (
-        row &&
-        (row as { resourceType?: string }).resourceType ===
-          "Cloudflare.Workflow"
-      ) {
+      if (row && (row as { resourceType?: string }).resourceType === "Cloudflare.Workflow") {
         return row as {
           resourceType: string;
           providerMode?: "live" | "local";
@@ -237,9 +223,7 @@ test.provider(
           );
         }
         return terminal;
-      }).pipe(
-        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
-      );
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }));
       expect(status.output?.greeting).toBe("Hello, world!");
 
       yield* stack.destroy();

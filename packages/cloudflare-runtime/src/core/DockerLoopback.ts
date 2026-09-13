@@ -44,8 +44,7 @@ const nsenterAvailable = () => {
   }
 };
 
-export const loopbackSocketDir = () =>
-  NodePath.join(NodeOs.tmpdir(), "alchemy-dev-loopback");
+export const loopbackSocketDir = () => NodePath.join(NodeOs.tmpdir(), "alchemy-dev-loopback");
 
 const addPort = (ports: Set<number>, raw: string) => {
   const port = Number(raw);
@@ -91,9 +90,7 @@ export const sidecarLoopbackExtraHost = () =>
     ? `${CONTAINER_LOOPBACK_ALIAS}:127.0.0.1`
     : `${CONTAINER_LOOPBACK_ALIAS}:host-gateway`;
 
-export const sidecarLoopbackBinds = (
-  ports: readonly number[],
-): readonly string[] => {
+export const sidecarLoopbackBinds = (ports: readonly number[]): readonly string[] => {
   if (!usesUnixSocketLoopback() || ports.length === 0) return [];
   return [`${loopbackSocketDir()}:${CONTAINER_LOOPBACK_MOUNT}`];
 };
@@ -132,8 +129,7 @@ const pipeSockets = (incoming: NodeNet.Socket, outgoing: NodeNet.Socket) => {
   outgoing.on("error", fail);
 };
 
-const socketPathFor = (port: number) =>
-  NodePath.join(loopbackSocketDir(), `${port}.sock`);
+const socketPathFor = (port: number) => NodePath.join(loopbackSocketDir(), `${port}.sock`);
 
 const FORWARDER_SOURCE = `\
 import * as net from "node:net";
@@ -171,9 +167,7 @@ const writeForwarderScript = (dir: string) => {
  */
 export const ensureLoopbackUnixSockets = (ports: readonly number[]) => {
   if (!usesUnixSocketLoopback()) return;
-  const unique = [
-    ...new Set(ports.filter((port) => Number.isInteger(port) && port > 0)),
-  ];
+  const unique = [...new Set(ports.filter((port) => Number.isInteger(port) && port > 0))];
   if (unique.length === 0) return;
   const dir = loopbackSocketDir();
   NodeFs.mkdirSync(dir, { recursive: true });
@@ -230,11 +224,7 @@ export const attachLoopbackNetnsForwarder = (input: {
   ports: readonly number[];
 }): { ok: true } | { ok: false; error: string } => {
   if (!usesUnixSocketLoopback()) return { ok: true };
-  const ports = [
-    ...new Set(
-      input.ports.filter((port) => Number.isInteger(port) && port > 0),
-    ),
-  ];
+  const ports = [...new Set(input.ports.filter((port) => Number.isInteger(port) && port > 0))];
   if (ports.length === 0) return { ok: true };
   if (input.pid <= 0) {
     return { ok: false, error: "container pid is not available" };
@@ -251,16 +241,7 @@ export const attachLoopbackNetnsForwarder = (input: {
   try {
     const child = NodeChild.spawn(
       "nsenter",
-      [
-        "-t",
-        String(input.pid),
-        "-n",
-        "--",
-        process.execPath,
-        script,
-        dir,
-        ...ports.map(String),
-      ],
+      ["-t", String(input.pid), "-n", "--", process.execPath, script, dir, ...ports.map(String)],
       { stdio: "ignore" },
     );
     child.on("error", () => {

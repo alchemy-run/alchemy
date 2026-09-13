@@ -50,7 +50,5 @@ export class DatasetError extends Data.TaggedError("DatasetError")<{
 
 export interface DatasetClient {
   raw: Effect.Effect<RuntimeAnalyticsEngineDataset, never, RuntimeContext>;
-  writeDataPoint(
-    dataPoint: DataPoint,
-  ): Effect.Effect<void, DatasetError, RuntimeContext>;
+  writeDataPoint(dataPoint: DataPoint): Effect.Effect<void, DatasetError, RuntimeContext>;
 }

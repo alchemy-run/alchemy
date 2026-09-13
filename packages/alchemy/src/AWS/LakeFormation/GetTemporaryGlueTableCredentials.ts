@@ -47,7 +47,6 @@ export interface GetTemporaryGlueTableCredentials extends Binding.Service<
   >
 > {}
 
-export const GetTemporaryGlueTableCredentials =
-  Binding.Service<GetTemporaryGlueTableCredentials>(
-    "AWS.LakeFormation.GetTemporaryGlueTableCredentials",
-  );
+export const GetTemporaryGlueTableCredentials = Binding.Service<GetTemporaryGlueTableCredentials>(
+  "AWS.LakeFormation.GetTemporaryGlueTableCredentials",
+);

@@ -61,16 +61,12 @@ test.provider(
       const created = yield* emr.describeSecurityConfiguration({
         Name: configName,
       });
-      expect(JSON.parse(created.SecurityConfiguration ?? "{}")).toEqual(
-        imdsDocument,
-      );
+      expect(JSON.parse(created.SecurityConfiguration ?? "{}")).toEqual(imdsDocument);
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(SecurityConfiguration);
       const all = yield* provider.list();
-      expect(all.some((c) => c.securityConfigurationName === configName)).toBe(
-        true,
-      );
+      expect(all.some((c) => c.securityConfigurationName === configName)).toBe(true);
 
       // Update content in place — the document is immutable in EMR, so the
       // provider converges by deleting and recreating under the same name
@@ -86,9 +82,7 @@ test.provider(
       const updated = yield* emr.describeSecurityConfiguration({
         Name: configName,
       });
-      expect(JSON.parse(updated.SecurityConfiguration ?? "{}")).toEqual(
-        encryptionDocument,
-      );
+      expect(JSON.parse(updated.SecurityConfiguration ?? "{}")).toEqual(encryptionDocument);
 
       // Rename — diff returns replace; the new name exists, the old is gone.
       yield* stack.deploy(
@@ -103,9 +97,7 @@ test.provider(
         Name: `${configName}-renamed`,
       });
       expect(renamed.Name).toBe(`${configName}-renamed`);
-      const oldGone = yield* Effect.flip(
-        emr.describeSecurityConfiguration({ Name: configName }),
-      );
+      const oldGone = yield* Effect.flip(emr.describeSecurityConfiguration({ Name: configName }));
       expect(oldGone._tag).toBe("SecurityConfigurationNotFound");
 
       // Destroy — verify gone out of band.

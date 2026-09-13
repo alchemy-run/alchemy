@@ -23,9 +23,7 @@ class DistributionFunctionAssociationPending extends Data.TaggedError(
   message: string;
 }> {}
 
-class DistributionPendingDeployment extends Data.TaggedError(
-  "DistributionPendingDeployment",
-)<{
+class DistributionPendingDeployment extends Data.TaggedError("DistributionPendingDeployment")<{
   message: string;
 }> {}
 
@@ -300,8 +298,7 @@ export interface DistributionOriginGroup {
 const isFunctionAssociationPending = (error: cloudfront.InvalidArgument) => {
   const message = error.message ?? "";
   return (
-    message.includes("FunctionAssociationArn") &&
-    message.includes("not found or is not published")
+    message.includes("FunctionAssociationArn") && message.includes("not found or is not published")
   );
 };
 
@@ -422,9 +419,7 @@ export type DistributionBinding = {
  */
 const resolveEffectiveAliases = (
   declared: string[] | undefined,
-  bindings:
-    | ReadonlyArray<DistributionBinding | ResourceBinding<DistributionBinding>>
-    | undefined,
+  bindings: ReadonlyArray<DistributionBinding | ResourceBinding<DistributionBinding>> | undefined,
 ): string[] | undefined => {
   const bound = (bindings ?? []).flatMap((binding) =>
     "data" in binding && binding.data !== undefined
@@ -575,9 +570,7 @@ export interface Distribution extends Resource<
  *
  * @resource
  */
-export const Distribution = Resource<Distribution>(
-  "AWS.CloudFront.Distribution",
-);
+export const Distribution = Resource<Distribution>("AWS.CloudFront.Distribution");
 
 export const DistributionProvider = () =>
   Provider.effect(
@@ -602,9 +595,7 @@ export const DistributionProvider = () =>
           Effect.flatMap((distribution) =>
             distribution?.Status === "Deployed"
               ? Effect.gen(function* () {
-                  yield* Effect.logInfo(
-                    `CloudFront Distribution wait: ${distributionId} deployed`,
-                  );
+                  yield* Effect.logInfo(`CloudFront Distribution wait: ${distributionId} deployed`);
                   return distribution;
                 })
               : Effect.gen(function* () {
@@ -620,10 +611,7 @@ export const DistributionProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DistributionPendingDeployment",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -632,14 +620,10 @@ export const DistributionProvider = () =>
         yield* Effect.logInfo(
           `CloudFront Distribution read: loading distribution ${distributionId}`,
         );
-        const distribution = yield* cloudfront
-          .getDistribution({ Id: distributionId })
-          .pipe(
-            Effect.map((response) => response.Distribution),
-            Effect.catchTag("NoSuchDistribution", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const distribution = yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
+          Effect.map((response) => response.Distribution),
+          Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)),
+        );
 
         if (!distribution?.Id) {
           yield* Effect.logInfo(
@@ -671,9 +655,7 @@ export const DistributionProvider = () =>
         };
       });
 
-      const getByCallerReference = Effect.fn(function* (
-        callerReference: string,
-      ) {
+      const getByCallerReference = Effect.fn(function* (callerReference: string) {
         yield* Effect.logInfo(
           `CloudFront Distribution read: searching for callerReference=${callerReference}`,
         );
@@ -691,15 +673,9 @@ export const DistributionProvider = () =>
               .getDistributionConfig({
                 Id: item.Id,
               })
-              .pipe(
-                Effect.catchTag("NoSuchDistribution", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)));
 
-            if (
-              config?.DistributionConfig?.CallerReference === callerReference
-            ) {
+            if (config?.DistributionConfig?.CallerReference === callerReference) {
               yield* Effect.logInfo(
                 `CloudFront Distribution read: recovered ${item.Id} for callerReference=${callerReference}`,
               );
@@ -718,9 +694,7 @@ export const DistributionProvider = () =>
         return undefined;
       });
 
-      const waitForDeletionReady = Effect.fn(function* (
-        distributionId: string,
-      ) {
+      const waitForDeletionReady = Effect.fn(function* (distributionId: string) {
         class DistributionPendingDeletionReadiness extends Data.TaggedError(
           "DistributionPendingDeletionReadiness",
         )<{
@@ -759,10 +733,7 @@ export const DistributionProvider = () =>
                 return undefined;
               }
 
-              if (
-                current.config.Enabled ||
-                current.distribution.Status !== "Deployed"
-              ) {
+              if (current.config.Enabled || current.distribution.Status !== "Deployed") {
                 yield* Effect.logInfo(
                   `CloudFront Distribution delete: ${distributionId} not ready enabled=${current.config.Enabled} status=${current.distribution.Status}`,
                 );
@@ -780,23 +751,14 @@ export const DistributionProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) =>
-              error._tag === "DistributionPendingDeletionReadiness",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            while: (error) => error._tag === "DistributionPendingDeletionReadiness",
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
 
       return {
-        stables: [
-          "distributionId",
-          "distributionArn",
-          "domainName",
-          "hostedZoneId",
-        ],
+        stables: ["distributionId", "distributionArn", "domainName", "hostedZoneId"],
         // `Staging` is create-only at the CloudFront API level; toggling it
         // requires a fresh distribution. Everything else updates in place via
         // the whole-config `updateDistribution` PUT.
@@ -830,16 +792,12 @@ export const DistributionProvider = () =>
         // (distribution + config + tags) so callers get a `delete`-ready item.
         list: () =>
           Effect.gen(function* () {
-            const summaries = yield* cloudfront.listDistributions
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.DistributionList?.Items ?? [],
-                  ),
-                ),
-              );
+            const summaries = yield* cloudfront.listDistributions.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.DistributionList?.Items ?? []),
+              ),
+            );
 
             const rows = yield* Effect.forEach(
               summaries,
@@ -865,12 +823,9 @@ export const DistributionProvider = () =>
                       ? Effect.map(
                           resolveUrl(current.distribution),
                           (url) =>
-                            toAttrs(
-                              current.distribution,
-                              current.etag,
-                              current.tags,
-                              url,
-                            ) as Distribution["Attributes"] | undefined,
+                            toAttrs(current.distribution, current.etag, current.tags, url) as
+                              | Distribution["Attributes"]
+                              | undefined,
                         )
                       : Effect.succeed(undefined),
                   ),
@@ -878,9 +833,7 @@ export const DistributionProvider = () =>
               { concurrency: 10 },
             );
 
-            return rows.filter(
-              (row): row is Distribution["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Distribution["Attributes"] => row !== undefined);
           }),
         reconcile: Effect.fn(function* ({
           id,
@@ -944,10 +897,7 @@ export const DistributionProvider = () =>
                           DistributionConfig: config,
                         });
 
-                        if (
-                          created.Distribution?.ARN &&
-                          Object.keys(desiredTags).length > 0
-                        ) {
+                        if (created.Distribution?.ARN && Object.keys(desiredTags).length > 0) {
                           yield* Effect.logInfo(
                             `CloudFront Distribution reconcile: tagging distribution ${created.Distribution.Id} after fallback`,
                           );
@@ -980,8 +930,7 @@ export const DistributionProvider = () =>
                     yield* Effect.logInfo(
                       `CloudFront Distribution reconcile: callerReference=${callerReference} already exists, attempting recovery`,
                     );
-                    const recovered =
-                      yield* getByCallerReference(callerReference);
+                    const recovered = yield* getByCallerReference(callerReference);
                     if (!recovered?.distribution.Id) {
                       return yield* Effect.fail(
                         new Error(
@@ -1002,8 +951,7 @@ export const DistributionProvider = () =>
                     error,
                   ): Effect.Effect<
                     never,
-                    | cloudfront.InvalidArgument
-                    | DistributionFunctionAssociationPending
+                    cloudfront.InvalidArgument | DistributionFunctionAssociationPending
                   > =>
                     isFunctionAssociationPending(error)
                       ? Effect.logInfo(
@@ -1012,9 +960,7 @@ export const DistributionProvider = () =>
                           Effect.andThen(
                             Effect.fail(
                               new DistributionFunctionAssociationPending({
-                                message:
-                                  error.message ??
-                                  "CloudFront function association pending",
+                                message: error.message ?? "CloudFront function association pending",
                               }),
                             ),
                           ),
@@ -1022,19 +968,13 @@ export const DistributionProvider = () =>
                       : Effect.fail(error),
                 ),
                 Effect.retry({
-                  while: (error) =>
-                    error instanceof DistributionFunctionAssociationPending,
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(24),
-                  ]),
+                  while: (error) => error instanceof DistributionFunctionAssociationPending,
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
                 }),
               );
 
             if (!created.distributionId) {
-              return yield* Effect.fail(
-                new Error("createDistribution returned no distribution"),
-              );
+              return yield* Effect.fail(new Error("createDistribution returned no distribution"));
             }
 
             yield* Effect.logInfo(
@@ -1045,12 +985,7 @@ export const DistributionProvider = () =>
               `CloudFront Distribution reconcile: deployed ${created.distributionId} domain=${deployed.DomainName}`,
             );
             yield* session.note(created.distributionId);
-            return toAttrs(
-              deployed,
-              created.etag,
-              created.tags,
-              yield* resolveUrl(deployed),
-            );
+            return toAttrs(deployed, created.etag, created.tags, yield* resolveUrl(deployed));
           }
 
           // Sync config — diff observed config against desired and patch
@@ -1079,8 +1014,7 @@ export const DistributionProvider = () =>
                   error,
                 ): Effect.Effect<
                   never,
-                  | cloudfront.InvalidArgument
-                  | DistributionFunctionAssociationPending
+                  cloudfront.InvalidArgument | DistributionFunctionAssociationPending
                 > =>
                   isFunctionAssociationPending(error)
                     ? Effect.logInfo(
@@ -1089,9 +1023,7 @@ export const DistributionProvider = () =>
                         Effect.andThen(
                           Effect.fail(
                             new DistributionFunctionAssociationPending({
-                              message:
-                                error.message ??
-                                "CloudFront function association pending",
+                              message: error.message ?? "CloudFront function association pending",
                             }),
                           ),
                         ),
@@ -1099,19 +1031,13 @@ export const DistributionProvider = () =>
                     : Effect.fail(error),
               ),
               Effect.retry({
-                while: (error) =>
-                  error instanceof DistributionFunctionAssociationPending,
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
+                while: (error) => error instanceof DistributionFunctionAssociationPending,
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
               }),
             );
 
           if (!updated.Distribution?.Id) {
-            return yield* Effect.fail(
-              new Error("updateDistribution returned no distribution"),
-            );
+            return yield* Effect.fail(new Error("updateDistribution returned no distribution"));
           }
 
           // Sync tags — diff observed cloud tags against desired and apply
@@ -1154,12 +1080,7 @@ export const DistributionProvider = () =>
             `CloudFront Distribution reconcile: deployed ${observed.distribution.Id} domain=${deployed.DomainName}`,
           );
           yield* session.note(observed.distribution.Id);
-          return toAttrs(
-            deployed,
-            updated.ETag,
-            desiredTags,
-            yield* resolveUrl(deployed),
-          );
+          return toAttrs(deployed, updated.ETag, desiredTags, yield* resolveUrl(deployed));
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.logInfo(
@@ -1263,9 +1184,7 @@ const toBehavior = (
     (behavior.cachePolicyId === undefined
       ? { QueryString: false, Cookies: { Forward: "none" } }
       : undefined),
-  MinTTL:
-    toWireSeconds(behavior.minTtl) ??
-    (behavior.cachePolicyId === undefined ? 0 : undefined),
+  MinTTL: toWireSeconds(behavior.minTtl) ?? (behavior.cachePolicyId === undefined ? 0 : undefined),
   DefaultTTL: toWireSeconds(behavior.defaultTtl),
   MaxTTL: toWireSeconds(behavior.maxTtl),
   TrustedKeyGroups: behavior.trustedKeyGroups
@@ -1285,9 +1204,7 @@ const toBehavior = (
   FieldLevelEncryptionId: behavior.fieldLevelEncryptionId,
   RealtimeLogConfigArn: behavior.realtimeLogConfigArn,
   SmoothStreaming: behavior.smoothStreaming,
-  GrpcConfig: behavior.grpcConfig
-    ? { Enabled: behavior.grpcConfig.enabled }
-    : undefined,
+  GrpcConfig: behavior.grpcConfig ? { Enabled: behavior.grpcConfig.enabled } : undefined,
   FunctionAssociations: behavior.functionAssociations
     ? {
         Quantity: behavior.functionAssociations.length,
@@ -1314,8 +1231,7 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
   // wins, then an explicit/legacy S3 origin, otherwise a custom origin.
   const isVpcOrigin = origin.vpcOriginConfig !== undefined;
   const isS3Origin =
-    !isVpcOrigin &&
-    (origin.s3Origin === true || origin.s3OriginConfig !== undefined);
+    !isVpcOrigin && (origin.s3Origin === true || origin.s3OriginConfig !== undefined);
 
   return {
     Id: origin.id,
@@ -1344,21 +1260,14 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
       ? {
           VpcOriginId: origin.vpcOriginConfig!.vpcOriginId as string,
           OwnerAccountId: origin.vpcOriginConfig!.ownerAccountId,
-          OriginReadTimeout: toWireSeconds(
-            origin.vpcOriginConfig!.originReadTimeout,
-          ),
-          OriginKeepaliveTimeout: toWireSeconds(
-            origin.vpcOriginConfig!.originKeepaliveTimeout,
-          ),
+          OriginReadTimeout: toWireSeconds(origin.vpcOriginConfig!.originReadTimeout),
+          OriginKeepaliveTimeout: toWireSeconds(origin.vpcOriginConfig!.originKeepaliveTimeout),
         }
       : undefined,
     S3OriginConfig: isS3Origin
       ? {
-          OriginAccessIdentity:
-            origin.s3OriginConfig?.originAccessIdentity ?? "",
-          OriginReadTimeout: toWireSeconds(
-            origin.s3OriginConfig?.originReadTimeout,
-          ),
+          OriginAccessIdentity: origin.s3OriginConfig?.originAccessIdentity ?? "",
+          OriginReadTimeout: toWireSeconds(origin.s3OriginConfig?.originReadTimeout),
         }
       : undefined,
     CustomOriginConfig:
@@ -1367,19 +1276,12 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
         : {
             HTTPPort: origin.customOriginConfig?.httpPort ?? 80,
             HTTPSPort: origin.customOriginConfig?.httpsPort ?? 443,
-            OriginProtocolPolicy:
-              origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
+            OriginProtocolPolicy: origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
             OriginSslProtocols: {
-              Quantity: (
-                origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]
-              ).length,
-              Items: origin.customOriginConfig?.originSslProtocols ?? [
-                "TLSv1.2",
-              ],
+              Quantity: (origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]).length,
+              Items: origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"],
             },
-            OriginReadTimeout: toWireSeconds(
-              origin.customOriginConfig?.originReadTimeout,
-            ),
+            OriginReadTimeout: toWireSeconds(origin.customOriginConfig?.originReadTimeout),
             OriginKeepaliveTimeout: toWireSeconds(
               origin.customOriginConfig?.originKeepaliveTimeout,
             ),
@@ -1387,8 +1289,7 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
             OriginMtlsConfig: origin.customOriginConfig?.originMtlsConfig
               ? {
                   ClientCertificateArn:
-                    origin.customOriginConfig.originMtlsConfig
-                      .clientCertificateArn,
+                    origin.customOriginConfig.originMtlsConfig.clientCertificateArn,
                 }
               : undefined,
           },
@@ -1429,10 +1330,7 @@ const fillUndefined = <T>(desired: T, observed: T): T => {
     ) {
       continue;
     }
-    out[key] = fillUndefined(
-      desiredObj[key],
-      (observed as Record<string, unknown>)[key],
-    );
+    out[key] = fillUndefined(desiredObj[key], (observed as Record<string, unknown>)[key]);
   }
   return out as T;
 };
@@ -1470,10 +1368,7 @@ export const mergeWithObservedConfig = (
     merged.Origins = {
       ...merged.Origins,
       Items: merged.Origins.Items.map((item) =>
-        fillUndefined(
-          item,
-          observedOrigins.find((origin) => origin.Id === item.Id) ?? item,
-        ),
+        fillUndefined(item, observedOrigins.find((origin) => origin.Id === item.Id) ?? item),
       ),
     };
   }
@@ -1484,9 +1379,7 @@ export const mergeWithObservedConfig = (
       Items: merged.CacheBehaviors.Items.map((item) =>
         fillUndefined(
           item,
-          observedBehaviors.find(
-            (behavior) => behavior.PathPattern === item.PathPattern,
-          ) ?? item,
+          observedBehaviors.find((behavior) => behavior.PathPattern === item.PathPattern) ?? item,
         ),
       ),
     };
@@ -1516,47 +1409,37 @@ const toConfig = (
   CacheBehaviors: props.orderedCacheBehaviors
     ? {
         Quantity: (
-          props.orderedCacheBehaviors as Array<
-            DistributionBehavior & { pathPattern: string }
-          >
+          props.orderedCacheBehaviors as Array<DistributionBehavior & { pathPattern: string }>
         ).length,
         Items: (
-          props.orderedCacheBehaviors as Array<
-            DistributionBehavior & { pathPattern: string }
-          >
+          props.orderedCacheBehaviors as Array<DistributionBehavior & { pathPattern: string }>
         ).map((behavior) =>
-          toBehavior(
-            behavior as DistributionBehavior & { pathPattern: string },
-          ),
+          toBehavior(behavior as DistributionBehavior & { pathPattern: string }),
         ) as cloudfront.CacheBehavior[],
       }
     : undefined,
   OriginGroups: props.originGroups
     ? {
         Quantity: (props.originGroups as DistributionOriginGroup[]).length,
-        Items: (props.originGroups as DistributionOriginGroup[]).map(
-          (group) => ({
-            Id: group.id,
-            FailoverCriteria: {
-              StatusCodes: {
-                Quantity: group.failoverStatusCodes.length,
-                Items: group.failoverStatusCodes,
-              },
+        Items: (props.originGroups as DistributionOriginGroup[]).map((group) => ({
+          Id: group.id,
+          FailoverCriteria: {
+            StatusCodes: {
+              Quantity: group.failoverStatusCodes.length,
+              Items: group.failoverStatusCodes,
             },
-            Members: {
-              Quantity: group.members.length,
-              Items: group.members.map((originId) => ({ OriginId: originId })),
-            },
-            SelectionCriteria: group.selectionCriteria,
-          }),
-        ),
+          },
+          Members: {
+            Quantity: group.members.length,
+            Items: group.members.map((originId) => ({ OriginId: originId })),
+          },
+          SelectionCriteria: group.selectionCriteria,
+        })),
       }
     : undefined,
   CustomErrorResponses: props.customErrorResponses
     ? {
-        Quantity: (
-          props.customErrorResponses as cloudfront.CustomErrorResponse[]
-        ).length,
+        Quantity: (props.customErrorResponses as cloudfront.CustomErrorResponse[]).length,
         Items: props.customErrorResponses as cloudfront.CustomErrorResponse[],
       }
     : undefined,
@@ -1572,26 +1455,19 @@ const toConfig = (
   Enabled: props.enabled ?? true,
   ViewerCertificate: props.viewerCertificate
     ? {
-        CloudFrontDefaultCertificate: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).cloudFrontDefaultCertificate,
-        IAMCertificateId: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).iamCertificateId,
-        ACMCertificateArn: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).acmCertificateArn,
-        SSLSupportMethod: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).sslSupportMethod,
-        MinimumProtocolVersion: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).minimumProtocolVersion,
-        Certificate: (props.viewerCertificate as DistributionViewerCertificate)
-          .certificate,
-        CertificateSource: (
-          props.viewerCertificate as DistributionViewerCertificate
-        ).certificateSource,
+        CloudFrontDefaultCertificate: (props.viewerCertificate as DistributionViewerCertificate)
+          .cloudFrontDefaultCertificate,
+        IAMCertificateId: (props.viewerCertificate as DistributionViewerCertificate)
+          .iamCertificateId,
+        ACMCertificateArn: (props.viewerCertificate as DistributionViewerCertificate)
+          .acmCertificateArn,
+        SSLSupportMethod: (props.viewerCertificate as DistributionViewerCertificate)
+          .sslSupportMethod,
+        MinimumProtocolVersion: (props.viewerCertificate as DistributionViewerCertificate)
+          .minimumProtocolVersion,
+        Certificate: (props.viewerCertificate as DistributionViewerCertificate).certificate,
+        CertificateSource: (props.viewerCertificate as DistributionViewerCertificate)
+          .certificateSource,
       }
     : props.aliases && props.aliases.length > 0
       ? undefined
@@ -1643,9 +1519,7 @@ const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
   }
   return yield* Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const response = yield* client.get(
-      `${endpoint}/_floci/cloudfront-edge/${distribution.Id}`,
-    );
+    const response = yield* client.get(`${endpoint}/_floci/cloudfront-edge/${distribution.Id}`);
     // A distribution legitimately has no edge port: the emulator binds one
     // opportunistically and stays Host-addressable when it can't, and the
     // endpoint 404s (with a JSON error body) for one it doesn't know yet.
@@ -1653,11 +1527,7 @@ const resolveUrl = Effect.fn("AWS.CloudFront.Distribution.url")(function* (
     // an error object, or a port-less entry. Anything that isn't a numeric
     // `Port` means "no local edge", which is the AWS URL.
     const edge = (yield* response.json) as { Port?: number } | null;
-    if (
-      edge === null ||
-      typeof edge !== "object" ||
-      typeof edge.Port !== "number"
-    ) {
+    if (edge === null || typeof edge !== "object" || typeof edge.Port !== "number") {
       return awsUrl;
     }
     const host = yield* Effect.sync(() => new URL(endpoint).hostname);

@@ -62,9 +62,7 @@ test.provider.skipIf(skipLive)(
       });
       yield* fs.copy(fixture, context, { overwrite: true });
 
-      const first = yield* stack.deploy(
-        imageFunction(context, coreFunctionName, "x86_64"),
-      );
+      const first = yield* stack.deploy(imageFunction(context, coreFunctionName, "x86_64"));
       expect(first.functionName).toBe(coreFunctionName);
       expect(first.code.image?.digest).toMatch(/^sha256:/);
       expect(first.code.image?.imageUri).toContain(`:${first.code.hash}`);
@@ -80,9 +78,7 @@ test.provider.skipIf(skipLive)(
       });
 
       // Unchanged context: the engine and ECR tag are both a no-op.
-      const unchanged = yield* stack.deploy(
-        imageFunction(context, coreFunctionName, "x86_64"),
-      );
+      const unchanged = yield* stack.deploy(imageFunction(context, coreFunctionName, "x86_64"));
       expect(unchanged.code.hash).toBe(first.code.hash);
       expect(unchanged.code.image?.digest).toBe(first.code.image?.digest);
 
@@ -101,18 +97,14 @@ test.provider.skipIf(skipLive)(
       expect(repositoryDriftPlan.resources["ContainerFunction"]).toMatchObject({
         action: "update",
       });
-      const repaired = yield* stack.deploy(
-        imageFunction(context, coreFunctionName, "x86_64"),
-      );
+      const repaired = yield* stack.deploy(imageFunction(context, coreFunctionName, "x86_64"));
       yield* assertRepositoryImmutable(repaired.code.image!.repositoryName);
       yield* assertRepositoryPolicy(repaired.code.image!.repositoryName);
 
       // A context change creates a new content-addressed tag and updates the
       // existing Lambda in place.
       yield* fs.writeFileString(path.join(context, "marker.txt"), "two\n");
-      const updated = yield* stack.deploy(
-        imageFunction(context, coreFunctionName, "x86_64"),
-      );
+      const updated = yield* stack.deploy(imageFunction(context, coreFunctionName, "x86_64"));
       expect(updated.functionName).toBe(first.functionName);
       expect(updated.code.hash).not.toBe(first.code.hash);
       expect(updated.code.image?.digest).not.toBe(first.code.image?.digest);
@@ -121,9 +113,7 @@ test.provider.skipIf(skipLive)(
 
       // Architecture changes update the image function. The separate arm64
       // smoke test below performs the platform-specific build and invocation.
-      const armPlan = yield* stack.plan(
-        imageFunction(context, coreFunctionName, "arm64"),
-      );
+      const armPlan = yield* stack.plan(imageFunction(context, coreFunctionName, "arm64"));
       expect(armPlan.resources["ContainerFunction"]).toMatchObject({
         action: "update",
       });
@@ -160,10 +150,7 @@ test.provider.skipIf(skipLive)(
       });
       yield* fs.copy(fixture, context, { overwrite: true });
 
-      const program = (
-        uri?: string,
-        imageConfig?: AWS.Lambda.FunctionImageConfig,
-      ) =>
+      const program = (uri?: string, imageConfig?: AWS.Lambda.FunctionImageConfig) =>
         Effect.gen(function* () {
           const repository = yield* AWS.ECR.Repository("ExternalRepository", {
             repositoryName: externalRepositoryName,
@@ -187,10 +174,7 @@ test.provider.skipIf(skipLive)(
         });
 
       const aliasTag = "lambda";
-      const pointAliasAt = Effect.fn(function* (
-        repositoryName: string,
-        imageTag: string,
-      ) {
+      const pointAliasAt = Effect.fn(function* (repositoryName: string, imageTag: string) {
         const response = yield* ecr.batchGetImage({
           repositoryName,
           imageIds: [{ imageTag }],
@@ -198,9 +182,7 @@ test.provider.skipIf(skipLive)(
         const image = response.images?.[0];
         if (image?.imageManifest === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `ECR image ${repositoryName}:${imageTag} has no manifest`,
-            ),
+            new Error(`ECR image ${repositoryName}:${imageTag} has no manifest`),
           );
         }
         yield* ecr
@@ -210,9 +192,7 @@ test.provider.skipIf(skipLive)(
             imageManifestMediaType: image.imageManifestMediaType,
             imageTag: aliasTag,
           })
-          .pipe(
-            Effect.catchTag("ImageAlreadyExistsException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ImageAlreadyExistsException", () => Effect.void));
       });
 
       // Materialize a private ECR image independently of the Lambda function,
@@ -228,9 +208,7 @@ test.provider.skipIf(skipLive)(
         }),
       );
       if (tagged.func === undefined) {
-        return yield* Effect.fail(
-          new Error("External function was not created"),
-        );
+        return yield* Effect.fail(new Error("External function was not created"));
       }
       expect(tagged.func.code.image).toMatchObject({
         source: "uri",
@@ -243,9 +221,7 @@ test.provider.skipIf(skipLive)(
         EntryPoint: ["/lambda-entrypoint.sh"],
         WorkingDirectory: "/var/task",
       });
-      expect(yield* invokeAlternate(tagged.func.functionName)).toBe(
-        "alternate",
-      );
+      expect(yield* invokeAlternate(tagged.func.functionName)).toBe("alternate");
 
       // Rebuild an independently-managed image, then repoint the same alias.
       // The URI string is unchanged, so only digest resolution can detect this.
@@ -266,9 +242,7 @@ test.provider.skipIf(skipLive)(
       });
       const retagged = yield* stack.deploy(program(aliasUri));
       if (retagged.func === undefined) {
-        return yield* Effect.fail(
-          new Error("External function was not updated"),
-        );
+        return yield* Effect.fail(new Error("External function was not updated"));
       }
       expect(retagged.func.code.image).toMatchObject({
         source: "uri",
@@ -277,9 +251,7 @@ test.provider.skipIf(skipLive)(
         ownsRepository: false,
       });
       yield* assertFunctionImageConfig(retagged.func.functionName, undefined);
-      expect((yield* invoke(retagged.func.functionName, "two")).marker).toBe(
-        "two",
-      );
+      expect((yield* invoke(retagged.func.functionName, "two")).marker).toBe("two");
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(externalFunctionName);
@@ -303,9 +275,7 @@ test.provider.skipIf(skipLive)(
       });
       yield* fs.copy(fixture, context, { overwrite: true });
 
-      const deployed = yield* stack.deploy(
-        imageFunction(context, armFunctionName, "arm64"),
-      );
+      const deployed = yield* stack.deploy(imageFunction(context, armFunctionName, "arm64"));
       expect(deployed.functionName).toBe(armFunctionName);
       expect(deployed.code.image?.digest).toMatch(/^sha256:/);
       yield* assertRepositoryImmutable(deployed.code.image!.repositoryName);
@@ -343,17 +313,13 @@ test.provider.skipIf(skipLive)(
       expect(deployed.functionName).toBe(zipFunctionName);
       yield* assertFunctionPackageType(deployed.functionName, "Zip");
 
-      const renamedPlan = yield* stack.plan(
-        zipFunction(`${zipFunctionName}-renamed`),
-      );
+      const renamedPlan = yield* stack.plan(zipFunction(`${zipFunctionName}-renamed`));
       expect(renamedPlan.resources["ContainerFunction"]).toMatchObject({
         action: "replace",
         deleteFirst: false,
       });
 
-      const imagePlan = yield* stack.plan(
-        imageFunction(context, zipFunctionName, "x86_64"),
-      );
+      const imagePlan = yield* stack.plan(imageFunction(context, zipFunctionName, "x86_64"));
       expect(imagePlan.resources["ContainerFunction"]).toMatchObject({
         action: "replace",
         deleteFirst: true,
@@ -392,8 +358,7 @@ const invokePayload = Effect.fn(function* (deployedFunctionName: string) {
           : "";
         const json = yield* Effect.try({
           try: () => JSON.parse(payload) as unknown,
-          catch: (cause) =>
-            new Error("Lambda returned an invalid JSON payload", { cause }),
+          catch: (cause) => new Error("Lambda returned an invalid JSON payload", { cause }),
         });
         return yield* Schema.decodeUnknownEffect(ImageInvocationResponse)(json);
       }),
@@ -401,10 +366,7 @@ const invokePayload = Effect.fn(function* (deployedFunctionName: string) {
   );
 });
 
-const invoke = Effect.fn(function* (
-  deployedFunctionName: string,
-  expectedMarker: string,
-) {
+const invoke = Effect.fn(function* (deployedFunctionName: string, expectedMarker: string) {
   return yield* invokePayload(deployedFunctionName).pipe(
     Effect.filterOrFail(
       (response) => response.marker === expectedMarker,
@@ -459,8 +421,7 @@ const assertFunctionImageConfig = Effect.fn(function* (
   yield* Lambda.getFunction({ FunctionName: deployedFunctionName }).pipe(
     Effect.filterOrFail(
       (response) => {
-        const observed =
-          response.Configuration?.ImageConfigResponse?.ImageConfig;
+        const observed = response.Configuration?.ImageConfigResponse?.ImageConfig;
         if (expected === undefined) {
           return (
             observed?.Command === undefined &&
@@ -469,10 +430,8 @@ const assertFunctionImageConfig = Effect.fn(function* (
           );
         }
         return (
-          JSON.stringify(observed?.Command) ===
-            JSON.stringify(expected.Command) &&
-          JSON.stringify(observed?.EntryPoint) ===
-            JSON.stringify(expected.EntryPoint) &&
+          JSON.stringify(observed?.Command) === JSON.stringify(expected.Command) &&
+          JSON.stringify(observed?.EntryPoint) === JSON.stringify(expected.EntryPoint) &&
           observed?.WorkingDirectory === expected.WorkingDirectory
         );
       },
@@ -501,13 +460,9 @@ const assertFunctionPackageType = Effect.fn(function* (
   );
 });
 
-const assertFunctionDeleted = Effect.fn(function* (
-  deployedFunctionName: string,
-) {
+const assertFunctionDeleted = Effect.fn(function* (deployedFunctionName: string) {
   yield* Lambda.getFunction({ FunctionName: deployedFunctionName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`Function ${deployedFunctionName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`Function ${deployedFunctionName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
@@ -518,9 +473,7 @@ const assertFunctionDeleted = Effect.fn(function* (
 
 const assertRepositoryDeleted = Effect.fn(function* (repositoryName: string) {
   yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`Repository ${repositoryName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`Repository ${repositoryName} still exists`))),
     Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
@@ -532,8 +485,7 @@ const assertRepositoryDeleted = Effect.fn(function* (repositoryName: string) {
 const assertRepositoryImmutable = Effect.fn(function* (repositoryName: string) {
   yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
     Effect.filterOrFail(
-      (response) =>
-        response.repositories?.[0]?.imageTagMutability === "IMMUTABLE",
+      (response) => response.repositories?.[0]?.imageTagMutability === "IMMUTABLE",
       () => new Error(`Repository ${repositoryName} is not immutable`),
     ),
   );
@@ -542,8 +494,7 @@ const assertRepositoryImmutable = Effect.fn(function* (repositoryName: string) {
 const assertRepositoryPolicy = Effect.fn(function* (repositoryName: string) {
   yield* ecr.getRepositoryPolicy({ repositoryName }).pipe(
     Effect.filterOrFail(
-      (response) =>
-        response.policyText?.includes("LambdaECRImageRetrievalPolicy") === true,
+      (response) => response.policyText?.includes("LambdaECRImageRetrievalPolicy") === true,
       () => new Error(`Repository ${repositoryName} has no Lambda pull policy`),
     ),
   );

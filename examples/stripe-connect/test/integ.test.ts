@@ -49,9 +49,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 
 const readMerchant = (base: string, id: string) =>
   Effect.gen(function* () {
-    const res = yield* HttpClient.execute(
-      HttpClientRequest.get(`${base}/merchants/${id}`),
-    );
+    const res = yield* HttpClient.execute(HttpClientRequest.get(`${base}/merchants/${id}`));
     expect(res.status).toBe(200);
     return (yield* res.json) as unknown as MerchantView;
   });
@@ -62,12 +60,8 @@ test(
     const { url } = yield* stack;
     expect(url).toBeString();
     const delivery = `${url.replace(/\/+$/, "")}/webhooks/stripe`;
-    const endpoints = yield* GetWebhookEndpoints({ limit: 100 }).pipe(
-      Effect.provide(StripeHttp),
-    );
-    const endpoint = endpoints.data.find(
-      (e) => e.url.replace(/\/+$/, "") === delivery,
-    );
+    const endpoints = yield* GetWebhookEndpoints({ limit: 100 }).pipe(Effect.provide(StripeHttp));
+    const endpoint = endpoints.data.find((e) => e.url.replace(/\/+$/, "") === delivery);
     expect(endpoint).toBeDefined();
     expect(endpoint?.enabled_events).toContain("account.updated");
   }),

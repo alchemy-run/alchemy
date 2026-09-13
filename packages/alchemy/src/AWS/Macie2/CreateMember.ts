@@ -30,6 +30,4 @@ export interface CreateMember extends Binding.Service<
     ) => Effect.Effect<macie2.CreateMemberResponse, macie2.CreateMemberError>
   >
 > {}
-export const CreateMember = Binding.Service<CreateMember>(
-  "AWS.Macie2.CreateMember",
-);
+export const CreateMember = Binding.Service<CreateMember>("AWS.Macie2.CreateMember");

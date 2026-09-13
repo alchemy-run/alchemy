@@ -21,8 +21,7 @@ const summarize = (info: Redshift.ClusterConnectionInfo) => ({
   hasPassword: info.password !== undefined,
   ssl: info.ssl,
   urlScheme: Redacted.value(info.url).split("://")[0],
-  expiresInFuture:
-    info.expiration !== undefined && info.expiration.getTime() > Date.now(),
+  expiresInFuture: info.expiration !== undefined && info.expiration.getTime() > Date.now(),
 });
 
 export default RedshiftConnectFunction.make(

@@ -7,10 +7,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // IndicatorFeedPermission is non-listable (pattern (e)): a grant is keyed by
 // {feedId, accountTag} from the granting account's side, and Cloudflare
@@ -28,9 +25,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Intel.IndicatorFeedPermission,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Intel.IndicatorFeedPermission);
       const all = yield* provider.list();
       expect(all).toEqual([]);
 

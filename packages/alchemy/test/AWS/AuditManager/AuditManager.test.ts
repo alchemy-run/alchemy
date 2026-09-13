@@ -20,9 +20,7 @@ describe("AWS.AuditManager", () => {
     (_stack) =>
       Effect.gen(function* () {
         const response = yield* auditmanager.getAccountStatus({});
-        expect(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION"]).toContain(
-          response.status,
-        );
+        expect(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION"]).toContain(response.status);
       }),
     { timeout: 60_000 },
   );
@@ -38,10 +36,7 @@ describe("AWS.AuditManager", () => {
         // accounts reject every control op with AccessDeniedException. Both
         // are typed tags in the distilled union — the provider's read path
         // depends on the former.
-        expect([
-          "ResourceNotFoundException",
-          "AccessDeniedException",
-        ]).toContain(error._tag);
+        expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
       }),
     { timeout: 60_000 },
   );
@@ -90,10 +85,7 @@ describe("AWS.AuditManager", () => {
           }).pipe(
             Effect.retry({
               while: (e) => e._tag === "NotActive",
-              schedule: Schedule.max([
-                Schedule.spaced("5 seconds"),
-                Schedule.recurs(12),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
             }),
           );
         }
@@ -184,15 +176,13 @@ describe("AWS.AuditManager", () => {
         const observedFramework = yield* auditmanager.getAssessmentFramework({
           frameworkId: framework.frameworkId,
         });
-        expect(
-          observedFramework.framework?.controlSets?.[0]?.controls?.[0]?.id,
-        ).toBe(control.controlId);
+        expect(observedFramework.framework?.controlSets?.[0]?.controls?.[0]?.id).toBe(
+          control.controlId,
+        );
         const observedAssessment = yield* auditmanager.getAssessment({
           assessmentId: assessment.assessmentId,
         });
-        expect(observedAssessment.assessment?.framework?.id).toBe(
-          framework.frameworkId,
-        );
+        expect(observedAssessment.assessment?.framework?.id).toBe(framework.frameworkId);
 
         // Update in place — descriptions flow through the update APIs and
         // ids are stable.
@@ -207,37 +197,27 @@ describe("AWS.AuditManager", () => {
         const reobservedFramework = yield* auditmanager.getAssessmentFramework({
           frameworkId: framework.frameworkId,
         });
-        expect(reobservedFramework.framework?.description).toBe(
-          "updated framework",
-        );
+        expect(reobservedFramework.framework?.description).toBe("updated framework");
 
         yield* stack.destroy();
 
         // Typed wait-until-gone for each resource.
         const assertGone = Effect.gen(function* () {
-          const controlGone = yield* auditmanager
-            .getControl({ controlId: control.controlId })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
-            );
+          const controlGone = yield* auditmanager.getControl({ controlId: control.controlId }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+          );
           const frameworkGone = yield* auditmanager
             .getAssessmentFramework({ frameworkId: framework.frameworkId })
             .pipe(
               Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             );
           const assessmentGone = yield* auditmanager
             .getAssessment({ assessmentId: assessment.assessmentId })
             .pipe(
               Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             );
           if (!controlGone || !frameworkGone || !assessmentGone) {
             return yield* Effect.fail({ _tag: "StillExists" as const });
@@ -245,10 +225,7 @@ describe("AWS.AuditManager", () => {
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
           }),
         );
         yield* assertGone;

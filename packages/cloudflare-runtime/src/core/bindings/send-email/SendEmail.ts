@@ -5,9 +5,7 @@ import * as Path from "effect/Path";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const EmailMessageWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/send-email/EmailMessage.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/send-email/EmailMessage.worker"),
 };
 const SendEmailBindingWorker = {
   worker: () =>
@@ -27,10 +25,7 @@ import type { RemoteBindings } from "../../remote-bindings/RemoteBindings.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
-import type {
-  SendEmailProps,
-  SendEmailServiceProps,
-} from "./SendEmailOptions.shared.ts";
+import type { SendEmailProps, SendEmailServiceProps } from "./SendEmailOptions.shared.ts";
 import {
   BINDING_SEND_EMAIL_DIRECTORY,
   BINDING_SEND_EMAIL_DISK,
@@ -63,13 +58,11 @@ export const SendEmailLive = Layer.effect(
     const storage = yield* Storage.Storage;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
         return yield* new ConfigError({
           subtag: "SendEmail",
-          message:
-            "Cannot configure email persistence: the Storage service has no disk path.",
+          message: "Cannot configure email persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
@@ -130,8 +123,7 @@ export const SendEmailLive = Layer.effect(
           },
           defer: Effect.gen(function* () {
             if (!used) return {};
-            const { persistPath, service: storageService } =
-              yield* makeStorageService;
+            const { persistPath, service: storageService } = yield* makeStorageService;
             const sendEmailService: WorkerdConfig.Service = {
               name: SERVICE_SEND_EMAIL,
               worker: {
@@ -166,9 +158,7 @@ export const SendEmailLive = Layer.effect(
  * the `EmailMessage` class to user code (workerd does not ship it
  * natively), matching the upstream Miniflare behavior.
  */
-export const remote = (
-  props: SendEmailProps,
-): BindingHook<RemoteBindings | SendEmail> =>
+export const remote = (props: SendEmailProps): BindingHook<RemoteBindings | SendEmail> =>
   Plugin.use(SendEmail, () =>
     makeRemoteBinding(
       {

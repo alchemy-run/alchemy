@@ -28,10 +28,7 @@ export interface DeleteAdapterVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<textract.DeleteAdapterVersionRequest, "AdapterId">,
-    ) => Effect.Effect<
-      textract.DeleteAdapterVersionResponse,
-      textract.DeleteAdapterVersionError
-    >
+    ) => Effect.Effect<textract.DeleteAdapterVersionResponse, textract.DeleteAdapterVersionError>
   >
 > {}
 export const DeleteAdapterVersion = Binding.Service<DeleteAdapterVersion>(

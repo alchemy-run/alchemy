@@ -76,10 +76,7 @@ export const DomainProvider = () =>
     Domain,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: DomainProps) {
-        return (
-          props.domainName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.domainName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const domainArn = (region: string, accountId: string, name: string) =>
@@ -88,9 +85,7 @@ export const DomainProvider = () =>
       const observeDomain = Effect.fn(function* (name: string) {
         return yield* sdb
           .domainMetadata({ DomainName: name })
-          .pipe(
-            Effect.catchTag("NoSuchDomain", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("NoSuchDomain", () => Effect.succeed(undefined)));
       });
 
       return Domain.Provider.of({
@@ -99,9 +94,7 @@ export const DomainProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const names = yield* sdb.listDomains
-              .items({})
-              .pipe(Stream.runCollect);
+            const names = yield* sdb.listDomains.items({}).pipe(Stream.runCollect);
             return Array.from(names).map((name) => ({
               domainName: name,
               domainArn: domainArn(region, accountId, name),
@@ -110,8 +103,7 @@ export const DomainProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.domainName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.domainName ?? (yield* createName(id, olds ?? {}));
           const metadata = yield* observeDomain(name);
           if (metadata === undefined) {
             return undefined;
@@ -144,9 +136,7 @@ export const DomainProvider = () =>
           //    domain succeeds); wait until the domain is visible.
           if (metadata === undefined) {
             yield* sdb.createDomain({ DomainName: name });
-            yield* retryWhileNoSuchDomain(
-              sdb.domainMetadata({ DomainName: name }),
-            );
+            yield* retryWhileNoSuchDomain(sdb.domainMetadata({ DomainName: name }));
           }
 
           // 3. SYNC — a domain has no mutable configuration and no tags.

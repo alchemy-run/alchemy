@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetSavingsPlansCoverage}.
  */
-export interface GetSavingsPlansCoverageRequest
-  extends ce.GetSavingsPlansCoverageRequest {}
+export interface GetSavingsPlansCoverageRequest extends ce.GetSavingsPlansCoverageRequest {}
 
 /**
  * Runtime binding for `ce:GetSavingsPlansCoverage`.
@@ -34,10 +33,7 @@ export interface GetSavingsPlansCoverage extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetSavingsPlansCoverageRequest,
-    ) => Effect.Effect<
-      ce.GetSavingsPlansCoverageResponse,
-      ce.GetSavingsPlansCoverageError
-    >
+    ) => Effect.Effect<ce.GetSavingsPlansCoverageResponse, ce.GetSavingsPlansCoverageError>
   >
 > {}
 

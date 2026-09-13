@@ -37,7 +37,6 @@ export interface GetResourceEvaluationSummary extends Binding.Service<
   >
 > {}
 
-export const GetResourceEvaluationSummary =
-  Binding.Service<GetResourceEvaluationSummary>(
-    "AWS.Config.GetResourceEvaluationSummary",
-  );
+export const GetResourceEvaluationSummary = Binding.Service<GetResourceEvaluationSummary>(
+  "AWS.Config.GetResourceEvaluationSummary",
+);

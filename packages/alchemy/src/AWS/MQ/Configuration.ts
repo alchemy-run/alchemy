@@ -126,9 +126,7 @@ const encodeData = (data: string): Effect.Effect<string> =>
   Effect.sync(() => Buffer.from(data, "utf8").toString("base64"));
 
 const decodeData = (data: string | undefined): Effect.Effect<string> =>
-  Effect.sync(() =>
-    data === undefined ? "" : Buffer.from(data, "base64").toString("utf8"),
-  );
+  Effect.sync(() => (data === undefined ? "" : Buffer.from(data, "base64").toString("utf8")));
 
 export const ConfigurationProvider = () =>
   Provider.effect(
@@ -143,11 +141,7 @@ export const ConfigurationProvider = () =>
       const readConfiguration = Effect.fn(function* (configurationId: string) {
         return yield* mq
           .describeConfiguration({ ConfigurationId: configurationId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       /** Enumerate all configurations (listConfigurations is not paginated). */
@@ -189,21 +183,14 @@ export const ConfigurationProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Engine type, version, and auth strategy are fixed at creation.
-          if (
-            (news.engineType ?? undefined) !== (olds?.engineType ?? undefined)
-          ) {
+          if ((news.engineType ?? undefined) !== (olds?.engineType ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (news.engineVersion ?? undefined) !==
-            (olds?.engineVersion ?? undefined)
-          ) {
+          if ((news.engineVersion ?? undefined) !== (olds?.engineVersion ?? undefined)) {
             return { action: "replace" } as const;
           }
           if (
@@ -250,9 +237,7 @@ export const ConfigurationProvider = () =>
             observed = yield* readConfiguration(created.Id!);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `MQ configuration '${name}' disappeared immediately after create`,
-                ),
+                new Error(`MQ configuration '${name}' disappeared immediately after create`),
               );
             }
           }
@@ -281,19 +266,13 @@ export const ConfigurationProvider = () =>
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
-          yield* syncMqTags(
-            observed.Arn!,
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          yield* syncMqTags(observed.Arn!, toTagRecord(observed.Tags), desiredTags);
 
           // 4. Re-read for the fresh latest revision + tags.
           const final = yield* readConfiguration(configurationId);
           if (final === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `MQ configuration '${name}' disappeared while reconciling`,
-              ),
+              new Error(`MQ configuration '${name}' disappeared while reconciling`),
             );
           }
           yield* session.note(name);

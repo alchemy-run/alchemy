@@ -41,10 +41,7 @@ export interface TestIdentityProvider extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<transfer.TestIdentityProviderRequest, "ServerId">,
-    ) => Effect.Effect<
-      transfer.TestIdentityProviderResponse,
-      transfer.TestIdentityProviderError
-    >
+    ) => Effect.Effect<transfer.TestIdentityProviderResponse, transfer.TestIdentityProviderError>
   >
 > {}
 export const TestIdentityProvider = Binding.Service<TestIdentityProvider>(

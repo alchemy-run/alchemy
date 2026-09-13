@@ -7,11 +7,7 @@ import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { renamedFrom } from "../../Rename.ts";
-import {
-  effectClass,
-  isYieldableEffectLike,
-  type YieldableEffectLike,
-} from "../../Util/effect.ts";
+import { effectClass, isYieldableEffectLike, type YieldableEffectLike } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
@@ -78,9 +74,10 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
 }
 
 type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
-  [
-    binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-  ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+  [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+    Bindings,
+    WorkerAssetsConfig
+  >[binding];
 }>;
 
 /**
@@ -223,11 +220,7 @@ export const StaticSite: {
       id: string,
       propsEff:
         | InputProps<StaticSiteProps<Bindings>, "dev">
-        | Effect.Effect<
-            InputProps<StaticSiteProps<Bindings>, "dev">,
-            never,
-            Req
-          >,
+        | Effect.Effect<InputProps<StaticSiteProps<Bindings>, "dev">, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): StaticSiteWorker<Bindings>;
     };
@@ -243,10 +236,7 @@ export const StaticSite: {
     ? (id: string, propsEff: any) => effectClass(makeStaticSite(id, propsEff))
     : makeStaticSite(id, propsEff)) as any;
 
-const makeStaticSite = <
-  const Bindings extends WorkerBindingProps = {},
-  Req = never,
->(
+const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = never>(
   id: string,
   propsEff:
     | InputProps<StaticSiteProps<Bindings>, "dev">
@@ -271,9 +261,7 @@ const makeStaticSite = <
       ctx.dev && props.dev
         ? yield* Command.Dev("Dev", {
             command: props.dev.command,
-            cwd:
-              props.dev.cwd ??
-              (typeof props.cwd === "string" ? props.cwd : undefined),
+            cwd: props.dev.cwd ?? (typeof props.cwd === "string" ? props.cwd : undefined),
             env: yield* serializeEnv(props.dev.env ?? props.env),
           }).pipe(
             Namespace.push(id),
@@ -341,11 +329,7 @@ const makeStaticSite = <
  * - remaining plain values (`null`, numbers, JSON objects) are stringified
  */
 const serializeEnv = Effect.fn(function* (
-  env: Input<
-    | WorkerBindingProps
-    | Record<string, string | Redacted.Redacted<string>>
-    | undefined
-  >,
+  env: Input<WorkerBindingProps | Record<string, string | Redacted.Redacted<string>> | undefined>,
 ) {
   const entries: [string, unknown][] = [];
   for (const [k, v] of Object.entries(env ?? {})) {
@@ -363,9 +347,7 @@ const serializeEnv = Effect.fn(function* (
       continue;
     } else if (isYieldableEffectLike(v)) {
       const resolved = serializeEnvValue(
-        yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(
-          Effect.orDie,
-        ),
+        yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(Effect.orDie),
       );
       if (resolved === undefined) continue;
       entries.push([k, resolved]);
@@ -377,19 +359,14 @@ const serializeEnv = Effect.fn(function* (
       entries.push([k, JSON.stringify(v)]);
     }
   }
-  return Object.fromEntries(entries) as Record<
-    string,
-    string | Redacted.Redacted<string>
-  >;
+  return Object.fromEntries(entries) as Record<string, string | Redacted.Redacted<string>>;
 });
 
 /**
  * Serialize one resolved env value for the build/dev subprocess: strings and
  * `Redacted` pass through, everything else becomes JSON.
  */
-const serializeEnvValue = (
-  value: unknown,
-): string | Redacted.Redacted<string> | undefined =>
+const serializeEnvValue = (value: unknown): string | Redacted.Redacted<string> | undefined =>
   value === undefined
     ? undefined
     : typeof value === "string"

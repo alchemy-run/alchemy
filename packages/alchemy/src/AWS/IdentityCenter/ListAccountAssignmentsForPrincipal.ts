@@ -32,10 +32,7 @@ export interface ListAccountAssignmentsForPrincipal extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        ssoAdmin.ListAccountAssignmentsForPrincipalRequest,
-        "InstanceArn"
-      >,
+      request: Omit<ssoAdmin.ListAccountAssignmentsForPrincipalRequest, "InstanceArn">,
     ) => Effect.Effect<
       ssoAdmin.ListAccountAssignmentsForPrincipalResponse,
       ssoAdmin.ListAccountAssignmentsForPrincipalError

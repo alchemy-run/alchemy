@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { FileLink } from "./FileLink.ts";
 
-export interface UpdateFileLinkRequest extends Omit<
-  DistilledUpdateFileLinkRequest,
-  "link"
-> {}
+export interface UpdateFileLinkRequest extends Omit<DistilledUpdateFileLinkRequest, "link"> {}
 
 /**
  * Update a bound Stripe File Link over HTTP. Expired links cannot be
@@ -38,6 +35,4 @@ export interface UpdateFileLink extends Binding.Service<
   >
 > {}
 
-export const UpdateFileLink = Binding.Service<UpdateFileLink>(
-  "Stripe.UpdateFileLink",
-);
+export const UpdateFileLink = Binding.Service<UpdateFileLink>("Stripe.UpdateFileLink");

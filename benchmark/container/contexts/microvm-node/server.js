@@ -11,9 +11,7 @@ http
     const url = new URL(req.url, "http://microvm");
     if (url.pathname === "/echo") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({ message: url.searchParams.get("message") ?? "" }),
-      );
+      res.end(JSON.stringify({ message: url.searchParams.get("message") ?? "" }));
       return;
     }
     res.writeHead(200, { "content-type": "text/plain" });

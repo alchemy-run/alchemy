@@ -50,9 +50,7 @@ export default class SecretKeyWorker extends Cloudflare.Worker<SecretKeyWorker>(
         // Sign with the raw-format key, verify with the jwk-format key —
         // both bindings carry the same material, so this only succeeds if
         // both formats imported correctly.
-        const signature = yield* Effect.promise(() =>
-          crypto.subtle.sign("HMAC", raw, data),
-        );
+        const signature = yield* Effect.promise(() => crypto.subtle.sign("HMAC", raw, data));
         const crossVerified = yield* Effect.promise(() =>
           crypto.subtle.verify("HMAC", jwk, signature, data),
         );

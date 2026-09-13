@@ -52,11 +52,7 @@ for (let i = 0; i < args.length; i++) {
   const arg = args[i]!;
   if (arg.startsWith("-")) {
     flags.push(arg);
-    if (
-      flagsWithValue.has(arg) &&
-      args[i + 1] &&
-      !args[i + 1]!.startsWith("-")
-    ) {
+    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
       flags.push(args[++i]!);
     }
     continue;
@@ -73,8 +69,7 @@ if (allowedRoots.length === 0) {
   process.exit(1);
 }
 
-const requestedRoots =
-  paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
+const requestedRoots = paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
 
 const files: string[] = [];
 for (const root of requestedRoots) {

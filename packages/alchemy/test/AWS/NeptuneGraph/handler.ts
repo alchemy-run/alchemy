@@ -103,10 +103,7 @@ export const NeptuneGraphTestFunctionLive = NeptuneGraphTestFunction.make(
             language: "OPEN_CYPHER",
             parameters: body.parameters,
           });
-          const payload = yield* response.payload.pipe(
-            Stream.decodeText,
-            Stream.mkString,
-          );
+          const payload = yield* response.payload.pipe(Stream.decodeText, Stream.mkString);
           return yield* HttpServerResponse.json(JSON.parse(payload));
         }
 

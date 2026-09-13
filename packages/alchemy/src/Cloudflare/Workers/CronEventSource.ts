@@ -201,23 +201,18 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  */
 export const cron = <Req = never>(
   expression: string,
-  process: (
-    controller: cf.ScheduledController,
-  ) => Effect.Effect<void, unknown, Req>,
+  process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
 ): Effect.Effect<void, never, CronEventSource | Exclude<Req, RuntimeContext>> =>
   CronEventSource.use((source) => source(expression, process));
 
 export type CronEventSourceService = <Req = never>(
   expression: string,
-  process: (
-    controller: cf.ScheduledController,
-  ) => Effect.Effect<void, unknown, Req>,
+  process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
 ) => Effect.Effect<void, never, Exclude<Req, RuntimeContext>>;
 
-export class CronEventSource extends Context.Service<
-  CronEventSource,
-  CronEventSourceService
->()("Cloudflare.Workers.CronEventSource") {}
+export class CronEventSource extends Context.Service<CronEventSource, CronEventSourceService>()(
+  "Cloudflare.Workers.CronEventSource",
+) {}
 
 export const CronEventSourceLive = Layer.effect(
   CronEventSource,
@@ -225,9 +220,7 @@ export const CronEventSourceLive = Layer.effect(
     const host = yield* Worker;
     return Effect.fn(function* <Req>(
       expression: string,
-      process: (
-        controller: cf.ScheduledController,
-      ) => Effect.Effect<void, unknown, Req>,
+      process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
     ) {
       // Deploy-time: attach the cron expression to the host Worker. Skipped once
       // running inside the deployed Worker (the global guard), where the only

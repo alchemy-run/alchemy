@@ -6,9 +6,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { Counter, CounterLive } from "./object.ts";
 
 // Tag
-export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
-  "WorkerA",
-) {}
+export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()("WorkerA") {}
 
 // Layer
 export default WorkerA.make(

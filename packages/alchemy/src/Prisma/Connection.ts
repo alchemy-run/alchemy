@@ -271,9 +271,7 @@ const listDatabaseConnections = (databaseId: string) =>
     let cursor: string | undefined;
     while (true) {
       const page = yield* getDatabaseConnections(
-        cursor === undefined
-          ? { databaseId, limit: 100 }
-          : { databaseId, limit: 100, cursor },
+        cursor === undefined ? { databaseId, limit: 100 } : { databaseId, limit: 100, cursor },
       );
       connections.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
@@ -296,9 +294,7 @@ const listAllConnections = () =>
     const connections: GetConnectionsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getConnections(
-        cursor === undefined ? {} : { cursor },
-      );
+      const page = yield* getConnections(cursor === undefined ? {} : { cursor });
       connections.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -337,9 +333,7 @@ class InvalidPrismaConnectionNameError extends Error {
   readonly _tag = "InvalidPrismaConnectionNameError";
 
   constructor() {
-    super(
-      "Prisma connection name must contain at least one non-space character",
-    );
+    super("Prisma connection name must contain at least one non-space character");
   }
 }
 
@@ -360,11 +354,7 @@ const uniqueConnection = (
       connections.length <= 1
         ? Effect.succeed(connections[0])
         : Effect.fail(
-            new AmbiguousPrismaConnectionError(
-              databaseId,
-              description,
-              connections.length,
-            ),
+            new AmbiguousPrismaConnectionError(databaseId, description, connections.length),
           ),
     ),
   );
@@ -376,15 +366,8 @@ const generatedConnectionRecoverySchedule = Schedule.max([
   Schedule.recurs(6),
 ]);
 
-const recoverGeneratedConnectionAfterConflict = (
-  databaseId: string,
-  expectedName: string,
-) =>
-  uniqueConnection(
-    databaseId,
-    expectedName,
-    (candidate) => candidate.name === expectedName,
-  ).pipe(
+const recoverGeneratedConnectionAfterConflict = (databaseId: string, expectedName: string) =>
+  uniqueConnection(databaseId, expectedName, (candidate) => candidate.name === expectedName).pipe(
     Effect.flatMap((connection) =>
       connection
         ? Effect.succeed(connection)
@@ -400,24 +383,16 @@ const recoverGeneratedConnectionAfterConflict = (
     }),
   );
 
-const physicalConnectionPrefix = (name: string) =>
-  `${name.trim().slice(0, 52)}-`;
+const physicalConnectionPrefix = (name: string) => `${name.trim().slice(0, 52)}-`;
 
-const isGeneratedPhysicalConnectionName = (
-  physicalName: string,
-  logicalName: string,
-) => {
+const isGeneratedPhysicalConnectionName = (physicalName: string, logicalName: string) => {
   const prefix = physicalConnectionPrefix(logicalName);
   return (
-    physicalName.startsWith(prefix) &&
-    /^[0-9a-f]{12}$/i.test(physicalName.slice(prefix.length))
+    physicalName.startsWith(prefix) && /^[0-9a-f]{12}$/i.test(physicalName.slice(prefix.length))
   );
 };
 
-const isAdoptablePhysicalConnectionName = (
-  physicalName: string,
-  logicalName: string,
-) =>
+const isAdoptablePhysicalConnectionName = (physicalName: string, logicalName: string) =>
   physicalName === logicalName.trim() ||
   isGeneratedPhysicalConnectionName(physicalName, logicalName);
 
@@ -447,17 +422,14 @@ const ProviderLive = () =>
         stables: ["connectionId"],
         list: () =>
           listAllConnections().pipe(
-            Effect.map((connections) =>
-              connections.map((c) => attrsFrom(c, {})),
-            ),
+            Effect.map((connections) => connections.map((c) => attrsFrom(c, {}))),
           ),
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.connectionId)) {
             return { action: "update" } as const;
           }
-          const oldDatabaseId =
-            output?.databaseId ?? unresolvedDatabaseIdOf(olds.database);
+          const oldDatabaseId = output?.databaseId ?? unresolvedDatabaseIdOf(olds.database);
           const newDatabaseId = isResolved(news.database)
             ? unresolvedDatabaseIdOf(news.database)
             : undefined;
@@ -465,8 +437,7 @@ const ProviderLive = () =>
             ? yield* validateConnectionName(news.name ?? id)
             : undefined;
           const nameChanged =
-            resolvedName !== undefined &&
-            resolvedName !== (olds.name ?? id).trim();
+            resolvedName !== undefined && resolvedName !== (olds.name ?? id).trim();
           if (concreteIdsChanged(oldDatabaseId, newDatabaseId) || nameChanged) {
             return { action: "replace" } as const;
           }
@@ -530,21 +501,11 @@ const ProviderLive = () =>
           );
           const connection =
             generated ??
-            (yield* uniqueConnection(
-              databaseId,
-              name,
-              (connection) => connection.name === name,
-            ));
+            (yield* uniqueConnection(databaseId, name, (connection) => connection.name === name));
           if (!connection) return undefined;
           return Unowned(attrsFrom(connection, {}));
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news,
-          olds,
-          output,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const databaseId = yield* resolveDatabaseId(news.database);
           const name = yield* validateConnectionName(news.name ?? id);
           const connectionId = isPrismaDevId(output?.connectionId)
@@ -558,12 +519,8 @@ const ProviderLive = () =>
             : undefined;
 
           const expectedName = physicalInstanceName(name, instanceId);
-          const physicalName =
-            connectionId && output ? output.connectionName : expectedName;
-          if (
-            connectionId &&
-            !isAdoptablePhysicalConnectionName(physicalName, name)
-          ) {
+          const physicalName = connectionId && output ? output.connectionName : expectedName;
+          if (connectionId && !isAdoptablePhysicalConnectionName(physicalName, name)) {
             return yield* Effect.fail(
               new Error(
                 `Persisted Prisma connection '${connectionId}' has physical name '${physicalName}', which does not match requested logical name '${name}'. Refusing to adopt or persist a mismatched connection.`,
@@ -572,8 +529,7 @@ const ProviderLive = () =>
           }
           if (
             connection &&
-            (connection.database.id !== databaseId ||
-              connection.name !== physicalName)
+            (connection.database.id !== databaseId || connection.name !== physicalName)
           ) {
             return yield* Effect.fail(
               new Error(
@@ -606,10 +562,7 @@ const ProviderLive = () =>
             connection = yield* physicalName === expectedName
               ? create.pipe(
                   Effect.catchTag("Conflict", () =>
-                    recoverGeneratedConnectionAfterConflict(
-                      databaseId,
-                      expectedName,
-                    ),
+                    recoverGeneratedConnectionAfterConflict(databaseId, expectedName),
                   ),
                 )
               : create;
@@ -624,10 +577,7 @@ const ProviderLive = () =>
             output?.accelerateConnectionString === undefined;
           const recoveringOwnedGeneratedSecrets =
             physicalName === expectedName && missingCanonicalSecrets;
-          if (
-            recoveringOwnedGeneratedSecrets ||
-            (news.rotate === true && olds?.rotate !== true)
-          ) {
+          if (recoveringOwnedGeneratedSecrets || (news.rotate === true && olds?.rotate !== true)) {
             const rotated = yield* createConnectionRotate({
               id: connection.id,
             }).pipe(
@@ -664,8 +614,7 @@ const ProviderLive = () =>
             pooledConnectionString:
               secrets.pooledConnectionString ?? output?.pooledConnectionString,
             accelerateConnectionString:
-              secrets.accelerateConnectionString ??
-              output?.accelerateConnectionString,
+              secrets.accelerateConnectionString ?? output?.accelerateConnectionString,
             host: secrets.host ?? output?.host,
             user: secrets.user ?? output?.user,
             password: secrets.password ?? output?.password,
@@ -701,18 +650,9 @@ const ProviderLive = () =>
 const ProviderLocal = () =>
   devProvider(Connection, ["connectionId"], ({ id, news }) => {
     const secrets = {
-      directConnectionString: attrOrRedactedString(
-        news.database,
-        "directConnectionString",
-      ),
-      pooledConnectionString: attrOrRedactedString(
-        news.database,
-        "pooledConnectionString",
-      ),
-      accelerateConnectionString: attrOrRedactedString(
-        news.database,
-        "accelerateConnectionString",
-      ),
+      directConnectionString: attrOrRedactedString(news.database, "directConnectionString"),
+      pooledConnectionString: attrOrRedactedString(news.database, "pooledConnectionString"),
+      accelerateConnectionString: attrOrRedactedString(news.database, "accelerateConnectionString"),
     };
     return {
       connectionId: devId("connection", id),

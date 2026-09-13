@@ -10,10 +10,7 @@ import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Exercise `QuerySearchLocal` — the current-credentials HTTP implementation of
 // the `QuerySearch` binding — from inside an Action. A web-crawler instance

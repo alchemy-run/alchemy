@@ -21,11 +21,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const readinessSchedule = Schedule.max([
   Schedule.exponential(500).pipe(
     Schedule.modifyDelay(({ duration: d }) =>
-      Effect.succeed(
-        Duration.isGreaterThan(d, Duration.seconds(5))
-          ? Duration.seconds(5)
-          : d,
-      ),
+      Effect.succeed(Duration.isGreaterThan(d, Duration.seconds(5)) ? Duration.seconds(5) : d),
     ),
   ),
   Schedule.recurs(10),
@@ -48,8 +44,7 @@ const findRestApis = Effect.fn(function* (logicalId: string) {
     Effect.map((pages) =>
       Array.from(pages).flatMap((page) =>
         (page.items ?? []).filter(
-          (api): api is ag.RestApi & { id: string } =>
-            api.id != null && hasTags(tags, api.tags),
+          (api): api is ag.RestApi & { id: string } => api.id != null && hasTags(tags, api.tags),
         ),
       ),
     ),
@@ -133,9 +128,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const deleted = yield* ag
         .getRestApi({ restApiId: apis[0].id })
-        .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       expect(deleted).toBeUndefined();
       const leftover = yield* findRestApis("AgEsApi");
       expect(leftover).toHaveLength(0);

@@ -129,18 +129,13 @@ export const StreamProvider = () =>
         id: string,
         props: { streamName?: string | undefined },
       ) {
-        return (
-          props.streamName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.streamName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const observeStream = Effect.fn(function* (streamName: string) {
         return yield* kv.describeStream({ StreamName: streamName }).pipe(
           Effect.map((r) => r.StreamInfo),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -158,15 +153,10 @@ export const StreamProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* kv.listStreams
-              .pages({})
-              .pipe(Stream_.runCollect);
+            const pages = yield* kv.listStreams.pages({}).pipe(Stream_.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.StreamInfoList ?? [])
-              .filter(
-                (info) =>
-                  info.StreamName !== undefined && info.StreamARN !== undefined,
-              )
+              .filter((info) => info.StreamName !== undefined && info.StreamARN !== undefined)
               .map((info) => ({
                 streamName: info.StreamName!,
                 streamArn: info.StreamARN!,
@@ -174,8 +164,7 @@ export const StreamProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const streamName =
-            output?.streamName ?? (yield* createName(id, olds ?? {}));
+          const streamName = output?.streamName ?? (yield* createName(id, olds ?? {}));
           const info = yield* observeStream(streamName);
           if (info?.StreamARN === undefined || info.Status === "DELETING") {
             return undefined;
@@ -208,8 +197,7 @@ export const StreamProvider = () =>
           // (`Stream("Id")`) — normalize WITHOUT a destructuring default
           // (defaults widen the inferred Props type).
           const props = news ?? {};
-          const streamName =
-            output?.streamName ?? (yield* createName(id, props));
+          const streamName = output?.streamName ?? (yield* createName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
           // Wire unit is whole hours (DataRetentionInHours).
@@ -221,9 +209,7 @@ export const StreamProvider = () =>
           // A previous incarnation still in DELETING blocks re-creation of
           // the same name — wait for the purge to finish, then recreate.
           if (info?.Status === "DELETING") {
-            yield* session.note(
-              `waiting for previous stream ${streamName} to finish deleting...`,
-            );
+            yield* session.note(`waiting for previous stream ${streamName} to finish deleting...`);
             yield* waitForStreamGone(streamName);
             info = undefined;
           }
@@ -258,10 +244,8 @@ export const StreamProvider = () =>
           // 3. SYNC — deviceName/mediaType (versioned update; only when the
           // observed metadata differs from the desired state)
           if (
-            (props.deviceName !== undefined &&
-              props.deviceName !== info.DeviceName) ||
-            (props.mediaType !== undefined &&
-              props.mediaType !== info.MediaType)
+            (props.deviceName !== undefined && props.deviceName !== info.DeviceName) ||
+            (props.mediaType !== undefined && props.mediaType !== info.MediaType)
           ) {
             yield* retryWhileSettling(
               kv.updateStream({
@@ -280,10 +264,7 @@ export const StreamProvider = () =>
           // 3b. SYNC — data retention (delta-based API: INCREASE/DECREASE by
           // the difference between observed and desired)
           const observedRetention = info.DataRetentionInHours ?? 0;
-          if (
-            desiredRetention !== undefined &&
-            desiredRetention !== observedRetention
-          ) {
+          if (desiredRetention !== undefined && desiredRetention !== observedRetention) {
             yield* retryWhileSettling(
               kv.updateDataRetention({
                 StreamARN: streamArn,
@@ -292,9 +273,7 @@ export const StreamProvider = () =>
                   desiredRetention > observedRetention
                     ? "INCREASE_DATA_RETENTION"
                     : "DECREASE_DATA_RETENTION",
-                DataRetentionChangeInHours: Math.abs(
-                  desiredRetention - observedRetention,
-                ),
+                DataRetentionChangeInHours: Math.abs(desiredRetention - observedRetention),
               }),
             );
             info = yield* waitForStreamActive(streamName, info.Version);
@@ -328,9 +307,7 @@ export const StreamProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A CREATING/UPDATING stream rejects deletion with
           // ResourceInUseException — retry through the transition (bounded).
-          yield* retryWhileResourceInUse(
-            kv.deleteStream({ StreamARN: output.streamArn }),
-          ).pipe(
+          yield* retryWhileResourceInUse(kv.deleteStream({ StreamARN: output.streamArn })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
           // DeleteStream is accepted immediately; the name stays reserved

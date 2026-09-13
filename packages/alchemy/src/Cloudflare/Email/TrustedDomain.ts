@@ -8,8 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-const EmailSecurityTrustedDomainTypeId =
-  "Cloudflare.Email.TrustedDomain" as const;
+const EmailSecurityTrustedDomainTypeId = "Cloudflare.Email.TrustedDomain" as const;
 type EmailSecurityTrustedDomainTypeId = typeof EmailSecurityTrustedDomainTypeId;
 
 export interface TrustedDomainProps {
@@ -104,19 +103,15 @@ export type TrustedDomain = Resource<
  * @product Email Security
  * @category Email
  */
-export const TrustedDomain = Resource<TrustedDomain>(
-  EmailSecurityTrustedDomainTypeId,
-  {
-    aliases: ["Cloudflare.EmailSecurity.TrustedDomain"],
-  },
-);
+export const TrustedDomain = Resource<TrustedDomain>(EmailSecurityTrustedDomainTypeId, {
+  aliases: ["Cloudflare.EmailSecurity.TrustedDomain"],
+});
 
 /**
  * Returns true if the given value is an TrustedDomain resource.
  */
 export const isTrustedDomain = (value: unknown): value is TrustedDomain =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EmailSecurityTrustedDomainTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === EmailSecurityTrustedDomainTypeId;
 
 export const TrustedDomainProvider = () =>
   Provider.succeed(TrustedDomain, {
@@ -128,29 +123,25 @@ export const TrustedDomainProvider = () =>
     // `EmailSecurityNotEntitled` error — treat that as an empty enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* emailSecurity.listSettingTrustedDomains
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((entry) =>
-                toAttributes(entry, accountId),
-              ),
-            ),
+      return yield* emailSecurity.listSettingTrustedDomains.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((entry) => toAttributes(entry, accountId)),
           ),
-          // Email Security is a paid add-on gated by both account
-          // entitlement and token scope: an unentitled account answers
-          // `EmailSecurityNotEntitled`, while a credential lacking the
-          // Email Security scope (e.g. Cloudflare OAuth) answers a bare
-          // `Forbidden`. Neither can enumerate, so both mean "none
-          // visible" — matching `Domain.list()`. Returning `[]` is the
-          // safe direction for the callers of `list` (orphan detection
-          // never deletes what it cannot see).
-          Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
-            Effect.succeed([] as TrustedDomainAttributes[]),
-          ),
-        );
+        ),
+        // Email Security is a paid add-on gated by both account
+        // entitlement and token scope: an unentitled account answers
+        // `EmailSecurityNotEntitled`, while a credential lacking the
+        // Email Security scope (e.g. Cloudflare OAuth) answers a bare
+        // `Forbidden`. Neither can enumerate, so both mean "none
+        // visible" — matching `Domain.list()`. Returning `[]` is the
+        // safe direction for the callers of `list` (orphan detection
+        // never deletes what it cannot see).
+        Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
+          Effect.succeed([] as TrustedDomainAttributes[]),
+        ),
+      );
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -203,8 +194,7 @@ export const TrustedDomainProvider = () =>
         (observed.isRecent ?? false) !== (news.isRecent ?? false) ||
         (observed.isSimilarity ?? false) !== (news.isSimilarity ?? false) ||
         (observed.isRegex ?? false) !== (news.isRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (news.comments !== undefined && (observed.comments ?? "") !== news.comments);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }

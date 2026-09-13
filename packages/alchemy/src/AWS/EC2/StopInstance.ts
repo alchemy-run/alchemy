@@ -45,6 +45,4 @@ export interface StopInstance extends Binding.Service<
   >
 > {}
 
-export const StopInstance = Binding.Service<StopInstance>(
-  "AWS.EC2.StopInstance",
-);
+export const StopInstance = Binding.Service<StopInstance>("AWS.EC2.StopInstance");

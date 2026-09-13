@@ -31,10 +31,7 @@ export interface ResetEncryptionKey extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.ResetEncryptionKeyRequest,
-    ) => Effect.Effect<
-      inspector2.ResetEncryptionKeyResponse,
-      inspector2.ResetEncryptionKeyError
-    >
+    ) => Effect.Effect<inspector2.ResetEncryptionKeyResponse, inspector2.ResetEncryptionKeyError>
   >
 > {}
 export const ResetEncryptionKey = Binding.Service<ResetEncryptionKey>(

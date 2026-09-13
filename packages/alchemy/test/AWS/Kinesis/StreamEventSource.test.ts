@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import KinesisStreamFunctionLive, {
-  KinesisStreamFunction,
-} from "./stream-handler.ts";
+import KinesisStreamFunctionLive, { KinesisStreamFunction } from "./stream-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,42 +24,26 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
 
         const functionUrl = streamFunction.functionUrl!;
 
-        const { streamName, streamArn } = yield* HttpClient.get(
-          functionUrl,
-        ).pipe(
+        const { streamName, streamArn } = yield* HttpClient.get(functionUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? (response.json as Effect.Effect<{
                   streamName: string;
                   streamArn: string;
                 }>)
-              : Effect.fail(
-                  new FunctionNotReady(
-                    `Function not ready: ${response.status}`,
-                  ),
-                ),
+              : Effect.fail(new FunctionNotReady(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
             body.streamName && body.streamArn
               ? Effect.succeed(body)
-              : Effect.fail(
-                  new FunctionNotReady(
-                    "Function returned empty stream identifiers",
-                  ),
-                ),
+              : Effect.fail(new FunctionNotReady("Function returned empty stream identifiers")),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("1 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("1 seconds"), Schedule.recurs(60)]),
           }),
         );
 
-        yield* waitForEventSourceMappingEnabled(
-          streamFunction.functionName,
-          streamArn,
-        );
+        yield* waitForEventSourceMappingEnabled(streamFunction.functionName, streamArn);
         yield* Effect.sleep("10 seconds");
 
         yield* Kinesis.putRecord({
@@ -100,17 +82,12 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "EventSourceMappingNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );
 });
 
-class EventSourceMappingNotReady extends Data.TaggedError(
-  "EventSourceMappingNotReady",
-) {}
+class EventSourceMappingNotReady extends Data.TaggedError("EventSourceMappingNotReady") {}
 
 class FunctionNotReady extends Data.TaggedError("FunctionNotReady")<{
   message: string;

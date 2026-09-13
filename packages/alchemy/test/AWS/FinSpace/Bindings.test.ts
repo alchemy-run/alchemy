@@ -98,16 +98,14 @@ test.provider(
     }),
 );
 
-test.provider(
-  "getKxUser on a nonexistent environment fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        finspace.getKxUser({
-          environmentId: missingEnvironmentId,
-          userName: "nouser",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getKxUser on a nonexistent environment fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      finspace.getKxUser({
+        environmentId: missingEnvironmentId,
+        userName: "nouser",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );

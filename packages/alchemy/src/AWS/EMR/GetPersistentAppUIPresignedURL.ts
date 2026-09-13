@@ -32,7 +32,6 @@ export interface GetPersistentAppUIPresignedURL extends Binding.Service<
     >
   >
 > {}
-export const GetPersistentAppUIPresignedURL =
-  Binding.Service<GetPersistentAppUIPresignedURL>(
-    "AWS.EMR.GetPersistentAppUIPresignedURL",
-  );
+export const GetPersistentAppUIPresignedURL = Binding.Service<GetPersistentAppUIPresignedURL>(
+  "AWS.EMR.GetPersistentAppUIPresignedURL",
+);

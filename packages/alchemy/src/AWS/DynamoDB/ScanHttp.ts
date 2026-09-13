@@ -10,9 +10,6 @@ export const ScanHttp = Layer.effect(
     tag: "AWS.DynamoDB.Scan",
     operation: DynamoDB.scan,
     actions: ["dynamodb:Scan"],
-    resources: (table) => [
-      table.tableArn,
-      Output.interpolate`${table.tableArn}/index/*`,
-    ],
+    resources: (table) => [table.tableArn, Output.interpolate`${table.tableArn}/index/*`],
   }),
 );

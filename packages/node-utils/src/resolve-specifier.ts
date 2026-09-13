@@ -24,14 +24,12 @@ export interface SpecifierResolverOptions {
 export const nodeModulesSegment = `${path.sep}node_modules${path.sep}`;
 
 /** Local project code: a file path outside every `node_modules` directory. */
-export const isProjectPath = (filePath: string) =>
-  !filePath.includes(nodeModulesSegment);
+export const isProjectPath = (filePath: string) => !filePath.includes(nodeModulesSegment);
 
 const typeScriptExtensions = /\.(?:[cm]?ts|[tj]sx)$/;
 
 /** Whether TypeScript's extension substitution applies to this importer. */
-export const isTypeScriptPath = (filePath: string) =>
-  typeScriptExtensions.test(filePath);
+export const isTypeScriptPath = (filePath: string) => typeScriptExtensions.test(filePath);
 
 export const isFileLikeSpecifier = (specifier: string) =>
   specifier.startsWith("./") ||
@@ -46,9 +44,7 @@ export const isFileLikeSpecifier = (specifier: string) =>
  * carry fragments in Node, so only `?` is honoured there.
  */
 export const splitSpecifierMetadata = (specifier: string) => {
-  const index = isFileLikeSpecifier(specifier)
-    ? specifier.search(/[?#]/)
-    : specifier.indexOf("?");
+  const index = isFileLikeSpecifier(specifier) ? specifier.search(/[?#]/) : specifier.indexOf("?");
   return index === -1
     ? { specifier, metadata: "" }
     : {
@@ -75,18 +71,7 @@ export class SpecifierResolver {
     this.#options = {
       tsconfig: options.tsconfig ? "auto" : undefined,
       // TypeScript source first, then Node's implicit extensions.
-      extensions: [
-        ".ts",
-        ".tsx",
-        ".mts",
-        ".cts",
-        ".jsx",
-        ".js",
-        ".mjs",
-        ".cjs",
-        ".json",
-        ".node",
-      ],
+      extensions: [".ts", ".tsx", ".mts", ".cts", ".jsx", ".js", ".mjs", ".cjs", ".json", ".node"],
       // TypeScript's emitted-extension substitution: `./x.js` may point at
       // `x.ts` (source) or `x.js` (emitted); source wins when both exist.
       extensionAlias: {
@@ -135,16 +120,14 @@ export class SpecifierResolver {
     specifier: string,
     conditions: ReadonlyArray<string>,
   ): string | undefined {
-    const request = specifier.startsWith("file:")
-      ? filePathOfUrl(specifier)
-      : specifier;
+    const request = specifier.startsWith("file:") ? filePathOfUrl(specifier) : specifier;
     if (request === undefined) return undefined;
     let result;
     try {
-      result = this.#resolver(
-        conditions,
-        isFileLikeSpecifier(request),
-      ).resolveFileSync(parentPath, request);
+      result = this.#resolver(conditions, isFileLikeSpecifier(request)).resolveFileSync(
+        parentPath,
+        request,
+      );
     } catch {
       return undefined;
     }

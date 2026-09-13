@@ -8,26 +8,18 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { loadInternalWorker } from "../internal/internal-worker.ts";
 const ClientWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/remote-bindings/workers/client.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/remote-bindings/workers/client.worker"),
 };
 const OutboundWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/remote-bindings/workers/outbound.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/remote-bindings/workers/outbound.worker"),
 };
 import * as Loopback from "../globals/Loopback.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
 import * as Plugin from "../Plugin.ts";
 import * as PluginContext from "../PluginContext.ts";
-import type {
-  ApiError,
-  ConfigError,
-  SystemError,
-} from "../RuntimeError.shared.ts";
+import type { ApiError, ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../workerd/Config.ts";
 import * as RemoteWorker from "./RemoteWorker.ts";
 import type {
@@ -39,9 +31,7 @@ import type {
 export class RemoteBindings extends Plugin.Service<
   RemoteBindings,
   {
-    readonly register: (
-      binding: RemoteBinding,
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    readonly register: (binding: RemoteBinding) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/RemoteBindings") {}
 
@@ -69,17 +59,11 @@ export const RemoteBindingsLive = Layer.effect(
         if (prefetched) {
           prefetches.delete(hash);
         }
-        const deploy = prefetched
-          ? Fiber.join(prefetched)
-          : remoteWorker.deploy(json);
+        const deploy = prefetched ? Fiber.join(prefetched) : remoteWorker.deploy(json);
         return yield* deploy.pipe(
-          Effect.flatMap((result) =>
-            HttpServerResponse.json({ ok: true, result }),
-          ),
+          Effect.flatMap((result) => HttpServerResponse.json({ ok: true, result })),
           Effect.tapCause((cause) => Effect.logError(Cause.pretty(cause))),
-          Effect.catch((error) =>
-            HttpServerResponse.json({ ok: false, error }, { status: 500 }),
-          ),
+          Effect.catch((error) => HttpServerResponse.json({ ok: false, error }, { status: 500 })),
         );
       }),
     );
@@ -91,11 +75,7 @@ export const RemoteBindingsLive = Layer.effect(
       prefetches.set(Hash.structure(config), fiber);
       const [outboundWorker, clientWorker] = yield* Effect.forEach(
         [OutboundWorker, ClientWorker],
-        (worker) =>
-          Effect.map(
-            Effect.promise(worker.worker),
-            formatInternalWorkerModules,
-          ),
+        (worker) => Effect.map(Effect.promise(worker.worker), formatInternalWorkerModules),
         { concurrency: "unbounded" },
       );
       const outbound = {
@@ -172,8 +152,6 @@ export const makeRemoteBinding = (
   f: (service: WorkerdConfig.ServiceDesignator) => WorkerdConfig.Worker_Binding,
 ): PluginContext.BindingHook<RemoteBindings> =>
   Effect.map(
-    Plugin.use(RemoteBindings, (remoteBindings) =>
-      remoteBindings.api.register(binding),
-    ),
+    Plugin.use(RemoteBindings, (remoteBindings) => remoteBindings.api.register(binding)),
     f,
   );

@@ -52,9 +52,7 @@ test.provider(
       const described = yield* cip.describeUserPoolDomain({
         Domain: outputs.domain.domain,
       });
-      expect(described.DomainDescription?.UserPoolId).toBe(
-        outputs.pool.userPoolId,
-      );
+      expect(described.DomainDescription?.UserPoolId).toBe(outputs.pool.userPoolId);
       expect(described.DomainDescription?.Status).toBe("ACTIVE");
 
       // no-op deploy converges without error

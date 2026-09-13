@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Out-of-band read of a variant, riding out eventual-consistency blips
 // where the freshly created variant is not yet visible (`VariantNotFound`,
@@ -30,9 +27,7 @@ const getVariant = (
 ) =>
   images.getV1Variant({ accountId, variantId }).pipe(
     Effect.flatMap((res) =>
-      !until || until(res)
-        ? Effect.succeed(res)
-        : Effect.fail({ _tag: "VariantStale" as const }),
+      !until || until(res) ? Effect.succeed(res) : Effect.fail({ _tag: "VariantStale" as const }),
     ),
     Effect.retry({
       // Ride out both "not yet visible" (`VariantNotFound`) and "visible but
@@ -46,10 +41,7 @@ const getVariant = (
       // Polls every 3s rather than every 2s: under full-suite parallel load
       // tighter polling only adds to the API request pressure that stretches
       // these consistency windows in the first place.
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -63,10 +55,7 @@ const expectGone = (accountId: string, variantId: string) =>
       while: (e) => e._tag === "VariantNotDeleted",
       // Bounded fixed spacing (~30s) — see `getVariant` on why the previous
       // uncapped exponential could run past the test timeout.
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -107,9 +96,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const live = yield* getVariant(
         accountId,
         created.variantName,
-        (r) =>
-          r.variant?.options.fit === "cover" &&
-          r.variant?.options.width === 100,
+        (r) => r.variant?.options.fit === "cover" && r.variant?.options.width === 100,
       );
       expect(live.variant?.id).toEqual("alchemytestvariant");
       expect(live.variant?.options.fit).toEqual("cover");
@@ -247,9 +234,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_LIST)(
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
-      expect(all.some((v) => v.variantName === deployed.variantName)).toBe(
-        true,
-      );
+      expect(all.some((v) => v.variantName === deployed.variantName)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

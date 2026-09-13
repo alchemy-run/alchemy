@@ -14,11 +14,7 @@ export const NeonDb = Effect.gen(function* () {
   // Resolved inside the effect (not at module scope) so it only runs at
   // deploy time — `import.meta.url` is undefined in the bundled worker.
   const migrationsDir = yield* Effect.sync(() =>
-    path.join(
-      import.meta.url ? fileURLToPath(import.meta.url) : ".",
-      "..",
-      "migrations",
-    ),
+    path.join(import.meta.url ? fileURLToPath(import.meta.url) : ".", "..", "migrations"),
   );
 
   const project = yield* Neon.Project("DrizzleWorkflowProject", {

@@ -28,9 +28,7 @@ export class RestartObject extends Cloudflare.DurableObject<RestartObject>()(
         crash: () =>
           Effect.gen(function* () {
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/exit"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/exit"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };

@@ -19,9 +19,7 @@ import {
  */
 const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
 
-export interface OctaneProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface OctaneProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -198,9 +196,10 @@ export const Octane: {
         | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -211,9 +210,10 @@ export const Octane: {
       | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -223,23 +223,20 @@ export const Octane: {
     ? (id: string, propsEff: any) => effectClass(Octane(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // Octane's server bundle externalizes `node:` modules for
-            // workerd's native node-compat — `getCompatibility` already
-            // adds `nodejs_compat` to every non-python Worker.
-            main: undefined!,
-            source: {
-              provider: OCTANE_SOURCE_PROVIDER,
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // Octane's server bundle externalizes `node:` modules for
+          // workerd's native node-compat — `getCompatibility` already
+          // adds `nodejs_compat` to every non-python Worker.
+          main: undefined!,
+          source: {
+            provider: OCTANE_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-              },
+              memo: props?.memo,
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

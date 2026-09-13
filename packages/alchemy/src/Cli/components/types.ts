@@ -45,13 +45,7 @@ export interface CycleChoice<State> {
     readonly value: State;
     readonly label?: string;
     readonly icon?: string;
-    readonly variant?:
-      | "neutral"
-      | "accent"
-      | "info"
-      | "success"
-      | "warning"
-      | "error";
+    readonly variant?: "neutral" | "accent" | "info" | "success" | "warning" | "error";
   }>;
 }
 

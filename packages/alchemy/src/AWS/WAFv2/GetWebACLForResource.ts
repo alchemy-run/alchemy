@@ -30,10 +30,7 @@ export interface GetWebACLForResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: WAFV2.GetWebACLForResourceRequest,
-    ) => Effect.Effect<
-      WAFV2.GetWebACLForResourceResponse,
-      WAFV2.GetWebACLForResourceError
-    >
+    ) => Effect.Effect<WAFV2.GetWebACLForResourceResponse, WAFV2.GetWebACLForResourceError>
   >
 > {}
 

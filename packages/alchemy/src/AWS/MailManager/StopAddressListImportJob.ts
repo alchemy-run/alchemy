@@ -28,13 +28,9 @@ export interface StopAddressListImportJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: mm.StopAddressListImportJobRequest,
-    ) => Effect.Effect<
-      mm.StopAddressListImportJobResponse,
-      mm.StopAddressListImportJobError
-    >
+    ) => Effect.Effect<mm.StopAddressListImportJobResponse, mm.StopAddressListImportJobError>
   >
 > {}
-export const StopAddressListImportJob =
-  Binding.Service<StopAddressListImportJob>(
-    "AWS.MailManager.StopAddressListImportJob",
-  );
+export const StopAddressListImportJob = Binding.Service<StopAddressListImportJob>(
+  "AWS.MailManager.StopAddressListImportJob",
+);

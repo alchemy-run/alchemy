@@ -78,9 +78,7 @@ export interface QueryGateway extends Binding.Service<
   (gateway: GatewayResource) => Effect.Effect<QueryGatewayClient>
 > {}
 
-export const QueryGateway = Binding.Service<QueryGateway>(
-  "Cloudflare.AI.QueryGateway",
-);
+export const QueryGateway = Binding.Service<QueryGateway>("Cloudflare.AI.QueryGateway");
 
 // Error raised by AI Gateway runtime operations.
 export class GatewayError extends Data.TaggedError("AiGatewayError")<{
@@ -126,9 +124,7 @@ export interface QueryGatewayClient {
   /**
    * Read an AI Gateway log entry by ID.
    */
-  getLog(
-    logId: string,
-  ): Effect.Effect<AiGatewayLog, GatewayError, RuntimeContext>;
+  getLog(logId: string): Effect.Effect<AiGatewayLog, GatewayError, RuntimeContext>;
   /**
    * Build a provider URL routed through this gateway.
    */

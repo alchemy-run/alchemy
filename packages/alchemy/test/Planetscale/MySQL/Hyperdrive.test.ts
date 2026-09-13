@@ -14,19 +14,13 @@ import MySQLHyperdriveWorker from "./fixtures/hyperdrive-worker.ts";
 import type { Widget } from "./fixtures/schema.ts";
 import { Hyperdrive, PlanetscaleDb } from "./fixtures/Stack.ts";
 
-const providers = Layer.mergeAll(
-  Cloudflare.providers(),
-  Planetscale.providers(),
-);
+const providers = Layer.mergeAll(Cloudflare.providers(), Planetscale.providers());
 
 const { test } = Test.make({
   providers,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -47,10 +41,7 @@ const fetchReady = (req: Effect.Effect<any, any, any>) =>
     Effect.retry({
       while: (e: unknown): e is WorkerNotReady =>
         e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
     }),
   ) as Effect.Effect<HttpClientResponse>;
 
@@ -63,9 +54,7 @@ const expectWidgetRoundTrip = (baseUrl: string, widget: Widget) =>
 
     const insertRes = yield* fetchReady(
       HttpClient.execute(
-        HttpClientRequest.post(`${baseUrl}/widgets`).pipe(
-          HttpClientRequest.bodyJsonUnsafe(widget),
-        ),
+        HttpClientRequest.post(`${baseUrl}/widgets`).pipe(HttpClientRequest.bodyJsonUnsafe(widget)),
       ),
     );
     expect(insertRes.status).toBe(200);
@@ -78,9 +67,7 @@ const expectWidgetRoundTrip = (baseUrl: string, widget: Widget) =>
     expect(afterBody.widgets.some((w) => w.id === widget.id)).toBe(true);
 
     const deleteRes = yield* fetchReady(
-      HttpClient.execute(
-        HttpClientRequest.delete(`${baseUrl}/widgets/${widget.id}`),
-      ),
+      HttpClient.execute(HttpClientRequest.delete(`${baseUrl}/widgets/${widget.id}`)),
     );
     expect(deleteRes.status).toBe(200);
 

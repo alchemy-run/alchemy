@@ -11,21 +11,15 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -70,9 +64,7 @@ test.provider.skipIf(entitled)(
       // The testing zone has no Logpull entitlement — both reads and
       // writes must fail with the typed authorization tag (Cloudflare
       // error code 10000).
-      const readError = yield* logs
-        .getControlRetention({ zoneId })
-        .pipe(Effect.flip);
+      const readError = yield* logs.getControlRetention({ zoneId }).pipe(Effect.flip);
       expect(readError._tag).toEqual("LogsControlNotAuthorized");
 
       const writeError = yield* logs
@@ -149,9 +141,7 @@ test.provider.skipIf(!entitled)(
 // the standing test zone is actually enumerated.
 test.provider("list enumerates the retention flag across all zones", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(
-      Cloudflare.LogsControl.LogsRetentionFlag,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.LogsControl.LogsRetentionFlag);
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -168,9 +158,7 @@ test.provider.skipIf(!entitled)(
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LogsControl.LogsRetentionFlag,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.LogsRetentionFlag);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

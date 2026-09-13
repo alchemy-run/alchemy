@@ -124,10 +124,7 @@ export interface StreamClient {
   /** Effect resolving to the raw Cloudflare Stream runtime binding. */
   raw: Effect.Effect<cf.StreamBinding, never, RuntimeContext>;
   /** Upload a new video from a URL. */
-  upload(
-    url: string,
-    params?: cf.StreamUrlUploadParams,
-  ): StreamEffect<cf.StreamVideo>;
+  upload(url: string, params?: cf.StreamUrlUploadParams): StreamEffect<cf.StreamVideo>;
   /**
    * Create a direct-creator upload (video uploads without an API key).
    * Unsupported by the local dev simulator — fails with {@link StreamError}.
@@ -173,9 +170,7 @@ export interface StreamVideoClient {
   /** MP4 download operations for the video. */
   downloads: {
     /** Generate a download of the given type. */
-    generate(
-      downloadType?: cf.StreamDownloadType,
-    ): StreamEffect<cf.StreamDownloadGetResponse>;
+    generate(downloadType?: cf.StreamDownloadType): StreamEffect<cf.StreamDownloadGetResponse>;
     /** Get the video's downloads. */
     get(): StreamEffect<cf.StreamDownloadGetResponse>;
     /** Delete a download of the given type. */
@@ -184,10 +179,7 @@ export interface StreamVideoClient {
   /** Caption operations for the video. */
   captions: {
     /** Upload a WebVTT caption file for a language. */
-    upload(
-      language: string,
-      input: ReadableStream,
-    ): StreamEffect<cf.StreamCaption>;
+    upload(language: string, input: ReadableStream): StreamEffect<cf.StreamCaption>;
     /** Generate a caption via AI for a language. */
     generate(language: string): StreamEffect<cf.StreamCaption>;
     /** List the video's captions, optionally filtered by language. */

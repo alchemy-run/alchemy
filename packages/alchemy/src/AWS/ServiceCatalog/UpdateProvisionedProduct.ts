@@ -41,7 +41,6 @@ export interface UpdateProvisionedProduct extends Binding.Service<
     >
   >
 > {}
-export const UpdateProvisionedProduct =
-  Binding.Service<UpdateProvisionedProduct>(
-    "AWS.ServiceCatalog.UpdateProvisionedProduct",
-  );
+export const UpdateProvisionedProduct = Binding.Service<UpdateProvisionedProduct>(
+  "AWS.ServiceCatalog.UpdateProvisionedProduct",
+);

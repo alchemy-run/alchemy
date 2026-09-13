@@ -11,18 +11,13 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -149,9 +144,7 @@ test.provider.skipIf(!byoipCidr || !byoipAsn)(
       yield* stack.destroy();
       const gone = yield* retryForbidden(
         addressing.getPrefix({ accountId, prefixId: created.prefixId }),
-      ).pipe(
-        Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)),
-      );
+      ).pipe(Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)));
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -164,9 +157,7 @@ test.provider.skipIf(!byoipPrefixId)(
       const accountId = yield* resolveAccountId;
       const prefixId = byoipPrefixId!;
 
-      const prefix = yield* retryForbidden(
-        addressing.getPrefix({ accountId, prefixId }),
-      );
+      const prefix = yield* retryForbidden(addressing.getPrefix({ accountId, prefixId }));
       const cidr = prefix.cidr!;
 
       yield* stack.destroy();
@@ -221,9 +212,7 @@ test.provider.skipIf(!byoipPrefixId || !delegateAccountId)(
       const accountId = yield* resolveAccountId;
       const prefixId = byoipPrefixId!;
 
-      const prefix = yield* retryForbidden(
-        addressing.getPrefix({ accountId, prefixId }),
-      );
+      const prefix = yield* retryForbidden(addressing.getPrefix({ accountId, prefixId }));
       const cidr = prefix.cidr!;
 
       yield* stack.destroy();
@@ -269,9 +258,7 @@ test.provider.skipIf(!byoipPrefixId)(
       const accountId = yield* resolveAccountId;
       const prefixId = byoipPrefixId!;
 
-      const prefix = yield* retryForbidden(
-        addressing.getPrefix({ accountId, prefixId }),
-      );
+      const prefix = yield* retryForbidden(addressing.getPrefix({ accountId, prefixId }));
       const cidr = prefix.cidr!;
 
       const services = yield* retryForbidden(
@@ -297,9 +284,7 @@ test.provider.skipIf(!byoipPrefixId)(
       expect(created.bindingId).toBeDefined();
       expect(created.serviceId).toEqual(cdn!.id);
       // Provisioning to the edge is asynchronous.
-      expect(["provisioning", "active"]).toContain(
-        created.provisioning.state ?? "provisioning",
-      );
+      expect(["provisioning", "active"]).toContain(created.provisioning.state ?? "provisioning");
 
       // Out-of-band verification.
       const live = yield* retryForbidden(
@@ -319,9 +304,7 @@ test.provider.skipIf(!byoipPrefixId)(
           bindingId: created.bindingId,
         }),
       ).pipe(
-        Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.succeed(undefined)),
       );
       expect(gone).toBeUndefined();
     }).pipe(logLevel),

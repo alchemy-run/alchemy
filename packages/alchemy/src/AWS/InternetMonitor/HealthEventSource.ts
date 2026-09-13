@@ -115,9 +115,7 @@ export const consumeHealthEvents = <StreamReq = never, Req = never>(
   ) => Effect.Effect<void, never, Req>,
 ) => {
   const detail = {
-    ...(props.impactTypes !== undefined
-      ? { impactType: [...props.impactTypes] }
-      : {}),
+    ...(props.impactTypes !== undefined ? { impactType: [...props.impactTypes] } : {}),
     ...(props.statuses !== undefined ? { status: [...props.statuses] } : {}),
   };
   return consumeBusEvents(
@@ -125,9 +123,7 @@ export const consumeHealthEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.internetmonitor"],
       "detail-type": ["Internet Monitor Health Event"],
-      ...(props.monitorArns !== undefined
-        ? { resources: [...props.monitorArns] }
-        : {}),
+      ...(props.monitorArns !== undefined ? { resources: [...props.monitorArns] } : {}),
       ...(Object.keys(detail).length > 0 ? { detail } : {}),
     },
     { description: props.description, state: props.state },

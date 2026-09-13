@@ -91,9 +91,7 @@ describe("AWS.Signer.ProfilePermission", () => {
             ),
           );
         expect(
-          (afterDestroy.permissions ?? []).find(
-            (p) => p.statementId === created.statementId,
-          ),
+          (afterDestroy.permissions ?? []).find((p) => p.statementId === created.statementId),
         ).toBeUndefined();
       }),
     { timeout: 120_000 },

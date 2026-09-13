@@ -3,9 +3,7 @@
 // proves request bodies flow through the deployed worker (h3's readBody)
 // and bindings are visible on non-GET routes.
 export default defineEventHandler(async (event) => {
-  const env = (
-    event.context.cloudflare as { env?: Record<string, unknown> } | undefined
-  )?.env;
+  const env = (event.context.cloudflare as { env?: Record<string, unknown> } | undefined)?.env;
   const echoed = event.method === "POST" ? await readBody(event) : null;
   return {
     method: event.method,

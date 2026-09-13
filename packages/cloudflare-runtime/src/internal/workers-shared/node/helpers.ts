@@ -22,11 +22,7 @@ export const normalizeFilePath = (relativeFilepath: string) => {
 
 export const getContentType = (absFilePath: string) => {
   let contentType = mime.getType(absFilePath);
-  if (
-    contentType &&
-    contentType.startsWith("text/") &&
-    !contentType.includes("charset")
-  ) {
+  if (contentType && contentType.startsWith("text/") && !contentType.includes("charset")) {
     contentType = `${contentType}; charset=utf-8`;
   }
   return contentType;

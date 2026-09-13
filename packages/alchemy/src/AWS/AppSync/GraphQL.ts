@@ -52,10 +52,7 @@ export interface GraphQLClient {
    */
   execute<T = unknown>(
     request: GraphQLRequest,
-  ): Effect.Effect<
-    GraphQLResult<T>,
-    GraphQLApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<GraphQLResult<T>, GraphQLApiError | Credentials.CredentialsError>;
 }
 
 /**

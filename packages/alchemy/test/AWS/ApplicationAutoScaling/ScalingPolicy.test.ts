@@ -19,11 +19,7 @@ const describePolicy = (policyName: string) =>
       ServiceNamespace: "dynamodb",
       PolicyNames: [policyName],
     })
-    .pipe(
-      Effect.map((res) =>
-        res.ScalingPolicies?.find((p) => p.PolicyName === policyName),
-      ),
-    );
+    .pipe(Effect.map((res) => res.ScalingPolicies?.find((p) => p.PolicyName === policyName)));
 
 const waitUntilPolicyGone = (policyName: string) =>
   describePolicy(policyName).pipe(
@@ -94,19 +90,14 @@ test.provider(
       // Auto Scaling created its managed CloudWatch alarms.
       const observed = yield* describePolicy(created.policyName);
       expect(observed?.PolicyType).toBe("TargetTrackingScaling");
-      expect(
-        observed?.TargetTrackingScalingPolicyConfiguration?.TargetValue,
-      ).toBe(70);
+      expect(observed?.TargetTrackingScalingPolicyConfiguration?.TargetValue).toBe(70);
       expect((observed?.Alarms ?? []).length).toBeGreaterThan(0);
 
       // Update in place — same name and ARN, new target value.
       const updated = yield* deploy(60);
       expect(updated.policyArn).toEqual(created.policyArn);
       const observedAfterUpdate = yield* describePolicy(created.policyName);
-      expect(
-        observedAfterUpdate?.TargetTrackingScalingPolicyConfiguration
-          ?.TargetValue,
-      ).toBe(60);
+      expect(observedAfterUpdate?.TargetTrackingScalingPolicyConfiguration?.TargetValue).toBe(60);
 
       yield* stack.destroy();
       const gone = yield* waitUntilPolicyGone(created.policyName);
@@ -281,11 +272,10 @@ test.provider(
       // and report the full triple rather than fail on the partial row —
       // including when the Output-valued `resourceId` prop was lost too.
       const provider = yield* Provider.findProvider(ScalingPolicy);
-      const { resourceId: _droppedProp, ...partialProps } =
-        partialRow.props as {
-          resourceId?: string;
-          [key: string]: unknown;
-        };
+      const { resourceId: _droppedProp, ...partialProps } = partialRow.props as {
+        resourceId?: string;
+        [key: string]: unknown;
+      };
       const observed = yield* provider.read!({
         id: "AasPartialPolicy",
         fqn: partialRow.fqn,
@@ -294,9 +284,7 @@ test.provider(
         output: partialAttr as ScalingPolicy["Attributes"],
       });
       expect(observed?.resourceId).toBe(created.resourceId);
-      expect(observed?.scalableDimension).toBe(
-        "dynamodb:table:ReadCapacityUnits",
-      );
+      expect(observed?.scalableDimension).toBe("dynamodb:table:ReadCapacityUnits");
 
       // And `delete` (every destroy) must converge from the partial row
       // instead of wedging the stack.

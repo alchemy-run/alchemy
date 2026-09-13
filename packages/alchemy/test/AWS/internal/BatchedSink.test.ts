@@ -4,10 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import {
-  BatchRetryExhaustedError,
-  makeBatchedSink,
-} from "@/AWS/internal/BatchedSink.ts";
+import { BatchRetryExhaustedError, makeBatchedSink } from "@/AWS/internal/BatchedSink.ts";
 
 /**
  * Pure tests of the shared batch-sink engine (`AWS/internal/BatchedSink.ts`)
@@ -47,10 +44,7 @@ describe("makeBatchedSink", () => {
       const sent = yield* Ref.make<(readonly number[])[]>([]);
       const sink = makeBatchedSink<number, FakeOut, never>({
         maxRecords: 3,
-        send: (batch) =>
-          Ref.update(sent, (batches) => [...batches, batch]).pipe(
-            Effect.as({}),
-          ),
+        send: (batch) => Ref.update(sent, (batches) => [...batches, batch]).pipe(Effect.as({})),
       });
 
       yield* Stream.make(1, 2, 3, 4, 5, 6, 7, 8).pipe(Stream.run(sink));
@@ -70,20 +64,13 @@ describe("makeBatchedSink", () => {
         maxRecords: 10,
         maxBytes: 5,
         sizeOf: (record) => record.length,
-        send: (batch) =>
-          Ref.update(sent, (batches) => [...batches, batch]).pipe(
-            Effect.as({}),
-          ),
+        send: (batch) => Ref.update(sent, (batches) => [...batches, batch]).pipe(Effect.as({})),
       });
 
       // each record is 2 bytes; 3 records would be 6 > 5, so batches of 2
       yield* Stream.make("aa", "bb", "cc", "dd", "ee").pipe(Stream.run(sink));
 
-      expect(yield* Ref.get(sent)).toEqual([
-        ["aa", "bb"],
-        ["cc", "dd"],
-        ["ee"],
-      ]);
+      expect(yield* Ref.get(sent)).toEqual([["aa", "bb"], ["cc", "dd"], ["ee"]]);
     }),
   );
 
@@ -99,9 +86,7 @@ describe("makeBatchedSink", () => {
             yield* Ref.update(sent, (batches) => [...batches, batch]);
             // first call: report the last two entries as unprocessed;
             // second call: everything succeeds.
-            return attempt === 0
-              ? { unprocessed: [batch.length - 2, batch.length - 1] }
-              : {};
+            return attempt === 0 ? { unprocessed: [batch.length - 2, batch.length - 1] } : {};
           }),
         unprocessed: (out, batch) => byIndex(out.unprocessed, batch),
       });
@@ -115,34 +100,27 @@ describe("makeBatchedSink", () => {
     }),
   );
 
-  it.effect(
-    "fails with BatchRetryExhaustedError carrying the stranded entries",
-    () =>
-      Effect.gen(function* () {
-        const calls = yield* Ref.make(0);
-        const sink = makeBatchedSink<number, FakeOut, never>({
-          maxRecords: 10,
-          retrySchedule: Schedule.recurs(2),
-          send: (batch) =>
-            Ref.update(calls, (n) => n + 1).pipe(
-              // the last entry is reported unprocessed forever
-              Effect.as({ unprocessed: [batch.length - 1] }),
-            ),
-          unprocessed: (out, batch) => byIndex(out.unprocessed, batch),
-        });
+  it.effect("fails with BatchRetryExhaustedError carrying the stranded entries", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0);
+      const sink = makeBatchedSink<number, FakeOut, never>({
+        maxRecords: 10,
+        retrySchedule: Schedule.recurs(2),
+        send: (batch) =>
+          Ref.update(calls, (n) => n + 1).pipe(
+            // the last entry is reported unprocessed forever
+            Effect.as({ unprocessed: [batch.length - 1] }),
+          ),
+        unprocessed: (out, batch) => byIndex(out.unprocessed, batch),
+      });
 
-        const error = yield* Stream.make(1, 2, 3).pipe(
-          Stream.run(sink),
-          Effect.flip,
-        );
+      const error = yield* Stream.make(1, 2, 3).pipe(Stream.run(sink), Effect.flip);
 
-        expect(error._tag).toBe("BatchRetryExhaustedError");
-        expect((error as BatchRetryExhaustedError<number>).entries).toEqual([
-          3,
-        ]);
-        // initial attempt + 2 bounded retries
-        expect(yield* Ref.get(calls)).toBe(3);
-      }),
+      expect(error._tag).toBe("BatchRetryExhaustedError");
+      expect((error as BatchRetryExhaustedError<number>).entries).toEqual([3]);
+      // initial attempt + 2 bounded retries
+      expect(yield* Ref.get(calls)).toBe(3);
+    }),
   );
 
   it.effect("drops rejected entries without retrying and surfaces them", () =>

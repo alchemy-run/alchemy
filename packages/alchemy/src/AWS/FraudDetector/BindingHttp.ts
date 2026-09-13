@@ -75,12 +75,7 @@ export const makeFraudDetectorDetectorHttpBinding = <
  * grants `actions` on the bound list's ARN, and the runtime half injects the
  * list's `name` into every request.
  */
-export const makeFraudDetectorListHttpBinding = <
-  I extends { name: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeFraudDetectorListHttpBinding = <I extends { name: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.FraudDetector.GetListElements`. */
   tag: string;
   /** The distilled operation. */
@@ -108,9 +103,7 @@ export const makeFraudDetectorListHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${list.LogicalId})`)(function* (
-        request: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${list.LogicalId})`)(function* (request: Omit<I, "name">) {
         const name = yield* ListName;
         return yield* op({ ...request, name } as unknown as I);
       });

@@ -43,10 +43,7 @@ const getJson = Effect.fn(function* (url: string) {
   const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
   const res = yield* client.get(url).pipe(
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential("1 second"),
-        Schedule.spaced("5 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
       times: 30,
     }),
   );
@@ -73,10 +70,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     const res = yield* client.get(url).pipe(
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("1 second"),
-          Schedule.spaced("5 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
         times: 30,
       }),
     );

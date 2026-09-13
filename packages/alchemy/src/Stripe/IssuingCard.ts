@@ -36,11 +36,7 @@ export type IssuingCardStatus = "active" | "canceled" | "inactive";
 export type IssuingCardType = "physical" | "virtual";
 
 /** Why a previous card is being replaced. Create-only. */
-export type IssuingCardReplacementReason =
-  | "damaged"
-  | "expired"
-  | "lost"
-  | "stolen";
+export type IssuingCardReplacementReason = "damaged" | "expired" | "lost" | "stolen";
 
 /** Card-present vs card-not-present authorization presence. */
 export type IssuingCardPresence = "not_present" | "present";
@@ -290,9 +286,7 @@ export type IssuingCard = Resource<
  */
 export const IssuingCard = Resource<IssuingCard>("Stripe.IssuingCard");
 
-export class IssuingCardNotResolved extends Data.TaggedError(
-  "Stripe.IssuingCardNotResolved",
-)<{
+export class IssuingCardNotResolved extends Data.TaggedError("Stripe.IssuingCardNotResolved")<{
   cardholder: string;
   currency: string;
 }> {}
@@ -325,9 +319,7 @@ const toSpendingControls = (
   const result: IssuingCardSpendingControls = {
     ...(controls.allowed_card_presences != null
       ? {
-          allowedCardPresences: [
-            ...controls.allowed_card_presences,
-          ] as IssuingCardPresence[],
+          allowedCardPresences: [...controls.allowed_card_presences] as IssuingCardPresence[],
         }
       : {}),
     ...(controls.allowed_categories != null
@@ -338,9 +330,7 @@ const toSpendingControls = (
       : {}),
     ...(controls.blocked_card_presences != null
       ? {
-          blockedCardPresences: [
-            ...controls.blocked_card_presences,
-          ] as IssuingCardPresence[],
+          blockedCardPresences: [...controls.blocked_card_presences] as IssuingCardPresence[],
         }
       : {}),
     ...(controls.blocked_categories != null
@@ -391,9 +381,7 @@ const toWireSpendingControls = (
         spending_limits: controls.spendingLimits.map((limit) => ({
           amount: limit.amount,
           interval: limit.interval,
-          ...(limit.categories !== undefined
-            ? { categories: limit.categories }
-            : {}),
+          ...(limit.categories !== undefined ? { categories: limit.categories } : {}),
         })),
       }
     : {}),
@@ -413,9 +401,7 @@ const toAttrs = (card: StripeIssuingCard): IssuingCardAttributes => ({
   financialAccount: card.financial_account ?? undefined,
   personalizationDesign: expandedId(card.personalization_design),
   replacementFor: expandedId(card.replacement_for),
-  replacementReason:
-    (card.replacement_reason as IssuingCardReplacementReason | null) ??
-    undefined,
+  replacementReason: (card.replacement_reason as IssuingCardReplacementReason | null) ?? undefined,
   cancellationReason: card.cancellation_reason ?? undefined,
   spendingControls: toSpendingControls(card.spending_controls),
   metadata: userMetadata(card.metadata),
@@ -435,9 +421,7 @@ const getById = (card: string) =>
   );
 
 const getByIdAny = (card: string) =>
-  GetIssuingCard({ card }).pipe(
-    Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)),
-  );
+  GetIssuingCard({ card }).pipe(Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)));
 
 const listByStatus = Effect.fn(function* (status: "active" | "inactive") {
   const cards: StripeIssuingCard[] = [];
@@ -461,10 +445,9 @@ const listByStatus = Effect.fn(function* (status: "active" | "inactive") {
 });
 
 const listLiveCards = Effect.fn(function* () {
-  const listed = yield* Effect.all(
-    [listByStatus("active"), listByStatus("inactive")],
-    { concurrency: 2 },
-  ).pipe(
+  const listed = yield* Effect.all([listByStatus("active"), listByStatus("inactive")], {
+    concurrency: 2,
+  }).pipe(
     Effect.catchIf(isIssuingUnavailable, () =>
       Effect.succeed([[], []] as [StripeIssuingCard[], StripeIssuingCard[]]),
     ),
@@ -491,10 +474,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -520,10 +500,7 @@ const shouldReplace = (
   if (news.cardholder !== output.cardholder) return true;
   if (news.currency !== output.currency) return true;
   if ((news.type ?? "virtual") !== output.type) return true;
-  if (
-    news.secondLine !== undefined &&
-    news.secondLine !== (output.secondLine ?? undefined)
-  ) {
+  if (news.secondLine !== undefined && news.secondLine !== (output.secondLine ?? undefined)) {
     return true;
   }
   if (news.expMonth !== undefined && news.expMonth !== output.expMonth) {
@@ -577,9 +554,7 @@ export const IssuingCardProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -621,9 +596,7 @@ export const IssuingCardProvider = () =>
           type: desiredType,
           status: desiredStatus,
           metadata,
-          ...(news.secondLine !== undefined
-            ? { second_line: news.secondLine }
-            : {}),
+          ...(news.secondLine !== undefined ? { second_line: news.secondLine } : {}),
           ...(news.expMonth !== undefined ? { exp_month: news.expMonth } : {}),
           ...(news.expYear !== undefined ? { exp_year: news.expYear } : {}),
           ...(news.financialAccount !== undefined
@@ -632,15 +605,11 @@ export const IssuingCardProvider = () =>
           ...(news.personalizationDesign !== undefined
             ? { personalization_design: news.personalizationDesign }
             : {}),
-          ...(news.replacementFor !== undefined
-            ? { replacement_for: news.replacementFor }
-            : {}),
+          ...(news.replacementFor !== undefined ? { replacement_for: news.replacementFor } : {}),
           ...(news.replacementReason !== undefined
             ? { replacement_reason: news.replacementReason }
             : {}),
-          ...(spendingControls !== undefined
-            ? { spending_controls: spendingControls }
-            : {}),
+          ...(spendingControls !== undefined ? { spending_controls: spendingControls } : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-issuing-card-${instanceId}`,
@@ -661,38 +630,26 @@ export const IssuingCardProvider = () =>
       const statusChanged = current.status !== desiredStatus;
       const personalizationChanged =
         news.personalizationDesign !== undefined &&
-        expandedId(current.personalization_design) !==
-          news.personalizationDesign;
+        expandedId(current.personalization_design) !== news.personalizationDesign;
       const spendingChanged =
         news.spendingControls !== undefined &&
-        !deepEqual(
-          news.spendingControls,
-          toSpendingControls(current.spending_controls),
-          { stripNullish: true },
-        );
+        !deepEqual(news.spendingControls, toSpendingControls(current.spending_controls), {
+          stripNullish: true,
+        });
 
-      if (
-        !statusChanged &&
-        !personalizationChanged &&
-        !spendingChanged &&
-        !metadataChanged
-      ) {
+      if (!statusChanged && !personalizationChanged && !spendingChanged && !metadataChanged) {
         return toAttrs(current);
       }
 
       const updated = yield* UpdateIssuingCard({
         card: current.id,
         ...(statusChanged ? { status: desiredStatus } : {}),
-        ...(personalizationChanged
-          ? { personalization_design: news.personalizationDesign }
-          : {}),
+        ...(personalizationChanged ? { personalization_design: news.personalizationDesign } : {}),
         ...(spendingChanged ? { spending_controls: spendingControls } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

@@ -99,22 +99,20 @@ export const makeRepositoryLinkScopedHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${repositoryLink.repositoryLinkArn}`,
-                ],
+                Resource: [Output.interpolate`${repositoryLink.repositoryLinkArn}`],
               },
             ],
           });
         }
       }
-      return Effect.fn(`${options.tag}(${repositoryLink.LogicalId})`)(
-        function* (request: Omit<I, "RepositoryLinkId">) {
-          return yield* op({
-            ...request,
-            RepositoryLinkId: yield* RepositoryLinkId,
-          } as I);
-        },
-      );
+      return Effect.fn(`${options.tag}(${repositoryLink.LogicalId})`)(function* (
+        request: Omit<I, "RepositoryLinkId">,
+      ) {
+        return yield* op({
+          ...request,
+          RepositoryLinkId: yield* RepositoryLinkId,
+        } as I);
+      });
     });
   });
 
@@ -147,28 +145,26 @@ export const makeSyncConfigurationScopedHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${syncConfiguration}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${syncConfiguration}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`${options.tag}(${syncConfiguration.LogicalId})`)(
-        function* (request?: Omit<I, "ResourceName" | "SyncType">) {
-          return yield* op({
-            ...request,
-            ResourceName: yield* ResourceName,
-            SyncType: yield* SyncType,
-          } as I);
-        },
-      );
+      return Effect.fn(`${options.tag}(${syncConfiguration.LogicalId})`)(function* (
+        request?: Omit<I, "ResourceName" | "SyncType">,
+      ) {
+        return yield* op({
+          ...request,
+          ResourceName: yield* ResourceName,
+          SyncType: yield* SyncType,
+        } as I);
+      });
     });
   });
 

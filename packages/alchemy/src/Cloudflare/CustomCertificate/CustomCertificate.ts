@@ -168,13 +168,7 @@ export interface Attributes {
   contentHash: string;
 }
 
-export type CustomCertificate = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type CustomCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare custom (BYO) edge certificate — upload your own SSL
@@ -250,9 +244,7 @@ export const CustomCertificate = Resource<CustomCertificate>(TypeId, {
 /**
  * Returns true if the given value is a CustomCertificate resource.
  */
-export const isCustomCertificate = (
-  value: unknown,
-): value is CustomCertificate =>
+export const isCustomCertificate = (value: unknown): value is CustomCertificate =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomCertificateProvider = () =>
@@ -275,25 +267,22 @@ export const CustomCertificateProvider = () =>
       const rows = yield* Effect.forEach(
         zones,
         (zone) =>
-          customCertificates.listCustomCertificates
-            .pages({ zoneId: zone.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((cert): Attributes =>
-                    toAttributes(cert, {
-                      type: "legacy_custom",
-                      contentHash: "",
-                    }),
-                  ),
+          customCertificates.listCustomCertificates.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((cert): Attributes =>
+                  toAttributes(cert, {
+                    type: "legacy_custom",
+                    contentHash: "",
+                  }),
                 ),
               ),
-              Effect.catchTag(
-                ["PlanLevelNotAllowed", "ZoneNotFound", "Forbidden"],
-                () => Effect.succeed([] as Attributes[]),
-              ),
             ),
+            Effect.catchTag(["PlanLevelNotAllowed", "ZoneNotFound", "Forbidden"], () =>
+              Effect.succeed([] as Attributes[]),
+            ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -305,9 +294,7 @@ export const CustomCertificateProvider = () =>
       // both sides are concrete.
       const oldZone =
         output?.zoneId ??
-        (olds !== undefined && isResolved(olds)
-          ? (olds.zoneId as string | undefined)
-          : undefined);
+        (olds !== undefined && isResolved(olds) ? (olds.zoneId as string | undefined) : undefined);
       if (
         typeof oldZone === "string" &&
         typeof news.zoneId === "string" &&
@@ -382,9 +369,7 @@ export const CustomCertificateProvider = () =>
         observed = yield* customCertificates.createCustomCertificate({
           zoneId,
           certificate: news.certificate,
-          privateKey: news.privateKey
-            ? Redacted.value(news.privateKey)
-            : undefined,
+          privateKey: news.privateKey ? Redacted.value(news.privateKey) : undefined,
           customCsrId,
           bundleMethod: news.bundleMethod,
           type: news.type,
@@ -403,14 +388,12 @@ export const CustomCertificateProvider = () =>
       //    against the observed response.
       const certDirty = output?.contentHash !== desiredHash;
       const bundleDirty =
-        news.bundleMethod !== undefined &&
-        observed.bundleMethod !== news.bundleMethod;
+        news.bundleMethod !== undefined && observed.bundleMethod !== news.bundleMethod;
       const geoDirty =
         news.geoRestrictions !== undefined &&
         observed.geoRestrictions?.label !== news.geoRestrictions.label;
       const policyDirty =
-        news.policy !== undefined &&
-        (observed.policyRestrictions ?? undefined) !== news.policy;
+        news.policy !== undefined && (observed.policyRestrictions ?? undefined) !== news.policy;
 
       if (certDirty || bundleDirty || geoDirty || policyDirty) {
         observed = yield* customCertificates.patchCustomCertificate({
@@ -419,9 +402,7 @@ export const CustomCertificateProvider = () =>
           ...(certDirty
             ? {
                 certificate: news.certificate,
-                privateKey: news.privateKey
-                  ? Redacted.value(news.privateKey)
-                  : undefined,
+                privateKey: news.privateKey ? Redacted.value(news.privateKey) : undefined,
                 customCsrId,
                 deploy: news.deploy,
               }
@@ -459,9 +440,7 @@ type ObservedCertificate = customCertificates.GetCustomCertificateResponse;
 const getCertificate = (zoneId: string, customCertificateId: string) =>
   customCertificates.getCustomCertificate({ zoneId, customCertificateId }).pipe(
     Effect.map((cert): ObservedCertificate | undefined => cert),
-    Effect.catchTag("CustomCertificateNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("CustomCertificateNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -476,11 +455,7 @@ const findByExpiry = (zoneId: string, expiresAtMs: number) =>
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk)
-        .filter(
-          (cert) =>
-            cert.expiresOn != null &&
-            Date.parse(cert.expiresOn) === expiresAtMs,
-        )
+        .filter((cert) => cert.expiresOn != null && Date.parse(cert.expiresOn) === expiresAtMs)
         .sort((a, b) => (a.uploadedOn ?? "").localeCompare(b.uploadedOn ?? ""))
         .at(0),
     ),
@@ -497,8 +472,7 @@ const parseCertificate = (pem: string) =>
       const x509 = new crypto.X509Certificate(pem);
       return { expiresAtMs: Date.parse(x509.validTo) };
     },
-    catch: (cause) =>
-      new Error(`failed to parse certificate PEM: ${cause}`, { cause }),
+    catch: (cause) => new Error(`failed to parse certificate PEM: ${cause}`, { cause }),
   });
 
 /**
@@ -552,8 +526,7 @@ const toAttributes = (
   expiresOn: cert.expiresOn ?? undefined,
   uploadedOn: cert.uploadedOn ?? undefined,
   modifiedOn: cert.modifiedOn ?? undefined,
-  bundleMethod:
-    (cert.bundleMethod as BundleMethod | null | undefined) ?? undefined,
+  bundleMethod: (cert.bundleMethod as BundleMethod | null | undefined) ?? undefined,
   type: meta.type,
   priority: cert.priority ?? undefined,
   status: cert.status ?? undefined,

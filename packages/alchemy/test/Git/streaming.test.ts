@@ -37,9 +37,7 @@ describe("StreamingSource", () => {
         // Across a slab edge, readSync declines; read assembles.
         expect(feeder.source.readSync!(1000, 100)).toBeUndefined();
         const across = yield* feeder.source.read(1000, 100);
-        expect(Array.from(across)).toEqual(
-          Array.from(data.subarray(1000, 1100)),
-        );
+        expect(Array.from(across)).toEqual(Array.from(data.subarray(1000, 1100)));
         yield* feeder.push(data.subarray(1600));
         feeder.end();
         expect(yield* feeder.source.awaitEnd).toBe(3000);
@@ -108,9 +106,7 @@ describe("StreamingSource", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const feeder = makeStreamingSource();
-        const pending = yield* Effect.forkChild(
-          Effect.result(feeder.source.read(0, 10)),
-        );
+        const pending = yield* Effect.forkChild(Effect.result(feeder.source.read(0, 10)));
         feeder.fail(new StoreError({ reason: "boom" }));
         const r = yield* Fiber.join(pending);
         expect(r._tag).toBe("Failure");

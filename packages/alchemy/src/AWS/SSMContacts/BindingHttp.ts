@@ -33,12 +33,7 @@ import type { Rotation } from "./Rotation.ts";
  * contact's ARN, and the runtime half injects the contact's ARN as the
  * request's `ContactId` field.
  */
-export const makeContactHttpBinding = <
-  I extends { ContactId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeContactHttpBinding = <I extends { ContactId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SSMContacts.StartEngagement`. */
   tag: string;
   /** The distilled operation; `ContactId` is injected from the contact. */
@@ -131,12 +126,7 @@ export const makeContactChannelHttpBinding = <
  * rotation's ARN, and the runtime half injects the rotation's ARN as the
  * request's `RotationId` field.
  */
-export const makeRotationHttpBinding = <
-  I extends { RotationId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeRotationHttpBinding = <I extends { RotationId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SSMContacts.ListRotationShifts`. */
   tag: string;
   /** The distilled operation; `RotationId` is injected from the rotation. */

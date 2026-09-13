@@ -31,17 +31,13 @@ export interface UpdateOrganizationConfiguration extends Binding.Service<
     detector: Detector,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        guardduty.UpdateOrganizationConfigurationRequest,
-        "DetectorId"
-      >,
+      request?: Omit<guardduty.UpdateOrganizationConfigurationRequest, "DetectorId">,
     ) => Effect.Effect<
       guardduty.UpdateOrganizationConfigurationResponse,
       guardduty.UpdateOrganizationConfigurationError
     >
   >
 > {}
-export const UpdateOrganizationConfiguration =
-  Binding.Service<UpdateOrganizationConfiguration>(
-    "AWS.GuardDuty.UpdateOrganizationConfiguration",
-  );
+export const UpdateOrganizationConfiguration = Binding.Service<UpdateOrganizationConfiguration>(
+  "AWS.GuardDuty.UpdateOrganizationConfiguration",
+);

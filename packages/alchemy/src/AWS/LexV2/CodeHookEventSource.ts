@@ -223,9 +223,7 @@ export const fulfillIntent = (
   },
   ...(options?.message !== undefined
     ? {
-        messages: [
-          { contentType: "PlainText" as const, content: options.message },
-        ],
+        messages: [{ contentType: "PlainText" as const, content: options.message }],
       }
     : {}),
 });

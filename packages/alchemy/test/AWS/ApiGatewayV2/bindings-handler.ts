@@ -32,16 +32,13 @@ export default ApiGatewayV2BindingsFunction.make(
     const api = yield* ApiGatewayV2.Api("AgV2BindingsApi", {
       protocolType: "HTTP",
     });
-    const integration = yield* ApiGatewayV2.Integration(
-      "AgV2BindingsUpstream",
-      {
-        api,
-        integrationType: "HTTP_PROXY",
-        integrationUri: "https://example.com",
-        integrationMethod: "ANY",
-        payloadFormatVersion: "1.0",
-      },
-    );
+    const integration = yield* ApiGatewayV2.Integration("AgV2BindingsUpstream", {
+      api,
+      integrationType: "HTTP_PROXY",
+      integrationUri: "https://example.com",
+      integrationMethod: "ANY",
+      payloadFormatVersion: "1.0",
+    });
     yield* ApiGatewayV2.Route("AgV2BindingsPing", {
       api,
       routeKey: "GET /ping",
@@ -53,8 +50,7 @@ export default ApiGatewayV2BindingsFunction.make(
     });
 
     const exportApi = yield* ApiGatewayV2.ExportApi(api);
-    const resetAuthorizersCache =
-      yield* ApiGatewayV2.ResetAuthorizersCache(stage);
+    const resetAuthorizersCache = yield* ApiGatewayV2.ResetAuthorizersCache(stage);
 
     return {
       fetch: Effect.gen(function* () {
@@ -63,13 +59,9 @@ export default ApiGatewayV2BindingsFunction.make(
         const pathname = url.pathname;
 
         if (request.method === "GET" && pathname === "/export") {
-          const exported = yield* exportApi({ OutputType: "JSON" }).pipe(
-            Effect.orDie,
-          );
+          const exported = yield* exportApi({ OutputType: "JSON" }).pipe(Effect.orDie);
           const document = exported.body
-            ? yield* Stream.mkString(Stream.decodeText(exported.body)).pipe(
-                Effect.orDie,
-              )
+            ? yield* Stream.mkString(Stream.decodeText(exported.body)).pipe(Effect.orDie)
             : "";
           const spec = yield* Effect.try(
             () =>
@@ -105,10 +97,7 @@ export default ApiGatewayV2BindingsFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        ApiGatewayV2.ExportApiHttp,
-        ApiGatewayV2.ResetAuthorizersCacheHttp,
-      ),
+      Layer.mergeAll(ApiGatewayV2.ExportApiHttp, ApiGatewayV2.ResetAuthorizersCacheHttp),
     ),
   ),
 );

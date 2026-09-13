@@ -14,23 +14,16 @@ export class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 
 // Bounded spaced schedule — rides out fresh-workers.dev cold-start
 // propagation without blowing past the test timeout.
-export const ready = Schedule.max([
-  Schedule.spaced("2 seconds"),
-  Schedule.recurs(45),
-]);
+export const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]);
 
 /** Retry an HTTP call until it returns 200. */
-export const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+export const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -41,16 +34,12 @@ export const untilOk = <E, R>(
 
 export const postJson = (url: string, body: unknown) =>
   untilOk(
-    HttpClient.execute(
-      HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-    ),
+    HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))),
   ).pipe(Effect.flatMap((res) => res.json));
 
 export const putJson = (url: string, body: unknown) =>
   untilOk(
-    HttpClient.execute(
-      HttpClientRequest.put(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-    ),
+    HttpClient.execute(HttpClientRequest.put(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))),
   ).pipe(Effect.flatMap((res) => res.json));
 
 export const getJson = (url: string) =>

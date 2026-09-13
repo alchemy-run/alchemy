@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface SendInvitesRequest extends Omit<
-  repostspace.SendInvitesInput,
-  "spaceId"
-> {}
+export interface SendInvitesRequest extends Omit<repostspace.SendInvitesInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `SendInvites` operation (IAM action
@@ -39,12 +36,7 @@ export interface SendInvites extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendInvitesRequest,
-    ) => Effect.Effect<
-      repostspace.SendInvitesResponse,
-      repostspace.SendInvitesError
-    >
+    ) => Effect.Effect<repostspace.SendInvitesResponse, repostspace.SendInvitesError>
   >
 > {}
-export const SendInvites = Binding.Service<SendInvites>(
-  "AWS.RePostSpace.SendInvites",
-);
+export const SendInvites = Binding.Service<SendInvites>("AWS.RePostSpace.SendInvites");

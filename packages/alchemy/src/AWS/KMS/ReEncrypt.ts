@@ -53,9 +53,7 @@ export interface ReEncrypt extends Binding.Service<
     destination: Key | AliasName,
     source?: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request: ReEncryptRequest,
-    ) => Effect.Effect<kms.ReEncryptResponse, kms.ReEncryptError>
+    (request: ReEncryptRequest) => Effect.Effect<kms.ReEncryptResponse, kms.ReEncryptError>
   >
 > {}
 

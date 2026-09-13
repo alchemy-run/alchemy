@@ -35,6 +35,4 @@ export interface CreateTopic extends Binding.Service<
     ) => Effect.Effect<kafka.CreateTopicResponse, kafka.CreateTopicError>
   >
 > {}
-export const CreateTopic = Binding.Service<CreateTopic>(
-  "AWS.Kafka.CreateTopic",
-);
+export const CreateTopic = Binding.Service<CreateTopic>("AWS.Kafka.CreateTopic");

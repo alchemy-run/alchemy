@@ -52,22 +52,17 @@ export default DeadlineTestFunction.make(
 
     // Event source: subscribe the host to Deadline job status changes. The
     // deploy proves the EventBridge rule + invoke permission wiring.
-    yield* Deadline.consumeFarmEvents(
-      { kinds: ["job-run", "job-lifecycle"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `deadline job event: ${event.detail.jobId} -> ${event.detail.status}`,
-          ),
-        ),
+    yield* Deadline.consumeFarmEvents({ kinds: ["job-run", "job-lifecycle"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`deadline job event: ${event.detail.jobId} -> ${event.detail.status}`),
+      ),
     );
 
     const createJob = yield* Deadline.CreateJob(queue);
     const getJob = yield* Deadline.GetJob(queue);
     const updateJob = yield* Deadline.UpdateJob(queue);
     const listJobs = yield* Deadline.ListJobs(queue);
-    const listJobParameterDefinitions =
-      yield* Deadline.ListJobParameterDefinitions(queue);
+    const listJobParameterDefinitions = yield* Deadline.ListJobParameterDefinitions(queue);
     const searchJobs = yield* Deadline.SearchJobs(queue);
     const searchSteps = yield* Deadline.SearchSteps(queue);
     const searchTasks = yield* Deadline.SearchTasks(queue);
@@ -81,10 +76,8 @@ export default DeadlineTestFunction.make(
     const getTask = yield* Deadline.GetTask(queue);
     const listTasks = yield* Deadline.ListTasks(queue);
     const updateTask = yield* Deadline.UpdateTask(queue);
-    const startAggregation =
-      yield* Deadline.StartSessionsStatisticsAggregation(farm);
-    const getAggregation =
-      yield* Deadline.GetSessionsStatisticsAggregation(farm);
+    const startAggregation = yield* Deadline.StartSessionsStatisticsAggregation(farm);
+    const getAggregation = yield* Deadline.GetSessionsStatisticsAggregation(farm);
 
     const bound = {
       createJob,
@@ -197,10 +190,9 @@ export default DeadlineTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/params") {
-          const { jobParameterDefinitions } =
-            yield* listJobParameterDefinitions({
-              jobId: param("jobId"),
-            });
+          const { jobParameterDefinitions } = yield* listJobParameterDefinitions({
+            jobId: param("jobId"),
+          });
           return yield* HttpServerResponse.json({
             count: (jobParameterDefinitions ?? []).length,
           });
@@ -345,9 +337,7 @@ export default DeadlineTestFunction.make(
       }).pipe(
         // Surface typed operation errors as a JSON 500 so the test log
         // shows the real cause instead of an opaque crash.
-        Effect.catch((error) =>
-          HttpServerResponse.json({ error: String(error) }, { status: 500 }),
-        ),
+        Effect.catch((error) => HttpServerResponse.json({ error: String(error) }, { status: 500 })),
         Effect.orDie,
       ),
     };

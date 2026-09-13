@@ -59,10 +59,7 @@ export interface MountedFileSystem {
 export interface Mount extends Binding.Service<
   Mount,
   "AWS.EFS.Mount",
-  (
-    target: AccessPoint | FileSystem,
-    options: MountOptions,
-  ) => Effect.Effect<MountedFileSystem>
+  (target: AccessPoint | FileSystem, options: MountOptions) => Effect.Effect<MountedFileSystem>
 > {}
 export const Mount = Binding.Service<Mount>("AWS.EFS.Mount");
 
@@ -71,9 +68,7 @@ export const Mount = Binding.Service<Mount>("AWS.EFS.Mount");
  */
 export const mount = Mount;
 
-const isAccessPoint = (
-  target: AccessPoint | FileSystem,
-): target is AccessPoint =>
+const isAccessPoint = (target: AccessPoint | FileSystem): target is AccessPoint =>
   (target as { Type?: string }).Type === "AWS.EFS.AccessPoint";
 
 const isLambdaFunction = (value: unknown): value is Function =>
@@ -90,10 +85,7 @@ const isLambdaFunction = (value: unknown): value is Function =>
 export const MountLive = Layer.effect(
   Mount,
   Effect.gen(function* () {
-    return Effect.fn(function* (
-      target: AccessPoint | FileSystem,
-      options: MountOptions,
-    ) {
+    return Effect.fn(function* (target: AccessPoint | FileSystem, options: MountOptions) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         const actions = options.readOnly
@@ -114,8 +106,7 @@ export const MountLive = Layer.effect(
                     Resource: ["*"],
                     Condition: {
                       StringEquals: {
-                        "elasticfilesystem:AccessPointArn":
-                          target.accessPointArn,
+                        "elasticfilesystem:AccessPointArn": target.accessPointArn,
                       },
                     },
                   }

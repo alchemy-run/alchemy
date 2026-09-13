@@ -50,8 +50,7 @@ export default Route53BindingsFunction.make(
     const testDnsAnswer = yield* Route53.TestDNSAnswer(zone);
     const getChange = yield* Route53.GetChange();
     const getHealthCheckStatus = yield* Route53.GetHealthCheckStatus(check);
-    const getHealthCheckLastFailureReason =
-      yield* Route53.GetHealthCheckLastFailureReason(check);
+    const getHealthCheckLastFailureReason = yield* Route53.GetHealthCheckLastFailureReason(check);
     const listHostedZones = yield* Route53.ListHostedZones();
     const listHostedZonesByName = yield* Route53.ListHostedZonesByName();
     const listHostedZonesByVpc = yield* Route53.ListHostedZonesByVPC();
@@ -75,10 +74,7 @@ export default Route53BindingsFunction.make(
       getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
         Effect.map((r) => r.ChangeInfo.Status),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(40)]),
           until: (status): boolean => status === "INSYNC",
         }),
       );
@@ -109,9 +105,7 @@ export default Route53BindingsFunction.make(
           const response = yield* listHostedZones({ MaxItems: 100 });
           return yield* HttpServerResponse.json({
             count: (response.HostedZones ?? []).length,
-            found: (response.HostedZones ?? []).some(
-              (z) => z.Id === detail.HostedZone.Id,
-            ),
+            found: (response.HostedZones ?? []).some((z) => z.Id === detail.HostedZone.Id),
           });
         }
 
@@ -130,9 +124,7 @@ export default Route53BindingsFunction.make(
           // A well-formed VPC id with no private-zone associations — the
           // call round-trips (IAM + query encoding) and returns an empty
           // summary list.
-          const region = yield* Effect.sync(
-            () => process.env.AWS_REGION ?? "us-east-1",
-          );
+          const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-east-1");
           const response = yield* listHostedZonesByVpc({
             VPCId: "vpc-0123456789abcdef0",
             VPCRegion: region,

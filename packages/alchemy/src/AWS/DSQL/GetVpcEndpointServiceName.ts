@@ -37,13 +37,9 @@ export interface GetVpcEndpointServiceName extends Binding.Service<
   <R extends Cluster>(
     cluster: R,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      dsql.GetVpcEndpointServiceNameOutput,
-      dsql.GetVpcEndpointServiceNameError
-    >
+    () => Effect.Effect<dsql.GetVpcEndpointServiceNameOutput, dsql.GetVpcEndpointServiceNameError>
   >
 > {}
-export const GetVpcEndpointServiceName =
-  Binding.Service<GetVpcEndpointServiceName>(
-    "AWS.DSQL.GetVpcEndpointServiceName",
-  );
+export const GetVpcEndpointServiceName = Binding.Service<GetVpcEndpointServiceName>(
+  "AWS.DSQL.GetVpcEndpointServiceName",
+);

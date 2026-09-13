@@ -31,16 +31,8 @@ import {
   type FlyHostRuntimeContext,
   type HostedProgramProps,
 } from "./hosted.ts";
-import type {
-  MachineGuest,
-  MachineImageRef,
-  MachineService,
-} from "./Machine.ts";
-import {
-  createFlyResourceName,
-  diffMachineMetadata,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
+import type { MachineGuest, MachineImageRef, MachineService } from "./Machine.ts";
+import { createFlyResourceName, diffMachineMetadata, sanitizeFlyAppName } from "./Metadata.ts";
 import type { MountedDisk, ServiceBinding } from "./MountVolume.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
 import type { Providers } from "./Providers.ts";
@@ -706,36 +698,28 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * @resource
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Fly.Service", {
-  createRuntimeContext: createFlyHostRuntimeContext("Fly.Service"),
-  // `{ app: Site }` at module scope is an Effect. Yield it here so the
-  // App is registered and `news.app` is resolved attributes at
-  // reconcile (same DX as `yield* App(...)` inside Effect.gen).
-  transformProps: (_id, props) =>
-    Effect.gen(function* () {
-      if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const app = Effect.isEffect(props.app)
-        ? yield* props.app as Effect.Effect<App, never, Providers>
-        : props.app;
-      return { ...props, app };
-    }),
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Fly.Service", {
+    createRuntimeContext: createFlyHostRuntimeContext("Fly.Service"),
+    // `{ app: Site }` at module scope is an Effect. Yield it here so the
+    // App is registered and `news.app` is resolved attributes at
+    // reconcile (same DX as `yield* App(...)` inside Effect.gen).
+    transformProps: (_id, props) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const app = Effect.isEffect(props.app)
+          ? yield* props.app as Effect.Effect<App, never, Providers>
+          : props.app;
+        return { ...props, app };
+      }),
+  });
 
-export class ServiceNotCreated extends Data.TaggedError(
-  "Fly.ServiceNotCreated",
-)<{
+export class ServiceNotCreated extends Data.TaggedError("Fly.ServiceNotCreated")<{
   name: string;
   appName: string;
 }> {}
 
-export class ServiceAppNotResolved extends Data.TaggedError(
-  "Fly.ServiceAppNotResolved",
-)<{
+export class ServiceAppNotResolved extends Data.TaggedError("Fly.ServiceAppNotResolved")<{
   message: string;
 }> {}
 
@@ -756,11 +740,7 @@ const compactRecord = (
 
 const toEnv = toEnvRecord;
 
-const resolveMachineName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveMachineName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyAppName(name);
     if (existing !== undefined) return existing;
@@ -804,12 +784,8 @@ const toFlyStatics = (
   return statics.map((entry) => ({
     guest_path: entry.guestPath,
     url_prefix: entry.urlPrefix,
-    ...(entry.tigrisBucket !== undefined
-      ? { tigris_bucket: entry.tigrisBucket }
-      : {}),
-    ...(entry.indexDocument !== undefined
-      ? { index_document: entry.indexDocument }
-      : {}),
+    ...(entry.tigrisBucket !== undefined ? { tigris_bucket: entry.tigrisBucket } : {}),
+    ...(entry.indexDocument !== undefined ? { index_document: entry.indexDocument } : {}),
   }));
 };
 
@@ -828,10 +804,7 @@ const buildConfig = (input: {
   services: input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
-  statics:
-    input.statics !== undefined && input.statics.length > 0
-      ? input.statics
-      : undefined,
+  statics: input.statics !== undefined && input.statics.length > 0 ? input.statics : undefined,
 });
 
 const sameImage = (machine: FlyMachine, image: string) => {
@@ -848,10 +821,7 @@ const sameImage = (machine: FlyMachine, image: string) => {
   return observedRepo === repo || observedRepo.endsWith(`/${repo}`);
 };
 
-const sameGuest = (
-  observed: FlyMachineGuest | undefined,
-  desired: FlyMachineGuest,
-) =>
+const sameGuest = (observed: FlyMachineGuest | undefined, desired: FlyMachineGuest) =>
   (observed?.cpu_kind ?? DEFAULT_CPU_KIND) === desired.cpu_kind &&
   (observed?.cpus ?? DEFAULT_CPUS) === desired.cpus &&
   (observed?.memory_mb ?? DEFAULT_MEMORY_MB) === desired.memory_mb &&
@@ -863,17 +833,11 @@ const sameEnv = (
   desired: Record<string, string>,
 ) => deepEqual(compactRecord(observed), desired);
 
-const sameServices = (
-  observed: FlyMachineService[] | undefined,
-  desired: FlyMachineService[],
-) => deepEqual(observed ?? [], desired, { stripNullish: true });
+const sameServices = (observed: FlyMachineService[] | undefined, desired: FlyMachineService[]) =>
+  deepEqual(observed ?? [], desired, { stripNullish: true });
 
-const sameMounts = (
-  observed: FlyMachineMount[] | undefined,
-  desired: FlyMachineMount[],
-) => {
-  const key = (mount: FlyMachineMount) =>
-    `${mount.volume ?? ""}:${mount.path ?? ""}`;
+const sameMounts = (observed: FlyMachineMount[] | undefined, desired: FlyMachineMount[]) => {
+  const key = (mount: FlyMachineMount) => `${mount.volume ?? ""}:${mount.path ?? ""}`;
   const left = [...(observed ?? [])].map(key).sort();
   const right = desired.map(key).sort();
   return deepEqual(left, right);
@@ -883,21 +847,12 @@ const metadataChanged = (
   observed: Record<string, string | undefined> | undefined,
   desired: Record<string, string>,
 ) => {
-  const { removed, added, updated } = diffMachineMetadata(
-    compactRecord(observed),
-    desired,
-  );
-  return (
-    removed.length > 0 ||
-    Object.keys(added).length > 0 ||
-    Object.keys(updated).length > 0
-  );
+  const { removed, added, updated } = diffMachineMetadata(compactRecord(observed), desired);
+  return removed.length > 0 || Object.keys(added).length > 0 || Object.keys(updated).length > 0;
 };
 
-const sameStatics = (
-  observed: FlyStatic[] | undefined,
-  desired: FlyStatic[] | undefined,
-) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
+const sameStatics = (observed: FlyStatic[] | undefined, desired: FlyStatic[] | undefined) =>
+  deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
 
 const configDrifted = (
   machine: FlyMachine,
@@ -940,9 +895,7 @@ const toAttrs = (set: ReplicaSet, codeHash: string): Service["Attributes"] => ({
 
 const machineIdsOf = (output: Service["Attributes"] | undefined) =>
   output?.machineIds ??
-  (output?.machineId !== undefined && output.machineId.length > 0
-    ? [output.machineId]
-    : []);
+  (output?.machineId !== undefined && output.machineId.length > 0 ? [output.machineId] : []);
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -964,16 +917,13 @@ export const ServiceProvider = () =>
         stables: ["machineId", "name", "region", "appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news, output }) {
           if (news === undefined || output === undefined) return undefined;
           if (isResolved(news)) {
             const desiredAppName = appNameOf(news.app);
-            const appChanged =
-              desiredAppName !== undefined && desiredAppName !== output.appName;
+            const appChanged = desiredAppName !== undefined && desiredAppName !== output.appName;
             const desiredName =
-              news.name !== undefined
-                ? sanitizeFlyAppName(news.name)
-                : output.name;
+              news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
             const nameChanged = desiredName !== output.name;
             const desiredRegion = news.region ?? DEFAULT_REGION;
             const regionChanged = desiredRegion !== output.region;
@@ -992,10 +942,7 @@ export const ServiceProvider = () =>
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
-            Pick<
-              ServiceProps,
-              "main" | "build" | "image" | "port" | "extraFiles" | "isExternal"
-            >
+            Pick<ServiceProps, "main" | "build" | "image" | "port" | "extraFiles" | "isExternal">
           >;
           if (
             isResolved({
@@ -1035,13 +982,7 @@ export const ServiceProvider = () =>
           return sets.map((set) => toAttrs(set, ""));
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           const props = news;
           const appName = appNameOf(props.app) ?? output?.appName;
           if (appName === undefined) {
@@ -1061,11 +1002,7 @@ export const ServiceProvider = () =>
           });
           let minSecretsVersion: number | undefined;
           for (const pg of bound.postgres) {
-            const version = yield* attachPostgresSecrets(
-              appName,
-              pg.clusterId,
-              pg.variableName,
-            );
+            const version = yield* attachPostgresSecrets(appName, pg.clusterId, pg.variableName);
             if (version !== undefined) {
               minSecretsVersion = Math.max(minSecretsVersion ?? 0, version);
             }
@@ -1142,11 +1079,7 @@ export const ServiceProvider = () =>
                   appName,
                   id,
                   type: "Fly.Service",
-                  baseName: yield* resolveMachineName(
-                    id,
-                    olds.name,
-                    output.name,
-                  ),
+                  baseName: yield* resolveMachineName(id, olds.name, output.name),
                 });
           if (current === undefined) return;
           yield* deleteReplicaSet({

@@ -81,7 +81,5 @@ export interface WriteSecretClient {
     value: Redacted.Redacted<string> | string,
   ): Effect.Effect<AppSecretsUpdateResp, UpdateSecretsError, RuntimeContext>;
   /** Delete a secret by name. */
-  delete(
-    name: string,
-  ): Effect.Effect<DeleteAppSecretResponse, DeleteSecretError, RuntimeContext>;
+  delete(name: string): Effect.Effect<DeleteAppSecretResponse, DeleteSecretError, RuntimeContext>;
 }

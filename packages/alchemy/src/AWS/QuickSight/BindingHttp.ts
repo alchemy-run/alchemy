@@ -108,10 +108,7 @@ export const makeQuickSightDataSetHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  dataSet.arn,
-                  Output.interpolate`${dataSet.arn}/ingestion/*`,
-                ],
+                Resource: [dataSet.arn, Output.interpolate`${dataSet.arn}/ingestion/*`],
               },
             ],
           });
@@ -176,9 +173,7 @@ export const makeQuickSightEmbedHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${dashboard.LogicalId})`)(function* (
-        request: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${dashboard.LogicalId})`)(function* (request: Req) {
         const arn = yield* Arn;
         const dashboardId = yield* DashboardId;
         return yield* op({

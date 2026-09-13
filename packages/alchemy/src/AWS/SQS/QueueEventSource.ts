@@ -22,9 +22,7 @@ export interface MessagesProps extends QueueEventSourceProps {
   maxNumberOfMessages?: number;
 }
 
-type MessagesHandler<Req> = (
-  stream: Stream.Stream<SQSRecord>,
-) => Effect.Effect<void, never, Req>;
+type MessagesHandler<Req> = (stream: Stream.Stream<SQSRecord>) => Effect.Effect<void, never, Req>;
 
 /**
  * Subscribe an Effect handler to messages produced by an SQS {@link Queue}.
@@ -106,9 +104,7 @@ export interface QueueEventSource extends Binding.Service<
   QueueEventSourceService
 > {}
 
-export const QueueEventSource = Binding.Service<QueueEventSource>(
-  "AWS.SQS.QueueEventSource",
-);
+export const QueueEventSource = Binding.Service<QueueEventSource>("AWS.SQS.QueueEventSource");
 
 export interface QueueEventSourceProps {
   /**
@@ -128,7 +124,5 @@ export interface QueueEventSourceProps {
 export type QueueEventSourceService = <Req = never>(
   bucket: Queue,
   props: MessagesProps,
-  process: (
-    stream: Stream.Stream<SQSRecord>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<SQSRecord>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

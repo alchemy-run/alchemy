@@ -33,9 +33,7 @@ export default BudgetsTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/AWSBudgetsActionsWithAWSResourceControlAccess",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/AWSBudgetsActionsWithAWSResourceControlAccess"],
     });
 
     const targetRole = yield* IAM.Role("BindingsTargetRole", {
@@ -65,9 +63,7 @@ export default BudgetsTestFunction.make(
           comparisonOperator: "GREATER_THAN",
           threshold: 80,
           thresholdType: "PERCENTAGE",
-          subscribers: [
-            { subscriptionType: "EMAIL", address: "budget-test@example.com" },
-          ],
+          subscribers: [{ subscriptionType: "EMAIL", address: "budget-test@example.com" }],
         },
       ],
     });
@@ -88,24 +84,19 @@ export default BudgetsTestFunction.make(
       },
       executionRoleArn: execRole.roleArn,
       approvalModel: "MANUAL",
-      subscribers: [
-        { subscriptionType: "EMAIL", address: "budget-test@example.com" },
-      ],
+      subscribers: [{ subscriptionType: "EMAIL", address: "budget-test@example.com" }],
     });
 
     // --- budget-scoped bindings ---
     const describeBudget = yield* Budgets.DescribeBudget(budget);
-    const performanceHistory =
-      yield* Budgets.DescribeBudgetPerformanceHistory(budget);
+    const performanceHistory = yield* Budgets.DescribeBudgetPerformanceHistory(budget);
     const notifications = yield* Budgets.DescribeNotificationsForBudget(budget);
-    const subscribers =
-      yield* Budgets.DescribeSubscribersForNotification(budget);
+    const subscribers = yield* Budgets.DescribeSubscribersForNotification(budget);
     const listActions = yield* Budgets.DescribeBudgetActionsForBudget(budget);
 
     // --- action-scoped bindings ---
     const executeAction = yield* Budgets.ExecuteBudgetAction(action);
-    const actionHistories =
-      yield* Budgets.DescribeBudgetActionHistories(action);
+    const actionHistories = yield* Budgets.DescribeBudgetActionHistories(action);
 
     const bound = {
       describeBudget,
@@ -143,10 +134,7 @@ export default BudgetsTestFunction.make(
           const result = yield* performanceHistory();
           return yield* HttpServerResponse.json({
             budgetName: result.BudgetPerformanceHistory?.BudgetName ?? null,
-            periods: (
-              result.BudgetPerformanceHistory?.BudgetedAndActualAmountsList ??
-              []
-            ).length,
+            periods: (result.BudgetPerformanceHistory?.BudgetedAndActualAmountsList ?? []).length,
           });
         }
 
@@ -171,9 +159,7 @@ export default BudgetsTestFunction.make(
           const result = yield* subscribers({ Notification: first });
           return yield* HttpServerResponse.json({
             count: (result.Subscribers ?? []).length,
-            subscriptionTypes: (result.Subscribers ?? []).map(
-              (s) => s.SubscriptionType,
-            ),
+            subscriptionTypes: (result.Subscribers ?? []).map((s) => s.SubscriptionType),
           });
         }
 
@@ -209,9 +195,8 @@ export default BudgetsTestFunction.make(
               outcome: "ok",
               executionType: r.ExecutionType,
             })),
-            Effect.catchTag(
-              ["ResourceLockedException", "InvalidParameterException"],
-              (e) => Effect.succeed({ outcome: e._tag, executionType: null }),
+            Effect.catchTag(["ResourceLockedException", "InvalidParameterException"], (e) =>
+              Effect.succeed({ outcome: e._tag, executionType: null }),
             ),
           );
           return yield* HttpServerResponse.json(outcome);

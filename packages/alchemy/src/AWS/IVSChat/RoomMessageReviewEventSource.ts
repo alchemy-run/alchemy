@@ -119,10 +119,9 @@ export interface RoomMessageReviewEventSource extends Binding.Service<
   RoomMessageReviewEventSourceService
 > {}
 
-export const RoomMessageReviewEventSource =
-  Binding.Service<RoomMessageReviewEventSource>(
-    "AWS.IVSChat.RoomMessageReviewEventSource",
-  );
+export const RoomMessageReviewEventSource = Binding.Service<RoomMessageReviewEventSource>(
+  "AWS.IVSChat.RoomMessageReviewEventSource",
+);
 
 /**
  * Review (and optionally modify or deny) every message sent to the room
@@ -157,7 +156,5 @@ export function onReviewMessage<Req = never>(
   handler: RoomMessageReviewHandlerFn<Req>,
   props?: RoomMessageReviewProps,
 ): Effect.Effect<void, never, RoomMessageReviewEventSource> {
-  return RoomMessageReviewEventSource.use((source) =>
-    source(room, handler, props),
-  );
+  return RoomMessageReviewEventSource.use((source) => source(room, handler, props));
 }

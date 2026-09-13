@@ -65,18 +65,13 @@ export const createPhysicalName = Effect.fn(function* ({
     );
   const stack = yield* Stack;
   const stage = yield* Stage;
-  let prefix =
-    _prefix ?? `${stack.name}${delimiter}${id}${delimiter}${stage}${delimiter}`;
+  let prefix = _prefix ?? `${stack.name}${delimiter}${id}${delimiter}${stage}${delimiter}`;
   if (
-    forbiddenPrefixes.some((forbidden) =>
-      prefix.toLowerCase().startsWith(forbidden.toLowerCase()),
-    )
+    forbiddenPrefixes.some((forbidden) => prefix.toLowerCase().startsWith(forbidden.toLowerCase()))
   ) {
     prefix = `x${delimiter}${prefix}`;
   }
-  const randomId = base32(
-    Buffer.from(instanceId ?? (yield* InstanceId), "hex"),
-  );
+  const randomId = base32(Buffer.from(instanceId ?? (yield* InstanceId), "hex"));
   const suffix = randomId.slice(0, suffixLength);
   const name = `${prefix}${suffix}`;
   if (maxLength && name.length > maxLength) {
@@ -86,19 +81,14 @@ export const createPhysicalName = Effect.fn(function* ({
     // would collapse to the same string. Keep a stable hash of the full name
     // next to the suffix so truncated names remain unique.
     const hash = yield* Effect.sync(() =>
-      base32(createHash("sha256").update(name).digest()).slice(
-        0,
-        TRUNCATION_HASH_LENGTH,
-      ),
+      base32(createHash("sha256").update(name).digest()).slice(0, TRUNCATION_HASH_LENGTH),
     );
     // The hash is what keeps same-resource names distinct, so it always
     // survives in full; when maxLength is tight (e.g. DAX's 20-char limit)
     // the instance suffix shrinks instead — 12 base32 chars still carry 60
     // bits of instance entropy.
     const tail = `${hash}${suffix}`.slice(0, maxLength);
-    return sanitize(
-      `${prefix.slice(0, Math.max(0, maxLength - tail.length))}${tail}`,
-    );
+    return sanitize(`${prefix.slice(0, Math.max(0, maxLength - tail.length))}${tail}`);
   }
   return sanitize(name);
 });

@@ -44,7 +44,6 @@ export interface PostWhatsAppMessageMedia extends Binding.Service<
     >
   >
 > {}
-export const PostWhatsAppMessageMedia =
-  Binding.Service<PostWhatsAppMessageMedia>(
-    "AWS.SocialMessaging.PostWhatsAppMessageMedia",
-  );
+export const PostWhatsAppMessageMedia = Binding.Service<PostWhatsAppMessageMedia>(
+  "AWS.SocialMessaging.PostWhatsAppMessageMedia",
+);

@@ -14,12 +14,7 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
  * mapping workflow and inject the bound workflow's name as the request's
  * `workflowName` field.
  */
-export const makeWorkflowHttpBinding = <
-  I extends { workflowName: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeWorkflowHttpBinding = <I extends { workflowName: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.EntityResolution.GetMatchId`. */
   tag: string;
   /** The distilled operation; `workflowName` is injected from the resource. */
@@ -30,9 +25,7 @@ export const makeWorkflowHttpBinding = <
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* (
-      workflow: MatchingWorkflow | IdMappingWorkflow,
-    ) {
+    return Effect.fn(function* (workflow: MatchingWorkflow | IdMappingWorkflow) {
       const WorkflowName = yield* workflow.workflowName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;

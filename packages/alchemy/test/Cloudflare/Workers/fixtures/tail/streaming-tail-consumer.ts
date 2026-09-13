@@ -35,21 +35,14 @@ interface StreamTailEvent {
 }
 
 export default {
-  async fetch(
-    request: Request,
-    env: { EVENTS: TailEventsKV },
-  ): Promise<Response> {
+  async fetch(request: Request, env: { EVENTS: TailEventsKV }): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/events") {
       const list = await env.EVENTS.list({ prefix: "evt:" });
-      const sessions = await Promise.all(
-        list.keys.map((key) => env.EVENTS.get(key.name)),
-      );
+      const sessions = await Promise.all(list.keys.map((key) => env.EVENTS.get(key.name)));
       return Response.json({
         keys: list.keys.map((key) => key.name),
-        sessions: sessions.filter(
-          (session): session is string => session !== null,
-        ),
+        sessions: sessions.filter((session): session is string => session !== null),
       });
     }
     return new Response("streaming-tail-consumer-ok");

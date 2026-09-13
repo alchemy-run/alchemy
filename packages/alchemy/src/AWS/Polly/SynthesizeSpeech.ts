@@ -36,12 +36,7 @@ export interface SynthesizeSpeech extends Binding.Service<
   () => Effect.Effect<
     (
       request: polly.SynthesizeSpeechInput,
-    ) => Effect.Effect<
-      polly.SynthesizeSpeechOutput,
-      polly.SynthesizeSpeechError
-    >
+    ) => Effect.Effect<polly.SynthesizeSpeechOutput, polly.SynthesizeSpeechError>
   >
 > {}
-export const SynthesizeSpeech = Binding.Service<SynthesizeSpeech>(
-  "AWS.Polly.SynthesizeSpeech",
-);
+export const SynthesizeSpeech = Binding.Service<SynthesizeSpeech>("AWS.Polly.SynthesizeSpeech");

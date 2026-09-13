@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface DeleteObjectRequest extends Omit<
-  S3.DeleteObjectRequest,
-  "Bucket"
-> {}
+export interface DeleteObjectRequest extends Omit<S3.DeleteObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:DeleteObject`.
@@ -33,11 +30,7 @@ export interface DeleteObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: DeleteObjectRequest,
-    ) => Effect.Effect<S3.DeleteObjectOutput, S3.DeleteObjectError>
+    (request: DeleteObjectRequest) => Effect.Effect<S3.DeleteObjectOutput, S3.DeleteObjectError>
   >
 > {}
-export const DeleteObject = Binding.Service<DeleteObject>(
-  "AWS.S3.DeleteObject",
-);
+export const DeleteObject = Binding.Service<DeleteObject>("AWS.S3.DeleteObject");

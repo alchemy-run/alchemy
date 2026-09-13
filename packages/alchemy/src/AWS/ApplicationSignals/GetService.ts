@@ -39,6 +39,4 @@ export interface GetService extends Binding.Service<
   >
 > {}
 
-export const GetService = Binding.Service<GetService>(
-  "AWS.ApplicationSignals.GetService",
-);
+export const GetService = Binding.Service<GetService>("AWS.ApplicationSignals.GetService");

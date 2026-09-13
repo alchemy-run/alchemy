@@ -29,10 +29,7 @@ export interface GetClustersForImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetClustersForImageRequest,
-    ) => Effect.Effect<
-      inspector2.GetClustersForImageResponse,
-      inspector2.GetClustersForImageError
-    >
+    ) => Effect.Effect<inspector2.GetClustersForImageResponse, inspector2.GetClustersForImageError>
   >
 > {}
 export const GetClustersForImage = Binding.Service<GetClustersForImage>(

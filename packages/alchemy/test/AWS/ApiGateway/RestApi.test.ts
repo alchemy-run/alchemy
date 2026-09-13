@@ -30,9 +30,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       expect(api.restApiId).toBeDefined();
       expect(api.rootResourceId).toBeDefined();
-      expect(api.binaryMediaTypes?.includes("application/octet-stream")).toBe(
-        true,
-      );
+      expect(api.binaryMediaTypes?.includes("application/octet-stream")).toBe(true);
 
       const created = yield* ag.getRestApi({ restApiId: api.restApiId });
       expect(created.id).toEqual(api.restApiId);
@@ -64,9 +62,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const narrowed = yield* ag.getRestApi({ restApiId: api.restApiId });
       expect(narrowed.binaryMediaTypes?.includes("image/png")).toBe(true);
-      expect(
-        narrowed.binaryMediaTypes?.includes("application/octet-stream"),
-      ).toBe(false);
+      expect(narrowed.binaryMediaTypes?.includes("application/octet-stream")).toBe(false);
 
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);

@@ -14,11 +14,7 @@ import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
 import { toEnvRecord } from "./hosted.ts";
-import {
-  createFlyResourceName,
-  diffMachineMetadata,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
+import { createFlyResourceName, diffMachineMetadata, sanitizeFlyAppName } from "./Metadata.ts";
 import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -682,16 +678,12 @@ export type Machine = Resource<
  */
 export const Machine = Resource<Machine>("Fly.Machine");
 
-export class MachineNotCreated extends Data.TaggedError(
-  "Fly.MachineNotCreated",
-)<{
+export class MachineNotCreated extends Data.TaggedError("Fly.MachineNotCreated")<{
   name: string;
   appName: string;
 }> {}
 
-export class MachineAppNotResolved extends Data.TaggedError(
-  "Fly.MachineAppNotResolved",
-)<{
+export class MachineAppNotResolved extends Data.TaggedError("Fly.MachineAppNotResolved")<{
   message: string;
 }> {}
 
@@ -714,20 +706,14 @@ const compactRecord = (
 
 const toEnv = toEnvRecord;
 
-const resolveMachineName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveMachineName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyAppName(name);
     if (existing !== undefined) return existing;
     return yield* createFlyResourceName(id);
   });
 
-const mergeBindings = (
-  bindings: readonly ResourceBinding<MachineBinding>[],
-) => {
+const mergeBindings = (bindings: readonly ResourceBinding<MachineBinding>[]) => {
   const env: Record<string, any> = {};
   const mounts: DiskSpec[] = [];
   for (const binding of bindings) {
@@ -737,10 +723,7 @@ const mergeBindings = (
   return { env, mounts };
 };
 
-const mergeDisks = (
-  props: DiskSpec[] | undefined,
-  bindingMounts: DiskSpec[],
-): DiskSpec[] => {
+const mergeDisks = (props: DiskSpec[] | undefined, bindingMounts: DiskSpec[]): DiskSpec[] => {
   const byPath = new Map<string, DiskSpec>();
   for (const disk of [...(props ?? []), ...bindingMounts]) {
     byPath.set(disk.path, disk);
@@ -784,7 +767,7 @@ const desiredMetadata = (
   props: MachineProps,
   alchemy: Record<string, string>,
 ): Record<string, string> => ({
-  ...(props.metadata ?? {}),
+  ...props.metadata,
   ...alchemy,
 });
 
@@ -802,10 +785,7 @@ const buildConfig = (input: {
   image: input.image,
   guest: input.guest,
   env: Object.keys(input.env).length > 0 ? input.env : undefined,
-  services:
-    input.services !== undefined && input.services.length > 0
-      ? input.services
-      : undefined,
+  services: input.services !== undefined && input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
   restart: input.restart,
@@ -827,10 +807,7 @@ const sameImage = (machine: FlyMachine, image: string) => {
   return observedRepo === repo || observedRepo.endsWith(`/${repo}`);
 };
 
-const sameGuest = (
-  observed: FlyMachineGuest | undefined,
-  desired: FlyMachineGuest,
-) =>
+const sameGuest = (observed: FlyMachineGuest | undefined, desired: FlyMachineGuest) =>
   (observed?.cpu_kind ?? DEFAULT_CPU_KIND) === desired.cpu_kind &&
   (observed?.cpus ?? DEFAULT_CPUS) === desired.cpus &&
   (observed?.memory_mb ?? DEFAULT_MEMORY_MB) === desired.memory_mb &&
@@ -847,12 +824,8 @@ const sameServices = (
   desired: FlyMachineService[] | undefined,
 ) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
 
-const sameMounts = (
-  observed: FlyMachineMount[] | undefined,
-  desired: FlyMachineMount[],
-) => {
-  const key = (mount: FlyMachineMount) =>
-    `${mount.volume ?? ""}:${mount.path ?? ""}`;
+const sameMounts = (observed: FlyMachineMount[] | undefined, desired: FlyMachineMount[]) => {
+  const key = (mount: FlyMachineMount) => `${mount.volume ?? ""}:${mount.path ?? ""}`;
   const left = [...(observed ?? [])].map(key).sort();
   const right = desired.map(key).sort();
   return deepEqual(left, right);
@@ -874,24 +847,15 @@ const sameRestart = (
     { stripNullish: true },
   );
 
-const sameInit = (
-  observed: FlyMachineInit | undefined,
-  desired: FlyMachineInit | undefined,
-) => deepEqual(observed ?? {}, desired ?? {}, { stripNullish: true });
+const sameInit = (observed: FlyMachineInit | undefined, desired: FlyMachineInit | undefined) =>
+  deepEqual(observed ?? {}, desired ?? {}, { stripNullish: true });
 
 const metadataChanged = (
   observed: Record<string, string | undefined> | undefined,
   desired: Record<string, string>,
 ) => {
-  const { removed, added, updated } = diffMachineMetadata(
-    compactRecord(observed),
-    desired,
-  );
-  return (
-    removed.length > 0 ||
-    Object.keys(added).length > 0 ||
-    Object.keys(updated).length > 0
-  );
+  const { removed, added, updated } = diffMachineMetadata(compactRecord(observed), desired);
+  return removed.length > 0 || Object.keys(added).length > 0 || Object.keys(updated).length > 0;
 };
 
 const configDrifted = (
@@ -941,9 +905,7 @@ const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
 
 const machineIdsOf = (output: Machine["Attributes"] | undefined) =>
   output?.machineIds ??
-  (output?.machineId !== undefined && output.machineId.length > 0
-    ? [output.machineId]
-    : []);
+  (output?.machineId !== undefined && output.machineId.length > 0 ? [output.machineId] : []);
 
 export const MachineProvider = () =>
   Provider.succeed(Machine, {
@@ -954,10 +916,8 @@ export const MachineProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const desiredAppName = appNameOf(news.app);
-      const appChanged =
-        desiredAppName !== undefined && desiredAppName !== output.appName;
-      const desiredName =
-        news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
+      const appChanged = desiredAppName !== undefined && desiredAppName !== output.appName;
+      const desiredName = news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
       const nameChanged = desiredName !== output.name;
       const desiredRegion = news.region ?? DEFAULT_REGION;
       const regionChanged = desiredRegion !== output.region;

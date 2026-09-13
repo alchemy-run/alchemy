@@ -10,11 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  applicationArn,
-  readAppConfigTags,
-  syncAppConfigTags,
-} from "./internal.ts";
+import { applicationArn, readAppConfigTags, syncAppConfigTags } from "./internal.ts";
 
 export interface ApplicationProps {
   /**
@@ -82,9 +78,7 @@ export const ApplicationProvider = () =>
       const findByName = Effect.fn(function* (name: string) {
         const apps = yield* appconfig.listApplications.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Items ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
         );
         return apps.find((a) => a.Name === name);
       });
@@ -92,11 +86,7 @@ export const ApplicationProvider = () =>
       const readApplication = Effect.fn(function* (applicationId: string) {
         return yield* appconfig
           .getApplication({ ApplicationId: applicationId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -104,9 +94,7 @@ export const ApplicationProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -148,10 +136,7 @@ export const ApplicationProvider = () =>
               Description: news.description,
               Tags: desiredTags,
             });
-          } else if (
-            news.description !== undefined &&
-            observed.Description !== news.description
-          ) {
+          } else if (news.description !== undefined && observed.Description !== news.description) {
             // 3. Sync — description is mutable in place.
             observed = yield* appconfig.updateApplication({
               ApplicationId: observed.Id,
@@ -179,16 +164,14 @@ export const ApplicationProvider = () =>
           // under it" — surfaced as BadRequestException). Children are
           // deleted first by the engine/nuke, but their deletion is
           // eventually consistent, so absorb the window with a bounded retry.
-          yield* appconfig
-            .deleteApplication({ ApplicationId: output.applicationId })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean => e._tag === "BadRequestException",
-                schedule: Schedule.fixed("3 seconds"),
-                times: 5,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* appconfig.deleteApplication({ ApplicationId: output.applicationId }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "BadRequestException",
+              schedule: Schedule.fixed("3 seconds"),
+              times: 5,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
 
         list: () =>
@@ -196,9 +179,7 @@ export const ApplicationProvider = () =>
             const { accountId, region } = yield* AWSEnvironment.current;
             const apps = yield* appconfig.listApplications.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
             );
             return apps.flatMap((a) =>
               a.Id !== undefined && a.Name !== undefined

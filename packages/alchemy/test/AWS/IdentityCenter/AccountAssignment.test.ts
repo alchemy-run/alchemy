@@ -83,8 +83,7 @@ test.provider("read returns undefined when creating-state lost targetId", () =>
       fqn: "AccountAssignment",
       instanceId: "test-instance",
       olds: {
-        permissionSetArn:
-          "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
+        permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
         principalId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         principalType: "GROUP",
       } as AccountAssignment["Props"],

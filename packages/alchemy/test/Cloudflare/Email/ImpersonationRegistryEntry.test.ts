@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Email Security (Area 1) is an enterprise add-on — the standard testing
 // account is not entitled (typed `EmailSecurityNotEntitled`), so the
@@ -27,19 +24,15 @@ const name = "Alchemy Test VIP";
 const email = "alchemy-vip@alchemy-test-2.us";
 
 const findEntry = (accountId: string) =>
-  emailSecurity.listSettingImpersonationRegistries
-    .items({ accountId, search: email })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).find((e) => e.name === name && e.email === email),
-      ),
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenRetrySchedule,
-        times: 8,
-      }),
-    );
+  emailSecurity.listSettingImpersonationRegistries.items({ accountId, search: email }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).find((e) => e.name === name && e.email === email)),
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
 
 test.provider.skipIf(!entitled)(
   "create, update in place, destroy",
@@ -111,9 +104,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.ImpersonationRegistryEntry,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.ImpersonationRegistryEntry);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -147,9 +138,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.ImpersonationRegistryEntry,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.ImpersonationRegistryEntry);
       const all = yield* provider.list();
       expect(all.some((e) => e.entryId === created.entryId)).toBe(true);
 

@@ -9,10 +9,7 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const listLive = (environmentId: string, serviceId: string) =>
   railway
@@ -30,10 +27,7 @@ const listLive = (environmentId: string, serviceId: string) =>
     .pipe(
       Effect.map((items) =>
         items
-          .filter(
-            (proxy) =>
-              proxy.deletedAt == null && proxy.syncStatus !== "DELETED",
-          )
+          .filter((proxy) => proxy.deletedAt == null && proxy.syncStatus !== "DELETED")
           .map((proxy) => ({
             ...proxy,
             domain: proxy.domain.replace(/\.+$/, ""),
@@ -42,16 +36,10 @@ const listLive = (environmentId: string, serviceId: string) =>
       railway.catchTags(["RailwayNotFound"], () => Effect.succeed([])),
     );
 
-const waitUntilProxyGone = (
-  environmentId: string,
-  serviceId: string,
-  id: string,
-) =>
+const waitUntilProxyGone = (environmentId: string, serviceId: string, id: string) =>
   listLive(environmentId, serviceId).pipe(
     Effect.map((items) =>
-      items.some((proxy) => proxy.id === id)
-        ? ("found" as const)
-        : ("gone" as const),
+      items.some((proxy) => proxy.id === id) ? ("found" as const) : ("gone" as const),
     ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -80,10 +68,7 @@ test.provider(
 
       const { project, environment } = yield* stack.deploy(suitePartition);
 
-      const service = yield* createTargetService(
-        project.projectId,
-        environment.environmentId,
-      );
+      const service = yield* createTargetService(project.projectId, environment.environmentId);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -152,10 +137,7 @@ test.provider(
 
       const { project, environment } = yield* stack.deploy(suitePartition);
 
-      const service = yield* createTargetService(
-        project.projectId,
-        environment.environmentId,
-      );
+      const service = yield* createTargetService(project.projectId, environment.environmentId);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -190,9 +172,7 @@ test.provider(
       const next = listed.find((proxy) => proxy.id === replaced.proxy.id);
       expect(next).toBeDefined();
       expect(next?.applicationPort).toEqual(5432);
-      expect(listed.some((proxy) => proxy.id === created.proxy.id)).toEqual(
-        false,
-      );
+      expect(listed.some((proxy) => proxy.id === created.proxy.id)).toEqual(false);
 
       yield* stack.destroy();
 

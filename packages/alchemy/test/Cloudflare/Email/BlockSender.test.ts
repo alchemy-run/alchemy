@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Email Security (Area 1) is an enterprise add-on — the standard testing
 // account is not entitled (typed `EmailSecurityNotEntitled`), so the
@@ -103,9 +100,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.BlockSender,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.BlockSender);
 
       if (entitled) {
         const deployed = yield* stack.deploy(
@@ -118,9 +113,7 @@ test.provider(
         );
 
         const all = yield* provider.list();
-        expect(
-          all.some((x) => x.blockSenderId === deployed.blockSenderId),
-        ).toBe(true);
+        expect(all.some((x) => x.blockSenderId === deployed.blockSenderId)).toBe(true);
       } else {
         const all = yield* provider.list();
         expect(all).toEqual([]);

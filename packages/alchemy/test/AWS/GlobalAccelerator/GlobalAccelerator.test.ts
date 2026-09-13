@@ -20,16 +20,11 @@ const FLOW_LOGS_BUCKET = "alchemy-test-ga-flow-logs-4f81c2";
 
 const assertAcceleratorGone = (acceleratorArn: string) =>
   ga.describeAccelerator({ AcceleratorArn: acceleratorArn }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`accelerator ${acceleratorArn} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`accelerator ${acceleratorArn} still exists`))),
     Effect.catchTag("AcceleratorNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -123,9 +118,7 @@ describe.sequential("AWS.GlobalAccelerator", () => {
           ListenerArn: created.listenerArn,
         });
         expect(lst.Listener?.Protocol).toEqual("TCP");
-        expect(lst.Listener?.PortRanges).toEqual([
-          { FromPort: 80, ToPort: 80 },
-        ]);
+        expect(lst.Listener?.PortRanges).toEqual([{ FromPort: 80, ToPort: 80 }]);
         expect(lst.Listener?.ClientAffinity).toEqual("NONE");
 
         const grp = yield* ga.describeEndpointGroup({
@@ -138,9 +131,7 @@ describe.sequential("AWS.GlobalAccelerator", () => {
         const tags = yield* ga.listTagsForResource({
           ResourceArn: created.acceleratorArn,
         });
-        const tagMap = Object.fromEntries(
-          (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-        );
+        const tagMap = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
         expect(tagMap.purpose).toEqual("alchemy-test");
         expect(tagMap["alchemy::id"]).toEqual("TestAccelerator");
 
@@ -167,12 +158,8 @@ describe.sequential("AWS.GlobalAccelerator", () => {
           AcceleratorArn: created.acceleratorArn,
         });
         expect(attrs.AcceleratorAttributes?.FlowLogsEnabled).toBe(true);
-        expect(attrs.AcceleratorAttributes?.FlowLogsS3Bucket).toEqual(
-          FLOW_LOGS_BUCKET,
-        );
-        expect(attrs.AcceleratorAttributes?.FlowLogsS3Prefix).toEqual(
-          "ga-flow-logs",
-        );
+        expect(attrs.AcceleratorAttributes?.FlowLogsS3Bucket).toEqual(FLOW_LOGS_BUCKET);
+        expect(attrs.AcceleratorAttributes?.FlowLogsS3Prefix).toEqual("ga-flow-logs");
 
         const lst2 = yield* ga.describeListener({
           ListenerArn: created.listenerArn,
@@ -186,9 +173,7 @@ describe.sequential("AWS.GlobalAccelerator", () => {
         const tags2 = yield* ga.listTagsForResource({
           ResourceArn: created.acceleratorArn,
         });
-        const tagMap2 = Object.fromEntries(
-          (tags2.Tags ?? []).map((t) => [t.Key, t.Value]),
-        );
+        const tagMap2 = Object.fromEntries((tags2.Tags ?? []).map((t) => [t.Key, t.Value]));
         expect(tagMap2.team).toEqual("platform");
 
         // --- update 2: endpoint group traffic dial + disable flow logs ---

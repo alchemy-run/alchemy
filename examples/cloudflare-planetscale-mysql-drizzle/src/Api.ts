@@ -33,10 +33,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             }
             const id = Number(request.url.split("/").pop());
             if (Number.isNaN(id)) {
-              return yield* HttpServerResponse.json(
-                { error: "Invalid user ID" },
-                { status: 400 },
-              );
+              return yield* HttpServerResponse.json({ error: "Invalid user ID" }, { status: 400 });
             }
             const user = yield* db.query.Users.findFirst({
               where: { id },
@@ -54,32 +51,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
                 email: crypto.randomUUID(),
               })
               .$returningId();
-            const user = yield* db
-              .select()
-              .from(Users)
-              .where(eq(Users.id, created!.id));
+            const user = yield* db.select().from(Users).where(eq(Users.id, created!.id));
             return yield* HttpServerResponse.json({ user });
           }
           case "DELETE": {
             const id = Number(request.url.split("/").pop());
             if (Number.isNaN(id)) {
-              return yield* HttpServerResponse.json(
-                { error: "Invalid user ID" },
-                { status: 400 },
-              );
+              return yield* HttpServerResponse.json({ error: "Invalid user ID" }, { status: 400 });
             }
-            const [user] = yield* db
-              .select()
-              .from(Users)
-              .where(eq(Users.id, id));
+            const [user] = yield* db.select().from(Users).where(eq(Users.id, id));
             yield* db.delete(Users).where(eq(Users.id, id));
             return yield* HttpServerResponse.json({ user });
           }
           default: {
-            return yield* HttpServerResponse.json(
-              { error: "Method not allowed" },
-              { status: 405 },
-            );
+            return yield* HttpServerResponse.json({ error: "Method not allowed" }, { status: 405 });
           }
         }
       }).pipe(

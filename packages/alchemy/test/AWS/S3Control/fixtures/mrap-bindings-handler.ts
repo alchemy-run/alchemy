@@ -23,12 +23,9 @@ export const BoundMrapLive = Layer.effect(
   BoundMrap,
   Effect.gen(function* () {
     const bucket = yield* AWS.S3.Bucket("S3ControlMrapBucket", {});
-    const mrap = yield* AWS.S3Control.MultiRegionAccessPoint(
-      "S3ControlMrapBindingsMrap",
-      {
-        regions: [{ bucket: bucket.bucketName }],
-      },
-    );
+    const mrap = yield* AWS.S3Control.MultiRegionAccessPoint("S3ControlMrapBindingsMrap", {
+      regions: [{ bucket: bucket.bucketName }],
+    });
     return { mrap };
   }),
 );
@@ -42,10 +39,8 @@ export default S3ControlMrapBindingsFunction.make(
   Effect.gen(function* () {
     const { mrap } = yield* BoundMrap;
 
-    const getRoutes =
-      yield* AWS.S3Control.GetMultiRegionAccessPointRoutes(mrap);
-    const submitRoutes =
-      yield* AWS.S3Control.SubmitMultiRegionAccessPointRoutes(mrap);
+    const getRoutes = yield* AWS.S3Control.GetMultiRegionAccessPointRoutes(mrap);
+    const submitRoutes = yield* AWS.S3Control.SubmitMultiRegionAccessPointRoutes(mrap);
 
     return {
       fetch: Effect.gen(function* () {

@@ -145,16 +145,12 @@ const MARKER_RE = /\s*\[alchemy:stack=([^;]+);stage=([^;]+);id=([^\]]+)\]\s*$/;
 const buildMarker = (stack: string, stage: string, id: string) =>
   `[alchemy:stack=${stack};stage=${stage};id=${id}]`;
 
-const augmentDescription = (
-  description: string | undefined,
-  marker: string,
-) => {
+const augmentDescription = (description: string | undefined, marker: string) => {
   const base = stripMarker(description ?? "");
   return base.length > 0 ? `${base}\n${marker}` : marker;
 };
 
-const stripMarker = (description: string): string =>
-  description.replace(MARKER_RE, "").trimEnd();
+const stripMarker = (description: string): string => description.replace(MARKER_RE, "").trimEnd();
 
 const parseMarker = (
   description: string | undefined,
@@ -179,9 +175,7 @@ export const DatasetProvider = () =>
       const toAttrs = Effect.fn(function* (dataset: Axiom.Dataset) {
         if (!dataset.edgeDeployment || !dataset.edgeDeploymentUrl) {
           return yield* Effect.fail(
-            new Error(
-              `Axiom dataset "${dataset.name}" is missing its edge deployment metadata`,
-            ),
+            new Error(`Axiom dataset "${dataset.name}" is missing its edge deployment metadata`),
           );
         }
         const apiRoot = apiBaseUrl.replace(/\/$/, "");
@@ -224,11 +218,7 @@ export const DatasetProvider = () =>
           if (news.kind && output && news.kind !== output.kind) {
             return { action: "replace" } as const;
           }
-          if (
-            news.edgeDeployment &&
-            output &&
-            news.edgeDeployment !== output.edgeDeployment
-          ) {
+          if (news.edgeDeployment && output && news.edgeDeployment !== output.edgeDeployment) {
             return { action: "replace" } as const;
           }
           if (
@@ -268,16 +258,10 @@ export const DatasetProvider = () =>
                 kind: news.kind,
                 retentionDays: news.retentionDays,
                 useRetentionPeriod: news.useRetentionPeriod,
-              }) as Effect.Effect<
-                Axiom.Dataset,
-                { readonly _tag: string },
-                never
-              >
+              }) as Effect.Effect<Axiom.Dataset, { readonly _tag: string }, never>
             ).pipe(
               Effect.catchIf(
-                (
-                  e,
-                ): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
+                (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
                   e._tag === "Conflict" || e._tag === "UnprocessableEntity",
                 () =>
                   update({
@@ -294,10 +278,7 @@ export const DatasetProvider = () =>
           // Sync — the dataset exists. Apply mutable aspects (description,
           // retentionDays, useRetentionPeriod) via PATCH. `kind` and `name`
           // are stable and replacement-only via diff above.
-          const desiredDescription = augmentDescription(
-            news.description,
-            marker,
-          );
+          const desiredDescription = augmentDescription(news.description, marker);
           const needsSync =
             current.description !== desiredDescription ||
             current.retentionDays !== news.retentionDays ||

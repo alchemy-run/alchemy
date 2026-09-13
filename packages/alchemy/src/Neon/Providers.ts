@@ -8,9 +8,7 @@ import { Branch, BranchProvider } from "./Branch.ts";
 import * as Credentials from "./Credentials.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Neon",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Neon") {}
 
 /**
  * Build a layer that registers all Neon resource providers, the Neon

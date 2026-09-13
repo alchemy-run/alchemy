@@ -28,10 +28,7 @@ export interface GetVocabularyFilter extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.GetVocabularyFilterRequest,
-    ) => Effect.Effect<
-      transcribe.GetVocabularyFilterResponse,
-      transcribe.GetVocabularyFilterError
-    >
+    ) => Effect.Effect<transcribe.GetVocabularyFilterResponse, transcribe.GetVocabularyFilterError>
   >
 > {}
 export const GetVocabularyFilter = Binding.Service<GetVocabularyFilter>(

@@ -37,14 +37,10 @@ export interface DescribeRuleGroupMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeRuleGroupMetadataRequest,
-    ) => Effect.Effect<
-      NFW.DescribeRuleGroupMetadataResponse,
-      NFW.DescribeRuleGroupMetadataError
-    >
+    ) => Effect.Effect<NFW.DescribeRuleGroupMetadataResponse, NFW.DescribeRuleGroupMetadataError>
   >
 > {}
 
-export const DescribeRuleGroupMetadata =
-  Binding.Service<DescribeRuleGroupMetadata>(
-    "AWS.NetworkFirewall.DescribeRuleGroupMetadata",
-  );
+export const DescribeRuleGroupMetadata = Binding.Service<DescribeRuleGroupMetadata>(
+  "AWS.NetworkFirewall.DescribeRuleGroupMetadata",
+);

@@ -21,33 +21,24 @@ const serviceLease = makeAppRegistryTestLease();
 beforeAll(serviceLease.acquire, { timeout: 3_600_000 });
 afterAll(serviceLease.release);
 
-class ApplicationStillExists extends Data.TaggedError(
-  "ApplicationStillExists",
-)<{
+class ApplicationStillExists extends Data.TaggedError("ApplicationStillExists")<{
   specifier: string;
 }> {}
 
 const assertApplicationGone = (specifier: string) =>
   appregistry.getApplication({ application: specifier }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ApplicationStillExists({ specifier })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ApplicationStillExists({ specifier }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ApplicationStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
 const listAssociatedGroupIds = (application: string) =>
   appregistry.listAssociatedAttributeGroups.pages({ application }).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.attributeGroups ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.attributeGroups ?? [])),
   );
 
 // A free, instantly-creatable no-op stack to associate with the application.
@@ -76,13 +67,10 @@ test.provider.skipIf(!process.env.AWS_TEST_APPREGISTRY)(
           const cfn = yield* Stack("AssocStack", {
             templateBody: NOOP_TEMPLATE,
           });
-          const groupAssociation = yield* AttributeGroupAssociation(
-            "GroupAssoc",
-            {
-              application: app.applicationId,
-              attributeGroup: group.attributeGroupId,
-            },
-          );
+          const groupAssociation = yield* AttributeGroupAssociation("GroupAssoc", {
+            application: app.applicationId,
+            attributeGroup: group.attributeGroupId,
+          });
           const resourceAssociation = yield* ResourceAssociation("StackAssoc", {
             application: app.applicationId,
             resourceType: "CFN_STACK",

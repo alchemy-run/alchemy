@@ -15,10 +15,7 @@ export type Message = never;
 
 // UPDATE
 
-export const update = (
-  model: Model,
-  _message: Message,
-): Update.Return<Model, Message> => ({
+export const update = (model: Model, _message: Message): Update.Return<Model, Message> => ({
   model,
 });
 

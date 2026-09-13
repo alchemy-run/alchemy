@@ -37,10 +37,7 @@ export interface BatchDeleteGeofence extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchDeleteGeofenceRequest,
-    ) => Effect.Effect<
-      location.BatchDeleteGeofenceResponse,
-      location.BatchDeleteGeofenceError
-    >
+    ) => Effect.Effect<location.BatchDeleteGeofenceResponse, location.BatchDeleteGeofenceError>
   >
 > {}
 export const BatchDeleteGeofence = Binding.Service<BatchDeleteGeofence>(

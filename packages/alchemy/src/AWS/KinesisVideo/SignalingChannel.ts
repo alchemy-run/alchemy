@@ -91,9 +91,7 @@ export interface SignalingChannel extends Resource<
  *
  * @resource
  */
-export const SignalingChannel = Resource<SignalingChannel>(
-  "AWS.KinesisVideo.SignalingChannel",
-);
+export const SignalingChannel = Resource<SignalingChannel>("AWS.KinesisVideo.SignalingChannel");
 
 export const SignalingChannelProvider = () =>
   Provider.effect(
@@ -103,21 +101,14 @@ export const SignalingChannelProvider = () =>
         id: string,
         props: { channelName?: string | undefined },
       ) {
-        return (
-          props.channelName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.channelName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const observeChannel = Effect.fn(function* (channelName: string) {
-        return yield* kv
-          .describeSignalingChannel({ ChannelName: channelName })
-          .pipe(
-            Effect.map((r) => r.ChannelInfo),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* kv.describeSignalingChannel({ ChannelName: channelName }).pipe(
+          Effect.map((r) => r.ChannelInfo),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       const fetchObservedTags = Effect.fn(function* (channelArn: string) {
@@ -134,16 +125,10 @@ export const SignalingChannelProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* kv.listSignalingChannels
-              .pages({})
-              .pipe(Stream_.runCollect);
+            const pages = yield* kv.listSignalingChannels.pages({}).pipe(Stream_.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.ChannelInfoList ?? [])
-              .filter(
-                (info) =>
-                  info.ChannelName !== undefined &&
-                  info.ChannelARN !== undefined,
-              )
+              .filter((info) => info.ChannelName !== undefined && info.ChannelARN !== undefined)
               .map((info) => ({
                 channelName: info.ChannelName!,
                 channelArn: info.ChannelARN!,
@@ -151,13 +136,9 @@ export const SignalingChannelProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const channelName =
-            output?.channelName ?? (yield* createName(id, olds ?? {}));
+          const channelName = output?.channelName ?? (yield* createName(id, olds ?? {}));
           const info = yield* observeChannel(channelName);
-          if (
-            info?.ChannelARN === undefined ||
-            info.ChannelStatus === "DELETING"
-          ) {
+          if (info?.ChannelARN === undefined || info.ChannelStatus === "DELETING") {
             return undefined;
           }
           const attrs = {
@@ -189,8 +170,7 @@ export const SignalingChannelProvider = () =>
           // (`SignalingChannel("Id")`) — normalize WITHOUT a destructuring
           // default (defaults widen the inferred Props type).
           const props = news ?? {};
-          const channelName =
-            output?.channelName ?? (yield* createName(id, props));
+          const channelName = output?.channelName ?? (yield* createName(id, props));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...props.tags, ...internalTags };
           // Wire unit is whole seconds (MessageTtlSeconds).
@@ -217,9 +197,7 @@ export const SignalingChannelProvider = () =>
                 ChannelName: channelName,
                 ChannelType: props.type ?? "SINGLE_MASTER",
                 SingleMasterConfiguration:
-                  desiredTtl !== undefined
-                    ? { MessageTtlSeconds: desiredTtl }
-                    : undefined,
+                  desiredTtl !== undefined ? { MessageTtlSeconds: desiredTtl } : undefined,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
@@ -281,9 +259,7 @@ export const SignalingChannelProvider = () =>
           // ResourceInUseException — retry through the transition (bounded).
           yield* retryWhileResourceInUse(
             kv.deleteSignalingChannel({ ChannelARN: output.channelArn }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitForChannelGone(output.channelName);
         }),
       });

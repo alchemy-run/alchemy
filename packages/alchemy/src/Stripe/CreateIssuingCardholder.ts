@@ -37,11 +37,7 @@ export interface CreateIssuingCardholder extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateIssuingCardholderRequest,
-    ) => Effect.Effect<
-      StripeIssuingCardholder,
-      CreateIssuingCardholderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeIssuingCardholder, CreateIssuingCardholderError, RuntimeContext>
   >
 > {}
 

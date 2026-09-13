@@ -27,12 +27,7 @@ export interface DeleteInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.DeleteInvitationsRequest,
-    ) => Effect.Effect<
-      macie2.DeleteInvitationsResponse,
-      macie2.DeleteInvitationsError
-    >
+    ) => Effect.Effect<macie2.DeleteInvitationsResponse, macie2.DeleteInvitationsError>
   >
 > {}
-export const DeleteInvitations = Binding.Service<DeleteInvitations>(
-  "AWS.Macie2.DeleteInvitations",
-);
+export const DeleteInvitations = Binding.Service<DeleteInvitations>("AWS.Macie2.DeleteInvitations");

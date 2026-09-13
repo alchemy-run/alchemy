@@ -13,8 +13,7 @@ import type { RegionID } from "../Region.ts";
 import { pollBatch, retryBatch } from "./internal.ts";
 
 export type JobQueueName = string;
-export type JobQueueArn =
-  `arn:aws:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
+export type JobQueueArn = `arn:aws:batch:${RegionID}:${AccountID}:job-queue/${JobQueueName}`;
 
 /**
  * Raised when a job queue's asynchronous deletion does not complete within
@@ -22,9 +21,7 @@ export type JobQueueArn =
  * delete the queue's compute environments while the association still exists,
  * wedging the whole chain.
  */
-export class JobQueueDeleteTimeoutError extends Data.TaggedError(
-  "JobQueueDeleteTimeoutError",
-)<{
+export class JobQueueDeleteTimeoutError extends Data.TaggedError("JobQueueDeleteTimeoutError")<{
   readonly jobQueueName: string;
   readonly status: string | undefined;
   readonly statusReason: string | undefined;
@@ -100,10 +97,7 @@ export interface JobQueue extends Resource<
  */
 export const JobQueue = Resource<JobQueue>("AWS.Batch.JobQueue");
 
-const toAttributes = (
-  q: batch.JobQueueDetail,
-  tags: Record<string, string>,
-) => ({
+const toAttributes = (q: batch.JobQueueDetail, tags: Record<string, string>) => ({
   jobQueueName: q.jobQueueName!,
   jobQueueArn: q.jobQueueArn as JobQueueArn,
   state: (q.state ?? "ENABLED") as "ENABLED" | "DISABLED",
@@ -117,14 +111,10 @@ const toAttributes = (
 
 const observedTagsOf = (q: { tags?: { [key: string]: string | undefined } }) =>
   Object.fromEntries(
-    Object.entries(q.tags ?? {}).filter(
-      (e): e is [string, string] => typeof e[1] === "string",
-    ),
+    Object.entries(q.tags ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"),
   );
 
-const toOrder = (
-  computeEnvironments: string[],
-): batch.ComputeEnvironmentOrder[] =>
+const toOrder = (computeEnvironments: string[]): batch.ComputeEnvironmentOrder[] =>
   computeEnvironments.map((computeEnvironment, index) => ({
     order: index + 1,
     computeEnvironment,
@@ -147,9 +137,7 @@ export const JobQueueProvider = () =>
           .describeJobQueues({ jobQueues: [name] })
           .pipe(
             Effect.map(
-              (res) =>
-                res.jobQueues?.find((q) => q.status !== "DELETED") ??
-                res.jobQueues?.[0],
+              (res) => res.jobQueues?.find((q) => q.status !== "DELETED") ?? res.jobQueues?.[0],
             ),
           );
 
@@ -159,9 +147,7 @@ export const JobQueueProvider = () =>
           describeOne(name),
           (q) =>
             q === undefined ||
-            (q.status !== "CREATING" &&
-              q.status !== "UPDATING" &&
-              q.status !== "DELETING"),
+            (q.status !== "CREATING" && q.status !== "UPDATING" && q.status !== "DELETING"),
         );
 
       const awaitDisabled = (name: string) =>
@@ -180,9 +166,7 @@ export const JobQueueProvider = () =>
         stables: ["jobQueueName", "jobQueueArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -196,22 +180,17 @@ export const JobQueueProvider = () =>
         }),
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* batch.describeJobQueues
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* batch.describeJobQueues.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.jobQueues ?? [])
               .flatMap((q) =>
-                q.jobQueueArn && q.status !== "DELETED"
-                  ? [toAttributes(q, observedTagsOf(q))]
-                  : [],
+                q.jobQueueArn && q.status !== "DELETED" ? [toAttributes(q, observedTagsOf(q))] : [],
               );
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.jobQueueName ?? (yield* toName(id, news));
-          const arn =
-            `arn:aws:batch:${region}:${accountId}:job-queue/${name}` as JobQueueArn;
+          const arn = `arn:aws:batch:${region}:${accountId}:job-queue/${name}` as JobQueueArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredState = news.state ?? "ENABLED";
@@ -257,9 +236,7 @@ export const JobQueueProvider = () =>
           }
 
           if (!queue?.jobQueueArn) {
-            return yield* Effect.die(
-              new Error(`JobQueue ${name} did not settle`),
-            );
+            return yield* Effect.die(new Error(`JobQueue ${name} did not settle`));
           }
 
           // Sync — diff observed against desired, apply only the delta.
@@ -290,10 +267,7 @@ export const JobQueueProvider = () =>
           }
 
           // Sync tags — diff against OBSERVED cloud tags.
-          const { upsert, removed } = diffTags(
-            observedTagsOf(queue),
-            desiredTags,
-          );
+          const { upsert, removed } = diffTags(observedTagsOf(queue), desiredTags);
           if (upsert.length > 0) {
             yield* batch.tagResource({
               resourceArn: arn,
@@ -305,10 +279,7 @@ export const JobQueueProvider = () =>
           }
 
           yield* session.note(arn);
-          return toAttributes(
-            { ...queue, jobQueueName: name, jobQueueArn: arn },
-            desiredTags,
-          );
+          return toAttributes({ ...queue, jobQueueName: name, jobQueueArn: arn }, desiredTags);
         }),
         delete: Effect.fn(function* ({ output }) {
           const name = output.jobQueueName;
@@ -316,10 +287,7 @@ export const JobQueueProvider = () =>
           if (!existing || existing.status === "DELETED") return;
 
           // Must be DISABLED before deletion.
-          if (
-            (existing.state ?? "ENABLED") !== "DISABLED" &&
-            existing.status !== "DELETING"
-          ) {
+          if ((existing.state ?? "ENABLED") !== "DISABLED" && existing.status !== "DELETING") {
             yield* retryBatch(
               batch.updateJobQueue({ jobQueue: name, state: "DISABLED" }),
               (e) => e._tag === "JobQueueBeingModified",

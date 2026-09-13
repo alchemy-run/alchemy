@@ -93,10 +93,7 @@ export const makeNeptuneClusterHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource: resources
-                  ? Output.map(cluster.dbClusterArn, (arn) => [
-                      arn,
-                      ...resources(arn),
-                    ])
+                  ? Output.map(cluster.dbClusterArn, (arn) => [arn, ...resources(arn)])
                   : [Output.interpolate`${cluster.dbClusterArn}`],
               },
             ],

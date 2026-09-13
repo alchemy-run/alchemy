@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { clientToken, stripAwsSystemTags } from "./internal.ts";
 
@@ -83,9 +78,7 @@ export interface AttributeGroup extends Resource<
  *
  * @resource
  */
-export const AttributeGroup = Resource<AttributeGroup>(
-  "AWS.AppRegistry.AttributeGroup",
-);
+export const AttributeGroup = Resource<AttributeGroup>("AWS.AppRegistry.AttributeGroup");
 
 export const AttributeGroupProvider = () =>
   Provider.effect(
@@ -95,21 +88,14 @@ export const AttributeGroupProvider = () =>
         id: string,
         props: Pick<AttributeGroupProps, "attributeGroupName">,
       ) {
-        return (
-          props.attributeGroupName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.attributeGroupName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       // getAttributeGroup accepts a name, ID, or ARN specifier.
       const observe = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getAttributeGroup({ attributeGroup: specifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Canonical comparison of the observed attribute JSON against the
@@ -121,20 +107,14 @@ export const AttributeGroupProvider = () =>
       ): boolean => {
         if (observed === undefined) return false;
         try {
-          return (
-            JSON.stringify(JSON.parse(observed)) === JSON.stringify(desired)
-          );
+          return JSON.stringify(JSON.parse(observed)) === JSON.stringify(desired);
         } catch {
           return false;
         }
       };
 
       return AttributeGroup.Provider.of({
-        stables: [
-          "attributeGroupId",
-          "attributeGroupArn",
-          "attributeGroupName",
-        ],
+        stables: ["attributeGroupId", "attributeGroupArn", "attributeGroupName"],
         list: () =>
           appregistry.listAttributeGroups.pages({}).pipe(
             Stream.runCollect,
@@ -150,8 +130,7 @@ export const AttributeGroupProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const specifier =
-            output?.attributeGroupId ?? (yield* createName(id, olds ?? {}));
+          const specifier = output?.attributeGroupId ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(specifier);
           if (!found?.id) return undefined;
           const attrs = {
@@ -159,9 +138,7 @@ export const AttributeGroupProvider = () =>
             attributeGroupArn: found.arn!,
             attributeGroupName: found.name!,
           };
-          return (yield* hasAlchemyTags(id, tagRecord(found.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
         // The attribute group name is its user-facing identity — changing it
         // replaces the group.
@@ -171,13 +148,7 @@ export const AttributeGroupProvider = () =>
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const attributeGroupName = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
@@ -214,12 +185,8 @@ export const AttributeGroupProvider = () =>
 
           // 3a. SYNC description + attributes — apply only the delta.
           const descriptionChanged =
-            news.description !== undefined &&
-            found!.description !== news.description;
-          const attrsChanged = !attributesEqual(
-            found!.attributes,
-            news.attributes,
-          );
+            news.description !== undefined && found!.description !== news.description;
+          const attrsChanged = !attributesEqual(found!.attributes, news.attributes);
           if (descriptionChanged || attrsChanged) {
             yield* appregistry.updateAttributeGroup({
               attributeGroup: attributeGroupId,
@@ -257,9 +224,7 @@ export const AttributeGroupProvider = () =>
             .deleteAttributeGroup({
               attributeGroup: output.attributeGroupId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

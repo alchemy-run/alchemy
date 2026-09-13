@@ -168,8 +168,7 @@ const makePipeBuilder = (state: PipeBuilderState) => ({
       {
         InputTemplate: options.inputTemplate,
         SqsQueueParameters:
-          options.messageGroupId !== undefined ||
-          options.messageDeduplicationId !== undefined
+          options.messageGroupId !== undefined || options.messageDeduplicationId !== undefined
             ? {
                 MessageGroupId: options.messageGroupId,
                 MessageDeduplicationId: options.messageDeduplicationId,
@@ -189,9 +188,7 @@ interface SourceSpec {
 const sourceSpec = (state: PipeBuilderState): SourceSpec => {
   const { source, options, filters } = state;
   // The wire field is whole seconds.
-  const maximumBatchingWindowInSeconds = toWireSeconds(
-    options.maximumBatchingWindow,
-  );
+  const maximumBatchingWindowInSeconds = toWireSeconds(options.maximumBatchingWindow);
   const filterCriteria: Pick<pipes.PipeSourceParameters, "FilterCriteria"> =
     filters.length > 0
       ? { FilterCriteria: { Filters: filters.map((Pattern) => ({ Pattern })) } }
@@ -203,11 +200,7 @@ const sourceSpec = (state: PipeBuilderState): SourceSpec => {
         statements: [
           {
             Effect: "Allow",
-            Action: [
-              "sqs:ReceiveMessage",
-              "sqs:DeleteMessage",
-              "sqs:GetQueueAttributes",
-            ],
+            Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
             Resource: [source.queueArn],
           },
         ],
@@ -323,9 +316,7 @@ const materializePipe = (
       desiredState: options.desiredState,
       source: src.arn as any,
       sourceParameters: src.parameters,
-      enrichment: state.enrichment
-        ? (state.enrichment.fn.functionArn as any)
-        : undefined,
+      enrichment: state.enrichment ? (state.enrichment.fn.functionArn as any) : undefined,
       enrichmentParameters: state.enrichment?.parameters,
       target: targetArn as any,
       targetParameters,

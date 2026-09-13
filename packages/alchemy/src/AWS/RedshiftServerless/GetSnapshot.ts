@@ -27,12 +27,7 @@ export interface GetSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: serverless.GetSnapshotRequest,
-    ) => Effect.Effect<
-      serverless.GetSnapshotResponse,
-      serverless.GetSnapshotError
-    >
+    ) => Effect.Effect<serverless.GetSnapshotResponse, serverless.GetSnapshotError>
   >
 > {}
-export const GetSnapshot = Binding.Service<GetSnapshot>(
-  "AWS.RedshiftServerless.GetSnapshot",
-);
+export const GetSnapshot = Binding.Service<GetSnapshot>("AWS.RedshiftServerless.GetSnapshot");

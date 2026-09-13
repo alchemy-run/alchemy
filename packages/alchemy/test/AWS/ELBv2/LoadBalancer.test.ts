@@ -12,10 +12,7 @@ import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Reuse the account/region default VPC and carve stack-owned subnets (subnets
 // don't count against the VPC limit). An ALB needs subnets in at least two AZs.
@@ -27,9 +24,9 @@ test.provider(
 
       const azResult = yield* EC2.describeAvailabilityZones({});
       const azs =
-        azResult.AvailabilityZones?.filter(
-          (az) => az.State === "available",
-        ).flatMap((az) => (az.ZoneName ? [az.ZoneName] : [])) ?? [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available").flatMap((az) =>
+          az.ZoneName ? [az.ZoneName] : [],
+        ) ?? [];
       const [az1, az2] = azs;
       expect(az1).toBeTruthy();
       expect(az2).toBeTruthy();
@@ -63,11 +60,9 @@ test.provider(
       const provider = yield* Provider.findProvider(LoadBalancer);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (x) => x.loadBalancerArn === deployed.loadBalancer.loadBalancerArn,
-        ),
-      ).toBe(true);
+      expect(all.some((x) => x.loadBalancerArn === deployed.loadBalancer.loadBalancerArn)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
 
@@ -78,9 +73,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => r.LoadBalancers?.length ?? 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
     }).pipe(logLevel),

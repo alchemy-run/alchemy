@@ -24,16 +24,10 @@ const PARALLEL_CSV = [
 const getParallelData = (name: string) =>
   translate
     .getParallelData({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const cleanupBucket = Effect.gen(function* () {
-  yield* s3
-    .deleteObject({ Bucket: bucketName, Key: objectKey })
-    .pipe(Effect.ignore);
+  yield* s3.deleteObject({ Bucket: bucketName, Key: objectKey }).pipe(Effect.ignore);
   yield* s3.deleteBucket({ Bucket: bucketName }).pipe(Effect.ignore);
 });
 
@@ -51,10 +45,7 @@ test.provider.skipIf(!process.env.AWS_TEST_TRANSLATE_PARALLEL_DATA)(
       yield* s3
         .createBucket({ Bucket: bucketName })
         .pipe(
-          Effect.catchTag(
-            ["BucketAlreadyOwnedByYou", "BucketAlreadyExists"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["BucketAlreadyOwnedByYou", "BucketAlreadyExists"], () => Effect.void),
         );
       yield* s3.putObject({
         Bucket: bucketName,
@@ -75,9 +66,7 @@ test.provider.skipIf(!process.env.AWS_TEST_TRANSLATE_PARALLEL_DATA)(
         }),
       );
       expect(deployed.parallelDataName).toBe(parallelDataName);
-      expect(deployed.parallelDataArn).toContain(
-        `:parallel-data/${parallelDataName}`,
-      );
+      expect(deployed.parallelDataArn).toContain(`:parallel-data/${parallelDataName}`);
       expect(deployed.status).toBe("ACTIVE");
       expect(deployed.sourceLanguageCode).toBe("en");
       expect(deployed.importedRecordCount).toBeGreaterThan(0);

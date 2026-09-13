@@ -31,7 +31,6 @@ export interface DescribeDomainChangeProgress extends Binding.Service<
     >
   >
 > {}
-export const DescribeDomainChangeProgress =
-  Binding.Service<DescribeDomainChangeProgress>(
-    "AWS.OpenSearch.DescribeDomainChangeProgress",
-  );
+export const DescribeDomainChangeProgress = Binding.Service<DescribeDomainChangeProgress>(
+  "AWS.OpenSearch.DescribeDomainChangeProgress",
+);

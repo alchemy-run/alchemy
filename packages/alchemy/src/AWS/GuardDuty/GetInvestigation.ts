@@ -32,12 +32,7 @@ export interface GetInvestigation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<guardduty.GetInvestigationRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.GetInvestigationResponse,
-      guardduty.GetInvestigationError
-    >
+    ) => Effect.Effect<guardduty.GetInvestigationResponse, guardduty.GetInvestigationError>
   >
 > {}
-export const GetInvestigation = Binding.Service<GetInvestigation>(
-  "AWS.GuardDuty.GetInvestigation",
-);
+export const GetInvestigation = Binding.Service<GetInvestigation>("AWS.GuardDuty.GetInvestigation");

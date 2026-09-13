@@ -5,11 +5,7 @@ import { isResource } from "../../Resource.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Bucket } from "../R2/Bucket.ts";
-import {
-  SearchInstance,
-  type SearchInstanceProps,
-  type SourceParams,
-} from "./SearchInstance.ts";
+import { SearchInstance, type SearchInstanceProps, type SourceParams } from "./SearchInstance.ts";
 import type { SearchNamespace } from "./SearchNamespace.ts";
 import { SearchToken } from "./SearchToken.ts";
 
@@ -285,17 +281,8 @@ export type Search = SearchInstance & {
  */
 export const Search = (id: string, props: Props) =>
   Effect.gen(function* () {
-    const {
-      source,
-      prefix,
-      include,
-      exclude,
-      jurisdiction,
-      parse,
-      store,
-      namespace,
-      ...shared
-    } = props;
+    const { source, prefix, include, exclude, jurisdiction, parse, store, namespace, ...shared } =
+      props;
 
     let tokenId = shared.tokenId;
     let serviceToken: SearchToken | undefined;
@@ -355,9 +342,7 @@ export const Search = (id: string, props: Props) =>
             })
           : undefined,
       });
-      sourceParams = webCrawler
-        ? ({ webCrawler } as Input<SourceParams>)
-        : undefined;
+      sourceParams = webCrawler ? ({ webCrawler } as Input<SourceParams>) : undefined;
     }
 
     const instance = yield* SearchInstance("Instance", {
@@ -378,11 +363,7 @@ export const Search = (id: string, props: Props) =>
   }).pipe(CoreNamespace.push(id));
 
 /** Drop `undefined` entries; return `undefined` when nothing is left. */
-const clean = <T extends object>(
-  obj: T,
-): { [K in keyof T]: T[K] } | undefined => {
+const clean = <T extends object>(obj: T): { [K in keyof T]: T[K] } | undefined => {
   const entries = Object.entries(obj).filter(([, v]) => v !== undefined);
-  return entries.length
-    ? (Object.fromEntries(entries) as { [K in keyof T]: T[K] })
-    : undefined;
+  return entries.length ? (Object.fromEntries(entries) as { [K in keyof T]: T[K] }) : undefined;
 };

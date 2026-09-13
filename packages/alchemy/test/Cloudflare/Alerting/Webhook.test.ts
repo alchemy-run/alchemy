@@ -12,10 +12,7 @@ import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/webhook-receiver.ts");
 
@@ -112,9 +109,7 @@ test.provider("list enumerates the deployed webhook destination", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Alerting.NotificationWebhook,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Alerting.NotificationWebhook);
     const all = yield* provider.list();
 
     const match = all.find((w) => w.webhookId === webhook.webhookId);
@@ -134,9 +129,6 @@ const waitForWebhookDeleted = (accountId: string, webhookId: string) =>
     Effect.catchTag("WebhookNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WebhookNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

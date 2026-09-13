@@ -292,9 +292,7 @@ export const ApplicationProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
 
       // Owned path: refresh by our persisted application id.
@@ -323,9 +321,7 @@ export const ApplicationProvider = () =>
       // 1. Observe — the app id cached on `output` is a hint, not a
       //    guarantee: a missing application falls through to the identity
       //    scan and then to create.
-      let observed = output?.appId
-        ? yield* getApp(zoneId, output.appId)
-        : undefined;
+      let observed = output?.appId ? yield* getApp(zoneId, output.appId) : undefined;
 
       // 2. Fall back to scanning the zone for a hostname + protocol match.
       //    Ownership has already been verified upstream — `read` reports
@@ -385,9 +381,7 @@ export const ApplicationProvider = () =>
                 (page.result ?? []).map((app) => toAttributes(app, zone.id)),
               ),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as ApplicationAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as ApplicationAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -407,10 +401,7 @@ type ObservedApp = spectrum.GetAppResponse;
  * partial shape.
  */
 type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
-type AnyApp =
-  | ObservedApp
-  | spectrum.CreateAppResponse
-  | spectrum.UpdateAppResponse;
+type AnyApp = ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse;
 const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
 
 /**
@@ -429,9 +420,7 @@ const getApp = (zoneId: string, appId: string) =>
  */
 const findByIdentity = (zoneId: string, dnsName: string, protocol: string) =>
   spectrum.listApps.items({ zoneId }).pipe(
-    Stream.filter(
-      (app) => app.dns.name === dnsName && app.protocol === protocol,
-    ),
+    Stream.filter((app) => app.dns.name === dnsName && app.protocol === protocol),
     Stream.take(1),
     Stream.runCollect,
     Effect.map((chunk): ObservedApp | undefined => Array.from(chunk)[0]),
@@ -484,16 +473,12 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
 
 const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
-  const observedIps =
-    "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
+  const observedIps = "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
   const observedConnectivity =
-    "connectivity" in observed
-      ? (observed.connectivity ?? "all")
-      : ("all" as const);
+    "connectivity" in observed ? (observed.connectivity ?? "all") : ("all" as const);
   return (
     (observed.type ?? "dynamic") !== (desired.type ?? "dynamic") ||
-    (desired.connectivity !== undefined &&
-      observedConnectivity !== desired.connectivity) ||
+    (desired.connectivity !== undefined && observedConnectivity !== desired.connectivity) ||
     (desired.ips !== undefined && !sameList(observedIps, desired.ips))
   );
 };
@@ -521,9 +506,7 @@ const toAttributes = (
       ? {
           name: a.originDns.name ?? undefined,
           ttl: a.originDns.ttl ?? undefined,
-          type: (a.originDns.type ?? undefined) as
-            | OriginDns["type"]
-            | undefined,
+          type: (a.originDns.type ?? undefined) as OriginDns["type"] | undefined,
         }
       : undefined,
     originPort: a.originPort ?? undefined,

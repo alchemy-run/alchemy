@@ -1,10 +1,7 @@
 import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Layer from "effect/Layer";
 import { makeSiteWiseAssetHttpBinding } from "./BindingHttp.ts";
-import {
-  ListAssetProperties,
-  type ListAssetPropertiesRequest,
-} from "./ListAssetProperties.ts";
+import { ListAssetProperties, type ListAssetPropertiesRequest } from "./ListAssetProperties.ts";
 
 export const ListAssetPropertiesHttp = Layer.effect(
   ListAssetProperties,

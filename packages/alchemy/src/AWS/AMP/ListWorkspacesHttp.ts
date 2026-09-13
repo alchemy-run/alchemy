@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  ListWorkspaces,
-  type ListWorkspacesRequest,
-} from "./ListWorkspaces.ts";
+import { ListWorkspaces, type ListWorkspacesRequest } from "./ListWorkspaces.ts";
 
 export const ListWorkspacesHttp = Layer.effect(
   ListWorkspaces,
@@ -28,9 +25,7 @@ export const ListWorkspacesHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn("AWS.AMP.ListWorkspaces")(function* (
-        request?: ListWorkspacesRequest,
-      ) {
+      return Effect.fn("AWS.AMP.ListWorkspaces")(function* (request?: ListWorkspacesRequest) {
         return yield* listWorkspaces(request ?? {});
       });
     });

@@ -20,9 +20,7 @@ export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlus
         Effect.withSpan("otel-event-flush.child"),
       ),
       ping: () =>
-        Effect.succeed("durable-object-rpc-ok").pipe(
-          Effect.withSpan("otel-event-flush.rpc"),
-        ),
+        Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
     }),
   ),
 ) {}
@@ -43,9 +41,7 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
         }
-        const targetClient = Cloudflare.toHttpClient(
-          targetNamespace.getByName("target"),
-        );
+        const targetClient = Cloudflare.toHttpClient(targetNamespace.getByName("target"));
         const response = yield* targetClient.execute(
           HttpClientRequest.get("http://otel-event-flush-target/"),
         );

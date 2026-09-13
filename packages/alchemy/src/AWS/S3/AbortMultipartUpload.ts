@@ -39,10 +39,7 @@ export interface AbortMultipartUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request: AbortMultipartUploadRequest,
-    ) => Effect.Effect<
-      S3.AbortMultipartUploadOutput,
-      S3.AbortMultipartUploadError
-    >
+    ) => Effect.Effect<S3.AbortMultipartUploadOutput, S3.AbortMultipartUploadError>
   >
 > {}
 

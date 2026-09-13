@@ -11,19 +11,14 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class PrefixListStillExists extends Data.TaggedError("PrefixListStillExists") {}
 
 const getEntries = (prefixListId: string) =>
   EC2.getManagedPrefixListEntries({ PrefixListId: prefixListId }).pipe(
     Effect.map((r) =>
-      Object.fromEntries(
-        (r.Entries ?? []).map((e) => [e.Cidr!, e.Description ?? ""]),
-      ),
+      Object.fromEntries((r.Entries ?? []).map((e) => [e.Cidr!, e.Description ?? ""])),
     ),
   );
 
@@ -71,9 +66,7 @@ test.provider(
       const described = yield* EC2.describeManagedPrefixLists({
         PrefixListIds: [prefixList.prefixListId],
       });
-      expect(described.PrefixLists?.[0]?.PrefixListId).toEqual(
-        prefixList.prefixListId,
-      );
+      expect(described.PrefixLists?.[0]?.PrefixListId).toEqual(prefixList.prefixListId);
       expect(described.PrefixLists?.[0]?.State).toEqual("create-complete");
 
       const entries1 = yield* getEntries(prefixList.prefixListId);
@@ -130,9 +123,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(PrefixList);
       const all = yield* provider.list();
-      expect(all.some((x) => x.prefixListId === prefixList.prefixListId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.prefixListId === prefixList.prefixListId)).toBe(true);
 
       yield* stack.destroy();
       yield* assertDeleted(prefixList.prefixListId);

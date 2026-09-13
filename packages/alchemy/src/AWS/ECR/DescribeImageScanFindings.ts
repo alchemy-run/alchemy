@@ -36,14 +36,10 @@ export interface DescribeImageScanFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeImageScanFindingsRequest,
-    ) => Effect.Effect<
-      ecr.DescribeImageScanFindingsResponse,
-      ecr.DescribeImageScanFindingsError
-    >
+    ) => Effect.Effect<ecr.DescribeImageScanFindingsResponse, ecr.DescribeImageScanFindingsError>
   >
 > {}
 
-export const DescribeImageScanFindings =
-  Binding.Service<DescribeImageScanFindings>(
-    "AWS.ECR.DescribeImageScanFindings",
-  );
+export const DescribeImageScanFindings = Binding.Service<DescribeImageScanFindings>(
+  "AWS.ECR.DescribeImageScanFindings",
+);

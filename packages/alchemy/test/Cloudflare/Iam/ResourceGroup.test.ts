@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic names — the same on every run (never Date.now()/random).
 const RG_NAME = "alchemy-iam-rg-crud";
@@ -57,9 +53,7 @@ test.provider(
       const accountScopeKey = `com.cloudflare.api.account.${accountId}`;
       const zone = yield* findZoneByName({ accountId, name: zoneName });
       if (!zone) {
-        return yield* Effect.die(
-          new Error(`zone "${zoneName}" not found in account`),
-        );
+        return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
       }
       const zoneObjectKey = `com.cloudflare.api.account.zone.${zone.id}`;
 
@@ -152,15 +146,11 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Iam.ResourceGroup,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Iam.ResourceGroup);
       const all = yield* provider.list();
 
       // Each element is the full `read` Attributes shape, usable by delete.
-      expect(
-        all.some((g) => g.resourceGroupId === deployed.resourceGroupId),
-      ).toBe(true);
+      expect(all.some((g) => g.resourceGroupId === deployed.resourceGroupId)).toBe(true);
 
       yield* stack.destroy();
 

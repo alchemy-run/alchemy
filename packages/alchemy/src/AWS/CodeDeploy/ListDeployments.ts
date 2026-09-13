@@ -35,6 +35,4 @@ export interface ListDeployments extends Binding.Service<
     ) => Effect.Effect<SVC.ListDeploymentsOutput, SVC.ListDeploymentsError>
   >
 > {}
-export const ListDeployments = Binding.Service<ListDeployments>(
-  "AWS.CodeDeploy.ListDeployments",
-);
+export const ListDeployments = Binding.Service<ListDeployments>("AWS.CodeDeploy.ListDeployments");

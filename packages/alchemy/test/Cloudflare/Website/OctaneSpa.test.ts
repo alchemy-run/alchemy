@@ -7,23 +7,13 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "octane-spa-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "octane-spa-app");
 
 // Keep the temp clone under the alchemy package (same convention as the
 // Vite tests) so the project root stays representable relative to cwd —
@@ -40,13 +30,7 @@ const fixtureEntries = [
   "public",
 ];
 
-const memoInclude = [
-  "src/**",
-  "public/**",
-  "index.html",
-  "vite.config.ts",
-  "package.json",
-];
+const memoInclude = ["src/**", "public/**", "index.html", "vite.config.ts", "package.json"];
 
 /** The shell marker baked into the fixture's `index.html` head. */
 const SPA_SHELL_MARKER = "octane-spa-shell";
@@ -95,27 +79,19 @@ describe.concurrent("OctaneSpa", () => {
         // (a) `/` serves the app shell (identified by the head marker).
         // The page markup renders only in the browser, so its marker must
         // be absent from the raw HTML.
-        const shellBody = yield* expectUrlContains(
-          `${site.url!}/`,
-          SPA_SHELL_MARKER,
-          {
-            timeout: "120 seconds",
-            label: "SPA shell at /",
-          },
-        );
+        const shellBody = yield* expectUrlContains(`${site.url!}/`, SPA_SHELL_MARKER, {
+          timeout: "120 seconds",
+          label: "SPA shell at /",
+        });
         expect(shellBody).not.toContain("OCTANE_SPA_PAGE_MARKER");
 
         // (b) A hard GET to an unregistered deep route serves the shell
         // with a 200 (`expectUrlContains` requires `res.ok`) — the SPA
         // fallback that lets the client-side app boot on any URL.
-        const deepBody = yield* expectUrlContains(
-          `${site.url!}/widgets/42`,
-          SPA_SHELL_MARKER,
-          {
-            timeout: "60 seconds",
-            label: "deep link serves SPA shell",
-          },
-        );
+        const deepBody = yield* expectUrlContains(`${site.url!}/widgets/42`, SPA_SHELL_MARKER, {
+          timeout: "60 seconds",
+          label: "deep link serves SPA shell",
+        });
         expect(deepBody).not.toContain("OCTANE_SPA_PAGE_MARKER");
 
         // (c) The hydrating client bundle serves and carries the content
@@ -123,24 +99,16 @@ describe.concurrent("OctaneSpa", () => {
         // and assert the page marker is inside it.
         const scriptSrc = shellBody.match(/\/assets\/[^"']+\.js/)?.[0];
         expect(scriptSrc).toBeDefined();
-        yield* expectUrlContains(
-          `${site.url!}${scriptSrc!}`,
-          "OCTANE_SPA_PAGE_MARKER",
-          {
-            timeout: "60 seconds",
-            label: "client bundle carries the page content",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}${scriptSrc!}`, "OCTANE_SPA_PAGE_MARKER", {
+          timeout: "60 seconds",
+          label: "client bundle carries the page content",
+        });
 
         // (d) A `public/` asset serves its own bytes.
-        const robots = yield* expectUrlContains(
-          `${site.url!}/robots.txt`,
-          "User-agent",
-          {
-            timeout: "60 seconds",
-            label: "static asset with SPA handling",
-          },
-        );
+        const robots = yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
+          timeout: "60 seconds",
+          label: "static asset with SPA handling",
+        });
         expect(robots).not.toContain(SPA_SHELL_MARKER);
 
         yield* stack.destroy();

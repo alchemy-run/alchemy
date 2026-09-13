@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TerminalReader } from "./TerminalReader.ts";
 
-export interface RetrieveTerminalReaderRequest extends Omit<
-  GetTerminalReaderRequest,
-  "reader"
-> {}
+export interface RetrieveTerminalReaderRequest extends Omit<GetTerminalReaderRequest, "reader"> {}
 
 /**
  * Retrieve a bound Stripe Terminal Reader over HTTP.
@@ -33,11 +30,7 @@ export interface RetrieveTerminalReader extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveTerminalReaderRequest,
-    ) => Effect.Effect<
-      GetTerminalReaderResponse,
-      GetTerminalReaderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<GetTerminalReaderResponse, GetTerminalReaderError, RuntimeContext>
   >
 > {}
 

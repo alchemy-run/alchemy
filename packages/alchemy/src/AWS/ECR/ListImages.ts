@@ -34,9 +34,7 @@ export interface ListImages extends Binding.Service<
   (
     repository: Repository,
   ) => Effect.Effect<
-    (
-      request?: ListImagesRequest,
-    ) => Effect.Effect<ecr.ListImagesResponse, ecr.ListImagesError>
+    (request?: ListImagesRequest) => Effect.Effect<ecr.ListImagesResponse, ecr.ListImagesError>
   >
 > {}
 

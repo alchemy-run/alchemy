@@ -39,13 +39,9 @@ export type WorkerLoader = {
   name: string;
   get<Err = never, Req = never>(
     name: string | null,
-    getCode: () =>
-      | WorkerLoaderWorkerCode
-      | Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
+    getCode: () => WorkerLoaderWorkerCode | Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
   ): Effect.Effect<WorkerStub, Err, Req>;
-  load(
-    code: WorkerLoaderWorkerCode,
-  ): Effect.Effect<WorkerStub, never, RuntimeContext>;
+  load(code: WorkerLoaderWorkerCode): Effect.Effect<WorkerStub, never, RuntimeContext>;
 };
 
 /**
@@ -75,10 +71,7 @@ export const isWorkerLoader = (value: unknown): value is WorkerLoader =>
   "~alchemy/Kind" in value &&
   (value as WorkerLoaderEffect)["~alchemy/Kind"] === WorkerLoaderTypeId;
 
-export interface WorkerLoaderClass extends Context.Service<
-  WorkerLoader,
-  WorkerLoader
-> {
+export interface WorkerLoaderClass extends Context.Service<WorkerLoader, WorkerLoader> {
   (name?: string): WorkerLoaderEffect;
   layer(loader: WorkerLoader): Layer.Layer<WorkerLoader>;
   layer(id: string): Layer.Layer<WorkerLoader>;
@@ -264,71 +257,60 @@ export interface WorkerLoaderClass extends Context.Service<
  * @category Workers & Compute
  */
 export const WorkerLoader: WorkerLoaderClass = Object.assign(
-  taggedFunction(
-    Context.Service()("Cloudflare.WorkerLoader"),
-    (name = "LOADER") =>
-      Object.assign(
-        Effect.gen(function* () {
-          yield* (yield* Worker).bind`${name}`({
-            bindings: [{ type: "worker_loader", name }],
-          });
+  taggedFunction(Context.Service()("Cloudflare.WorkerLoader"), (name = "LOADER") =>
+    Object.assign(
+      Effect.gen(function* () {
+        yield* (yield* Worker).bind`${name}`({
+          bindings: [{ type: "worker_loader", name }],
+        });
 
-          const loader: _WorkerLoader = yield* Effect.all([
-            WorkerEnvironment,
-            ALCHEMY_PHASE,
-          ]).pipe(
-            Effect.flatMap(([env, phase]) => {
-              if (env === undefined || phase === "plan") {
-                return Effect.succeed(undefined as any);
-              }
-              const loader = env[name];
-              if (!loader) {
-                return Effect.die(
-                  new Error(`WorkerLoader '${name}' not found in env`),
-                );
-              }
-              return Effect.succeed(loader);
-            }),
-          );
+        const loader: _WorkerLoader = yield* Effect.all([WorkerEnvironment, ALCHEMY_PHASE]).pipe(
+          Effect.flatMap(([env, phase]) => {
+            if (env === undefined || phase === "plan") {
+              return Effect.succeed(undefined as any);
+            }
+            const loader = env[name];
+            if (!loader) {
+              return Effect.die(new Error(`WorkerLoader '${name}' not found in env`));
+            }
+            return Effect.succeed(loader);
+          }),
+        );
 
-          return {
-            Type: WorkerLoaderTypeId,
-            name,
-            load: (options) =>
+        return {
+          Type: WorkerLoaderTypeId,
+          name,
+          load: (options) =>
+            Effect.sync(() => wrapWorkerStub(loader.load(unwrapWorkerLoader(options)))),
+          get: <Err = never, Req = never>(
+            name: string | null,
+            getCode: () => WorkerLoaderWorkerCode | Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
+          ) =>
+            Effect.flatMap(Effect.context<Req>(), (context) =>
               Effect.sync(() =>
-                wrapWorkerStub(loader.load(unwrapWorkerLoader(options))),
-              ),
-            get: <Err = never, Req = never>(
-              name: string | null,
-              getCode: () =>
-                | WorkerLoaderWorkerCode
-                | Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
-            ) =>
-              Effect.flatMap(Effect.context<Req>(), (context) =>
-                Effect.sync(() =>
-                  // Native get() returns a WorkerStub, not a Fetcher. The
-                  // stub's fetcher is getEntrypoint(); wrapping the stub
-                  // itself as a Fetcher makes worker.fetch throw
-                  // "fetcher.fetch is not a function" (#1382).
-                  wrapWorkerStub(
-                    loader.get(name, () =>
-                      asEffect(getCode()).pipe(
-                        Effect.provide(context),
-                        Effect.map(unwrapWorkerLoader),
-                        Effect.runPromise,
-                      ),
+                // Native get() returns a WorkerStub, not a Fetcher. The
+                // stub's fetcher is getEntrypoint(); wrapping the stub
+                // itself as a Fetcher makes worker.fetch throw
+                // "fetcher.fetch is not a function" (#1382).
+                wrapWorkerStub(
+                  loader.get(name, () =>
+                    asEffect(getCode()).pipe(
+                      Effect.provide(context),
+                      Effect.map(unwrapWorkerLoader),
+                      Effect.runPromise,
                     ),
                   ),
                 ),
               ),
-          } satisfies WorkerLoader;
-        }),
-        {
-          "~alchemy/Name": name,
-          "~alchemy/Kind": WorkerLoaderTypeId,
-          name,
-        },
-      ),
+            ),
+        } satisfies WorkerLoader;
+      }),
+      {
+        "~alchemy/Name": name,
+        "~alchemy/Kind": WorkerLoaderTypeId,
+        name,
+      },
+    ),
   ),
   {
     layer: (loader: WorkerLoader) =>
@@ -346,15 +328,12 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
  */
 const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
   ...loader,
-  globalOutbound:
-    loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
+  globalOutbound: loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
   tails: loader.tails?.map((t) => t.raw),
   streamingTails: loader.streamingTails?.map((t) => t.raw),
 });
 
-const wrapDynamicWorkerEntrypoint = <Shape>(
-  raw: any,
-): DynamicWorkerEntrypoint<Shape> =>
+const wrapDynamicWorkerEntrypoint = <Shape>(raw: any): DynamicWorkerEntrypoint<Shape> =>
   Object.assign(makeRpcStub<any>(raw), fromCloudflareFetcher(raw));
 
 const wrapWorkerStub = (raw: any): WorkerStub => {
@@ -362,8 +341,6 @@ const wrapWorkerStub = (raw: any): WorkerStub => {
   return {
     ...defaultEntrypoint,
     getEntrypoint: <Shape>(name?: string) =>
-      wrapDynamicWorkerEntrypoint<Shape>(
-        name ? raw.getEntrypoint(name) : raw.getEntrypoint(),
-      ),
+      wrapDynamicWorkerEntrypoint<Shape>(name ? raw.getEntrypoint(name) : raw.getEntrypoint()),
   };
 };

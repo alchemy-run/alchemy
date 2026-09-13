@@ -18,10 +18,7 @@ const assertGone = <R>(probe: Effect.Effect<unknown, { _tag: string }, R>) =>
     Effect.flatMap(() => Effect.fail({ _tag: "StillExists" as const })),
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -106,9 +103,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
         expect(updated.description).toEqual("updated index");
 
         yield* stack.destroy();
-        yield* assertGone(
-          location.describePlaceIndex({ IndexName: index.indexName }),
-        );
+        yield* assertGone(location.describePlaceIndex({ IndexName: index.indexName }));
       }),
     { timeout: 180_000 },
   );
@@ -256,9 +251,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
         );
         expect(updated.keyName).toEqual(key.keyName);
         expect(updated.description).toEqual("updated key");
-        expect(updated.restrictions.allowReferers).toEqual([
-          "https://example.com/*",
-        ]);
+        expect(updated.restrictions.allowReferers).toEqual(["https://example.com/*"]);
         expect(Redacted.value(updated.key)).toEqual(Redacted.value(key.key));
 
         yield* stack.destroy();
@@ -275,10 +268,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
         const out = yield* stack.deploy(
           Effect.gen(function* () {
             const tracker = yield* Location.Tracker("ConsumerTracker", {});
-            const collection = yield* Location.GeofenceCollection(
-              "ConsumerFences",
-              {},
-            );
+            const collection = yield* Location.GeofenceCollection("ConsumerFences", {});
             const link = yield* Location.TrackerConsumer("Link", {
               trackerName: tracker.trackerName,
               consumerArn: collection.collectionArn,
@@ -301,9 +291,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
         expect(consumers.ConsumerArns).toContain(out.collectionArn);
 
         yield* stack.destroy();
-        yield* assertGone(
-          location.describeTracker({ TrackerName: out.trackerName }),
-        );
+        yield* assertGone(location.describeTracker({ TrackerName: out.trackerName }));
       }),
     { timeout: 180_000 },
   );
@@ -340,9 +328,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Location", () => {
         expect(updated.description).toEqual("fleet tracker");
 
         yield* stack.destroy();
-        yield* assertGone(
-          location.describeTracker({ TrackerName: tracker.trackerName }),
-        );
+        yield* assertGone(location.describeTracker({ TrackerName: tracker.trackerName }));
       }),
     { timeout: 180_000 },
   );

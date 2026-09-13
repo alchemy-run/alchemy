@@ -69,9 +69,7 @@ export interface ResourcePolicy extends Resource<
  *
  * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.RUM.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.RUM.ResourcePolicy");
 
 /** Order-insensitive canonical form of a JSON policy document. */
 const canonicalJson = (document: string): string => {
@@ -101,9 +99,8 @@ export const ResourcePolicyProvider = () =>
         return yield* rum
           .getResourcePolicy({ Name: appMonitorName })
           .pipe(
-            Effect.catchTag(
-              ["PolicyNotFoundException", "ResourceNotFoundException"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["PolicyNotFoundException", "ResourceNotFoundException"], () =>
+              Effect.succeed(undefined),
             ),
           );
       });
@@ -139,8 +136,7 @@ export const ResourcePolicyProvider = () =>
           // revision id guards against concurrent writers).
           const policy =
             existing?.PolicyDocument !== undefined &&
-            canonicalJson(existing.PolicyDocument) ===
-              canonicalJson(news!.policyDocument)
+            canonicalJson(existing.PolicyDocument) === canonicalJson(news!.policyDocument)
               ? existing
               : yield* rum.putResourcePolicy({
                   Name: appMonitorName,
@@ -164,10 +160,7 @@ export const ResourcePolicyProvider = () =>
             ),
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(8)]),
             }),
           );
         }),

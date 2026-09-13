@@ -27,10 +27,7 @@ export interface CheckNoPublicAccess extends Binding.Service<
   () => Effect.Effect<
     (
       request: aa.CheckNoPublicAccessRequest,
-    ) => Effect.Effect<
-      aa.CheckNoPublicAccessResponse,
-      aa.CheckNoPublicAccessError
-    >
+    ) => Effect.Effect<aa.CheckNoPublicAccessResponse, aa.CheckNoPublicAccessError>
   >
 > {}
 

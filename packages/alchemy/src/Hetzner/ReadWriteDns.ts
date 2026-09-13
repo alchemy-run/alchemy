@@ -50,9 +50,7 @@ export interface ReadWriteDns extends Binding.Service<
   (zone: Zone) => Effect.Effect<ReadWriteDnsClient>
 > {}
 
-export const ReadWriteDns = Binding.Service<ReadWriteDns>(
-  "Hetzner.DNS.ReadWriteDns",
-);
+export const ReadWriteDns = Binding.Service<ReadWriteDns>("Hetzner.DNS.ReadWriteDns");
 
 /** Combined read + write DNS RRSet operations. */
 export interface ReadWriteDnsClient extends ReadDnsClient, WriteDnsClient {}

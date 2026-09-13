@@ -51,16 +51,12 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
               Resource: ["*"],
             },
           ];
-          yield* host.bind`Allow(${host}, AWS.Account.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Account.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.Account.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.Account.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

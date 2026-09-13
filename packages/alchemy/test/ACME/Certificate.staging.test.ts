@@ -20,8 +20,7 @@ const { test } = Test.make({
   providers: Layer.mergeAll(ACME.providers(), Cloudflare.providers()),
 });
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const NAME = `alchemy-acme-staging.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
@@ -34,12 +33,10 @@ const resolveZoneId = Effect.gen(function* () {
 });
 
 const challengeRecords = (zoneId: string) =>
-  dns.listRecords
-    .items({ zoneId, name: { exact: `_acme-challenge.${NAME}` }, type: "TXT" })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-    );
+  dns.listRecords.items({ zoneId, name: { exact: `_acme-challenge.${NAME}` }, type: "TXT" }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+  );
 
 test.provider(
   "issues a wildcard from Let's Encrypt staging over Cloudflare DNS-01",
@@ -64,17 +61,13 @@ test.provider(
         }),
       );
 
-      expect(deployed.account.accountUrl).toContain(
-        "acme-staging-v02.api.letsencrypt.org",
-      );
+      expect(deployed.account.accountUrl).toContain("acme-staging-v02.api.letsencrypt.org");
       expect(deployed.cert.issuer).toContain("STAGING");
       const parsed = yield* ACME.parseCertificate(deployed.cert.certificate);
       expect([...parsed.dnsNames].sort()).toEqual([`*.${NAME}`, NAME].sort());
       const now = yield* Effect.sync(() => Date.now());
       expect(Date.parse(deployed.cert.notAfter)).toBeGreaterThan(now);
-      expect(Redacted.value(deployed.cert.privateKey)).toContain(
-        "BEGIN PRIVATE KEY",
-      );
+      expect(Redacted.value(deployed.cert.privateKey)).toContain("BEGIN PRIVATE KEY");
 
       // The solver's finalizer removed every challenge record.
       expect(yield* challengeRecords(zoneId)).toEqual([]);

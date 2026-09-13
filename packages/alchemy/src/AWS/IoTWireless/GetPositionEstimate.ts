@@ -39,10 +39,7 @@ export interface GetPositionEstimate extends Binding.Service<
   () => Effect.Effect<
     (
       request: iotw.GetPositionEstimateRequest,
-    ) => Effect.Effect<
-      iotw.GetPositionEstimateResponse,
-      iotw.GetPositionEstimateError
-    >
+    ) => Effect.Effect<iotw.GetPositionEstimateResponse, iotw.GetPositionEstimateError>
   >
 > {}
 export const GetPositionEstimate = Binding.Service<GetPositionEstimate>(

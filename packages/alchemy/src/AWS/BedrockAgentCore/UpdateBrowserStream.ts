@@ -45,10 +45,7 @@ export interface UpdateBrowserStream extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateBrowserStreamRequest,
-    ) => Effect.Effect<
-      agentcore.UpdateBrowserStreamResponse,
-      agentcore.UpdateBrowserStreamError
-    >
+    ) => Effect.Effect<agentcore.UpdateBrowserStreamResponse, agentcore.UpdateBrowserStreamError>
   >
 > {}
 export const UpdateBrowserStream = Binding.Service<UpdateBrowserStream>(

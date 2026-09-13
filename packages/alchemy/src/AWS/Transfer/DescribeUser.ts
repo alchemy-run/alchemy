@@ -32,12 +32,7 @@ export interface DescribeUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<transfer.DescribeUserRequest, "ServerId" | "UserName">,
-    ) => Effect.Effect<
-      transfer.DescribeUserResponse,
-      transfer.DescribeUserError
-    >
+    ) => Effect.Effect<transfer.DescribeUserResponse, transfer.DescribeUserError>
   >
 > {}
-export const DescribeUser = Binding.Service<DescribeUser>(
-  "AWS.Transfer.DescribeUser",
-);
+export const DescribeUser = Binding.Service<DescribeUser>("AWS.Transfer.DescribeUser");

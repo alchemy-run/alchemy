@@ -6,9 +6,7 @@ import * as Option from "effect/Option";
 export const loadConfigProvider = (envFile: Option.Option<string>) => {
   if (Option.isSome(envFile)) {
     return ConfigProvider.fromDotEnv({ path: envFile.value }).pipe(
-      Effect.map((dotEnv) =>
-        ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv()),
-      ),
+      Effect.map((dotEnv) => ConfigProvider.orElse(dotEnv, ConfigProvider.fromEnv())),
     );
   }
   return Effect.gen(function* () {

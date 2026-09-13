@@ -14,9 +14,7 @@ export interface Diagnostic {
 // where `catchTag` discriminates by tag alone.
 
 /** The caller sent something the route cannot act on. */
-export class AlchemistInvalidInput extends Data.TaggedError(
-  "AlchemistInvalidInput",
-)<{
+export class AlchemistInvalidInput extends Data.TaggedError("AlchemistInvalidInput")<{
   readonly message: string;
   readonly field?: string;
 }> {

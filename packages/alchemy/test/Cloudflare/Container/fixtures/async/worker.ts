@@ -29,8 +29,7 @@ export default {
       const binding = env.ECHO as unknown;
       return Response.json({
         kind:
-          typeof (binding as { idFromName?: unknown } | null)?.idFromName ===
-          "function"
+          typeof (binding as { idFromName?: unknown } | null)?.idFromName === "function"
             ? "durable_object_namespace"
             : JSON.stringify(binding),
       });

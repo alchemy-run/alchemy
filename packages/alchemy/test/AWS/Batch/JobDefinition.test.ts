@@ -15,9 +15,7 @@ const activeRevisions = batch.describeJobDefinitions
   .pages({ jobDefinitionName: name, status: "ACTIVE" })
   .pipe(
     Stream.runCollect,
-    Effect.map((pages) =>
-      Array.from(pages).flatMap((p) => p.jobDefinitions ?? []),
-    ),
+    Effect.map((pages) => Array.from(pages).flatMap((p) => p.jobDefinitions ?? [])),
   );
 
 const jobDef = (command: string[]) =>
@@ -33,9 +31,7 @@ const jobDef = (command: string[]) =>
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"],
     });
     return yield* JobDefinition("EchoJobDef", {
       jobDefinitionName: name,
@@ -56,9 +52,7 @@ test.provider(
       expect(created.jobDefinitionName).toBe(name);
       const firstRevision = created.revision;
       expect(firstRevision).toBeGreaterThanOrEqual(1);
-      expect(created.jobDefinitionArn).toContain(
-        `job-definition/${name}:${firstRevision}`,
-      );
+      expect(created.jobDefinitionArn).toContain(`job-definition/${name}:${firstRevision}`);
 
       // Identical content — no new revision registered.
       const unchanged = yield* stack.deploy(jobDef(["echo", "one"]));

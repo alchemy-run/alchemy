@@ -83,13 +83,7 @@ export type RuleAttributes = {
   created: string | undefined;
 };
 
-export type Rule = Resource<
-  TypeId,
-  RuleProps,
-  RuleAttributes,
-  never,
-  Providers
->;
+export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>;
 
 /**
  * A Cloudflare Web Analytics (RUM) rule.
@@ -157,9 +151,7 @@ export const RuleProvider = () =>
       // flatten — the same listRules read path each rule's `read` uses.
       const sites = yield* rum.listSiteInfos.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
       );
       const rulesetIds = Array.from(
         new Set(
@@ -173,9 +165,7 @@ export const RuleProvider = () =>
         (rulesetId) =>
           listRules(accountId, rulesetId).pipe(
             Effect.map((rules) =>
-              (rules ?? []).map((rule) =>
-                toAttributes(rule, rulesetId, accountId),
-              ),
+              (rules ?? []).map((rule) => toAttributes(rule, rulesetId, accountId)),
             ),
             // A freshly minted scoped token can briefly 403 across the
             // edge — skip rulesets we momentarily can't read.
@@ -204,8 +194,7 @@ export const RuleProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const rulesetId =
-        output?.rulesetId ??
-        (typeof olds?.rulesetId === "string" ? olds.rulesetId : undefined);
+        output?.rulesetId ?? (typeof olds?.rulesetId === "string" ? olds.rulesetId : undefined);
       if (rulesetId === undefined) return undefined;
 
       // There is no getRule — read through the ruleset's rule list. A
@@ -274,15 +263,11 @@ export const RuleProvider = () =>
             // visible. Ride out the propagation window with a bounded retry.
             Effect.retry({
               while: (e) => e._tag === "RulesetNotFound",
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
             }),
           );
         const fresh = yield* listRules(accountId, rulesetId);
-        observed =
-          fresh?.find((rule) => rule.id === created.id) ?? toRule(created);
+        observed = fresh?.find((rule) => rule.id === created.id) ?? toRule(created);
         return toAttributes(observed, rulesetId, accountId);
       }
 
@@ -329,17 +314,12 @@ export const RuleProvider = () =>
           // `RuleNotFound` (code 10003) — the rule is already gone;
           // `RulesetNotFound` (404) — the parent site/ruleset is gone,
           // taking the rule with it. Both make delete a success.
-          Effect.catchTag(
-            ["RuleNotFound", "RulesetNotFound"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["RuleNotFound", "RulesetNotFound"], () => Effect.void),
         );
     }),
   });
 
-type ObservedRule = NonNullable<
-  NonNullable<rum.ListRulesResponse["rules"]>
->[number];
+type ObservedRule = NonNullable<NonNullable<rum.ListRulesResponse["rules"]>>[number];
 
 /**
  * List the rules of a ruleset, mapping "ruleset gone" (`RulesetNotFound`,
@@ -347,15 +327,11 @@ type ObservedRule = NonNullable<
  */
 const listRules = (accountId: string, rulesetId: string) =>
   rum.listRules({ accountId, rulesetId }).pipe(
-    Effect.map(
-      (response): readonly ObservedRule[] | undefined => response.rules ?? [],
-    ),
+    Effect.map((response): readonly ObservedRule[] | undefined => response.rules ?? []),
     Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
   );
 
-const toRule = (
-  rule: rum.CreateRuleResponse | rum.UpdateRuleResponse,
-): ObservedRule => rule;
+const toRule = (rule: rum.CreateRuleResponse | rum.UpdateRuleResponse): ObservedRule => rule;
 
 const samePaths = (
   observed: readonly string[] | undefined,

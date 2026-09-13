@@ -14,9 +14,7 @@ import {
 
 const VOCS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/vocs/source";
 
-export interface VocsProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface VocsProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -141,9 +139,10 @@ export const Vocs: {
         | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -154,9 +153,10 @@ export const Vocs: {
       | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -166,26 +166,23 @@ export const Vocs: {
     ? (id: string, propsEff: any) => effectClass(Vocs(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // The Worker compatibility resolver enables Node.js APIs from
-            // the date (or adds the flag when a caller pins an older date).
-            assets: {
-              htmlHandling: "drop-trailing-slash" as const,
-              ...props?.assets,
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // The Worker compatibility resolver enables Node.js APIs from
+          // the date (or adds the flag when a caller pins an older date).
+          assets: {
+            htmlHandling: "drop-trailing-slash" as const,
+            ...props?.assets,
+          },
+          main: undefined!,
+          source: {
+            provider: VOCS_SOURCE_PROVIDER,
+            devMode: "server",
+            options: {
+              rootDir: props?.rootDir,
+              outDir: props?.outDir,
+              memo: props?.memo,
             },
-            main: undefined!,
-            source: {
-              provider: VOCS_SOURCE_PROVIDER,
-              devMode: "server",
-              options: {
-                rootDir: props?.rootDir,
-                outDir: props?.outDir,
-                memo: props?.memo,
-              },
-            },
-          }),
-        ),
+          },
+        })),
       )) as any;

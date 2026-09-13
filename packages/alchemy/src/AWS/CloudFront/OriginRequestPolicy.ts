@@ -102,11 +102,7 @@ export const OriginRequestPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getOriginRequestPolicyConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchOriginRequestPolicy", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.succeed(undefined)));
         if (!config?.OriginRequestPolicyConfig) return undefined;
         return { config: config.OriginRequestPolicyConfig, etag: config.ETag };
       });
@@ -116,15 +112,12 @@ export const OriginRequestPolicyProvider = () =>
           Type: "custom",
         });
         const summary = listed.OriginRequestPolicyList?.Items?.find(
-          (item) =>
-            item.OriginRequestPolicy?.OriginRequestPolicyConfig?.Name === name,
+          (item) => item.OriginRequestPolicy?.OriginRequestPolicyConfig?.Name === name,
         );
         if (!summary?.OriginRequestPolicy?.Id) return undefined;
         return yield* getById(summary.OriginRequestPolicy.Id).pipe(
           Effect.map((found) =>
-            found
-              ? { id: summary.OriginRequestPolicy.Id, ...found }
-              : undefined,
+            found ? { id: summary.OriginRequestPolicy.Id, ...found } : undefined,
           ),
         );
       });
@@ -158,10 +151,7 @@ export const OriginRequestPolicyProvider = () =>
         stables: ["originRequestPolicyId"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
@@ -169,11 +159,7 @@ export const OriginRequestPolicyProvider = () =>
           if (output?.originRequestPolicyId) {
             const found = yield* getById(output.originRequestPolicyId);
             if (found) {
-              return toAttrs(
-                output.originRequestPolicyId,
-                found.config,
-                found.etag,
-              );
+              return toAttrs(output.originRequestPolicyId, found.config, found.etag);
             }
           }
           const name = yield* createName(id, olds ?? {});
@@ -197,12 +183,10 @@ export const OriginRequestPolicyProvider = () =>
                   Type: "custom",
                   Marker: marker,
                 });
-              for (const summary of listed.OriginRequestPolicyList?.Items ??
-                []) {
+              for (const summary of listed.OriginRequestPolicyList?.Items ?? []) {
                 if (summary.Type !== "custom") continue;
                 const id = summary.OriginRequestPolicy?.Id;
-                const config =
-                  summary.OriginRequestPolicy?.OriginRequestPolicyConfig;
+                const config = summary.OriginRequestPolicy?.OriginRequestPolicyConfig;
                 if (!id || !config) continue;
                 const found = yield* getById(id);
                 items.push(toAttrs(id, found?.config ?? config, found?.etag));
@@ -219,9 +203,7 @@ export const OriginRequestPolicyProvider = () =>
           let observed = output?.originRequestPolicyId
             ? yield* getById(output.originRequestPolicyId).pipe(
                 Effect.map((found) =>
-                  found
-                    ? { id: output.originRequestPolicyId, ...found }
-                    : undefined,
+                  found ? { id: output.originRequestPolicyId, ...found } : undefined,
                 ),
               )
             : undefined;
@@ -300,9 +282,7 @@ export const OriginRequestPolicyProvider = () =>
               Id: output.originRequestPolicyId,
               IfMatch: current.etag,
             })
-            .pipe(
-              Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.void));
         }),
       };
     }),

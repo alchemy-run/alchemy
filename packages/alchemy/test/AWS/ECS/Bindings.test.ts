@@ -11,9 +11,7 @@ import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 import OneShotTask from "./fixtures/oneshot-task.ts";
-import EcsBindingsTestFunctionLive, {
-  EcsBindingsTestFunction,
-} from "./handler.ts";
+import EcsBindingsTestFunctionLive, { EcsBindingsTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -43,10 +41,7 @@ const infra = Effect.gen(function* () {
 
 // Deploy is heavy: default-VPC subnet + cluster + the one-shot task definition
 // + Lambda. Keep readiness polling bounded after the deploy completes.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 let baseUrl: string;
 
@@ -63,19 +58,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -94,28 +84,16 @@ interface DescribedTask {
 }
 
 const runTask = (body: { command?: string[]; startedBy?: string }) =>
-  send(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(`${baseUrl}/run`),
-      body,
-    ),
-  ).pipe(
+  send(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/run`), body)).pipe(
     Effect.flatMap((r) => r.json),
     Effect.map((json) => json as RunResponse),
   );
 
 const describeTask = (taskArn: string) =>
-  send(
-    HttpClientRequest.get(
-      `${baseUrl}/describe?task=${encodeURIComponent(taskArn)}`,
-    ),
-  ).pipe(
+  send(HttpClientRequest.get(`${baseUrl}/describe?task=${encodeURIComponent(taskArn)}`)).pipe(
     Effect.flatMap((r) => r.json),
     Effect.map(
-      (json) =>
-        (json as { tasks?: DescribedTask[] }).tasks?.[0] as
-          | DescribedTask
-          | undefined,
+      (json) => (json as { tasks?: DescribedTask[] }).tasks?.[0] as DescribedTask | undefined,
     ),
   );
 
@@ -160,9 +138,7 @@ describe("ECS Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/list`;
 
-      yield* Effect.logInfo(
-        `ECS bindings setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ECS bindings setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -170,9 +146,7 @@ describe("ECS Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `ECS bindings setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`ECS bindings setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -227,12 +201,9 @@ describe("ECS Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/describe?task=00000000000000000000000000000000`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/describe?task=00000000000000000000000000000000`),
           ).pipe(Effect.flatMap((r) => r.json));
-          const failures = (response as { failures?: { reason?: string }[] })
-            .failures;
+          const failures = (response as { failures?: { reason?: string }[] }).failures;
           expect(failures?.length).toBe(1);
           expect(failures?.[0]?.reason).toBe("MISSING");
         }),
@@ -252,14 +223,10 @@ describe("ECS Bindings", () => {
           // so poll the STOPPED listing until it appears (stopped tasks stay
           // listed for ~an hour).
           const taskArns = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/list?status=STOPPED&startedBy=alchemy-list-test`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/list?status=STOPPED&startedBy=alchemy-list-test`),
           ).pipe(
             Effect.flatMap((r) => r.json),
-            Effect.map(
-              (json) => (json as { taskArns: string[] }).taskArns ?? [],
-            ),
+            Effect.map((json) => (json as { taskArns: string[] }).taskArns ?? []),
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (arns) => arns.includes(run.taskArn!),
@@ -277,12 +244,10 @@ describe("ECS Bindings", () => {
       "lists services in the bound cluster (none deployed)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/services`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as { serviceArns: string[] }).serviceArns).toEqual(
-            [],
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/services`)).pipe(
+            Effect.flatMap((r) => r.json),
           );
+          expect((response as { serviceArns: string[] }).serviceArns).toEqual([]);
         }),
       { timeout: 60_000 },
     );
@@ -294,12 +259,9 @@ describe("ECS Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/describe-services?service=alchemy-no-such-service`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/describe-services?service=alchemy-no-such-service`),
           ).pipe(Effect.flatMap((r) => r.json));
-          const failures = (response as { failures?: { reason?: string }[] })
-            .failures;
+          const failures = (response as { failures?: { reason?: string }[] }).failures;
           expect(failures?.length).toBe(1);
           expect(failures?.[0]?.reason).toBe("MISSING");
         }),
@@ -315,10 +277,9 @@ describe("ECS Bindings", () => {
           const response = yield* send(
             HttpClientRequest.get(`${baseUrl}/container-instances`),
           ).pipe(Effect.flatMap((r) => r.json));
-          expect(
-            (response as { containerInstanceArns: string[] })
-              .containerInstanceArns,
-          ).toEqual([]);
+          expect((response as { containerInstanceArns: string[] }).containerInstanceArns).toEqual(
+            [],
+          );
         }),
       { timeout: 60_000 },
     );
@@ -346,35 +307,26 @@ describe("ECS Bindings", () => {
             protectedTasks?: unknown[];
           }
           const isTaskNotValid = (r: ProtectionResponse): boolean =>
-            r.error === "InvalidParameterException" ||
-            r.failures?.[0]?.reason === "TASK_NOT_VALID";
+            r.error === "InvalidParameterException" || r.failures?.[0]?.reason === "TASK_NOT_VALID";
 
           const protect = (yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/protect`),
-              {
-                taskArn: run.taskArn,
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/protect`), {
+              taskArn: run.taskArn,
+            }),
           ).pipe(Effect.flatMap((r) => r.json))) as ProtectionResponse;
           expect(isTaskNotValid(protect)).toBe(true);
 
           const protection = (yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/protection?task=${encodeURIComponent(run.taskArn!)}`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/protection?task=${encodeURIComponent(run.taskArn!)}`),
           ).pipe(Effect.flatMap((r) => r.json))) as ProtectionResponse;
           expect(isTaskNotValid(protection)).toBe(true);
 
           // Clean up the sleeping task.
           yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/stop`),
-              {
-                taskArn: run.taskArn,
-                reason: "protection test done",
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/stop`), {
+              taskArn: run.taskArn,
+              reason: "protection test done",
+            }),
           );
         }),
       { timeout: 120_000 },
@@ -395,18 +347,13 @@ describe("ECS Bindings", () => {
           expect(run.taskArn).toBeTruthy();
 
           const stop = yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/stop`),
-              {
-                taskArn: run.taskArn,
-                reason: "alchemy stop test",
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/stop`), {
+              taskArn: run.taskArn,
+              reason: "alchemy stop test",
+            }),
           ).pipe(Effect.flatMap((r) => r.json));
           expect((stop as { taskArn?: string }).taskArn).toBe(run.taskArn);
-          expect((stop as { desiredStatus?: string }).desiredStatus).toBe(
-            "STOPPED",
-          );
+          expect((stop as { desiredStatus?: string }).desiredStatus).toBe("STOPPED");
 
           const stopped = yield* describeUntilStopped(run.taskArn!);
           expect(stopped?.lastStatus).toBe("STOPPED");

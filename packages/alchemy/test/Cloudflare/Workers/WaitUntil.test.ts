@@ -13,10 +13,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -27,13 +24,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // already reach the worker. Route matching uses `url.pathname`, so the
 // param is invisible to the fixture.
 let bust = 0;
-const getText = (
-  client: HttpClient.HttpClient,
-  url: string,
-): Effect.Effect<string, unknown> =>
-  client
-    .get(`${url}?cb=${Date.now()}-${bust++}`)
-    .pipe(Effect.flatMap((res) => res.text));
+const getText = (client: HttpClient.HttpClient, url: string): Effect.Effect<string, unknown> =>
+  client.get(`${url}?cb=${Date.now()}-${bust++}`).pipe(Effect.flatMap((res) => res.text));
 
 describe.skipIf(!!process.env.FAST)(
   "waitUntil runs background Effects past the response (worker ctx + DO state)",
@@ -71,17 +63,14 @@ describe.skipIf(!!process.env.FAST)(
           // The workers.dev placeholder serves HTML with a 200 during subdomain
           // propagation; a bare JSON.parse throw would be a *defect* that the
           // `Effect.catch` below can't see, so parse as a typed failure.
-          const body = yield* Effect.try(
-            () => JSON.parse(text) as { entries?: string[] },
-          );
+          const body = yield* Effect.try(() => JSON.parse(text) as { entries?: string[] });
           return body.entries ?? [];
         }).pipe(
           Effect.catch(() => Effect.succeed([] as string[])),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (entries) =>
-              entries.includes("from-worker-wait-until") &&
-              entries.includes("from-do-wait-until"),
+              entries.includes("from-worker-wait-until") && entries.includes("from-do-wait-until"),
             times: 30,
           }),
         );
@@ -115,30 +104,23 @@ describe.skipIf(!!process.env.FAST)(
         yield* expectUrlContains(`${url}/finalizer`, "finalizer-scheduled", {
           label: "finalizer /finalizer",
         });
-        yield* expectUrlContains(
-          `${url}/finalizer-do`,
-          "do-finalizer-scheduled",
-          {
-            label: "finalizer /finalizer-do",
-          },
-        );
+        yield* expectUrlContains(`${url}/finalizer-do`, "do-finalizer-scheduled", {
+          label: "finalizer /finalizer-do",
+        });
 
         const entries = yield* Effect.gen(function* () {
           const text = yield* getText(client, `${url}/entries`);
           // The workers.dev placeholder serves HTML with a 200 during subdomain
           // propagation; a bare JSON.parse throw would be a *defect* that the
           // `Effect.catch` below can't see, so parse as a typed failure.
-          const body = yield* Effect.try(
-            () => JSON.parse(text) as { entries?: string[] },
-          );
+          const body = yield* Effect.try(() => JSON.parse(text) as { entries?: string[] });
           return body.entries ?? [];
         }).pipe(
           Effect.catch(() => Effect.succeed([] as string[])),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (entries) =>
-              entries.includes("from-request-finalizer") &&
-              entries.includes("from-do-finalizer"),
+              entries.includes("from-request-finalizer") && entries.includes("from-do-finalizer"),
             times: 30,
           }),
         );
@@ -158,9 +140,7 @@ describe.skipIf(!!process.env.FAST)(
         // events it has served.
         const observation = yield* Effect.gen(function* () {
           const init = Number(yield* getText(client, `${url}/init-runs`));
-          const finalized = Number(
-            yield* getText(client, `${url}/init-finalizer-runs`),
-          );
+          const finalized = Number(yield* getText(client, `${url}/init-finalizer-runs`));
           return { init, finalized };
         }).pipe(
           Effect.repeat({

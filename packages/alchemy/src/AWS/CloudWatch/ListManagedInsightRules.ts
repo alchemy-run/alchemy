@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListManagedInsightRulesRequest
-  extends cloudwatch.ListManagedInsightRulesInput {}
+export interface ListManagedInsightRulesRequest extends cloudwatch.ListManagedInsightRulesInput {}
 
 /**
  * Runtime binding for `cloudwatch:ListManagedInsightRules` — list the

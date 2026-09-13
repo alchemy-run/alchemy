@@ -13,7 +13,6 @@ export const TestIdentityProviderHttp = Layer.effect(
     // AWS authorizes this operation against the addressed user, despite the
     // binding being server-scoped so it can inject ServerId. UserName arrives
     // at runtime, so grant the operation on every user of the bound server.
-    resource: (server) =>
-      Output.map(server.arn, (arn) => `${arn.replace(":server/", ":user/")}/*`),
+    resource: (server) => Output.map(server.arn, (arn) => `${arn.replace(":server/", ":user/")}/*`),
   }),
 );

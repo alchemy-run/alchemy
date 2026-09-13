@@ -63,9 +63,7 @@ test.provider(
       expect(original.key).toBe(original.name);
       expect(original.name.length).toBeGreaterThan(0);
       const live = yield* listLive(base.box.environmentId);
-      expect(
-        live.find((item) => item.id === original.sandboxCheckpointId),
-      ).toEqual({
+      expect(live.find((item) => item.id === original.sandboxCheckpointId)).toEqual({
         id: original.sandboxCheckpointId,
         key: original.key,
         createdAt: original.createdAt,
@@ -82,16 +80,14 @@ test.provider(
 
       const unchanged = yield* stack.deploy(Snapshot());
       expect(unchanged.checkpoint).toEqual(original);
-      const renamed = yield* stack.deploy(
-        Snapshot("restorable-checkpoint", true),
-      );
+      const renamed = yield* stack.deploy(Snapshot("restorable-checkpoint", true));
       expect(renamed.checkpoint.name).toBe("restorable-checkpoint");
       expect(renamed.checkpoint.createdAt).toBe(original.createdAt);
       const renamedLive = yield* listLive(base.box.environmentId);
       expect(renamedLive.some((item) => item.key === original.key)).toBe(false);
-      expect(
-        renamedLive.find((item) => item.key === renamed.checkpoint.key)?.id,
-      ).toBe(renamed.checkpoint.sandboxCheckpointId);
+      expect(renamedLive.find((item) => item.key === renamed.checkpoint.key)?.id).toBe(
+        renamed.checkpoint.sandboxCheckpointId,
+      );
       expect(renamed.restored).toBeDefined();
       const restored = yield* Railway.execSandbox({
         sandboxId: renamed.restored!.sandboxId,
@@ -158,13 +154,8 @@ test.provider(
       for (const recapture of [false, true]) {
         const created = yield* stack.deploy(Snapshot("before-rename"));
         const persisted = yield* state.get(key);
-        if (
-          persisted?.status !== "created" &&
-          persisted?.status !== "updated"
-        ) {
-          return yield* Effect.fail(
-            new Error("Expected a stable checkpoint row"),
-          );
+        if (persisted?.status !== "created" && persisted?.status !== "updated") {
+          return yield* Effect.fail(new Error("Expected a stable checkpoint row"));
         }
         const attempted: Railway.SandboxCheckpointProps = {
           sandbox: {
@@ -281,9 +272,7 @@ test.provider(
       if (Result.isFailure(denied)) {
         expect(denied.failure).toBeInstanceOf(OwnedBySomeoneElse);
       }
-      expect((yield* listLive(base.box.environmentId))[0]?.createdAt).toBe(
-        foreign.createdAt,
-      );
+      expect((yield* listLive(base.box.environmentId))[0]?.createdAt).toBe(foreign.createdAt);
 
       const adopted = yield* stack.deploy(program(true));
       expect(adopted.sandboxCheckpointId).toBe(foreign.id);
@@ -296,18 +285,16 @@ test.provider(
         },
         { id: true, createdAt: true },
       );
-      const collision = yield* Effect.result(
-        stack.deploy(program(false, "occupied-checkpoint")),
-      );
+      const collision = yield* Effect.result(stack.deploy(program(false, "occupied-checkpoint")));
       expect(Result.isFailure(collision)).toBe(true);
       const afterCollision = yield* listLive(base.box.environmentId);
       expect(afterCollision).toHaveLength(2);
-      expect(
-        afterCollision.find((item) => item.id === occupied.id)?.createdAt,
-      ).toBe(occupied.createdAt);
-      expect(
-        afterCollision.find((item) => item.id === foreign.id)?.createdAt,
-      ).toBe(foreign.createdAt);
+      expect(afterCollision.find((item) => item.id === occupied.id)?.createdAt).toBe(
+        occupied.createdAt,
+      );
+      expect(afterCollision.find((item) => item.id === foreign.id)?.createdAt).toBe(
+        foreign.createdAt,
+      );
       yield* railway.deleteSandboxCheckpoint({
         environmentId: base.box.environmentId,
         id: occupied.id,

@@ -79,11 +79,7 @@ describe("test.provider scratch state durability", () => {
       expect(Core.defaultStage()).toBe(expected);
       const scratch = Core.scratchStack(options, NAME, FILE);
       expect(scratch.stage).toBe(expected);
-      const overridden = Core.scratchStack(
-        { ...options, stage: "custom" },
-        NAME,
-        FILE,
-      );
+      const overridden = Core.scratchStack({ ...options, stage: "custom" }, NAME, FILE);
       expect(overridden.stage).toBe("custom");
     }),
   );

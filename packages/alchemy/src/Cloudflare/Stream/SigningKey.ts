@@ -38,13 +38,7 @@ export type SigningKeyAttributes = {
   jwk: Redacted.Redacted<string>;
 };
 
-export type SigningKey = Resource<
-  TypeId,
-  SigningKeyProps,
-  SigningKeyAttributes,
-  never,
-  Providers
->;
+export type SigningKey = Resource<TypeId, SigningKeyProps, SigningKeyAttributes, never, Providers>;
 
 /**
  * A Cloudflare Stream signing key — an RSA key pair used to sign viewer
@@ -180,8 +174,4 @@ export const SigningKeyProvider = () =>
 const findKey = (accountId: string, keyId: string) =>
   stream
     .getKey({ accountId })
-    .pipe(
-      Effect.map((response) =>
-        (response.result ?? []).some((key) => key.id === keyId),
-      ),
-    );
+    .pipe(Effect.map((response) => (response.result ?? []).some((key) => key.id === keyId)));

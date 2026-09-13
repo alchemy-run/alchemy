@@ -15,18 +15,14 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Prisma.providers() });
 
 const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials =
-  process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
+const hasLiveCredentials = process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
 const runLive = wantsLive && hasLiveCredentials;
 const wantsCleanup =
   process.env.ALCHEMY_RUN_LIVE_PRISMA_CLEANUP === "true" &&
   !!process.env.PRISMA_CLEANUP_PROJECT_ID?.trim();
 const runCleanup = wantsCleanup && hasLiveCredentials;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 if (wantsLive && !hasLiveCredentials) {
   test(
@@ -63,8 +59,7 @@ test.provider.skipIf(!runCleanup)(
     Effect.gen(function* () {
       const projectId = process.env.PRISMA_CLEANUP_PROJECT_ID!.trim();
       const appId = process.env.PRISMA_CLEANUP_APP_ID?.trim() || undefined;
-      const deploymentId =
-        process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
+      const deploymentId = process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
 
       if (deploymentId) {
         yield* Prisma.destroyDeployment(deploymentId, {
@@ -94,9 +89,7 @@ test.provider.skipIf(!runLive)(
       });
       yield* fs.writeFileString(
         path.join(appDir, "package.json"),
-        ["{", '  "type": "module",', '  "main": "server.ts"', "}", ""].join(
-          "\n",
-        ),
+        ["{", '  "type": "module",', '  "main": "server.ts"', "}", ""].join("\n"),
       );
       yield* fs.writeFileString(
         path.join(appDir, "server.ts"),
@@ -191,10 +184,7 @@ test.provider.skipIf(!runLive)(
                 ),
             ),
           );
-        yield* expectGone(
-          "Prisma project",
-          Prisma.getProject(deployed.projectId),
-        );
+        yield* expectGone("Prisma project", Prisma.getProject(deployed.projectId));
         yield* expectGone("Prisma App", Prisma.getApp(deployed.appId));
       }).pipe(
         Effect.ensuring(
@@ -217,9 +207,7 @@ test.provider.skipIf(!runLive)(
       const fixture = yield* path.fromFileUrl(
         new URL("./fixtures/compute-static-live/", import.meta.url),
       );
-      const nodeModules = yield* path.fromFileUrl(
-        new URL("../../node_modules/", import.meta.url),
-      );
+      const nodeModules = yield* path.fromFileUrl(new URL("../../node_modules/", import.meta.url));
       const appDir = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-prisma-static-site-",
       });
@@ -250,21 +238,11 @@ test.provider.skipIf(!runLive)(
 
       const verifySite = Effect.fn(function* (url: string, version: string) {
         const origin = url.replace(/\/$/, "");
-        const index = yield* fs.readFileString(
-          path.join(appDir, "dist/index.html"),
-        );
-        const script = yield* fs.readFileString(
-          path.join(appDir, "dist/assets/app.js"),
-        );
-        const scriptStat = yield* fs.stat(
-          path.join(appDir, "dist/assets/app.js"),
-        );
-        const docs = yield* fs.readFileString(
-          path.join(appDir, "dist/docs/index.html"),
-        );
-        const docsStyle = yield* fs.readFileString(
-          path.join(appDir, "dist/docs/style.css"),
-        );
+        const index = yield* fs.readFileString(path.join(appDir, "dist/index.html"));
+        const script = yield* fs.readFileString(path.join(appDir, "dist/assets/app.js"));
+        const scriptStat = yield* fs.stat(path.join(appDir, "dist/assets/app.js"));
+        const docs = yield* fs.readFileString(path.join(appDir, "dist/docs/index.html"));
+        const docsStyle = yield* fs.readFileString(path.join(appDir, "dist/docs/style.css"));
         expect(index).toContain("alchemy static shell");
         expect(index).toContain(`<p id="version">${version}</p>`);
         expect(script).toContain("alchemy static asset");
@@ -274,9 +252,7 @@ test.provider.skipIf(!runLive)(
           const text = yield* response.text;
           if (response.status !== 200 || text !== index) {
             return yield* Effect.fail(
-              new Error(
-                `Static site ${version} is not ready (HTTP ${response.status})`,
-              ),
+              new Error(`Static site ${version} is not ready (HTTP ${response.status})`),
             );
           }
         }).pipe(
@@ -299,26 +275,18 @@ test.provider.skipIf(!runLive)(
 
         const query = "?from=%2Fclient%2Froute&next=%2F%2Fevil.example";
         for (const pathname of ["/docs", "//docs"]) {
-          const redirect = yield* HttpClient.get(
-            `${origin}${pathname}${query}`,
-          );
+          const redirect = yield* HttpClient.get(`${origin}${pathname}${query}`);
           expect(redirect.status).toBe(301);
           expect(redirect.headers["location"]).toBe(`/docs/${query}`);
-          const target = yield* Effect.sync(
-            () => new URL(redirect.headers["location"]!, origin),
-          );
+          const target = yield* Effect.sync(() => new URL(redirect.headers["location"]!, origin));
           expect(target.origin).toBe(origin);
           expect(target.search).toBe(query);
-          expect(decodeURIComponent(target.pathname).replace(/^\/+/, "/")).toBe(
-            "/docs/",
-          );
+          expect(decodeURIComponent(target.pathname).replace(/^\/+/, "/")).toBe("/docs/");
           yield* redirect.text;
           const directory = yield* HttpClient.get(target.href);
           expect(directory.status).toBe(200);
           expect(yield* directory.text).toBe(docs);
-          const relativeAsset = yield* Effect.sync(
-            () => new URL("./style.css", target).href,
-          );
+          const relativeAsset = yield* Effect.sync(() => new URL("./style.css", target).href);
           const stylesheet = yield* HttpClient.get(relativeAsset);
           expect(stylesheet.status).toBe(200);
           expect(stylesheet.headers["content-type"]).toContain("text/css");
@@ -331,12 +299,12 @@ test.provider.skipIf(!runLive)(
         const output = yield* deploy("v1");
         expect(output.site.url).toBeDefined();
         expect(output.site.deploymentId).toBeDefined();
-        expect(
-          (yield* getProject({ id: output.project.projectId })).data.id,
-        ).toBe(output.project.projectId);
-        expect(
-          (yield* getService({ serviceId: output.site.appId })).data.id,
-        ).toBe(output.site.appId);
+        expect((yield* getProject({ id: output.project.projectId })).data.id).toBe(
+          output.project.projectId,
+        );
+        expect((yield* getService({ serviceId: output.site.appId })).data.id).toBe(
+          output.site.appId,
+        );
         yield* verifySite(output.site.url!, "v1").pipe(
           Effect.timeout("20 seconds"),
           Effect.provideService(FetchHttpClient.RequestInit, {
@@ -352,9 +320,9 @@ test.provider.skipIf(!runLive)(
         expect(updated.site.url).toBe(output.site.url);
         expect(updated.site.deploymentId).toBeDefined();
         expect(updated.site.deploymentId).not.toBe(output.site.deploymentId);
-        expect(
-          (yield* getService({ serviceId: updated.site.appId })).data.id,
-        ).toBe(updated.site.appId);
+        expect((yield* getService({ serviceId: updated.site.appId })).data.id).toBe(
+          updated.site.appId,
+        );
         yield* verifySite(updated.site.url!, "v2").pipe(
           Effect.timeout("20 seconds"),
           Effect.provideService(FetchHttpClient.RequestInit, {
@@ -407,9 +375,7 @@ test.provider.skipIf(!runLive)(
       });
       yield* fs.writeFileString(
         path.join(appDir, "package.json"),
-        ["{", '  "type": "module",', '  "main": "server.ts"', "}", ""].join(
-          "\n",
-        ),
+        ["{", '  "type": "module",', '  "main": "server.ts"', "}", ""].join("\n"),
       );
       yield* fs.writeFileString(
         path.join(appDir, "server.ts"),
@@ -504,17 +470,12 @@ const fetchText = (url: string) =>
     const http = yield* HttpClient.HttpClient;
     const response = yield* http.execute(HttpClientRequest.get(url));
     if (response.status < 200 || response.status >= 300) {
-      return yield* Effect.fail(
-        new Error(`Prisma Compute app returned HTTP ${response.status}`),
-      );
+      return yield* Effect.fail(new Error(`Prisma Compute app returned HTTP ${response.status}`));
     }
     return yield* response.text;
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential(Duration.seconds(1)),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential(Duration.seconds(1)), Schedule.recurs(8)]),
     }),
   );
 
@@ -527,9 +488,6 @@ const expectGone = <A, E, R>(label: string, effect: Effect.Effect<A, E, R>) =>
     if (!gone) return yield* Effect.fail(new Error(`${label} still exists`));
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential(Duration.seconds(1)),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential(Duration.seconds(1)), Schedule.recurs(8)]),
     }),
   );

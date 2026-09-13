@@ -35,9 +35,7 @@ export interface CreateAPIKey extends Binding.Service<
   >
 > {}
 
-export const CreateAPIKey = Binding.Service<CreateAPIKey>(
-  "AWS.WAFv2.CreateAPIKey",
-);
+export const CreateAPIKey = Binding.Service<CreateAPIKey>("AWS.WAFv2.CreateAPIKey");
 
 /**
  * Runtime binding for `wafv2:GetDecryptedAPIKey` — read the token domains
@@ -66,10 +64,7 @@ export interface GetDecryptedAPIKey extends Binding.Service<
   () => Effect.Effect<
     (
       request: WAFV2.GetDecryptedAPIKeyRequest,
-    ) => Effect.Effect<
-      WAFV2.GetDecryptedAPIKeyResponse,
-      WAFV2.GetDecryptedAPIKeyError
-    >
+    ) => Effect.Effect<WAFV2.GetDecryptedAPIKeyResponse, WAFV2.GetDecryptedAPIKeyError>
   >
 > {}
 
@@ -106,9 +101,7 @@ export interface ListAPIKeys extends Binding.Service<
   >
 > {}
 
-export const ListAPIKeys = Binding.Service<ListAPIKeys>(
-  "AWS.WAFv2.ListAPIKeys",
-);
+export const ListAPIKeys = Binding.Service<ListAPIKeys>("AWS.WAFv2.ListAPIKeys");
 
 /**
  * Runtime binding for `wafv2:DeleteAPIKey` — delete a CAPTCHA API key
@@ -138,6 +131,4 @@ export interface DeleteAPIKey extends Binding.Service<
   >
 > {}
 
-export const DeleteAPIKey = Binding.Service<DeleteAPIKey>(
-  "AWS.WAFv2.DeleteAPIKey",
-);
+export const DeleteAPIKey = Binding.Service<DeleteAPIKey>("AWS.WAFv2.DeleteAPIKey");

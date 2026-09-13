@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DeleteSMSSandboxPhoneNumberRequest
-  extends sns.DeleteSMSSandboxPhoneNumberInput {}
+export interface DeleteSMSSandboxPhoneNumberRequest extends sns.DeleteSMSSandboxPhoneNumberInput {}
 
 /**
  * Runtime binding for `sns:DeleteSMSSandboxPhoneNumber`.
@@ -26,14 +25,10 @@ export interface DeleteSMSSandboxPhoneNumber extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteSMSSandboxPhoneNumberRequest,
-    ) => Effect.Effect<
-      sns.DeleteSMSSandboxPhoneNumberResult,
-      sns.DeleteSMSSandboxPhoneNumberError
-    >
+    ) => Effect.Effect<sns.DeleteSMSSandboxPhoneNumberResult, sns.DeleteSMSSandboxPhoneNumberError>
   >
 > {}
 
-export const DeleteSMSSandboxPhoneNumber =
-  Binding.Service<DeleteSMSSandboxPhoneNumber>(
-    "AWS.SNS.DeleteSMSSandboxPhoneNumber",
-  );
+export const DeleteSMSSandboxPhoneNumber = Binding.Service<DeleteSMSSandboxPhoneNumber>(
+  "AWS.SNS.DeleteSMSSandboxPhoneNumber",
+);

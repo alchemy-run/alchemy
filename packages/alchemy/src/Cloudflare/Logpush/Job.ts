@@ -19,10 +19,7 @@ type TypeId = typeof TypeId;
  * `workers_trace_events` and `audit_logs` are account-scoped, while
  * `http_requests` and `firewall_events` are zone-scoped (Enterprise).
  */
-export type Dataset = Exclude<
-  NonNullable<logpush.CreateJobForAccountRequest["dataset"]>,
-  null
->;
+export type Dataset = Exclude<NonNullable<logpush.CreateJobForAccountRequest["dataset"]>, null>;
 
 /**
  * Structured output configuration for a Logpush job — the replacement for
@@ -332,21 +329,17 @@ export const JobProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const accountRows = yield* logpush.listJobsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((job): job is NonNullable<typeof job> => job != null)
-                .map((job) =>
-                  toAttributes(job, { accountId, zoneId: undefined }),
-                )
-                .filter((attrs): attrs is JobAttributes => attrs !== undefined),
-            ),
+      const accountRows = yield* logpush.listJobsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((job): job is NonNullable<typeof job> => job != null)
+              .map((job) => toAttributes(job, { accountId, zoneId: undefined }))
+              .filter((attrs): attrs is JobAttributes => attrs !== undefined),
           ),
-        );
+        ),
+      );
 
       const zones = yield* listAllZones(accountId);
       const zoneRows = yield* Effect.forEach(
@@ -358,21 +351,16 @@ export const JobProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? [])
                   .filter((job): job is NonNullable<typeof job> => job != null)
-                  .map((job) =>
-                    toAttributes(job, { accountId, zoneId: zone.id }),
-                  )
-                  .filter(
-                    (attrs): attrs is JobAttributes => attrs !== undefined,
-                  ),
+                  .map((job) => toAttributes(job, { accountId, zoneId: zone.id }))
+                  .filter((attrs): attrs is JobAttributes => attrs !== undefined),
               ),
             ),
             // Best-effort account-wide fan-out: a zone the token can't read
             // for Logpush (plan-gated route, missing permission, or a code-
             // 10000 auth blip) must be skipped, not fail the whole
             // enumeration. Drop only that zone and keep the rest.
-            Effect.catchTag(
-              ["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"],
-              () => Effect.succeed([]),
+            Effect.catchTag(["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"], () =>
+              Effect.succeed([]),
             ),
           ),
         { concurrency: 10 },
@@ -412,9 +400,7 @@ export const JobProvider = () =>
 
       const jobId = observed.id;
       if (jobId === undefined || jobId === null) {
-        return yield* Effect.fail(
-          new Error("Cloudflare did not return an id for the Logpush job"),
-        );
+        return yield* Effect.fail(new Error("Cloudflare did not return an id for the Logpush job"));
       }
 
       // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
@@ -429,9 +415,7 @@ export const JobProvider = () =>
       const attrs = toAttributes({ ...observed, id: jobId }, scope);
       if (!attrs) {
         return yield* Effect.fail(
-          new Error(
-            "Cloudflare returned a Logpush job without id/dataset/destination",
-          ),
+          new Error("Cloudflare returned a Logpush job without id/dataset/destination"),
         );
       }
       // Prefer the desired destination — the observed echo redacts secrets.
@@ -486,11 +470,7 @@ const findByName = (scope: Scope, name: string, dataset: Dataset | undefined) =>
     Effect.map((chunk): logpush.GetJobResponse | undefined => {
       const match = Array.from(chunk)
         .filter((job): job is NonNullable<typeof job> => job != null)
-        .find(
-          (job) =>
-            job.name === name &&
-            (dataset === undefined || job.dataset === dataset),
-        );
+        .find((job) => job.name === name && (dataset === undefined || job.dataset === dataset));
       return match ?? undefined;
     }),
   );
@@ -579,8 +559,7 @@ const needsUpdate = (
   }
   if (
     desired.maxUploadIntervalSeconds !== undefined &&
-    desired.maxUploadIntervalSeconds !==
-      asNumber(observed.maxUploadIntervalSeconds)
+    desired.maxUploadIntervalSeconds !== asNumber(observed.maxUploadIntervalSeconds)
   ) {
     return true;
   }
@@ -627,18 +606,13 @@ const outputOptionsEqual = (
   return true;
 };
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const toAttributes = (
   observed: logpush.GetJobResponse | undefined,
   scope: Scope,
 ): JobAttributes | undefined => {
-  if (
-    observed?.id == null ||
-    observed.dataset == null ||
-    observed.destinationConf == null
-  ) {
+  if (observed?.id == null || observed.dataset == null || observed.destinationConf == null) {
     return undefined;
   }
   return {

@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
@@ -188,17 +183,10 @@ export interface Assessment extends Resource<
  */
 export const Assessment = Resource<Assessment>("AWS.AuditManager.Assessment");
 
-const createAssessmentName = (
-  id: string,
-  props: { name?: string | undefined },
-) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 100 });
+const createAssessmentName = (id: string, props: { name?: string | undefined }) =>
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 100 });
 
-const toAttributes = (
-  assessment: auditmanager.Assessment,
-): Assessment["Attributes"] => ({
+const toAttributes = (assessment: auditmanager.Assessment): Assessment["Attributes"] => ({
   assessmentId: assessment.metadata?.id ?? "",
   arn: assessment.arn ?? "",
   name: unredact(assessment.metadata?.name) ?? "",
@@ -210,24 +198,15 @@ const toAttributes = (
 const readAssessmentById = Effect.fn(function* (assessmentId: string) {
   const response = yield* auditmanager
     .getAssessment({ assessmentId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.assessment;
 });
 
 const findAssessmentByName = Effect.fn(function* (name: string) {
-  const pages = yield* auditmanager.listAssessments
-    .pages({})
-    .pipe(EffectStream.runCollect);
+  const pages = yield* auditmanager.listAssessments.pages({}).pipe(EffectStream.runCollect);
   const match = Array.from(pages)
     .flatMap((page) => page.assessmentMetadata ?? [])
-    .find(
-      (assessment) =>
-        unredact(assessment.name) === name && assessment.status !== "INACTIVE",
-    );
+    .find((assessment) => unredact(assessment.name) === name && assessment.status !== "INACTIVE");
   if (!match?.id) return undefined;
   return yield* readAssessmentById(match.id);
 });
@@ -292,14 +271,10 @@ export const AssessmentProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const assessment = output?.assessmentId
             ? yield* readAssessmentById(output.assessmentId)
-            : yield* findAssessmentByName(
-                yield* createAssessmentName(id, olds ?? {}),
-              );
+            : yield* findAssessmentByName(yield* createAssessmentName(id, olds ?? {}));
           if (!assessment) return undefined;
           const attrs = toAttributes(assessment);
-          return (yield* hasAlchemyTags(id, attrs.tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
@@ -318,8 +293,7 @@ export const AssessmentProvider = () =>
             awsAccounts: [{ id: accountId }],
           };
           const desiredDestination = {
-            destinationType:
-              news.assessmentReportsDestination.destinationType ?? "S3",
+            destinationType: news.assessmentReportsDestination.destinationType ?? "S3",
             destination: news.assessmentReportsDestination.destination,
           };
 
@@ -345,14 +319,10 @@ export const AssessmentProvider = () =>
             assessment = created.assessment;
             if (!assessment?.metadata?.id) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateAssessment for '${name}' returned no assessment`,
-                ),
+                new Error(`CreateAssessment for '${name}' returned no assessment`),
               );
             }
-            yield* session.note(
-              `Created assessment ${name} (${assessment.metadata.id})`,
-            );
+            yield* session.note(`Created assessment ${name} (${assessment.metadata.id})`);
           }
 
           // Sync — diff observed against desired; update on drift.
@@ -360,15 +330,13 @@ export const AssessmentProvider = () =>
           const observed = projectAssessment({
             name: unredact(metadata?.name) ?? "",
             description: unredact(metadata?.description) ?? "",
-            destinationType:
-              metadata?.assessmentReportsDestination?.destinationType ?? "S3",
-            destination:
-              metadata?.assessmentReportsDestination?.destination ?? "",
-            accountIds: (metadata?.scope?.awsAccounts ?? []).flatMap(
-              (account) => (account.id ? [account.id] : []),
+            destinationType: metadata?.assessmentReportsDestination?.destinationType ?? "S3",
+            destination: metadata?.assessmentReportsDestination?.destination ?? "",
+            accountIds: (metadata?.scope?.awsAccounts ?? []).flatMap((account) =>
+              account.id ? [account.id] : [],
             ),
-            serviceNames: (metadata?.scope?.awsServices ?? []).flatMap(
-              (service) => (service.serviceName ? [service.serviceName] : []),
+            serviceNames: (metadata?.scope?.awsServices ?? []).flatMap((service) =>
+              service.serviceName ? [service.serviceName] : [],
             ),
             roles: (metadata?.roles ?? []).map((role) => ({
               roleType: role.roleType,
@@ -380,12 +348,8 @@ export const AssessmentProvider = () =>
             description: news.description ?? "",
             destinationType: desiredDestination.destinationType,
             destination: desiredDestination.destination,
-            accountIds: (desiredScope.awsAccounts ?? []).map(
-              (account) => account.id,
-            ),
-            serviceNames: (desiredScope.awsServices ?? []).map(
-              (service) => service.serviceName,
-            ),
+            accountIds: (desiredScope.awsAccounts ?? []).map((account) => account.id),
+            serviceNames: (desiredScope.awsServices ?? []).map((service) => service.serviceName),
             roles: news.roles.map((role) => ({
               roleType: role.roleType,
               roleArn: role.roleArn,
@@ -395,15 +359,13 @@ export const AssessmentProvider = () =>
           // detects, so only compare services the user explicitly pinned.
           const serviceDrifted =
             news.scope?.awsServices !== undefined &&
-            JSON.stringify(observed.serviceNames) !==
-              JSON.stringify(desired.serviceNames);
+            JSON.stringify(observed.serviceNames) !== JSON.stringify(desired.serviceNames);
           const drifted =
             observed.name !== desired.name ||
             observed.description !== desired.description ||
             observed.destinationType !== desired.destinationType ||
             observed.destination !== desired.destination ||
-            JSON.stringify(observed.accountIds) !==
-              JSON.stringify(desired.accountIds) ||
+            JSON.stringify(observed.accountIds) !== JSON.stringify(desired.accountIds) ||
             JSON.stringify(observed.roles) !== JSON.stringify(desired.roles) ||
             serviceDrifted;
           const assessmentId = metadata?.id ?? output?.assessmentId ?? "";
@@ -434,9 +396,7 @@ export const AssessmentProvider = () =>
           if (upsert.length > 0) {
             yield* auditmanager.tagResource({
               resourceArn: attrs.arn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
 
@@ -446,9 +406,7 @@ export const AssessmentProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* auditmanager
             .deleteAssessment({ assessmentId: output.assessmentId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

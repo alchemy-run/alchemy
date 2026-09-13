@@ -5,13 +5,7 @@ import * as Logger from "effect/Logger";
 import { LoggingCli, formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { Cli } from "@/Report.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import {
-  createNode,
-  deleteNode,
-  planWith,
-  replaceNode,
-  updateNode,
-} from "./PlanTestNodes.ts";
+import { createNode, deleteNode, planWith, replaceNode, updateNode } from "./PlanTestNodes.ts";
 
 describe("formatPlanLines", () => {
   test("keeps compact output unchanged by default", () => {
@@ -22,11 +16,7 @@ describe("formatPlanLines", () => {
           replaceNode({ engine: "v1" }, { engine: "v2" }, "Second"),
         ]),
       ),
-    ).toEqual([
-      "Plan: 1 to update, 1 to replace",
-      "[First] update",
-      "[Second] replace",
-    ]);
+    ).toEqual(["Plan: 1 to update, 1 to replace", "[First] update", "[Second] replace"]);
   });
 
   test("renders detailed creates and updates as YAML", () => {

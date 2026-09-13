@@ -52,9 +52,7 @@ export const QueryDatabaseLocal = Layer.effect(
     // providers layer). Capture the full context so the HTTP query ops run
     // with the current credentials — no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     const auth: D1Auth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
       accountId,

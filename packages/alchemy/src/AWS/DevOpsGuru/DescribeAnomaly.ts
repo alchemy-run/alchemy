@@ -27,12 +27,7 @@ export interface DescribeAnomaly extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.DescribeAnomalyRequest,
-    ) => Effect.Effect<
-      devopsguru.DescribeAnomalyResponse,
-      devopsguru.DescribeAnomalyError
-    >
+    ) => Effect.Effect<devopsguru.DescribeAnomalyResponse, devopsguru.DescribeAnomalyError>
   >
 > {}
-export const DescribeAnomaly = Binding.Service<DescribeAnomaly>(
-  "AWS.DevOpsGuru.DescribeAnomaly",
-);
+export const DescribeAnomaly = Binding.Service<DescribeAnomaly>("AWS.DevOpsGuru.DescribeAnomaly");

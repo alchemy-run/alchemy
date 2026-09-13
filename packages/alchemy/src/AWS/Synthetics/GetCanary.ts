@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Canary } from "./Canary.ts";
 
-export interface GetCanaryRequest extends Omit<
-  synthetics.GetCanaryRequest,
-  "Name"
-> {}
+export interface GetCanaryRequest extends Omit<synthetics.GetCanaryRequest, "Name"> {}
 
 /**
  * Runtime binding for `synthetics:GetCanary` — read the full configuration

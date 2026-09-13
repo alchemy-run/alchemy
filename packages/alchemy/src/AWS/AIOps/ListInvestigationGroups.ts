@@ -31,10 +31,7 @@ export interface ListInvestigationGroups extends Binding.Service<
   () => Effect.Effect<
     (
       request?: aiops.ListInvestigationGroupsInput,
-    ) => Effect.Effect<
-      aiops.ListInvestigationGroupsOutput,
-      aiops.ListInvestigationGroupsError
-    >
+    ) => Effect.Effect<aiops.ListInvestigationGroupsOutput, aiops.ListInvestigationGroupsError>
   >
 > {}
 export const ListInvestigationGroups = Binding.Service<ListInvestigationGroups>(

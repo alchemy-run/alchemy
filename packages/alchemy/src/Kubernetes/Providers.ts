@@ -6,9 +6,7 @@ import { HelmChart, HelmChartProvider } from "./HelmChart.ts";
 import { Job, JobProvider } from "./Job.ts";
 import { Manifest, ManifestProvider } from "./Manifest.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Kubernetes",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Kubernetes") {}
 
 /**
  * The Kubernetes provider layer: the cluster-agnostic workload providers
@@ -27,17 +25,9 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
  * ```
  */
 export const providers = () =>
-  Layer.effect(
-    Providers,
-    Provider.collection([Deployment, HelmChart, Job, Manifest]),
-  ).pipe(
+  Layer.effect(Providers, Provider.collection([Deployment, HelmChart, Job, Manifest])).pipe(
     Layer.provide(
-      Layer.mergeAll(
-        DeploymentProvider(),
-        HelmChartProvider(),
-        JobProvider(),
-        ManifestProvider(),
-      ),
+      Layer.mergeAll(DeploymentProvider(), HelmChartProvider(), JobProvider(), ManifestProvider()),
     ),
     // The built-in adapters are provideMerged (not just provided) so the
     // workloads' dynamic `findClusterAdapter` lookups see them in the

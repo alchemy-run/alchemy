@@ -13,9 +13,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // it neither creates nor deletes an organization.
 test.provider("list returns the organization singleton", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(
-      AWS.Organizations.Organization,
-    );
+    const provider = yield* Provider.findProvider(AWS.Organizations.Organization);
     const all = yield* provider.list();
 
     // 0 (account is not a management account) or 1 (it is) — never more.
@@ -28,9 +26,7 @@ test.provider("list returns the organization singleton", (stack) =>
       expect(typeof org.organizationId).toBe("string");
       expect(org.organizationId.length).toBeGreaterThan(0);
       expect(typeof org.organizationArn).toBe("string");
-      expect(org.organizationArn.startsWith("arn:aws:organizations::")).toBe(
-        true,
-      );
+      expect(org.organizationArn.startsWith("arn:aws:organizations::")).toBe(true);
       expect(Array.isArray(org.availablePolicyTypes)).toBe(true);
       if (org.managementAccountEmail != null) {
         expect(typeof org.managementAccountEmail).toBe("string");

@@ -59,13 +59,7 @@ export type EntryAttributes = {
   profileId: string | undefined;
 };
 
-export type Entry = Resource<
-  TypeId,
-  EntryProps,
-  EntryAttributes,
-  never,
-  Providers
->;
+export type Entry = Resource<TypeId, EntryProps, EntryAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust **DLP custom entry** — a standalone regular-
@@ -159,9 +153,7 @@ export const EntryProvider = () =>
       const name = yield* createEntryName(id, news.name);
 
       // 1. Observe.
-      const observed = output?.entryId
-        ? yield* observeEntry(accountId, output.entryId)
-        : undefined;
+      const observed = output?.entryId ? yield* observeEntry(accountId, output.entryId) : undefined;
 
       // 2. Ensure — create when missing.
       if (!observed) {
@@ -170,12 +162,8 @@ export const EntryProvider = () =>
           name,
           enabled: news.enabled ?? true,
           pattern: encodePattern(news.pattern),
-          ...(news.description !== undefined
-            ? { description: news.description }
-            : {}),
-          ...(news.profileId !== undefined
-            ? { profileId: news.profileId }
-            : {}),
+          ...(news.description !== undefined ? { description: news.description } : {}),
+          ...(news.profileId !== undefined ? { profileId: news.profileId } : {}),
         });
         return toAttributes(created, accountId);
       }
@@ -196,9 +184,7 @@ export const EntryProvider = () =>
         name,
         enabled: news.enabled ?? true,
         pattern: encodePattern(news.pattern),
-        ...(news.description !== undefined
-          ? { description: news.description }
-          : {}),
+        ...(news.description !== undefined ? { description: news.description } : {}),
       });
       return toAttributes(updated, accountId);
     }),
@@ -250,15 +236,10 @@ const encodePattern = (pattern: {
   validation?: "luhn";
 }): { regex: string; validation?: "luhn" } => ({
   regex: pattern.regex,
-  ...(pattern.validation !== undefined
-    ? { validation: pattern.validation }
-    : {}),
+  ...(pattern.validation !== undefined ? { validation: pattern.validation } : {}),
 });
 
-const toAttributes = (
-  entry: ObservedEntry,
-  accountId: string,
-): EntryAttributes => ({
+const toAttributes = (entry: ObservedEntry, accountId: string): EntryAttributes => ({
   entryId: entry.id,
   accountId,
   name: entry.name,

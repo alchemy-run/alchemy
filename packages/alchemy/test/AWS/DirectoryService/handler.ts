@@ -55,9 +55,7 @@ export default DirectoryServiceTestFunction.make(
         if (request.method === "GET" && pathname === "/directories") {
           const { DirectoryDescriptions } = yield* describeDirectories();
           return yield* HttpServerResponse.json({
-            ids: (DirectoryDescriptions ?? []).map(
-              (directory) => directory.DirectoryId,
-            ),
+            ids: (DirectoryDescriptions ?? []).map((directory) => directory.DirectoryId),
           });
         }
 

@@ -30,10 +30,7 @@ export interface ListEntitlements extends Binding.Service<
   () => Effect.Effect<
     (
       request?: mediaconnect.ListEntitlementsRequest,
-    ) => Effect.Effect<
-      mediaconnect.ListEntitlementsResponse,
-      mediaconnect.ListEntitlementsError
-    >
+    ) => Effect.Effect<mediaconnect.ListEntitlementsResponse, mediaconnect.ListEntitlementsError>
   >
 > {}
 export const ListEntitlements = Binding.Service<ListEntitlements>(

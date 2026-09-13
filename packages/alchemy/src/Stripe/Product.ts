@@ -132,11 +132,7 @@ const userMetadata = (
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
 const toAttrs = (product: StripeProduct) => ({
@@ -153,9 +149,7 @@ const toAttrs = (product: StripeProduct) => ({
 const isMissingProduct = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetProduct({ id }).pipe(
-    Effect.catchIf(isMissingProduct, () => Effect.succeed(undefined)),
-  );
+  GetProduct({ id }).pipe(Effect.catchIf(isMissingProduct, () => Effect.succeed(undefined)));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const products: StripeProduct[] = [];
@@ -179,10 +173,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllProducts = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const products: StripeProduct[] = [];
   for (const product of [...active, ...inactive]) {
@@ -205,10 +198,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -242,9 +232,7 @@ export const ProductProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -273,9 +261,7 @@ export const ProductProvider = () =>
         current = yield* CreateProduct({
           name,
           active: desiredActive,
-          ...(desiredDescription.length > 0
-            ? { description: desiredDescription }
-            : {}),
+          ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
           ...(desiredImages.length > 0 ? { images: desiredImages } : {}),
           metadata,
         }).pipe(
@@ -290,8 +276,7 @@ export const ProductProvider = () =>
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const nameChanged = current.name !== name;
       const activeChanged = current.active !== desiredActive;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const imagesChanged = !arrayEquals(current.images, desiredImages);
 
       if (
@@ -309,15 +294,11 @@ export const ProductProvider = () =>
         ...(nameChanged ? { name } : {}),
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(descriptionChanged ? { description: desiredDescription } : {}),
-        ...(imagesChanged
-          ? { images: desiredImages.length > 0 ? desiredImages : "" }
-          : {}),
+        ...(imagesChanged ? { images: desiredImages.length > 0 ? desiredImages : "" } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

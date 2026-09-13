@@ -36,12 +36,7 @@ const LIST_MAX_PAGES = 100;
 export type PaymentLinkBillingAddressCollection = "auto" | "required";
 export type PaymentLinkCustomerCreation = "always" | "if_required";
 export type PaymentLinkPaymentMethodCollection = "always" | "if_required";
-export type PaymentLinkSubmitType =
-  | "auto"
-  | "book"
-  | "donate"
-  | "pay"
-  | "subscribe";
+export type PaymentLinkSubmitType = "auto" | "book" | "donate" | "pay" | "subscribe";
 export type PaymentLinkAfterCompletionType = "hosted_confirmation" | "redirect";
 
 export interface PaymentLinkLineItemAdjustableQuantity {
@@ -259,9 +254,7 @@ export type PaymentLink = Resource<
  */
 export const PaymentLink = Resource<PaymentLink>("Stripe.PaymentLink");
 
-export class PaymentLinkNotResolved extends Data.TaggedError(
-  "Stripe.PaymentLinkNotResolved",
-)<{
+export class PaymentLinkNotResolved extends Data.TaggedError("Stripe.PaymentLinkNotResolved")<{
   lineItems: PaymentLinkLineItem[];
 }> {}
 
@@ -298,9 +291,7 @@ const fromObservedLineItems = (
   for (const item of items) {
     const price = priceIdOf(item.price);
     if (price === undefined) continue;
-    const adjustableQuantity = fromObservedAdjustableQuantity(
-      item.adjustable_quantity,
-    );
+    const adjustableQuantity = fromObservedAdjustableQuantity(item.adjustable_quantity);
     out.push({
       price,
       quantity: item.quantity ?? 1,
@@ -323,9 +314,7 @@ const fromObservedAfterCompletion = (
         },
       }
     : {}),
-  ...(value.redirect !== undefined
-    ? { redirect: { url: value.redirect.url } }
-    : {}),
+  ...(value.redirect !== undefined ? { redirect: { url: value.redirect.url } } : {}),
 });
 
 const toWireAfterCompletion = (
@@ -395,9 +384,7 @@ const hydrateLineItems = (link: StripePaymentLink) =>
       const response = yield* GetPaymentLinkLineItems({
         payment_link: link.id,
         limit: LIST_PAGE_SIZE,
-        ...(startingAfter !== undefined
-          ? { starting_after: startingAfter }
-          : {}),
+        ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
       });
       data.push(...response.data);
       if (!response.has_more || response.data.length === 0) {
@@ -449,10 +436,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllPaymentLinks = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const links: StripePaymentLink[] = [];
   for (const link of [...active, ...inactive]) {
@@ -475,10 +461,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -505,9 +488,7 @@ const shouldReplace = (
   if (output === undefined) return false;
   if (output.lineItems.length === 0) return false;
   if (news.lineItems.length !== output.lineItems.length) return true;
-  return news.lineItems.some(
-    (item, index) => item.price !== output.lineItems[index]?.price,
-  );
+  return news.lineItems.some((item, index) => item.price !== output.lineItems[index]?.price);
 };
 
 const adjustableQuantityEqual = (
@@ -584,9 +565,7 @@ export const PaymentLinkProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -625,9 +604,7 @@ export const PaymentLinkProvider = () =>
           ...(news.billingAddressCollection !== undefined
             ? { billing_address_collection: news.billingAddressCollection }
             : {}),
-          ...(news.submitType !== undefined
-            ? { submit_type: news.submitType }
-            : {}),
+          ...(news.submitType !== undefined ? { submit_type: news.submitType } : {}),
           ...(news.customerCreation !== undefined
             ? { customer_creation: news.customerCreation }
             : {}),
@@ -641,9 +618,7 @@ export const PaymentLinkProvider = () =>
                 },
               }
             : {}),
-          ...(news.inactiveMessage !== undefined
-            ? { inactive_message: news.inactiveMessage }
-            : {}),
+          ...(news.inactiveMessage !== undefined ? { inactive_message: news.inactiveMessage } : {}),
           ...(afterCompletion !== undefined
             ? { after_completion: toWireAfterCompletion(afterCompletion) }
             : {}),
@@ -672,11 +647,9 @@ export const PaymentLinkProvider = () =>
         news.billingAddressCollection !== undefined &&
         current.billing_address_collection !== news.billingAddressCollection;
       const submitTypeChanged =
-        news.submitType !== undefined &&
-        current.submit_type !== news.submitType;
+        news.submitType !== undefined && current.submit_type !== news.submitType;
       const customerCreationChanged =
-        news.customerCreation !== undefined &&
-        current.customer_creation !== news.customerCreation;
+        news.customerCreation !== undefined && current.customer_creation !== news.customerCreation;
       const paymentMethodCollectionChanged =
         news.paymentMethodCollection !== undefined &&
         current.payment_method_collection !== news.paymentMethodCollection;
@@ -688,16 +661,11 @@ export const PaymentLinkProvider = () =>
         (current.inactive_message ?? "") !== news.inactiveMessage;
       const afterCompletionChanged =
         afterCompletion !== undefined &&
-        !deepEqual(
-          afterCompletion,
-          fromObservedAfterCompletion(current.after_completion),
-          { stripNullish: true },
-        );
+        !deepEqual(afterCompletion, fromObservedAfterCompletion(current.after_completion), {
+          stripNullish: true,
+        });
       const observedLineItems = current.line_items?.data ?? [];
-      const lineItemsChanged = lineItemsNeedUpdate(
-        news.lineItems,
-        observedLineItems,
-      );
+      const lineItemsChanged = lineItemsNeedUpdate(news.lineItems, observedLineItems);
       const updateLineItems = lineItemsChanged
         ? toWireUpdateLineItems(news.lineItems, observedLineItems)
         : undefined;
@@ -721,16 +689,10 @@ export const PaymentLinkProvider = () =>
       const updated = yield* UpdatePaymentLink({
         payment_link: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
-        ...(allowPromotionCodesChanged
-          ? { allow_promotion_codes: news.allowPromotionCodes }
-          : {}),
-        ...(billingChanged
-          ? { billing_address_collection: news.billingAddressCollection }
-          : {}),
+        ...(allowPromotionCodesChanged ? { allow_promotion_codes: news.allowPromotionCodes } : {}),
+        ...(billingChanged ? { billing_address_collection: news.billingAddressCollection } : {}),
         ...(submitTypeChanged ? { submit_type: news.submitType } : {}),
-        ...(customerCreationChanged
-          ? { customer_creation: news.customerCreation }
-          : {}),
+        ...(customerCreationChanged ? { customer_creation: news.customerCreation } : {}),
         ...(paymentMethodCollectionChanged
           ? { payment_method_collection: news.paymentMethodCollection }
           : {}),
@@ -741,9 +703,7 @@ export const PaymentLinkProvider = () =>
               },
             }
           : {}),
-        ...(inactiveMessageChanged
-          ? { inactive_message: news.inactiveMessage }
-          : {}),
+        ...(inactiveMessageChanged ? { inactive_message: news.inactiveMessage } : {}),
         ...(afterCompletionChanged && afterCompletion !== undefined
           ? {
               after_completion: toWireAfterCompletion(
@@ -751,15 +711,11 @@ export const PaymentLinkProvider = () =>
               ) as UpdatePaymentLinkRequestAfterCompletion,
             }
           : {}),
-        ...(updateLineItems !== undefined
-          ? { line_items: updateLineItems }
-          : {}),
+        ...(updateLineItems !== undefined ? { line_items: updateLineItems } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

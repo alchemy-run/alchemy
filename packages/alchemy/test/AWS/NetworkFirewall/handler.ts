@@ -25,8 +25,7 @@ export default NetworkFirewallBindingsFunction.make(
     const ruleGroup = yield* NetworkFirewall.RuleGroup("BindingsRuleGroup", {
       type: "STATEFUL",
       capacity: 10,
-      rules:
-        'pass tcp any any -> any 443 (msg:"allow https"; sid:100001; rev:1;)',
+      rules: 'pass tcp any any -> any 443 (msg:"allow https"; sid:100001; rev:1;)',
       summaryConfiguration: { RuleOptions: ["SID", "MSG"] },
     });
     const policy = yield* NetworkFirewall.FirewallPolicy("BindingsPolicy", {
@@ -38,13 +37,10 @@ export default NetworkFirewallBindingsFunction.make(
     });
 
     const bound = {
-      describeFirewallPolicy:
-        yield* NetworkFirewall.DescribeFirewallPolicy(policy),
+      describeFirewallPolicy: yield* NetworkFirewall.DescribeFirewallPolicy(policy),
       describeRuleGroup: yield* NetworkFirewall.DescribeRuleGroup(ruleGroup),
-      describeRuleGroupSummary:
-        yield* NetworkFirewall.DescribeRuleGroupSummary(ruleGroup),
-      describeRuleGroupMetadata:
-        yield* NetworkFirewall.DescribeRuleGroupMetadata(ruleGroup),
+      describeRuleGroupSummary: yield* NetworkFirewall.DescribeRuleGroupSummary(ruleGroup),
+      describeRuleGroupMetadata: yield* NetworkFirewall.DescribeRuleGroupMetadata(ruleGroup),
     };
 
     return {
@@ -64,8 +60,7 @@ export default NetworkFirewallBindingsFunction.make(
           const response = yield* bound.describeFirewallPolicy();
           return yield* HttpServerResponse.json({
             status: response.FirewallPolicyResponse.FirewallPolicyStatus,
-            statelessDefaultActions:
-              response.FirewallPolicy?.StatelessDefaultActions ?? [],
+            statelessDefaultActions: response.FirewallPolicy?.StatelessDefaultActions ?? [],
           });
         }
 

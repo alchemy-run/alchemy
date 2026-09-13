@@ -39,10 +39,7 @@ export interface CalculateIsolines extends Binding.Service<
   () => Effect.Effect<
     (
       request: geoRoutes.CalculateIsolinesRequest,
-    ) => Effect.Effect<
-      geoRoutes.CalculateIsolinesResponse,
-      geoRoutes.CalculateIsolinesError
-    >
+    ) => Effect.Effect<geoRoutes.CalculateIsolinesResponse, geoRoutes.CalculateIsolinesError>
   >
 > {}
 export const CalculateIsolines = Binding.Service<CalculateIsolines>(

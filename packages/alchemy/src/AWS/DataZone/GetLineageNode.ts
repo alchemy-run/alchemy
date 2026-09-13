@@ -34,12 +34,7 @@ export interface GetLineageNode extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetLineageNodeRequest,
-    ) => Effect.Effect<
-      datazone.GetLineageNodeOutput,
-      datazone.GetLineageNodeError
-    >
+    ) => Effect.Effect<datazone.GetLineageNodeOutput, datazone.GetLineageNodeError>
   >
 > {}
-export const GetLineageNode = Binding.Service<GetLineageNode>(
-  "AWS.DataZone.GetLineageNode",
-);
+export const GetLineageNode = Binding.Service<GetLineageNode>("AWS.DataZone.GetLineageNode");

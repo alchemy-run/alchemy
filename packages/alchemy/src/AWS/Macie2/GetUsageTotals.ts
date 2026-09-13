@@ -27,12 +27,7 @@ export interface GetUsageTotals extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetUsageTotalsRequest,
-    ) => Effect.Effect<
-      macie2.GetUsageTotalsResponse,
-      macie2.GetUsageTotalsError
-    >
+    ) => Effect.Effect<macie2.GetUsageTotalsResponse, macie2.GetUsageTotalsError>
   >
 > {}
-export const GetUsageTotals = Binding.Service<GetUsageTotals>(
-  "AWS.Macie2.GetUsageTotals",
-);
+export const GetUsageTotals = Binding.Service<GetUsageTotals>("AWS.Macie2.GetUsageTotals");

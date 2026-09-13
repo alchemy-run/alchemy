@@ -22,15 +22,13 @@ export const COMPOSITION_ARN_WILDCARD = "arn:aws:ivs:*:*:composition/*";
  * Encoder configurations referenced by a composition's destinations are
  * runtime data, so StartComposition grants include this wildcard.
  */
-export const ENCODER_CONFIGURATION_ARN_WILDCARD =
-  "arn:aws:ivs:*:*:encoder-configuration/*";
+export const ENCODER_CONFIGURATION_ARN_WILDCARD = "arn:aws:ivs:*:*:encoder-configuration/*";
 
 /**
  * Storage configurations referenced by a composition's S3 destinations are
  * runtime data, so StartComposition grants include this wildcard.
  */
-export const STORAGE_CONFIGURATION_ARN_WILDCARD =
-  "arn:aws:ivs:*:*:storage-configuration/*";
+export const STORAGE_CONFIGURATION_ARN_WILDCARD = "arn:aws:ivs:*:*:storage-configuration/*";
 
 /**
  * Build the impl Effect for an IVS Real-Time operation scoped to a
@@ -84,9 +82,7 @@ export const makeIvsRealtimeStageHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${stage.LogicalId})`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${stage.LogicalId})`)(function* (request?: Req) {
         const stageArn = yield* StageArn;
         const wire = options.prepare
           ? options.prepare((request ?? {}) as Req)
@@ -127,28 +123,26 @@ export const makeIvsRealtimeReplicationHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${sourceStage}, ${destinationStage}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [sourceStage.stageArn, destinationStage.stageArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${sourceStage}, ${destinationStage}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [sourceStage.stageArn, destinationStage.stageArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `${options.tag}(${sourceStage.LogicalId}, ${destinationStage.LogicalId})`,
-      )(function* (request: Omit<I, "sourceStageArn" | "destinationStageArn">) {
-        return yield* op({
-          ...request,
-          sourceStageArn: yield* SourceStageArn,
-          destinationStageArn: yield* DestinationStageArn,
-        } as I);
-      });
+      return Effect.fn(`${options.tag}(${sourceStage.LogicalId}, ${destinationStage.LogicalId})`)(
+        function* (request: Omit<I, "sourceStageArn" | "destinationStageArn">) {
+          return yield* op({
+            ...request,
+            sourceStageArn: yield* SourceStageArn,
+            destinationStageArn: yield* DestinationStageArn,
+          } as I);
+        },
+      );
     });
   });
 

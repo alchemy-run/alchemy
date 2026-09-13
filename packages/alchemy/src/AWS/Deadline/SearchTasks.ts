@@ -36,6 +36,4 @@ export interface SearchTasks extends Binding.Service<
     ) => Effect.Effect<deadline.SearchTasksResponse, deadline.SearchTasksError>
   >
 > {}
-export const SearchTasks = Binding.Service<SearchTasks>(
-  "AWS.Deadline.SearchTasks",
-);
+export const SearchTasks = Binding.Service<SearchTasks>("AWS.Deadline.SearchTasks");

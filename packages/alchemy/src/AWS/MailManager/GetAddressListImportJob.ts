@@ -32,10 +32,7 @@ export interface GetAddressListImportJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: mm.GetAddressListImportJobRequest,
-    ) => Effect.Effect<
-      mm.GetAddressListImportJobResponse,
-      mm.GetAddressListImportJobError
-    >
+    ) => Effect.Effect<mm.GetAddressListImportJobResponse, mm.GetAddressListImportJobError>
   >
 > {}
 export const GetAddressListImportJob = Binding.Service<GetAddressListImportJob>(

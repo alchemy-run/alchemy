@@ -4,16 +4,8 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  createInternalTags,
-  hasAlchemyTags,
-  stripInternalTags,
-} from "../Tags.ts";
-import {
-  Docker,
-  dockerEngineContextName,
-  dockerPhysicalName,
-} from "./Docker.ts";
+import { createInternalTags, hasAlchemyTags, stripInternalTags } from "../Tags.ts";
+import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface NetworkProps {
@@ -99,13 +91,7 @@ export const NetworkProvider = () =>
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.network
             .inspect(name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!info) return undefined;
           const attrs = toNetworkAttributes(info);
           if (output) return attrs;
@@ -116,10 +102,7 @@ export const NetworkProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, output, instanceId, news, olds }) {
           if (!isResolved(news) || !output) return undefined;
-          if (
-            dockerEngineContextName(olds?.context) !==
-            dockerEngineContextName(news?.context)
-          ) {
+          if (dockerEngineContextName(olds?.context) !== dockerEngineContextName(news?.context)) {
             return { action: "replace", deleteFirst: true };
           }
           const args = yield* makeNetworkArgs(id, news, instanceId);
@@ -141,16 +124,10 @@ export const NetworkProvider = () =>
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
           const context = dockerEngineContextName(news?.context);
           if (output) {
-            const refreshed = yield* docker.network
-              .inspect(output.id, context)
-              .pipe(
-                Effect.map(toNetworkAttributes),
-                Effect.catchReason(
-                  "PlatformError",
-                  "NotFound",
-                  () => Effect.undefined,
-                ),
-              );
+            const refreshed = yield* docker.network.inspect(output.id, context).pipe(
+              Effect.map(toNetworkAttributes),
+              Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
+            );
             if (refreshed) return refreshed;
           }
           const args = yield* makeNetworkArgs(id, news, instanceId);
@@ -160,44 +137,28 @@ export const NetworkProvider = () =>
             label: { ...internalTags, ...args.label },
             context,
           });
-          return toNetworkAttributes(
-            yield* docker.network.inspect(createdId, context),
-          );
+          return toNetworkAttributes(yield* docker.network.inspect(createdId, context));
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.network
             .remove(output.id, dockerEngineContextName(olds?.context))
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            ),
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });
     }),
   );
 
-const makeNetworkArgs = (
-  id: string,
-  props: NetworkProps | undefined,
-  instanceId: string,
-) =>
+const makeNetworkArgs = (id: string, props: NetworkProps | undefined, instanceId: string) =>
   dockerPhysicalName(id, props, instanceId).pipe(
-    Effect.map(
-      (name): Parameters<Docker["Service"]["network"]["create"]>[0] => ({
-        name,
-        driver: props?.driver ?? "bridge",
-        ipv6: props?.enableIPv6 ?? false,
-        label: props?.labels ?? {},
-      }),
-    ),
+    Effect.map((name): Parameters<Docker["Service"]["network"]["create"]>[0] => ({
+      name,
+      driver: props?.driver ?? "bridge",
+      ipv6: props?.enableIPv6 ?? false,
+      label: props?.labels ?? {},
+    })),
   );
 
-export const toNetworkAttributes = (
-  info: Docker.Network,
-): Network["Attributes"] => ({
+export const toNetworkAttributes = (info: Docker.Network): Network["Attributes"] => ({
   id: info.Id,
   name: info.Name,
   driver: info.Driver,

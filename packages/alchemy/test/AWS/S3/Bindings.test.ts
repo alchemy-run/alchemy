@@ -8,9 +8,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import S3PresignTestFunctionLive, {
-  S3PresignTestFunction,
-} from "./fixtures/presign-handler";
+import S3PresignTestFunctionLive, { S3PresignTestFunction } from "./fixtures/presign-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -19,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "S3Bindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load. Budget ~150s
 // of readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let bucketName: string;
@@ -41,19 +36,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -80,10 +70,7 @@ const getTag = (path: string) =>
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "IamNotPropagated",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -100,9 +87,7 @@ const presign = (
     if (params.contentType !== undefined) {
       search.set("contentType", params.contentType);
     }
-    const response = yield* send(
-      HttpClientRequest.get(`${baseUrl}/${op}?${search.toString()}`),
-    );
+    const response = yield* send(HttpClientRequest.get(`${baseUrl}/${op}?${search.toString()}`));
     expect(response.status).toBe(200);
     const body = (yield* response.json) as { url: string };
     expect(body.url).toContain("X-Amz-Signature=");
@@ -140,19 +125,14 @@ const sendPresigned = (request: HttpClientRequest.HttpClientRequest) =>
       response.status === 403
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new IamNotPropagated({ status: response.status, body }),
-              ),
+              Effect.fail(new IamNotPropagated({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "IamNotPropagated",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -173,9 +153,7 @@ describe("S3 Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/bucket-name`;
 
-      yield* Effect.logInfo(
-        `S3 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`S3 test setup: probing readiness at ${readinessUrl}`);
       // The fixture answers 503 until the runtime hydrates resource
       // Outputs (first-event race after a cold start) — keep retrying
       // until it serves the bucket name.
@@ -186,17 +164,13 @@ describe("S3 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `S3 test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`S3 test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
       bucketName = (ready as { bucketName: string }).bucketName;
       expect(bucketName).toBeTruthy();
-      yield* Effect.logInfo(
-        `S3 test setup: fixture ready (bucket ${bucketName})`,
-      );
+      yield* Effect.logInfo(`S3 test setup: fixture ready (bucket ${bucketName})`);
     }),
     { timeout: 240_000 },
   );
@@ -209,11 +183,7 @@ describe("S3 Bindings", () => {
       // afterAll lacks the providers layer test bodies get, so provide it for
       // the out-of-band distilled call.
       if (bucketName) {
-        yield* Core.withProviders(
-          assertBucketDeleted(bucketName),
-          testOptions,
-          "S3Bindings",
-        );
+        yield* Core.withProviders(assertBucketDeleted(bucketName), testOptions, "S3Bindings");
       }
     }),
     { timeout: 120_000 },
@@ -233,9 +203,7 @@ describe("S3 Bindings", () => {
           });
 
           const putResponse = yield* sendPresigned(
-            HttpClientRequest.put(url).pipe(
-              HttpClientRequest.bodyText(body, "text/plain"),
-            ),
+            HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText(body, "text/plain")),
           );
           expect(putResponse.status).toBe(200);
 
@@ -259,9 +227,7 @@ describe("S3 Bindings", () => {
           // Signed for text/plain but sent as application/json — the
           // signature no longer matches, so S3 must reject it.
           const response = yield* HttpClient.execute(
-            HttpClientRequest.put(url).pipe(
-              HttpClientRequest.bodyText("{}", "application/json"),
-            ),
+            HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText("{}", "application/json")),
           );
           expect(response.status).toBe(403);
         }),
@@ -282,16 +248,12 @@ describe("S3 Bindings", () => {
             contentType: "text/plain",
           });
           const putResponse = yield* sendPresigned(
-            HttpClientRequest.put(putUrl).pipe(
-              HttpClientRequest.bodyText(body, "text/plain"),
-            ),
+            HttpClientRequest.put(putUrl).pipe(HttpClientRequest.bodyText(body, "text/plain")),
           );
           expect(putResponse.status).toBe(200);
 
           const getUrl = yield* presign("presign-get", { key });
-          const getResponse = yield* sendPresigned(
-            HttpClientRequest.get(getUrl),
-          );
+          const getResponse = yield* sendPresigned(HttpClientRequest.get(getUrl));
           expect(getResponse.status).toBe(200);
           expect(yield* getResponse.text).toBe(body);
         }),
@@ -316,13 +278,9 @@ describe("S3 Bindings", () => {
             key,
             contentType: "application/octet-stream",
           });
-          const getResponse = yield* sendPresigned(
-            HttpClientRequest.get(getUrl),
-          );
+          const getResponse = yield* sendPresigned(HttpClientRequest.get(getUrl));
           expect(getResponse.status).toBe(200);
-          expect(getResponse.headers["content-type"]).toBe(
-            "application/octet-stream",
-          );
+          expect(getResponse.headers["content-type"]).toBe("application/octet-stream");
           expect(yield* getResponse.text).toBe("override me");
         }),
       { timeout: 120_000 },
@@ -347,9 +305,7 @@ describe("S3 Bindings", () => {
           // Poll until S3 reports the URL expired (bounded — expiry is 1s,
           // allow a little clock skew between the Lambda signer and S3).
           const status = yield* Effect.gen(function* () {
-            const response = yield* HttpClient.execute(
-              HttpClientRequest.get(getUrl),
-            );
+            const response = yield* HttpClient.execute(HttpClientRequest.get(getUrl));
             return response.status;
           }).pipe(
             Effect.repeat({
@@ -392,9 +348,7 @@ describe("S3 Bindings", () => {
             Key: "batch/one.txt",
           }).pipe(
             Effect.map(() => "found" as const),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed("not-found" as const),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
           );
           expect(head).toBe("not-found");
         }),
@@ -461,9 +415,7 @@ describe("S3 Bindings", () => {
             Tagging: { TagSet: [{ Key: "ephemeral", Value: "yes" }] },
           });
 
-          yield* getJson<{ ok: boolean }>(
-            route("/delete-tagging", { key: "tagging/delete.txt" }),
-          );
+          yield* getJson<{ ok: boolean }>(route("/delete-tagging", { key: "tagging/delete.txt" }));
 
           // out-of-band verification via distilled
           const tags = yield* S3.getObjectTagging({
@@ -576,15 +528,10 @@ describe("S3 Bindings", () => {
         Effect.gen(function* () {
           yield* seed("restore/std.txt", "not archived");
 
-          const tag = yield* getTag(
-            route("/restore", { key: "restore/std.txt" }),
-          );
+          const tag = yield* getTag(route("/restore", { key: "restore/std.txt" }));
           // STANDARD objects are not restorable — the binding must surface
           // the *typed* platform rejection, proving IAM + wiring works.
-          expect([
-            "InvalidObjectState",
-            "ObjectAlreadyInActiveTierError",
-          ]).toContain(tag);
+          expect(["InvalidObjectState", "ObjectAlreadyInActiveTierError"]).toContain(tag);
         }),
       { timeout: 120_000 },
     );
@@ -596,9 +543,7 @@ describe("S3 Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           yield* seed("lock/get-retention.txt", "no lock");
-          const tag = yield* getTag(
-            route("/retention", { key: "lock/get-retention.txt" }),
-          );
+          const tag = yield* getTag(route("/retention", { key: "lock/get-retention.txt" }));
           expect(tag).toBe("InvalidRequest");
         }),
       { timeout: 120_000 },
@@ -611,9 +556,7 @@ describe("S3 Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           yield* seed("lock/put-retention.txt", "no lock");
-          const tag = yield* getTag(
-            route("/retention-put", { key: "lock/put-retention.txt" }),
-          );
+          const tag = yield* getTag(route("/retention-put", { key: "lock/put-retention.txt" }));
           expect(tag).toBe("InvalidRequest");
         }),
       { timeout: 120_000 },
@@ -626,9 +569,7 @@ describe("S3 Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           yield* seed("lock/get-hold.txt", "no lock");
-          const tag = yield* getTag(
-            route("/legal-hold", { key: "lock/get-hold.txt" }),
-          );
+          const tag = yield* getTag(route("/legal-hold", { key: "lock/get-hold.txt" }));
           expect(tag).toBe("InvalidRequest");
         }),
       { timeout: 120_000 },
@@ -641,9 +582,7 @@ describe("S3 Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           yield* seed("lock/put-hold.txt", "no lock");
-          const tag = yield* getTag(
-            route("/legal-hold-put", { key: "lock/put-hold.txt" }),
-          );
+          const tag = yield* getTag(route("/legal-hold-put", { key: "lock/put-hold.txt" }));
           expect(tag).toBe("InvalidRequest");
         }),
       { timeout: 120_000 },

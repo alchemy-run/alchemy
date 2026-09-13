@@ -11,25 +11,22 @@ import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import { RepoPath, RepoNotFound, PushDenied } from "./Schema.ts";
 
 /** `GET /:owner/:repo/info/refs?service=…`: the ref advertisement. */
-export const InfoRefs = HttpApiEndpoint.get(
-  "infoRefs",
-  "/:owner/:repo/info/refs",
-  { params: RepoPath, error: [RepoNotFound, PushDenied] },
-);
+export const InfoRefs = HttpApiEndpoint.get("infoRefs", "/:owner/:repo/info/refs", {
+  params: RepoPath,
+  error: [RepoNotFound, PushDenied],
+});
 
 /** `POST /:owner/:repo/git-upload-pack`: clone and fetch. */
-export const UploadPack = HttpApiEndpoint.post(
-  "uploadPack",
-  "/:owner/:repo/git-upload-pack",
-  { params: RepoPath, error: [RepoNotFound, PushDenied] },
-);
+export const UploadPack = HttpApiEndpoint.post("uploadPack", "/:owner/:repo/git-upload-pack", {
+  params: RepoPath,
+  error: [RepoNotFound, PushDenied],
+});
 
 /** `POST /:owner/:repo/git-receive-pack`: push. */
-export const ReceivePack = HttpApiEndpoint.post(
-  "receivePack",
-  "/:owner/:repo/git-receive-pack",
-  { params: RepoPath, error: [RepoNotFound, PushDenied] },
-);
+export const ReceivePack = HttpApiEndpoint.post("receivePack", "/:owner/:repo/git-receive-pack", {
+  params: RepoPath,
+  error: [RepoNotFound, PushDenied],
+});
 
 /** The git wire protocol, mounted at the root. */
 export class Protocol extends HttpApiGroup.make("protocol", {

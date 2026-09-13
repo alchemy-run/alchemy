@@ -27,12 +27,7 @@ export interface ListInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.ListInvitationsRequest,
-    ) => Effect.Effect<
-      securityhub.ListInvitationsResponse,
-      securityhub.ListInvitationsError
-    >
+    ) => Effect.Effect<securityhub.ListInvitationsResponse, securityhub.ListInvitationsError>
   >
 > {}
-export const ListInvitations = Binding.Service<ListInvitations>(
-  "AWS.SecurityHub.ListInvitations",
-);
+export const ListInvitations = Binding.Service<ListInvitations>("AWS.SecurityHub.ListInvitations");

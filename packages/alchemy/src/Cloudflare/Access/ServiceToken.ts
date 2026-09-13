@@ -117,49 +117,44 @@ export type ServiceToken = Resource<
  * @product Access
  * @category Cloudflare One (Zero Trust)
  */
-export const ServiceToken = Resource<ServiceToken>(
-  "Cloudflare.Access.ServiceToken",
-);
+export const ServiceToken = Resource<ServiceToken>("Cloudflare.Access.ServiceToken");
 
 export const isServiceToken = (value: unknown): value is ServiceToken =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.ServiceToken";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.ServiceToken";
 
 export const ServiceTokenProvider = () =>
   Provider.succeed(ServiceToken, {
     stables: ["serviceTokenId", "accountId", "clientId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessServiceTokensForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (
-                    t,
-                  ): t is (typeof page.result)[number] & {
-                    id: string;
-                    clientId: string;
-                  } => t.id != null && t.clientId != null,
-                )
-                .map((t) => ({
-                  serviceTokenId: t.id,
-                  accountId,
-                  clientId: t.clientId,
-                  // The secret is only revealed on create/rotate, never on
-                  // enumeration — match read and leave it undefined.
-                  clientSecret: undefined,
-                  name: t.name ?? "",
-                  duration: t.duration ?? undefined,
-                  expiresAt: t.expiresAt ?? undefined,
-                  clientSecretVersion: 1,
-                })),
-            ),
+      return yield* zeroTrust.listAccessServiceTokensForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (
+                  t,
+                ): t is (typeof page.result)[number] & {
+                  id: string;
+                  clientId: string;
+                } => t.id != null && t.clientId != null,
+              )
+              .map((t) => ({
+                serviceTokenId: t.id,
+                accountId,
+                clientId: t.clientId,
+                // The secret is only revealed on create/rotate, never on
+                // enumeration — match read and leave it undefined.
+                clientSecret: undefined,
+                name: t.name ?? "",
+                duration: t.duration ?? undefined,
+                expiresAt: t.expiresAt ?? undefined,
+                clientSecretVersion: 1,
+              })),
           ),
-        );
+        ),
+      );
     }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -178,11 +173,7 @@ export const ServiceTokenProvider = () =>
             accountId: acct,
             serviceTokenId: output.serviceTokenId,
           })
-          .pipe(
-            Effect.catchTag("AccessServiceTokenNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
         if (direct && direct.id) {
           return {
             serviceTokenId: direct.id,
@@ -211,12 +202,7 @@ export const ServiceTokenProvider = () =>
         clientSecretVersion: output?.clientSecretVersion ?? 1,
       };
     }),
-    reconcile: Effect.fn(function* ({
-      id,
-      news = {} as ServiceTokenProps,
-      olds,
-      output,
-    }) {
+    reconcile: Effect.fn(function* ({ id, news = {} as ServiceTokenProps, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createTokenName(id, news.name);
       const acct = output?.accountId ?? accountId;
@@ -232,11 +218,7 @@ export const ServiceTokenProvider = () =>
             accountId: acct,
             serviceTokenId: output.serviceTokenId,
           })
-          .pipe(
-            Effect.catchTag("AccessServiceTokenNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed || !observed.id) {
         observed = yield* findTokenByName(acct, name);
@@ -263,9 +245,7 @@ export const ServiceTokenProvider = () =>
             ),
           );
         if (!created.id || !created.clientId) {
-          return yield* Effect.fail(
-            new Error("ServiceToken: created token missing id"),
-          );
+          return yield* Effect.fail(new Error("ServiceToken: created token missing id"));
         }
         const fresh = yield* zeroTrust.getAccessServiceTokenForAccount({
           accountId: acct,
@@ -276,8 +256,7 @@ export const ServiceTokenProvider = () =>
           accountId: acct,
           clientId: created.clientId,
           clientSecret:
-            "clientSecret" in created &&
-            typeof created.clientSecret === "string"
+            "clientSecret" in created && typeof created.clientSecret === "string"
               ? Redacted.make(created.clientSecret)
               : output?.clientSecret,
           name: created.name ?? name,
@@ -312,8 +291,7 @@ export const ServiceTokenProvider = () =>
       // Rotate — when the declared secret version moved past the version we
       // last reconciled, mint a new secret. The previous secret stays valid
       // until previousClientSecretExpiresAt.
-      const priorVersion =
-        output?.clientSecretVersion ?? olds?.clientSecretVersion ?? 1;
+      const priorVersion = output?.clientSecretVersion ?? olds?.clientSecretVersion ?? 1;
       let clientSecret = output?.clientSecret;
       if (desiredVersion > priorVersion) {
         const rotated = yield* zeroTrust.rotateAccessServiceToken({
@@ -333,9 +311,7 @@ export const ServiceTokenProvider = () =>
       }
 
       if (!synced.id || !synced.clientId) {
-        return yield* Effect.fail(
-          new Error("ServiceToken: ensured token missing id"),
-        );
+        return yield* Effect.fail(new Error("ServiceToken: ensured token missing id"));
       }
       return {
         serviceTokenId: synced.id,
@@ -374,10 +350,8 @@ const findTokenByName = (acct: string, name: string) =>
 
 // Skip no-op PUTs while treating an unset prop as "keep whatever Cloudflare
 // has" rather than a difference.
-const differs = (
-  desired: string | undefined,
-  observed: string | null | undefined,
-) => desired !== undefined && desired !== (observed ?? undefined);
+const differs = (desired: string | undefined, observed: string | null | undefined) =>
+  desired !== undefined && desired !== (observed ?? undefined);
 
 type ObservedToken = {
   id?: string;

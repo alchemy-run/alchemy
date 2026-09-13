@@ -57,9 +57,7 @@ export interface NotificationHub extends Resource<
  *
  * @resource
  */
-export const NotificationHub = Resource<NotificationHub>(
-  "AWS.Notifications.NotificationHub",
-);
+export const NotificationHub = Resource<NotificationHub>("AWS.Notifications.NotificationHub");
 
 /**
  * Poll until the hub reaches a terminal status (bounded and fail-open —
@@ -165,9 +163,7 @@ export const NotificationHubProvider = () =>
               .deregisterNotificationHub({
                 notificationHubRegion: output.notificationHubRegion,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       });

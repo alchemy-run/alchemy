@@ -110,8 +110,7 @@ export type WorkerRoute = Resource<
 export const WorkerRoute = Resource<WorkerRoute>("Cloudflare.Workers.Route");
 
 export const isWorkerRoute = (value: unknown): value is WorkerRoute =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Workers.Route";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Workers.Route";
 
 export const WorkerRouteProvider = () =>
   Provider.succeed(WorkerRoute, {
@@ -122,11 +121,7 @@ export const WorkerRouteProvider = () =>
       const n = news as WorkerRouteProps;
       // zoneId is Input<string>; by diff time both sides are concrete
       // strings when statically knowable.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -161,9 +156,7 @@ export const WorkerRouteProvider = () =>
       const script = news.script as string | undefined;
 
       // 1. Observe by cached id first.
-      let observed = output?.routeId
-        ? yield* observeById(zoneId, output.routeId)
-        : undefined;
+      let observed = output?.routeId ? yield* observeById(zoneId, output.routeId) : undefined;
 
       // 2. Fall back to scanning the zone for the pattern. Ownership has
       //    already been verified upstream — `read` reports existing
@@ -177,20 +170,18 @@ export const WorkerRouteProvider = () =>
       //    crashed previous reconcile) created the route between our
       //    observation and now — treat it as a race and converge via PUT.
       if (!observed) {
-        observed = yield* workers
-          .createRoute({ zoneId, pattern: news.pattern, script })
-          .pipe(
-            Effect.map(normalizeRoute),
-            Effect.catchTag("InvalidRoute", (originalError) =>
-              Effect.gen(function* () {
-                const match = yield* findByPattern(zoneId, news.pattern);
-                if (!match) {
-                  return yield* Effect.fail(originalError);
-                }
-                return match;
-              }),
-            ),
-          );
+        observed = yield* workers.createRoute({ zoneId, pattern: news.pattern, script }).pipe(
+          Effect.map(normalizeRoute),
+          Effect.catchTag("InvalidRoute", (originalError) =>
+            Effect.gen(function* () {
+              const match = yield* findByPattern(zoneId, news.pattern);
+              if (!match) {
+                return yield* Effect.fail(originalError);
+              }
+              return match;
+            }),
+          ),
+        );
       }
 
       // 4. Sync — PUT resends the full desired body when the observed
@@ -235,9 +226,7 @@ export const WorkerRouteProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((route) =>
-                  toAttributes(normalizeRoute(route), zone.id),
-                ),
+                (page.result ?? []).map((route) => toAttributes(normalizeRoute(route), zone.id)),
               ),
             ),
             Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
@@ -271,10 +260,7 @@ const normalizeRoute = (raw: {
   script: raw.script == null || raw.script === "" ? undefined : raw.script,
 });
 
-const toAttributes = (
-  observed: ObservedRoute,
-  zoneId: string,
-): WorkerRouteAttributes => ({
+const toAttributes = (observed: ObservedRoute, zoneId: string): WorkerRouteAttributes => ({
   routeId: observed.id,
   zoneId,
   pattern: observed.pattern,
@@ -289,9 +275,7 @@ const observeById = (zoneId: string, routeId: string) =>
     // (10007, how some API versions tag a GET on a missing route). Both
     // are in `getRoute`'s typed union; swallow them so the reconciler
     // falls through to the find-by-pattern path.
-    Effect.catchTag(["RouteNotFound", "WorkerNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["RouteNotFound", "WorkerNotFound"], () => Effect.succeed(undefined)),
   );
 
 /**

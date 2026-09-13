@@ -27,34 +27,32 @@ export const GetAuthorizationTokenHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.CodeArtifact.GetAuthorizationToken(${domain}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["codeartifact:GetAuthorizationToken"],
-                  Resource: [domain.domainArn],
-                },
-                {
-                  // CodeArtifact exchanges the caller's credentials for the
-                  // bearer token through STS on the caller's behalf.
-                  Effect: "Allow",
-                  Action: ["sts:GetServiceBearerToken"],
-                  Resource: ["*"],
-                  Condition: {
-                    StringEquals: {
-                      "sts:AWSServiceName": "codeartifact.amazonaws.com",
-                    },
+          yield* host.bind`Allow(${host}, AWS.CodeArtifact.GetAuthorizationToken(${domain}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["codeartifact:GetAuthorizationToken"],
+                Resource: [domain.domainArn],
+              },
+              {
+                // CodeArtifact exchanges the caller's credentials for the
+                // bearer token through STS on the caller's behalf.
+                Effect: "Allow",
+                Action: ["sts:GetServiceBearerToken"],
+                Resource: ["*"],
+                Condition: {
+                  StringEquals: {
+                    "sts:AWSServiceName": "codeartifact.amazonaws.com",
                   },
                 },
-              ],
-            },
-          );
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.CodeArtifact.GetAuthorizationToken(${domain.LogicalId})`,
-      )(function* (request?: GetAuthorizationTokenRequest) {
+      return Effect.fn(`AWS.CodeArtifact.GetAuthorizationToken(${domain.LogicalId})`)(function* (
+        request?: GetAuthorizationTokenRequest,
+      ) {
         const owner = yield* Owner;
         return yield* op({
           domain: yield* DomainName,

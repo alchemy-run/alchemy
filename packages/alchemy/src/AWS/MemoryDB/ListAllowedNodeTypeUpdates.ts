@@ -35,7 +35,6 @@ export interface ListAllowedNodeTypeUpdates extends Binding.Service<
     >
   >
 > {}
-export const ListAllowedNodeTypeUpdates =
-  Binding.Service<ListAllowedNodeTypeUpdates>(
-    "AWS.MemoryDB.ListAllowedNodeTypeUpdates",
-  );
+export const ListAllowedNodeTypeUpdates = Binding.Service<ListAllowedNodeTypeUpdates>(
+  "AWS.MemoryDB.ListAllowedNodeTypeUpdates",
+);

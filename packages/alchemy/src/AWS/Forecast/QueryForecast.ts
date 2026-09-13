@@ -34,12 +34,7 @@ export interface QueryForecast extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecastquery.QueryForecastRequest,
-    ) => Effect.Effect<
-      forecastquery.QueryForecastResponse,
-      forecastquery.QueryForecastError
-    >
+    ) => Effect.Effect<forecastquery.QueryForecastResponse, forecastquery.QueryForecastError>
   >
 > {}
-export const QueryForecast = Binding.Service<QueryForecast>(
-  "AWS.Forecast.QueryForecast",
-);
+export const QueryForecast = Binding.Service<QueryForecast>("AWS.Forecast.QueryForecast");

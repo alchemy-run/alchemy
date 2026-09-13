@@ -19,8 +19,7 @@ export const ListEventIntegrationAssociationsHttp = Layer.effect(
     name: "ListEventIntegrationAssociations",
     operation: appintegrations.listEventIntegrationAssociations,
     requestKey: "EventIntegrationName",
-    identifier: (integration: EventIntegration) =>
-      integration.eventIntegrationName,
+    identifier: (integration: EventIntegration) => integration.eventIntegrationName,
     iamActions: ["app-integrations:ListEventIntegrationAssociations"],
     resources: (integration, { region, accountId }) => [
       Output.interpolate`${integration.eventIntegrationArn}`,

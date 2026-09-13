@@ -169,9 +169,7 @@ export type WebhookEndpoint = Resource<
  *
  * @resource
  */
-export const WebhookEndpoint = Resource<WebhookEndpoint>(
-  "Stripe.WebhookEndpoint",
-);
+export const WebhookEndpoint = Resource<WebhookEndpoint>("Stripe.WebhookEndpoint");
 
 const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
@@ -193,10 +191,7 @@ const redactSecret = (
   }
 };
 
-const toAttrs = (
-  endpoint: StripeWebhookEndpoint,
-  previousSecret?: Redacted.Redacted<string>,
-) => ({
+const toAttrs = (endpoint: StripeWebhookEndpoint, previousSecret?: Redacted.Redacted<string>) => ({
   id: endpoint.id,
   url: endpoint.url,
   enabledEvents: endpoint.enabled_events,
@@ -204,9 +199,7 @@ const toAttrs = (
   apiVersion: endpoint.api_version ?? undefined,
   application: endpoint.application ?? undefined,
   connect: endpoint.application != null,
-  status: (endpoint.status === "disabled"
-    ? "disabled"
-    : "enabled") as WebhookEndpointStatus,
+  status: (endpoint.status === "disabled" ? "disabled" : "enabled") as WebhookEndpointStatus,
   secret: redactSecret(endpoint.secret) ?? previousSecret,
   metadata: userMetadata(endpoint.metadata),
   created: endpoint.created,
@@ -218,9 +211,7 @@ const isMissingWebhookEndpoint = isMissingStripeResource;
 const getById = (webhookEndpoint: string) =>
   GetWebhookEndpoint({
     webhook_endpoint: webhookEndpoint,
-  }).pipe(
-    Effect.catchIf(isMissingWebhookEndpoint, () => Effect.succeed(undefined)),
-  );
+  }).pipe(Effect.catchIf(isMissingWebhookEndpoint, () => Effect.succeed(undefined)));
 
 const listAllWebhookEndpoints = Effect.fn(function* () {
   const endpoints: StripeWebhookEndpoint[] = [];
@@ -254,10 +245,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -291,15 +279,7 @@ const shouldReplace = (
 
 export const WebhookEndpointProvider = () =>
   Provider.succeed(WebhookEndpoint, {
-    stables: [
-      "id",
-      "secret",
-      "apiVersion",
-      "connect",
-      "application",
-      "created",
-      "livemode",
-    ],
+    stables: ["id", "secret", "apiVersion", "connect", "application", "created", "livemode"],
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
@@ -316,9 +296,7 @@ export const WebhookEndpointProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, output?.secret);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -348,12 +326,8 @@ export const WebhookEndpointProvider = () =>
         current = yield* CreateWebhookEndpoint({
           url: desiredUrl,
           enabled_events: desiredEvents,
-          ...(desiredDescription.length > 0
-            ? { description: desiredDescription }
-            : {}),
-          ...(news.apiVersion !== undefined
-            ? { api_version: news.apiVersion }
-            : {}),
+          ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
+          ...(news.apiVersion !== undefined ? { api_version: news.apiVersion } : {}),
           ...(news.connect !== undefined ? { connect: news.connect } : {}),
           metadata,
         }).pipe(
@@ -368,8 +342,7 @@ export const WebhookEndpointProvider = () =>
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const urlChanged = current.url !== desiredUrl;
       const eventsChanged = !arrayEquals(current.enabled_events, desiredEvents);
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const observedDisabled = current.status === "disabled";
       const disabledChanged = observedDisabled !== desiredDisabled;
 
@@ -392,9 +365,7 @@ export const WebhookEndpointProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

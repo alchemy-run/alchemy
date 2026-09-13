@@ -76,9 +76,7 @@ const simulateFile = async (fileIdx: number) => {
     }
     completed++;
     if (completed % 100 === 0) {
-      console.log(
-        `progress: ${completed}/${FILES * ITERATIONS} anomalies=${anomalies}`,
-      );
+      console.log(`progress: ${completed}/${FILES * ITERATIONS} anomalies=${anomalies}`);
     }
   }
 };

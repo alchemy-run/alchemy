@@ -27,11 +27,7 @@ export interface UpdateMapRun extends Binding.Service<
   (
     stateMachine: StateMachine,
   ) => Effect.Effect<
-    (
-      request: UpdateMapRunRequest,
-    ) => Effect.Effect<sfn.UpdateMapRunOutput, sfn.UpdateMapRunError>
+    (request: UpdateMapRunRequest) => Effect.Effect<sfn.UpdateMapRunOutput, sfn.UpdateMapRunError>
   >
 > {}
-export const UpdateMapRun = Binding.Service<UpdateMapRun>(
-  "AWS.StepFunctions.UpdateMapRun",
-);
+export const UpdateMapRun = Binding.Service<UpdateMapRun>("AWS.StepFunctions.UpdateMapRun");

@@ -26,13 +26,9 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 const saasEnabled = !!process.env.CLOUDFLARE_SAAS_ENABLED;
 const testSaas = test.provider.skipIf(!saasEnabled);
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test hostnames on a domain we do not control — the
 // hostnames stay `pending` forever, which is fine: CRUD is still fully
@@ -47,9 +43,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -62,18 +56,16 @@ const resolveZoneId = Effect.gen(function* () {
 const forbiddenBlips = Schedule.exponential("500 millis");
 
 const findByHostname = (zoneId: string, hostname: string) =>
-  customHostnames.listCustomHostnames
-    .items({ zoneId, hostname: { contain: hostname } })
-    .pipe(
-      Stream.filter((h) => h.hostname === hostname),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenBlips,
-        times: 8,
-      }),
-    );
+  customHostnames.listCustomHostnames.items({ zoneId, hostname: { contain: hostname } }).pipe(
+    Stream.filter((h) => h.hostname === hostname),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)[0]),
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenBlips,
+      times: 8,
+    }),
+  );
 
 const getHostname = (zoneId: string, customHostnameId: string) =>
   customHostnames.getCustomHostname({ zoneId, customHostnameId }).pipe(
@@ -207,9 +199,7 @@ test.provider("list returns a well-typed array of custom hostnames", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.CustomHostname.CustomHostname,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.CustomHostname);
     const all = yield* provider.list();
 
     expect(Array.isArray(all)).toBe(true);
@@ -238,24 +228,17 @@ testSaas(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomHostname.CustomHostname(
-            "ListResource",
-            {
-              zoneId,
-              hostname: HOST_DEFAULT,
-            },
-          ).pipe(adopt(true));
+          return yield* Cloudflare.CustomHostname.CustomHostname("ListResource", {
+            zoneId,
+            hostname: HOST_DEFAULT,
+          }).pipe(adopt(true));
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomHostname.CustomHostname,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.CustomHostname);
       const all = yield* provider.list();
 
-      expect(
-        all.some((h) => h.customHostnameId === deployed.customHostnameId),
-      ).toBe(true);
+      expect(all.some((h) => h.customHostnameId === deployed.customHostnameId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

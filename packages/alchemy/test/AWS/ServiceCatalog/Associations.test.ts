@@ -26,24 +26,17 @@ const TEMPLATE = JSON.stringify({
   },
 });
 
-class PortfolioStillExists extends Data.TaggedError(
-  "AssocPortfolioStillExists",
-)<{
+class PortfolioStillExists extends Data.TaggedError("AssocPortfolioStillExists")<{
   portfolioId: string;
 }> {}
 
 const assertPortfolioGone = (portfolioId: string) =>
   servicecatalog.describePortfolio({ Id: portfolioId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new PortfolioStillExists({ portfolioId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new PortfolioStillExists({ portfolioId }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "AssocPortfolioStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -113,27 +106,21 @@ test.provider(
       const portfolios = yield* servicecatalog.listPortfoliosForProduct({
         ProductId: deployed.productId,
       });
-      expect(
-        (portfolios.PortfolioDetails ?? []).some(
-          (d) => d.Id === deployed.portfolioId,
-        ),
-      ).toBe(true);
+      expect((portfolios.PortfolioDetails ?? []).some((d) => d.Id === deployed.portfolioId)).toBe(
+        true,
+      );
 
       const principals = yield* servicecatalog.listPrincipalsForPortfolio({
         PortfolioId: deployed.portfolioId,
       });
-      expect(
-        (principals.Principals ?? []).some(
-          (p) => p.PrincipalARN === deployed.roleArn,
-        ),
-      ).toBe(true);
+      expect((principals.Principals ?? []).some((p) => p.PrincipalARN === deployed.roleArn)).toBe(
+        true,
+      );
 
       // Account-wide provider enumeration drives `alchemy unsafe nuke`.
       // Both association providers must discover their child resources so
       // teardown can schedule them before the portfolio and product.
-      const productAssociationProvider = yield* Provider.findProvider(
-        PortfolioProductAssociation,
-      );
+      const productAssociationProvider = yield* Provider.findProvider(PortfolioProductAssociation);
       const principalAssociationProvider = yield* Provider.findProvider(
         PrincipalPortfolioAssociation,
       );

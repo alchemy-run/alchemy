@@ -31,12 +31,8 @@ export interface ListExports extends Binding.Service<
   ListExports,
   "AWS.BCMDataExports.ListExports",
   () => Effect.Effect<
-    (
-      request?: ListExportsRequest,
-    ) => Effect.Effect<bcm.ListExportsResponse, bcm.ListExportsError>
+    (request?: ListExportsRequest) => Effect.Effect<bcm.ListExportsResponse, bcm.ListExportsError>
   >
 > {}
 
-export const ListExports = Binding.Service<ListExports>(
-  "AWS.BCMDataExports.ListExports",
-);
+export const ListExports = Binding.Service<ListExports>("AWS.BCMDataExports.ListExports");

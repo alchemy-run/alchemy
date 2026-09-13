@@ -85,8 +85,7 @@ export class InvalidReplicationGroupConfiguration extends Data.TaggedError(
 export const validateReplicationGroupProps = (
   props: ReplicationGroupProps,
 ): InvalidReplicationGroupConfiguration | undefined => {
-  const invalid = (message: string) =>
-    new InvalidReplicationGroupConfiguration({ message });
+  const invalid = (message: string) => new InvalidReplicationGroupConfiguration({ message });
   if (
     props.port !== undefined &&
     (!Number.isInteger(props.port) || props.port < 1 || props.port > 65_535)
@@ -107,31 +106,16 @@ export const validateReplicationGroupProps = (
   ) {
     return invalid("replicasPerNodeGroup must be an integer from 0 through 5");
   }
-  if (
-    props.automaticFailoverEnabled === true &&
-    (props.replicasPerNodeGroup ?? 0) < 1
-  ) {
-    return invalid(
-      "automaticFailoverEnabled requires replicasPerNodeGroup to be at least 1",
-    );
+  if (props.automaticFailoverEnabled === true && (props.replicasPerNodeGroup ?? 0) < 1) {
+    return invalid("automaticFailoverEnabled requires replicasPerNodeGroup to be at least 1");
   }
   if (props.multiAzEnabled === true && (props.replicasPerNodeGroup ?? 0) < 1) {
-    return invalid(
-      "multiAzEnabled requires replicasPerNodeGroup to be at least 1",
-    );
+    return invalid("multiAzEnabled requires replicasPerNodeGroup to be at least 1");
   }
-  if (
-    props.multiAzEnabled === true &&
-    props.automaticFailoverEnabled !== true
-  ) {
-    return invalid(
-      "multiAzEnabled requires automaticFailoverEnabled to be true",
-    );
+  if (props.multiAzEnabled === true && props.automaticFailoverEnabled !== true) {
+    return invalid("multiAzEnabled requires automaticFailoverEnabled to be true");
   }
-  if (
-    props.transitEncryptionMode !== undefined &&
-    props.transitEncryptionEnabled === false
-  ) {
+  if (props.transitEncryptionMode !== undefined && props.transitEncryptionEnabled === false) {
     return invalid("transitEncryptionMode requires transitEncryptionEnabled");
   }
   return undefined;
@@ -157,9 +141,7 @@ export const validateReplicationGroupProps = (
  *
  * @resource
  */
-export const ReplicationGroup = Resource<ReplicationGroup>(
-  "AWS.ElastiCache.ReplicationGroup",
-);
+export const ReplicationGroup = Resource<ReplicationGroup>("AWS.ElastiCache.ReplicationGroup");
 
 const DEFAULT_NODE_TYPE = "cache.t4g.micro";
 
@@ -174,11 +156,7 @@ export const ReplicationGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeReplicationGroups({ ReplicationGroupId: name })
-          .pipe(
-            Effect.catchTag("ReplicationGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ReplicationGroups?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {
@@ -186,9 +164,7 @@ export const ReplicationGroupProvider = () =>
           Effect.flatMap((group) =>
             group?.Status === "available"
               ? Effect.succeed(group)
-              : Effect.fail(
-                  new Error(`Replication group '${name}' is not available`),
-                ),
+              : Effect.fail(new Error(`Replication group '${name}' is not available`)),
           ),
           Effect.retry({
             schedule: Schedule.max([
@@ -205,9 +181,7 @@ export const ReplicationGroupProvider = () =>
           Effect.flatMap((group) =>
             group === undefined
               ? Effect.void
-              : Effect.fail(
-                  new Error(`Replication group '${name}' is still deleting`),
-                ),
+              : Effect.fail(new Error(`Replication group '${name}' is still deleting`)),
           ),
           Effect.retry({
             schedule: Schedule.max([
@@ -219,16 +193,12 @@ export const ReplicationGroupProvider = () =>
           }),
         );
       });
-      const retryWhileCacheTransitioning = <A, E, R>(
-        effect: Effect.Effect<A, E, R>,
-      ) =>
+      const retryWhileCacheTransitioning = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.retry({
             while: (error) =>
-              (error as { _tag?: string })._tag ===
-                "InvalidReplicationGroupStateFault" ||
-              (error as { _tag?: string })._tag ===
-                "InvalidCacheClusterStateFault",
+              (error as { _tag?: string })._tag === "InvalidReplicationGroupStateFault" ||
+              (error as { _tag?: string })._tag === "InvalidCacheClusterStateFault",
             schedule: Schedule.max([
               Schedule.fixed("15 seconds"),
               // AWS can report the group as available before its member
@@ -238,16 +208,9 @@ export const ReplicationGroupProvider = () =>
           }),
         );
       const attrs = Effect.fn(function* (group: elasticache.ReplicationGroup) {
-        if (
-          !group.ReplicationGroupId ||
-          !group.ARN ||
-          !group.Status ||
-          !group.Engine
-        ) {
+        if (!group.ReplicationGroupId || !group.ARN || !group.Status || !group.Engine) {
           return yield* Effect.fail(
-            new Error(
-              "ElastiCache replication group is missing its id, ARN, status, or engine",
-            ),
+            new Error("ElastiCache replication group is missing its id, ARN, status, or engine"),
           );
         }
         const engineVersion = group.MemberClusters?.[0]
@@ -296,13 +259,10 @@ export const ReplicationGroupProvider = () =>
         stables: ["replicationGroupId", "replicationGroupArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          if (replacement(olds ?? {}, news ?? {}))
-            return { action: "replace" } as const;
+          if (replacement(olds ?? {}, news ?? {})) return { action: "replace" } as const;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const group = yield* readGroup(
@@ -310,9 +270,7 @@ export const ReplicationGroupProvider = () =>
           );
           if (!group?.ARN) return undefined;
           const result = yield* attrs(group);
-          return (yield* hasAlchemyTags(id, result.tags))
-            ? result
-            : Unowned(result);
+          return (yield* hasAlchemyTags(id, result.tags)) ? result : Unowned(result);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const props = news!;
@@ -344,8 +302,7 @@ export const ReplicationGroupProvider = () =>
                 SnapshotRetentionLimit: props.snapshotRetentionLimit,
                 SnapshotWindow: props.snapshotWindow,
                 AutoMinorVersionUpgrade: props.autoMinorVersionUpgrade,
-                TransitEncryptionEnabled:
-                  props.transitEncryptionEnabled ?? true,
+                TransitEncryptionEnabled: props.transitEncryptionEnabled ?? true,
                 TransitEncryptionMode: props.transitEncryptionMode,
                 AtRestEncryptionEnabled: props.atRestEncryptionEnabled,
                 KmsKeyId: props.kmsKeyId,
@@ -356,12 +313,7 @@ export const ReplicationGroupProvider = () =>
                 SnapshotArns: props.snapshotArns,
                 Tags: tagsToWire(desiredTags),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ReplicationGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ReplicationGroupAlreadyExistsFault", () => Effect.void));
           }
           group = yield* waitForAvailable(name);
           const update: elasticache.ModifyReplicationGroupMessage = {
@@ -369,9 +321,7 @@ export const ReplicationGroupProvider = () =>
             ApplyImmediately: true,
           };
           let changed = false;
-          const set = <
-            K extends keyof elasticache.ModifyReplicationGroupMessage,
-          >(
+          const set = <K extends keyof elasticache.ModifyReplicationGroupMessage>(
             key: K,
             desired: elasticache.ModifyReplicationGroupMessage[K],
             observed: unknown,
@@ -381,11 +331,7 @@ export const ReplicationGroupProvider = () =>
               changed = true;
             }
           };
-          set(
-            "ReplicationGroupDescription",
-            props.description,
-            group.Description,
-          );
+          set("ReplicationGroupDescription", props.description, group.Description);
           set("CacheNodeType", props.nodeType, group.CacheNodeType);
           set("Engine", props.engine, group.Engine);
           set(
@@ -394,19 +340,11 @@ export const ReplicationGroupProvider = () =>
             group.AutoMinorVersionUpgrade,
           );
           set("PreferredMaintenanceWindow", props.maintenanceWindow, undefined);
-          set(
-            "SnapshotRetentionLimit",
-            props.snapshotRetentionLimit,
-            group.SnapshotRetentionLimit,
-          );
+          set("SnapshotRetentionLimit", props.snapshotRetentionLimit, group.SnapshotRetentionLimit);
           set("SnapshotWindow", props.snapshotWindow, group.SnapshotWindow);
           set("CacheParameterGroupName", props.parameterGroupName, undefined);
           set("IpDiscovery", props.ipDiscovery, group.IpDiscovery);
-          set(
-            "TransitEncryptionMode",
-            props.transitEncryptionMode,
-            group.TransitEncryptionMode,
-          );
+          set("TransitEncryptionMode", props.transitEncryptionMode, group.TransitEncryptionMode);
           // ElastiCache reports VPC security groups and engine version on a
           // member cluster, not on the replication-group response.
           const member = group.MemberClusters?.[0]
@@ -426,10 +364,7 @@ export const ReplicationGroupProvider = () =>
             changed = true;
           }
           const existingUsers = group.UserGroupIds ?? [];
-          if (
-            props.userGroupIds &&
-            !sameStringSet(props.userGroupIds, existingUsers)
-          ) {
+          if (props.userGroupIds && !sameStringSet(props.userGroupIds, existingUsers)) {
             update.UserGroupIdsToAdd = props.userGroupIds.filter(
               (id) => !existingUsers.includes(id),
             );
@@ -443,10 +378,7 @@ export const ReplicationGroupProvider = () =>
             group = yield* waitForAvailable(name);
           }
           const currentNodeGroups = group.NodeGroups?.length ?? 1;
-          if (
-            props.numNodeGroups !== undefined &&
-            props.numNodeGroups !== currentNodeGroups
-          ) {
+          if (props.numNodeGroups !== undefined && props.numNodeGroups !== currentNodeGroups) {
             yield* elasticache.modifyReplicationGroupShardConfiguration({
               ReplicationGroupId: name,
               NodeGroupCount: props.numNodeGroups,
@@ -533,9 +465,7 @@ export const ReplicationGroupProvider = () =>
           }
           if (group.ARN) {
             const { removed, upsert } = diffTags(
-              yield* retryWhileCacheTransitioning(
-                readElastiCacheTags(group.ARN),
-              ),
+              yield* retryWhileCacheTransitioning(readElastiCacheTags(group.ARN)),
               desiredTags,
             );
             if (upsert.length)
@@ -567,12 +497,7 @@ export const ReplicationGroupProvider = () =>
                 ReplicationGroupId: output.replicationGroupId,
                 FinalSnapshotIdentifier: olds.finalSnapshotName,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ReplicationGroupNotFoundFault",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.void)),
           );
           yield* waitForDeleted(output.replicationGroupId);
         }),

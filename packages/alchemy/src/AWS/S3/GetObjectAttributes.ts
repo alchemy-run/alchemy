@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface GetObjectAttributesRequest extends Omit<
-  S3.GetObjectAttributesRequest,
-  "Bucket"
-> {}
+export interface GetObjectAttributesRequest extends Omit<S3.GetObjectAttributesRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:GetObjectAttributes`.
@@ -37,10 +34,7 @@ export interface GetObjectAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetObjectAttributesRequest,
-    ) => Effect.Effect<
-      S3.GetObjectAttributesOutput,
-      S3.GetObjectAttributesError
-    >
+    ) => Effect.Effect<S3.GetObjectAttributesOutput, S3.GetObjectAttributesError>
   >
 > {}
 export const GetObjectAttributes = Binding.Service<GetObjectAttributes>(

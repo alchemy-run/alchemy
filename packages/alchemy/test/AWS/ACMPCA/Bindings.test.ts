@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "ACMPCABindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let caArn: string;
@@ -32,9 +29,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
         ? response.json
         : response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new Error(`Fixture answered ${response.status}: ${body}`),
-              ),
+              Effect.fail(new Error(`Fixture answered ${response.status}: ${body}`)),
             ),
           ),
     ),
@@ -82,9 +77,7 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
       // Activate the CA: self-sign its CSR with the root template and
       // install the result (GetCertificateAuthorityCsr + IssueCertificate +
       // GetCertificate + ImportCertificateAuthorityCertificate).
-      const activated = (yield* send(
-        HttpClientRequest.post(`${baseUrl}/activate`),
-      ).pipe(
+      const activated = (yield* send(HttpClientRequest.post(`${baseUrl}/activate`)).pipe(
         Effect.retry({
           schedule: Schedule.spaced("3 seconds"),
           times: 3,
@@ -130,9 +123,7 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
       "returns the installed CA certificate",
       () =>
         Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/ca-certificate`),
-          )) as {
+          const body = (yield* send(HttpClientRequest.get(`${baseUrl}/ca-certificate`))) as {
             certificate: string;
           };
           expect(body.certificate).toContain("BEGIN CERTIFICATE");
@@ -146,9 +137,7 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
       "issues a short-lived end-entity certificate, then revokes it by serial",
       () =>
         Effect.gen(function* () {
-          const issued = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/issue`),
-          )) as {
+          const issued = (yield* send(HttpClientRequest.post(`${baseUrl}/issue`))) as {
             certificateArn: string;
             certificate: string;
           };
@@ -156,12 +145,9 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
           expect(issued.certificate).toContain("BEGIN CERTIFICATE");
 
           const revoked = (yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/revoke`),
-              {
-                certificateArn: issued.certificateArn,
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/revoke`), {
+              certificateArn: issued.certificateArn,
+            }),
           )) as { revoked: boolean; serial: string };
           expect(revoked.revoked).toBe(true);
           expect(revoked.serial).toBeTruthy();
@@ -175,9 +161,7 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
       "generates an audit report into S3 and polls it",
       () =>
         Effect.gen(function* () {
-          const body = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/audit`),
-          )) as {
+          const body = (yield* send(HttpClientRequest.post(`${baseUrl}/audit`))) as {
             auditReportId: string;
             s3Key: string;
             status: string;

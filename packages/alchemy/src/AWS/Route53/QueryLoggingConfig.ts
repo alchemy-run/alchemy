@@ -83,13 +83,9 @@ export interface QueryLoggingConfig extends Resource<
  *
  * @resource
  */
-export const QueryLoggingConfig = Resource<QueryLoggingConfig>(
-  "AWS.Route53.QueryLoggingConfig",
-);
+export const QueryLoggingConfig = Resource<QueryLoggingConfig>("AWS.Route53.QueryLoggingConfig");
 
-const toAttrs = (
-  config: route53.QueryLoggingConfig,
-): QueryLoggingConfig["Attributes"] => ({
+const toAttrs = (config: route53.QueryLoggingConfig): QueryLoggingConfig["Attributes"] => ({
   id: config.Id,
   hostedZoneId: config.HostedZoneId,
   cloudWatchLogsLogGroupArn: config.CloudWatchLogsLogGroupArn,
@@ -113,8 +109,7 @@ const retryQueryLoggingCreate = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "InsufficientCloudWatchLogsResourcePolicy" ||
-      e._tag === "ConcurrentModification",
+      e._tag === "InsufficientCloudWatchLogsResourcePolicy" || e._tag === "ConcurrentModification",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
   });
 
@@ -131,9 +126,7 @@ export const QueryLoggingConfigProvider = () =>
             MaxResults: 1,
           })
           .pipe(
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed({ QueryLoggingConfigs: [] }),
-            ),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed({ QueryLoggingConfigs: [] })),
           );
         return (response.QueryLoggingConfigs ?? []).at(0);
       });
@@ -141,11 +134,7 @@ export const QueryLoggingConfigProvider = () =>
       const observeById = Effect.fn(function* (id: string) {
         const response = yield* route53
           .getQueryLoggingConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchQueryLoggingConfig", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchQueryLoggingConfig", () => Effect.succeed(undefined)));
         return response?.QueryLoggingConfig;
       });
 
@@ -161,9 +150,7 @@ export const QueryLoggingConfigProvider = () =>
           route53.listQueryLoggingConfigs.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.QueryLoggingConfigs ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.QueryLoggingConfigs ?? []).map(toAttrs)),
             ),
           ),
         // The configuration is immutable (no update API) — any property
@@ -198,11 +185,7 @@ export const QueryLoggingConfigProvider = () =>
           // Sync — the configuration is immutable; an adopted/drifted config
           // pointing at a different log group is converged by delete +
           // recreate (routine prop changes replace via `diff` instead).
-          if (
-            observed &&
-            observed.CloudWatchLogsLogGroupArn !==
-              news.cloudWatchLogsLogGroupArn
-          ) {
+          if (observed && observed.CloudWatchLogsLogGroupArn !== news.cloudWatchLogsLogGroupArn) {
             yield* deleteById(observed.Id);
             observed = undefined;
           }

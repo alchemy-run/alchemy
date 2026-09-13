@@ -15,10 +15,7 @@ export default defineEventHandler((event) => {
     | undefined;
   return {
     marker: "api-route-ok",
-    binding:
-      typeof cloudflare?.env?.TEST_BINDING === "string"
-        ? cloudflare.env.TEST_BINDING
-        : null,
+    binding: typeof cloudflare?.env?.TEST_BINDING === "string" ? cloudflare.env.TEST_BINDING : null,
     hasWaitUntil: typeof cloudflare?.context?.waitUntil === "function",
   };
 });

@@ -18,15 +18,10 @@ export const makeWorkflowName = (
     ? scriptName.pipe(Effect.orDie)
     : scriptName;
   return Output.asOutput(
-    resolvedScriptName as
-      | string
-      | Output.Output<string>
-      | Effect.Effect<string>,
+    resolvedScriptName as string | Output.Output<string> | Effect.Effect<string>,
   ).pipe(
     Output.mapEffect((scriptName) => {
-      const base = `${scriptName}-${className}`
-        .toLowerCase()
-        .replaceAll(/[^a-z0-9-]/g, "-");
+      const base = `${scriptName}-${className}`.toLowerCase().replaceAll(/[^a-z0-9-]/g, "-");
       return sha256(base).pipe(
         Effect.map((hash) => {
           const suffix = `-${hash.slice(0, 8)}`;

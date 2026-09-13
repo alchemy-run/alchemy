@@ -9,8 +9,7 @@ declare class Api extends WorkerEntrypoint<unknown, Record<string, unknown>> {
 }
 
 declare const target: Cloudflare.Worker;
-declare const effectTarget: Cloudflare.Worker &
-  Rpc<{ defaultOnly(): Effect.Effect<string> }>;
+declare const effectTarget: Cloudflare.Worker & Rpc<{ defaultOnly(): Effect.Effect<string> }>;
 
 export const Worker = Cloudflare.Worker("EntrypointEnvTypeProbe", {
   script: "export default {}",
@@ -49,12 +48,8 @@ env.API.ctx;
 // @ts-expect-error The entrypoint's protected environment is not exposed.
 env.API.env;
 
-export const _untyped: Promise<Response> = env.UNTYPED.fetch(
-  "https://example.com",
-);
-export const _default: Promise<Response> = env.DEFAULT.fetch(
-  "https://example.com",
-);
+export const _untyped: Promise<Response> = env.UNTYPED.fetch("https://example.com");
+export const _default: Promise<Response> = env.DEFAULT.fetch("https://example.com");
 // @ts-expect-error Untyped bindings expose only the Fetcher interface.
 env.UNTYPED.greet("alice");
 // @ts-expect-error A named entrypoint does not inherit the default entrypoint's methods.

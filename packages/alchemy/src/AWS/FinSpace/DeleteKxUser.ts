@@ -28,6 +28,4 @@ export interface DeleteKxUser extends Binding.Service<
     ) => Effect.Effect<SVC.DeleteKxUserResponse, SVC.DeleteKxUserError>
   >
 > {}
-export const DeleteKxUser = Binding.Service<DeleteKxUser>(
-  "AWS.FinSpace.DeleteKxUser",
-);
+export const DeleteKxUser = Binding.Service<DeleteKxUser>("AWS.FinSpace.DeleteKxUser");

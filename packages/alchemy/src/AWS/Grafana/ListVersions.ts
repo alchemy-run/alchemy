@@ -30,6 +30,4 @@ export interface ListVersions extends Binding.Service<
     ) => Effect.Effect<grafana.ListVersionsResponse, grafana.ListVersionsError>
   >
 > {}
-export const ListVersions = Binding.Service<ListVersions>(
-  "AWS.Grafana.ListVersions",
-);
+export const ListVersions = Binding.Service<ListVersions>("AWS.Grafana.ListVersions");

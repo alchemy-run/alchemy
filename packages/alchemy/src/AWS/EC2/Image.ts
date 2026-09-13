@@ -93,9 +93,7 @@ const amazonLinux2023Options = (options?: {
   description: "Amazon Linux 2023",
 });
 
-const amazonLinux2Options = (options?: {
-  architecture?: ImageArchitecture;
-}): FindImageOptions => ({
+const amazonLinux2Options = (options?: { architecture?: ImageArchitecture }): FindImageOptions => ({
   owners: ["amazon"],
   name: ["amzn2-ami-hvm-*-*-gp2"],
   architecture: options?.architecture,
@@ -115,9 +113,8 @@ const amazonLinux2Options = (options?: {
  * });
  * ```
  */
-export const amazonLinux2023 = (options?: {
-  architecture?: ImageArchitecture;
-}) => image(amazonLinux2023Options(options));
+export const amazonLinux2023 = (options?: { architecture?: ImageArchitecture }) =>
+  image(amazonLinux2023Options(options));
 
 /**
  * Resolve the latest Amazon Linux 2 AMI ID for the current region as an

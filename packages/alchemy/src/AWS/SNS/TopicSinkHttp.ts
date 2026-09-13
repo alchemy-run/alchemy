@@ -24,9 +24,7 @@ const selectFailed = (
     return [];
   }
   const indices = new Set(
-    failed
-      .filter((entry) => entry.SenderFault === senderFault)
-      .map((entry) => Number(entry.Id)),
+    failed.filter((entry) => entry.SenderFault === senderFault).map((entry) => Number(entry.Id)),
   );
   return batch.filter((_, index) => indices.has(index));
 };
@@ -53,11 +51,7 @@ export const TopicSinkHttp = Layer.effect(
       }
       const publish = yield* publishBatch(topic);
 
-      return makeBatchedSink<
-        TopicSinkEntry,
-        sns.PublishBatchResponse,
-        sns.PublishBatchError
-      >({
+      return makeBatchedSink<TopicSinkEntry, sns.PublishBatchResponse, sns.PublishBatchError>({
         maxRecords: 10,
         maxBytes: 262_144,
         sizeOf: (entry) => encoder.encode(entry.Message).length,

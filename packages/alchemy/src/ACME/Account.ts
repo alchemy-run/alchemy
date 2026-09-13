@@ -125,9 +125,7 @@ export interface Account extends Resource<
 export const Account = Resource<Account>("ACME.Account");
 
 /** The CA answered `newAccount` without a `Location`, so the account has no URL. */
-export class AccountUrlMissing extends Data.TaggedError(
-  "ACME.AccountUrlMissing",
-)<{
+export class AccountUrlMissing extends Data.TaggedError("ACME.AccountUrlMissing")<{
   readonly directoryUrl: string;
 }> {}
 
@@ -192,11 +190,7 @@ export const AccountProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       if (output === undefined || olds === undefined) return undefined;
-      const credentials = credentialsOf(
-        olds,
-        output.privateKey,
-        output.accountUrl,
-      );
+      const credentials = credentialsOf(olds, output.privateKey, output.accountUrl);
       const existing = yield* observeAccount(credentials);
       if (existing === undefined) return undefined;
       return {
@@ -209,9 +203,7 @@ export const AccountProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const keyAlgorithm = news.keyAlgorithm ?? "ES256";
       // Observe: the key is the identity; keep it across reconciles.
-      const accountKey =
-        output?.privateKey ??
-        (yield* Acme.Jose.generateAccountKey(keyAlgorithm));
+      const accountKey = output?.privateKey ?? (yield* Acme.Jose.generateAccountKey(keyAlgorithm));
       const credentials = credentialsOf(news, accountKey, output?.accountUrl);
       let account = yield* observeAccount(credentials);
 
@@ -251,20 +243,14 @@ export const AccountProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const credentials = credentialsOf(
-        olds,
-        output.privateKey,
-        output.accountUrl,
-      );
+      const credentials = credentialsOf(olds, output.privateKey, output.accountUrl);
       // Deactivation is permanent and idempotent: a deactivated account
       // answers `unauthorized`, a purged one `accountDoesNotExist`.
-      yield* acme
-        .updateAccount({ url: output.accountUrl, status: "deactivated" })
-        .pipe(
-          Effect.catchTag(["AcmeAccountDoesNotExist", "AcmeUnauthorized"], () =>
-            Effect.succeed(undefined),
-          ),
-          Effect.provide(accountLayer(credentials)),
-        );
+      yield* acme.updateAccount({ url: output.accountUrl, status: "deactivated" }).pipe(
+        Effect.catchTag(["AcmeAccountDoesNotExist", "AcmeUnauthorized"], () =>
+          Effect.succeed(undefined),
+        ),
+        Effect.provide(accountLayer(credentials)),
+      );
     }),
   });

@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — a fresh token intermittently 403s.
@@ -70,12 +67,9 @@ test.provider(
 
       const settings = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings(
-            "CniSettings",
-            {
-              defaultAsn: 65000,
-            },
-          );
+          return yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings("CniSettings", {
+            defaultAsn: 65000,
+          });
         }),
       );
 
@@ -91,12 +85,9 @@ test.provider(
       // Update in place — same singleton, initialDefaultAsn survives.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings(
-            "CniSettings",
-            {
-              defaultAsn: 64999,
-            },
-          );
+          return yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings("CniSettings", {
+            defaultAsn: 64999,
+          });
         }),
       );
       expect(updated.defaultAsn).toEqual(64999);

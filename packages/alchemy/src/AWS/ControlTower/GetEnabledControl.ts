@@ -30,10 +30,7 @@ export interface GetEnabledControl extends Binding.Service<
   (
     enabledControl: EnabledControl,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      controltower.GetEnabledControlOutput,
-      controltower.GetEnabledControlError
-    >
+    () => Effect.Effect<controltower.GetEnabledControlOutput, controltower.GetEnabledControlError>
   >
 > {}
 

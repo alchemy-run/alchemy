@@ -13,10 +13,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -32,25 +29,18 @@ const requestTimeout = "5 seconds";
 // retry through `readinessRetry`. Cap the backoff at 3s so 15 attempts stay
 // bounded (~45s) instead of the raw exponential blowing past the timeout.
 const readinessRetry = {
-  schedule: Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("3 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
   times: 15,
 } as const;
 
-const requestUntilReady = (
-  effect: Effect.Effect<HttpClientResponse, unknown, never>,
-) =>
+const requestUntilReady = (effect: Effect.Effect<HttpClientResponse, unknown, never>) =>
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
       Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
-          : yield* Effect.fail(
-              new Error(`Worker not ready: ${res.status} ${yield* res.text}`),
-            );
+          : yield* Effect.fail(new Error(`Worker not ready: ${res.status} ${yield* res.text}`));
       }),
     ),
     Effect.retry(readinessRetry),
@@ -72,24 +62,16 @@ test(
   "D1 counter writes from WorkerA are visible from WorkerB (cross-script DO)",
   Effect.gen(function* () {
     const { urlA, urlB } = yield* stack;
-    const client = (yield* HttpClient.HttpClient).pipe(
-      withCounterKey("d1-cross"),
-    );
+    const client = (yield* HttpClient.HttpClient).pipe(withCounterKey("d1-cross"));
 
-    yield* reset(urlA).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
-    yield* reset(urlB).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
+    yield* reset(urlA).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    yield* reset(urlB).pipe(Effect.provideService(HttpClient.HttpClient, client));
 
     const first = yield* requestUntilReady(client.post(`${urlA}/d1/increment`));
     expect(first.status).toBe(200);
     expect((yield* first.json) as { value: number }).toEqual({ value: 1 });
 
-    const second = yield* requestUntilReady(
-      client.post(`${urlA}/d1/increment`),
-    );
+    const second = yield* requestUntilReady(client.post(`${urlA}/d1/increment`));
     expect((yield* second.json) as { value: number }).toEqual({ value: 2 });
 
     const fromB = yield* requestUntilReady(client.get(`${urlB}/d1`));
@@ -103,24 +85,16 @@ test(
   "DO storage counter writes from WorkerA are visible from WorkerB (cross-script DO)",
   Effect.gen(function* () {
     const { urlA, urlB } = yield* stack;
-    const client = (yield* HttpClient.HttpClient).pipe(
-      withCounterKey("do-cross"),
-    );
+    const client = (yield* HttpClient.HttpClient).pipe(withCounterKey("do-cross"));
 
-    yield* reset(urlA).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
-    yield* reset(urlB).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
+    yield* reset(urlA).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    yield* reset(urlB).pipe(Effect.provideService(HttpClient.HttpClient, client));
 
     const first = yield* requestUntilReady(client.post(`${urlA}/do/increment`));
     expect(first.status).toBe(200);
     expect((yield* first.json) as { value: number }).toEqual({ value: 1 });
 
-    const second = yield* requestUntilReady(
-      client.post(`${urlA}/do/increment`),
-    );
+    const second = yield* requestUntilReady(client.post(`${urlA}/do/increment`));
     expect((yield* second.json) as { value: number }).toEqual({ value: 2 });
 
     const fromB = yield* requestUntilReady(client.get(`${urlB}/do`));
@@ -134,19 +108,11 @@ test(
   "WorkerC hosts its own isolated Counter (writes from A/B are not visible from C)",
   Effect.gen(function* () {
     const { urlA, urlB, urlC } = yield* stack;
-    const client = (yield* HttpClient.HttpClient).pipe(
-      withCounterKey("isolation"),
-    );
+    const client = (yield* HttpClient.HttpClient).pipe(withCounterKey("isolation"));
 
-    yield* reset(urlA).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
-    yield* reset(urlB).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
-    yield* reset(urlC).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
+    yield* reset(urlA).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    yield* reset(urlB).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    yield* reset(urlC).pipe(Effect.provideService(HttpClient.HttpClient, client));
 
     // Increment via WorkerA and WorkerB (both route to WorkerA's hosted Counter).
     yield* requestUntilReady(client.post(`${urlA}/do/increment`));
@@ -178,16 +144,10 @@ test(
   "Writes from WorkerB are visible from WorkerA (bidirectional cross-script DO)",
   Effect.gen(function* () {
     const { urlA, urlB } = yield* stack;
-    const client = (yield* HttpClient.HttpClient).pipe(
-      withCounterKey("bidirectional"),
-    );
+    const client = (yield* HttpClient.HttpClient).pipe(withCounterKey("bidirectional"));
 
-    yield* reset(urlA).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
-    yield* reset(urlB).pipe(
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
+    yield* reset(urlA).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    yield* reset(urlB).pipe(Effect.provideService(HttpClient.HttpClient, client));
 
     yield* requestUntilReady(client.post(`${urlB}/d1/increment`));
     yield* requestUntilReady(client.post(`${urlB}/d1/increment`));

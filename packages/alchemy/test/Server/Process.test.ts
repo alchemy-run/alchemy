@@ -8,11 +8,7 @@ import * as Plan from "@/Plan";
 import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import { Resource } from "@/Resource";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-  ServerHost,
-} from "@/Server/Process.ts";
+import { createHostRuntimeContext, type HostRuntimeContext, ServerHost } from "@/Server/Process.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
@@ -30,10 +26,9 @@ interface Host extends Resource<"Test.Host", HostProps, { ok: boolean }> {}
 type HostServices = ServerHost;
 type HostShape = Main<HostServices>;
 
-const Host: Platform<Host, HostServices, HostShape, HostRuntimeContext> =
-  Platform("Test.Host", {
-    createRuntimeContext: createHostRuntimeContext("Test.Host"),
-  });
+const Host: Platform<Host, HostServices, HostShape, HostRuntimeContext> = Platform("Test.Host", {
+  createRuntimeContext: createHostRuntimeContext("Test.Host"),
+});
 
 const hostProvider = () =>
   Provider.succeed(Host, {

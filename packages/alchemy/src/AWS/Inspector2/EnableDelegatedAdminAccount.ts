@@ -33,7 +33,6 @@ export interface EnableDelegatedAdminAccount extends Binding.Service<
     >
   >
 > {}
-export const EnableDelegatedAdminAccount =
-  Binding.Service<EnableDelegatedAdminAccount>(
-    "AWS.Inspector2.EnableDelegatedAdminAccount",
-  );
+export const EnableDelegatedAdminAccount = Binding.Service<EnableDelegatedAdminAccount>(
+  "AWS.Inspector2.EnableDelegatedAdminAccount",
+);

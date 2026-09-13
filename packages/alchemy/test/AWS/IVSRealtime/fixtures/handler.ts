@@ -55,22 +55,22 @@ export default IVSRealtimeTestFunction.make(
         ),
     );
 
-    const createParticipantToken =
-      yield* IVSRealtime.CreateParticipantToken(stage);
-    const disconnectParticipant =
-      yield* IVSRealtime.DisconnectParticipant(stage);
+    const createParticipantToken = yield* IVSRealtime.CreateParticipantToken(stage);
+    const disconnectParticipant = yield* IVSRealtime.DisconnectParticipant(stage);
     const getParticipant = yield* IVSRealtime.GetParticipant(stage);
     const listParticipants = yield* IVSRealtime.ListParticipants(stage);
-    const listParticipantEvents =
-      yield* IVSRealtime.ListParticipantEvents(stage);
-    const listParticipantReplicas =
-      yield* IVSRealtime.ListParticipantReplicas(stage);
+    const listParticipantEvents = yield* IVSRealtime.ListParticipantEvents(stage);
+    const listParticipantReplicas = yield* IVSRealtime.ListParticipantReplicas(stage);
     const getStageSession = yield* IVSRealtime.GetStageSession(stage);
     const listStageSessions = yield* IVSRealtime.ListStageSessions(stage);
-    const startParticipantReplication =
-      yield* IVSRealtime.StartParticipantReplication(stage, overflowStage);
-    const stopParticipantReplication =
-      yield* IVSRealtime.StopParticipantReplication(stage, overflowStage);
+    const startParticipantReplication = yield* IVSRealtime.StartParticipantReplication(
+      stage,
+      overflowStage,
+    );
+    const stopParticipantReplication = yield* IVSRealtime.StopParticipantReplication(
+      stage,
+      overflowStage,
+    );
     const startComposition = yield* IVSRealtime.StartComposition(stage);
     const stopComposition = yield* IVSRealtime.StopComposition();
     const getComposition = yield* IVSRealtime.GetComposition();
@@ -139,9 +139,8 @@ export default IVSRealtimeTestFunction.make(
             reason: "alchemy test",
           }).pipe(
             Effect.map(() => ({ ok: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -159,9 +158,8 @@ export default IVSRealtimeTestFunction.make(
             sessionId: MISSING_SESSION_ID,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -172,9 +170,7 @@ export default IVSRealtimeTestFunction.make(
             sessionId: MISSING_SESSION_ID,
           }).pipe(
             Effect.map((r) => ({ count: r.participants.length })),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed({ tag: e._tag }),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -185,9 +181,8 @@ export default IVSRealtimeTestFunction.make(
             participantId: MISSING_PARTICIPANT_ID,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -199,9 +194,7 @@ export default IVSRealtimeTestFunction.make(
             participantId: MISSING_PARTICIPANT_ID,
           }).pipe(
             Effect.map((r) => ({ count: r.events.length })),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed({ tag: e._tag }),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -211,9 +204,7 @@ export default IVSRealtimeTestFunction.make(
             participantId: MISSING_PARTICIPANT_ID,
           }).pipe(
             Effect.map((r) => ({ count: r.replicas.length })),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed({ tag: e._tag }),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed({ tag: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -243,9 +234,8 @@ export default IVSRealtimeTestFunction.make(
             participantId: MISSING_PARTICIPANT_ID,
           }).pipe(
             Effect.map(() => ({ ok: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -265,9 +255,8 @@ export default IVSRealtimeTestFunction.make(
           const arn = url.searchParams.get("arn")!;
           const result = yield* getComposition({ arn }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -277,9 +266,8 @@ export default IVSRealtimeTestFunction.make(
           const arn = url.searchParams.get("arn")!;
           const result = yield* stopComposition({ arn }).pipe(
             Effect.map(() => ({ ok: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);

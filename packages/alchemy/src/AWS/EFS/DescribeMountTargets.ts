@@ -42,10 +42,7 @@ export interface DescribeMountTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeMountTargetsRequest,
-    ) => Effect.Effect<
-      efs.DescribeMountTargetsResponse,
-      efs.DescribeMountTargetsError
-    >
+    ) => Effect.Effect<efs.DescribeMountTargetsResponse, efs.DescribeMountTargetsError>
   >
 > {}
 export const DescribeMountTargets = Binding.Service<DescribeMountTargets>(

@@ -112,9 +112,7 @@ export interface DBClusterEndpoint extends Resource<
  *
  * @resource
  */
-export const DBClusterEndpoint = Resource<DBClusterEndpoint>(
-  "AWS.RDS.DBClusterEndpoint",
-);
+export const DBClusterEndpoint = Resource<DBClusterEndpoint>("AWS.RDS.DBClusterEndpoint");
 
 const toAttrs = ({
   endpoint,
@@ -149,11 +147,7 @@ export const DBClusterEndpointProvider = () =>
           .describeDBClusterEndpoints({
             DBClusterEndpointIdentifier: identifier,
           })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusterEndpoints?.[0];
       });
 
@@ -179,10 +173,8 @@ export const DBClusterEndpointProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
-            (yield* toIdentifier(
-              id,
-              olds ?? ({} as DBClusterEndpointProps),
-            )) !== (yield* toIdentifier(id, news))
+            (yield* toIdentifier(id, olds ?? ({} as DBClusterEndpointProps))) !==
+            (yield* toIdentifier(id, news))
           ) {
             return { action: "replace" } as const;
           }
@@ -208,9 +200,7 @@ export const DBClusterEndpointProvider = () =>
           return toAttrs({ endpoint, tags: output?.tags ?? {} });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbClusterEndpointIdentifier ??
-            (yield* toIdentifier(id, news));
+          const identifier = output?.dbClusterEndpointIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -233,18 +223,11 @@ export const DBClusterEndpointProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBClusterEndpointAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBClusterEndpointAlreadyExistsFault", () => Effect.void));
             observed = yield* readEndpoint(identifier);
             if (!observed?.DBClusterEndpointIdentifier) {
               return yield* Effect.fail(
-                new Error(
-                  `DB cluster endpoint '${identifier}' not found after create`,
-                ),
+                new Error(`DB cluster endpoint '${identifier}' not found after create`),
               );
             }
           } else {
@@ -258,9 +241,7 @@ export const DBClusterEndpointProvider = () =>
             observed = yield* readEndpoint(identifier);
             if (!observed?.DBClusterEndpointIdentifier) {
               return yield* Effect.fail(
-                new Error(
-                  `DB cluster endpoint '${identifier}' not found after update`,
-                ),
+                new Error(`DB cluster endpoint '${identifier}' not found after update`),
               );
             }
           }
@@ -293,12 +274,7 @@ export const DBClusterEndpointProvider = () =>
             .deleteDBClusterEndpoint({
               DBClusterEndpointIdentifier: output.dbClusterEndpointIdentifier,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBClusterEndpointNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBClusterEndpointNotFoundFault", () => Effect.void));
         }),
       };
     }),

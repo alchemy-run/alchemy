@@ -86,9 +86,7 @@ const chain = (self: Fragment, next: Fragment): Fragment => {
 };
 
 /** Seal a fragment into a `{ StartAt, States }` machine (`End: true`). */
-const seal = (
-  fragment: Fragment,
-): { StartAt: string; States: Record<string, State> } => {
+const seal = (fragment: Fragment): { StartAt: string; States: Record<string, State> } => {
   const states = { ...fragment.states };
   for (const terminal of fragment.terminals) {
     states[terminal] = { ...states[terminal], End: true };
@@ -121,8 +119,7 @@ const renderValue = (value: unknown): unknown => {
  * (`TimeoutSeconds`, `IntervalSeconds`, `Seconds`) must be positive
  * integers, so sub-second durations round up to 1.
  */
-export const aslSeconds = (input: Duration.Input): number =>
-  Math.max(1, toWholeSeconds(input)!);
+export const aslSeconds = (input: Duration.Input): number => Math.max(1, toWholeSeconds(input)!);
 
 const retryPolicy = (options: RetryOptions): Record<string, unknown> => ({
   ErrorEquals:
@@ -134,9 +131,7 @@ const retryPolicy = (options: RetryOptions): Record<string, unknown> => ({
   IntervalSeconds: aslSeconds(options.initial ?? "1 second"),
   BackoffRate: options.backoff ?? 2,
   MaxAttempts: options.maxAttempts ?? 3,
-  ...(options.maxDelay !== undefined
-    ? { MaxDelaySeconds: aslSeconds(options.maxDelay) }
-    : {}),
+  ...(options.maxDelay !== undefined ? { MaxDelaySeconds: aslSeconds(options.maxDelay) } : {}),
   ...(options.jitter ? { JitterStrategy: "FULL" } : {}),
 });
 
@@ -288,11 +283,7 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
     case "when": {
       const name = allocName(ctx, "Choice");
       const onTrue = compileNode(ctx, node.onTrue.node, v);
-      const onFalse = compileNode(
-        ctx,
-        node.onFalse?.node ?? { kind: "succeed", value: null },
-        v,
-      );
+      const onFalse = compileNode(ctx, node.onFalse?.node ?? { kind: "succeed", value: null }, v);
       return {
         startAt: name,
         states: {
@@ -455,8 +446,7 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
         step = iterator.next(variableExpr(stepVar));
       }
       const diverged =
-        fragments.length > 0 &&
-        fragments[fragments.length - 1].terminals.length === 0;
+        fragments.length > 0 && fragments[fragments.length - 1].terminals.length === 0;
       if (!diverged) {
         // final Pass assigning the generator's return value
         const name = allocName(ctx, "Pass");
@@ -519,9 +509,7 @@ const compileBranch = (
  * that), or inspect/extend the definition first — the raw
  * `definition: Record<string, unknown>` escape hatch stays first-class.
  */
-export const compileProgram = (
-  program: SfnEffect<any, any>,
-): CompiledProgram => {
+export const compileProgram = (program: SfnEffect<any, any>): CompiledProgram => {
   const ctx: Ctx = {
     nameCounters: {},
     varCounter: 0,

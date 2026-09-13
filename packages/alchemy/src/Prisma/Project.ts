@@ -228,9 +228,7 @@ const listProjectDatabases = (projectId: string) =>
     let cursor: string | undefined;
     while (true) {
       const page = yield* getProjectDatabases(
-        cursor === undefined
-          ? { projectId, limit: 100 }
-          : { projectId, limit: 100, cursor },
+        cursor === undefined ? { projectId, limit: 100 } : { projectId, limit: 100, cursor },
       );
       databases.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
@@ -393,12 +391,9 @@ const ProviderLive = () =>
           const desiredCreateDatabase = isResolved(news.createDatabase)
             ? (news.createDatabase ?? true)
             : undefined;
-          const desiredRegion = isResolved(news.region)
-            ? (news.region ?? "us-east-1")
-            : undefined;
+          const desiredRegion = isResolved(news.region) ? (news.region ?? "us-east-1") : undefined;
           const hadDatabase =
-            output?.databaseId !== undefined ||
-            (!output && (olds.createDatabase ?? true));
+            output?.databaseId !== undefined || (!output && (olds.createDatabase ?? true));
 
           // The API cannot remove a project's last/default database. Moving
           // from a database-bearing project to `createDatabase: false`
@@ -409,8 +404,7 @@ const ProviderLive = () =>
             // name. A stable explicit name collides with the old generation
             // and must be removed before creating the new project.
             const deleteFirst = isResolved(news.name)
-              ? news.name !== undefined &&
-                (!output || news.name === output.projectName)
+              ? news.name !== undefined && (!output || news.name === output.projectName)
               : true;
             return { action: "replace", deleteFirst } as const;
           }
@@ -432,8 +426,7 @@ const ProviderLive = () =>
           }
           if (
             desiredCreateDatabase === true &&
-            (output?.databaseId === undefined ||
-              (olds.createDatabase ?? true) === false)
+            (output?.databaseId === undefined || (olds.createDatabase ?? true) === false)
           ) {
             return { action: "update" } as const;
           }
@@ -442,13 +435,9 @@ const ProviderLive = () =>
             settings: news.settings,
           };
           if (!isResolved(updateProps)) return undefined;
-          const resolvedUpdateProps = updateProps as Pick<
-            ProjectProps,
-            "name" | "settings"
-          >;
+          const resolvedUpdateProps = updateProps as Pick<ProjectProps, "name" | "settings">;
           const nextName = yield* createName(id, resolvedUpdateProps.name);
-          const oldName =
-            output?.projectName ?? (yield* createName(id, olds.name));
+          const oldName = output?.projectName ?? (yield* createName(id, olds.name));
           if (
             nextName !== oldName ||
             // Settings are write-only in the Management API project
@@ -456,17 +445,14 @@ const ProviderLive = () =>
             // out-of-band changes converge, and write `{}` once when a
             // previously managed settings prop is removed.
             resolvedUpdateProps.settings !== undefined ||
-            (olds.settings !== undefined &&
-              resolvedUpdateProps.settings === undefined)
+            (olds.settings !== undefined && resolvedUpdateProps.settings === undefined)
           ) {
             return { action: "update" } as const;
           }
           return undefined;
         }),
         read: Effect.fn(function* ({ id, output, olds = {} }) {
-          const projectId = isPrismaDevId(output?.projectId)
-            ? undefined
-            : output?.projectId;
+          const projectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           const project = projectId
             ? yield* getProject({ id: projectId }).pipe(
                 Effect.map((response) => response.data),
@@ -477,13 +463,11 @@ const ProviderLive = () =>
           const database = yield* defaultDatabase(project.id).pipe(
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
-          const cachedSecrets =
-            output?.databaseId === database?.id ? output : undefined;
+          const cachedSecrets = output?.databaseId === database?.id ? output : undefined;
           const attrs = attrsFrom(project, database, {
             directConnectionString: cachedSecrets?.directConnectionString,
             pooledConnectionString: cachedSecrets?.pooledConnectionString,
-            accelerateConnectionString:
-              cachedSecrets?.accelerateConnectionString,
+            accelerateConnectionString: cachedSecrets?.accelerateConnectionString,
             host: cachedSecrets?.host,
             user: cachedSecrets?.user,
             password: cachedSecrets?.password,
@@ -491,15 +475,11 @@ const ProviderLive = () =>
           // An omitted name is derived from this exact PlanScope instance ID.
           // Finding it proves this is create-recovery, not a foreign natural-
           // key match. User-supplied names still require explicit adoption.
-          return projectId === undefined && olds.name !== undefined
-            ? Unowned(attrs)
-            : attrs;
+          return projectId === undefined && olds.name !== undefined ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const name = yield* createName(id, news.name);
-          const outputProjectId = isPrismaDevId(output?.projectId)
-            ? undefined
-            : output?.projectId;
+          const outputProjectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           let project: ObservedProject | undefined = outputProjectId
             ? yield* getProject({ id: outputProjectId }).pipe(
                 Effect.map((response) => response.data),
@@ -527,9 +507,7 @@ const ProviderLive = () =>
                 return {
                   project,
                   database: response.data.database ?? undefined,
-                  secrets: extractConnectionSecrets(
-                    response.data.database?.connections[0],
-                  ),
+                  secrets: extractConnectionSecrets(response.data.database?.connections[0]),
                   created: true,
                   recoverSecrets: true,
                 };
@@ -564,13 +542,10 @@ const ProviderLive = () =>
           }
           if (!project) {
             return yield* Effect.fail(
-              new Error(
-                `Prisma project '${name}' could not be observed after create recovery.`,
-              ),
+              new Error(`Prisma project '${name}' could not be observed after create recovery.`),
             );
           }
-          const ownedGeneratedIdentity =
-            news.name === undefined && project.name === name;
+          const ownedGeneratedIdentity = news.name === undefined && project.name === name;
 
           if (news.createDatabase === false && createdDatabase) {
             return yield* Effect.fail(
@@ -598,8 +573,7 @@ const ProviderLive = () =>
           // forced reconcile after adoption) instead of trusting `olds` as an
           // observation of cloud state. When the prop is removed after being
           // managed, an empty object clears the previously managed settings.
-          const settingsChanged =
-            news.settings !== undefined || olds?.settings !== undefined;
+          const settingsChanged = news.settings !== undefined || olds?.settings !== undefined;
           if (project.name !== name || settingsChanged) {
             project = (yield* updateProject({
               id: project.id,
@@ -638,20 +612,12 @@ const ProviderLive = () =>
                 Effect.catchTag("Conflict", () =>
                   defaultDatabase(projectId).pipe(
                     Effect.flatMap((database) =>
-                      requireDefaultDatabaseInRegion(
-                        database,
-                        name,
-                        desiredRegion,
-                      ),
+                      requireDefaultDatabaseInRegion(database, name, desiredRegion),
                     ),
                   ),
                 ),
               );
-              database = yield* requireDefaultDatabaseInRegion(
-                created,
-                name,
-                desiredRegion,
-              );
+              database = yield* requireDefaultDatabaseInRegion(created, name, desiredRegion);
               secrets = extractConnectionSecrets(created.connections[0]);
             }
           }
@@ -679,9 +645,7 @@ const ProviderLive = () =>
           }
 
           const persistedSecrets =
-            output &&
-            database !== undefined &&
-            output.databaseId === database.id
+            output && database !== undefined && output.databaseId === database.id
               ? {
                   directConnectionString: output.directConnectionString,
                   pooledConnectionString: output.pooledConnectionString,
@@ -691,24 +655,17 @@ const ProviderLive = () =>
                   password: output.password,
                 }
               : {};
-          const knownSecrets = mergeConnectionSecrets(
-            secrets,
-            persistedSecrets,
-          );
+          const knownSecrets = mergeConnectionSecrets(secrets, persistedSecrets);
           let finalSecrets = knownSecrets;
           if (
             database &&
             (recoverCreateSecrets ||
-              (ownedGeneratedIdentity &&
-                !hasCanonicalConnectionSecrets(knownSecrets)) ||
+              (ownedGeneratedIdentity && !hasCanonicalConnectionSecrets(knownSecrets)) ||
               defaultDatabaseChanged ||
               olds !== undefined ||
               news.rotateCredentialsOnAdopt === true)
           ) {
-            const recovered = yield* recoverDatabaseConnectionSecrets(
-              database,
-              knownSecrets,
-            );
+            const recovered = yield* recoverDatabaseConnectionSecrets(database, knownSecrets);
             database = recovered.database;
             finalSecrets = recovered.secrets;
           }
@@ -730,13 +687,9 @@ const ProviderLocal = () =>
     workspaceId: devId("workspace", "local"),
     createdAt: DEV_TIMESTAMP,
     defaultRegion:
-      news.createDatabase === false
-        ? (news.region ?? null)
-        : (news.region ?? "us-east-1"),
-    databaseId:
-      news.createDatabase === false ? undefined : devId("database", id),
-    defaultConnectionId:
-      news.createDatabase === false ? undefined : devId("connection", id),
+      news.createDatabase === false ? (news.region ?? null) : (news.region ?? "us-east-1"),
+    databaseId: news.createDatabase === false ? undefined : devId("database", id),
+    defaultConnectionId: news.createDatabase === false ? undefined : devId("connection", id),
     directConnectionString: undefined,
     pooledConnectionString: undefined,
     accelerateConnectionString: undefined,

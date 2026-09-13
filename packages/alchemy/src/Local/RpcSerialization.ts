@@ -10,11 +10,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Output from "../Output.ts";
 import { isRedactedMarker, type RedactedMarker } from "../RuntimeContext.ts";
-import {
-  decodeDuration,
-  DURATION_MARKER,
-  encodeState,
-} from "../State/StateEncoding.ts";
+import { decodeDuration, DURATION_MARKER, encodeState } from "../State/StateEncoding.ts";
 
 type RpcEffectHandler<Args extends Array<any>, Success, Error> = (
   ...args: Args
@@ -239,10 +235,7 @@ const serializeRpcArgs = (value: unknown): unknown => {
   }
   if (value && typeof value === "object" && !("toJSON" in value)) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        serializeRpcArgs(child),
-      ]),
+      Object.entries(value).map(([key, child]) => [key, serializeRpcArgs(child)]),
     );
   }
   return value;
@@ -270,9 +263,7 @@ const isContextMarker = (value: object): value is ContextMarker =>
   "description" in value &&
   typeof value.description === "string";
 
-const isDurationEnvelope = (
-  value: object,
-): value is { [DURATION_MARKER]: unknown } =>
+const isDurationEnvelope = (value: object): value is { [DURATION_MARKER]: unknown } =>
   DURATION_MARKER in value && Object.keys(value).length === 1;
 
 const deserializeRpcArgs = (value: unknown): unknown => {
@@ -310,10 +301,7 @@ const deserializeRpcArgs = (value: unknown): unknown => {
       return decodeDuration(value[DURATION_MARKER]) ?? value;
     }
     return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        deserializeRpcArgs(child),
-      ]),
+      Object.entries(value).map(([key, child]) => [key, deserializeRpcArgs(child)]),
     );
   }
   return value;

@@ -38,6 +38,4 @@ export interface DescribeDataRepositoryAssociations extends Binding.Service<
   >
 > {}
 export const DescribeDataRepositoryAssociations =
-  Binding.Service<DescribeDataRepositoryAssociations>(
-    "AWS.FSx.DescribeDataRepositoryAssociations",
-  );
+  Binding.Service<DescribeDataRepositoryAssociations>("AWS.FSx.DescribeDataRepositoryAssociations");

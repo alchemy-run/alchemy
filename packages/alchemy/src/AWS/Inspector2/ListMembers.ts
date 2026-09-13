@@ -28,12 +28,7 @@ export interface ListMembers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.ListMembersRequest,
-    ) => Effect.Effect<
-      inspector2.ListMembersResponse,
-      inspector2.ListMembersError
-    >
+    ) => Effect.Effect<inspector2.ListMembersResponse, inspector2.ListMembersError>
   >
 > {}
-export const ListMembers = Binding.Service<ListMembers>(
-  "AWS.Inspector2.ListMembers",
-);
+export const ListMembers = Binding.Service<ListMembers>("AWS.Inspector2.ListMembers");

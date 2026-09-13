@@ -39,16 +39,11 @@ test.provider(
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const fn = yield* HttpApiTestFunction.pipe(
-            Effect.provide(HttpApiTestFunctionLive),
-          );
-          const { api, stage, url } = yield* AWS.ApiGatewayV2.HttpApi(
-            "TestHttpApi",
-            {
-              handler: fn,
-              timeout: "29 seconds",
-            },
-          );
+          const fn = yield* HttpApiTestFunction.pipe(Effect.provide(HttpApiTestFunctionLive));
+          const { api, stage, url } = yield* AWS.ApiGatewayV2.HttpApi("TestHttpApi", {
+            handler: fn,
+            timeout: "29 seconds",
+          });
           return {
             url,
             apiId: api.apiId,
@@ -89,9 +84,7 @@ test.provider(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`GET /items/widget-42 returned ${response.status}`),
-                ),
+              : Effect.fail(new Error(`GET /items/widget-42 returned ${response.status}`)),
           ),
         ),
       );
@@ -108,9 +101,7 @@ test.provider(
           Effect.flatMap((response) =>
             response.status === 201
               ? response.json
-              : Effect.fail(
-                  new Error(`POST /items returned ${response.status}`),
-                ),
+              : Effect.fail(new Error(`POST /items returned ${response.status}`)),
           ),
         ),
       );

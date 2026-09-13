@@ -68,8 +68,7 @@ const FakeHandlers = Layer.succeed(Git.Handlers, {
     receivePack: echoBody,
   },
   github: {
-    user: () =>
-      Effect.succeed(HttpServerResponse.jsonUnsafe({ login: "default" })),
+    user: () => Effect.succeed(HttpServerResponse.jsonUnsafe({ login: "default" })),
     repo: unexpected,
     branches: unexpected,
     commits: unexpected,
@@ -92,11 +91,7 @@ const Authentication = HttpRouter.middleware((httpEffect) =>
       return HttpServerResponse.empty({ status: 401 });
     }
     const runtime = yield* RuntimeContext;
-    return HttpServerResponse.setHeader(
-      yield* httpEffect,
-      "x-runtime-id",
-      runtime.id,
-    );
+    return HttpServerResponse.setHeader(yield* httpEffect, "x-runtime-id", runtime.id);
   }).pipe(Effect.provide(RuntimeContext.phantom)),
 );
 class AppRoutes extends HttpApiGroup.make("app").add(
@@ -105,36 +100,26 @@ class AppRoutes extends HttpApiGroup.make("app").add(
 class AppApi extends HttpApi.make("app").add(AppRoutes) {}
 const AppApiLive = HttpApiBuilder.layer(AppApi).pipe(
   Layer.provide(
-    HttpApiBuilder.group(AppApi, "app", (h) =>
-      h.handle("health", () => Effect.succeed("ok")),
-    ),
+    HttpApiBuilder.group(AppApi, "app", (h) => h.handle("health", () => Effect.succeed("ok"))),
   ),
 );
 const GitHubLive = HttpApiBuilder.group(Git.Api, "github", (h) =>
   Effect.map(Git.Handlers, (git) =>
     h.handleAll({
       ...git.github,
-      user: () =>
-        Effect.succeed(HttpServerResponse.jsonUnsafe({ login: "application" })),
+      user: () => Effect.succeed(HttpServerResponse.jsonUnsafe({ login: "application" })),
     }),
   ),
 );
-const OpenRoutes = Git.ApiLive.pipe(
-  Layer.provide(FakeHandlers),
-  Layer.provide(Http.Platform),
-);
+const OpenRoutes = Git.ApiLive.pipe(Layer.provide(FakeHandlers), Layer.provide(Http.Platform));
 const ProtectedRoutes = Layer.mergeAll(
   Layer.mergeAll(
     AppApiLive,
-    HttpApiBuilder.layer(Git.Api).pipe(
-      Layer.provide(Layer.mergeAll(Git.GroupsLive, GitHubLive)),
-    ),
+    HttpApiBuilder.layer(Git.Api).pipe(Layer.provide(Layer.mergeAll(Git.GroupsLive, GitHubLive))),
   ).pipe(Layer.provide(Authentication.layer)),
   Git.InternalApiLive,
 ).pipe(Layer.provide(FakeHandlers), Layer.provide(Http.Platform));
-class PrefixedApi extends HttpApi.make("custom-git")
-  .add(Git.Refs)
-  .prefix("/git") {}
+class PrefixedApi extends HttpApi.make("custom-git").add(Git.Refs).prefix("/git") {}
 const PrefixedRoutes = Layer.mergeAll(
   AppApiLive,
   HttpApiBuilder.layer(PrefixedApi).pipe(
@@ -150,11 +135,7 @@ const PrefixedRoutes = Layer.mergeAll(
   Layer.provide(Http.Platform),
 );
 
-const request = (
-  fetch: Http.HttpEffect<RuntimeContext>,
-  path: string,
-  init?: RequestInit,
-) =>
+const request = (fetch: Http.HttpEffect<RuntimeContext>, path: string, init?: RequestInit) =>
   fetch.pipe(
     Effect.provideService(
       HttpServerRequest.HttpServerRequest,
@@ -168,59 +149,47 @@ const request = (
       set: () => Effect.succeed(""),
     }),
     Effect.catchCause((cause) =>
-      HttpServerError.causeResponse(cause).pipe(
-        Effect.map(([response]) => response),
-      ),
+      HttpServerError.causeResponse(cause).pipe(Effect.map(([response]) => response)),
     ),
     Effect.map(HttpServerResponse.toWeb),
     Effect.scoped,
   );
 
 describe("Git HTTP composition", () => {
-  it.effect(
-    "registers every default group and preserves decoded requests and typed errors",
-    () =>
-      Effect.gen(function* () {
-        const server = yield* HttpRouter.toHttpEffect(OpenRoutes);
-        const ref = yield* request(
-          server,
-          "/api/v1/repos/acme/repo/ref?name=refs%2Fheads%2Fmain",
-        );
-        expect(ref.status).toBe(200);
-        expect(yield* Effect.promise(() => ref.json())).toEqual({
-          name: "refs/heads/main",
-          oid,
-        });
+  it.effect("registers every default group and preserves decoded requests and typed errors", () =>
+    Effect.gen(function* () {
+      const server = yield* HttpRouter.toHttpEffect(OpenRoutes);
+      const ref = yield* request(server, "/api/v1/repos/acme/repo/ref?name=refs%2Fheads%2Fmain");
+      expect(ref.status).toBe(200);
+      expect(yield* Effect.promise(() => ref.json())).toEqual({
+        name: "refs/heads/main",
+        oid,
+      });
 
-        const missing = yield* request(server, "/api/v1/repos/acme/missing");
-        expect(missing.status).toBe(404);
-        expect(yield* Effect.promise(() => missing.json())).toMatchObject({
-          _tag: "RepoNotFound",
-          owner: "acme",
-          repo: "missing",
-        });
+      const missing = yield* request(server, "/api/v1/repos/acme/missing");
+      expect(missing.status).toBe(404);
+      expect(yield* Effect.promise(() => missing.json())).toMatchObject({
+        _tag: "RepoNotFound",
+        owner: "acme",
+        repo: "missing",
+      });
 
-        const invalid = yield* request(server, "/api/v1/repos/acme/repo/ref");
-        expect(invalid.status).toBe(400);
-      }).pipe(Effect.scoped),
+      const invalid = yield* request(server, "/api/v1/repos/acme/repo/ref");
+      expect(invalid.status).toBe(400);
+    }).pipe(Effect.scoped),
   );
 
   it.effect("preserves binary protocol responses", () =>
     Effect.gen(function* () {
       const server = yield* HttpRouter.toHttpEffect(OpenRoutes);
       const bytes = new Uint8Array([0, 255, 1, 128, 10]);
-      const response = yield* request(
-        server,
-        "/acme/repo.git/git-upload-pack",
-        { method: "POST", body: bytes },
-      );
+      const response = yield* request(server, "/acme/repo.git/git-upload-pack", {
+        method: "POST",
+        body: bytes,
+      });
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe(
-        "application/x-git-upload-pack-result",
-      );
-      expect(
-        new Uint8Array(yield* Effect.promise(() => response.arrayBuffer())),
-      ).toEqual(bytes);
+      expect(response.headers.get("content-type")).toBe("application/x-git-upload-pack-result");
+      expect(new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()))).toEqual(bytes);
     }).pipe(Effect.scoped),
   );
 
@@ -231,11 +200,9 @@ describe("Git HTTP composition", () => {
         const server = yield* HttpRouter.toHttpEffect(ProtectedRoutes);
         const denied = yield* request(server, "/api/v3/user");
         expect(denied.status).toBe(401);
-        const wireDenied = yield* request(
-          server,
-          "/acme/repo.git/git-upload-pack",
-          { method: "POST" },
-        );
+        const wireDenied = yield* request(server, "/acme/repo.git/git-upload-pack", {
+          method: "POST",
+        });
         expect(wireDenied.status).toBe(401);
         const allowed = yield* request(server, "/api/v3/user", {
           headers: { authorization: "Bearer test" },
@@ -258,37 +225,32 @@ describe("Git HTTP composition", () => {
         expect(yield* Effect.promise(() => internal.text())).toBe("hash input");
       }).pipe(Effect.scoped),
   );
-  it.effect(
-    "adds app endpoints beside prefixed Git defaults on a subset API",
-    () =>
-      Effect.gen(function* () {
-        const server = yield* HttpRouter.toHttpEffect(PrefixedRoutes);
-        const init = { headers: { authorization: "Bearer test" } };
-        const denied = yield* request(
-          server,
-          "/git/api/v1/repos/acme/repo/ref?name=refs/heads/main",
-        );
-        expect(denied.status).toBe(401);
-        const ref = yield* request(
-          server,
-          "/git/api/v1/repos/acme/repo/ref?name=refs/heads/main",
-          init,
-        );
-        expect(ref.status).toBe(200);
-        expect(yield* Effect.promise(() => ref.json())).toEqual({
-          name: "refs/heads/main",
-          oid,
-        });
-        expect(ref.headers.get("x-runtime-id")).toBe("request-runtime");
-        const health = yield* request(server, "/health", init);
-        expect(health.status).toBe(200);
-        expect(yield* Effect.promise(() => health.json())).toBe("ok");
-        const unprefixed = yield* request(
-          server,
-          "/api/v1/repos/acme/repo/ref?name=refs/heads/main",
-          init,
-        );
-        expect(unprefixed.status).toBe(404);
-      }).pipe(Effect.scoped),
+  it.effect("adds app endpoints beside prefixed Git defaults on a subset API", () =>
+    Effect.gen(function* () {
+      const server = yield* HttpRouter.toHttpEffect(PrefixedRoutes);
+      const init = { headers: { authorization: "Bearer test" } };
+      const denied = yield* request(server, "/git/api/v1/repos/acme/repo/ref?name=refs/heads/main");
+      expect(denied.status).toBe(401);
+      const ref = yield* request(
+        server,
+        "/git/api/v1/repos/acme/repo/ref?name=refs/heads/main",
+        init,
+      );
+      expect(ref.status).toBe(200);
+      expect(yield* Effect.promise(() => ref.json())).toEqual({
+        name: "refs/heads/main",
+        oid,
+      });
+      expect(ref.headers.get("x-runtime-id")).toBe("request-runtime");
+      const health = yield* request(server, "/health", init);
+      expect(health.status).toBe(200);
+      expect(yield* Effect.promise(() => health.json())).toBe("ok");
+      const unprefixed = yield* request(
+        server,
+        "/api/v1/repos/acme/repo/ref?name=refs/heads/main",
+        init,
+      );
+      expect(unprefixed.status).toBe(404);
+    }).pipe(Effect.scoped),
   );
 });

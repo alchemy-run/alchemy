@@ -7,9 +7,7 @@ import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
-const timeoutHandlerPath = fileURLToPath(
-  new URL("./timeout-handler.ts", import.meta.url),
-);
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -77,10 +75,7 @@ test.provider(
       expect(createdAlias.invokeArn).toContain(createdAlias.aliasArn);
 
       // Assert the alias actually exists in the cloud.
-      const liveV1 = yield* getAliasOrUndefined(
-        created.fn.functionName,
-        "live",
-      );
+      const liveV1 = yield* getAliasOrUndefined(created.fn.functionName, "live");
       expect(liveV1).toBeDefined();
       expect(liveV1!.AliasArn).toBe(createdAlias.aliasArn);
       expect(liveV1!.FunctionVersion).toBe(version1);
@@ -116,10 +111,7 @@ test.provider(
       });
 
       // Assert the cloud reflects the update.
-      const liveV2 = yield* getAliasOrUndefined(
-        updated.fn.functionName,
-        "live",
-      );
+      const liveV2 = yield* getAliasOrUndefined(updated.fn.functionName, "live");
       expect(liveV2).toBeDefined();
       expect(liveV2!.AliasArn).toBe(createdAlias.aliasArn);
       expect(liveV2!.FunctionVersion).toBe(version2);
@@ -145,15 +137,10 @@ test.provider(
       expect(clearedAlias.routingConfig).toBeUndefined();
 
       // Assert the cloud cleared description and routing.
-      const liveCleared = yield* getAliasOrUndefined(
-        cleared.fn.functionName,
-        "live",
-      );
+      const liveCleared = yield* getAliasOrUndefined(cleared.fn.functionName, "live");
       expect(liveCleared).toBeDefined();
       expect(liveCleared!.Description ?? "").toBe("");
-      expect(
-        liveCleared!.RoutingConfig?.AdditionalVersionWeights ?? {},
-      ).toEqual({});
+      expect(liveCleared!.RoutingConfig?.AdditionalVersionWeights ?? {}).toEqual({});
 
       // --- replace (rename the alias) ---
       // The provider's `diff` flags an aliasName change as a replacement, so a
@@ -176,20 +163,14 @@ test.provider(
       expect(replacedAlias.description).toBe("renamed");
 
       // The new alias exists in the cloud...
-      const stableAlias = yield* getAliasOrUndefined(
-        replaced.fn.functionName,
-        "stable",
-      );
+      const stableAlias = yield* getAliasOrUndefined(replaced.fn.functionName, "stable");
       expect(stableAlias).toBeDefined();
       expect(stableAlias!.AliasArn).toBe(replacedAlias.aliasArn);
       expect(stableAlias!.FunctionVersion).toBe(version2);
       expect(stableAlias!.Description).toBe("renamed");
 
       // ...and the old one was deleted as part of the replacement.
-      const oldLive = yield* getAliasOrUndefined(
-        replaced.fn.functionName,
-        "live",
-      );
+      const oldLive = yield* getAliasOrUndefined(replaced.fn.functionName, "live");
       expect(oldLive).toBeUndefined();
 
       // --- list ---
@@ -198,18 +179,14 @@ test.provider(
       expect(
         aliases.some(
           (alias) =>
-            alias.functionName === replaced.fn.functionName &&
-            alias.aliasName === "stable",
+            alias.functionName === replaced.fn.functionName && alias.aliasName === "stable",
         ),
       ).toBe(true);
 
       // --- delete ---
       yield* stack.destroy();
 
-      const afterDestroy = yield* getAliasOrUndefined(
-        replaced.fn.functionName,
-        "stable",
-      );
+      const afterDestroy = yield* getAliasOrUndefined(replaced.fn.functionName, "stable");
       expect(afterDestroy).toBeUndefined();
 
       // ...and the host function itself is gone (bounded retry to ride out
@@ -218,16 +195,11 @@ test.provider(
         FunctionName: replaced.fn.functionName,
       }).pipe(
         Effect.flatMap(() =>
-          Effect.fail(
-            new Error(`Function ${replaced.fn.functionName} still exists`),
-          ),
+          Effect.fail(new Error(`Function ${replaced.fn.functionName} still exists`)),
         ),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
     }).pipe(
@@ -237,16 +209,9 @@ test.provider(
   { timeout: 360_000 },
 );
 
-const getAliasOrUndefined = Effect.fn(function* (
-  functionName: string,
-  name: string,
-) {
+const getAliasOrUndefined = Effect.fn(function* (functionName: string, name: string) {
   return yield* Lambda.getAlias({
     FunctionName: functionName,
     Name: name,
-  }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });

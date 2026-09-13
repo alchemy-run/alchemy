@@ -14,42 +14,33 @@ import {
 export const ConnectCacheClusterHttp = Layer.effect(
   ConnectCacheCluster,
   Effect.gen(function* () {
-    return Effect.fn(function* (
-      cluster: CacheCluster,
-      options?: ConnectCacheClusterOptions,
-    ) {
+    return Effect.fn(function* (cluster: CacheCluster, options?: ConnectCacheClusterOptions) {
       const prefix = cacheClusterConnectEnvPrefix(cluster.LogicalId);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ElastiCache.ConnectCacheCluster(${cluster}))`(
-            {
-              env: {
-                [`${prefix}_ENDPOINTS`]: Output.map(
-                  cluster.endpoints,
-                  JSON.stringify,
-                ),
-                [`${prefix}_TLS`]: Output.map(
-                  cluster.transitEncryptionEnabled,
-                  (tls) => String(tls ?? false),
-                ),
-              },
-              ...(options?.subnetIds || options?.securityGroupIds
-                ? {
-                    vpc: {
-                      subnetIds: options?.subnetIds ?? [],
-                      securityGroupIds: options?.securityGroupIds ?? [],
-                    },
-                  }
-                : {}),
+          yield* host.bind`Allow(${host}, AWS.ElastiCache.ConnectCacheCluster(${cluster}))`({
+            env: {
+              [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
+              [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>
+                String(tls ?? false),
+              ),
             },
-          );
+            ...(options?.subnetIds || options?.securityGroupIds
+              ? {
+                  vpc: {
+                    subnetIds: options?.subnetIds ?? [],
+                    securityGroupIds: options?.securityGroupIds ?? [],
+                  },
+                }
+              : {}),
+          });
         }
       }
       return Effect.gen(function* () {
-        const endpoints = unpackEnvValue<
-          Array<{ address: string; port: number }>
-        >(process.env[`${prefix}_ENDPOINTS`]);
+        const endpoints = unpackEnvValue<Array<{ address: string; port: number }>>(
+          process.env[`${prefix}_ENDPOINTS`],
+        );
         if (endpoints !== undefined) {
           if (!endpoints.length) {
             return yield* Effect.die(

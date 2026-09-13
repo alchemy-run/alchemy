@@ -18,10 +18,7 @@ import { SecretProviderLocal } from "./SecretsStore/Secret.ts";
 import { LocalWorkerProvider } from "./Workers/LocalWorkerProvider.ts";
 
 const cloudflareServices = Layer.provide(
-  Layer.merge(
-    Credentials.fromAuthProvider(),
-    CloudflareEnvironment.fromProfile(),
-  ),
+  Layer.merge(Credentials.fromAuthProvider(), CloudflareEnvironment.fromProfile()),
   CloudflareAuth,
 );
 

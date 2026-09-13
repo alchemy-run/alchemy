@@ -143,9 +143,7 @@ const toWirePersistentVolume = (
   return { ...rest, lastUsedTtlHours: toWireHours(lastUsedTtl) };
 };
 
-const toWireConfiguration = (
-  config: FleetConfiguration,
-): deadline.FleetConfiguration =>
+const toWireConfiguration = (config: FleetConfiguration): deadline.FleetConfiguration =>
   config.customerManaged !== undefined
     ? {
         customerManaged: {
@@ -321,10 +319,7 @@ export interface Fleet extends Resource<
  */
 export const Fleet = Resource<Fleet>("AWS.Deadline.Fleet");
 
-const createFleetName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createFleetName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -341,11 +336,7 @@ const readFleetById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getFleet({ farmId, fleetId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const fleetArn = arnOf(`farm/${described.farmId}/fleet/${described.fleetId}`);
   const state: FleetState = {
@@ -379,9 +370,7 @@ const findFleetByDisplayName = Effect.fn(function* (
       Effect.succeed([] as deadline.FleetSummary[]),
     ),
   );
-  const match = summaries.find(
-    (summary) => summary.displayName === displayName,
-  );
+  const match = summaries.find((summary) => summary.displayName === displayName);
   if (!match) return undefined;
   return yield* readFleetById(farmId, match.fleetId, arnOf);
 });
@@ -399,9 +388,7 @@ class FleetNotReady extends Data.TaggedError("FleetNotReady")<{
  * A fleet whose asynchronous provisioning converged to a terminal failed
  * status (`CREATE_FAILED` / `UPDATE_FAILED`).
  */
-export class FleetProvisioningFailed extends Data.TaggedError(
-  "FleetProvisioningFailed",
-)<{
+export class FleetProvisioningFailed extends Data.TaggedError("FleetProvisioningFailed")<{
   readonly fleetId: string;
   readonly status: string;
   readonly message: string | undefined;
@@ -417,18 +404,12 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
   });
 
-const waitForFleetActive = (
-  farmId: string,
-  fleetId: string,
-  arnOf: (path: string) => string,
-) =>
+const waitForFleetActive = (farmId: string, fleetId: string, arnOf: (path: string) => string) =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const state = yield* readFleetById(farmId, fleetId, arnOf);
       if (state === undefined) {
-        return yield* Effect.fail(
-          new FleetNotReady({ fleetId, status: undefined }),
-        );
+        return yield* Effect.fail(new FleetNotReady({ fleetId, status: undefined }));
       }
       if (
         state.described.status === "CREATE_FAILED" ||
@@ -442,13 +423,8 @@ const waitForFleetActive = (
           }),
         );
       }
-      if (
-        state.described.status !== "ACTIVE" &&
-        state.described.status !== "SUSPENDED"
-      ) {
-        return yield* Effect.fail(
-          new FleetNotReady({ fleetId, status: state.described.status }),
-        );
+      if (state.described.status !== "ACTIVE" && state.described.status !== "SUSPENDED") {
+        return yield* Effect.fail(new FleetNotReady({ fleetId, status: state.described.status }));
       }
       return state;
     }),
@@ -459,15 +435,9 @@ const waitUntilFleetGone = (farmId: string, fleetId: string) =>
     Effect.gen(function* () {
       const described = yield* deadline
         .getFleet({ farmId, fleetId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (described !== undefined) {
-        return yield* Effect.fail(
-          new FleetNotReady({ fleetId, status: described.status }),
-        );
+        return yield* Effect.fail(new FleetNotReady({ fleetId, status: described.status }));
       }
     }),
   ).pipe(
@@ -489,11 +459,7 @@ export const FleetProvider = () =>
           if (farmId === undefined) return undefined;
           const state = output?.fleetId
             ? yield* readFleetById(farmId, output.fleetId, arnOf)
-            : yield* findFleetByDisplayName(
-                farmId,
-                yield* createFleetName(id, olds ?? {}),
-                arnOf,
-              );
+            : yield* findFleetByDisplayName(farmId, yield* createFleetName(id, olds ?? {}), arnOf);
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -509,9 +475,7 @@ export const FleetProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(
-              new Error("AWS.Deadline.Fleet requires props"),
-            );
+            return yield* Effect.fail(new Error("AWS.Deadline.Fleet requires props"));
           }
           const arnOf = yield* deadlineArnOf;
           const farmId = news.farmId;
@@ -536,16 +500,12 @@ export const FleetProvider = () =>
                   minWorkerCount: news.minWorkerCount,
                   maxWorkerCount: news.maxWorkerCount,
                   configuration: toWireConfiguration(news.configuration),
-                  hostConfiguration: toWireHostConfiguration(
-                    news.hostConfiguration,
-                  ),
+                  hostConfiguration: toWireHostConfiguration(news.hostConfiguration),
                   tags: desiredTags,
                 }),
               ),
             );
-            yield* session.note(
-              `Creating fleet ${displayName} (${created.fleetId})...`,
-            );
+            yield* session.note(`Creating fleet ${displayName} (${created.fleetId})...`);
             state = yield* waitForFleetActive(farmId, created.fleetId, arnOf);
           }
 
@@ -571,16 +531,10 @@ export const FleetProvider = () =>
                 minWorkerCount: news.minWorkerCount,
                 maxWorkerCount: news.maxWorkerCount,
                 configuration: toWireConfiguration(news.configuration),
-                hostConfiguration: toWireHostConfiguration(
-                  news.hostConfiguration,
-                ),
+                hostConfiguration: toWireHostConfiguration(news.hostConfiguration),
               }),
             );
-            state = yield* waitForFleetActive(
-              farmId,
-              state.attrs.fleetId,
-              arnOf,
-            );
+            state = yield* waitForFleetActive(farmId, state.attrs.fleetId, arnOf);
             yield* session.note(`Updated fleet ${displayName}`);
           }
 
@@ -588,15 +542,9 @@ export const FleetProvider = () =>
           yield* syncDeadlineTags(state.attrs.fleetArn, desiredTags);
 
           yield* session.note(state.attrs.fleetArn);
-          const final = yield* readFleetById(
-            farmId,
-            state.attrs.fleetId,
-            arnOf,
-          );
+          const final = yield* readFleetById(farmId, state.attrs.fleetId, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled fleet ${displayName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled fleet ${displayName}`));
           }
           return final.attrs;
         }),
@@ -606,9 +554,7 @@ export const FleetProvider = () =>
               farmId: output.farmId,
               fleetId: output.fleetId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Fleet deletion drains workers asynchronously; wait until gone so
           // the parent farm's deletion does not hit a dependency conflict.
           yield* waitUntilFleetGone(output.farmId, output.fleetId);

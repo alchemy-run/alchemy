@@ -10,12 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  isActiveStatus,
-  readAppRunnerTags,
-  syncAppRunnerTags,
-  toWireTags,
-} from "./internal.ts";
+import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
 export interface VpcConnectorProps {
   /**
@@ -110,9 +105,7 @@ export interface VpcConnector extends Resource<
  *
  * @resource
  */
-export const VpcConnector = Resource<VpcConnector>(
-  "AWS.AppRunner.VpcConnector",
-);
+export const VpcConnector = Resource<VpcConnector>("AWS.AppRunner.VpcConnector");
 
 const sameStringSet = (
   a: readonly string[] | undefined,
@@ -123,9 +116,7 @@ const sameStringSet = (
   return left.length === right.length && left.every((v, i) => v === right[i]);
 };
 
-class VpcConnectorStillActive extends Data.TaggedError(
-  "VpcConnectorStillActive",
-)<{
+class VpcConnectorStillActive extends Data.TaggedError("VpcConnectorStillActive")<{
   readonly vpcConnectorArn: string;
   readonly status: string;
 }> {}
@@ -142,9 +133,7 @@ export const VpcConnectorProvider = () =>
       const listConnectors = () =>
         apprunner.listVpcConnectors.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.VpcConnectors ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.VpcConnectors ?? [])),
         );
 
       /**
@@ -154,13 +143,8 @@ export const VpcConnectorProvider = () =>
       const findConnector = Effect.fn(function* (name: string) {
         const connectors = yield* listConnectors();
         return connectors
-          .filter(
-            (c) => c.VpcConnectorName === name && isActiveStatus(c.Status),
-          )
-          .sort(
-            (a, b) =>
-              (b.VpcConnectorRevision ?? 0) - (a.VpcConnectorRevision ?? 0),
-          )[0];
+          .filter((c) => c.VpcConnectorName === name && isActiveStatus(c.Status))
+          .sort((a, b) => (b.VpcConnectorRevision ?? 0) - (a.VpcConnectorRevision ?? 0))[0];
       });
 
       const toAttrs = Effect.fn(function* (connector: apprunner.VpcConnector) {
@@ -170,9 +154,7 @@ export const VpcConnectorProvider = () =>
           connector.VpcConnectorRevision === undefined
         ) {
           return yield* Effect.fail(
-            new Error(
-              "App Runner VPC connector is missing its name, ARN, or revision",
-            ),
+            new Error("App Runner VPC connector is missing its name, ARN, or revision"),
           );
         }
         return {
@@ -190,9 +172,7 @@ export const VpcConnectorProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // VPC connectors are immutable — subnet or security group
@@ -214,8 +194,7 @@ export const VpcConnectorProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.vpcConnectorName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.vpcConnectorName ?? (yield* toName(id, olds ?? {}));
           const connector = yield* findConnector(name);
           if (connector === undefined) return undefined;
           const attrs = yield* toAttrs(connector);
@@ -224,8 +203,7 @@ export const VpcConnectorProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.vpcConnectorName ?? (yield* toName(id, news ?? {}));
+          const name = output?.vpcConnectorName ?? (yield* toName(id, news ?? {}));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news?.tags };
 
@@ -308,9 +286,7 @@ export const VpcConnectorProvider = () =>
 
         list: () =>
           listConnectors().pipe(
-            Effect.map((connectors) =>
-              connectors.filter((c) => isActiveStatus(c.Status)),
-            ),
+            Effect.map((connectors) => connectors.filter((c) => isActiveStatus(c.Status))),
             Effect.flatMap(
               Effect.forEach((connector) => toAttrs(connector), {
                 concurrency: 4,

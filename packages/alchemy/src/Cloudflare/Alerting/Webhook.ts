@@ -122,9 +122,7 @@ export const NotificationWebhook = Resource<NotificationWebhook>(TypeId);
 /**
  * Returns true if the given value is a NotificationWebhook resource.
  */
-export const isNotificationWebhook = (
-  value: unknown,
-): value is NotificationWebhook =>
+export const isNotificationWebhook = (value: unknown): value is NotificationWebhook =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationWebhookProvider = () =>
@@ -181,8 +179,7 @@ export const NotificationWebhookProvider = () =>
       // Inputs are resolved to concrete values by the engine before
       // reconcile runs.
       const url = news.url as string;
-      const secret =
-        news.secret === undefined ? undefined : Redacted.value(news.secret);
+      const secret = news.secret === undefined ? undefined : Redacted.value(news.secret);
 
       // 1. Observe — by cached id first, then by deterministic name.
       let observed: ObservedWebhook | undefined;
@@ -214,19 +211,14 @@ export const NotificationWebhookProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
               schedule: Schedule.max([
-                Schedule.min([
-                  Schedule.exponential("1 second"),
-                  Schedule.spaced("5 seconds"),
-                ]),
+                Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
                 Schedule.recurs(24),
               ]),
             }),
           );
         if (!created.id) {
           return yield* Effect.fail(
-            new Error(
-              "Cloudflare did not return an id for the created webhook destination",
-            ),
+            new Error("Cloudflare did not return an id for the created webhook destination"),
           );
         }
         const fresh = yield* observeWebhook(accountId, created.id);
@@ -236,8 +228,7 @@ export const NotificationWebhookProvider = () =>
       // 3. Sync — PUT the full desired body when any observable field
       //    drifts, or when the (write-only, unobservable) secret prop
       //    changed between olds and news.
-      const oldSecret =
-        olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
+      const oldSecret = olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
       const secretChanged = secret !== oldSecret;
       if (observed.name !== name || observed.url !== url || secretChanged) {
         // The update PUT fires the same test POST as create — ride out edge
@@ -253,10 +244,7 @@ export const NotificationWebhookProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
             }),
           );
         const fresh = yield* observeWebhook(accountId, observed.id);
@@ -283,9 +271,7 @@ export const NotificationWebhookProvider = () =>
         .pipe(
           Effect.catchTag("InternalServerError", (e) =>
             observeWebhook(output.accountId, output.webhookId).pipe(
-              Effect.flatMap((observed) =>
-                observed === undefined ? Effect.void : Effect.fail(e),
-              ),
+              Effect.flatMap((observed) => (observed === undefined ? Effect.void : Effect.fail(e))),
             ),
           ),
         );
@@ -300,8 +286,7 @@ interface ObservedWebhook {
   readonly createdAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowWebhook = (raw: {
   id?: string | null;

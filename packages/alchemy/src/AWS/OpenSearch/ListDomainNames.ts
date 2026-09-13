@@ -25,12 +25,7 @@ export interface ListDomainNames extends Binding.Service<
   () => Effect.Effect<
     (
       request?: opensearch.ListDomainNamesRequest,
-    ) => Effect.Effect<
-      opensearch.ListDomainNamesResponse,
-      opensearch.ListDomainNamesError
-    >
+    ) => Effect.Effect<opensearch.ListDomainNamesResponse, opensearch.ListDomainNamesError>
   >
 > {}
-export const ListDomainNames = Binding.Service<ListDomainNames>(
-  "AWS.OpenSearch.ListDomainNames",
-);
+export const ListDomainNames = Binding.Service<ListDomainNames>("AWS.OpenSearch.ListDomainNames");

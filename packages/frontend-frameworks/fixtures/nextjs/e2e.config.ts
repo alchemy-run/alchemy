@@ -1,7 +1,4 @@
-import {
-  KvNamespace,
-  Text,
-} from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { KvNamespace, Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 import { kCurrentWorker } from "miniflare";
 

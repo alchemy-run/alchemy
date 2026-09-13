@@ -131,22 +131,16 @@ export type VolumeSnapshot = Resource<
  */
 export const VolumeSnapshot = Resource<VolumeSnapshot>("Fly.VolumeSnapshot");
 
-export class VolumeSnapshotNotCreated extends Data.TaggedError(
-  "Fly.VolumeSnapshotNotCreated",
-)<{
+export class VolumeSnapshotNotCreated extends Data.TaggedError("Fly.VolumeSnapshotNotCreated")<{
   appName: string;
   volumeId: string;
 }> {}
 
-export class VolumeSnapshotRefsMissing extends Data.TaggedError(
-  "Fly.VolumeSnapshotRefsMissing",
-)<{
+export class VolumeSnapshotRefsMissing extends Data.TaggedError("Fly.VolumeSnapshotRefsMissing")<{
   message: string;
 }> {}
 
-class VolumeSnapshotPending extends Data.TaggedError(
-  "Fly.VolumeSnapshotPending",
-)<{
+class VolumeSnapshotPending extends Data.TaggedError("Fly.VolumeSnapshotPending")<{
   volumeId: string;
 }> {}
 
@@ -191,39 +185,25 @@ const listSnapshots = (appName: string, volumeId: string) =>
       volume_id: volumeId,
     })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as FlyVolumeSnapshot[]),
-      ),
+      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([] as FlyVolumeSnapshot[])),
     );
 
 const findById = (appName: string, volumeId: string, snapshotId: string) =>
   listSnapshots(appName, volumeId).pipe(
-    Effect.map((snapshots) =>
-      snapshots.find((snapshot) => snapshot.id === snapshotId),
-    ),
+    Effect.map((snapshots) => snapshots.find((snapshot) => snapshot.id === snapshotId)),
   );
 
 const newestFirst = (left: FlyVolumeSnapshot, right: FlyVolumeSnapshot) =>
   Date.parse(right.created_at ?? "") - Date.parse(left.created_at ?? "");
 
-const pickNewest = (
-  snapshots: FlyVolumeSnapshot[],
-): FlyVolumeSnapshot | undefined =>
-  snapshots
-    .filter((snapshot) => (snapshot.id ?? "").length > 0)
-    .sort(newestFirst)[0];
+const pickNewest = (snapshots: FlyVolumeSnapshot[]): FlyVolumeSnapshot | undefined =>
+  snapshots.filter((snapshot) => (snapshot.id ?? "").length > 0).sort(newestFirst)[0];
 
-const waitForNewSnapshot = (
-  appName: string,
-  volumeId: string,
-  knownIds: ReadonlySet<string>,
-) =>
+const waitForNewSnapshot = (appName: string, volumeId: string, knownIds: ReadonlySet<string>) =>
   listSnapshots(appName, volumeId).pipe(
     Effect.flatMap((snapshots) => {
       const next = pickNewest(
-        snapshots.filter(
-          (snapshot) => snapshot.id !== undefined && !knownIds.has(snapshot.id),
-        ),
+        snapshots.filter((snapshot) => snapshot.id !== undefined && !knownIds.has(snapshot.id)),
       );
       if (next !== undefined) return Effect.succeed(next);
       return Effect.fail(new VolumeSnapshotPending({ volumeId }));
@@ -233,9 +213,7 @@ const waitForNewSnapshot = (
       times: 8,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.VolumeSnapshotPending", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("Fly.VolumeSnapshotPending", () => Effect.succeed(undefined)),
   );
 
 export const VolumeSnapshotProvider = () =>
@@ -247,11 +225,9 @@ export const VolumeSnapshotProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const desiredApp = appNameOf(news.app);
-      const appChanged =
-        desiredApp !== undefined && desiredApp !== output.appName;
+      const appChanged = desiredApp !== undefined && desiredApp !== output.appName;
       const desiredVolume = volumeIdOf(news.volumeId);
-      const volumeChanged =
-        desiredVolume !== undefined && desiredVolume !== output.volumeId;
+      const volumeChanged = desiredVolume !== undefined && desiredVolume !== output.volumeId;
       if (appChanged || volumeChanged) {
         return { action: "replace" as const };
       }
@@ -279,10 +255,7 @@ export const VolumeSnapshotProvider = () =>
           listSnapshots(appName, volumeId).pipe(
             Effect.map((snapshots) =>
               snapshots
-                .filter(
-                  (snapshot) =>
-                    snapshot.id !== undefined && snapshot.id.length > 0,
-                )
+                .filter((snapshot) => snapshot.id !== undefined && snapshot.id.length > 0)
                 .map((snapshot) => toAttrs(appName, volumeId, snapshot)),
             ),
           ),
@@ -297,8 +270,7 @@ export const VolumeSnapshotProvider = () =>
       const volumeId = volumeIdOf(props.volumeId) ?? output?.volumeId;
       if (appName === undefined || volumeId === undefined) {
         return yield* new VolumeSnapshotRefsMissing({
-          message:
-            "Fly.VolumeSnapshot requires a resolved App with appName and a volumeId.",
+          message: "Fly.VolumeSnapshot requires a resolved App with appName and a volumeId.",
         });
       }
 
@@ -312,9 +284,7 @@ export const VolumeSnapshotProvider = () =>
       if (current === undefined) {
         const knownIds = new Set(
           observed.flatMap((snapshot) =>
-            snapshot.id !== undefined && snapshot.id.length > 0
-              ? [snapshot.id]
-              : [],
+            snapshot.id !== undefined && snapshot.id.length > 0 ? [snapshot.id] : [],
           ),
         );
         yield* machines
@@ -328,8 +298,7 @@ export const VolumeSnapshotProvider = () =>
             Effect.retry({
               while: (e) =>
                 e._tag === "NotFound" ||
-                (e._tag === "BadRequest" &&
-                  e.message.includes("uninitialized volume")),
+                (e._tag === "BadRequest" && e.message.includes("uninitialized volume")),
               times: 8,
               schedule: backoff,
             }),

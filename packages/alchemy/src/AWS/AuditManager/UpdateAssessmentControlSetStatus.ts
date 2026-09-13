@@ -39,7 +39,6 @@ export interface UpdateAssessmentControlSetStatus extends Binding.Service<
   >
 > {}
 
-export const UpdateAssessmentControlSetStatus =
-  Binding.Service<UpdateAssessmentControlSetStatus>(
-    "AWS.AuditManager.UpdateAssessmentControlSetStatus",
-  );
+export const UpdateAssessmentControlSetStatus = Binding.Service<UpdateAssessmentControlSetStatus>(
+  "AWS.AuditManager.UpdateAssessmentControlSetStatus",
+);

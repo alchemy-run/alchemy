@@ -10,13 +10,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Regional Tiered Cache is Enterprise-only. On the testing account's zone
 // every GET/PATCH fails with Cloudflare code 1135 ("Sorry, this zone setting
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -94,12 +88,9 @@ describe.sequential("RegionalTieredCache", () => {
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Cache.RegionalTieredCache(
-              "RegionalCache",
-              {
-                zoneId,
-              },
-            );
+            return yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
+              zoneId,
+            });
           }),
         );
 
@@ -115,13 +106,10 @@ describe.sequential("RegionalTieredCache", () => {
         // Update in place — same singleton, initialValue survives.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Cache.RegionalTieredCache(
-              "RegionalCache",
-              {
-                zoneId,
-                enabled: false,
-              },
-            );
+            return yield* Cloudflare.Cache.RegionalTieredCache("RegionalCache", {
+              zoneId,
+              enabled: false,
+            });
           }),
         );
         expect(updated.value).toEqual("off");
@@ -146,9 +134,7 @@ describe.sequential("RegionalTieredCache", () => {
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Cache.RegionalTieredCache,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Cache.RegionalTieredCache);
       const all = yield* provider.list();
 
       // Always well-formed: an array whose entries match the Attributes shape.

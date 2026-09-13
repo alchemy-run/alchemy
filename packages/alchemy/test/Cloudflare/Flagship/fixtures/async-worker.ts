@@ -18,13 +18,9 @@ export default {
     }
 
     if (url.pathname.startsWith("/details")) {
-      const details = await env.FLAGS.getStringDetails(
-        "nonexistent-flag",
-        "fallback",
-        {
-          userId: "user-42",
-        },
-      );
+      const details = await env.FLAGS.getStringDetails("nonexistent-flag", "fallback", {
+        userId: "user-42",
+      });
       return Response.json({ mode: "async", details });
     }
 

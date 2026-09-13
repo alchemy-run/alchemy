@@ -61,7 +61,6 @@ export interface InvokeBlueprintOptimizationAsync extends Binding.Service<
     >
   >
 > {}
-export const InvokeBlueprintOptimizationAsync =
-  Binding.Service<InvokeBlueprintOptimizationAsync>(
-    "AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync",
-  );
+export const InvokeBlueprintOptimizationAsync = Binding.Service<InvokeBlueprintOptimizationAsync>(
+  "AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync",
+);

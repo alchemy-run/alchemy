@@ -1,7 +1,4 @@
-import {
-  apiTokenCredentials,
-  Credentials,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
@@ -33,10 +30,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
@@ -57,10 +51,7 @@ test.provider("create and delete bucket with default props", (stack) =>
     expect(bucket.jurisdiction).toEqual("default");
     expect(bucket.publicDomain).toBeUndefined();
 
-    const actualBucket = yield* getBucketWhenReady(
-      bucket.bucketName,
-      accountId,
-    );
+    const actualBucket = yield* getBucketWhenReady(bucket.bucketName, accountId);
     expect(actualBucket.name).toEqual(bucket.bucketName);
 
     yield* stack.destroy();
@@ -84,10 +75,7 @@ test.provider("create, update, delete bucket", (stack) =>
       }),
     );
 
-    const actualBucket = yield* getBucketWhenReady(
-      bucket.bucketName,
-      accountId,
-    );
+    const actualBucket = yield* getBucketWhenReady(bucket.bucketName, accountId);
     expect(actualBucket.name).toEqual(bucket.bucketName);
     expect(actualBucket.storageClass).toEqual("Standard");
 
@@ -105,10 +93,7 @@ test.provider("create, update, delete bucket", (stack) =>
     // bucket name and unchanged creation date.
     expect(updatedBucket.bucketName).toEqual(bucket.bucketName);
 
-    const actualUpdatedBucket = yield* getBucketWhenReady(
-      updatedBucket.bucketName,
-      accountId,
-    );
+    const actualUpdatedBucket = yield* getBucketWhenReady(updatedBucket.bucketName, accountId);
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
     expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
     expect(actualUpdatedBucket.creationDate).toEqual(actualBucket.creationDate);
@@ -122,146 +107,135 @@ test.provider("create, update, delete bucket", (stack) =>
 // Engine-level adoption: R2 buckets have no ownership signal (Cloudflare
 // doesn't expose tags on R2 buckets), so a name match in `read` is treated
 // as silent adoption.
-test.provider(
-  "existing bucket (matching name) is silently adopted without --adopt",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("existing bucket (matching name) is silently adopted without --adopt", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Phase 1: deploy normally so a real R2 bucket exists. No explicit
-      // `name` — the engine generates a random-suffixed physical name
-      // (collision-free across concurrent runs); the deploy output hands
-      // back the real name, which pins the bucket's identity for the
-      // adoption phase below.
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
-            forceDestroy: true,
-          });
-        }),
-      );
-      const bucketName = initial.bucketName;
-
-      // Phase 2: wipe local state — the bucket stays on Cloudflare.
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableBucket",
+    // Phase 1: deploy normally so a real R2 bucket exists. No explicit
+    // `name` — the engine generates a random-suffixed physical name
+    // (collision-free across concurrent runs); the deploy output hands
+    // back the real name, which pins the bucket's identity for the
+    // adoption phase below.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
+          forceDestroy: true,
         });
-      }).pipe(Effect.provide(stack.state));
+      }),
+    );
+    const bucketName = initial.bucketName;
 
-      // Phase 3: redeploy without `adopt(true)`. The engine calls
-      // `provider.read`, which fetches the bucket by name and returns
-      // plain attrs — silent adoption.
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
-            forceDestroy: true,
-            name: bucketName,
-          });
-        }),
-      );
+    // Phase 2: wipe local state — the bucket stays on Cloudflare.
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableBucket",
+      });
+    }).pipe(Effect.provide(stack.state));
 
-      expect(adopted.bucketName).toEqual(bucketName);
-
-      const persisted = yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        return yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableBucket",
+    // Phase 3: redeploy without `adopt(true)`. The engine calls
+    // `provider.read`, which fetches the bucket by name and returns
+    // plain attrs — silent adoption.
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("AdoptableBucket", {
+          forceDestroy: true,
+          name: bucketName,
         });
-      }).pipe(Effect.provide(stack.state));
+      }),
+    );
 
-      expect((persisted as any)?.attr).toMatchObject({ bucketName });
+    expect(adopted.bucketName).toEqual(bucketName);
 
-      yield* stack.destroy();
-      yield* waitForBucketToBeDeleted(bucketName, accountId);
-    }).pipe(logLevel),
+    const persisted = yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      return yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableBucket",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    expect((persisted as any)?.attr).toMatchObject({ bucketName });
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(bucketName, accountId);
+  }).pipe(logLevel),
 );
 
-test.provider(
-  "destroying a bucket with forceDestroy empties its objects first",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("destroying a bucket with forceDestroy empties its objects first", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const bucket = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("BucketWithObjects", {
-            forceDestroy: true,
-          });
-        }),
-      );
+    const bucket = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("BucketWithObjects", {
+          forceDestroy: true,
+        });
+      }),
+    );
 
-      yield* putObject(accountId, bucket.bucketName, "hello.txt", "hello");
-      yield* putObject(
-        accountId,
-        bucket.bucketName,
-        "nested/world.txt",
-        "world",
-      );
+    yield* putObject(accountId, bucket.bucketName, "hello.txt", "hello");
+    yield* putObject(accountId, bucket.bucketName, "nested/world.txt", "world");
 
-      const before = yield* listKeysWhenReady(accountId, bucket.bucketName, 2);
-      expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
+    const before = yield* listKeysWhenReady(accountId, bucket.bucketName, 2);
+    expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-    }).pipe(logLevel),
+    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+  }).pipe(logLevel),
 );
 
 // Without `forceDestroy`, R2's own refusal to delete a non-empty bucket is
 // the last line of defense for the data in it — alchemy must not empty the
 // bucket to get past it. See https://github.com/alchemy-run/alchemy/issues/1248.
-test.provider(
-  "destroying a non-empty bucket without forceDestroy keeps the objects",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("destroying a non-empty bucket without forceDestroy keeps the objects", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const declaration = Effect.gen(function* () {
-        return yield* Cloudflare.R2.Bucket("ProtectedBucket");
-      });
+    const declaration = Effect.gen(function* () {
+      return yield* Cloudflare.R2.Bucket("ProtectedBucket");
+    });
 
-      const bucket = yield* stack.deploy(declaration);
+    const bucket = yield* stack.deploy(declaration);
 
-      yield* putObject(accountId, bucket.bucketName, "keep.txt", "precious");
-      yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
+    yield* putObject(accountId, bucket.bucketName, "keep.txt", "precious");
+    yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
 
-      // R2's own refusal (`BucketNotEmpty`) is what fails the teardown.
-      const destroyed = yield* Effect.result(stack.destroy());
-      expect(Result.isFailure(destroyed)).toBe(true);
-      expect(String(destroyed)).toContain("BucketNotEmpty");
+    // R2's own refusal (`BucketNotEmpty`) is what fails the teardown.
+    const destroyed = yield* Effect.result(stack.destroy());
+    expect(Result.isFailure(destroyed)).toBe(true);
+    expect(String(destroyed)).toContain("BucketNotEmpty");
 
-      // Both the bucket and its object survived the teardown.
-      const survived = yield* r2.getBucket({
-        accountId,
-        bucketName: bucket.bucketName,
-      });
-      expect(survived.name).toEqual(bucket.bucketName);
-      const keys = yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
-      expect(keys).toEqual(["keep.txt"]);
+    // Both the bucket and its object survived the teardown.
+    const survived = yield* r2.getBucket({
+      accountId,
+      bucketName: bucket.bucketName,
+    });
+    expect(survived.name).toEqual(bucket.bucketName);
+    const keys = yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
+    expect(keys).toEqual(["keep.txt"]);
 
-      // Opting in lets the same stack tear down for real.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("ProtectedBucket", {
-            forceDestroy: true,
-          });
-        }),
-      );
-      yield* stack.destroy();
-      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-    }).pipe(logLevel),
+    // Opting in lets the same stack tear down for real.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("ProtectedBucket", {
+          forceDestroy: true,
+        });
+      }),
+    );
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+  }).pipe(logLevel),
 );
 
 // The incident behind https://github.com/alchemy-run/alchemy/issues/1248,
@@ -309,9 +283,7 @@ test.provider(
         );
       });
       const plan = yield* stack.plan(retained);
-      expect(
-        (Object.values(plan.resources) as { action: string }[])[0]?.action,
-      ).toEqual("noop");
+      expect((Object.values(plan.resources) as { action: string }[])[0]?.action).toEqual("noop");
       yield* stack.deploy(retained);
       expect(yield* removalPolicyOf(stack, "Origin")).toEqual("retain");
 
@@ -323,9 +295,7 @@ test.provider(
       expect(yield* stateOf(stack, "Origin")).toBeUndefined();
       const survivor = yield* r2.getBucket({ accountId, bucketName });
       expect(survivor.name).toEqual(bucketName);
-      expect(yield* listKeysWhenReady(accountId, bucketName, 1)).toEqual([
-        "precious.txt",
-      ]);
+      expect(yield* listKeysWhenReady(accountId, bucketName, 1)).toEqual(["precious.txt"]);
 
       // ── 4. it lands in its new home by adopting the same bucket ──
       // (Same stack, new logical id — the engine cannot tell that apart from
@@ -341,9 +311,7 @@ test.provider(
         }),
       );
       expect(moved.bucketName).toEqual(bucketName);
-      expect(yield* listKeysWhenReady(accountId, bucketName, 1)).toEqual([
-        "precious.txt",
-      ]);
+      expect(yield* listKeysWhenReady(accountId, bucketName, 1)).toEqual(["precious.txt"]);
 
       yield* stack.destroy();
       yield* waitForBucketToBeDeleted(bucketName, accountId);
@@ -371,9 +339,7 @@ test.provider(
 
       const declare = (name: string) =>
         Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("Renamed", { name }).pipe(
-            RemovalPolicy.retain(),
-          );
+          return yield* Cloudflare.R2.Bucket("Renamed", { name }).pipe(RemovalPolicy.retain());
         });
 
       yield* stack.deploy(declare(oldName));
@@ -389,9 +355,7 @@ test.provider(
       // dropped from state, never deleted, and its objects are still there.
       const old = yield* r2.getBucket({ accountId, bucketName: oldName });
       expect(old.name).toEqual(oldName);
-      expect(yield* listKeysWhenReady(accountId, oldName, 1)).toEqual([
-        "precious.txt",
-      ]);
+      expect(yield* listKeysWhenReady(accountId, oldName, 1)).toEqual(["precious.txt"]);
 
       yield* stack.destroy();
 
@@ -433,12 +397,10 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     expect(initialRules.rules).toHaveLength(1);
     expect(initialRules.rules?.[0]?.id).toEqual("expire-after-30d");
     expect(initialRules.rules?.[0]?.enabled).toEqual(true);
-    expect(initialRules.rules?.[0]?.deleteObjectsTransition?.condition).toEqual(
-      {
-        type: "Age",
-        maxAge: 60 * 60 * 24 * 30,
-      },
-    );
+    expect(initialRules.rules?.[0]?.deleteObjectsTransition?.condition).toEqual({
+      type: "Age",
+      maxAge: 60 * 60 * 24 * 30,
+    });
 
     // Update: change the prefix and add a storage class transition.
     yield* stack.deploy(
@@ -532,13 +494,8 @@ test.provider("cors rules are added, updated, and removed", (stack) =>
     expect(initialCors.rules).toHaveLength(1);
     expect(initialCors.rules?.[0]?.id).toEqual("range-reads");
     expect(initialCors.rules?.[0]?.allowed.methods).toEqual(["GET", "HEAD"]);
-    expect(initialCors.rules?.[0]?.allowed.origins).toEqual([
-      "https://map.example.com",
-    ]);
-    expect(initialCors.rules?.[0]?.exposeHeaders).toEqual([
-      "etag",
-      "content-range",
-    ]);
+    expect(initialCors.rules?.[0]?.allowed.origins).toEqual(["https://map.example.com"]);
+    expect(initialCors.rules?.[0]?.exposeHeaders).toEqual(["etag", "content-range"]);
     expect(initialCors.rules?.[0]?.maxAgeSeconds).toEqual(3600);
 
     // Update: widen origins and add a second rule.
@@ -692,64 +649,60 @@ test.provider("cors reconciliation converges drift and adoption", (stack) =>
     const converged = yield* r2.getBucketCors({ accountId, bucketName });
     expect(converged.rules).toHaveLength(1);
     expect(converged.rules?.[0]?.id).toEqual("range-reads");
-    expect(converged.rules?.[0]?.allowed.origins).toEqual([
-      "https://map.example.com",
-    ]);
+    expect(converged.rules?.[0]?.allowed.origins).toEqual(["https://map.example.com"]);
 
     yield* stack.destroy();
     yield* waitForBucketToBeDeleted(bucketName, accountId);
   }).pipe(logLevel),
 );
 
-test.provider(
-  "drift detects and repairs a live storage-class change",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-r2-drift-repair";
+test.provider("drift detects and repairs a live storage-class change", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const bucketName = "alchemy-test-r2-drift-repair";
 
-      yield* forceDeleteBucket(accountId, bucketName);
-      yield* stack.destroy();
+    yield* forceDeleteBucket(accountId, bucketName);
+    yield* stack.destroy();
 
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.R2.Bucket("DriftRepairBucket", {
-            forceDestroy: true,
-            name: bucketName,
-            storageClass: "Standard",
-          });
-        }),
-      );
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("DriftRepairBucket", {
+          forceDestroy: true,
+          name: bucketName,
+          storageClass: "Standard",
+        });
+      }),
+    );
 
-      yield* r2.patchBucket({
-        accountId,
-        bucketName,
-        storageClass: "InfrequentAccess",
-      });
+    yield* r2.patchBucket({
+      accountId,
+      bucketName,
+      storageClass: "InfrequentAccess",
+    });
 
-      const detected = yield* Drift.detect({
-        name: stack.name,
-        stage: stack.stage,
-      }).pipe(Effect.provide(stack.state));
-      expect(detected.resources.DriftRepairBucket).toMatchObject({
-        action: "drifted",
-        resourceType: "Cloudflare.R2.Bucket",
-      });
+    const detected = yield* Drift.detect({
+      name: stack.name,
+      stage: stack.stage,
+    }).pipe(Effect.provide(stack.state));
+    expect(detected.resources.DriftRepairBucket).toMatchObject({
+      action: "drifted",
+      resourceType: "Cloudflare.R2.Bucket",
+    });
 
-      const repaired = yield* Drift.repair({
-        name: stack.name,
-        stage: stack.stage,
-      }).pipe(Effect.provide(stack.state));
-      expect(repaired.resources.DriftRepairBucket).toMatchObject({
-        action: "repaired",
-      });
+    const repaired = yield* Drift.repair({
+      name: stack.name,
+      stage: stack.stage,
+    }).pipe(Effect.provide(stack.state));
+    expect(repaired.resources.DriftRepairBucket).toMatchObject({
+      action: "repaired",
+    });
 
-      const bucket = yield* getBucketWhenReady(bucketName, accountId);
-      expect(bucket.storageClass).toEqual("Standard");
+    const bucket = yield* getBucketWhenReady(bucketName, accountId);
+    expect(bucket.storageClass).toEqual("Standard");
 
-      yield* stack.destroy();
-      yield* waitForBucketToBeDeleted(bucketName, accountId);
-    }).pipe(logLevel),
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(bucketName, accountId);
+  }).pipe(logLevel),
 );
 
 test.provider(
@@ -794,9 +747,7 @@ test.provider(
 
       const after = yield* stateOf(stack, "DriftRecreateBucket");
       expect(after?.instanceId).toEqual(before?.instanceId);
-      expect((yield* getBucketWhenReady(bucketName, accountId)).name).toEqual(
-        bucketName,
-      );
+      expect((yield* getBucketWhenReady(bucketName, accountId)).name).toEqual(bucketName);
 
       yield* stack.destroy();
       yield* waitForBucketToBeDeleted(bucketName, accountId);
@@ -862,9 +813,7 @@ test.provider("cors is applied to the new bucket on replacement", (stack) =>
     });
     expect(replacedCors.rules).toHaveLength(1);
     expect(replacedCors.rules?.[0]?.id).toEqual("range-reads");
-    expect(replacedCors.rules?.[0]?.allowed.origins).toEqual([
-      "https://map.example.com",
-    ]);
+    expect(replacedCors.rules?.[0]?.allowed.origins).toEqual(["https://map.example.com"]);
 
     // The replaced bucket is cleaned up.
     yield* waitForBucketToBeDeleted(oldName, accountId);
@@ -1067,30 +1016,21 @@ test.provider("managed r2.dev domain is applied on replacement", (stack) =>
 
 // R2 bucket creates are eventually consistent — a read immediately after
 // deploy can briefly return NoSuchBucket until the bucket propagates.
-const getBucketWhenReady = Effect.fn(function* (
-  bucketName: string,
-  accountId: string,
-) {
+const getBucketWhenReady = Effect.fn(function* (bucketName: string, accountId: string) {
   return yield* r2.getBucket({ accountId, bucketName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "NoSuchBucket",
       // Cap the backoff at 2s so we keep sampling instead of sleeping
       // through the budget on the geometric tail.
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("200 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("200 millis"), Schedule.spaced("2 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
   );
 });
 
-const waitForBucketToBeDeleted = Effect.fn(function* (
-  bucketName: string,
-  accountId: string,
-) {
+const waitForBucketToBeDeleted = Effect.fn(function* (bucketName: string, accountId: string) {
   yield* r2
     .getBucket({
       accountId,
@@ -1108,12 +1048,7 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 
-const putObject = (
-  accountId: string,
-  bucketName: string,
-  key: string,
-  body: string,
-) =>
+const putObject = (accountId: string, bucketName: string, key: string, body: string) =>
   r2.putObject({
     accountId,
     bucketName,
@@ -1134,9 +1069,7 @@ const listKeysWhenReady = Effect.fn(function* (
       const keys = (page.result ?? [])
         .map((o) => o.key)
         .filter((k): k is string => typeof k === "string");
-      return keys.length === count
-        ? Effect.succeed(keys)
-        : Effect.fail(new ListLagError());
+      return keys.length === count ? Effect.succeed(keys) : Effect.fail(new ListLagError());
     }),
     Effect.retry({
       while: (e): e is ListLagError => e instanceof ListLagError,
@@ -1173,14 +1106,9 @@ const removalPolicyOf = Effect.fn(function* (
  * deliberately RETAINED: alchemy has forgotten them by design, so nothing
  * else will ever reclaim them.
  */
-const forceDeleteBucket = Effect.fn(function* (
-  accountId: string,
-  bucketName: string,
-) {
+const forceDeleteBucket = Effect.fn(function* (accountId: string, bucketName: string) {
   yield* r2.listObjects.items({ accountId, bucketName, perPage: 1000 }).pipe(
-    Stream.filter(
-      (o): o is typeof o & { key: string } => typeof o.key === "string",
-    ),
+    Stream.filter((o): o is typeof o & { key: string } => typeof o.key === "string"),
     Stream.map((o) => o.key),
     Stream.runForEachArray((chunk) =>
       r2.deleteObjects({ accountId, bucketName, body: [...chunk] }),
@@ -1216,10 +1144,7 @@ type Recorded = { method: string; url: string };
 /** Fetch transport that records every request and answers from `respond`. */
 const recordingTransport = (respond: (call: Recorded) => Response) => {
   const calls: Recorded[] = [];
-  const fetch = async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     calls.push({
       method: (input instanceof Request ? input.method : init?.method) ?? "GET",
       url: input instanceof Request ? input.url : String(input),
@@ -1229,9 +1154,7 @@ const recordingTransport = (respond: (call: Recorded) => Response) => {
   return {
     calls,
     layer: FetchHttpClient.layer.pipe(
-      Layer.provide(
-        Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch),
-      ),
+      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch)),
     ),
   };
 };
@@ -1258,10 +1181,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
         source: { type: "env" },
       } satisfies CloudflareResolvedCredentials),
     ),
-    Layer.succeed(
-      Credentials,
-      Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
-    ),
+    Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
     Layer.succeed(
       LocalRuntimeState,
       LocalRuntimeState.of({
@@ -1301,9 +1221,7 @@ const objectDeletes = (calls: Recorded[]) =>
 /** `DELETE .../r2/buckets/{name}` — deleting the bucket itself. */
 const bucketDeletes = (calls: Recorded[]) =>
   calls.filter(
-    (c) =>
-      c.method === "DELETE" &&
-      c.url.endsWith(`/r2/buckets/${stubbedOutput.bucketName}`),
+    (c) => c.method === "DELETE" && c.url.endsWith(`/r2/buckets/${stubbedOutput.bucketName}`),
   );
 
 /** One object in the bucket, so the empty path has something to delete. */
@@ -1318,16 +1236,11 @@ const stubResponse = (call: Recorded) =>
   );
 
 /** Run the real provider delete; return every request it made. */
-const recordDelete = (
-  props: { forceDestroy?: boolean },
-  options?: { force?: boolean },
-) =>
+const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boolean }) =>
   Effect.gen(function* () {
     const transport = recordingTransport(stubResponse);
     yield* Effect.gen(function* () {
-      const provider = yield* Provider<Cloudflare.R2.Bucket>(
-        "Cloudflare.R2.Bucket",
-      );
+      const provider = yield* Provider<Cloudflare.R2.Bucket>("Cloudflare.R2.Bucket");
       yield* provider.delete({
         id: "Bucket",
         fqn: "Bucket",

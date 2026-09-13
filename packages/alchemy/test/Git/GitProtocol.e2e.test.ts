@@ -28,10 +28,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeTestStack("GitServiceE2EStack");
 
@@ -55,21 +52,15 @@ const edgeRetry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         (error as { _tag?: string })._tag === "TimeoutError" ||
         ((error as { _tag?: string })._tag === "HttpClientError" &&
           (!(error as { response?: { status: number } }).response ||
-            (error as { response: { status: number } }).response.status ===
-              404 ||
-            (error as { response: { status: number } }).response.status >=
-              500)),
+            (error as { response: { status: number } }).response.status === 404 ||
+            (error as { response: { status: number } }).response.status >= 500)),
       schedule: Schedule.spaced("1500 millis"),
       times: 40,
     }),
   );
 
 /** Delete-if-exists + wait until the deterministic name is free again. */
-const purgeRepo = Effect.fn(function* (
-  url: string,
-  owner: string,
-  repo: string,
-) {
+const purgeRepo = Effect.fn(function* (url: string, owner: string, repo: string) {
   const admin = yield* makeClient(url, TEST_SECRET);
   // edgeRetry on every step: a freshly deployed workers.dev route serves
   // transient 5xx/1042s for a few seconds (typed 404s decode fine and are
@@ -148,8 +139,7 @@ const mustFailGit = Effect.fn(function* (cwd: string, ...args: Array<string>) {
 const retryGit = (cwd: string, ...args: Array<string>) =>
   mustGit(cwd, ...args).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GitError" || error._tag === "TimeoutError",
+      while: (error) => error._tag === "GitError" || error._tag === "TimeoutError",
       schedule: Schedule.spaced("3 seconds"),
       times: 5,
     }),
@@ -167,24 +157,17 @@ const tempDir = Effect.gen(function* () {
 });
 
 /** Purge + create a repo, returning the admin client and an authed remote. */
-const freshRepo = Effect.fn(function* (
-  url: string,
-  owner: string,
-  name: string,
-) {
+const freshRepo = Effect.fn(function* (url: string, owner: string, name: string) {
   const admin = yield* makeClient(url, TEST_SECRET);
   // Retry the whole purge -> create CYCLE, never the bare POST: a create
   // that commits server-side but loses its response (edge 5xx mid-rollout)
   // leaves the name taken, so retrying just the POST would 409 forever.
   const created = yield* Effect.gen(function* () {
     yield* purgeRepo(url, owner, name);
-    return yield* admin.repos
-      .create({ payload: { owner, name } })
-      .pipe(edgeRetry);
+    return yield* admin.repos.create({ payload: { owner, name } }).pipe(edgeRetry);
   }).pipe(
     Effect.retry({
-      while: (error: { readonly _tag?: string }) =>
-        error._tag === "RepoAlreadyExists",
+      while: (error: { readonly _tag?: string }) => error._tag === "RepoAlreadyExists",
       schedule: Schedule.spaced("1 second"),
       times: 3,
     }),
@@ -251,14 +234,7 @@ test(
     const params = { owner: "e2e", repo: "proto-basic" };
 
     // step 1: empty clone succeeds with the empty-repo warning
-    const clone = yield* retryGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "work",
-    );
+    const clone = yield* retryGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "work");
     expect(`${clone.stdout}\n${clone.stderr}`).toContain("empty repository");
     const work = path.join(tmp, "work");
 
@@ -270,10 +246,7 @@ test(
     yield* fs.writeFileString(path.join(work, "sub", "nested.txt"), "nested\n");
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c2: subdir");
-    yield* fs.writeFileString(
-      path.join(work, "run.sh"),
-      "#!/bin/sh\necho ok\n",
-    );
+    yield* fs.writeFileString(path.join(work, "run.sh"), "#!/bin/sh\necho ok\n");
     yield* fs.chmod(path.join(work, "run.sh"), 0o755);
     yield* fs.symlink("hello.txt", path.join(work, "link.txt"));
     yield* mustGit(work, "add", "-A");
@@ -294,9 +267,7 @@ test(
       params: { ...params, oid: commit.tree },
     });
     expect(tree.entries.find((e) => e.name === "run.sh")?.mode).toBe("100755");
-    expect(tree.entries.find((e) => e.name === "link.txt")?.mode).toBe(
-      "120000",
-    );
+    expect(tree.entries.find((e) => e.name === "link.txt")?.mode).toBe("120000");
     expect(tree.entries.find((e) => e.name === "sub")?.type).toBe("tree");
 
     // the /file raw route serves the working-tree bytes
@@ -415,23 +386,14 @@ test(
 
     // --atomic: a batch with one stale CAS is all-or-nothing
     const loser = pushA.exitCode === 0 ? b : a;
-    yield* mustFailGit(
-      loser,
-      "push",
-      "--atomic",
-      "origin",
-      "main",
-      "HEAD:refs/heads/atomic-side",
-    );
+    yield* mustFailGit(loser, "push", "--atomic", "origin", "main", "HEAD:refs/heads/atomic-side");
     const admin = yield* makeClient(url, TEST_SECRET);
     const refs = yield* admin.refs.list({
       params: { owner: "e2e", repo: "proto-cas" },
       query: {},
     });
     // the side branch must NOT exist — the failed main CAS aborted the batch
-    expect(refs.refs.some((r) => r.name === "refs/heads/atomic-side")).toBe(
-      false,
-    );
+    expect(refs.refs.some((r) => r.name === "refs/heads/atomic-side")).toBe(false);
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -499,14 +461,7 @@ test(
     const tmp = yield* tempDir;
     const params = { owner: "e2e", repo: "proto-tags" };
 
-    yield* retryGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "work",
-    );
+    yield* retryGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "f.txt"), "one\n");
     yield* mustGit(work, "add", "-A");
@@ -526,17 +481,14 @@ test(
     });
     expect(tagRef.oid).toBe(tagOid);
     expect(tagRef.peeled).toBe(head);
-    const lsRemote = (yield* mustGit(work, "ls-remote", "--tags", "origin"))
-      .stdout;
+    const lsRemote = (yield* mustGit(work, "ls-remote", "--tags", "origin")).stdout;
     expect(lsRemote).toContain(`${tagOid}\trefs/tags/v1`);
     expect(lsRemote).toContain(`${head}\trefs/tags/v1^{}`);
 
     // a fresh clone materializes the annotated tag object intact
     yield* retryGit(tmp, "clone", remote, "verify");
     const verify = path.join(tmp, "verify");
-    expect((yield* mustGit(verify, "cat-file", "-t", tagOid)).stdout).toBe(
-      "tag",
-    );
+    expect((yield* mustGit(verify, "cat-file", "-t", tagOid)).stdout).toBe("tag");
     expect((yield* mustGit(verify, "tag", "-l", "v1")).stdout).toBe("v1");
 
     // branch push + delete-refs on both kinds
@@ -560,14 +512,7 @@ test(
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
 
-    yield* retryGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "full",
-    );
+    yield* retryGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "full");
     const full = path.join(tmp, "full");
     for (const n of ["c1", "c2", "c3"]) {
       yield* fs.writeFileString(path.join(full, "f.txt"), `${n}\n`);
@@ -579,12 +524,7 @@ test(
     // depth-1 clone sees exactly one commit and is marked shallow
     yield* retryGit(tmp, "clone", "--depth", "1", remote, "shallow");
     const shallow = path.join(tmp, "shallow");
-    const countShallow = (yield* mustGit(
-      shallow,
-      "rev-list",
-      "--count",
-      "HEAD",
-    )).stdout;
+    const countShallow = (yield* mustGit(shallow, "rev-list", "--count", "HEAD")).stdout;
     expect(countShallow).toBe("1");
     expect(yield* fs.exists(path.join(shallow, ".git", "shallow"))).toBe(true);
     expect(yield* fs.readFileString(path.join(shallow, "f.txt"))).toBe("c3\n");
@@ -592,8 +532,7 @@ test(
     // deepen by one commit — absolute --depth (v1 supports `deepen <n>`
     // only; `--deepen` needs the deepen-relative capability, cut in v1)
     yield* mustGit(shallow, "fetch", "--depth", "2", "origin");
-    const deepened = (yield* mustGit(shallow, "rev-list", "--count", "HEAD"))
-      .stdout;
+    const deepened = (yield* mustGit(shallow, "rev-list", "--count", "HEAD")).stdout;
     expect(deepened).toBe("2");
   }).pipe(logLevel),
   { timeout: 120_000 },
@@ -623,14 +562,10 @@ test.skipIf(!!process.env.FAST)(
     yield* retryGit(tmp, "clone", remote, "b");
     const b = path.join(tmp, "b");
     yield* mustGit(b, "fsck", "--strict");
-    expect((yield* mustGit(b, "rev-parse", "HEAD:big.bin")).stdout).toBe(
-      blobOid,
-    );
+    expect((yield* mustGit(b, "rev-parse", "HEAD:big.bin")).stdout).toBe(blobOid);
     const roundTripped = yield* fs.readFile(path.join(b, "big.bin"));
     expect(roundTripped.length).toBe(noise.length);
-    expect(Buffer.compare(Buffer.from(roundTripped), Buffer.from(noise))).toBe(
-      0,
-    );
+    expect(Buffer.compare(Buffer.from(roundTripped), Buffer.from(noise))).toBe(0);
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -678,9 +613,7 @@ test.skipIf(!!process.env.FAST)(
     const b = path.join(tmp, "b");
     yield* mustGit(b, "fsck", "--strict");
     expect((yield* mustGit(b, "rev-parse", "HEAD")).stdout).toBe(head);
-    expect((yield* mustGit(b, "rev-list", "--count", "HEAD")).stdout).toBe(
-      "500",
-    );
+    expect((yield* mustGit(b, "rev-list", "--count", "HEAD")).stdout).toBe("500");
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -697,14 +630,7 @@ test(
     const tmp = yield* tempDir;
     const params = { owner: "e2e", repo: "proto-readonly" };
 
-    yield* retryGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "work",
-    );
+    yield* retryGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "f.txt"), "one\n");
     yield* mustGit(work, "add", "-A");
@@ -738,14 +664,7 @@ test(
     const tmp = yield* tempDir;
     const params = { owner: "e2e", repo: "proto-auth" };
 
-    yield* retryGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "seed",
-    );
+    yield* retryGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "seed");
     const seed = path.join(tmp, "seed");
     yield* fs.writeFileString(path.join(seed, "f.txt"), "seed\n");
     yield* mustGit(seed, "add", "-A");
@@ -775,14 +694,7 @@ test.skipIf(!!process.env.FAST)(
     yield* purgeRepo(url, "e2e", "proto-fork-dst");
 
     // seed the parent
-    yield* retryGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "src",
-    );
+    yield* retryGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "src");
     const src = path.join(tmp, "src");
     yield* fs.writeFileString(path.join(src, "f.txt"), "one\n");
     yield* mustGit(src, "add", "-A");
@@ -800,24 +712,17 @@ test.skipIf(!!process.env.FAST)(
     });
     expect(forked.repo.status).toBe("forking");
     expect(forked.repo.forkOf).toBeTruthy();
-    const ready = yield* admin.repos
-      .get({ params: { owner: "e2e", repo: "proto-fork-dst" } })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (repo) => repo.status === "ready",
-          times: 45,
-        }),
-      );
+    const ready = yield* admin.repos.get({ params: { owner: "e2e", repo: "proto-fork-dst" } }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (repo) => repo.status === "ready",
+        times: 45,
+      }),
+    );
     expect(ready.status).toBe("ready");
 
     // the fork clones with its own bootstrap token and matches the parent
-    const forkRemote = yield* authRemote(
-      url,
-      TEST_SECRET,
-      "e2e",
-      "proto-fork-dst",
-    );
+    const forkRemote = yield* authRemote(url, TEST_SECRET, "e2e", "proto-fork-dst");
     yield* retryGit(tmp, "clone", forkRemote, "dst");
     const dst = path.join(tmp, "dst");
     yield* mustGit(dst, "fsck", "--strict");
@@ -832,25 +737,21 @@ test.skipIf(!!process.env.FAST)(
       params: { owner: "e2e", repo: "proto-fork-src" },
       query: {},
     });
-    expect(parentRefs.refs.find((r) => r.name === "refs/heads/main")?.oid).toBe(
-      parentHead,
-    );
+    expect(parentRefs.refs.find((r) => r.name === "refs/heads/main")?.oid).toBe(parentHead);
 
     // delete the parent → the fork still clones (R2 fork-retention pin)
     yield* admin.repos.delete({
       params: { owner: "e2e", repo: "proto-fork-src" },
     });
-    yield* admin.repos
-      .get({ params: { owner: "e2e", repo: "proto-fork-src" } })
-      .pipe(
-        Effect.as(false),
-        Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (gone) => gone,
-          times: 45,
-        }),
-      );
+    yield* admin.repos.get({ params: { owner: "e2e", repo: "proto-fork-src" } }).pipe(
+      Effect.as(false),
+      Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (gone) => gone,
+        times: 45,
+      }),
+    );
     yield* retryGit(tmp, "clone", forkRemote, "dst2");
     yield* mustGit(path.join(tmp, "dst2"), "fsck", "--strict");
 
@@ -878,15 +779,13 @@ test.skipIf(!!process.env.FAST)(
     });
     expect(imported.repo.status).toBe("importing");
 
-    const ready = yield* admin.repos
-      .get({ params: { owner: "e2e", repo: "proto-import" } })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (repo) => repo.status === "ready",
-          times: 45,
-        }),
-      );
+    const ready = yield* admin.repos.get({ params: { owner: "e2e", repo: "proto-import" } }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (repo) => repo.status === "ready",
+        times: 45,
+      }),
+    );
     expect(ready.status).toBe("ready");
 
     const refs = yield* admin.refs.list({
@@ -898,12 +797,7 @@ test.skipIf(!!process.env.FAST)(
     // and the imported history clones with a fresh token
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
-    const importRemote = yield* authRemote(
-      url,
-      TEST_SECRET,
-      "e2e",
-      "proto-import",
-    );
+    const importRemote = yield* authRemote(url, TEST_SECRET, "e2e", "proto-import");
     // the import was depth-limited, so the repo's history is shallow —
     // v0 can only serve that to a shallow-aware client (see handleUploadPack)
     yield* retryGit(tmp, "clone", "--depth", "1", importRemote, "imported");

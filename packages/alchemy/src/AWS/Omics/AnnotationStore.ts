@@ -132,31 +132,20 @@ export interface AnnotationStore extends Resource<
  *
  * @resource
  */
-export const AnnotationStore = Resource<AnnotationStore>(
-  "AWS.Omics.AnnotationStore",
-);
+export const AnnotationStore = Resource<AnnotationStore>("AWS.Omics.AnnotationStore");
 
 export const AnnotationStoreProvider = () =>
   Provider.effect(
     AnnotationStore,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
-        return (
-          props.name ??
-          toStoreName(yield* createPhysicalName({ id, maxLength: 96 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
+        return props.name ?? toStoreName(yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
       const waitUntilActive = Effect.fn(function* (name: string) {
         const final = yield* omics.getAnnotationStore({ name }).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(23),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(23)]),
             until: (s) => s.status === "ACTIVE" || s.status === "FAILED",
           }),
         );
@@ -187,11 +176,7 @@ export const AnnotationStoreProvider = () =>
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const found = yield* omics
             .getAnnotationStore({ name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined) return undefined;
           const attrs = {
             annotationStoreId: found.id,
@@ -199,9 +184,7 @@ export const AnnotationStoreProvider = () =>
             name: found.name,
             status: found.status,
           };
-          return (yield* hasAlchemyTags(id, tagRecord(found.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -211,8 +194,7 @@ export const AnnotationStoreProvider = () =>
           if (oldName !== newName) return { action: "replace" } as const;
           if (
             (prev.storeFormat ?? "") !== (news.storeFormat ?? "") ||
-            (prev.reference?.referenceArn ?? "") !==
-              (news.reference?.referenceArn ?? "") ||
+            (prev.reference?.referenceArn ?? "") !== (news.reference?.referenceArn ?? "") ||
             prev.sseConfig?.type !== news.sseConfig?.type ||
             prev.sseConfig?.keyArn !== news.sseConfig?.keyArn
           ) {
@@ -227,11 +209,7 @@ export const AnnotationStoreProvider = () =>
           // OBSERVE — annotation stores are addressable by name.
           let store = yield* omics
             .getAnnotationStore({ name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // ENSURE — create if missing, tolerating a create race, then wait
           // for the async provisioning to reach a terminal state.
@@ -253,10 +231,7 @@ export const AnnotationStoreProvider = () =>
           }
 
           // SYNC — description is the only mutable field.
-          if (
-            news.description !== undefined &&
-            news.description !== store.description
-          ) {
+          if (news.description !== undefined && news.description !== store.description) {
             yield* omics.updateAnnotationStore({
               name,
               description: news.description,
@@ -278,9 +253,7 @@ export const AnnotationStoreProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* omics
             .deleteAnnotationStore({ name: output.name, force: true })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

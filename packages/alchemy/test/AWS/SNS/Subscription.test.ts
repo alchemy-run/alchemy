@@ -43,9 +43,7 @@ test.provider(
       const attributes = yield* SNS.getSubscriptionAttributes({
         SubscriptionArn: deployed.subscription.subscriptionArn,
       }).pipe(
-        Effect.tapError((err) =>
-          Effect.logError(deployed.subscription.subscriptionArn, err),
-        ),
+        Effect.tapError((err) => Effect.logError(deployed.subscription.subscriptionArn, err)),
         Effect.retry({
           while: (error) => error._tag === "NotFoundException",
           schedule: Schedule.fixed(300),
@@ -92,11 +90,9 @@ test.provider(
       const provider = yield* Provider.findProvider(Subscription);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (s) => s.subscriptionArn === deployed.subscription.subscriptionArn,
-        ),
-      ).toBe(true);
+      expect(all.some((s) => s.subscriptionArn === deployed.subscription.subscriptionArn)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
       yield* assertSubscriptionDeleted(deployed.subscription.subscriptionArn);
@@ -104,13 +100,9 @@ test.provider(
   { timeout: 180_000 },
 );
 
-class SubscriptionStillExists extends Data.TaggedError(
-  "SubscriptionStillExists",
-) {}
+class SubscriptionStillExists extends Data.TaggedError("SubscriptionStillExists") {}
 
-const assertSubscriptionDeleted = Effect.fn(function* (
-  subscriptionArn: string,
-) {
+const assertSubscriptionDeleted = Effect.fn(function* (subscriptionArn: string) {
   yield* SNS.getSubscriptionAttributes({
     SubscriptionArn: subscriptionArn,
   }).pipe(

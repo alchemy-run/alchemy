@@ -69,7 +69,6 @@ export const connectMicrovm = <S>(
     const headers = microvmAuthHeaders(connection.authToken);
     return makeFetchRpcStub<S>({
       baseUrl: `https://${connection.endpoint}`,
-      fetch: (request) =>
-        client.execute(request.pipe(HttpClientRequest.setHeaders(headers))),
+      fetch: (request) => client.execute(request.pipe(HttpClientRequest.setHeaders(headers))),
     });
   });

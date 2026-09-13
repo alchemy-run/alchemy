@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
 // On the standard testing account every MCN call fails with the typed
@@ -54,43 +51,41 @@ const expectGone = (accountId: string, onrampId: string) =>
     }),
   );
 
-test.provider(
-  "unentitled accounts surface the typed FeatureNotEnabled error",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("unentitled accounts surface the typed FeatureNotEnabled error", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const canList = yield* mcn.listOnRamps({ accountId }).pipe(
-        Effect.as(true),
-        Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
-      );
-      if (canList) {
-        // Entitled account — the gated lifecycle test covers real behavior.
-        yield* Effect.logInfo("account is MCN-entitled; probe test is a no-op");
-        return;
-      }
+    const canList = yield* mcn.listOnRamps({ accountId }).pipe(
+      Effect.as(true),
+      Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
+    );
+    if (canList) {
+      // Entitled account — the gated lifecycle test covers real behavior.
+      yield* Effect.logInfo("account is MCN-entitled; probe test is a no-op");
+      return;
+    }
 
-      // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* mcn.listOnRamps({ accountId }).pipe(Effect.flip);
-      expect(error._tag).toEqual("FeatureNotEnabled");
+    // The typed tag — not UnknownCloudflareError, not a status check.
+    const error = yield* mcn.listOnRamps({ accountId }).pipe(Effect.flip);
+    expect(error._tag).toEqual("FeatureNotEnabled");
 
-      const createError = yield* mcn
-        .createOnRamp({
-          accountId,
-          name: "alchemy-mcn-probe",
-          cloudType: "AWS",
-          type: "OnrampTypeSingle",
-          dynamicRouting: false,
-          installRoutesInCloud: false,
-          installRoutesInMagicWan: false,
-        })
-        .pipe(Effect.flip);
-      expect(createError._tag).toEqual("FeatureNotEnabled");
+    const createError = yield* mcn
+      .createOnRamp({
+        accountId,
+        name: "alchemy-mcn-probe",
+        cloudType: "AWS",
+        type: "OnrampTypeSingle",
+        dynamicRouting: false,
+        installRoutesInCloud: false,
+        installRoutesInMagicWan: false,
+      })
+      .pipe(Effect.flip);
+    expect(createError._tag).toEqual("FeatureNotEnabled");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
@@ -167,9 +162,7 @@ test.provider("list returns on-ramps or a typed [] when unentitled", (stack) =>
       Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.MagicCloudNetworking.OnRamp,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.MagicCloudNetworking.OnRamp);
     const all = yield* provider.list();
 
     if (!canList) {
@@ -204,9 +197,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicCloudNetworking.OnRamp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicCloudNetworking.OnRamp);
       const all = yield* provider.list();
 
       expect(all.some((x) => x.onRampId === onramp.onRampId)).toBe(true);

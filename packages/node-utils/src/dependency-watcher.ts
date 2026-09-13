@@ -58,12 +58,8 @@ export class DependencyWatcher {
     if (this.#closed) return;
     const previous = this.#dependencies;
     this.#dependencies = dependencies;
-    const removed = [...previous].filter(
-      (dependency) => !dependencies.has(dependency),
-    );
-    const added = [...dependencies].filter(
-      (dependency) => !previous.has(dependency),
-    );
+    const removed = [...previous].filter((dependency) => !dependencies.has(dependency));
+    const added = [...dependencies].filter((dependency) => !previous.has(dependency));
     if (removed.length > 0) {
       for (const dependency of removed) {
         this.#fingerprints.delete(dependency);
@@ -117,9 +113,7 @@ export class DependencyWatcher {
 
   #fingerprint(file: string): string | undefined {
     try {
-      return createHash("sha256")
-        .update(readFileSync(file))
-        .digest("base64url");
+      return createHash("sha256").update(readFileSync(file)).digest("base64url");
     } catch {
       // Missing and unreadable are both materially different from the last
       // successfully read contents, while repeated missing-file events fold

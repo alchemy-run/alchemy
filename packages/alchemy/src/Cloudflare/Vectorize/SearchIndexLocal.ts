@@ -4,10 +4,7 @@ import * as Layer from "effect/Layer";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { SearchIndex } from "./SearchIndex.ts";
-import {
-  type SearchIndexAuth,
-  makeHttpSearchIndexClient,
-} from "./SearchIndexHttpClient.ts";
+import { type SearchIndexAuth, makeHttpSearchIndexClient } from "./SearchIndexHttpClient.ts";
 import type { Index } from "./VectorizeIndex.ts";
 
 /**
@@ -52,9 +49,7 @@ export const SearchIndexLocal = Layer.effect(
     // providers layer). Capture the full context so the HTTP ops run with the
     // current credentials — no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     const auth: SearchIndexAuth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
       accountId,

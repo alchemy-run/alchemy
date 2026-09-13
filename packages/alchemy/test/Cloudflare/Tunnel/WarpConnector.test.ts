@@ -14,10 +14,7 @@ const { test } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Read a WARP Connector tunnel out-of-band, mapping "gone" (TunnelNotFound)
 // and soft-deleted tunnels to undefined.
@@ -95,9 +92,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Tunnel.WarpConnector,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Tunnel.WarpConnector);
       const all = yield* provider.list();
 
       const found = all.find((t) => t.tunnelId === connector.tunnelId);

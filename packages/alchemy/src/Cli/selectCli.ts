@@ -24,12 +24,8 @@ export const selectCliServices = () =>
 
       return yield* Effect.promise<SelectedCli>(async () => {
         const { sigilCli } = await import("./components/view/SigilCli.tsx");
-        const { brandedCliFormatter } =
-          await import("./components/view/Help.tsx");
-        return Layer.mergeAll(
-          sigilCli(),
-          CliOutput.layer(brandedCliFormatter(cli)),
-        );
+        const { brandedCliFormatter } = await import("./components/view/Help.tsx");
+        return Layer.mergeAll(sigilCli(), CliOutput.layer(brandedCliFormatter(cli)));
       });
     }),
   );

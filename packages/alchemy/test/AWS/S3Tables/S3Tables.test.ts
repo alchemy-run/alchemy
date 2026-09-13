@@ -26,22 +26,16 @@ const LIFECYCLE_BUCKET_PREFIX = "table-bucket-namespace-table-lifecycle-";
 const purgeOrphanedTableBuckets = Effect.gen(function* () {
   const buckets = yield* s3tables.listTableBuckets.pages({}).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.tableBuckets ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.tableBuckets ?? [])),
   );
   yield* Effect.forEach(
     buckets.filter((b) => b.name.startsWith(LIFECYCLE_BUCKET_PREFIX)),
     (bucket) =>
       Effect.gen(function* () {
-        const tables = yield* s3tables.listTables
-          .pages({ tableBucketARN: bucket.arn })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.tables ?? []),
-            ),
-          );
+        const tables = yield* s3tables.listTables.pages({ tableBucketARN: bucket.arn }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.tables ?? [])),
+        );
         yield* Effect.forEach(tables, (t) =>
           s3tables
             .deleteTable({
@@ -55,9 +49,7 @@ const purgeOrphanedTableBuckets = Effect.gen(function* () {
           .pages({ tableBucketARN: bucket.arn })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.namespaces ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.namespaces ?? [])),
           );
         yield* Effect.forEach(namespaces, (ns) =>
           s3tables
@@ -71,10 +63,7 @@ const purgeOrphanedTableBuckets = Effect.gen(function* () {
           // Child deletes are eventually consistent; ride out the window.
           Effect.retry({
             while: (e) => e._tag === "ConflictException",
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
           }),
           Effect.catchTag("NotFoundException", () => Effect.void),
         );
@@ -84,20 +73,15 @@ const purgeOrphanedTableBuckets = Effect.gen(function* () {
 
 // Poll a getter until it reports the resource is gone (typed
 // NotFoundException), bounded so a stuck delete fails fast.
-const waitUntilGone = <A, E extends { _tag: string }, R>(
-  read: Effect.Effect<A, E, R>,
-) =>
+const waitUntilGone = <A, E extends { _tag: string }, R>(read: Effect.Effect<A, E, R>) =>
   read.pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "StillExists" as const } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "StillExists" as const } as const)),
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "StillExists",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
     Effect.catchIf(
-      (e): e is E & { _tag: "NotFoundException" } =>
-        e._tag === "NotFoundException",
+      (e): e is E & { _tag: "NotFoundException" } => e._tag === "NotFoundException",
       () => Effect.void,
     ),
   );
@@ -181,9 +165,7 @@ test.provider(
       yield* stack.destroy();
 
       // The bucket (and everything under it) must be gone.
-      yield* waitUntilGone(
-        s3tables.getTableBucket({ tableBucketARN: bucket.tableBucketArn }),
-      );
+      yield* waitUntilGone(s3tables.getTableBucket({ tableBucketARN: bucket.tableBucketArn }));
     }),
   { timeout: 180_000 },
 );
@@ -217,14 +199,10 @@ test.provider(
       expect(second.tableBucketArn).not.toBe(first.tableBucketArn);
 
       // The old bucket must have been deleted as part of the replacement.
-      yield* waitUntilGone(
-        s3tables.getTableBucket({ tableBucketARN: first.tableBucketArn }),
-      );
+      yield* waitUntilGone(s3tables.getTableBucket({ tableBucketARN: first.tableBucketArn }));
 
       yield* stack.destroy();
-      yield* waitUntilGone(
-        s3tables.getTableBucket({ tableBucketARN: second.tableBucketArn }),
-      );
+      yield* waitUntilGone(s3tables.getTableBucket({ tableBucketARN: second.tableBucketArn }));
     }),
   { timeout: 180_000 },
 );
@@ -240,9 +218,7 @@ test.provider(
         // protection assertion. Ordinary destroy intentionally cannot remove
         // them, so use the same explicit force path nuke uses.
         const stale = (yield* provider.list()).filter((bucket) =>
-          bucket.name.startsWith(
-            "ordinary-bucket-delete-protects-untracked-child",
-          ),
+          bucket.name.startsWith("ordinary-bucket-delete-protects-untracked-child"),
         );
         yield* Effect.forEach(
           stale,
@@ -283,9 +259,7 @@ test.provider(
         session: stubSession,
         bindings: [],
       };
-      const protectedDelete = yield* Effect.result(
-        provider.delete(deleteInput),
-      );
+      const protectedDelete = yield* Effect.result(provider.delete(deleteInput));
       expect(Result.isFailure(protectedDelete)).toBe(true);
       if (Result.isFailure(protectedDelete)) {
         expect(protectedDelete.failure._tag).toBe("BadRequestException");
@@ -296,9 +270,7 @@ test.provider(
       });
 
       yield* provider.delete({ ...deleteInput, force: true });
-      yield* waitUntilGone(
-        s3tables.getTableBucket({ tableBucketARN: bucket.tableBucketArn }),
-      );
+      yield* waitUntilGone(s3tables.getTableBucket({ tableBucketARN: bucket.tableBucketArn }));
       // Clear the now-stale stack state through the normal idempotent path.
       yield* stack.destroy();
     }),

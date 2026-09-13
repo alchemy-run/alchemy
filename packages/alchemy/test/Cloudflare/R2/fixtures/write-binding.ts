@@ -24,22 +24,17 @@ export default class R2WriteBindingWorker extends Cloudflare.Worker<R2WriteBindi
           const key = url.searchParams.get("key") ?? "";
           const sha256 = url.searchParams.get("sha256") ?? "";
           const contentLength = Number(request.headers["content-length"] ?? 0);
-          return yield* r2
-            .put(key, request.stream, { contentLength, sha256 })
-            .pipe(
-              Effect.flatMap((object) =>
-                HttpServerResponse.json({
-                  stored: true,
-                  size: object?.size ?? null,
-                }),
-              ),
-              Effect.catchTag("R2Error", (e) =>
-                HttpServerResponse.json(
-                  { stored: false, error: e.message },
-                  { status: 400 },
-                ),
-              ),
-            );
+          return yield* r2.put(key, request.stream, { contentLength, sha256 }).pipe(
+            Effect.flatMap((object) =>
+              HttpServerResponse.json({
+                stored: true,
+                size: object?.size ?? null,
+              }),
+            ),
+            Effect.catchTag("R2Error", (e) =>
+              HttpServerResponse.json({ stored: false, error: e.message }, { status: 400 }),
+            ),
+          );
         }
         const handled = yield* writeRoutes(r2, request, url);
         return handled ?? HttpServerResponse.text("Not Found", { status: 404 });

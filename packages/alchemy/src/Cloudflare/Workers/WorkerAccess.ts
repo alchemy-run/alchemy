@@ -54,9 +54,7 @@ export interface WorkerAccessApplication {
   previews?: boolean;
 }
 
-export class WorkerAccessIdentityError extends Data.TaggedError(
-  "WorkerAccessIdentityError",
-)<{
+export class WorkerAccessIdentityError extends Data.TaggedError("WorkerAccessIdentityError")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -131,9 +129,7 @@ interface RawAccessContext {
   getIdentity(): Promise<WorkerAccessIdentity | undefined>;
 }
 
-const makeAccessContext = (
-  raw: RawAccessContext,
-): WorkerExecutionContextAccess => ({
+const makeAccessContext = (raw: RawAccessContext): WorkerExecutionContextAccess => ({
   aud: raw.aud,
   getIdentity: () =>
     Effect.tryPromise({
@@ -141,9 +137,7 @@ const makeAccessContext = (
       catch: (cause) =>
         new WorkerAccessIdentityError({
           message:
-            cause instanceof Error
-              ? cause.message
-              : "Unknown Access identity resolution error",
+            cause instanceof Error ? cause.message : "Unknown Access identity resolution error",
           cause,
         }),
     }),
@@ -164,8 +158,7 @@ export const resolveAccessContext = (
   env: Record<string, unknown> | undefined,
 ): WorkerExecutionContextAccess | undefined => {
   // Deployed behind Access: workerd populates ctx.access natively.
-  const native = (ctx as cf.ExecutionContext & { access?: RawAccessContext })
-    .access;
+  const native = (ctx as cf.ExecutionContext & { access?: RawAccessContext }).access;
   if (native !== undefined) {
     return makeAccessContext(native);
   }

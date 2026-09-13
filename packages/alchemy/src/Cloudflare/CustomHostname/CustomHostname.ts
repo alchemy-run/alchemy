@@ -19,11 +19,7 @@ export type DcvMethod = "http" | "txt" | "email";
 /**
  * Certificate authority that issues the managed certificate.
  */
-export type CertificateAuthority =
-  | "digicert"
-  | "google"
-  | "lets_encrypt"
-  | "ssl_com";
+export type CertificateAuthority = "digicert" | "google" | "lets_encrypt" | "ssl_com";
 
 /**
  * Per-hostname TLS settings applied to the edge certificate.
@@ -278,16 +274,12 @@ export type CustomHostname = Resource<
  * @product Custom Hostnames
  * @category Domains & DNS
  */
-export const CustomHostname = Resource<CustomHostname>(
-  "Cloudflare.CustomHostname.CustomHostname",
-  {
-    aliases: ["Cloudflare.CustomHostname"],
-  },
-);
+export const CustomHostname = Resource<CustomHostname>("Cloudflare.CustomHostname.CustomHostname", {
+  aliases: ["Cloudflare.CustomHostname"],
+});
 
 export const isCustomHostname = (value: unknown): value is CustomHostname =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.CustomHostname.CustomHostname";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.CustomHostname.CustomHostname";
 
 export const CustomHostnameProvider = () =>
   Provider.succeed(CustomHostname, {
@@ -329,11 +321,7 @@ export const CustomHostnameProvider = () =>
       }
       // zoneId is Input<string>; compare only once both sides are
       // concrete strings.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -374,10 +362,9 @@ export const CustomHostnameProvider = () =>
             Effect.map(narrowHostname),
             Effect.catch((originalError) =>
               Effect.gen(function* () {
-                const existing = yield* findByHostname(
-                  zoneId,
-                  news.hostname,
-                ).pipe(Effect.catch(() => Effect.succeed(undefined)));
+                const existing = yield* findByHostname(zoneId, news.hostname).pipe(
+                  Effect.catch(() => Effect.succeed(undefined)),
+                );
                 if (!existing) return yield* Effect.fail(originalError);
                 return existing;
               }),
@@ -396,11 +383,7 @@ export const CustomHostnameProvider = () =>
         customOriginServer?: string;
         customOriginSni?: string;
       } = {};
-      if (
-        !justCreated &&
-        news.ssl !== undefined &&
-        !sslEqualsObserved(news.ssl, observed.ssl)
-      ) {
+      if (!justCreated && news.ssl !== undefined && !sslEqualsObserved(news.ssl, observed.ssl)) {
         patch.ssl = desiredSsl;
       }
       if (
@@ -409,16 +392,10 @@ export const CustomHostnameProvider = () =>
       ) {
         patch.customMetadata = news.customMetadata;
       }
-      if (
-        customOriginServer !== undefined &&
-        customOriginServer !== observed.customOriginServer
-      ) {
+      if (customOriginServer !== undefined && customOriginServer !== observed.customOriginServer) {
         patch.customOriginServer = customOriginServer;
       }
-      if (
-        news.customOriginSni !== undefined &&
-        news.customOriginSni !== observed.customOriginSni
-      ) {
+      if (news.customOriginSni !== undefined && news.customOriginSni !== observed.customOriginSni) {
         patch.customOriginSni = news.customOriginSni;
       }
       if (Object.keys(patch).length > 0) {
@@ -447,19 +424,14 @@ export const CustomHostnameProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       // Owned path: we have persisted state (our own id) — refresh it.
       if (output?.customHostnameId) {
-        const observed = yield* observeById(
-          output.zoneId,
-          output.customHostnameId,
-        );
+        const observed = yield* observeById(output.zoneId, output.customHostnameId);
         if (observed) return toAttributes(observed, output.zoneId);
       }
       // Adoption path: no state of our own, but the hostname may already
       // exist on the zone. Custom hostnames carry no ownership markers we
       // can inspect, so brand any match `Unowned` — the engine refuses to
       // take over unless `adopt` is set.
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const hostname = output?.hostname ?? olds?.hostname;
       if (zoneId && hostname) {
         const observed = yield* findByHostname(zoneId, hostname);
@@ -486,17 +458,11 @@ const observeById = (zoneId: string, customHostnameId: string) =>
 // offers a `contain` filter, so an exact client-side match is applied on
 // top.
 const findByHostname = (zoneId: string, hostname: string) =>
-  customHostnames.listCustomHostnames
-    .items({ zoneId, hostname: { contain: hostname } })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).find((h) => h.hostname === hostname),
-      ),
-      Effect.map((found) =>
-        found === undefined ? undefined : narrowHostname(found),
-      ),
-    );
+  customHostnames.listCustomHostnames.items({ zoneId, hostname: { contain: hostname } }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).find((h) => h.hostname === hostname)),
+    Effect.map((found) => (found === undefined ? undefined : narrowHostname(found))),
+  );
 
 interface ObservedSsl {
   readonly status?: string;
@@ -543,8 +509,7 @@ interface ObservedHostname {
   readonly ssl?: ObservedSsl;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 type RawHostname =
   | customHostnames.GetCustomHostnameResponse
@@ -610,10 +575,7 @@ const narrowHostname = (raw: RawHostname): ObservedHostname => ({
         },
 });
 
-const toAttributes = (
-  observed: ObservedHostname,
-  zoneId: string,
-): Attributes => ({
+const toAttributes = (observed: ObservedHostname, zoneId: string): Attributes => ({
   customHostnameId: observed.id,
   zoneId,
   hostname: observed.hostname,
@@ -672,10 +634,7 @@ const buildSslBody = (ssl: Ssl | undefined) => ({
  * we manage, with defaults we should not fight). Returns `true` when no
  * patch is needed.
  */
-const sslEqualsObserved = (
-  desired: Ssl,
-  observed: ObservedSsl | undefined,
-): boolean => {
+const sslEqualsObserved = (desired: Ssl, observed: ObservedSsl | undefined): boolean => {
   if (observed === undefined) return false;
   if (desired.method !== undefined && desired.method !== observed.method) {
     return false;
@@ -683,16 +642,10 @@ const sslEqualsObserved = (
   if (desired.type !== undefined && desired.type !== observed.type) {
     return false;
   }
-  if (
-    desired.wildcard !== undefined &&
-    desired.wildcard !== (observed.wildcard ?? false)
-  ) {
+  if (desired.wildcard !== undefined && desired.wildcard !== (observed.wildcard ?? false)) {
     return false;
   }
-  if (
-    desired.bundleMethod !== undefined &&
-    desired.bundleMethod !== observed.bundleMethod
-  ) {
+  if (desired.bundleMethod !== undefined && desired.bundleMethod !== observed.bundleMethod) {
     return false;
   }
   if (
@@ -704,13 +657,10 @@ const sslEqualsObserved = (
   const s = desired.settings;
   if (s !== undefined) {
     const o = observed.settings;
-    if (s.ciphers !== undefined && !arrayEqualsUnordered(s.ciphers, o?.ciphers))
-      return false;
-    if (s.earlyHints !== undefined && s.earlyHints !== o?.earlyHints)
-      return false;
+    if (s.ciphers !== undefined && !arrayEqualsUnordered(s.ciphers, o?.ciphers)) return false;
+    if (s.earlyHints !== undefined && s.earlyHints !== o?.earlyHints) return false;
     if (s.http2 !== undefined && s.http2 !== o?.http2) return false;
-    if (s.minTlsVersion !== undefined && s.minTlsVersion !== o?.minTlsVersion)
-      return false;
+    if (s.minTlsVersion !== undefined && s.minTlsVersion !== o?.minTlsVersion) return false;
     if (s.tls_1_3 !== undefined && s.tls_1_3 !== o?.tls_1_3) return false;
   }
   return true;

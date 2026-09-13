@@ -66,9 +66,7 @@ test(
     expect(about.status).toBe(200);
 
     // Nitro API route serves through the dev server.
-    const hello = (await (
-      await fetchOk(new URL("/api/hello", url))
-    ).json()) as {
+    const hello = (await (await fetchOk(new URL("/api/hello", url))).json()) as {
       greeting: string | null;
     };
     expect(hello).toEqual({ greeting: "Hello from Nuxt on AWS!" });

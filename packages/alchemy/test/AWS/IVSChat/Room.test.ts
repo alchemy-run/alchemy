@@ -31,9 +31,7 @@ const assertRoomGone = (arn: string) =>
   Effect.gen(function* () {
     const room = yield* ivschat.getRoom({ identifier: arn }).pipe(
       Effect.map((r) => r.arn),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (room !== undefined) {
       return yield* Effect.fail(new Error(`room '${arn}' still exists`));

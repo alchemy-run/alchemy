@@ -16,16 +16,13 @@ import {
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
-export const isWebSocketEvent = (
-  event: any,
-): event is lambda.APIGatewayProxyWebsocketEventV2 =>
+export const isWebSocketEvent = (event: any): event is lambda.APIGatewayProxyWebsocketEventV2 =>
   typeof event?.requestContext?.connectionId === "string" &&
   typeof event?.requestContext?.routeKey === "string" &&
   event?.requestContext?.messageDirection === "IN";
 
 /** `$connect` → `connect` for stable, readable logical ids. */
-const sanitizeRouteKey = (routeKey: string) =>
-  routeKey.replace(/[^A-Za-z0-9]+/g, "") || "route";
+const sanitizeRouteKey = (routeKey: string) => routeKey.replace(/[^A-Za-z0-9]+/g, "") || "route";
 
 /**
  * Connects a WebSocket API route to the current Lambda function.
@@ -70,9 +67,7 @@ export const WebSocketEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       api: Api,
       props: WebSocketRouteProps,
-      handler: (
-        event: WebSocketEvent,
-      ) => Effect.Effect<WebSocketResult, never, Req>,
+      handler: (event: WebSocketEvent) => Effect.Effect<WebSocketResult, never, Req>,
     ) {
       // Deploy-time: materialize the Integration + Route + invoke
       // Permission for this route key. Skipped once running inside the
@@ -85,30 +80,24 @@ export const WebSocketEventSource = Layer.effect(
           Effect.gen(function* () {
             const key = sanitizeRouteKey(props.routeKey);
 
-            const integration = yield* Integration(
-              `${api.LogicalId}-${key}-Integration`,
-              {
-                apiId: api.apiId,
-                integrationType: "AWS_PROXY",
-                // WebSocket AWS_PROXY integrations require the full Lambda
-                // invocation URI. Region is derived from the function ARN
-                // so the binding needs no ambient environment.
-                integrationUri: Output.map(
-                  host.functionArn,
-                  (arn: string) =>
-                    `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
-                ),
-                integrationMethod: "POST",
-              },
-            );
+            const integration = yield* Integration(`${api.LogicalId}-${key}-Integration`, {
+              apiId: api.apiId,
+              integrationType: "AWS_PROXY",
+              // WebSocket AWS_PROXY integrations require the full Lambda
+              // invocation URI. Region is derived from the function ARN
+              // so the binding needs no ambient environment.
+              integrationUri: Output.map(
+                host.functionArn,
+                (arn: string) =>
+                  `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+              ),
+              integrationMethod: "POST",
+            });
 
             yield* Route(`${api.LogicalId}-${key}-Route`, {
               apiId: api.apiId,
               routeKey: props.routeKey,
-              target: Output.map(
-                integration.integrationId,
-                (id: string) => `integrations/${id}`,
-              ),
+              target: Output.map(integration.integrationId, (id: string) => `integrations/${id}`),
             });
 
             yield* Permission(`${api.LogicalId}-${key}-Permission`, {
@@ -130,10 +119,7 @@ export const WebSocketEventSource = Layer.effect(
       yield* host.listen(
         Effect.gen(function* () {
           return (event: any) => {
-            if (
-              isWebSocketEvent(event) &&
-              event.requestContext.routeKey === props.routeKey
-            ) {
+            if (isWebSocketEvent(event) && event.requestContext.routeKey === props.routeKey) {
               return handler(event).pipe(
                 Effect.map((result) => result ?? { statusCode: 200 }),
                 Effect.orDie,

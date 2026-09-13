@@ -23,10 +23,7 @@ const withPricingRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -43,19 +40,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -107,9 +99,7 @@ test.provider(
 describe("Pricing Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Pricing test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Pricing test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Pricing test setup: deploying fixture");
@@ -123,9 +113,7 @@ describe("Pricing Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `Pricing test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Pricing test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -133,9 +121,7 @@ describe("Pricing Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Pricing test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Pricing test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -150,9 +136,9 @@ describe("Pricing Bindings", () => {
       "returns a non-empty price list for AmazonEC2 t3.micro",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/products`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/products`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             formatVersion: string | undefined;
             firstServiceCode: string | undefined;
@@ -172,9 +158,9 @@ describe("Pricing Bindings", () => {
       "describes AmazonEC2 with its filterable attribute names",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/services`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/services`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             services: Array<{
               serviceCode: string;
               attributeNameCount: number;
@@ -221,19 +207,15 @@ describe("Pricing Bindings", () => {
       "lists volumeType attribute values for AmazonEC2",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/attribute-values`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/attribute-values`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             values: string[];
           };
 
           expect(response.values.length).toBeGreaterThan(0);
           // gp2/gp3 are stable, long-standing EBS volume types.
-          expect(
-            response.values.some((value) =>
-              value.startsWith("General Purpose"),
-            ),
-          ).toBe(true);
+          expect(response.values.some((value) => value.startsWith("General Purpose"))).toBe(true);
         }),
       { timeout: 120_000 },
     );

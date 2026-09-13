@@ -10,9 +10,7 @@ import * as Shield from "@/AWS/Shield";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class ShieldTestFunction extends Lambda.Function<Lambda.Function>()(
-  "ShieldTestFunction",
-) {}
+export class ShieldTestFunction extends Lambda.Function<Lambda.Function>()("ShieldTestFunction") {}
 
 /**
  * Routes answer `{ …fields }` on success or `{ errorTag }` when the operation
@@ -28,9 +26,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { Message?: string }).Message ??
-          (e as { message?: string }).message,
+        errorMessage: (e as { Message?: string }).Message ?? (e as { message?: string }).message,
       }),
     ),
   );
@@ -62,8 +58,7 @@ export default ShieldTestFunction.make(
     const listAttacks = yield* Shield.ListAttacks();
     const describeAttack = yield* Shield.DescribeAttack();
     const describeDRTAccess = yield* Shield.DescribeDRTAccess();
-    const listResourcesInProtectionGroup =
-      yield* Shield.ListResourcesInProtectionGroup();
+    const listResourcesInProtectionGroup = yield* Shield.ListResourcesInProtectionGroup();
 
     const bound = {
       getSubscriptionState,
@@ -93,9 +88,7 @@ export default ShieldTestFunction.make(
         // Available to Standard and Advanced customers alike.
         if (request.method === "GET" && pathname === "/attack-stats") {
           const result = yield* errorTagged(
-            describeAttackStatistics().pipe(
-              Effect.map((r) => ({ dataItems: r.DataItems.length })),
-            ),
+            describeAttackStatistics().pipe(Effect.map((r) => ({ dataItems: r.DataItems.length }))),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -166,8 +159,7 @@ export default ShieldTestFunction.make(
             {
               errorTag: (e as { _tag?: string })._tag ?? "UnknownError",
               errorMessage:
-                (e as { message?: string }).message ??
-                (e as { Message?: string }).Message,
+                (e as { message?: string }).message ?? (e as { Message?: string }).Message,
             },
             { status: 500 },
           ),

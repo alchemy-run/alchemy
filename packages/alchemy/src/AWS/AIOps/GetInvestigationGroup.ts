@@ -33,10 +33,7 @@ export interface GetInvestigationGroup extends Binding.Service<
   (
     group: InvestigationGroup,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      aiops.GetInvestigationGroupResponse,
-      aiops.GetInvestigationGroupError
-    >
+    () => Effect.Effect<aiops.GetInvestigationGroupResponse, aiops.GetInvestigationGroupError>
   >
 > {}
 export const GetInvestigationGroup = Binding.Service<GetInvestigationGroup>(

@@ -28,12 +28,7 @@ export interface ResumeResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.ResumeResourceRequest,
-    ) => Effect.Effect<
-      forecast.ResumeResourceResponse,
-      forecast.ResumeResourceError
-    >
+    ) => Effect.Effect<forecast.ResumeResourceResponse, forecast.ResumeResourceError>
   >
 > {}
-export const ResumeResource = Binding.Service<ResumeResource>(
-  "AWS.Forecast.ResumeResource",
-);
+export const ResumeResource = Binding.Service<ResumeResource>("AWS.Forecast.ResumeResource");

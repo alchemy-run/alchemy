@@ -38,15 +38,12 @@ export default ElastiCacheBindingsTestFunction.make(
       { kinds: ["cache-limit-approaching", "snapshot-creation-failed"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `elasticache event: ${event["detail-type"]} -> ${event.resources.join(", ")}`,
-          ),
+          Effect.log(`elasticache event: ${event["detail-type"]} -> ${event.resources.join(", ")}`),
         ),
     );
 
     const describeCaches = yield* ElastiCache.DescribeServerlessCaches();
-    const describeSnapshots =
-      yield* ElastiCache.DescribeServerlessCacheSnapshots();
+    const describeSnapshots = yield* ElastiCache.DescribeServerlessCacheSnapshots();
     const deleteSnapshot = yield* ElastiCache.DeleteServerlessCacheSnapshot();
     const copySnapshot = yield* ElastiCache.CopyServerlessCacheSnapshot();
     const exportSnapshot = yield* ElastiCache.ExportServerlessCacheSnapshot();
@@ -102,9 +99,7 @@ export default ElastiCacheBindingsTestFunction.make(
             ServerlessCacheName: name,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ServerlessCacheNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ServerlessCacheNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -118,10 +113,7 @@ export default ElastiCacheBindingsTestFunction.make(
           }).pipe(
             Effect.map(() => "Deleted"),
             Effect.catchTag(
-              [
-                "ServerlessCacheSnapshotNotFoundFault",
-                "ServiceLinkedRoleNotFoundFault",
-              ],
+              ["ServerlessCacheSnapshotNotFoundFault", "ServiceLinkedRoleNotFoundFault"],
               (e) => Effect.succeed(e._tag),
             ),
           );

@@ -89,16 +89,12 @@ export interface KafkaEventSource extends Binding.Service<
   KafkaEventSourceService
 > {}
 
-export const KafkaEventSource = Binding.Service<KafkaEventSource>(
-  "AWS.Kafka.KafkaEventSource",
-);
+export const KafkaEventSource = Binding.Service<KafkaEventSource>("AWS.Kafka.KafkaEventSource");
 
 export type KafkaEventSourceService = <StreamReq = never, Req = never>(
   cluster: ServerlessCluster,
   props: KafkaEventSourceProps,
-  process: (
-    stream: Stream.Stream<MSKRecord, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<MSKRecord, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
 /**
@@ -124,14 +120,8 @@ export type KafkaEventSourceService = <StreamReq = never, Req = never>(
  * );
  * ```
  */
-export const consumeKafkaTopic = <
-  C extends ServerlessCluster,
-  Req = never,
-  StreamReq = never,
->(
+export const consumeKafkaTopic = <C extends ServerlessCluster, Req = never, StreamReq = never>(
   cluster: C,
   props: KafkaEventSourceProps,
-  process: (
-    stream: Stream.Stream<MSKRecord, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<MSKRecord, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) => KafkaEventSource.use((source) => source(cluster, props, process));

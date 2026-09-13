@@ -39,14 +39,12 @@ export default MediaConnectTestFunction.make(
 
     // Event source: subscribe the host to MediaConnect alert/status events.
     // The deploy proves the EventBridge rule + invoke permission wiring.
-    yield* MediaConnect.consumeFlowEvents(
-      { kinds: ["alert", "flow-status-change"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `mediaconnect event: ${event["detail-type"]} ${event.detail.message ?? event.detail.status ?? ""}`,
-          ),
+    yield* MediaConnect.consumeFlowEvents({ kinds: ["alert", "flow-status-change"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(
+          `mediaconnect event: ${event["detail-type"]} ${event.detail.message ?? event.detail.status ?? ""}`,
         ),
+      ),
     );
 
     // Accessor for the flow's ARN, resolvable inside the runtime fetch
@@ -55,8 +53,7 @@ export default MediaConnectTestFunction.make(
 
     const describeFlow = yield* MediaConnect.DescribeFlow(flow);
     const sourceMetadata = yield* MediaConnect.DescribeFlowSourceMetadata(flow);
-    const sourceThumbnail =
-      yield* MediaConnect.DescribeFlowSourceThumbnail(flow);
+    const sourceThumbnail = yield* MediaConnect.DescribeFlowSourceThumbnail(flow);
     const startFlow = yield* MediaConnect.StartFlow(flow);
     const stopFlow = yield* MediaConnect.StopFlow(flow);
     const grantEntitlements = yield* MediaConnect.GrantFlowEntitlements(flow);
@@ -223,10 +220,7 @@ export default MediaConnectTestFunction.make(
           const { Status: stopStatus } = yield* stopFlow().pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "BadRequestException",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(18),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]),
             }),
           );
           return yield* HttpServerResponse.json({

@@ -38,9 +38,7 @@ describe("cloudflare externals", () => {
     });
 
     const result = await miniflare.fetchJson<Record<string, string>>("/");
-    expect(result["(cloudflare:workers) WorkerEntrypoint.name"]).toBe(
-      "WorkerEntrypoint",
-    );
+    expect(result["(cloudflare:workers) WorkerEntrypoint.name"]).toBe("WorkerEntrypoint");
     expect(["DurableObject", "DurableObjectBase"]).toContain(
       result["(cloudflare:workers) DurableObject.name"],
     );
@@ -56,8 +54,7 @@ describe("cloudflare externals", () => {
       compatibilityDate: "2025-07-01",
     });
 
-    const result =
-      await miniflare.fetchJson<Record<string, string>>("/external");
+    const result = await miniflare.fetchJson<Record<string, string>>("/external");
     expect(["DurableObject", "DurableObjectBase"]).toContain(
       result["(EXTERNAL) (cloudflare:workers) DurableObject.name"],
     );

@@ -99,11 +99,7 @@ export const DBClusterParameterGroupProvider = () =>
           .describeDBClusterParameterGroups({
             DBClusterParameterGroupName: name,
           })
-          .pipe(
-            Effect.catchTag("DBParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusterParameterGroups?.[0];
       });
 
@@ -147,27 +143,19 @@ export const DBClusterParameterGroupProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
-            (yield* toName(
-              id,
-              olds ?? ({} as DBClusterParameterGroupProps),
-            )) !== (yield* toName(id, news))
+            (yield* toName(id, olds ?? ({} as DBClusterParameterGroupProps))) !==
+            (yield* toName(id, news))
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            olds?.family !== news.family ||
-            olds?.description !== news.description
-          ) {
+          if (olds?.family !== news.family || olds?.description !== news.description) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbClusterParameterGroupName ??
-            (yield* toName(
-              id,
-              olds ?? ({ family: "" } as DBClusterParameterGroupProps),
-            ));
+            (yield* toName(id, olds ?? ({ family: "" } as DBClusterParameterGroupProps)));
           const group = yield* readGroup(name);
           if (!group?.DBClusterParameterGroupName) {
             return undefined;
@@ -181,8 +169,7 @@ export const DBClusterParameterGroupProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.dbClusterParameterGroupName ?? (yield* toName(id, news));
+          const name = output?.dbClusterParameterGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -197,31 +184,22 @@ export const DBClusterParameterGroupProvider = () =>
               .createDBClusterParameterGroup({
                 DBClusterParameterGroupName: name,
                 DBParameterGroupFamily: news.family,
-                Description:
-                  news.description ?? `Alchemy parameter group ${name}`,
+                Description: news.description ?? `Alchemy parameter group ${name}`,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBClusterParameterGroupName) {
               return yield* Effect.fail(
-                new Error(
-                  `Failed to create DB cluster parameter group '${name}'`,
-                ),
+                new Error(`Failed to create DB cluster parameter group '${name}'`),
               );
             }
           }
 
-          const dbClusterParameterGroupArn =
-            observed.DBClusterParameterGroupArn;
+          const dbClusterParameterGroupArn = observed.DBClusterParameterGroupArn;
 
           // Sync tags — diff observed (the describe response does not
           // surface tags, so use prior `output.tags` as the baseline) ↔
@@ -255,12 +233,7 @@ export const DBClusterParameterGroupProvider = () =>
             .deleteDBClusterParameterGroup({
               DBClusterParameterGroupName: output.dbClusterParameterGroupName,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBParameterGroupNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.void));
         }),
       };
     }),

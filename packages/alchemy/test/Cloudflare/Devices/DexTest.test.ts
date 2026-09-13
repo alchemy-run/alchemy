@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // DEX synthetic tests require the Digital Experience Monitoring
 // entitlement. On the standard testing account
@@ -145,9 +142,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Devices.DeviceDexTest,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Devices.DeviceDexTest);
       const all = yield* provider.list();
 
       expect(all.some((t) => t.testId === deployed.testId)).toBe(true);
@@ -163,9 +158,7 @@ test.provider.skipIf(entitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Devices.DeviceDexTest,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Devices.DeviceDexTest);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

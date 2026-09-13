@@ -7,11 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import PollyTestFunctionLive, {
-  BUCKET,
-  LEXICON_NAME,
-  PollyTestFunction,
-} from "./handler.ts";
+import PollyTestFunctionLive, { BUCKET, LEXICON_NAME, PollyTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -19,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "PollyBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -40,19 +33,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("2 seconds"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(5)]),
     }),
   );
 
@@ -73,9 +61,7 @@ describe.sequential("Polly Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/ping`;
-      yield* Effect.logInfo(
-        `Polly test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Polly test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -83,9 +69,7 @@ describe.sequential("Polly Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Polly test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Polly test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -102,9 +86,9 @@ describe.sequential("Polly Bindings", () => {
       "lists en-US voices including Joanna",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/voices`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/voices`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             error?: string;
             count: number;
             voiceIds: string[];
@@ -123,9 +107,9 @@ describe.sequential("Polly Bindings", () => {
       "lists the fixture's deployed lexicon",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/lexicons`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/lexicons`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             error?: string;
             names: string[];
           };
@@ -142,9 +126,9 @@ describe.sequential("Polly Bindings", () => {
       "reads the lexicon's PLS content scoped to its ARN",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/lexicon-content`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/lexicon-content`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             error?: string;
             name: string | null;
             containsAlias: boolean;
@@ -175,9 +159,9 @@ describe.sequential("Polly Bindings", () => {
       "streams text events in and collects audio events out",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/stream`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/stream`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             error?: string;
             events: number;
             audioBytes: number;
@@ -198,9 +182,9 @@ describe.sequential("Polly Bindings", () => {
       "synthesizes text with the lexicon applied to non-empty mp3 bytes",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/synthesize`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/synthesize`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             error?: string;
             contentType?: string;
             byteLength: number;
@@ -219,9 +203,9 @@ describe.sequential("Polly Bindings", () => {
       "runs an async synthesis task to completion in S3",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/task`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/task`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             error?: string;
             taskId: string;
             status: string | null;

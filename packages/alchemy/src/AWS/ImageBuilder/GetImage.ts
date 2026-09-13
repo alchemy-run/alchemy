@@ -31,10 +31,7 @@ export interface GetImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: imagebuilder.GetImageRequest,
-    ) => Effect.Effect<
-      imagebuilder.GetImageResponse,
-      imagebuilder.GetImageError
-    >
+    ) => Effect.Effect<imagebuilder.GetImageResponse, imagebuilder.GetImageError>
   >
 > {}
 export const GetImage = Binding.Service<GetImage>("AWS.ImageBuilder.GetImage");

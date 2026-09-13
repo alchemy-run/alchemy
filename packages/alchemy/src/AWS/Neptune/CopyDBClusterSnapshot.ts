@@ -29,10 +29,7 @@ export interface CopyDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.CopyDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      neptune.CopyDBClusterSnapshotResult,
-      neptune.CopyDBClusterSnapshotError
-    >
+    ) => Effect.Effect<neptune.CopyDBClusterSnapshotResult, neptune.CopyDBClusterSnapshotError>
   >
 > {}
 export const CopyDBClusterSnapshot = Binding.Service<CopyDBClusterSnapshot>(

@@ -317,11 +317,7 @@ const retryWhileCreating = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]),
   });
 
-const retryWhileConcurrentlyModified = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryWhileConcurrentlyModified = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -329,9 +325,7 @@ const retryWhileConcurrentlyModified = <
     schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]),
   });
 
-const buildSubject = (
-  subject: CertificateAuthoritySubject,
-): acmpca.ASN1Subject => ({
+const buildSubject = (subject: CertificateAuthoritySubject): acmpca.ASN1Subject => ({
   CommonName: subject.commonName,
   Organization: subject.organization,
   OrganizationalUnit: subject.organizationalUnit,
@@ -383,36 +377,28 @@ export const CertificateAuthorityProvider = () =>
       // DELETED state is inside its restoration window — for lifecycle
       // purposes it is gone (we never restore automatically).
       const describeCa = Effect.fn(function* (arn: string) {
-        return yield* acmpca
-          .describeCertificateAuthority({ CertificateAuthorityArn: arn })
-          .pipe(
-            Effect.map((r) => r.CertificateAuthority),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* acmpca.describeCertificateAuthority({ CertificateAuthorityArn: arn }).pipe(
+          Effect.map((r) => r.CertificateAuthority),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       const listCaTags = Effect.fn(function* (arn: string) {
-        const tags = yield* acmpca.listTags
-          .items({ CertificateAuthorityArn: arn })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Object.fromEntries(
-                Array.from(chunk)
-                  .filter((t) => t.Value !== undefined)
-                  .map((t) => [t.Key, t.Value!] as const),
-              ),
+        const tags = yield* acmpca.listTags.items({ CertificateAuthorityArn: arn }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Object.fromEntries(
+              Array.from(chunk)
+                .filter((t) => t.Value !== undefined)
+                .map((t) => [t.Key, t.Value!] as const),
             ),
-            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
-          );
+          ),
+          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+        );
         return tags;
       });
 
-      const subjectFromAsn1 = (
-        s: acmpca.ASN1Subject | undefined,
-      ): CertificateAuthoritySubject => ({
+      const subjectFromAsn1 = (s: acmpca.ASN1Subject | undefined): CertificateAuthoritySubject => ({
         commonName: s?.CommonName,
         organization: s?.Organization,
         organizationalUnit: s?.OrganizationalUnit,
@@ -443,13 +429,10 @@ export const CertificateAuthorityProvider = () =>
         return (
           (ca.Type ?? "ROOT") === (props.type ?? "ROOT") &&
           config?.KeyAlgorithm === (props.keyAlgorithm ?? "RSA_2048") &&
-          config?.SigningAlgorithm ===
-            (props.signingAlgorithm ?? "SHA256WITHRSA") &&
-          (ca.UsageMode ?? "GENERAL_PURPOSE") ===
-            (props.usageMode ?? "GENERAL_PURPOSE") &&
+          config?.SigningAlgorithm === (props.signingAlgorithm ?? "SHA256WITHRSA") &&
+          (ca.UsageMode ?? "GENERAL_PURPOSE") === (props.usageMode ?? "GENERAL_PURPOSE") &&
           (props.keyStorageSecurityStandard === undefined ||
-            ca.KeyStorageSecurityStandard ===
-              props.keyStorageSecurityStandard) &&
+            ca.KeyStorageSecurityStandard === props.keyStorageSecurityStandard) &&
           JSON.stringify(buildSubject(subjectFromAsn1(config?.Subject))) ===
             JSON.stringify(buildSubject(props.subject ?? {}))
         );
@@ -459,16 +442,11 @@ export const CertificateAuthorityProvider = () =>
       // only way back to an orphaned CA is its Alchemy ownership tags.
       // Leaking a CA would keep billing, so reconcile searches by tags
       // (plus matching immutable configuration) before creating.
-      const findManagedCa = Effect.fn(function* (
-        id: string,
-        props: CertificateAuthorityProps,
-      ) {
+      const findManagedCa = Effect.fn(function* (id: string, props: CertificateAuthorityProps) {
         const cas = yield* acmpca.listCertificateAuthorities.items({}).pipe(
           Stream.runCollect,
           Effect.map((chunk) =>
-            Array.from(chunk).filter(
-              (ca) => ca.Arn !== undefined && ca.Status !== "DELETED",
-            ),
+            Array.from(chunk).filter((ca) => ca.Arn !== undefined && ca.Status !== "DELETED"),
           ),
         );
         for (const ca of cas) {
@@ -536,14 +514,11 @@ export const CertificateAuthorityProvider = () =>
           if (!isResolved(news)) return;
           const immutableChanged =
             (news.type ?? "ROOT") !== (olds.type ?? "ROOT") ||
-            (news.keyAlgorithm ?? "RSA_2048") !==
-              (olds.keyAlgorithm ?? "RSA_2048") ||
+            (news.keyAlgorithm ?? "RSA_2048") !== (olds.keyAlgorithm ?? "RSA_2048") ||
             (news.signingAlgorithm ?? "SHA256WITHRSA") !==
               (olds.signingAlgorithm ?? "SHA256WITHRSA") ||
-            (news.usageMode ?? "GENERAL_PURPOSE") !==
-              (olds.usageMode ?? "GENERAL_PURPOSE") ||
-            news.keyStorageSecurityStandard !==
-              olds.keyStorageSecurityStandard ||
+            (news.usageMode ?? "GENERAL_PURPOSE") !== (olds.usageMode ?? "GENERAL_PURPOSE") ||
+            news.keyStorageSecurityStandard !== olds.keyStorageSecurityStandard ||
             JSON.stringify(buildSubject(news.subject)) !==
               JSON.stringify(buildSubject(olds.subject));
           if (immutableChanged) {
@@ -552,9 +527,7 @@ export const CertificateAuthorityProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
-          const desiredRevocation = buildRevocationConfiguration(
-            news.revocationConfiguration,
-          );
+          const desiredRevocation = buildRevocationConfiguration(news.revocationConfiguration);
 
           // 1. OBSERVE — output is only an ARN cache; cloud state is
           // authoritative. Fall back to a tag search so a persistence
@@ -601,36 +574,28 @@ export const CertificateAuthorityProvider = () =>
               buildRevocationConfiguration({
                 crlConfiguration: ca.RevocationConfiguration?.CrlConfiguration
                   ? {
-                      enabled:
-                        ca.RevocationConfiguration.CrlConfiguration.Enabled,
+                      enabled: ca.RevocationConfiguration.CrlConfiguration.Enabled,
                       expiration:
-                        ca.RevocationConfiguration.CrlConfiguration
-                          .ExpirationInDays === undefined
+                        ca.RevocationConfiguration.CrlConfiguration.ExpirationInDays === undefined
                           ? undefined
                           : Duration.days(
-                              ca.RevocationConfiguration.CrlConfiguration
-                                .ExpirationInDays,
+                              ca.RevocationConfiguration.CrlConfiguration.ExpirationInDays,
                             ),
-                      customCname:
-                        ca.RevocationConfiguration.CrlConfiguration.CustomCname,
-                      s3BucketName:
-                        ca.RevocationConfiguration.CrlConfiguration
-                          .S3BucketName,
-                      s3ObjectAcl: ca.RevocationConfiguration.CrlConfiguration
-                        .S3ObjectAcl as "PUBLIC_READ" | undefined,
-                      crlType: ca.RevocationConfiguration.CrlConfiguration
-                        .CrlType as "COMPLETE" | undefined,
-                      customPath:
-                        ca.RevocationConfiguration.CrlConfiguration.CustomPath,
+                      customCname: ca.RevocationConfiguration.CrlConfiguration.CustomCname,
+                      s3BucketName: ca.RevocationConfiguration.CrlConfiguration.S3BucketName,
+                      s3ObjectAcl: ca.RevocationConfiguration.CrlConfiguration.S3ObjectAcl as
+                        | "PUBLIC_READ"
+                        | undefined,
+                      crlType: ca.RevocationConfiguration.CrlConfiguration.CrlType as
+                        | "COMPLETE"
+                        | undefined,
+                      customPath: ca.RevocationConfiguration.CrlConfiguration.CustomPath,
                     }
                   : undefined,
                 ocspConfiguration: ca.RevocationConfiguration?.OcspConfiguration
                   ? {
-                      enabled:
-                        ca.RevocationConfiguration.OcspConfiguration.Enabled,
-                      ocspCustomCname:
-                        ca.RevocationConfiguration.OcspConfiguration
-                          .OcspCustomCname,
+                      enabled: ca.RevocationConfiguration.OcspConfiguration.Enabled,
+                      ocspCustomCname: ca.RevocationConfiguration.OcspConfiguration.OcspCustomCname,
                     }
                   : undefined,
               }),

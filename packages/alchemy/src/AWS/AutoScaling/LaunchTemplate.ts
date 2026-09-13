@@ -238,9 +238,7 @@ export const LaunchTemplate: Platform<
   LaunchTemplateShape,
   LaunchTemplateRuntimeContext
 > = Platform("AWS.AutoScaling.LaunchTemplate", {
-  createRuntimeContext: createEc2HostRuntimeContext(
-    "AWS.AutoScaling.LaunchTemplate",
-  ),
+  createRuntimeContext: createEc2HostRuntimeContext("AWS.AutoScaling.LaunchTemplate"),
 });
 
 export const LaunchTemplateProvider = () =>
@@ -260,10 +258,7 @@ export const LaunchTemplateProvider = () =>
         resourceType: "AWS.AutoScaling.LaunchTemplate",
       });
 
-      const toName = (
-        id: string,
-        props: { launchTemplateName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { launchTemplateName?: string } = {}) =>
         props.launchTemplateName
           ? Effect.succeed(props.launchTemplateName)
           : createPhysicalName({ id, maxLength: 128, lowercase: true });
@@ -284,9 +279,7 @@ export const LaunchTemplateProvider = () =>
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
             Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+              isLaunchTemplateNotFound(error) ? Effect.succeed(undefined) : Effect.fail(error),
             ),
           );
 
@@ -298,9 +291,7 @@ export const LaunchTemplateProvider = () =>
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
             Effect.catch((error) =>
-              isLaunchTemplateNotFound(error)
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+              isLaunchTemplateNotFound(error) ? Effect.succeed(undefined) : Effect.fail(error),
             ),
           );
 
@@ -362,9 +353,7 @@ export const LaunchTemplateProvider = () =>
         const versionNumber = created.LaunchTemplateVersion?.VersionNumber;
         if (versionNumber === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `createLaunchTemplateVersion returned no version for '${launchTemplateId}'`,
-            ),
+            new Error(`createLaunchTemplateVersion returned no version for '${launchTemplateId}'`),
           );
         }
 
@@ -382,9 +371,7 @@ export const LaunchTemplateProvider = () =>
       ) {
         return {
           launchTemplateId: template.LaunchTemplateId as LaunchTemplateId,
-          launchTemplateArn: yield* toArn(
-            template.LaunchTemplateId as LaunchTemplateId,
-          ),
+          launchTemplateArn: yield* toArn(template.LaunchTemplateId as LaunchTemplateId),
           launchTemplateName: template.LaunchTemplateName!,
           defaultVersionNumber: Number(template.DefaultVersionNumber ?? 1),
           latestVersionNumber: Number(
@@ -402,11 +389,7 @@ export const LaunchTemplateProvider = () =>
       });
 
       return {
-        stables: [
-          "launchTemplateId",
-          "launchTemplateArn",
-          "launchTemplateName",
-        ],
+        stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
         diff: Effect.fn(function* ({ id, olds, news: _news, output }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
@@ -419,11 +402,7 @@ export const LaunchTemplateProvider = () =>
           if (!deepEqual(olds, news)) {
             return {
               action: "update",
-              stables: [
-                "launchTemplateId",
-                "launchTemplateArn",
-                "launchTemplateName",
-              ],
+              stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
             } as const;
           }
 
@@ -437,19 +416,14 @@ export const LaunchTemplateProvider = () =>
             if (hash !== output.code.hash) {
               return {
                 action: "update",
-                stables: [
-                  "launchTemplateId",
-                  "launchTemplateArn",
-                  "launchTemplateName",
-                ],
+                stables: ["launchTemplateId", "launchTemplateArn", "launchTemplateName"],
               } as const;
             }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const template =
-            (output?.launchTemplateId &&
-              (yield* describeById(output.launchTemplateId))) ??
+            (output?.launchTemplateId && (yield* describeById(output.launchTemplateId))) ??
             (yield* describeByName(yield* toName(id, olds ?? {})));
 
           return template
@@ -474,15 +448,8 @@ export const LaunchTemplateProvider = () =>
               ),
             ),
           ),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
-          const launchTemplateName =
-            output?.launchTemplateName ?? (yield* toName(id, news));
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          const launchTemplateName = output?.launchTemplateName ?? (yield* toName(id, news));
           const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
@@ -498,8 +465,7 @@ export const LaunchTemplateProvider = () =>
           // (id from output, name from desired) so the reconciler
           // converges whether `output` is fresh, stale, or missing.
           let existing =
-            (output?.launchTemplateId &&
-              (yield* describeById(output.launchTemplateId))) ||
+            (output?.launchTemplateId && (yield* describeById(output.launchTemplateId))) ||
             (yield* describeByName(launchTemplateName));
 
           // Ensure — create the launch template if missing. We must
@@ -523,9 +489,7 @@ export const LaunchTemplateProvider = () =>
                   imageId: news.imageId,
                   instanceType: news.instanceType,
                   keyName: news.keyName,
-                  securityGroupIds: news.securityGroupIds as
-                    | string[]
-                    | undefined,
+                  securityGroupIds: news.securityGroupIds as string[] | undefined,
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   tags: desiredTags,
                 },
@@ -535,9 +499,7 @@ export const LaunchTemplateProvider = () =>
             const template = created.LaunchTemplate;
             if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
               return yield* Effect.fail(
-                new Error(
-                  `createLaunchTemplate returned no launch template for '${id}'`,
-                ),
+                new Error(`createLaunchTemplate returned no launch template for '${id}'`),
               );
             }
             yield* session.note(template.LaunchTemplateId);
@@ -571,9 +533,7 @@ export const LaunchTemplateProvider = () =>
           const refreshed = yield* describeById(existing.LaunchTemplateId!);
           if (!refreshed) {
             return yield* Effect.fail(
-              new Error(
-                `Launch template '${launchTemplateName}' was not readable after reconcile`,
-              ),
+              new Error(`Launch template '${launchTemplateName}' was not readable after reconcile`),
             );
           }
           yield* session.note(refreshed.LaunchTemplateId!);
@@ -586,9 +546,7 @@ export const LaunchTemplateProvider = () =>
             } as any)
             .pipe(
               Effect.catch((error) =>
-                isLaunchTemplateNotFound(error)
-                  ? Effect.void
-                  : Effect.fail(error),
+                isLaunchTemplateNotFound(error) ? Effect.void : Effect.fail(error),
               ),
             );
 

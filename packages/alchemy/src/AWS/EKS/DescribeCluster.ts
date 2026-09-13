@@ -35,6 +35,4 @@ export interface DescribeCluster extends Binding.Service<
     ) => Effect.Effect<eks.DescribeClusterResponse, eks.DescribeClusterError>
   >
 > {}
-export const DescribeCluster = Binding.Service<DescribeCluster>(
-  "AWS.EKS.DescribeCluster",
-);
+export const DescribeCluster = Binding.Service<DescribeCluster>("AWS.EKS.DescribeCluster");

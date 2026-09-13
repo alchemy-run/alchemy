@@ -24,9 +24,7 @@ const DDL = `CREATE TABLE IF NOT EXISTS ${TABLE} (
 const D1Routes = Effect.gen(function* () {
   const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
   const sql = yield* SQL.D1(d1);
-  const layerUsers = yield* makeLayerUsers(TABLE).pipe(
-    Effect.provide(SQL.D1Layer(d1)),
-  );
+  const layerUsers = yield* makeLayerUsers(TABLE).pipe(Effect.provide(SQL.D1Layer(d1)));
   return makeSqlRoutes({ sql, layerUsers, ddl: DDL, table: TABLE });
 });
 
@@ -51,10 +49,7 @@ export default class SqlD1Worker extends Cloudflare.Worker<SqlD1Worker>()(
         if (response !== undefined) {
           return response;
         }
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
           HttpServerResponse.json({ error: String(cause) }, { status: 500 }),

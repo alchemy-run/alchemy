@@ -30,10 +30,7 @@ export interface StopProjectVersion extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.StopProjectVersionRequest,
-    ) => Effect.Effect<
-      rekognition.StopProjectVersionResponse,
-      rekognition.StopProjectVersionError
-    >
+    ) => Effect.Effect<rekognition.StopProjectVersionResponse, rekognition.StopProjectVersionError>
   >
 > {}
 export const StopProjectVersion = Binding.Service<StopProjectVersion>(

@@ -40,12 +40,7 @@ export interface StartIncident extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<incidents.StartIncidentInput, "responsePlanArn">,
-    ) => Effect.Effect<
-      incidents.StartIncidentOutput,
-      incidents.StartIncidentError
-    >
+    ) => Effect.Effect<incidents.StartIncidentOutput, incidents.StartIncidentError>
   >
 > {}
-export const StartIncident = Binding.Service<StartIncident>(
-  "AWS.SSMIncidents.StartIncident",
-);
+export const StartIncident = Binding.Service<StartIncident>("AWS.SSMIncidents.StartIncident");

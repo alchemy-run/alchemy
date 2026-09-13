@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type DataSourceStatus = qbusiness.DataSourceStatus;
@@ -161,10 +156,7 @@ export interface DataSource extends Resource<
  */
 export const DataSource = Resource<DataSource>("AWS.QBusiness.DataSource");
 
-const createDisplayName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createDisplayName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -172,14 +164,8 @@ const createDisplayName = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-  return Object.fromEntries(
-    (response?.tags ?? []).map((tag) => [tag.key, tag.value]),
-  );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
 interface DataSourceState {
@@ -194,11 +180,7 @@ const readDataSourceById = Effect.fn(function* (
 ) {
   const described = yield* qbusiness
     .getDataSource({ applicationId, indexId, dataSourceId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.dataSourceArn;
   if (arn === undefined) return undefined;
@@ -223,21 +205,16 @@ const findDataSourceByName = Effect.fn(function* (
   indexId: string,
   displayName: string,
 ) {
-  const summaries = yield* qbusiness.listDataSources
-    .pages({ applicationId, indexId })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.dataSources ?? []),
-      ),
-      // The parent application/index may itself be gone.
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as qbusiness.DataSource[]),
-      ),
-    );
+  const summaries = yield* qbusiness.listDataSources.pages({ applicationId, indexId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.dataSources ?? [])),
+    // The parent application/index may itself be gone.
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as qbusiness.DataSource[]),
+    ),
+  );
   const match = summaries.find(
-    (summary) =>
-      summary.displayName === displayName && summary.status !== "DELETING",
+    (summary) => summary.displayName === displayName && summary.status !== "DELETING",
   );
   if (!match?.dataSourceId) return undefined;
   return yield* readDataSourceById(applicationId, indexId, match.dataSourceId);
@@ -247,9 +224,7 @@ const findDataSourceByName = Effect.fn(function* (
  * A data source still transitioning toward the awaited status — retried by
  * {@link waitForDataSourceStatus}'s bounded schedule.
  */
-class DataSourceNotReady extends Data.TaggedError(
-  "QBusinessDataSourceNotReady",
-)<{
+class DataSourceNotReady extends Data.TaggedError("QBusinessDataSourceNotReady")<{
   readonly dataSourceId: string;
   readonly status: string | undefined;
 }> {}
@@ -299,11 +274,7 @@ const waitForDataSourceStatus = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getDataSource({ applicationId, indexId, dataSourceId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* Effect.fail(
@@ -342,11 +313,7 @@ export const DataSourceProvider = () =>
             return undefined;
           }
           const state = output?.dataSourceId
-            ? yield* readDataSourceById(
-                applicationId,
-                indexId,
-                output.dataSourceId,
-              )
+            ? yield* readDataSourceById(applicationId, indexId, output.dataSourceId)
             : yield* findDataSourceByName(
                 applicationId,
                 indexId,
@@ -361,18 +328,13 @@ export const DataSourceProvider = () =>
           if (!isResolved(news)) return;
           if (olds === undefined) return;
           // The parent application and index are fixed at creation.
-          if (
-            olds.applicationId !== news.applicationId ||
-            olds.indexId !== news.indexId
-          ) {
+          if (olds.applicationId !== news.applicationId || olds.indexId !== news.indexId) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("QBusiness DataSource requires props"),
-            );
+            return yield* Effect.fail(new Error("QBusiness DataSource requires props"));
           }
           const applicationId = news.applicationId;
           const indexId = news.indexId;
@@ -383,11 +345,7 @@ export const DataSourceProvider = () =>
           // Observe — prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.dataSourceId
-            ? yield* readDataSourceById(
-                applicationId,
-                indexId,
-                output.dataSourceId,
-              )
+            ? yield* readDataSourceById(applicationId, indexId, output.dataSourceId)
             : yield* findDataSourceByName(applicationId, indexId, displayName);
 
           // Ensure — create if missing, then wait for ACTIVE.
@@ -402,8 +360,7 @@ export const DataSourceProvider = () =>
                 description: news.description,
                 syncSchedule: news.syncSchedule,
                 roleArn: news.roleArn,
-                documentEnrichmentConfiguration:
-                  news.documentEnrichmentConfiguration,
+                documentEnrichmentConfiguration: news.documentEnrichmentConfiguration,
                 mediaExtractionConfiguration: news.mediaExtractionConfiguration,
                 tags: Object.entries(desiredTags).map(([key, value]) => ({
                   key,
@@ -413,25 +370,12 @@ export const DataSourceProvider = () =>
             );
             if (!created.dataSourceId) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateDataSource for '${displayName}' returned no dataSourceId`,
-                ),
+                new Error(`CreateDataSource for '${displayName}' returned no dataSourceId`),
               );
             }
-            yield* session.note(
-              `Creating data source ${displayName} (${created.dataSourceId})...`,
-            );
-            yield* waitForDataSourceStatus(
-              applicationId,
-              indexId,
-              created.dataSourceId,
-              "ACTIVE",
-            );
-            state = yield* readDataSourceById(
-              applicationId,
-              indexId,
-              created.dataSourceId,
-            );
+            yield* session.note(`Creating data source ${displayName} (${created.dataSourceId})...`);
+            yield* waitForDataSourceStatus(applicationId, indexId, created.dataSourceId, "ACTIVE");
+            state = yield* readDataSourceById(applicationId, indexId, created.dataSourceId);
             if (state === undefined) {
               return yield* Effect.fail(
                 new Error(`failed to read created data source ${displayName}`),
@@ -445,8 +389,7 @@ export const DataSourceProvider = () =>
             displayName !== described.displayName ||
             (news.description ?? "") !== (described.description ?? "") ||
             (news.syncSchedule ?? "") !== (described.syncSchedule ?? "") ||
-            (news.roleArn !== undefined &&
-              news.roleArn !== described.roleArn) ||
+            (news.roleArn !== undefined && news.roleArn !== described.roleArn) ||
             news.configuration !== undefined ||
             news.vpcConfiguration !== undefined ||
             news.documentEnrichmentConfiguration !== undefined ||
@@ -462,8 +405,7 @@ export const DataSourceProvider = () =>
               description: news.description,
               syncSchedule: news.syncSchedule,
               roleArn: news.roleArn,
-              documentEnrichmentConfiguration:
-                news.documentEnrichmentConfiguration,
+              documentEnrichmentConfiguration: news.documentEnrichmentConfiguration,
               mediaExtractionConfiguration: news.mediaExtractionConfiguration,
             });
             yield* waitForDataSourceStatus(
@@ -495,11 +437,7 @@ export const DataSourceProvider = () =>
 
           yield* session.note(state.attrs.dataSourceArn);
 
-          const final = yield* readDataSourceById(
-            applicationId,
-            indexId,
-            state.attrs.dataSourceId,
-          );
+          const final = yield* readDataSourceById(applicationId, indexId, state.attrs.dataSourceId);
           if (!final) {
             return yield* Effect.fail(
               new Error(`failed to read reconciled data source ${displayName}`),
@@ -514,9 +452,7 @@ export const DataSourceProvider = () =>
               indexId: output.indexId,
               dataSourceId: output.dataSourceId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitForDataSourceStatus(
             output.applicationId,
             output.indexId,

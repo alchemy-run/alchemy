@@ -53,13 +53,9 @@ describe("Hetzner.Website.ReactRouter local", () => {
           timeout: "90 seconds",
           label: "dev home page",
         });
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "REACT_ROUTER_AWS_API_MARKER",
-          {
-            label: "api route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "REACT_ROUTER_AWS_API_MARKER", {
+          label: "api route (dev)",
+        });
 
         yield* stack.destroy();
       }),

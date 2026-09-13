@@ -12,8 +12,7 @@ export const toTagList = (tags: Record<string, string>): securitylake.Tag[] =>
 
 export const fromTagList = (
   tags: readonly securitylake.Tag[] | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.key, tag.value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.key, tag.value]));
 
 /** Observed cloud tags for a Security Lake resource ARN ({} on any failure). */
 export const readSecurityLakeTags = (resourceArn: string) =>

@@ -102,9 +102,7 @@ export interface SubscriptionFilter extends Resource<
  *
  * @resource
  */
-export const SubscriptionFilter = Resource<SubscriptionFilter>(
-  "AWS.Logs.SubscriptionFilter",
-);
+export const SubscriptionFilter = Resource<SubscriptionFilter>("AWS.Logs.SubscriptionFilter");
 
 /**
  * `putSubscriptionFilter` validates delivery to the destination at call time.
@@ -122,9 +120,7 @@ const retryThroughDestinationValidation = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "InvalidParameterException" ||
-      e._tag === "OperationAbortedException",
+    while: (e) => e._tag === "InvalidParameterException" || e._tag === "OperationAbortedException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(9)]),
   });
 
@@ -149,10 +145,7 @@ export const SubscriptionFilterProvider = () =>
         distribution: filter.distribution,
       });
 
-      const observe = Effect.fn(function* (
-        logGroupName: string,
-        filterName: string,
-      ) {
+      const observe = Effect.fn(function* (logGroupName: string, filterName: string) {
         return yield* logs.describeSubscriptionFilters
           .items({
             logGroupName,
@@ -160,16 +153,12 @@ export const SubscriptionFilterProvider = () =>
           })
           .pipe(
             Stream.filter(
-              (
-                filter,
-              ): filter is logs.SubscriptionFilter & { filterName: string } =>
+              (filter): filter is logs.SubscriptionFilter & { filterName: string } =>
                 filter.filterName === filterName,
             ),
             Stream.runHead,
             Effect.map(Option.getOrUndefined),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -201,14 +190,10 @@ export const SubscriptionFilterProvider = () =>
                   ),
                   Stream.runCollect,
                   Effect.map((chunk) =>
-                    Array.from(chunk).map((filter) =>
-                      toAttributes(logGroupName, filter),
-                    ),
+                    Array.from(chunk).map((filter) => toAttributes(logGroupName, filter)),
                   ),
                   // group deleted between list and describe — skip
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -219,25 +204,21 @@ export const SubscriptionFilterProvider = () =>
           if (olds.logGroupName !== news.logGroupName) {
             return { action: "replace" } as const;
           }
-          if (
-            (yield* toFilterName(id, olds)) !== (yield* toFilterName(id, news))
-          ) {
+          if ((yield* toFilterName(id, olds)) !== (yield* toFilterName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const logGroupName = output?.logGroupName ?? olds?.logGroupName;
           if (logGroupName === undefined) return undefined;
-          const filterName =
-            output?.filterName ?? (yield* toFilterName(id, olds ?? {}));
+          const filterName = output?.filterName ?? (yield* toFilterName(id, olds ?? {}));
           const observed = yield* observe(logGroupName, filterName);
           if (!observed) return undefined;
           return toAttributes(logGroupName, observed);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const logGroupName = news.logGroupName;
-          const filterName =
-            output?.filterName ?? (yield* toFilterName(id, news));
+          const filterName = output?.filterName ?? (yield* toFilterName(id, news));
           const desiredPattern = news.filterPattern ?? "";
 
           // Observe — the filter name is the identity within the log group and
@@ -249,8 +230,7 @@ export const SubscriptionFilterProvider = () =>
             (observed.filterPattern ?? "") === desiredPattern &&
             observed.destinationArn === news.destinationArn &&
             observed.roleArn === news.roleArn &&
-            (news.distribution === undefined ||
-              observed.distribution === news.distribution) &&
+            (news.distribution === undefined || observed.distribution === news.distribution) &&
             (news.applyOnTransformedLogs === undefined ||
               observed.applyOnTransformedLogs === news.applyOnTransformedLogs);
 

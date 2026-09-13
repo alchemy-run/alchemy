@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  decodeDefinition,
-  encodeDefinition,
-  syncAmpTags,
-  toTagRecord,
-} from "./internal.ts";
+import { decodeDefinition, encodeDefinition, syncAmpTags, toTagRecord } from "./internal.ts";
 
 export interface ScraperEksSource {
   /**
@@ -197,11 +192,7 @@ export const ScraperProvider = () =>
       const describe = Effect.fn(function* (scraperId: string) {
         const response = yield* amp
           .describeScraper({ scraperId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.scraper;
       });
 
@@ -231,13 +222,9 @@ export const ScraperProvider = () =>
         const scraper = yield* amp.describeScraper({ scraperId }).pipe(
           Effect.map((r) => r.scraper),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("15 seconds"),
-              Schedule.recurs(100),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(100)]),
             until: (s): boolean =>
-              s.status.statusCode !== "CREATING" &&
-              s.status.statusCode !== "UPDATING",
+              s.status.statusCode !== "CREATING" && s.status.statusCode !== "UPDATING",
           }),
         );
         if (scraper.status.statusCode !== "ACTIVE") {
@@ -258,10 +245,7 @@ export const ScraperProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           // The metric source is immutable — a change replaces the scraper.
-          if (
-            olds !== undefined &&
-            canonicalSource(olds.source) !== canonicalSource(news.source)
-          ) {
+          if (olds !== undefined && canonicalSource(olds.source) !== canonicalSource(news.source)) {
             return { action: "replace" } as const;
           }
         }),
@@ -284,9 +268,7 @@ export const ScraperProvider = () =>
 
           // 1. Observe — cloud state is authoritative; output is an id cache.
           let scraper =
-            output?.scraperId !== undefined
-              ? yield* describe(output.scraperId)
-              : undefined;
+            output?.scraperId !== undefined ? yield* describe(output.scraperId) : undefined;
 
           // 2. Ensure — create if missing, then wait for ACTIVE.
           if (scraper === undefined) {
@@ -314,13 +296,10 @@ export const ScraperProvider = () =>
           const observedConfig = yield* decodeDefinition(
             scraper.scrapeConfiguration.configurationBlob,
           );
-          const observedDestination =
-            scraper.destination.ampConfiguration?.workspaceArn;
-          const aliasDrifts =
-            (news!.alias ?? undefined) !== (scraper.alias ?? undefined);
+          const observedDestination = scraper.destination.ampConfiguration?.workspaceArn;
+          const aliasDrifts = (news!.alias ?? undefined) !== (scraper.alias ?? undefined);
           const configDrifts = observedConfig !== desiredConfig;
-          const destinationDrifts =
-            observedDestination !== news!.destinationWorkspaceArn;
+          const destinationDrifts = observedDestination !== news!.destinationWorkspaceArn;
           const roleDrifts =
             news!.roleConfiguration !== undefined &&
             ((news!.roleConfiguration.sourceRoleArn ?? undefined) !==
@@ -344,9 +323,7 @@ export const ScraperProvider = () =>
                     },
                   }
                 : undefined,
-              roleConfiguration: roleDrifts
-                ? news!.roleConfiguration
-                : undefined,
+              roleConfiguration: roleDrifts ? news!.roleConfiguration : undefined,
             });
             scraper = yield* waitActive(scraperId);
           }
@@ -364,10 +341,7 @@ export const ScraperProvider = () =>
             // A scraper mid-transition rejects deletion; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("10 seconds"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
             }),
           );
         }),
@@ -376,9 +350,7 @@ export const ScraperProvider = () =>
           amp.listScrapers.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                page.scrapers.map((summary) => toAttrs(summary)),
-              ),
+              Array.from(chunk).flatMap((page) => page.scrapers.map((summary) => toAttrs(summary))),
             ),
           ),
       };

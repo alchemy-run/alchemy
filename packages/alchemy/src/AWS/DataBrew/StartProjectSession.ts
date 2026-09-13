@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Project } from "./Project.ts";
 
-export interface StartProjectSessionRequest extends Omit<
-  SVC.StartProjectSessionRequest,
-  "Name"
-> {}
+export interface StartProjectSessionRequest extends Omit<SVC.StartProjectSessionRequest, "Name"> {}
 
 /**
  * Runtime binding for `databrew:StartProjectSession` — opens an interactive
@@ -35,10 +32,7 @@ export interface StartProjectSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StartProjectSessionRequest,
-    ) => Effect.Effect<
-      SVC.StartProjectSessionResponse,
-      SVC.StartProjectSessionError
-    >
+    ) => Effect.Effect<SVC.StartProjectSessionResponse, SVC.StartProjectSessionError>
   >
 > {}
 export const StartProjectSession = Binding.Service<StartProjectSession>(

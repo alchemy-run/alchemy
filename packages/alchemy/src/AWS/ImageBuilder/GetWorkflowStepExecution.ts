@@ -37,7 +37,6 @@ export interface GetWorkflowStepExecution extends Binding.Service<
     >
   >
 > {}
-export const GetWorkflowStepExecution =
-  Binding.Service<GetWorkflowStepExecution>(
-    "AWS.ImageBuilder.GetWorkflowStepExecution",
-  );
+export const GetWorkflowStepExecution = Binding.Service<GetWorkflowStepExecution>(
+  "AWS.ImageBuilder.GetWorkflowStepExecution",
+);

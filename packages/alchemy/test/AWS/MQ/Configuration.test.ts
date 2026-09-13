@@ -10,17 +10,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probes: prove the distilled MQ error union carries the
 // not-found tag the providers' observe/read/delete paths depend on.
-test.provider(
-  "describeBroker on a nonexistent broker fails with NotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        mq.describeBroker({
-          BrokerId: "b-00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("NotFoundException");
-    }),
+test.provider("describeBroker on a nonexistent broker fails with NotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      mq.describeBroker({
+        BrokerId: "b-00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("NotFoundException");
+  }),
 );
 
 test.provider(
@@ -38,18 +36,12 @@ test.provider(
 
 const assertConfigurationGone = (configurationId: string) =>
   Effect.gen(function* () {
-    const status = yield* mq
-      .describeConfiguration({ ConfigurationId: configurationId })
-      .pipe(
-        Effect.map(() => "PRESENT" as const),
-        Effect.catchTag("NotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
-      );
+    const status = yield* mq.describeConfiguration({ ConfigurationId: configurationId }).pipe(
+      Effect.map(() => "PRESENT" as const),
+      Effect.catchTag("NotFoundException", () => Effect.succeed("GONE" as const)),
+    );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`MQ configuration ${configurationId} still exists`),
-      );
+      return yield* Effect.fail(new Error(`MQ configuration ${configurationId} still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -89,8 +81,7 @@ test.provider(
       const engines = yield* mq.describeBrokerEngineTypes({
         EngineType: "ACTIVEMQ",
       });
-      const engineVersion =
-        engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
+      const engineVersion = engines.BrokerEngineTypes?.[0]?.EngineVersions?.[0]?.Name;
       expect(engineVersion).toBeDefined();
 
       const created = yield* stack.deploy(
@@ -131,9 +122,7 @@ test.provider(
         }),
       );
       expect(updated.configurationId).toBe(created.configurationId);
-      expect(updated.configurationRevision).toBeGreaterThan(
-        created.configurationRevision,
-      );
+      expect(updated.configurationRevision).toBeGreaterThan(created.configurationRevision);
 
       yield* stack.destroy();
       yield* assertConfigurationGone(created.configurationId);

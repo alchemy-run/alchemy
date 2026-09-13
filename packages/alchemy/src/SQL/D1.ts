@@ -50,10 +50,7 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  *
  * @binding
  */
-export const D1 = <E = never, R = never>(
-  database: D1DatabaseSource<E, R>,
-  config?: D1Config,
-) =>
+export const D1 = <E = never, R = never>(database: D1DatabaseSource<E, R>, config?: D1Config) =>
   Effect.map(
     makeExecutionMemo(
       Effect.gen(function* () {
@@ -90,6 +87,4 @@ export const D1Layer = <E = never, R = never>(
     Effect.gen(function* () {
       return yield* D1Client.D1Client;
     }),
-  ).pipe(
-    Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))),
-  );
+  ).pipe(Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))));

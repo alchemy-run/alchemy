@@ -39,10 +39,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeTestStack("GitRealWorldStack");
 
@@ -114,11 +111,7 @@ const edgeRetry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 40 }),
   );
 
-const freshRepo = Effect.fn(function* (
-  url: string,
-  owner: string,
-  name: string,
-) {
+const freshRepo = Effect.fn(function* (url: string, owner: string, name: string) {
   const admin = yield* makeClient(url, TEST_SECRET);
   const created = yield* Effect.gen(function* () {
     yield* admin.repos.delete({ params: { owner, repo: name } }).pipe(
@@ -135,13 +128,10 @@ const freshRepo = Effect.fn(function* (
         times: 60,
       }),
     );
-    return yield* admin.repos
-      .create({ payload: { owner, name } })
-      .pipe(edgeRetry);
+    return yield* admin.repos.create({ payload: { owner, name } }).pipe(edgeRetry);
   }).pipe(
     Effect.retry({
-      while: (error: { readonly _tag?: string }) =>
-        error._tag === "RepoAlreadyExists",
+      while: (error: { readonly _tag?: string }) => error._tag === "RepoAlreadyExists",
       schedule: Schedule.spaced("1 second"),
       times: 3,
     }),
@@ -183,8 +173,7 @@ test.skipIf(skipHuge)(
     const tmp = yield* tempDir;
 
     // The repo under test is the one these tests live in.
-    const root = (yield* mustSh(process.cwd(), `git rev-parse --show-toplevel`))
-      .stdout;
+    const root = (yield* mustSh(process.cwd(), `git rev-parse --show-toplevel`)).stdout;
     expect(root.length).toBeGreaterThan(0);
 
     // Depth-1 clone, re-committed as a single root commit: keeps the real
@@ -203,34 +192,23 @@ test.skipIf(skipHuge)(
       `,
     );
 
-    const stats = (yield* mustSh(
-      tmp,
-      `cd src && git count-objects -v | tr '\\n' ' '`,
-    )).stdout;
+    const stats = (yield* mustSh(tmp, `cd src && git count-objects -v | tr '\\n' ' '`)).stdout;
     const files = Number.parseInt(
       (yield* mustSh(tmp, `cd src && git ls-files | wc -l`)).stdout,
       10,
     );
     const head = (yield* mustSh(tmp, `cd src && git rev-parse HEAD`)).stdout;
-    const tree = (yield* mustSh(tmp, `cd src && git rev-parse HEAD^{tree}`))
-      .stdout;
-    yield* Effect.logInfo(
-      `[real-world] source: ${files} files, ${stats.trim()}`,
-    );
+    const tree = (yield* mustSh(tmp, `cd src && git rev-parse HEAD^{tree}`)).stdout;
+    yield* Effect.logInfo(`[real-world] source: ${files} files, ${stats.trim()}`);
     expect(files).toBeGreaterThan(5_000);
 
     const repo = yield* freshRepo(url, "real", "alchemy");
 
     // ── the push ─────────────────────────────────────────────────────────
     const pushStarted = yield* Effect.sync(() => performance.now());
-    yield* mustSh(
-      tmp,
-      `cd src && git remote add origin '${repo.remote}' && git push origin main`,
-    );
+    yield* mustSh(tmp, `cd src && git remote add origin '${repo.remote}' && git push origin main`);
     const pushMs = yield* Effect.sync(() => performance.now() - pushStarted);
-    yield* Effect.logInfo(
-      `[real-world] pushed ${files} files in ${(pushMs / 1000).toFixed(1)}s`,
-    );
+    yield* Effect.logInfo(`[real-world] pushed ${files} files in ${(pushMs / 1000).toFixed(1)}s`);
 
     // The server's view must match the client's exactly.
     const remoteRef = yield* repo.admin.refs.get({
@@ -262,31 +240,20 @@ test.skipIf(skipHuge)(
       );
       expect(p.objects).toBeGreaterThan(5_000);
     }
-    expect(
-      meta.objects.loose + meta.objects.packed + meta.objects.r2,
-    ).toBeGreaterThan(5_000);
+    expect(meta.objects.loose + meta.objects.packed + meta.objects.r2).toBeGreaterThan(5_000);
 
     // ── clone it back and prove it is identical ──────────────────────────
     const cloneStarted = yield* Effect.sync(() => performance.now());
     yield* mustSh(tmp, `rm -rf back && git clone -q '${repo.remote}' back`);
     const cloneMs = yield* Effect.sync(() => performance.now() - cloneStarted);
-    yield* Effect.logInfo(
-      `[real-world] cloned back in ${(cloneMs / 1000).toFixed(1)}s`,
-    );
+    yield* Effect.logInfo(`[real-world] cloned back in ${(cloneMs / 1000).toFixed(1)}s`);
 
     yield* mustSh(tmp, `cd back && git fsck --strict`);
-    expect((yield* mustSh(tmp, `cd back && git rev-parse HEAD`)).stdout).toBe(
-      head,
-    );
+    expect((yield* mustSh(tmp, `cd back && git rev-parse HEAD`)).stdout).toBe(head);
     // The tree oid matching means every path, mode and blob matches.
+    expect((yield* mustSh(tmp, `cd back && git rev-parse HEAD^{tree}`)).stdout).toBe(tree);
     expect(
-      (yield* mustSh(tmp, `cd back && git rev-parse HEAD^{tree}`)).stdout,
-    ).toBe(tree);
-    expect(
-      Number.parseInt(
-        (yield* mustSh(tmp, `cd back && git ls-files | wc -l`)).stdout,
-        10,
-      ),
+      Number.parseInt((yield* mustSh(tmp, `cd back && git ls-files | wc -l`)).stdout, 10),
     ).toBe(files);
     // NOTE: no `diff -r` here. The tree oid equality above is the stronger
     // and *correct* assertion — identical tree oids mean every path, mode
@@ -299,20 +266,16 @@ test.skipIf(skipHuge)(
     yield* repo.admin.repos.compact({
       params: { owner: "real", repo: "alchemy" },
     });
-    const packed = yield* repo.admin.repos
-      .get({ params: { owner: "real", repo: "alchemy" } })
-      .pipe(
-        Effect.map((found) => found.objects),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (objects: { loose: number; packed: number }) =>
-            objects.packed > 0 && objects.loose === 0,
-          times: 150,
-        }),
-      );
-    yield* Effect.logInfo(
-      `[real-world] compacted: ${packed.packed} objects in R2 packs`,
+    const packed = yield* repo.admin.repos.get({ params: { owner: "real", repo: "alchemy" } }).pipe(
+      Effect.map((found) => found.objects),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (objects: { loose: number; packed: number }) =>
+          objects.packed > 0 && objects.loose === 0,
+        times: 150,
+      }),
     );
+    yield* Effect.logInfo(`[real-world] compacted: ${packed.packed} objects in R2 packs`);
     expect(packed.packed).toBeGreaterThan(5_000);
 
     const packedCloneStarted = yield* Effect.sync(() => performance.now());
@@ -323,9 +286,7 @@ test.skipIf(skipHuge)(
       ).toFixed(0)}ms`,
     );
     yield* mustSh(tmp, `cd packed && git fsck --strict`);
-    expect(
-      (yield* mustSh(tmp, `cd packed && git rev-parse HEAD^{tree}`)).stdout,
-    ).toBe(tree);
+    expect((yield* mustSh(tmp, `cd packed && git rev-parse HEAD^{tree}`)).stdout).toBe(tree);
 
     // ── an incremental push on top of the real repo still works ──────────
     yield* mustSh(

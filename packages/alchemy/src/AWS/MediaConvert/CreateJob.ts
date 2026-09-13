@@ -34,12 +34,7 @@ export interface CreateJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediaconvert.CreateJobRequest,
-    ) => Effect.Effect<
-      mediaconvert.CreateJobResponse,
-      mediaconvert.CreateJobError
-    >
+    ) => Effect.Effect<mediaconvert.CreateJobResponse, mediaconvert.CreateJobError>
   >
 > {}
-export const CreateJob = Binding.Service<CreateJob>(
-  "AWS.MediaConvert.CreateJob",
-);
+export const CreateJob = Binding.Service<CreateJob>("AWS.MediaConvert.CreateJob");

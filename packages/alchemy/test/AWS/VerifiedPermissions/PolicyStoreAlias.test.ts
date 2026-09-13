@@ -11,11 +11,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findAlias = (aliasName: string) =>
   avp
     .getPolicyStoreAlias({ aliasName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 // CreatePolicyStoreAlias currently rejects every alias name shape with a
 // typed ValidationException in this account/region (probed 2026-07-15 with

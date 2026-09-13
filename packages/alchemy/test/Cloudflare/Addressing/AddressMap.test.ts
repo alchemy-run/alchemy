@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
@@ -172,9 +169,7 @@ test.provider(
       );
       expect(deployed.addressMapId).toBeDefined();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Addressing.AddressMap,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Addressing.AddressMap);
       const all = yield* provider.list();
 
       // The deployed map appears in the exhaustively-paginated result, fully

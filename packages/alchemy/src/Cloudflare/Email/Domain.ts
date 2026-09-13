@@ -178,8 +178,7 @@ export const Domain = Resource<Domain>(EmailSecurityDomainTypeId, {
  * Returns true if the given value is an Domain resource.
  */
 export const isDomain = (value: unknown): value is Domain =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === EmailSecurityDomainTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === EmailSecurityDomainTypeId;
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
@@ -222,9 +221,7 @@ export const DomainProvider = () =>
 
       // 1. Observe — the domain must already be onboarded; the API cannot
       //    create one.
-      let observed = output?.domainId
-        ? yield* getDomain(accountId, output.domainId)
-        : undefined;
+      let observed = output?.domainId ? yield* getDomain(accountId, output.domainId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.domain);
       }
@@ -261,9 +258,7 @@ export const DomainProvider = () =>
           accountId: output.accountId,
           domainId: output.domainId,
         })
-        .pipe(
-          Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.void));
     }),
 
     // Account-scoped collection: enumerate every onboarded domain via the
@@ -277,9 +272,7 @@ export const DomainProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((d) =>
-              toAttributes(d as ObservedDomain, accountId),
-            ),
+            (page.result ?? []).map((d) => toAttributes(d as ObservedDomain, accountId)),
           ),
         ),
         Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
@@ -298,9 +291,7 @@ type ObservedDomain = emailSecurity.GetSettingDomainResponse;
 const getDomain = (accountId: string, domainId: string) =>
   emailSecurity.getSettingDomain({ accountId, domainId }).pipe(
     Effect.map((domain): ObservedDomain | undefined => domain),
-    Effect.catchTag("EmailSecurityDomainNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -309,15 +300,10 @@ const getDomain = (accountId: string, domainId: string) =>
 const findByName = (accountId: string, domain: string) =>
   emailSecurity.listSettingDomains.items({ accountId, domain: [domain] }).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).find((d): d is ObservedDomain => d.domain === domain),
-    ),
+    Effect.map((chunk) => Array.from(chunk).find((d): d is ObservedDomain => d.domain === domain)),
   );
 
-const sameArray = (
-  observed: readonly string[] | null | undefined,
-  desired: readonly string[],
-) => {
+const sameArray = (observed: readonly string[] | null | undefined, desired: readonly string[]) => {
   const a = [...(observed ?? [])].sort();
   const b = [...desired].sort();
   return a.length === b.length && a.join(",") === b.join(",");
@@ -332,13 +318,8 @@ const sameArray = (
 const settingsDelta = (
   observed: ObservedDomain,
   news: DomainProps,
-):
-  | Omit<emailSecurity.PatchSettingDomainRequest, "accountId" | "domainId">
-  | undefined => {
-  const delta: Omit<
-    emailSecurity.PatchSettingDomainRequest,
-    "accountId" | "domainId"
-  > = {};
+): Omit<emailSecurity.PatchSettingDomainRequest, "accountId" | "domainId"> | undefined => {
+  const delta: Omit<emailSecurity.PatchSettingDomainRequest, "accountId" | "domainId"> = {};
   let dirty = false;
   if (
     news.allowedDeliveryModes !== undefined &&
@@ -366,17 +347,11 @@ const settingsDelta = (
     dirty = true;
   }
   const integrationId = news.integrationId as string | undefined;
-  if (
-    integrationId !== undefined &&
-    (observed.integrationId ?? "") !== integrationId
-  ) {
+  if (integrationId !== undefined && (observed.integrationId ?? "") !== integrationId) {
     delta.integrationId = integrationId;
     dirty = true;
   }
-  if (
-    news.lookbackHops !== undefined &&
-    observed.lookbackHops !== news.lookbackHops
-  ) {
+  if (news.lookbackHops !== undefined && observed.lookbackHops !== news.lookbackHops) {
     delta.lookbackHops = news.lookbackHops;
     dirty = true;
   }
@@ -394,10 +369,7 @@ const settingsDelta = (
     delta.requireTlsOutbound = news.requireTlsOutbound;
     dirty = true;
   }
-  if (
-    news.transport !== undefined &&
-    (observed.transport ?? "") !== news.transport
-  ) {
+  if (news.transport !== undefined && (observed.transport ?? "") !== news.transport) {
     delta.transport = news.transport;
     dirty = true;
   }
@@ -417,9 +389,7 @@ const toAttributes = (
         timestamp: domain.authorization.timestamp,
       }
     : undefined,
-  allowedDeliveryModes: [
-    ...(domain.allowedDeliveryModes ?? []),
-  ] as DeliveryMode[],
+  allowedDeliveryModes: [...(domain.allowedDeliveryModes ?? [])] as DeliveryMode[],
   dropDispositions: [...(domain.dropDispositions ?? [])] as DropDisposition[],
   ipRestrictions: [...(domain.ipRestrictions ?? [])],
   folder: (domain.folder ?? undefined) as "AllItems" | "Inbox" | undefined,

@@ -8,21 +8,12 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  parsePolicyDocument,
-  stringifyPolicyDocument,
-  toTagRecord,
-} from "./common.ts";
+import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
 import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
 
 export type RoleName = string;
@@ -150,9 +141,9 @@ const mergeBoundInlinePolicies = (
     .filter((binding) => (binding as { action?: string }).action !== "delete")
     .flatMap((binding) => binding.data?.policyStatements ?? []);
   if (statements.length === 0) return inlinePolicies ?? {};
-  const deduped = Array.from(
-    new Map(statements.map((s) => [JSON.stringify(s), s])).values(),
-  ).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const deduped = Array.from(new Map(statements.map((s) => [JSON.stringify(s), s])).values()).sort(
+    (a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)),
+  );
   return {
     ...inlinePolicies,
     [BINDINGS_POLICY_NAME]: { Version: "2012-10-17", Statement: deduped },
@@ -171,9 +162,9 @@ const mergeBoundAssumeRolePolicy = (
     .filter((binding) => (binding as { action?: string }).action !== "delete")
     .flatMap((binding) => binding.data?.assumeRolePolicyStatements ?? []);
   const statements = [...(doc?.Statement ?? []), ...bound];
-  const deduped = Array.from(
-    new Map(statements.map((s) => [JSON.stringify(s), s])).values(),
-  ).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const deduped = Array.from(new Map(statements.map((s) => [JSON.stringify(s), s])).values()).sort(
+    (a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)),
+  );
   return { Version: "2012-10-17", Statement: deduped };
 };
 
@@ -240,17 +231,13 @@ export const RoleProvider = () =>
     Role,
     Effect.gen(function* () {
       const toRoleName = (id: string, props: { roleName?: string } = {}) =>
-        props.roleName
-          ? Effect.succeed(props.roleName)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.roleName ? Effect.succeed(props.roleName) : createPhysicalName({ id, maxLength: 64 });
 
       const readInlinePolicies = Effect.fn(function* (roleName: string) {
-        const policyNames = yield* iam.listRolePolicies
-          .items({ RoleName: roleName })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        const policyNames = yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
         const entries = yield* Effect.all(
           policyNames.map((policyName) =>
             iam
@@ -260,11 +247,7 @@ export const RoleProvider = () =>
               })
               .pipe(
                 Effect.map(
-                  (response) =>
-                    [
-                      policyName,
-                      parsePolicyDocument(response.PolicyDocument),
-                    ] as const,
+                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
                 ),
                 Effect.catchTag("NoSuchEntityException", () =>
                   Effect.succeed([policyName, undefined] as const),
@@ -273,25 +256,18 @@ export const RoleProvider = () =>
           ),
         );
         return Object.fromEntries(
-          entries.filter(
-            (entry): entry is [string, PolicyDocument] =>
-              entry[1] !== undefined,
-          ),
+          entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
         );
       });
 
       const readManagedPolicies = Effect.fn(function* (roleName: string) {
-        const attached = yield* iam.listAttachedRolePolicies
-          .items({ RoleName: roleName })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        const attached = yield* iam.listAttachedRolePolicies.items({ RoleName: roleName }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
         return attached
           .map((policy) => policy.PolicyArn)
-          .filter(
-            (policyArn): policyArn is string => typeof policyArn === "string",
-          );
+          .filter((policyArn): policyArn is string => typeof policyArn === "string");
       });
 
       const readTags = Effect.fn(function* (roleName: string) {
@@ -329,9 +305,7 @@ export const RoleProvider = () =>
                 RoleName: roleName,
                 PolicyArn: policyArn,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }
       });
@@ -346,10 +320,7 @@ export const RoleProvider = () =>
         news: Record<string, PolicyDocument>;
       }) {
         for (const [policyName, document] of Object.entries(news)) {
-          if (
-            JSON.stringify(olds[policyName] ?? null) !==
-            JSON.stringify(document)
-          ) {
+          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
             yield* iam.putRolePolicy({
               RoleName: roleName,
               PolicyName: policyName,
@@ -365,9 +336,7 @@ export const RoleProvider = () =>
                 RoleName: roleName,
                 PolicyName: policyName,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }
       });
@@ -387,9 +356,7 @@ export const RoleProvider = () =>
                   .flatMap((page) => page.Roles ?? [])
                   // Service-linked roles are owned by AWS and cannot be
                   // modified or deleted by us (UnmodifiableEntityException).
-                  .filter(
-                    (role) => !role.Path?.startsWith("/aws-service-role/"),
-                  ),
+                  .filter((role) => !role.Path?.startsWith("/aws-service-role/")),
               ),
             );
 
@@ -403,12 +370,11 @@ export const RoleProvider = () =>
                   if (!assumeRolePolicyDocument) {
                     return undefined;
                   }
-                  const [managedPolicyArns, inlinePolicies, tags] =
-                    yield* Effect.all([
-                      readManagedPolicies(role.RoleName),
-                      readInlinePolicies(role.RoleName),
-                      readTags(role.RoleName),
-                    ]);
+                  const [managedPolicyArns, inlinePolicies, tags] = yield* Effect.all([
+                    readManagedPolicies(role.RoleName),
+                    readInlinePolicies(role.RoleName),
+                    readTags(role.RoleName),
+                  ]);
                   return {
                     roleArn: role.Arn as RoleArn,
                     roleName: role.RoleName,
@@ -419,30 +385,23 @@ export const RoleProvider = () =>
                     inlinePolicies,
                     description: role.Description,
                     maxSessionDuration: role.MaxSessionDuration,
-                    permissionsBoundary:
-                      role.PermissionsBoundary?.PermissionsBoundaryArn,
+                    permissionsBoundary: role.PermissionsBoundary?.PermissionsBoundaryArn,
                     tags,
                   };
                 }).pipe(
                   // A role may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 8 },
             );
 
             return hydrated.filter(
-              (attrs): attrs is NonNullable<typeof attrs> =>
-                attrs !== undefined,
+              (attrs): attrs is NonNullable<typeof attrs> => attrs !== undefined,
             );
           }),
         diff: Effect.fn(function* ({ id, olds, news = {} }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toRoleName(id, olds ?? {})) !==
-            (yield* toRoleName(id, news ?? {}))
-          ) {
+          if ((yield* toRoleName(id, olds ?? {})) !== (yield* toRoleName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if ((olds?.path ?? "/") !== (news?.path ?? "/")) {
@@ -450,17 +409,12 @@ export const RoleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const roleName =
-            output?.roleName ?? (yield* toRoleName(id, olds ?? {}));
+          const roleName = output?.roleName ?? (yield* toRoleName(id, olds ?? {}));
           const role = yield* iam
             .getRole({
               RoleName: roleName,
             })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           if (!role?.Role) {
             return undefined;
           }
@@ -488,25 +442,15 @@ export const RoleProvider = () =>
             inlinePolicies,
             description: role.Role.Description,
             maxSessionDuration: role.Role.MaxSessionDuration,
-            permissionsBoundary:
-              role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
+            permissionsBoundary: role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
             tags,
           };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {},
-          output,
-          session,
-          bindings,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session, bindings }) {
           const roleName = output?.roleName ?? (yield* toRoleName(id, news));
           // Fold binding-supplied policy statements into the inline policies.
-          const inlinePolicies = mergeBoundInlinePolicies(
-            news.inlinePolicies,
-            bindings,
-          );
+          const inlinePolicies = mergeBoundInlinePolicies(news.inlinePolicies, bindings);
           // Merge binding-supplied trust statements into the trust policy.
           const assumeRolePolicyDocument = mergeBoundAssumeRolePolicy(
             news.assumeRolePolicyDocument,
@@ -521,20 +465,14 @@ export const RoleProvider = () =>
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const desiredMaxSessionDuration = toWireSeconds(
-            news.maxSessionDuration,
-          );
+          const desiredMaxSessionDuration = toWireSeconds(news.maxSessionDuration);
 
           // Observe — read the role from IAM. Absence is signalled by
           // `NoSuchEntityException`; ownership has already been verified
           // upstream so adopting a `Unowned` role is the engine's call.
           let observedRole = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
 
           // Ensure — create the role when missing. A peer reconciler may
           // have created it concurrently; tolerate that race by reading
@@ -544,9 +482,7 @@ export const RoleProvider = () =>
               .createRole({
                 Path: news.path,
                 RoleName: roleName,
-                AssumeRolePolicyDocument: stringifyPolicyDocument(
-                  assumeRolePolicyDocument,
-                ),
+                AssumeRolePolicyDocument: stringifyPolicyDocument(assumeRolePolicyDocument),
                 Description: news.description,
                 MaxSessionDuration: desiredMaxSessionDuration,
                 PermissionsBoundary: news.permissionsBoundary,
@@ -564,8 +500,7 @@ export const RoleProvider = () =>
             observedRole.Role?.AssumeRolePolicyDocument,
           );
           const observedDescription = observedRole.Role?.Description;
-          const observedMaxSessionDuration =
-            observedRole.Role?.MaxSessionDuration;
+          const observedMaxSessionDuration = observedRole.Role?.MaxSessionDuration;
           const observedPermissionsBoundary =
             observedRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn;
 
@@ -578,9 +513,7 @@ export const RoleProvider = () =>
             yield* iam
               .updateAssumeRolePolicy({
                 RoleName: roleName,
-                PolicyDocument: stringifyPolicyDocument(
-                  assumeRolePolicyDocument,
-                ),
+                PolicyDocument: stringifyPolicyDocument(assumeRolePolicyDocument),
               })
               .pipe(Effect.retry(invalidPrincipalRetry));
           }
@@ -610,20 +543,17 @@ export const RoleProvider = () =>
                 .deleteRolePermissionsBoundary({
                   RoleName: roleName,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                );
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             }
           }
 
           // Sync managed and inline policies — observe the live state
           // and apply only the delta. This is robust to manual edits in
           // the AWS console and to adoption.
-          const [observedManagedPolicies, observedInlinePolicies] =
-            yield* Effect.all([
-              readManagedPolicies(roleName),
-              readInlinePolicies(roleName),
-            ]);
+          const [observedManagedPolicies, observedInlinePolicies] = yield* Effect.all([
+            readManagedPolicies(roleName),
+            readInlinePolicies(roleName),
+          ]);
           yield* syncManagedPolicies({
             roleName,
             olds: observedManagedPolicies,
@@ -663,17 +593,12 @@ export const RoleProvider = () =>
             roleArn,
             roleName: liveRole.Role?.RoleName ?? roleName,
             roleId: liveRole.Role?.RoleId ?? observedRole.Role?.RoleId,
-            path:
-              liveRole.Role?.Path ??
-              observedRole.Role?.Path ??
-              news.path ??
-              "/",
+            path: liveRole.Role?.Path ?? observedRole.Role?.Path ?? news.path ?? "/",
             assumeRolePolicyDocument,
             managedPolicyArns: news.managedPolicyArns ?? [],
             inlinePolicies,
             description: liveRole.Role?.Description ?? news.description,
-            maxSessionDuration:
-              liveRole.Role?.MaxSessionDuration ?? desiredMaxSessionDuration,
+            maxSessionDuration: liveRole.Role?.MaxSessionDuration ?? desiredMaxSessionDuration,
             permissionsBoundary:
               liveRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn ??
               news.permissionsBoundary,
@@ -694,32 +619,26 @@ export const RoleProvider = () =>
                   RoleName: output.roleName,
                   PolicyName: policyName,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
             ),
             Stream.runDrain,
             // The role itself may already be gone.
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
 
-          yield* iam.listAttachedRolePolicies
-            .items({ RoleName: output.roleName })
-            .pipe(
-              Stream.mapEffect((policy) =>
-                iam
-                  .detachRolePolicy({
-                    RoleName: output.roleName,
-                    PolicyArn: policy.PolicyArn!,
-                  })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
-              ),
-              Stream.runDrain,
-              // The role itself may already be gone.
-              Effect.catchTag("NoSuchEntityException", () => Effect.void),
-            );
+          yield* iam.listAttachedRolePolicies.items({ RoleName: output.roleName }).pipe(
+            Stream.mapEffect((policy) =>
+              iam
+                .detachRolePolicy({
+                  RoleName: output.roleName,
+                  PolicyArn: policy.PolicyArn!,
+                })
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+            ),
+            Stream.runDrain,
+            // The role itself may already be gone.
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          );
 
           yield* iam
             .deleteRole({
@@ -732,10 +651,7 @@ export const RoleProvider = () =>
                   error._tag === "DeleteConflictException" ||
                   error._tag === "LimitExceededException" ||
                   error._tag === "ServiceFailureException",
-                schedule: Schedule.max([
-                  Schedule.exponential("250 millis"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
               }),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
@@ -746,18 +662,12 @@ export const RoleProvider = () =>
           for (let attempt = 0; attempt < 30; attempt++) {
             const remaining = yield* iam
               .getRole({ RoleName: output.roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
             if (remaining === undefined) return;
             yield* Effect.sleep("1 second");
           }
           yield* Effect.die(
-            new Error(
-              `IAM role ${output.roleName} remained observable 30 seconds after delete`,
-            ),
+            new Error(`IAM role ${output.roleName} remained observable 30 seconds after delete`),
           );
         }),
       };

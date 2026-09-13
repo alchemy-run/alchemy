@@ -116,8 +116,7 @@ export type SnippetRules = Resource<
 export const SnippetRules = Resource<SnippetRules>("Cloudflare.Snippets.Rules");
 
 export const isSnippetRules = (value: unknown): value is SnippetRules =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Snippets.Rules";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Snippets.Rules";
 
 export const SnippetRulesProvider = () =>
   Provider.succeed(SnippetRules, {
@@ -141,27 +140,18 @@ export const SnippetRulesProvider = () =>
             // reject the route; skip them. (`listObservedRules` already maps
             // the snippet-rules 404 to an empty list, which becomes
             // `undefined` above.)
-            Effect.catchTag(["Forbidden", "Unauthorized"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["Forbidden", "Unauthorized"], () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is SnippetRulesAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is SnippetRulesAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       const o = olds as SnippetRulesProps;
       const n = news as SnippetRulesProps;
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        typeof n.zoneId === "string" &&
-        oldZoneId !== undefined &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (typeof n.zoneId === "string" && oldZoneId !== undefined && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -207,12 +197,7 @@ export const SnippetRulesProvider = () =>
       if ((yield* listObservedRules(output.zoneId)).length === 0) return;
       yield* snippets
         .deleteRule({ zoneId: output.zoneId })
-        .pipe(
-          Effect.catchTag(
-            ["SnippetRulesNotFound", "SnippetZoneNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["SnippetRulesNotFound", "SnippetZoneNotFound"], () => Effect.void));
     }),
   });
 

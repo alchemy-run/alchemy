@@ -9,38 +9,29 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe.
-test.provider(
-  "getBrowser on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        control.getBrowser({
-          browserId: "alchemy_nonexistent_probe-0000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getBrowser on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      control.getBrowser({
+        browserId: "alchemy_nonexistent_probe-0000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertBrowserGone = (browserId: string) =>
   Effect.gen(function* () {
     const status = yield* control.getBrowser({ browserId }).pipe(
       Effect.map((r) => r.status as string),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("DELETED" as string),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("DELETED" as string)),
     );
     if (status !== "DELETED") {
-      return yield* Effect.fail(
-        new Error(`browser still live (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`browser still live (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 

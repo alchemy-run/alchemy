@@ -162,9 +162,7 @@ test.provider(
       });
       expect(afterUpdate.Action).toBe("ARCHIVE");
       expect(afterUpdate.Rank).toBe(1);
-      expect(afterUpdate.Description).toBe(
-        "auto-archive high severity findings",
-      );
+      expect(afterUpdate.Description).toBe("auto-archive high severity findings");
 
       // Destroy — everything (including the detector singleton) is gone.
       yield* stack.destroy();

@@ -166,13 +166,7 @@ const runOpenNextBuild = (options: {
       // those mutations do not reliably reach execSync children under bun.
       const child = yield* ChildProcess.make(
         "node",
-        [
-          options.cli,
-          "build",
-          "--config-path",
-          options.configPath,
-          ...options.extraArgs,
-        ],
+        [options.cli, "build", "--config-path", options.configPath, ...options.extraArgs],
         {
           cwd: options.root,
           stdin: "ignore",
@@ -180,19 +174,12 @@ const runOpenNextBuild = (options: {
           stderr: "pipe",
         },
       ).pipe(
-        Effect.mapError(
-          fail(
-            "Failed to spawn the @opennextjs/aws build CLI (is `node` on PATH?)",
-          ),
-        ),
+        Effect.mapError(fail("Failed to spawn the @opennextjs/aws build CLI (is `node` on PATH?)")),
       );
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
         dest: NodeJS.WriteStream,
-      ) =>
-        Stream.runForEach(stream, (chunk) =>
-          Effect.sync(() => dest.write(chunk)),
-        );
+      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,
@@ -200,9 +187,7 @@ const runOpenNextBuild = (options: {
           stderr: forward(child.stderr, process.stderr),
         },
         { concurrency: "unbounded" },
-      ).pipe(
-        Effect.mapError(fail("Failed reading the OpenNext build's output")),
-      );
+      ).pipe(Effect.mapError(fail("Failed reading the OpenNext build's output")));
       if (exitCode !== 0) {
         return yield* Effect.fail(
           fail(`The OpenNext build exited with code ${exitCode}`)(undefined),
@@ -226,14 +211,13 @@ const resolveNextCli = (root: string) =>
       return require.resolve("next/dist/bin/next");
     },
     catch: fail(
-      `Failed to resolve "next" from ${root}. ` +
-        "It must be installed in your project.",
+      `Failed to resolve "next" from ${root}. ` + "It must be installed in your project.",
     ),
   });
 
 /** Bind an ephemeral port and release it, returning the port number. */
-const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> =
-  Effect.callback((resume) => {
+const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> = Effect.callback(
+  (resume) => {
     const net = createRequire(import.meta.url)("net") as typeof NodeNet;
     const server = net.createServer();
     server.once("error", (cause) =>
@@ -249,7 +233,8 @@ const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> =
       const port = address.port;
       server.close(() => resume(Effect.succeed(port)));
     });
-  });
+  },
+);
 
 interface NextDevChild {
   readonly exited: () => boolean;
@@ -270,9 +255,7 @@ const spawnNextDev = (options: {
   Effect.acquireRelease(
     Effect.try({
       try: () => {
-        const cp = createRequire(import.meta.url)(
-          "child_process",
-        ) as typeof NodeChildProcessModule;
+        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
         const child = cp.spawn(
           "node",
           [
@@ -355,9 +338,7 @@ const awaitNextDevReady = (options: {
       yield* Effect.sleep(500);
     }
     return yield* Effect.fail(
-      fail(`Timed out waiting for the next dev server at ${options.url}`)(
-        undefined,
-      ),
+      fail(`Timed out waiting for the next dev server at ${options.url}`)(undefined),
     );
   });
 
@@ -365,9 +346,7 @@ const awaitNextDevReady = (options: {
  * `AWS.Website.Server` drives; `serverModules` carries names only — the AWS
  * deploy ships the OpenNext bundles from disk, never in-memory). */
 export interface NextjsAwsService {
-  readonly build: (
-    options?: FrameworkCore.FrameworkBuildOptions,
-  ) => Effect.Effect<
+  readonly build: (options?: FrameworkCore.FrameworkBuildOptions) => Effect.Effect<
     {
       readonly distDirectory: string;
       readonly clientDirectory: string;
@@ -377,11 +356,7 @@ export interface NextjsAwsService {
   >;
   readonly dev: (
     options?: FrameworkCore.FrameworkDevOptions,
-  ) => Effect.Effect<
-    FrameworkCore.FrameworkDevServer,
-    FrameworkCore.FrameworkError,
-    Scope.Scope
-  >;
+  ) => Effect.Effect<FrameworkCore.FrameworkDevServer, FrameworkCore.FrameworkError, Scope.Scope>;
 }
 
 /**
@@ -390,24 +365,19 @@ export interface NextjsAwsService {
  */
 export const make: (
   options?: NextjsAwsOptions,
-) => Effect.Effect<NextjsAwsService, never, FileSystem.FileSystem | Path.Path> =
-  Effect.fnUntraced(function* (options?: NextjsAwsOptions) {
+) => Effect.Effect<NextjsAwsService, never, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
+  function* (options?: NextjsAwsOptions) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
     const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
       Layer.provide(
-        Layer.merge(
-          Layer.succeed(FileSystem.FileSystem)(fs),
-          Layer.succeed(Path.Path)(path),
-        ),
+        Layer.merge(Layer.succeed(FileSystem.FileSystem)(fs), Layer.succeed(Path.Path)(path)),
       ),
     );
 
     const resolveRoot = (override: string | undefined) =>
-      Effect.sync(() =>
-        path.resolve(override ?? options?.root ?? process.cwd()),
-      );
+      Effect.sync(() => path.resolve(override ?? options?.root ?? process.cwd()));
 
     const build: NextjsAwsService["build"] = Effect.fn(function* (
       buildOptions?: FrameworkCore.FrameworkBuildOptions,
@@ -428,9 +398,7 @@ export const make: (
           .writeFileString(absoluteConfigPath, DEFAULT_OPEN_NEXT_CONFIG)
           .pipe(
             Effect.mapError(
-              fail(
-                `Failed to write the default OpenNext config at ${absoluteConfigPath}`,
-              ),
+              fail(`Failed to write the default OpenNext config at ${absoluteConfigPath}`),
             ),
           );
       }
@@ -477,9 +445,7 @@ export const make: (
 
       const entryName = deriveServerEntryName(defaultOrigin);
       const entryPath = path.join(distDirectory, entryName);
-      if (
-        !(yield* fs.exists(entryPath).pipe(Effect.orElseSucceed(() => false)))
-      ) {
+      if (!(yield* fs.exists(entryPath).pipe(Effect.orElseSucceed(() => false)))) {
         return yield* Effect.fail(
           fail(`The build produced no server entry at ${entryPath}`)(undefined),
         );
@@ -506,6 +472,7 @@ export const make: (
     });
 
     return { build, dev };
-  });
+  },
+);
 
 export default make;

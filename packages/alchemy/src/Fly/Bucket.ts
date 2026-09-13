@@ -256,9 +256,7 @@ export class BucketOrgMissing extends Data.TaggedError("Fly.BucketOrgMissing")<{
   orgSlug: string;
 }> {}
 
-export class BucketProvisionFailed extends Data.TaggedError(
-  "Fly.BucketProvisionFailed",
-)<{
+export class BucketProvisionFailed extends Data.TaggedError("Fly.BucketProvisionFailed")<{
   name: string;
   status: string | undefined;
   errorMessage: string | undefined;
@@ -282,17 +280,12 @@ const sanitizeFlyBucketName = (name: string): string => {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
-  const clipped =
-    lowered.length > 63 ? lowered.slice(0, 63).replace(/-+$/g, "") : lowered;
+  const clipped = lowered.length > 63 ? lowered.slice(0, 63).replace(/-+$/g, "") : lowered;
   const raw = clipped.length === 0 ? "f" : clipped;
   return /^[a-z]/.test(raw) ? raw : `f${raw}`.slice(0, 63);
 };
 
-const resolveBucketName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveBucketName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyBucketName(name);
     if (existing !== undefined) return existing;
@@ -326,9 +319,7 @@ const asString = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const redact = (
-  value: string | undefined,
-): Redacted.Redacted<string> | undefined =>
+const redact = (value: string | undefined): Redacted.Redacted<string> | undefined =>
   value !== undefined && value.length > 0 ? Redacted.make(value) : undefined;
 
 const keepSecret = (
@@ -336,10 +327,8 @@ const keepSecret = (
   previous: Redacted.Redacted<string> | undefined,
 ): Redacted.Redacted<string> | undefined => next ?? previous;
 
-const envString = (
-  env: Record<string, unknown>,
-  key: BucketSecretName,
-): string | undefined => asString(env[key]);
+const envString = (env: Record<string, unknown>, key: BucketSecretName): string | undefined =>
+  asString(env[key]);
 
 type ObservedAddOn = Pick<
   AddOnsResponseEdgesItemNode,
@@ -378,9 +367,7 @@ const desiredOptions = (props: BucketProps): Record<string, unknown> => {
   return options;
 };
 
-const websiteDomain = (
-  options: Record<string, unknown>,
-): string | undefined => {
+const websiteDomain = (options: Record<string, unknown>): string | undefined => {
   const website = asRecord(options.website);
   return asString(website.domain_name);
 };
@@ -403,31 +390,19 @@ const toAttrs = (
     name,
     status: addOn.status ?? undefined,
     orgSlug,
-    public:
-      typeof options.public === "boolean"
-        ? options.public
-        : (previous?.public ?? false),
+    public: typeof options.public === "boolean" ? options.public : (previous?.public ?? false),
     domainName: websiteDomain(options),
     accelerate: options.accelerate === true,
     ssoLink: addOn.ssoLink ?? undefined,
     createdAt: addOn.createdAt,
-    accessKeyId: keepSecret(
-      redact(envString(env, "AWS_ACCESS_KEY_ID")),
-      previous?.accessKeyId,
-    ),
+    accessKeyId: keepSecret(redact(envString(env, "AWS_ACCESS_KEY_ID")), previous?.accessKeyId),
     secretAccessKey: keepSecret(
       redact(envString(env, "AWS_SECRET_ACCESS_KEY")),
       previous?.secretAccessKey,
     ),
-    endpoint: keepSecret(
-      redact(envString(env, "AWS_ENDPOINT_URL_S3")),
-      previous?.endpoint,
-    ),
+    endpoint: keepSecret(redact(envString(env, "AWS_ENDPOINT_URL_S3")), previous?.endpoint),
     region: keepSecret(redact(envString(env, "AWS_REGION")), previous?.region),
-    bucketName: keepSecret(
-      redact(envString(env, "BUCKET_NAME") ?? name),
-      previous?.bucketName,
-    ),
+    bucketName: keepSecret(redact(envString(env, "BUCKET_NAME") ?? name), previous?.bucketName),
   };
 };
 
@@ -446,8 +421,7 @@ const hasAlchemyMetadata = (metadata: unknown): boolean => {
 };
 
 const isOwnedAddOn = (addOn: ObservedAddOn): boolean =>
-  matchesAlchemyPhysicalName(addOn.name ?? undefined) ||
-  hasAlchemyMetadata(addOn.metadata);
+  matchesAlchemyPhysicalName(addOn.name ?? undefined) || hasAlchemyMetadata(addOn.metadata);
 
 export const listTigrisAddOns = Effect.fn(function* () {
   const rows: AddOnsResponseEdgesItemNode[] = [];
@@ -469,17 +443,12 @@ export const listTigrisAddOns = Effect.fn(function* () {
 });
 
 const findById = (addOnId: string) =>
-  listTigrisAddOns().pipe(
-    Effect.map((addOns) => addOns.find((addOn) => addOn.id === addOnId)),
-  );
+  listTigrisAddOns().pipe(Effect.map((addOns) => addOns.find((addOn) => addOn.id === addOnId)));
 
 const findByName = (name: string) =>
-  listTigrisAddOns().pipe(
-    Effect.map((addOns) => addOns.find((addOn) => addOn.name === name)),
-  );
+  listTigrisAddOns().pipe(Effect.map((addOns) => addOns.find((addOn) => addOn.name === name)));
 
-const failedStatus = (status: string | undefined) =>
-  status === "error" || status === "failed";
+const failedStatus = (status: string | undefined) => status === "error" || status === "failed";
 
 const pendingStatus = (status: string | undefined) =>
   status === "creating" ||
@@ -492,10 +461,7 @@ const waitUntilReady = (name: string, addOnId: string) =>
     Effect.flatMap(
       (
         addOn,
-      ): Effect.Effect<
-        AddOnsResponseEdgesItemNode,
-        BucketPending | BucketProvisionFailed
-      > => {
+      ): Effect.Effect<AddOnsResponseEdgesItemNode, BucketPending | BucketProvisionFailed> => {
         if (addOn === undefined) {
           return Effect.fail(new BucketPending({ name, status: "missing" }));
         }
@@ -510,9 +476,7 @@ const waitUntilReady = (name: string, addOnId: string) =>
           );
         }
         if (pendingStatus(status)) {
-          return Effect.fail(
-            new BucketPending({ name, status: status ?? "creating" }),
-          );
+          return Effect.fail(new BucketPending({ name, status: status ?? "creating" }));
         }
         return Effect.succeed(addOn);
       },
@@ -537,8 +501,7 @@ const waitUntilGone = (addOnId: string, name: string) =>
       }),
     );
     const still =
-      (yield* findById(addOnId)) ??
-      (name.length > 0 ? yield* findByName(name) : undefined);
+      (yield* findById(addOnId)) ?? (name.length > 0 ? yield* findByName(name) : undefined);
     if (still !== undefined) {
       return yield* new BucketPending({
         name,
@@ -606,13 +569,9 @@ export const BucketProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const desiredName =
-        news.name !== undefined
-          ? sanitizeFlyBucketName(news.name)
-          : output.name;
+      const desiredName = news.name !== undefined ? sanitizeFlyBucketName(news.name) : output.name;
       const nameChanged = desiredName !== output.name;
-      const orgChanged =
-        news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
+      const orgChanged = news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
       if (nameChanged || orgChanged) {
         return { action: "replace" as const };
       }
@@ -636,16 +595,13 @@ export const BucketProvider = () =>
 
     list: Effect.fn(function* () {
       const addOns = yield* listTigrisAddOns();
-      return addOns.flatMap((addOn) =>
-        isOwnedAddOn(addOn) ? [toAttrs(addOn)] : [],
-      );
+      return addOns.flatMap((addOn) => (isOwnedAddOn(addOn) ? [toAttrs(addOn)] : []));
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? ({} as BucketProps);
       const name = yield* resolveBucketName(id, props.name, output?.name);
-      const orgSlug =
-        props.orgSlug ?? output?.orgSlug ?? (yield* resolveOrgSlug());
+      const orgSlug = props.orgSlug ?? output?.orgSlug ?? (yield* resolveOrgSlug());
       let previous = output;
 
       // Observe by cached id, then the desired name.
@@ -738,25 +694,16 @@ export const BucketProvider = () =>
       const latest = (yield* findById(current.id)) ?? current;
       // GraphQL list/get omit `environment` after create. Keep credentials
       // from the create payload (or last persisted attrs) via keepSecret.
-      const attrs = toAttrs(
-        latest,
-        toAttrs(current, previous, { name, orgSlug }),
-        {
-          name,
-          orgSlug,
-        },
-      );
+      const attrs = toAttrs(latest, toAttrs(current, previous, { name, orgSlug }), {
+        name,
+        orgSlug,
+      });
       const observedPublic = asRecord(latest.options).public;
       return {
         ...attrs,
         public:
-          typeof observedPublic === "boolean"
-            ? observedPublic
-            : (props.public ?? attrs.public),
-        domainName:
-          websiteDomain(asRecord(latest.options)) ??
-          props.domainName ??
-          attrs.domainName,
+          typeof observedPublic === "boolean" ? observedPublic : (props.public ?? attrs.public),
+        domainName: websiteDomain(asRecord(latest.options)) ?? props.domainName ?? attrs.domainName,
         accelerate:
           typeof asRecord(latest.options).accelerate === "boolean"
             ? (asRecord(latest.options).accelerate as boolean)
@@ -808,10 +755,7 @@ const envValuesOf = (addOn: ObservedAddOn): Record<string, string> => {
   if (values.BUCKET_NAME === undefined && addOn.name != null) {
     values.BUCKET_NAME = addOn.name;
   }
-  if (
-    values.AWS_ENDPOINT_URL === undefined &&
-    values.AWS_ENDPOINT_URL_S3 !== undefined
-  ) {
+  if (values.AWS_ENDPOINT_URL === undefined && values.AWS_ENDPOINT_URL_S3 !== undefined) {
     values.AWS_ENDPOINT_URL = values.AWS_ENDPOINT_URL_S3;
   }
   return values;
@@ -838,24 +782,17 @@ const findAttachedBucket = (input: { id?: string; name: string }) =>
         name: listed.name ?? input.name,
         provider: TIGRIS,
       })
-      .pipe(
-        Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
     return detail ?? listed;
   });
 
-const secretsFromBoundEnv = (
-  env: Record<string, string>,
-): Record<string, string> => {
+const secretsFromBoundEnv = (env: Record<string, string>): Record<string, string> => {
   const values: Record<string, string> = {};
   for (const key of BUCKET_SECRET_NAMES) {
     const value = env[key];
     if (value !== undefined && value.length > 0) values[key] = value;
   }
-  if (
-    values.AWS_ENDPOINT_URL === undefined &&
-    values.AWS_ENDPOINT_URL_S3 !== undefined
-  ) {
+  if (values.AWS_ENDPOINT_URL === undefined && values.AWS_ENDPOINT_URL_S3 !== undefined) {
     values.AWS_ENDPOINT_URL = values.AWS_ENDPOINT_URL_S3;
   }
   return values;

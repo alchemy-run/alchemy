@@ -105,9 +105,9 @@ export const consumeParameterEvents = <StreamReq = never, Req = never>(
     props.id ?? "SSMParameterEvents",
     {
       source: ["aws.ssm"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as ParameterEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as ParameterEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
       ...(props.names !== undefined && props.names.length > 0
         ? { detail: { name: [...props.names] } }
         : {}),

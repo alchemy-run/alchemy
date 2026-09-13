@@ -36,13 +36,8 @@ export interface UpdateLibraryItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateLibraryItemRequest,
-    ) => Effect.Effect<
-      qapps.UpdateLibraryItemOutput,
-      qapps.UpdateLibraryItemError
-    >
+    ) => Effect.Effect<qapps.UpdateLibraryItemOutput, qapps.UpdateLibraryItemError>
   >
 > {}
 
-export const UpdateLibraryItem = Binding.Service<UpdateLibraryItem>(
-  "AWS.QApps.UpdateLibraryItem",
-);
+export const UpdateLibraryItem = Binding.Service<UpdateLibraryItem>("AWS.QApps.UpdateLibraryItem");

@@ -20,10 +20,7 @@ const deleteSnapshot = () =>
     Effect.catchTag("SnapshotNotFoundFault", () => Effect.void),
     Effect.retry({
       while: (error) => error._tag === "InvalidSnapshotStateFault",
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -35,10 +32,7 @@ const waitForSnapshot = () =>
         : Effect.fail(new Error(`snapshot '${snapshotName}' is not available`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("30 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -48,10 +42,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     Effect.gen(function* () {
       yield* stack.destroy();
       yield* deleteSnapshot();
-      const deploy = (
-        snapshotNameToRestore?: string,
-        finalSnapshotName?: string,
-      ) =>
+      const deploy = (snapshotNameToRestore?: string, finalSnapshotName?: string) =>
         stack.deploy(
           Effect.gen(function* () {
             const net = yield* getProvisionedNetwork;

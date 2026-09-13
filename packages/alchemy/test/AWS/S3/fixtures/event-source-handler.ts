@@ -93,12 +93,8 @@ export default BucketEventSourceFunction.make(
             return HttpServerResponse.text("Missing key", { status: 400 });
           }
           return yield* getObject({ Key: `${PROCESSED_PREFIX}${key}` }).pipe(
-            Effect.flatMap((result) =>
-              Stream.mkString(Stream.decodeText(result.Body!)),
-            ),
-            Effect.flatMap((text) =>
-              HttpServerResponse.json({ processed: JSON.parse(text) }),
-            ),
+            Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+            Effect.flatMap((text) => HttpServerResponse.json({ processed: JSON.parse(text) })),
             // Object not written yet — the test polls until it appears.
             Effect.catchTag("NoSuchKey", () =>
               HttpServerResponse.json({ processed: null }, { status: 404 }),
@@ -106,19 +102,10 @@ export default BucketEventSourceFunction.make(
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Lambda.BucketEventSource,
-        S3.PutObjectHttp,
-        S3.GetObjectHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(Lambda.BucketEventSource, S3.PutObjectHttp, S3.GetObjectHttp)),
   ),
 );

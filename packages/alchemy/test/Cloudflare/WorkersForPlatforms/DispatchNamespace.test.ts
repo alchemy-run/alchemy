@@ -13,10 +13,7 @@ import { poll } from "@/Util/poll.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -39,10 +36,7 @@ const expectNamespaceGone = (accountId: string, name: string) =>
     Effect.catchTag("DispatchNamespaceNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "NamespaceNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -64,16 +58,10 @@ const getScript = (accountId: string, namespace: string, scriptName: string) =>
 // A deleted script comes back as a success with `script: null` while its
 // namespace still exists, and as `DispatchNamespaceNotFound` once the
 // namespace itself has been destroyed — both are the success condition.
-const expectScriptGone = (
-  accountId: string,
-  namespace: string,
-  scriptName: string,
-) =>
+const expectScriptGone = (accountId: string, namespace: string, scriptName: string) =>
   getScript(accountId, namespace, scriptName).pipe(
     Effect.flatMap((response) =>
-      response.script
-        ? Effect.fail({ _tag: "ScriptNotDeleted" } as const)
-        : Effect.void,
+      response.script ? Effect.fail({ _tag: "ScriptNotDeleted" } as const) : Effect.void,
     ),
     Effect.catchTag(
       ["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"],
@@ -81,10 +69,7 @@ const expectScriptGone = (
     ),
     Effect.retry({
       while: (e) => e._tag === "ScriptNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -144,12 +129,9 @@ const scriptName = "alchemy-wfp-customer-a";
 // orders script-last on deploy (and first on destroy).
 const program = () =>
   Effect.gen(function* () {
-    const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace(
-      "ScriptNs",
-      {
-        name: namespaceName,
-      },
-    );
+    const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("ScriptNs", {
+      name: namespaceName,
+    });
 
     return { namespace };
   });
@@ -168,9 +150,7 @@ test.provider(
       // new etag.
       const updated = yield* stack.deploy(program());
 
-      expect(updated.namespace.namespaceId).toEqual(
-        initial.namespace.namespaceId,
-      );
+      expect(updated.namespace.namespaceId).toEqual(initial.namespace.namespaceId);
 
       yield* stack.destroy();
 
@@ -185,25 +165,17 @@ const assetsNamespaceName = "alchemy-wfp-assets-test-ns";
 // Read-after-create: a just-uploaded script can briefly 404 (or come back
 // with `script: null`) from the out-of-band read — poll (bounded) until the
 // script is visible with `has_assets` set.
-const expectScriptWithAssets = (
-  accountId: string,
-  namespace: string,
-  scriptName: string,
-) =>
+const expectScriptWithAssets = (accountId: string, namespace: string, scriptName: string) =>
   poll({
     description: "namespace script is visible with assets",
     effect: getScript(accountId, namespace, scriptName).pipe(
       Effect.map((response) => response.script),
-      Effect.catchTag(
-        ["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"],
-        () => Effect.succeed(null),
+      Effect.catchTag(["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"], () =>
+        Effect.succeed(null),
       ),
     ),
     predicate: (script) => script?.id === scriptName && !!script.hasAssets,
-    schedule: Schedule.max([
-      Schedule.exponential("500 millis"),
-      Schedule.recurs(10),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
   });
 
 // One program deploying the namespace and a user Worker with static assets
@@ -211,12 +183,9 @@ const expectScriptWithAssets = (
 // engine orders the Worker last on deploy (and first on destroy).
 const assetsProgram = (assetsDir: string) =>
   Effect.gen(function* () {
-    const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace(
-      "AssetsNs",
-      {
-        name: assetsNamespaceName,
-      },
-    );
+    const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("AssetsNs", {
+      name: assetsNamespaceName,
+    });
     const worker = yield* Cloudflare.Worker("WfpAssetsWorker", {
       namespace: namespace.name,
       script: `export default { fetch: () => new Response("ok") };`,
@@ -292,12 +261,8 @@ test.provider(
       const all = yield* poll({
         description: "list() includes the deployed dispatch namespace",
         effect: provider.list(),
-        predicate: (all) =>
-          all.some((ns) => ns.namespaceId === deployed.namespaceId),
-        schedule: Schedule.max([
-          Schedule.spaced("2 seconds"),
-          Schedule.recurs(20),
-        ]),
+        predicate: (all) => all.some((ns) => ns.namespaceId === deployed.namespaceId),
+        schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(20)]),
       });
 
       const match = all.find((ns) => ns.namespaceId === deployed.namespaceId);

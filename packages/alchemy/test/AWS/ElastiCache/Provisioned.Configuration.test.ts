@@ -17,13 +17,8 @@ shareProvisionedNetwork({ beforeAll, afterAll });
 const listTagsWhenAvailable = (resourceName: string) =>
   ElastiCache.listTagsForResource({ ResourceName: resourceName }).pipe(
     Effect.retry({
-      while: (error) =>
-        (error as { _tag?: string })._tag ===
-        "InvalidReplicationGroupStateFault",
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(100),
-      ]),
+      while: (error) => (error as { _tag?: string })._tag === "InvalidReplicationGroupStateFault",
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(100)]),
     }),
   );
 
@@ -50,9 +45,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               nodeType: "cache.t4g.micro",
               subnetGroupName: net.subnetGroupName,
               securityGroupIds: [
-                phase === "one"
-                  ? net.securityGroupId
-                  : replacementSecurityGroup.groupId,
+                phase === "one" ? net.securityGroupId : replacementSecurityGroup.groupId,
               ],
               replicasPerNodeGroup: 0,
               transitEncryptionEnabled: true,
@@ -68,17 +61,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             return {
               cache,
               activeSecurityGroupId:
-                phase === "one"
-                  ? net.securityGroupId
-                  : replacementSecurityGroup.groupId,
+                phase === "one" ? net.securityGroupId : replacementSecurityGroup.groupId,
             };
           }),
         );
 
       const created = yield* deploy("one");
-      const createdTags = yield* listTagsWhenAvailable(
-        created.cache.replicationGroupArn,
-      );
+      const createdTags = yield* listTagsWhenAvailable(created.cache.replicationGroupArn);
       expect(createdTags.TagList).toContainEqual({
         Key: "phase",
         Value: "one",
@@ -89,12 +78,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       });
 
       const updated = yield* deploy("two");
-      expect(updated.cache.replicationGroupId).toBe(
-        created.cache.replicationGroupId,
-      );
-      const updatedTags = yield* listTagsWhenAvailable(
-        updated.cache.replicationGroupArn,
-      );
+      expect(updated.cache.replicationGroupId).toBe(created.cache.replicationGroupId);
+      const updatedTags = yield* listTagsWhenAvailable(updated.cache.replicationGroupArn);
       expect(updatedTags.TagList).toContainEqual({
         Key: "phase",
         Value: "two",
@@ -109,17 +94,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       });
       const memberId = group.ReplicationGroups?.[0]?.MemberClusters?.[0];
       if (!memberId)
-        return yield* Effect.fail(
-          new Error("replication group has no member cluster"),
-        );
+        return yield* Effect.fail(new Error("replication group has no member cluster"));
       const member = yield* ElastiCache.describeCacheClusters({
         CacheClusterId: memberId,
       });
-      expect(
-        member.CacheClusters?.[0]?.SecurityGroups?.map(
-          (sg) => sg.SecurityGroupId,
-        ),
-      ).toEqual([updated.activeSecurityGroupId]);
+      expect(member.CacheClusters?.[0]?.SecurityGroups?.map((sg) => sg.SecurityGroupId)).toEqual([
+        updated.activeSecurityGroupId,
+      ]);
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(updated.cache.replicationGroupId);

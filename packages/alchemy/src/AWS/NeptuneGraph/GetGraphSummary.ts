@@ -28,12 +28,7 @@ export interface GetGraphSummary extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<neptunegraph.GetGraphSummaryInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.GetGraphSummaryOutput,
-      neptunegraph.GetGraphSummaryError
-    >
+    ) => Effect.Effect<neptunegraph.GetGraphSummaryOutput, neptunegraph.GetGraphSummaryError>
   >
 > {}
-export const GetGraphSummary = Binding.Service<GetGraphSummary>(
-  "AWS.NeptuneGraph.GetGraphSummary",
-);
+export const GetGraphSummary = Binding.Service<GetGraphSummary>("AWS.NeptuneGraph.GetGraphSummary");

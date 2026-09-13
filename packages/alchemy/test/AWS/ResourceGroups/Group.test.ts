@@ -11,16 +11,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const assertGroupGone = (groupName: string) =>
   resourcegroups.getGroup({ Group: groupName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`group ${groupName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`group ${groupName} still exists`))),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -59,9 +54,7 @@ describe("AWS.ResourceGroups.Group", () => {
           Group: created.groupName,
         });
         expect(observed.Group.GroupArn).toEqual(created.groupArn);
-        expect(observed.Group.Description).toEqual(
-          "Alchemy resource-groups test",
-        );
+        expect(observed.Group.Description).toEqual("Alchemy resource-groups test");
 
         const query = yield* resourcegroups.getGroupQuery({
           Group: created.groupName,
@@ -83,9 +76,7 @@ describe("AWS.ResourceGroups.Group", () => {
           .pages({ Group: created.groupName })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Resources ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Resources ?? [])),
           );
         expect(members).toEqual([]);
 
@@ -112,9 +103,7 @@ describe("AWS.ResourceGroups.Group", () => {
         const afterUpdate = yield* resourcegroups.getGroup({
           Group: created.groupName,
         });
-        expect(afterUpdate.Group.Description).toEqual(
-          "Alchemy resource-groups test updated",
-        );
+        expect(afterUpdate.Group.Description).toEqual("Alchemy resource-groups test updated");
         const queryAfterUpdate = yield* resourcegroups.getGroupQuery({
           Group: created.groupName,
         });
@@ -213,9 +202,7 @@ describe("AWS.ResourceGroups.Group", () => {
         const observed = yield* resourcegroups.getGroupConfiguration({
           Group: created.groupName,
         });
-        const types = (observed.GroupConfiguration?.Configuration ?? []).map(
-          (item) => item.Type,
-        );
+        const types = (observed.GroupConfiguration?.Configuration ?? []).map((item) => item.Type);
         expect(types).toContain("AWS::EC2::CapacityReservationPool");
         expect(types).toContain("AWS::ResourceGroups::Generic");
 

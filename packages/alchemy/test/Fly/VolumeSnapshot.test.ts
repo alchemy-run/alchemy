@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilVolumeGone = (appName: string, volumeId: string) =>
   machines
@@ -54,11 +51,7 @@ const listedHas = (appName: string, volumeId: string, snapshotId: string) =>
       app_name: appName,
       volume_id: volumeId,
     })
-    .pipe(
-      Effect.map((snapshots) =>
-        snapshots.find((snapshot) => snapshot.id === snapshotId),
-      ),
-    );
+    .pipe(Effect.map((snapshots) => snapshots.find((snapshot) => snapshot.id === snapshotId)));
 
 const box = (id: string, app: Fly.App, name: string) =>
   Fly.Machine(id, {
@@ -99,9 +92,7 @@ test.provider(
       expect(created.snapshot.snapshotId).toEqual(expect.any(String));
       expect(created.snapshot.snapshotId.length).toBeGreaterThan(0);
       expect(created.snapshot.appName).toEqual(created.app.appName);
-      expect(created.snapshot.volumeId).toEqual(
-        created.volume.mounts[0]?.volumeId,
-      );
+      expect(created.snapshot.volumeId).toEqual(created.volume.mounts[0]?.volumeId);
 
       const fetched = yield* listedHas(
         created.app.appName,
@@ -124,16 +115,12 @@ test.provider(
       );
 
       expect(updated.snapshot.snapshotId).toEqual(created.snapshot.snapshotId);
-      expect(updated.snapshot.volumeId).toEqual(
-        created.volume.mounts[0]?.volumeId,
-      );
+      expect(updated.snapshot.volumeId).toEqual(created.volume.mounts[0]?.volumeId);
       expect(updated.snapshot.appName).toEqual(created.app.appName);
 
       const provider = yield* Provider.findProvider(Fly.VolumeSnapshot);
       const all = yield* provider.list();
-      const listed = all.find(
-        (row) => row.snapshotId === created.snapshot.snapshotId,
-      );
+      const listed = all.find((row) => row.snapshotId === created.snapshot.snapshotId);
       expect(listed).toBeDefined();
       expect(listed?.appName).toEqual(created.app.appName);
       expect(listed?.volumeId).toEqual(created.volume.mounts[0]?.volumeId);
@@ -179,9 +166,7 @@ test.provider(
         }),
       );
 
-      expect(created.snapshot.volumeId).toEqual(
-        created.volumeA.mounts[0]?.volumeId,
-      );
+      expect(created.snapshot.volumeId).toEqual(created.volumeA.mounts[0]?.volumeId);
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -196,15 +181,9 @@ test.provider(
         }),
       );
 
-      expect(replaced.snapshot.snapshotId).not.toEqual(
-        created.snapshot.snapshotId,
-      );
-      expect(replaced.snapshot.volumeId).toEqual(
-        replaced.volumeB.mounts[0]?.volumeId,
-      );
-      expect(replaced.snapshot.volumeId).not.toEqual(
-        created.volumeA.mounts[0]?.volumeId,
-      );
+      expect(replaced.snapshot.snapshotId).not.toEqual(created.snapshot.snapshotId);
+      expect(replaced.snapshot.volumeId).toEqual(replaced.volumeB.mounts[0]?.volumeId);
+      expect(replaced.snapshot.volumeId).not.toEqual(created.volumeA.mounts[0]?.volumeId);
       expect(replaced.snapshot.appName).toEqual(created.app.appName);
 
       const fetched = yield* listedHas(

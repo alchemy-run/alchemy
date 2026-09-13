@@ -29,10 +29,7 @@ export interface DeleteGroupMembership extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        identitystore.DeleteGroupMembershipRequest,
-        "IdentityStoreId"
-      >,
+      request: Omit<identitystore.DeleteGroupMembershipRequest, "IdentityStoreId">,
     ) => Effect.Effect<
       identitystore.DeleteGroupMembershipResponse,
       identitystore.DeleteGroupMembershipError

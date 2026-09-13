@@ -30,6 +30,4 @@ export interface DescribeClusters extends Binding.Service<
     ) => Effect.Effect<redshift.ClustersMessage, redshift.DescribeClustersError>
   >
 > {}
-export const DescribeClusters = Binding.Service<DescribeClusters>(
-  "AWS.Redshift.DescribeClusters",
-);
+export const DescribeClusters = Binding.Service<DescribeClusters>("AWS.Redshift.DescribeClusters");

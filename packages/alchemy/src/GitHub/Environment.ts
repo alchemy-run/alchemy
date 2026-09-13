@@ -62,9 +62,7 @@ export interface EnvironmentProps {
    * branches with branch protection rules, or `customBranchPolicies` to a
    * list of branch name patterns (e.g. `["main", "release/*"]`).
    */
-  deploymentBranchPolicy?:
-    | { protectedBranches: true }
-    | { customBranchPolicies: string[] };
+  deploymentBranchPolicy?: { protectedBranches: true } | { customBranchPolicies: string[] };
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -217,11 +215,7 @@ export const resolveEnvironmentName = (
   environment: string | Environment | undefined,
 ): string | undefined => {
   const ref = environment as unknown as string | { name: string } | undefined;
-  return ref === undefined
-    ? undefined
-    : typeof ref === "string"
-      ? ref
-      : ref.name;
+  return ref === undefined ? undefined : typeof ref === "string" ? ref : ref.name;
 };
 
 export const EnvironmentProvider = () =>
@@ -283,8 +277,7 @@ export const EnvironmentProvider = () =>
             environment_name: news.name,
             wait_timer: news.waitTimer ?? 0,
             prevent_self_review: news.preventSelfReview ?? false,
-            reviewers:
-              reviewers === null || reviewers.length === 0 ? null : reviewers,
+            reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
             deployment_branch_policy:
               news.deploymentBranchPolicy === undefined
                 ? null
@@ -317,9 +310,7 @@ export const EnvironmentProvider = () =>
                 per_page: 100,
               },
             );
-            const observedNames = new Set(
-              observed.map((policy) => policy.name),
-            );
+            const observedNames = new Set(observed.map((policy) => policy.name));
             for (const name of desired) {
               if (!observedNames.has(name)) {
                 await octokit.rest.repos.createDeploymentBranchPolicy({

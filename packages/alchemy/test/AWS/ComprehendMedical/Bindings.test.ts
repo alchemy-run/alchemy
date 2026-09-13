@@ -8,9 +8,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import ComprehendMedicalTestFunctionLive, {
-  ComprehendMedicalTestFunction,
-} from "./handler";
+import ComprehendMedicalTestFunctionLive, { ComprehendMedicalTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -19,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "ComprehendMedicalBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -41,28 +36,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe("ComprehendMedical Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "ComprehendMedical test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ComprehendMedical test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("ComprehendMedical test setup: deploying fixture");
@@ -76,9 +64,7 @@ describe("ComprehendMedical Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `ComprehendMedical test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ComprehendMedical test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -103,9 +89,9 @@ describe("ComprehendMedical Bindings", () => {
       "extracts medical entities from a clinical note",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/entities`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/entities`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             entities: Array<{ text: string; category: string; type: string }>;
             modelVersion: string;
           };
@@ -126,9 +112,9 @@ describe("ComprehendMedical Bindings", () => {
       "detects protected health information",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/phi`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/phi`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             entities: Array<{ text: string; type: string }>;
           };
 
@@ -146,9 +132,9 @@ describe("ComprehendMedical Bindings", () => {
       "links conditions to ICD-10-CM codes",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/icd10`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/icd10`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             entities: Array<{
               text: string;
               codes: Array<{ code: string; description: string }>;
@@ -170,9 +156,9 @@ describe("ComprehendMedical Bindings", () => {
       "links medications to RxNorm concepts",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/rxnorm`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/rxnorm`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             entities: Array<{
               text: string;
               concepts: Array<{ code: string; description: string }>;
@@ -180,9 +166,7 @@ describe("ComprehendMedical Bindings", () => {
           };
 
           expect(response.entities.length).toBeGreaterThan(0);
-          const withConcepts = response.entities.filter(
-            (e) => e.concepts.length > 0,
-          );
+          const withConcepts = response.entities.filter((e) => e.concepts.length > 0);
           expect(withConcepts.length).toBeGreaterThan(0);
           expect(withConcepts[0].concepts[0].code.length).toBeGreaterThan(0);
         }),
@@ -195,9 +179,9 @@ describe("ComprehendMedical Bindings", () => {
       "links concepts to SNOMED CT codes",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/snomed`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/snomed`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             entities: Array<{
               text: string;
               concepts: Array<{ code: string; description: string }>;
@@ -205,9 +189,7 @@ describe("ComprehendMedical Bindings", () => {
           };
 
           expect(response.entities.length).toBeGreaterThan(0);
-          const withConcepts = response.entities.filter(
-            (e) => e.concepts.length > 0,
-          );
+          const withConcepts = response.entities.filter((e) => e.concepts.length > 0);
           expect(withConcepts.length).toBeGreaterThan(0);
           expect(withConcepts[0].concepts[0].code.length).toBeGreaterThan(0);
         }),
@@ -220,9 +202,9 @@ describe("ComprehendMedical Bindings", () => {
       "lists batch jobs across all five job families",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/jobs`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/jobs`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             entities: number;
             icd10cm: number;
             phi: number;
@@ -246,9 +228,9 @@ describe("ComprehendMedical Bindings", () => {
       "answers with the typed ResourceNotFoundException for unknown jobs",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/job-checks`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/job-checks`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             describes: string[];
             stops: string[];
           };
@@ -256,12 +238,8 @@ describe("ComprehendMedical Bindings", () => {
           // IAM authorizes before the job lookup, so the typed
           // ResourceNotFoundException proves both wiring and permissions
           // for every describe/stop binding.
-          expect(response.describes).toEqual(
-            Array(5).fill("ResourceNotFoundException"),
-          );
-          expect(response.stops).toEqual(
-            Array(5).fill("ResourceNotFoundException"),
-          );
+          expect(response.describes).toEqual(Array(5).fill("ResourceNotFoundException"));
+          expect(response.stops).toEqual(Array(5).fill("ResourceNotFoundException"));
         }),
       { timeout: 120_000 },
     );
@@ -281,9 +259,7 @@ describe("ComprehendMedical Bindings", () => {
           const roleArn = `arn:aws:iam::${Account}:role/alchemy-nonexistent-comprehendmedical-role`;
 
           const response = (yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/job-start?roleArn=${encodeURIComponent(roleArn)}`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/job-start?roleArn=${encodeURIComponent(roleArn)}`),
           ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
 
           expect(response.tag).toBe("InvalidRequestException");

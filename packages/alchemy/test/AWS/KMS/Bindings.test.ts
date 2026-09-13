@@ -56,10 +56,7 @@ const sharedStack = Core.scratchStack(testOptions, "KMSBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let standingKeyId: string;
@@ -85,29 +82,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const postJson = (path: string, body: object) =>
-  send(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(`${baseUrl}${path}`),
-      body,
-    ),
-  ).pipe(Effect.flatMap((response) => response.json));
+  send(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}${path}`), body)).pipe(
+    Effect.flatMap((response) => response.json),
+  );
 
 const getJson = (path: string) =>
   send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
@@ -186,10 +175,7 @@ const scanKeyMetadatas = Effect.gen(function* () {
  * Wait for KMS's eventually-consistent state transition to become visible.
  * Ten seconds is ample in practice and keeps a broken transition bounded.
  */
-const waitForKeyState = Effect.fn(function* (
-  keyId: string,
-  expectedState: kms.KeyState,
-) {
+const waitForKeyState = Effect.fn(function* (keyId: string, expectedState: kms.KeyState) {
   return yield* kms.describeKey({ KeyId: keyId }).pipe(
     Effect.flatMap((response) => {
       const actualState = response.KeyMetadata?.KeyState;
@@ -205,10 +191,7 @@ const waitForKeyState = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "StandingKeyNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("250 millis"),
-        Schedule.recurs(40),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("250 millis"), Schedule.recurs(40)]),
     }),
   );
 });
@@ -267,9 +250,7 @@ const ensureStandingKey = Effect.fn(function* (
           Description: spec.description,
           KeySpec: spec.keySpec,
           KeyUsage: spec.keyUsage,
-          Tags: [
-            { TagKey: "alchemy:standing-fixture", TagValue: "kms-bindings" },
-          ],
+          Tags: [{ TagKey: "alchemy:standing-fixture", TagValue: "kms-bindings" }],
         })
         .pipe(
           Effect.flatMap((created) =>
@@ -284,18 +265,13 @@ const ensureStandingKey = Effect.fn(function* (
     // key always converges. Retry only that exact transient state error.
     Effect.retry({
       while: (error) => error._tag === "KMSInvalidStateException",
-      schedule: Schedule.max([
-        Schedule.fixed("250 millis"),
-        Schedule.recurs(40),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("250 millis"), Schedule.recurs(40)]),
     }),
     Effect.catchTag("AlreadyExistsException", () =>
       // Lost a create race with a parallel run: the alias already points at
       // another key. Schedule ours for deletion so it doesn't become an
       // orphan, and fall through to the alias's actual target.
-      kms
-        .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
-        .pipe(Effect.ignore),
+      kms.scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 }).pipe(Effect.ignore),
     ),
   );
   // CreateAlias is eventually consistent: the immediate read-back can 404
@@ -303,10 +279,7 @@ const ensureStandingKey = Effect.fn(function* (
   const described = yield* kms.describeKey({ KeyId: spec.alias }).pipe(
     Effect.retry({
       while: (error) => error._tag === "NotFoundException",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
     }),
   );
   return described.KeyMetadata!.KeyId;
@@ -350,20 +323,12 @@ const releaseStandingKeys = Effect.gen(function* () {
       scanned.metadatas = yield* scanKeyMetadatas;
     }
     const target =
-      viaAlias ??
-      scanned.metadatas?.find(
-        (metadata) => metadata?.Description === spec.description,
-      );
+      viaAlias ?? scanned.metadatas?.find((metadata) => metadata?.Description === spec.description);
     if (target?.KeyId && target.KeyState !== "PendingDeletion") {
-      yield* kms
-        .scheduleKeyDeletion({ KeyId: target.KeyId, PendingWindowInDays: 7 })
-        .pipe(
-          // Already pending deletion (raced with another run) or already gone.
-          Effect.catchTag(
-            ["KMSInvalidStateException", "NotFoundException"],
-            () => Effect.void,
-          ),
-        );
+      yield* kms.scheduleKeyDeletion({ KeyId: target.KeyId, PendingWindowInDays: 7 }).pipe(
+        // Already pending deletion (raced with another run) or already gone.
+        Effect.catchTag(["KMSInvalidStateException", "NotFoundException"], () => Effect.void),
+      );
     }
   }
 });
@@ -375,11 +340,7 @@ describe("KMS Bindings", () => {
       // `beforeAll` doesn't run inside `test.provider`'s environment, so
       // provide the AWS providers (Credentials/Region) explicitly for the
       // out-of-band distilled calls.
-      standingKeyId = yield* Core.withProviders(
-        ensureStandingKeys,
-        testOptions,
-        "KMSBindings",
-      );
+      standingKeyId = yield* Core.withProviders(ensureStandingKeys, testOptions, "KMSBindings");
       yield* Effect.logInfo(
         `KMS test setup: standing key ${standingKeyId} (${STANDING_KEY_ALIAS})`,
       );
@@ -397,9 +358,7 @@ describe("KMS Bindings", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      yield* Effect.logInfo(
-        `KMS test setup: probing readiness at ${baseUrl}/ready`,
-      );
+      yield* Effect.logInfo(`KMS test setup: probing readiness at ${baseUrl}/ready`);
       yield* HttpClient.get(`${baseUrl}/ready`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -444,10 +403,7 @@ describe("KMS Bindings", () => {
       }).pipe(
         Effect.retry({
           while: (error) => error._tag === "CryptoNotAuthorized",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(30),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
         }),
       );
     }),
@@ -461,11 +417,7 @@ describe("KMS Bindings", () => {
       .destroy()
       .pipe(
         Effect.ensuring(
-          Core.withProviders(
-            releaseStandingKeys,
-            testOptions,
-            "KMSBindings",
-          ).pipe(Effect.orDie),
+          Core.withProviders(releaseStandingKeys, testOptions, "KMSBindings").pipe(Effect.orDie),
         ),
       ),
     { timeout: 120_000 },
@@ -507,84 +459,71 @@ describe("KMS Bindings", () => {
       }),
     );
 
-    test.provider(
-      "fails with a typed InvalidCiphertextException on context mismatch",
-      (_stack) =>
-        Effect.gen(function* () {
-          const encrypted = (yield* postJson("/encrypt", {
-            plaintextBase64: yield* toBase64("context-bound secret"),
-            context: { tenant: "alpha" },
-          })) as { ciphertextBase64: string };
+    test.provider("fails with a typed InvalidCiphertextException on context mismatch", (_stack) =>
+      Effect.gen(function* () {
+        const encrypted = (yield* postJson("/encrypt", {
+          plaintextBase64: yield* toBase64("context-bound secret"),
+          context: { tenant: "alpha" },
+        })) as { ciphertextBase64: string };
 
-          const decrypted = (yield* postJson("/decrypt", {
-            ciphertextBase64: encrypted.ciphertextBase64,
-            context: { tenant: "beta" },
-          })) as { ok: boolean; error?: string };
+        const decrypted = (yield* postJson("/decrypt", {
+          ciphertextBase64: encrypted.ciphertextBase64,
+          context: { tenant: "beta" },
+        })) as { ok: boolean; error?: string };
 
-          expect(decrypted.ok).toBe(false);
-          expect(decrypted.error).toEqual("InvalidCiphertextException");
-        }),
+        expect(decrypted.ok).toBe(false);
+        expect(decrypted.error).toEqual("InvalidCiphertextException");
+      }),
     );
   });
 
   describe("GenerateDataKey", () => {
-    test.provider(
-      "returns a plaintext data key whose ciphertext blob decrypts back",
-      (_stack) =>
-        Effect.gen(function* () {
-          const generated = (yield* postJson("/generate-data-key", {})) as {
-            keyId?: string;
-            plaintextBase64?: string;
-            ciphertextBase64?: string;
-          };
+    test.provider("returns a plaintext data key whose ciphertext blob decrypts back", (_stack) =>
+      Effect.gen(function* () {
+        const generated = (yield* postJson("/generate-data-key", {})) as {
+          keyId?: string;
+          plaintextBase64?: string;
+          ciphertextBase64?: string;
+        };
 
-          expect(generated.plaintextBase64).toBeTruthy();
-          expect(generated.ciphertextBase64).toBeTruthy();
-          expect(generated.keyId).toContain(standingKeyId);
-          // AES_256 data key = 32 bytes.
-          const dataKey = yield* Effect.sync(() =>
-            Buffer.from(generated.plaintextBase64!, "base64"),
-          );
-          expect(dataKey.length).toBe(32);
+        expect(generated.plaintextBase64).toBeTruthy();
+        expect(generated.ciphertextBase64).toBeTruthy();
+        expect(generated.keyId).toContain(standingKeyId);
+        // AES_256 data key = 32 bytes.
+        const dataKey = yield* Effect.sync(() => Buffer.from(generated.plaintextBase64!, "base64"));
+        expect(dataKey.length).toBe(32);
 
-          // The encrypted copy must decrypt (via the Decrypt binding) back to
-          // the exact plaintext data key.
-          const decrypted = (yield* postJson("/decrypt", {
-            ciphertextBase64: generated.ciphertextBase64,
-          })) as { ok: boolean; plaintextBase64?: string };
+        // The encrypted copy must decrypt (via the Decrypt binding) back to
+        // the exact plaintext data key.
+        const decrypted = (yield* postJson("/decrypt", {
+          ciphertextBase64: generated.ciphertextBase64,
+        })) as { ok: boolean; plaintextBase64?: string };
 
-          expect(decrypted.ok).toBe(true);
-          expect(decrypted.plaintextBase64).toEqual(generated.plaintextBase64);
-        }),
+        expect(decrypted.ok).toBe(true);
+        expect(decrypted.plaintextBase64).toEqual(generated.plaintextBase64);
+      }),
     );
   });
 
   describe("GenerateDataKeyWithoutPlaintext", () => {
-    test.provider(
-      "returns only a ciphertext blob that decrypts to a 32-byte key",
-      (_stack) =>
-        Effect.gen(function* () {
-          const generated = (yield* postJson(
-            "/generate-data-key-without-plaintext",
-            {},
-          )) as {
-            keyId?: string;
-            ciphertextBase64?: string;
-          };
+    test.provider("returns only a ciphertext blob that decrypts to a 32-byte key", (_stack) =>
+      Effect.gen(function* () {
+        const generated = (yield* postJson("/generate-data-key-without-plaintext", {})) as {
+          keyId?: string;
+          ciphertextBase64?: string;
+        };
 
-          expect(generated.ciphertextBase64).toBeTruthy();
-          expect(generated.keyId).toContain(standingKeyId);
+        expect(generated.ciphertextBase64).toBeTruthy();
+        expect(generated.keyId).toContain(standingKeyId);
 
-          const decrypted = (yield* postJson("/decrypt", {
-            ciphertextBase64: generated.ciphertextBase64,
-          })) as { ok: boolean; plaintextBase64?: string };
+        const decrypted = (yield* postJson("/decrypt", {
+          ciphertextBase64: generated.ciphertextBase64,
+        })) as { ok: boolean; plaintextBase64?: string };
 
-          expect(decrypted.ok).toBe(true);
-          const dataKey = yield* Effect.sync(() =>
-            Buffer.from(decrypted.plaintextBase64!, "base64"),
-          );
-          expect(dataKey.length).toBe(32);
-        }),
+        expect(decrypted.ok).toBe(true);
+        const dataKey = yield* Effect.sync(() => Buffer.from(decrypted.plaintextBase64!, "base64"));
+        expect(dataKey.length).toBe(32);
+      }),
     );
   });
 
@@ -593,10 +532,7 @@ describe("KMS Bindings", () => {
       "returns a key pair whose private blob decrypts back to the plaintext",
       (_stack) =>
         Effect.gen(function* () {
-          const generated = (yield* postJson(
-            "/generate-data-key-pair",
-            {},
-          )) as {
+          const generated = (yield* postJson("/generate-data-key-pair", {})) as {
             keyId?: string;
             keyPairSpec?: string;
             publicKeyBase64?: string;
@@ -614,75 +550,62 @@ describe("KMS Bindings", () => {
           })) as { ok: boolean; plaintextBase64?: string };
 
           expect(decrypted.ok).toBe(true);
-          expect(decrypted.plaintextBase64).toEqual(
-            generated.privateKeyPlaintextBase64,
-          );
+          expect(decrypted.plaintextBase64).toEqual(generated.privateKeyPlaintextBase64);
         }),
     );
   });
 
   describe("GenerateDataKeyPairWithoutPlaintext", () => {
-    test.provider(
-      "returns a public key and an encrypted private key only",
-      (_stack) =>
-        Effect.gen(function* () {
-          const generated = (yield* postJson(
-            "/generate-data-key-pair-without-plaintext",
-            {},
-          )) as {
-            publicKeyBase64?: string;
-            privateKeyCiphertextBase64?: string;
-          };
+    test.provider("returns a public key and an encrypted private key only", (_stack) =>
+      Effect.gen(function* () {
+        const generated = (yield* postJson("/generate-data-key-pair-without-plaintext", {})) as {
+          publicKeyBase64?: string;
+          privateKeyCiphertextBase64?: string;
+        };
 
-          expect(generated.publicKeyBase64).toBeTruthy();
-          expect(generated.privateKeyCiphertextBase64).toBeTruthy();
+        expect(generated.publicKeyBase64).toBeTruthy();
+        expect(generated.privateKeyCiphertextBase64).toBeTruthy();
 
-          const decrypted = (yield* postJson("/decrypt", {
-            ciphertextBase64: generated.privateKeyCiphertextBase64,
-          })) as { ok: boolean; plaintextBase64?: string };
-          expect(decrypted.ok).toBe(true);
-          expect(decrypted.plaintextBase64).toBeTruthy();
-        }),
+        const decrypted = (yield* postJson("/decrypt", {
+          ciphertextBase64: generated.privateKeyCiphertextBase64,
+        })) as { ok: boolean; plaintextBase64?: string };
+        expect(decrypted.ok).toBe(true);
+        expect(decrypted.plaintextBase64).toBeTruthy();
+      }),
     );
   });
 
   describe("ReEncrypt", () => {
-    test.provider(
-      "rotates the encryption context without exposing the plaintext",
-      (_stack) =>
-        Effect.gen(function* () {
-          const message = "re-encrypt me in place";
-          const encrypted = (yield* postJson("/encrypt", {
-            plaintextBase64: yield* toBase64(message),
-            context: { tenant: "alpha" },
-          })) as { ciphertextBase64: string };
+    test.provider("rotates the encryption context without exposing the plaintext", (_stack) =>
+      Effect.gen(function* () {
+        const message = "re-encrypt me in place";
+        const encrypted = (yield* postJson("/encrypt", {
+          plaintextBase64: yield* toBase64(message),
+          context: { tenant: "alpha" },
+        })) as { ciphertextBase64: string };
 
-          const reEncrypted = (yield* postJson("/re-encrypt", {
-            ciphertextBase64: encrypted.ciphertextBase64,
-            sourceContext: { tenant: "alpha" },
-            destinationContext: { tenant: "beta" },
-          })) as {
-            keyId?: string;
-            sourceKeyId?: string;
-            ciphertextBase64?: string;
-          };
+        const reEncrypted = (yield* postJson("/re-encrypt", {
+          ciphertextBase64: encrypted.ciphertextBase64,
+          sourceContext: { tenant: "alpha" },
+          destinationContext: { tenant: "beta" },
+        })) as {
+          keyId?: string;
+          sourceKeyId?: string;
+          ciphertextBase64?: string;
+        };
 
-          expect(reEncrypted.ciphertextBase64).toBeTruthy();
-          expect(reEncrypted.ciphertextBase64).not.toEqual(
-            encrypted.ciphertextBase64,
-          );
-          expect(reEncrypted.keyId).toContain(standingKeyId);
+        expect(reEncrypted.ciphertextBase64).toBeTruthy();
+        expect(reEncrypted.ciphertextBase64).not.toEqual(encrypted.ciphertextBase64);
+        expect(reEncrypted.keyId).toContain(standingKeyId);
 
-          const decrypted = (yield* postJson("/decrypt", {
-            ciphertextBase64: reEncrypted.ciphertextBase64,
-            context: { tenant: "beta" },
-          })) as { ok: boolean; plaintextBase64?: string };
+        const decrypted = (yield* postJson("/decrypt", {
+          ciphertextBase64: reEncrypted.ciphertextBase64,
+          context: { tenant: "beta" },
+        })) as { ok: boolean; plaintextBase64?: string };
 
-          expect(decrypted.ok).toBe(true);
-          expect(yield* fromBase64(decrypted.plaintextBase64!)).toEqual(
-            message,
-          );
-        }),
+        expect(decrypted.ok).toBe(true);
+        expect(yield* fromBase64(decrypted.plaintextBase64!)).toEqual(message);
+      }),
     );
   });
 
@@ -720,22 +643,20 @@ describe("KMS Bindings", () => {
       }),
     );
 
-    test.provider(
-      "rejects a tampered message with a typed KMSInvalidMacException",
-      (_stack) =>
-        Effect.gen(function* () {
-          const mac = (yield* postJson("/mac", {
-            messageBase64: yield* toBase64("original message"),
-          })) as { macBase64?: string };
+    test.provider("rejects a tampered message with a typed KMSInvalidMacException", (_stack) =>
+      Effect.gen(function* () {
+        const mac = (yield* postJson("/mac", {
+          messageBase64: yield* toBase64("original message"),
+        })) as { macBase64?: string };
 
-          const verified = (yield* postJson("/verify-mac", {
-            messageBase64: yield* toBase64("tampered message"),
-            macBase64: mac.macBase64,
-          })) as { ok: boolean; error?: string };
+        const verified = (yield* postJson("/verify-mac", {
+          messageBase64: yield* toBase64("tampered message"),
+          macBase64: mac.macBase64,
+        })) as { ok: boolean; error?: string };
 
-          expect(verified.ok).toBe(false);
-          expect(verified.error).toEqual("KMSInvalidMacException");
-        }),
+        expect(verified.ok).toBe(false);
+        expect(verified.error).toEqual("KMSInvalidMacException");
+      }),
     );
   });
 
@@ -778,35 +699,31 @@ describe("KMS Bindings", () => {
   });
 
   describe("GetPublicKey", () => {
-    test.provider(
-      "downloads the signing key's DER-encoded public key",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/public-key")) as {
-            keyUsage?: string;
-            publicKeyBase64?: string;
-            signingAlgorithms?: string[];
-          };
-          expect(response.keyUsage).toEqual("SIGN_VERIFY");
-          expect(response.publicKeyBase64).toBeTruthy();
-          expect(response.signingAlgorithms).toContain("ECDSA_SHA_256");
-        }),
+    test.provider("downloads the signing key's DER-encoded public key", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/public-key")) as {
+          keyUsage?: string;
+          publicKeyBase64?: string;
+          signingAlgorithms?: string[];
+        };
+        expect(response.keyUsage).toEqual("SIGN_VERIFY");
+        expect(response.publicKeyBase64).toBeTruthy();
+        expect(response.signingAlgorithms).toContain("ECDSA_SHA_256");
+      }),
     );
   });
 
   describe("DeriveSharedSecret", () => {
-    test.provider(
-      "KMS-side ECDH matches a locally computed shared secret",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/derive-shared-secret", {})) as {
-            byteLength?: number;
-            match?: boolean;
-          };
-          // P-256 ECDH shared secret = 32 bytes.
-          expect(response.byteLength).toBe(32);
-          expect(response.match).toBe(true);
-        }),
+    test.provider("KMS-side ECDH matches a locally computed shared secret", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/derive-shared-secret", {})) as {
+          byteLength?: number;
+          match?: boolean;
+        };
+        // P-256 ECDH shared secret = 32 bytes.
+        expect(response.byteLength).toBe(32);
+        expect(response.match).toBe(true);
+      }),
     );
   });
 
@@ -821,9 +738,7 @@ describe("KMS Bindings", () => {
         };
         expect(first.randomBase64).toBeTruthy();
         expect(second.randomBase64).toBeTruthy();
-        const bytes = yield* Effect.sync(() =>
-          Buffer.from(first.randomBase64!, "base64"),
-        );
+        const bytes = yield* Effect.sync(() => Buffer.from(first.randomBase64!, "base64"));
         expect(bytes.length).toBe(32);
         expect(first.randomBase64).not.toEqual(second.randomBase64);
       }),

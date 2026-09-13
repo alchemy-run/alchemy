@@ -14,10 +14,7 @@ import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
@@ -43,13 +40,10 @@ class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
 const waitForDns = Effect.fn(function* (hostname: string) {
   yield* Effect.tryPromise({
     try: async (signal) => {
-      const res = await fetch(
-        `https://1.1.1.1/dns-query?name=${hostname}&type=AAAA`,
-        {
-          headers: { accept: "application/dns-json" },
-          signal,
-        },
-      );
+      const res = await fetch(`https://1.1.1.1/dns-query?name=${hostname}&type=AAAA`, {
+        headers: { accept: "application/dns-json" },
+        signal,
+      });
       const body = (await res.json()) as { Answer?: unknown[] };
       if (!body.Answer?.length) throw new Error("no answer");
     },
@@ -69,10 +63,7 @@ const waitForDns = Effect.fn(function* (hostname: string) {
  * Retried through DNS/certificate propagation on a freshly attached
  * custom domain.
  */
-const expectRedirect = Effect.fn(function* (
-  from: string,
-  expectedLocation: string,
-) {
+const expectRedirect = Effect.fn(function* (from: string, expectedLocation: string) {
   const location = yield* Effect.tryPromise({
     try: async (signal) => {
       const res = await fetch(from, { redirect: "manual", signal });
@@ -81,8 +72,7 @@ const expectRedirect = Effect.fn(function* (
       }
       return res.headers.get("location") ?? "";
     },
-    catch: (cause) =>
-      new RedirectNotReady({ url: from, detail: String(cause) }),
+    catch: (cause) => new RedirectNotReady({ url: from, detail: String(cause) }),
   }).pipe(
     Effect.flatMap((location) =>
       location === expectedLocation
@@ -104,17 +94,12 @@ const expectRedirect = Effect.fn(function* (
 });
 
 /** Our redirect rules in the zone's dynamic-redirect phase entrypoint. */
-const listWorkerRedirectRules = Effect.fn(function* (
-  zoneId: string,
-  scriptName: string,
-) {
+const listWorkerRedirectRules = Effect.fn(function* (zoneId: string, scriptName: string) {
   const entrypoint = yield* rulesets
     .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
     .pipe(Effect.catch(() => Effect.succeed(undefined)));
   return (entrypoint?.rules ?? []).flatMap((rule) =>
-    (rule.description ?? "").startsWith(
-      `alchemy:worker:${scriptName}:redirect:`,
-    )
+    (rule.description ?? "").startsWith(`alchemy:worker:${scriptName}:redirect:`)
       ? [rule.description as string]
       : [],
   );
@@ -162,11 +147,7 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
 
         yield* stack.destroy();
 
-        const deploy = (domain: {
-          name: string;
-          aliases?: string[];
-          redirects?: string[];
-        }) =>
+        const deploy = (domain: { name: string; aliases?: string[]; redirects?: string[] }) =>
           stack.deploy(
             Effect.gen(function* () {
               return yield* Cloudflare.Worker("RedirectWorker", {
@@ -190,10 +171,7 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
           redirects: [oldHost],
         });
         expect(worker.url).toEqual(`https://${mainHost}`);
-        expect(worker.urls.slice(0, 2)).toEqual([
-          `https://${mainHost}`,
-          `https://${aliasHost}`,
-        ]);
+        expect(worker.urls.slice(0, 2)).toEqual([`https://${mainHost}`, `https://${aliasHost}`]);
         expect(worker.urls.some((u) => u.includes(oldHost))).toBe(false);
         // workers.dev stays on by default and ranks after the domain.
         expect(worker.urls[worker.urls.length - 1]).toMatch(/\.workers\.dev$/);
@@ -205,9 +183,9 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
           name: customDomainZone!,
         });
         expect(zone).toBeDefined();
-        expect(
-          yield* listWorkerRedirectRules(zone!.id, worker.workerName),
-        ).toEqual([`alchemy:worker:${worker.workerName}:redirect:${oldHost}`]);
+        expect(yield* listWorkerRedirectRules(zone!.id, worker.workerName)).toEqual([
+          `alchemy:worker:${worker.workerName}:redirect:${oldHost}`,
+        ]);
 
         // The canonical domain AND the alias serve the Worker; the
         // redirect host 301s with path and query preserved — and never
@@ -224,10 +202,7 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
           label: "alias serves the worker",
           timeout: "120 seconds",
         });
-        yield* expectRedirect(
-          `https://${oldHost}/hello?x=1`,
-          `https://${mainHost}/hello?x=1`,
-        );
+        yield* expectRedirect(`https://${oldHost}/hello?x=1`, `https://${mainHost}/hello?x=1`);
 
         // Removing the redirect cleans our rule and detaches nothing else.
         const updated = yield* deploy({ name: mainHost });
@@ -236,22 +211,16 @@ describe.concurrent("Cloudflare.Worker urls & domain", () => {
           aliases: [],
           redirects: [],
         });
-        expect(
-          yield* listWorkerRedirectRules(zone!.id, updated.workerName),
-        ).toEqual([]);
+        expect(yield* listWorkerRedirectRules(zone!.id, updated.workerName)).toEqual([]);
 
         // Re-add, then destroy — teardown must remove the rule too.
         const readded = yield* deploy({
           name: mainHost,
           redirects: [oldHost],
         });
-        expect(
-          yield* listWorkerRedirectRules(zone!.id, readded.workerName),
-        ).toHaveLength(1);
+        expect(yield* listWorkerRedirectRules(zone!.id, readded.workerName)).toHaveLength(1);
         yield* stack.destroy();
-        expect(
-          yield* listWorkerRedirectRules(zone!.id, readded.workerName),
-        ).toEqual([]);
+        expect(yield* listWorkerRedirectRules(zone!.id, readded.workerName)).toEqual([]);
         yield* waitForWorkerToBeDeleted(readded.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 540_000 },

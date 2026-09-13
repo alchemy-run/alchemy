@@ -14,24 +14,14 @@ const { test } = Test.make({ providers: AWS.providers() });
 // dominates the runtime (create ~5-15 min, destroy ~5-15 min).
 const runLive = !process.env.FAST;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "solidstart-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "solidstart-app");
 
 // Clone under the alchemy package so `@solidjs/start`, `vite`, and
 // `@solidjs/vite-plugin-nitro-2` resolve from the workspace's hoisted
 // node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 // Under the floci runner the standalone composite deploys only the framework
 // dev server (no Lambda/S3/CloudFront), so the standalone test below is
@@ -70,20 +60,14 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "SOLIDSTART_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "SOLIDSTART_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "SOLIDSTART_AWS_PAGE_MARKER", {
@@ -91,46 +75,26 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
           label: "SSR home page",
         });
         // The fixture's own vite.config.ts applied (its `define` marker).
-        yield* expectUrlContains(
-          `${url}/`,
-          "config:solidstart-aws-user-config-loaded",
-          {
-            label: "user vite.config.ts applied",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "config:solidstart-aws-user-config-loaded", {
+          label: "user vite.config.ts applied",
+        });
         // API route through the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "SOLIDSTART_AWS_API_MARKER",
-          {
-            label: "API route",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "roundtrip",
-          {
-            label: "API route query echo",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "SOLIDSTART_AWS_API_MARKER", {
+          label: "API route",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+          label: "API route query echo",
+        });
         // Public file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "solidstart-aws-robots-marker",
-          {
-            label: "public asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "solidstart-aws-robots-marker", {
+          label: "public asset from S3",
+        });
         // Prerendered into `.output/public` at build time (via the `nitro`
         // prop's `prerender.routes`) and served from S3 by exact match at
         // the edge — no Lambda invocation.
-        yield* expectUrlContains(
-          `${url}/prerendered`,
-          "SOLIDSTART_AWS_PRERENDERED_MARKER",
-          {
-            label: "prerendered page from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/prerendered`, "SOLIDSTART_AWS_PRERENDERED_MARKER", {
+          label: "prerendered page from S3",
+        });
 
         const distributionId = deployed.site.distribution!.distributionId;
 
@@ -174,9 +138,7 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         const url = deployed.router.url as string;
         // `https://{id}.cloudfront.net` live; the emulator serves the
         // router's edge on a local plain-HTTP port.
-        expect(url).toMatch(
-          runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
-        );
+        expect(url).toMatch(runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//);
 
         // SSR through the ROUTER's distribution (the site registered
         // itself in the router's KV store — no site-owned distribution).
@@ -189,38 +151,22 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         });
         // Lambda env applied on deploy (parity with the dev-server
         // injection asserted in SolidStart.local.test.ts).
-        yield* expectUrlContains(
-          `${url}/`,
-          "env:solidstart-aws-live-env-marker",
-          {
-            label: "server.environment on the Lambda",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "env:solidstart-aws-live-env-marker", {
+          label: "server.environment on the Lambda",
+        });
         // The router's defaultTTL-0 cache policy must not cache SSR
         // responses: the API route round-trips with distinct query strings,
         // which a day-long cached body would break.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=router-one`,
-          "router-one",
-          {
-            label: "API via router (query one)",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=router-two`,
-          "router-two",
-          {
-            label: "API via router (query two)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=router-one`, "router-one", {
+          label: "API via router (query one)",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=router-two`, "router-two", {
+          label: "API via router (query two)",
+        });
         // Static asset from S3 through the router's edge function.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "solidstart-aws-robots-marker",
-          {
-            label: "public asset via router",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "solidstart-aws-robots-marker", {
+          label: "public asset via router",
+        });
 
         const distributionId = deployed.router.distributionId as string;
 
@@ -240,9 +186,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

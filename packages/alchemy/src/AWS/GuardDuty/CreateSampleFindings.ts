@@ -32,10 +32,7 @@ export interface CreateSampleFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.CreateSampleFindingsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.CreateSampleFindingsResponse,
-      guardduty.CreateSampleFindingsError
-    >
+    ) => Effect.Effect<guardduty.CreateSampleFindingsResponse, guardduty.CreateSampleFindingsError>
   >
 > {}
 export const CreateSampleFindings = Binding.Service<CreateSampleFindings>(

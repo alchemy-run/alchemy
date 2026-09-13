@@ -8,10 +8,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import EmrTestFunctionLive, {
-  EmrTestFunction,
-  PROBE_RELEASE_LABEL,
-} from "./handler";
+import EmrTestFunctionLive, { EmrTestFunction, PROBE_RELEASE_LABEL } from "./handler";
 import EmrSlowTestFunctionLive, { EmrSlowTestFunction } from "./slow-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -20,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "EMRBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -43,26 +37,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("EMR Bindings", () => {
   beforeAll(
@@ -150,18 +137,16 @@ describe.sequential("EMR Bindings", () => {
   });
 
   describe("consumeClusterEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      () =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeClusterEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", () =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeClusterEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });
@@ -193,10 +178,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );

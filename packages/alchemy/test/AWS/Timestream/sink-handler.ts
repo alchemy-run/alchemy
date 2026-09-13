@@ -69,9 +69,7 @@ export default TimestreamSinkFunction.make(
           };
           const base = Date.now() - body.count * 1_000;
           yield* Stream.fromIterable(
-            Array.from({ length: body.count }, (_, i) =>
-              record(body.host, i, base + i * 1_000),
-            ),
+            Array.from({ length: body.count }, (_, i) => record(body.host, i, base + i * 1_000)),
           ).pipe(Stream.run(sink));
           return yield* HttpServerResponse.json({
             ok: true,

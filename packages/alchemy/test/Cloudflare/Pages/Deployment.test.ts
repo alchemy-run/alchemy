@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic project name (never derived from Date.now() or randomness).
 // Project names form globally-unique *.pages.dev subdomains, so it carries
@@ -29,11 +26,7 @@ const LIST_PROJECT_NAME = "alchemy-e3-pages-deploy-list";
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
 // declared in the distilled error union) on the test's own out-of-band
 // verification calls.
-const getDeployment = (
-  accountId: string,
-  projectName: string,
-  deploymentId: string,
-) =>
+const getDeployment = (accountId: string, projectName: string, deploymentId: string) =>
   pages.getProjectDeployment({ accountId, projectName, deploymentId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -42,15 +35,9 @@ const getDeployment = (
     }),
   );
 
-const expectDeploymentGone = (
-  accountId: string,
-  projectName: string,
-  deploymentId: string,
-) =>
+const expectDeploymentGone = (accountId: string, projectName: string, deploymentId: string) =>
   getDeployment(accountId, projectName, deploymentId).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "DeploymentNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "DeploymentNotDeleted" } as const)),
     // A missing deployment surfaces as `DeploymentNotFound` (Cloudflare
     // error code 8000009) — that's the success condition here. A missing
     // project (cascade delete) also counts.
@@ -58,10 +45,7 @@ const expectDeploymentGone = (
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "DeploymentNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -71,10 +55,7 @@ const expectProjectGone = (accountId: string, projectName: string) =>
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ProjectNotDeleted" || e._tag === "Forbidden",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -125,11 +106,7 @@ test.provider(
       expect(initial.latestStageName).toEqual("deploy");
       expect(initial.latestStageStatus).toEqual("success");
 
-      const live = yield* getDeployment(
-        accountId,
-        PROJECT_NAME,
-        initial.deploymentId,
-      );
+      const live = yield* getDeployment(accountId, PROJECT_NAME, initial.deploymentId);
       expect(live.id).toEqual(initial.deploymentId);
       expect(live.environment).toEqual("production");
 
@@ -147,11 +124,7 @@ test.provider(
       // The replaced deployment was the project's active production
       // deployment, which Cloudflare refuses to delete — the provider
       // tolerates that, so it must still exist.
-      const stillLive = yield* getDeployment(
-        accountId,
-        PROJECT_NAME,
-        initial.deploymentId,
-      );
+      const stillLive = yield* getDeployment(accountId, PROJECT_NAME, initial.deploymentId);
       expect(stillLive.id).toEqual(initial.deploymentId);
 
       // 4. Replacing a preview deployment force-deletes the old one.
@@ -159,11 +132,7 @@ test.provider(
       expect(preview2.deploymentId).not.toEqual(preview1.deploymentId);
       expect(preview2.branch).toEqual("preview-2");
 
-      yield* expectDeploymentGone(
-        accountId,
-        PROJECT_NAME,
-        preview1.deploymentId,
-      );
+      yield* expectDeploymentGone(accountId, PROJECT_NAME, preview1.deploymentId);
 
       // 5. Destroy — the preview deployment is force-deleted, then the
       //    project (and with it the remaining production deployment) goes.
@@ -198,25 +167,17 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
       yield* Effect.gen(function* () {
         const deployed = (yield* stack.deploy(
           Effect.gen(function* () {
-            const project = yield* Cloudflare.Pages.Project(
-              "ListDeployProject",
-              {
-                name: LIST_PROJECT_NAME,
-              },
-            ).pipe(adopt(true));
-            const deployment = yield* Cloudflare.Pages.Deployment(
-              "ListDeployment",
-              {
-                projectName: project.name,
-              },
-            );
+            const project = yield* Cloudflare.Pages.Project("ListDeployProject", {
+              name: LIST_PROJECT_NAME,
+            }).pipe(adopt(true));
+            const deployment = yield* Cloudflare.Pages.Deployment("ListDeployment", {
+              projectName: project.name,
+            });
             return { deployment };
           }),
         )).deployment;
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.Pages.Deployment,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.Pages.Deployment);
         // The deployment fans out across all account projects; ride out edge
         // propagation of the freshly-created project before asserting presence.
         const all = yield* provider.list().pipe(
@@ -227,10 +188,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
           ),
           Effect.retry({
             while: (e) => e._tag === "DeploymentNotListedYet",
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
           }),
         );
 
@@ -244,10 +202,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
         Effect.ensuring(
           stack
             .destroy()
-            .pipe(
-              Effect.andThen(purgeProject(accountId, LIST_PROJECT_NAME)),
-              Effect.ignore,
-            ),
+            .pipe(Effect.andThen(purgeProject(accountId, LIST_PROJECT_NAME)), Effect.ignore),
         ),
       );
 

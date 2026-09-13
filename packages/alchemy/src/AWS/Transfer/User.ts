@@ -124,17 +124,10 @@ export const UserProvider = () =>
   Provider.effect(
     User,
     Effect.gen(function* () {
-      const describe = Effect.fn(function* (
-        serverId: string,
-        userName: string,
-      ) {
+      const describe = Effect.fn(function* (serverId: string, userName: string) {
         const response = yield* transfer
           .describeUser({ ServerId: serverId, UserName: userName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.User;
       });
 
@@ -145,14 +138,9 @@ export const UserProvider = () =>
         return toTagRecord(response?.Tags);
       });
 
-      const toAttrs = Effect.fn(function* (
-        serverId: string,
-        user: transfer.DescribedUser,
-      ) {
+      const toAttrs = Effect.fn(function* (serverId: string, user: transfer.DescribedUser) {
         if (!user.UserName) {
-          return yield* Effect.fail(
-            new Error("Transfer user is missing its UserName"),
-          );
+          return yield* Effect.fail(new Error("Transfer user is missing its UserName"));
         }
         return {
           userName: user.UserName,
@@ -170,10 +158,7 @@ export const UserProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           // ServerId and UserName are the resource identity.
-          if (
-            news.serverId !== olds?.serverId ||
-            news.userName !== olds?.userName
-          ) {
+          if (news.serverId !== olds?.serverId || news.userName !== olds?.userName) {
             return { action: "replace" } as const;
           }
         }),
@@ -185,12 +170,10 @@ export const UserProvider = () =>
           const user = yield* describe(serverId, userName);
           if (!user?.UserName) return undefined;
           const attrs = yield* toAttrs(serverId, user);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -215,9 +198,7 @@ export const UserProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
             // 3. Sync — push mutable configuration.
             yield* transfer.updateUser({
@@ -235,9 +216,7 @@ export const UserProvider = () =>
           observed = yield* describe(news.serverId, news.userName);
           if (!observed?.UserName) {
             return yield* Effect.fail(
-              new Error(
-                `Transfer user '${news.userName}' not found after reconcile`,
-              ),
+              new Error(`Transfer user '${news.userName}' not found after reconcile`),
             );
           }
 
@@ -262,9 +241,7 @@ export const UserProvider = () =>
               ServerId: output.serverId,
               UserName: output.userName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Users are sub-resources keyed by their parent server; there is no

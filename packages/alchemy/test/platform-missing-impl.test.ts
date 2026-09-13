@@ -75,10 +75,7 @@ const MissingImplStack = Alchemy.Stack(
 );
 
 class ProvidedWidget extends Widget()("ProvidedWidget") {}
-const ProvidedWidgetLive = ProvidedWidget.make(
-  { name: "provided" },
-  Effect.succeed({}),
-);
+const ProvidedWidgetLive = ProvidedWidget.make({ name: "provided" }, Effect.succeed({}));
 
 const ProvidedStack = Alchemy.Stack(
   "PlatformProvidedStack",

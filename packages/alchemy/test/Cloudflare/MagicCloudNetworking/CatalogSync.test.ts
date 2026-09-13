@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
 // On the standard testing account every MCN call fails with the typed
@@ -44,49 +41,42 @@ const expectGone = (accountId: string, syncId: string) =>
     Effect.catchTag("CatalogSyncNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SyncNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
-test.provider(
-  "unentitled accounts surface the typed FeatureNotEnabled error",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("unentitled accounts surface the typed FeatureNotEnabled error", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const canList = yield* mcn.listCatalogSyncs({ accountId }).pipe(
-        Effect.as(true),
-        Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
-      );
-      if (canList) {
-        // Entitled account — the gated lifecycle test covers real behavior.
-        yield* Effect.logInfo("account is MCN-entitled; probe test is a no-op");
-        return;
-      }
+    const canList = yield* mcn.listCatalogSyncs({ accountId }).pipe(
+      Effect.as(true),
+      Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
+    );
+    if (canList) {
+      // Entitled account — the gated lifecycle test covers real behavior.
+      yield* Effect.logInfo("account is MCN-entitled; probe test is a no-op");
+      return;
+    }
 
-      // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* mcn
-        .listCatalogSyncs({ accountId })
-        .pipe(Effect.flip);
-      expect(error._tag).toEqual("FeatureNotEnabled");
+    // The typed tag — not UnknownCloudflareError, not a status check.
+    const error = yield* mcn.listCatalogSyncs({ accountId }).pipe(Effect.flip);
+    expect(error._tag).toEqual("FeatureNotEnabled");
 
-      const createError = yield* mcn
-        .createCatalogSync({
-          accountId,
-          name: "alchemy-mcn-probe",
-          destinationType: "NONE",
-          updateMode: "MANUAL",
-        })
-        .pipe(Effect.flip);
-      expect(createError._tag).toEqual("FeatureNotEnabled");
+    const createError = yield* mcn
+      .createCatalogSync({
+        accountId,
+        name: "alchemy-mcn-probe",
+        destinationType: "NONE",
+        updateMode: "MANUAL",
+      })
+      .pipe(Effect.flip);
+    expect(createError._tag).toEqual("FeatureNotEnabled");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider.skipIf(!entitled)(
@@ -154,9 +144,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicCloudNetworking.CatalogSync,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicCloudNetworking.CatalogSync);
 
       const before = yield* provider.list();
       expect(Array.isArray(before)).toBe(true);

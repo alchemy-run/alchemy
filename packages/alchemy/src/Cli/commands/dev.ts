@@ -88,16 +88,9 @@ export const devCommand = Command.make(
         // duplicate --import inherited via execArgv is harmless — the
         // second import of the same URL hits the module cache.
         const entry = fileURLToPath(
-          import.meta.resolve(
-            `alchemy/bin/exec${moduleExtension(import.meta.url)}`,
-          ),
+          import.meta.resolve(`alchemy/bin/exec${moduleExtension(import.meta.url)}`),
         );
-        command = [
-          process.execPath,
-          ...process.execArgv,
-          ...nodeLoaderArgs(entry),
-          entry,
-        ];
+        command = [process.execPath, ...process.execArgv, ...nodeLoaderArgs(entry), entry];
       }
       const runChild = ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",

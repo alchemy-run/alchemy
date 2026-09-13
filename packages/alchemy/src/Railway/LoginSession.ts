@@ -37,10 +37,7 @@ export const loginSessionUrl = (
   const hostname = options?.hostname ?? "alchemy";
   const host = (options?.host ?? RAILWAY_CLI_LOGIN_HOST).replace(/\/+$/, "");
   const payload = `wordCode=${code}&hostname=${hostname}`;
-  const encoded = Buffer.from(payload)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  const encoded = Buffer.from(payload).toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
   return `${host}/cli-login?d=${encoded}`;
 };
 
@@ -56,16 +53,12 @@ const anonymousRailwayCredentials = (apiBaseUrl?: string) =>
   });
 
 const anonymousRailway = (apiBaseUrl?: string) =>
-  Layer.mergeAll(
-    anonymousRailwayCredentials(apiBaseUrl),
-    FetchHttpClient.layer,
-  );
+  Layer.mergeAll(anonymousRailwayCredentials(apiBaseUrl), FetchHttpClient.layer);
 
 export const provideAnonymousRailway = <A, E>(
   effect: Effect.Effect<A, E, railway.GraphQLRequirements>,
   apiBaseUrl?: string,
-): Effect.Effect<A, E> =>
-  effect.pipe(Effect.provide(anonymousRailway(apiBaseUrl)));
+): Effect.Effect<A, E> => effect.pipe(Effect.provide(anonymousRailway(apiBaseUrl)));
 
 const LOGIN_POLL_TIMES = 300;
 
@@ -89,9 +82,7 @@ export const pollLoginSessionToken = (code: string) =>
         .loginSessionConsume({ code })
         .pipe(railway.catchTags(missingSession, () => Effect.succeed(null))),
     ),
-    Effect.map((token) =>
-      token != null && token.length > 0 ? token : undefined,
-    ),
+    Effect.map((token) => (token != null && token.length > 0 ? token : undefined)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       while: (token) => token == null,

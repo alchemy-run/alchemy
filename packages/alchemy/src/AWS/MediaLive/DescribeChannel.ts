@@ -31,12 +31,7 @@ export interface DescribeChannel extends Binding.Service<
   (
     channel: Channel,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      medialive.DescribeChannelResponse,
-      medialive.DescribeChannelError
-    >
+    () => Effect.Effect<medialive.DescribeChannelResponse, medialive.DescribeChannelError>
   >
 > {}
-export const DescribeChannel = Binding.Service<DescribeChannel>(
-  "AWS.MediaLive.DescribeChannel",
-);
+export const DescribeChannel = Binding.Service<DescribeChannel>("AWS.MediaLive.DescribeChannel");

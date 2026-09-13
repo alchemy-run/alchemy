@@ -71,9 +71,7 @@ const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
 
 // Force `Connection: close` so each request opens a fresh connection rather
 // than pinning to one edge/host over a pooled keep-alive socket.
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
-);
+const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
 
 interface Target {
   /** Coarse environment, e.g. `container`, `lambda→microvm`, `worker→microvm`. */
@@ -120,10 +118,7 @@ const waitForHost = (url: string) =>
       ),
       Effect.timeout("30 seconds"),
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         times: 30,
       }),
     );
@@ -138,14 +133,10 @@ const bootOne = (t: Target, batch: number, key: string) =>
     const q = `variant=${t.variant}&${t.keyParam}=${encodeURIComponent(key)}`;
     const start = yield* Effect.sync(() => Date.now());
     const result = yield* client.get(`${t.host}/boot?${q}`).pipe(
-      Effect.flatMap((r) =>
-        Effect.map(r.text, (body) => ({ status: r.status, body })),
-      ),
+      Effect.flatMap((r) => Effect.map(r.text, (body) => ({ status: r.status, body }))),
       Effect.timeout(REQUEST_TIMEOUT),
       Effect.map((res) => ({ ok: true as const, ...res })),
-      Effect.catch((err) =>
-        Effect.succeed({ ok: false as const, error: String(err) }),
-      ),
+      Effect.catch((err) => Effect.succeed({ ok: false as const, error: String(err) })),
     );
     const outside = (yield* Effect.sync(() => Date.now())) - start;
 
@@ -196,9 +187,7 @@ const shutdownOne = (t: Target, key: string, id: string | undefined) =>
     const target = t.shutdownBy === "id" ? id : key;
     if (target === undefined) return;
     const q = `variant=${t.variant}&${t.shutdownBy}=${encodeURIComponent(target)}`;
-    yield* client
-      .get(`${t.host}/shutdown?${q}`)
-      .pipe(Effect.timeout("60 seconds"), Effect.ignore);
+    yield* client.get(`${t.host}/shutdown?${q}`).pipe(Effect.timeout("60 seconds"), Effect.ignore);
   });
 
 const runTarget = (t: Target, nonce: string) =>
@@ -217,13 +206,9 @@ const runTarget = (t: Target, nonce: string) =>
         { length: t.concurrency },
         (_, i) => `${nonce}-${t.env}-${t.variant}-b${b}-${i}`,
       );
-      const outcomes = yield* Effect.forEach(
-        keys,
-        (key) => bootOne(t, b, key),
-        {
-          concurrency: t.concurrency,
-        },
-      );
+      const outcomes = yield* Effect.forEach(keys, (key) => bootOne(t, b, key), {
+        concurrency: t.concurrency,
+      });
       samples.push(...outcomes.map((o) => o.sample));
       yield* Effect.forEach(
         outcomes.map((o, i) => ({ key: keys[i], id: o.id })),
@@ -271,17 +256,7 @@ const buildSamplesCsv = (samples: ReadonlyArray<Sample>) => {
     "error",
   ].join(",");
   const rows = samples.map((s) =>
-    [
-      s.env,
-      s.variant,
-      s.label,
-      s.batch,
-      s.key,
-      s.readyMs ?? "",
-      s.outside,
-      s.ok,
-      s.error,
-    ]
+    [s.env, s.variant, s.label, s.batch, s.key, s.readyMs ?? "", s.outside, s.ok, s.error]
       .map(csvEscape)
       .join(","),
   );
@@ -297,9 +272,7 @@ const summarize = (samples: ReadonlyArray<Sample>) => {
     (groups.get(k) ?? groups.set(k, []).get(k)!).push(s);
   }
   return [...groups.values()].map((g) => {
-    const ready = stats(
-      g.map((s) => s.readyMs).filter((m): m is number => typeof m === "number"),
-    );
+    const ready = stats(g.map((s) => s.readyMs).filter((m): m is number => typeof m === "number"));
     const outside = stats(g.filter((s) => s.ok).map((s) => s.outside));
     // Variable round count per target (containers vs serial MicroVM), so derive
     // the span from the samples themselves rather than a global batch count.
@@ -360,20 +333,14 @@ const buildSummaryCsv = (rows: ReadonlyArray<Summary>) => {
   return [header, ...lines].join("\n") + "\n";
 };
 
-const buildReport = (
-  rows: ReadonlyArray<Summary>,
-  meta: { runId: string; total: number },
-) => {
+const buildReport = (rows: ReadonlyArray<Summary>, meta: { runId: string; total: number }) => {
   const head =
     "| environment | variant | ok | ready p50 | ready p95 | ready mean | ready max | first → last round (mean) |";
   const sep = "| --- | --- | --- | --- | --- | --- | --- | --- |";
   const body = rows.map((r) => {
     const first = r.byBatch[0];
     const last = [...r.byBatch].reverse().find((b) => b !== undefined);
-    const trend =
-      first !== undefined && last !== undefined
-        ? `${sN(first)} → ${sN(last)}`
-        : "—";
+    const trend = first !== undefined && last !== undefined ? `${sN(first)} → ${sN(last)}` : "—";
     return `| ${r.env} | ${r.variant} | ${r.ok}/${r.total} | ${sN(r.ready.p50)} | ${sN(r.ready.p95)} | ${sN(r.ready.mean)} | ${sN(r.ready.max)} | ${trend} |`;
   });
   return [
@@ -516,14 +483,8 @@ test(
     yield* fs.makeDirectory(reportDir, { recursive: true });
 
     const runId = new Date().toISOString().replace(/[:.]/g, "-");
-    yield* fs.writeFileString(
-      path.join(dataDir, `samples-${runId}.csv`),
-      buildSamplesCsv(samples),
-    );
-    yield* fs.writeFileString(
-      path.join(reportDir, "summary.csv"),
-      buildSummaryCsv(rows),
-    );
+    yield* fs.writeFileString(path.join(dataDir, `samples-${runId}.csv`), buildSamplesCsv(samples));
+    yield* fs.writeFileString(path.join(reportDir, "summary.csv"), buildSummaryCsv(rows));
     yield* fs.writeFileString(
       path.join(reportDir, "report.md"),
       buildReport(rows, { runId, total: samples.length }),

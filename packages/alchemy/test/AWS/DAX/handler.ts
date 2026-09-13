@@ -13,9 +13,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // and the typed error decode at zero cost (no cluster is ever created).
 const NONEXISTENT_CLUSTER_NAME = "alchemy-nonexistent-dax-probe";
 
-export class DAXTestFunction extends Lambda.Function<Lambda.Function>()(
-  "DAXTestFunction",
-) {}
+export class DAXTestFunction extends Lambda.Function<Lambda.Function>()("DAXTestFunction") {}
 
 export default DAXTestFunction.make(
   {
@@ -51,9 +49,7 @@ export default DAXTestFunction.make(
             ClusterNames: [NONEXISTENT_CLUSTER_NAME],
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -73,9 +69,5 @@ export default DAXTestFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(DAX.DescribeClustersHttp, DAX.DescribeEventsHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(DAX.DescribeClustersHttp, DAX.DescribeEventsHttp))),
 );

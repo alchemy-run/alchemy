@@ -35,12 +35,7 @@ export type DeliveryStreamStatus =
 
 export type DeliveryStreamSourceType = "DirectPut" | "KinesisStreamAsSource";
 
-export type CompressionFormat =
-  | "UNCOMPRESSED"
-  | "GZIP"
-  | "ZIP"
-  | "Snappy"
-  | "HADOOP_SNAPPY";
+export type CompressionFormat = "UNCOMPRESSED" | "GZIP" | "ZIP" | "Snappy" | "HADOOP_SNAPPY";
 
 export interface KinesisStreamSourceProps {
   /**
@@ -97,9 +92,7 @@ export interface S3DestinationProps {
   compressionFormat?: CompressionFormat;
 }
 
-export type DeliveryStreamEncryptionKeyType =
-  | "AWS_OWNED_CMK"
-  | "CUSTOMER_MANAGED_CMK";
+export type DeliveryStreamEncryptionKeyType = "AWS_OWNED_CMK" | "CUSTOMER_MANAGED_CMK";
 
 export type DeliveryStreamEncryptionStatus =
   | "ENABLED"
@@ -334,17 +327,13 @@ export interface DeliveryStream extends Resource<
  *
  * @resource
  */
-export const DeliveryStream = Resource<DeliveryStream>(
-  "AWS.Firehose.DeliveryStream",
-);
+export const DeliveryStream = Resource<DeliveryStream>("AWS.Firehose.DeliveryStream");
 
 /**
  * The delivery stream entered `CREATING_FAILED` — AWS never recovers this
  * state; the stream must be deleted and recreated.
  */
-export class DeliveryStreamCreateFailed extends Data.TaggedError(
-  "DeliveryStreamCreateFailed",
-)<{
+export class DeliveryStreamCreateFailed extends Data.TaggedError("DeliveryStreamCreateFailed")<{
   readonly deliveryStreamName: string;
   readonly details: string | undefined;
 }> {}
@@ -371,28 +360,19 @@ export class DeliveryStreamEncryptionFailed extends Data.TaggedError(
   readonly details: string | undefined;
 }> {}
 
-class DeliveryStreamNotActive extends Data.TaggedError(
-  "DeliveryStreamNotActive",
-)<{
+class DeliveryStreamNotActive extends Data.TaggedError("DeliveryStreamNotActive")<{
   readonly status: string;
 }> {}
 
-class DeliveryStreamEncryptionPending extends Data.TaggedError(
-  "DeliveryStreamEncryptionPending",
-) {}
+class DeliveryStreamEncryptionPending extends Data.TaggedError("DeliveryStreamEncryptionPending") {}
 
-class DeliveryStreamStillExists extends Data.TaggedError(
-  "DeliveryStreamStillExists",
-) {}
+class DeliveryStreamStillExists extends Data.TaggedError("DeliveryStreamStillExists") {}
 
 const defaultBufferingIntervalInSeconds = 300;
 const defaultBufferingSizeInMBs = 5;
 const defaultCompressionFormat = "UNCOMPRESSED" as const;
 
-const createDeliveryStreamName = (
-  id: string,
-  props: { deliveryStreamName?: string | undefined },
-) =>
+const createDeliveryStreamName = (id: string, props: { deliveryStreamName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.deliveryStreamName) {
       return props.deliveryStreamName;
@@ -450,15 +430,10 @@ const retryConcurrentModification = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
   });
 
-const toTagRecord = (
-  tags: ReadonlyArray<{ Key: string; Value?: string }> | undefined,
-) =>
+const toTagRecord = (tags: ReadonlyArray<{ Key: string; Value?: string }> | undefined) =>
   Object.fromEntries(
     (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Value === "string",
-      )
+      .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")
       .map((tag) => [tag.Key, tag.Value]),
   );
 
@@ -477,45 +452,33 @@ const toAttrs = ({
   return {
     deliveryStreamName: description.DeliveryStreamName,
     deliveryStreamArn: description.DeliveryStreamARN as DeliveryStreamArn,
-    deliveryStreamStatus:
-      description.DeliveryStreamStatus as DeliveryStreamStatus,
-    deliveryStreamType:
-      description.DeliveryStreamType as DeliveryStreamSourceType,
+    deliveryStreamStatus: description.DeliveryStreamStatus as DeliveryStreamStatus,
+    deliveryStreamType: description.DeliveryStreamType as DeliveryStreamSourceType,
     versionId: description.VersionId,
     destinationId: destination?.DestinationId,
     bucketArn: s3?.BucketARN ?? "",
     roleArn: s3?.RoleARN ?? "",
     roleName,
-    kinesisStreamArn:
-      description.Source?.KinesisStreamSourceDescription?.KinesisStreamARN,
+    kinesisStreamArn: description.Source?.KinesisStreamSourceDescription?.KinesisStreamARN,
     prefix: s3?.Prefix || undefined,
     errorOutputPrefix: s3?.ErrorOutputPrefix || undefined,
     bufferingIntervalInSeconds: s3?.BufferingHints?.IntervalInSeconds,
     bufferingSizeInMBs: s3?.BufferingHints?.SizeInMBs,
     compressionFormat: s3?.CompressionFormat as CompressionFormat | undefined,
-    encryptionStatus: encryption?.Status as
-      | DeliveryStreamEncryptionStatus
-      | undefined,
+    encryptionStatus: encryption?.Status as DeliveryStreamEncryptionStatus | undefined,
     encryptionKeyType:
       encryption?.Status === "ENABLED"
         ? (encryption.KeyType as DeliveryStreamEncryptionKeyType | undefined)
         : undefined,
-    encryptionKeyArn:
-      encryption?.Status === "ENABLED" ? encryption.KeyARN : undefined,
+    encryptionKeyArn: encryption?.Status === "ENABLED" ? encryption.KeyARN : undefined,
     tags,
   };
 };
 
-const describeDeliveryStream = Effect.fn(function* (
-  deliveryStreamName: string,
-) {
+const describeDeliveryStream = Effect.fn(function* (deliveryStreamName: string) {
   const response = yield* firehose
     .describeDeliveryStream({ DeliveryStreamName: deliveryStreamName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.DeliveryStreamDescription;
 });
 
@@ -535,11 +498,7 @@ const readDeliveryStream = Effect.fn(function* ({
   // means it's gone.
   const tagsResponse = yield* firehose
     .listTagsForDeliveryStream({ DeliveryStreamName: deliveryStreamName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!tagsResponse) {
     return undefined;
   }
@@ -556,9 +515,7 @@ const waitForDeliveryStreamActive = (deliveryStreamName: string) =>
   Effect.gen(function* () {
     const description = yield* describeDeliveryStream(deliveryStreamName);
     if (!description) {
-      return yield* Effect.fail(
-        new DeliveryStreamNotActive({ status: "MISSING" }),
-      );
+      return yield* Effect.fail(new DeliveryStreamNotActive({ status: "MISSING" }));
     }
     if (description.DeliveryStreamStatus === "CREATING_FAILED") {
       return yield* Effect.fail(
@@ -579,10 +536,7 @@ const waitForDeliveryStreamActive = (deliveryStreamName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "DeliveryStreamNotActive",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(45),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(45)]),
     }),
   );
 
@@ -594,21 +548,14 @@ const waitForEncryptionSettled = (deliveryStreamName: string) =>
   Effect.gen(function* () {
     const description = yield* describeDeliveryStream(deliveryStreamName);
     const encryption = description?.DeliveryStreamEncryptionConfiguration;
-    if (
-      encryption?.Status === "ENABLING" ||
-      encryption?.Status === "DISABLING"
-    ) {
+    if (encryption?.Status === "ENABLING" || encryption?.Status === "DISABLING") {
       return yield* Effect.fail(new DeliveryStreamEncryptionPending());
     }
     return encryption;
   }).pipe(
     Effect.retry({
-      while: (e: { _tag: string }) =>
-        e._tag === "DeliveryStreamEncryptionPending",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(45),
-      ]),
+      while: (e: { _tag: string }) => e._tag === "DeliveryStreamEncryptionPending",
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(45)]),
     }),
   );
 
@@ -623,10 +570,7 @@ const waitForDeliveryStreamDeleted = (deliveryStreamName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "DeliveryStreamStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(50),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(50)]),
     }),
   );
 
@@ -643,8 +587,7 @@ export const DeliveryStreamProvider = () =>
   Provider.effect(
     DeliveryStream,
     Effect.gen(function* () {
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
       // Ensure the synthesized IAM role exists and its inline policy matches
       // the desired destination/source access. `createRole` tolerates the
@@ -721,12 +664,7 @@ export const DeliveryStreamProvider = () =>
       });
 
       return DeliveryStream.Provider.of({
-        stables: [
-          "deliveryStreamName",
-          "deliveryStreamArn",
-          "deliveryStreamType",
-          "roleName",
-        ],
+        stables: ["deliveryStreamName", "deliveryStreamArn", "deliveryStreamType", "roleName"],
 
         // Enumerate every delivery stream in the ambient account/region.
         // `listDeliveryStreams` pages via ExclusiveStartDeliveryStreamName +
@@ -742,10 +680,7 @@ export const DeliveryStreamProvider = () =>
                 ExclusiveStartDeliveryStreamName: exclusiveStart,
               });
               names.push(...page.DeliveryStreamNames);
-              if (
-                !page.HasMoreDeliveryStreams ||
-                page.DeliveryStreamNames.length === 0
-              ) {
+              if (!page.HasMoreDeliveryStreams || page.DeliveryStreamNames.length === 0) {
                 break;
               }
               exclusiveStart = names[names.length - 1];
@@ -759,23 +694,19 @@ export const DeliveryStreamProvider = () =>
             );
 
             return hydrated.filter(
-              (attrs): attrs is DeliveryStream["Attributes"] =>
-                attrs !== undefined,
+              (attrs): attrs is DeliveryStream["Attributes"] => attrs !== undefined,
             );
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const deliveryStreamName =
-            output?.deliveryStreamName ??
-            (yield* createDeliveryStreamName(id, olds ?? {}));
+            output?.deliveryStreamName ?? (yield* createDeliveryStreamName(id, olds ?? {}));
           const state = yield* readDeliveryStream({
             deliveryStreamName,
             roleName: output?.roleName,
           });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -814,10 +745,7 @@ export const DeliveryStreamProvider = () =>
               }),
             );
           }
-          if (
-            news.encryption?.keyType === "CUSTOMER_MANAGED_CMK" &&
-            !news.encryption.keyArn
-          ) {
+          if (news.encryption?.keyType === "CUSTOMER_MANAGED_CMK" && !news.encryption.keyArn) {
             return yield* Effect.fail(
               new DeliveryStreamValidationError({
                 message: `DeliveryStream "${id}" requires encryption.keyArn when keyType is CUSTOMER_MANAGED_CMK`,
@@ -826,24 +754,21 @@ export const DeliveryStreamProvider = () =>
           }
 
           const deliveryStreamName =
-            output?.deliveryStreamName ??
-            (yield* createDeliveryStreamName(id, news));
+            output?.deliveryStreamName ?? (yield* createDeliveryStreamName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
           // Synthesize the IAM role when the caller didn't supply one for
           // the destination (and/or the Kinesis source).
           const needsRole =
-            !news.destination.roleArn ||
-            (news.source !== undefined && !news.source.roleArn);
+            !news.destination.roleArn || (news.source !== undefined && !news.source.roleArn);
           const roleName = needsRole
             ? (output?.roleName ?? (yield* createRoleName(id)))
             : undefined;
           const synthesizedRoleArn = roleName
             ? `arn:aws:iam::${accountId}:role/${roleName}`
             : undefined;
-          const destinationRoleArn =
-            news.destination.roleArn ?? synthesizedRoleArn!;
+          const destinationRoleArn = news.destination.roleArn ?? synthesizedRoleArn!;
           const sourceRoleArn = news.source
             ? (news.source.roleArn ?? synthesizedRoleArn!)
             : undefined;
@@ -876,9 +801,7 @@ export const DeliveryStreamProvider = () =>
                 DeliveryStreamName: deliveryStreamName,
                 AllowForceDelete: true,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             yield* waitForDeliveryStreamDeleted(deliveryStreamName);
             observed = undefined;
           }
@@ -887,11 +810,9 @@ export const DeliveryStreamProvider = () =>
             IntervalInSeconds:
               toWireSeconds(news.destination.bufferingInterval) ??
               defaultBufferingIntervalInSeconds,
-            SizeInMBs:
-              news.destination.bufferingSizeInMBs ?? defaultBufferingSizeInMBs,
+            SizeInMBs: news.destination.bufferingSizeInMBs ?? defaultBufferingSizeInMBs,
           };
-          const desiredCompression =
-            news.destination.compressionFormat ?? defaultCompressionFormat;
+          const desiredCompression = news.destination.compressionFormat ?? defaultCompressionFormat;
 
           // Ensure — create the stream if it's missing. Tolerate the
           // already-exists race (`ResourceInUseException`) and retry through
@@ -901,9 +822,7 @@ export const DeliveryStreamProvider = () =>
               firehose
                 .createDeliveryStream({
                   DeliveryStreamName: deliveryStreamName,
-                  DeliveryStreamType: news.source
-                    ? "KinesisStreamAsSource"
-                    : "DirectPut",
+                  DeliveryStreamType: news.source ? "KinesisStreamAsSource" : "DirectPut",
                   KinesisStreamSourceConfiguration: news.source
                     ? {
                         KinesisStreamARN: news.source.kinesisStreamArn,
@@ -926,13 +845,9 @@ export const DeliveryStreamProvider = () =>
                   },
                   Tags: createTagsList(desiredTags),
                 })
-                .pipe(
-                  Effect.catchTag("ResourceInUseException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void)),
             );
-            yield* session.note(
-              `Creating delivery stream ${deliveryStreamName}...`,
-            );
+            yield* session.note(`Creating delivery stream ${deliveryStreamName}...`);
           }
 
           // Both a fresh create and a crashed prior run land here in
@@ -943,8 +858,7 @@ export const DeliveryStreamProvider = () =>
           // apply only the delta via UpdateDestination (read-modify-write on
           // VersionId, retried through ConcurrentModificationException).
           const syncDestination = Effect.gen(function* () {
-            const description =
-              yield* describeDeliveryStream(deliveryStreamName);
+            const description = yield* describeDeliveryStream(deliveryStreamName);
             if (!description) return;
             const destination = description.Destinations[0];
             const s3 = destination?.ExtendedS3DestinationDescription;
@@ -954,10 +868,8 @@ export const DeliveryStreamProvider = () =>
               s3.RoleARN !== destinationRoleArn ||
               s3.BucketARN !== news.destination.bucketArn ||
               (s3.Prefix ?? "") !== (news.destination.prefix ?? "") ||
-              (s3.ErrorOutputPrefix ?? "") !==
-                (news.destination.errorOutputPrefix ?? "") ||
-              s3.BufferingHints.IntervalInSeconds !==
-                desiredBufferingHints.IntervalInSeconds ||
+              (s3.ErrorOutputPrefix ?? "") !== (news.destination.errorOutputPrefix ?? "") ||
+              s3.BufferingHints.IntervalInSeconds !== desiredBufferingHints.IntervalInSeconds ||
               s3.BufferingHints.SizeInMBs !== desiredBufferingHints.SizeInMBs ||
               s3.CompressionFormat !== desiredCompression;
             if (!delta) return;
@@ -975,9 +887,7 @@ export const DeliveryStreamProvider = () =>
                 CompressionFormat: desiredCompression,
               },
             });
-            yield* session.note(
-              `Updated destination settings for ${deliveryStreamName}`,
-            );
+            yield* session.note(`Updated destination settings for ${deliveryStreamName}`);
           });
           yield* retryConcurrentModification(syncDestination);
 
@@ -987,8 +897,7 @@ export const DeliveryStreamProvider = () =>
           // Start/Stop only on a delta. Both operations are async; the
           // bounded settle-wait converges them. A terminal *_FAILED status
           // also mismatches the desired state, so the op is re-applied.
-          const observedEncryption =
-            yield* waitForEncryptionSettled(deliveryStreamName);
+          const observedEncryption = yield* waitForEncryptionSettled(deliveryStreamName);
           const encryptionEnabled = observedEncryption?.Status === "ENABLED";
           if (news.encryption) {
             const keyMatches =
@@ -1006,8 +915,7 @@ export const DeliveryStreamProvider = () =>
                   },
                 }),
               );
-              const settled =
-                yield* waitForEncryptionSettled(deliveryStreamName);
+              const settled = yield* waitForEncryptionSettled(deliveryStreamName);
               if (settled?.Status !== "ENABLED") {
                 return yield* Effect.fail(
                   new DeliveryStreamEncryptionFailed({
@@ -1046,11 +954,7 @@ export const DeliveryStreamProvider = () =>
             .listTagsForDeliveryStream({
               DeliveryStreamName: deliveryStreamName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           const observedTags = toTagRecord(observedTagsResponse?.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (removed.length > 0) {
@@ -1092,9 +996,7 @@ export const DeliveryStreamProvider = () =>
                 DeliveryStreamName: output.deliveryStreamName,
                 AllowForceDelete: true,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           yield* waitForDeliveryStreamDeleted(output.deliveryStreamName);
 

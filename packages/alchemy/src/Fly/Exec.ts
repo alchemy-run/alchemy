@@ -1,7 +1,4 @@
-import type {
-  ExecCommandError,
-  ExecResult,
-} from "@distilled.cloud/fly-io/sprites";
+import type { ExecCommandError, ExecResult } from "@distilled.cloud/fly-io/sprites";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -45,9 +42,7 @@ export interface Exec extends Binding.Service<
   (
     sprite: Sprite,
   ) => Effect.Effect<
-    (
-      request: ExecRequest,
-    ) => Effect.Effect<ExecResult, ExecCommandError, RuntimeContext>
+    (request: ExecRequest) => Effect.Effect<ExecResult, ExecCommandError, RuntimeContext>
   >
 > {}
 

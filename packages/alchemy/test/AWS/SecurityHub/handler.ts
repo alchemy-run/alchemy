@@ -27,9 +27,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { Message?: string }).Message ??
-          (e as { message?: string }).message,
+        errorMessage: (e as { Message?: string }).Message ?? (e as { message?: string }).message,
       }),
     ),
   );
@@ -64,15 +62,12 @@ export default SecurityHubTestFunction.make(
     // Standards & controls
     const describeStandards = yield* SecurityHub.DescribeStandards();
     const getEnabledStandards = yield* SecurityHub.GetEnabledStandards();
-    const listSecurityControlDefinitions =
-      yield* SecurityHub.ListSecurityControlDefinitions();
-    const getSecurityControlDefinition =
-      yield* SecurityHub.GetSecurityControlDefinition();
+    const listSecurityControlDefinitions = yield* SecurityHub.ListSecurityControlDefinitions();
+    const getSecurityControlDefinition = yield* SecurityHub.GetSecurityControlDefinition();
 
     // Product integrations
     const describeProducts = yield* SecurityHub.DescribeProducts();
-    const listEnabledProductsForImport =
-      yield* SecurityHub.ListEnabledProductsForImport();
+    const listEnabledProductsForImport = yield* SecurityHub.ListEnabledProductsForImport();
 
     // Custom actions, automation rules & aggregation reads
     const describeActionTargets = yield* SecurityHub.DescribeActionTargets();
@@ -83,10 +78,8 @@ export default SecurityHubTestFunction.make(
     const listMembers = yield* SecurityHub.ListMembers();
     const listInvitations = yield* SecurityHub.ListInvitations();
     const getInvitationsCount = yield* SecurityHub.GetInvitationsCount();
-    const getAdministratorAccount =
-      yield* SecurityHub.GetAdministratorAccount();
-    const listOrganizationAdminAccounts =
-      yield* SecurityHub.ListOrganizationAdminAccounts();
+    const getAdministratorAccount = yield* SecurityHub.GetAdministratorAccount();
+    const listOrganizationAdminAccounts = yield* SecurityHub.ListOrganizationAdminAccounts();
     const describeOrganizationConfiguration =
       yield* SecurityHub.DescribeOrganizationConfiguration();
 
@@ -151,8 +144,7 @@ export default SecurityHubTestFunction.make(
                 UpdatedAt: now,
                 Severity: { Label: "INFORMATIONAL" },
                 Title: "Alchemy SecurityHub bindings test finding",
-                Description:
-                  "Synthetic finding imported by the alchemy SecurityHub bindings test.",
+                Description: "Synthetic finding imported by the alchemy SecurityHub bindings test.",
                 Resources: [
                   {
                     Type: "Other",
@@ -249,20 +241,18 @@ export default SecurityHubTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/control-definitions") {
-          const { SecurityControlDefinitions } =
-            yield* listSecurityControlDefinitions({
-              MaxResults: 10,
-            });
+          const { SecurityControlDefinitions } = yield* listSecurityControlDefinitions({
+            MaxResults: 10,
+          });
           return yield* HttpServerResponse.json({
             count: (SecurityControlDefinitions ?? []).length,
           });
         }
 
         if (request.method === "GET" && pathname === "/control") {
-          const { SecurityControlDefinition } =
-            yield* getSecurityControlDefinition({
-              SecurityControlId: "IAM.1",
-            });
+          const { SecurityControlDefinition } = yield* getSecurityControlDefinition({
+            SecurityControlId: "IAM.1",
+          });
           return yield* HttpServerResponse.json({
             id: SecurityControlDefinition?.SecurityControlId ?? null,
             severity: SecurityControlDefinition?.SeverityRating ?? null,
@@ -277,8 +267,7 @@ export default SecurityHubTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/enabled-products") {
-          const { ProductSubscriptions } =
-            yield* listEnabledProductsForImport();
+          const { ProductSubscriptions } = yield* listEnabledProductsForImport();
           return yield* HttpServerResponse.json({
             count: (ProductSubscriptions ?? []).length,
           });
@@ -373,8 +362,7 @@ export default SecurityHubTestFunction.make(
             {
               errorTag: (e as { _tag?: string })._tag ?? "UnknownError",
               errorMessage:
-                (e as { message?: string }).message ??
-                (e as { Message?: string }).Message,
+                (e as { message?: string }).message ?? (e as { Message?: string }).Message,
             },
             { status: 500 },
           ),

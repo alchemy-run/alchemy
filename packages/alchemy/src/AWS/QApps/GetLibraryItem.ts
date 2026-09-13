@@ -6,10 +6,7 @@ import type { QApp } from "./QApp.ts";
 /**
  * Request for {@link GetLibraryItem} — `instanceId` is injected from the bound Q App.
  */
-export interface GetLibraryItemRequest extends Omit<
-  qapps.GetLibraryItemInput,
-  "instanceId"
-> {}
+export interface GetLibraryItemRequest extends Omit<qapps.GetLibraryItemInput, "instanceId"> {}
 
 /**
  * Runtime binding for `qapps:GetLibraryItem`.
@@ -41,6 +38,4 @@ export interface GetLibraryItem extends Binding.Service<
   >
 > {}
 
-export const GetLibraryItem = Binding.Service<GetLibraryItem>(
-  "AWS.QApps.GetLibraryItem",
-);
+export const GetLibraryItem = Binding.Service<GetLibraryItem>("AWS.QApps.GetLibraryItem");

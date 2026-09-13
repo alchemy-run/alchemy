@@ -34,11 +34,7 @@ const fixtureEntries = [
  * concurrently running test). Fails with the combined output on a
  * non-zero exit.
  */
-const run = (options: {
-  cmd: string;
-  args: string[];
-  cwd: string;
-}): Effect.Effect<string, Error> =>
+const run = (options: { cmd: string; args: string[]; cwd: string }): Effect.Effect<string, Error> =>
   Effect.callback<string, Error>((resume) => {
     const child = spawn(options.cmd, options.args, {
       cwd: options.cwd,
@@ -54,9 +50,7 @@ const run = (options: {
         code === 0
           ? Effect.succeed(output)
           : Effect.fail(
-              new Error(
-                `${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`,
-              ),
+              new Error(`${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`),
             ),
       ),
     );
@@ -109,20 +103,14 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Nextjs", () => {
         expect(deployed.site.imageUrl).toBeDefined();
         expect(deployed.site.revalidationQueue).toBeDefined();
         expect(deployed.site.tagCacheTable).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "NEXTJS_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "NEXTJS_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "NEXTJS_AWS_PAGE_MARKER", {
@@ -130,20 +118,12 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Nextjs", () => {
           label: "SSR home page",
         });
         // App Router API route through the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "NEXTJS_AWS_API_MARKER",
-          {
-            label: "API route",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "roundtrip",
-          {
-            label: "API route query echo",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "NEXTJS_AWS_API_MARKER", {
+          label: "API route",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+          label: "API route query echo",
+        });
         // Statically-rendered page: prerendered into the ISR cache at build
         // time, served by the server function through the S3 incremental
         // cache — proves the cache seed upload and the cache-bucket IAM.
@@ -151,13 +131,9 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Nextjs", () => {
           label: "static (prerendered) page",
         });
         // Public file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "nextjs-aws-robots-marker",
-          {
-            label: "public asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "nextjs-aws-robots-marker", {
+          label: "public asset from S3",
+        });
         // Client asset (hashed chunk) served from S3: the SSR page links
         // /_next/static/* files uploaded by the asset deployment.
         expect(deployed.site.files?.files).toBeDefined();
@@ -170,8 +146,7 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Nextjs", () => {
         const imageResponse = yield* client.get(imageUrl).pipe(
           Effect.filterOrFail(
             (response): boolean => response.status === 200,
-            (response) =>
-              new Error(`/_next/image returned status ${response.status}`),
+            (response) => new Error(`/_next/image returned status ${response.status}`),
           ),
           Effect.retry({
             schedule: Schedule.exponential("2 seconds"),
@@ -199,9 +174,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

@@ -28,6 +28,4 @@ export interface ListEngagements extends Binding.Service<
     ) => Effect.Effect<ssm.ListEngagementsResult, ssm.ListEngagementsError>
   >
 > {}
-export const ListEngagements = Binding.Service<ListEngagements>(
-  "AWS.SSMContacts.ListEngagements",
-);
+export const ListEngagements = Binding.Service<ListEngagements>("AWS.SSMContacts.ListEngagements");

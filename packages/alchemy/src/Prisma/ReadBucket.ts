@@ -40,9 +40,7 @@ export interface ReadBucketClient {
    * Read an object's metadata without downloading it. Resolves `null` when the
    * key does not exist.
    */
-  head(
-    key: string,
-  ): Effect.Effect<BucketObject | null, BucketError, RuntimeContext>;
+  head(key: string): Effect.Effect<BucketObject | null, BucketError, RuntimeContext>;
   /**
    * Read an object and its body. Resolves `null` when the key does not exist.
    */
@@ -53,9 +51,7 @@ export interface ReadBucketClient {
   /**
    * List one page of objects in the bucket.
    */
-  list(
-    options?: ListOptions,
-  ): Effect.Effect<ListResult, BucketError, RuntimeContext>;
+  list(options?: ListOptions): Effect.Effect<ListResult, BucketError, RuntimeContext>;
   /**
    * Mint a presigned download URL, so a browser can read the object without
    * credentials. Pure client-side SigV4 — no request is made to the store.
@@ -111,14 +107,10 @@ export const ReadBucket = Binding.Service<ReadBucket>("Prisma.ReadBucket");
  * Build the read operations over an already-resolved transport. Shared with
  * {@link ReadWriteBucket} so both levels run the same code.
  */
-export const readBucketOperations = (
-  access: BucketAccess,
-): ReadBucketClient => ({
+export const readBucketOperations = (access: BucketAccess): ReadBucketClient => ({
   head: (key: string) =>
     access.bucketName.pipe(
-      Effect.flatMap((Bucket) =>
-        access.authorize(S3.headObject({ Bucket, Key: key })),
-      ),
+      Effect.flatMap((Bucket) => access.authorize(S3.headObject({ Bucket, Key: key }))),
       Effect.map((response) => objectFrom(key, response)),
       // A missing key is absence, not a failure — mirror the native bucket
       // clients that resolve `null`.
@@ -156,8 +148,8 @@ export const readBucketOperations = (
       ),
       Effect.map((response): ListResult => {
         const objects = (response.Contents ?? []).map(objectFromListEntry);
-        const delimitedPrefixes = (response.CommonPrefixes ?? []).flatMap(
-          (prefix) => (prefix.Prefix === undefined ? [] : [prefix.Prefix]),
+        const delimitedPrefixes = (response.CommonPrefixes ?? []).flatMap((prefix) =>
+          prefix.Prefix === undefined ? [] : [prefix.Prefix],
         );
         return response.IsTruncated && response.NextContinuationToken
           ? {
@@ -182,9 +174,8 @@ export const readBucketOperations = (
 /**
  * Build a read-only bucket client from a bound bucket key's credentials.
  */
-export const makeReadBucketClient = (
-  credentials: BucketCredentials,
-): ReadBucketClient => readBucketOperations(makeBucketAccess(credentials));
+export const makeReadBucketClient = (credentials: BucketCredentials): ReadBucketClient =>
+  readBucketOperations(makeBucketAccess(credentials));
 
 /**
  * Implementation layer for {@link ReadBucket}. Provide it on the host

@@ -51,14 +51,10 @@ test.provider(
       const distExists = yield* fs.exists(fixture.outdir);
       expect(distExists).toBe(true);
 
-      const outputExists = yield* fs.exists(
-        pathe.join(fixture.outdir, "output.txt"),
-      );
+      const outputExists = yield* fs.exists(pathe.join(fixture.outdir, "output.txt"));
       expect(outputExists).toBe(true);
 
-      const firstBuildOutput = yield* fs.readFileString(
-        pathe.join(fixture.outdir, "output.txt"),
-      );
+      const firstBuildOutput = yield* fs.readFileString(pathe.join(fixture.outdir, "output.txt"));
 
       yield* Effect.sleep(1100);
 
@@ -66,9 +62,7 @@ test.provider(
 
       expect(build2.hash).toMatchObject(build1.hash);
 
-      const secondBuildOutput = yield* fs.readFileString(
-        pathe.join(fixture.outdir, "output.txt"),
-      );
+      const secondBuildOutput = yield* fs.readFileString(pathe.join(fixture.outdir, "output.txt"));
       expect(secondBuildOutput).toBe(firstBuildOutput);
 
       yield* fs.writeFileString(
@@ -80,9 +74,7 @@ test.provider(
 
       expect(build3.hash).not.toMatchObject(build1.hash);
 
-      const thirdBuildOutput = yield* fs.readFileString(
-        pathe.join(fixture.outdir, "output.txt"),
-      );
+      const thirdBuildOutput = yield* fs.readFileString(pathe.join(fixture.outdir, "output.txt"));
       expect(thirdBuildOutput).not.toBe(firstBuildOutput);
 
       yield* fs.writeFileString(

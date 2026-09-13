@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -33,9 +27,7 @@ const resolveZoneId = Effect.gen(function* () {
 // `Forbidden` error (added to the dns ops' unions via distilled patches).
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -44,8 +36,7 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const getSettings = (zoneId: string) =>
-  retryForbidden(dns.getSettingZone({ zoneId }));
+const getSettings = (zoneId: string) => retryForbidden(dns.getSettingZone({ zoneId }));
 
 // Baselines for the (entitlement-free) fields these tests manage.
 // NOTE: `nsTtl` and custom SOA records are entitlement-gated on the testing
@@ -98,9 +89,7 @@ describe.sequential("ZoneSettings", () => {
         expect(settings.zoneId).toEqual(zoneId);
         expect(settings.flattenAllCnames).toEqual(true);
         // The pre-management snapshot was captured for restore-on-destroy.
-        expect(settings.initialSettings.flattenAllCnames).toEqual(
-          BASELINE_FLATTEN_ALL_CNAMES,
-        );
+        expect(settings.initialSettings.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
         expect(settings.managedKeys).toContain("flattenAllCnames");
 
         // Out-of-band verify via the SDK.
@@ -139,9 +128,7 @@ describe.sequential("ZoneSettings", () => {
           }),
         );
         expect(initial.multiProvider).toEqual(true);
-        expect(initial.initialSettings.multiProvider).toEqual(
-          BASELINE_MULTI_PROVIDER,
-        );
+        expect(initial.initialSettings.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
         expect(initial.managedKeys).toContain("multiProvider");
 
         // Same singleton patched in place — new value plus a second managed
@@ -158,12 +145,8 @@ describe.sequential("ZoneSettings", () => {
         expect(updated.zoneId).toEqual(zoneId);
         expect(updated.multiProvider).toEqual(true);
         expect(updated.flattenAllCnames).toEqual(true);
-        expect(updated.initialSettings.multiProvider).toEqual(
-          BASELINE_MULTI_PROVIDER,
-        );
-        expect(updated.initialSettings.flattenAllCnames).toEqual(
-          BASELINE_FLATTEN_ALL_CNAMES,
-        );
+        expect(updated.initialSettings.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
+        expect(updated.initialSettings.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
         expect(updated.managedKeys).toContain("multiProvider");
         expect(updated.managedKeys).toContain("flattenAllCnames");
 
@@ -202,9 +185,7 @@ describe.sequential("ZoneSettings", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DNS.ZoneDnsSettings,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.ZoneDnsSettings);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

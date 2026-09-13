@@ -11,10 +11,7 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Volume backups are Pro-plan gated. Railway rejects Hobby/unentitled
 // workspaces with GraphQL `Not Authorized`, already typed as
@@ -40,46 +37,32 @@ const VolumeStack = Effect.gen(function* () {
 
 const listLive = (volumeInstanceId: string) =>
   railway
-    .listVolumeInstanceBackup(
-      { volumeInstanceId },
-      { id: true, name: true, createdAt: true },
-    )
-    .pipe(
-      railway.catchTags(["RailwayNotFound", "RailwayForbidden"], () =>
-        Effect.succeed([]),
-      ),
-    );
+    .listVolumeInstanceBackup({ volumeInstanceId }, { id: true, name: true, createdAt: true })
+    .pipe(railway.catchTags(["RailwayNotFound", "RailwayForbidden"], () => Effect.succeed([])));
 
 const waitUntilReady = (volumeInstanceId: string) =>
-  railway
-    .volumeInstance({ id: volumeInstanceId }, { deletedAt: true, state: true })
-    .pipe(
-      Effect.map((instance) =>
-        instance.deletedAt == null &&
-        instance.state !== "DELETED" &&
-        instance.state !== "DELETING" &&
-        instance.state !== "UPDATING" &&
-        instance.state !== "MIGRATING" &&
-        instance.state !== "MIGRATION_PENDING" &&
-        instance.state !== "RESTORING" &&
-        instance.state !== "ERROR"
-          ? ("ready" as const)
-          : ("pending" as const),
-      ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed("pending" as const),
-      ),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "ready",
-        times: 10,
-      }),
-    );
+  railway.volumeInstance({ id: volumeInstanceId }, { deletedAt: true, state: true }).pipe(
+    Effect.map((instance) =>
+      instance.deletedAt == null &&
+      instance.state !== "DELETED" &&
+      instance.state !== "DELETING" &&
+      instance.state !== "UPDATING" &&
+      instance.state !== "MIGRATING" &&
+      instance.state !== "MIGRATION_PENDING" &&
+      instance.state !== "RESTORING" &&
+      instance.state !== "ERROR"
+        ? ("ready" as const)
+        : ("pending" as const),
+    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("pending" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "ready",
+      times: 10,
+    }),
+  );
 
-const waitUntilBackupGone = (
-  volumeInstanceId: string,
-  volumeInstanceBackupId: string,
-) =>
+const waitUntilBackupGone = (volumeInstanceId: string, volumeInstanceBackupId: string) =>
   listLive(volumeInstanceId).pipe(
     Effect.map((items) =>
       items.some((backup) => backup.id === volumeInstanceBackupId)
@@ -111,13 +94,8 @@ test.provider(
         ),
       );
       if (Result.isSuccess(result)) {
-        yield* Effect.logInfo(
-          "volume backups are entitled on this token; probe is a no-op",
-        );
-        if (
-          result.success.workflowId != null &&
-          result.success.workflowId.length > 0
-        ) {
+        yield* Effect.logInfo("volume backups are entitled on this token; probe is a no-op");
+        if (result.success.workflowId != null && result.success.workflowId.length > 0) {
           yield* railway
             .workflowStatus(
               {
@@ -137,12 +115,7 @@ test.provider(
               },
               { workflowId: true },
             )
-            .pipe(
-              railway.catchTags(
-                ["RailwayNotFound", "RailwayForbidden"],
-                () => Effect.void,
-              ),
-            );
+            .pipe(railway.catchTags(["RailwayNotFound", "RailwayForbidden"], () => Effect.void));
         }
         yield* stack.destroy();
         return;
@@ -188,22 +161,16 @@ test.provider.skipIf(!backupEntitled)(
 
       expect(created.backup.volumeInstanceBackupId).toEqual(expect.any(String));
       expect(created.backup.volumeInstanceBackupId.length).toBeGreaterThan(0);
-      expect(created.backup.volumeInstanceId).toEqual(
-        created.volume.volumeInstanceId,
-      );
+      expect(created.backup.volumeInstanceId).toEqual(created.volume.volumeInstanceId);
       expect(created.backup.volumeId).toEqual(created.volume.volumeId);
       expect(created.backup.projectId).toEqual(created.project.projectId);
-      expect(created.backup.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.backup.environmentId).toEqual(created.environment.environmentId);
       expect(created.backup.name).toEqual(expect.any(String));
       expect(created.backup.name.length).toBeGreaterThan(0);
       expect(created.backup.createdAt).toEqual(expect.any(String));
 
       const listed = yield* listLive(created.volume.volumeInstanceId);
-      const fetched = listed.find(
-        (backup) => backup.id === created.backup.volumeInstanceBackupId,
-      );
+      const fetched = listed.find((backup) => backup.id === created.backup.volumeInstanceBackupId);
       expect(fetched).toBeDefined();
       expect(fetched?.name).toEqual(created.backup.name);
       expect(fetched?.createdAt).toEqual(created.backup.createdAt);
@@ -211,9 +178,7 @@ test.provider.skipIf(!backupEntitled)(
       const provider = yield* Provider.findProvider(Railway.VolumeBackup);
       const fromProvider = yield* provider.list();
       const found = fromProvider.find(
-        (backup) =>
-          backup.volumeInstanceBackupId ===
-          created.backup.volumeInstanceBackupId,
+        (backup) => backup.volumeInstanceBackupId === created.backup.volumeInstanceBackupId,
       );
       expect(found).toBeDefined();
       expect(found?.volumeInstanceId).toEqual(created.volume.volumeInstanceId);

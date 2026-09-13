@@ -52,10 +52,7 @@ export interface GetListElements extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetListElementsRequest,
-    ) => Effect.Effect<
-      frauddetector.GetListElementsResult,
-      frauddetector.GetListElementsError
-    >
+    ) => Effect.Effect<frauddetector.GetListElementsResult, frauddetector.GetListElementsError>
   >
 > {}
 export const GetListElements = Binding.Service<GetListElements>(

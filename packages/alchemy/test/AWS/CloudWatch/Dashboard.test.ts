@@ -39,20 +39,16 @@ test.provider("list enumerates the deployed dashboard", (stack) =>
     const provider = yield* Provider.findProvider(Dashboard);
     const all = yield* provider.list();
 
-    expect(all.some((d) => d.dashboardName === dashboard.dashboardName)).toBe(
-      true,
-    );
+    expect(all.some((d) => d.dashboardName === dashboard.dashboardName)).toBe(true);
 
     yield* stack.destroy();
 
     // Out-of-band assert-gone: getDashboard returns the typed
     // DashboardNotFoundError once the dashboard is deleted.
-    const gone = yield* cloudwatch
-      .getDashboard({ DashboardName: dashboard.dashboardName })
-      .pipe(
-        Effect.map(() => false),
-        Effect.catchTag("DashboardNotFoundError", () => Effect.succeed(true)),
-      );
+    const gone = yield* cloudwatch.getDashboard({ DashboardName: dashboard.dashboardName }).pipe(
+      Effect.map(() => false),
+      Effect.catchTag("DashboardNotFoundError", () => Effect.succeed(true)),
+    );
     expect(gone).toBe(true);
   }),
 );

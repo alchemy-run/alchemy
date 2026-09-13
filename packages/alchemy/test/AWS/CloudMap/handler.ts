@@ -40,13 +40,10 @@ export default CloudMapTestFunction.make(
   },
   Effect.gen(function* () {
     const vpc = yield* resolveFixtureVpc;
-    const namespace = yield* AWS.CloudMap.PrivateDnsNamespace(
-      "FixtureNamespace",
-      {
-        name: "alchemy-cloudmap-fixture.local",
-        vpc,
-      },
-    );
+    const namespace = yield* AWS.CloudMap.PrivateDnsNamespace("FixtureNamespace", {
+      name: "alchemy-cloudmap-fixture.local",
+      vpc,
+    });
     const service = yield* AWS.CloudMap.Service("FixtureService", {
       namespaceId: namespace.namespaceId,
       name: "backend",
@@ -65,23 +62,17 @@ export default CloudMapTestFunction.make(
     });
 
     const discoverInstances = yield* AWS.CloudMap.DiscoverInstances(service);
-    const discoverInstancesRevision =
-      yield* AWS.CloudMap.DiscoverInstancesRevision(service);
+    const discoverInstancesRevision = yield* AWS.CloudMap.DiscoverInstancesRevision(service);
     const registerInstance = yield* AWS.CloudMap.RegisterInstance(service);
     const deregisterInstance = yield* AWS.CloudMap.DeregisterInstance(service);
     const getInstance = yield* AWS.CloudMap.GetInstance(service);
     const listInstances = yield* AWS.CloudMap.ListInstances(service);
-    const getServiceAttributes =
-      yield* AWS.CloudMap.GetServiceAttributes(service);
+    const getServiceAttributes = yield* AWS.CloudMap.GetServiceAttributes(service);
     const getOperation = yield* AWS.CloudMap.GetOperation();
-    const registerCustomInstance =
-      yield* AWS.CloudMap.RegisterInstance(customService);
-    const deregisterCustomInstance =
-      yield* AWS.CloudMap.DeregisterInstance(customService);
-    const updateCustomHealth =
-      yield* AWS.CloudMap.UpdateInstanceCustomHealthStatus(customService);
-    const getCustomHealthStatus =
-      yield* AWS.CloudMap.GetInstancesHealthStatus(customService);
+    const registerCustomInstance = yield* AWS.CloudMap.RegisterInstance(customService);
+    const deregisterCustomInstance = yield* AWS.CloudMap.DeregisterInstance(customService);
+    const updateCustomHealth = yield* AWS.CloudMap.UpdateInstanceCustomHealthStatus(customService);
+    const getCustomHealthStatus = yield* AWS.CloudMap.GetInstancesHealthStatus(customService);
     const ServiceId = yield* service.serviceId;
     const CustomServiceId = yield* customService.serviceId;
     const NamespaceName = yield* service.namespaceName;
@@ -233,10 +224,7 @@ export default CloudMapTestFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

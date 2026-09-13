@@ -75,8 +75,7 @@ export type NetworkInterconnectSettings = Resource<
  * @product Network Interconnects
  * @category Network
  */
-export const NetworkInterconnectSettings =
-  Resource<NetworkInterconnectSettings>(TypeId);
+export const NetworkInterconnectSettings = Resource<NetworkInterconnectSettings>(TypeId);
 
 /**
  * Returns true if the given value is a NetworkInterconnectSettings resource.

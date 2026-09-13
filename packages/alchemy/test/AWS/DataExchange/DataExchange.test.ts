@@ -112,9 +112,7 @@ test.provider(
         ResourceArn: created.revision.revisionArn,
       });
       expect(toTagRecord(updatedRevisionTags.Tags).Environment).toBeUndefined();
-      expect(toTagRecord(updatedRevisionTags.Tags)["alchemy::id"]).toBe(
-        "PricesV1",
-      );
+      expect(toTagRecord(updatedRevisionTags.Tags)["alchemy::id"]).toBe("PricesV1");
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();
@@ -214,8 +212,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID)(
   "create, update, destroy an event action on an entitled data set",
   (stack) =>
     Effect.gen(function* () {
-      const entitledDataSetId =
-        process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID!;
+      const entitledDataSetId = process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID!;
       const exportBucket = process.env.AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET!;
       yield* stack.destroy();
 
@@ -246,9 +243,9 @@ test.provider.skipIf(!process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID)(
       const observed = yield* dataexchange.getEventAction({
         EventActionId: created.eventActionId,
       });
-      expect(
-        observed.Action?.ExportRevisionToS3?.RevisionDestination.KeyPattern,
-      ).toBe("exports/${Revision.CreatedAt}/${Asset.Name}");
+      expect(observed.Action?.ExportRevisionToS3?.RevisionDestination.KeyPattern).toBe(
+        "exports/${Revision.CreatedAt}/${Asset.Name}",
+      );
 
       yield* stack.destroy();
       const gone = yield* Effect.flip(

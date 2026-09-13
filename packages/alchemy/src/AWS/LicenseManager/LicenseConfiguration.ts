@@ -5,12 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -141,10 +136,7 @@ export const LicenseConfigurationProvider = () =>
   Provider.effect(
     LicenseConfiguration,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
@@ -176,20 +168,14 @@ export const LicenseConfigurationProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const found = yield* licensemanager
           .getLicenseConfiguration({ LicenseConfigurationArn: arn })
-          .pipe(
-            Effect.catchTag("LicenseConfigurationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("LicenseConfigurationNotFound", () => Effect.succeed(undefined)));
         if (found === undefined || !isLive(found.Status)) return undefined;
         return found;
       });
 
       // Distilled's `Tag` has optional `Key`/`Value`; narrow to a plain
       // record, dropping any entries the API returned without both fields.
-      const toTagRecord = (
-        tags: licensemanager.Tag[] | undefined,
-      ): Record<string, string> => {
+      const toTagRecord = (tags: licensemanager.Tag[] | undefined): Record<string, string> => {
         const record: Record<string, string> = {};
         for (const tag of tags ?? []) {
           if (tag.Key !== undefined && tag.Value !== undefined) {
@@ -212,11 +198,7 @@ export const LicenseConfigurationProvider = () =>
       });
 
       return LicenseConfiguration.Provider.of({
-        stables: [
-          "licenseConfigurationId",
-          "licenseConfigurationArn",
-          "licenseCountingType",
-        ],
+        stables: ["licenseConfigurationId", "licenseConfigurationArn", "licenseCountingType"],
 
         list: () =>
           Effect.gen(function* () {
@@ -225,9 +207,7 @@ export const LicenseConfigurationProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          let observed:
-            | licensemanager.GetLicenseConfigurationResponse
-            | undefined;
+          let observed: licensemanager.GetLicenseConfigurationResponse | undefined;
           if (output?.licenseConfigurationArn) {
             observed = yield* getByArn(output.licenseConfigurationArn);
           } else {
@@ -256,7 +236,7 @@ export const LicenseConfigurationProvider = () =>
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
 
@@ -300,16 +280,10 @@ export const LicenseConfigurationProvider = () =>
           if (observed.Name !== name) {
             update.Name = name;
           }
-          if (
-            news.description !== undefined &&
-            observed.Description !== news.description
-          ) {
+          if (news.description !== undefined && observed.Description !== news.description) {
             update.Description = news.description;
           }
-          if (
-            news.licenseCount !== undefined &&
-            observed.LicenseCount !== news.licenseCount
-          ) {
+          if (news.licenseCount !== undefined && observed.LicenseCount !== news.licenseCount) {
             update.LicenseCount = news.licenseCount;
           }
           const desiredHardLimit = news.licenseCountHardLimit ?? false;
@@ -318,15 +292,12 @@ export const LicenseConfigurationProvider = () =>
           }
           if (
             news.licenseRules !== undefined &&
-            JSON.stringify(observed.LicenseRules ?? []) !==
-              JSON.stringify(news.licenseRules)
+            JSON.stringify(observed.LicenseRules ?? []) !== JSON.stringify(news.licenseRules)
           ) {
             update.LicenseRules = news.licenseRules;
           }
           const desiredDisassociate = news.disassociateWhenNotFound ?? false;
-          if (
-            (observed.DisassociateWhenNotFound ?? false) !== desiredDisassociate
-          ) {
+          if ((observed.DisassociateWhenNotFound ?? false) !== desiredDisassociate) {
             update.DisassociateWhenNotFound = desiredDisassociate;
           }
           if (Object.keys(update).length > 0) {
@@ -368,12 +339,7 @@ export const LicenseConfigurationProvider = () =>
             .deleteLicenseConfiguration({
               LicenseConfigurationArn: output.licenseConfigurationArn,
             })
-            .pipe(
-              Effect.catchTag(
-                "LicenseConfigurationNotFound",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("LicenseConfigurationNotFound", () => Effect.void));
         }),
       });
     }),

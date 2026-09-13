@@ -29,10 +29,7 @@ import type { Worker as WorkerService } from "./Worker.ts";
  * returns a typed Effect `RpcClient` over the rpc server living on
  * the DO's `fetch` handler.
  */
-export interface RpcDurableObject<
-  Self,
-  Rpcs extends Rpc.Any = Rpc.Any,
-> extends Omit<
+export interface RpcDurableObject<Self, Rpcs extends Rpc.Any = Rpc.Any> extends Omit<
   DurableObjectType<{ fetch: HttpEffect<DurableObjectState> }>,
   "getByName" | "get" | "Shape"
 > {
@@ -88,24 +85,14 @@ export interface RpcDurableObjectClass extends Effect.Effect<
     <Rpcs extends Rpc.Any>(
       name: string,
       props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
-    ): Effect.Effect<
-      RpcDurableObject<Self, Rpcs>,
-      never,
-      WorkerService | Self
-    > & {
+    ): Effect.Effect<RpcDurableObject<Self, Rpcs>, never, WorkerService | Self> & {
       new (_: never): {};
       from(
         scriptName: Input<string>,
       ): Effect.Effect<RpcDurableObject<Self, Rpcs>, never, WorkerService>;
       from<Req = never>(
-        worker:
-          | Dependencies<Self>
-          | Effect.Effect<Dependencies<Self>, ConfigError, Req>,
-      ): Effect.Effect<
-        RpcDurableObject<Self, Rpcs>,
-        never,
-        WorkerService | Req
-      >;
+        worker: Dependencies<Self> | Effect.Effect<Dependencies<Self>, ConfigError, Req>,
+      ): Effect.Effect<RpcDurableObject<Self, Rpcs>, never, WorkerService | Req>;
       make<InnerR = never, InitReq = never>(
         impl: Effect.Effect<
           Effect.Effect<
@@ -116,11 +103,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
           ConfigError,
           InitReq
         >,
-      ): Layer.Layer<
-        Self,
-        never,
-        WorkerService | Exclude<InitReq | InnerR, DurableObjectServices>
-      >;
+      ): Layer.Layer<Self, never, WorkerService | Exclude<InitReq | InnerR, DurableObjectServices>>;
     };
     /** Inline-impl form. */
     <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
@@ -155,11 +138,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
     name: string,
     props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
     impl: Effect.Effect<
-      Effect.Effect<
-        Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
-        never,
-        DurableObjectServices
-      >,
+      Effect.Effect<Effect.Effect<HttpEffect<InnerR>, never, InnerR>, never, DurableObjectServices>,
       ConfigError,
       InitReq
     >,
@@ -388,10 +367,7 @@ export const RpcDurableObject: RpcDurableObjectClass = taggedFunction(
     if (args.length === 0) {
       return (...inner: any[]) => {
         if (inner.length === 2) {
-          const [name, props] = inner as [
-            string,
-            { readonly schema: RpcGroup.RpcGroup<any> },
-          ];
+          const [name, props] = inner as [string, { readonly schema: RpcGroup.RpcGroup<any> }];
           return buildModular(name, props.schema);
         }
         const [name, props, impl] = inner as [
@@ -446,9 +422,7 @@ const rpcWrap = (
 // box the http effect in the `{ fetch }` shape.
 const wrapImpl = (impl: Effect.Effect<Effect.Effect<any>>) =>
   impl.pipe(
-    Effect.map((inner) =>
-      inner.pipe(Effect.map((fetch: HttpEffect<any>) => ({ fetch }))),
-    ),
+    Effect.map((inner) => inner.pipe(Effect.map((fetch: HttpEffect<any>) => ({ fetch })))),
   ) as Effect.Effect<Effect.Effect<any>>;
 
 const build = (
@@ -463,11 +437,7 @@ const build = (
   // modular form below).
   const underlying = (DurableObject as any)()(name, wrapImpl(impl));
   // `underlying` is itself an Effect now, no `.asEffect()` hop required.
-  const underlyingEff = underlying as Effect.Effect<
-    DurableObjectType<any>,
-    never,
-    any
-  >;
+  const underlyingEff = underlying as Effect.Effect<DurableObjectType<any>, never, any>;
   const rpcBound = underlyingEff.pipe(
     Effect.map((rawNs) => rpcWrap(rawNs, props.schema)),
   ) as unknown as Effect.Effect<RpcDurableObject<any>>;
@@ -484,19 +454,14 @@ const buildModular = (name: string, schema: RpcGroup.RpcGroup<any>) => {
   // We just rpc-wrap each output so consumers see a typed `getByName`.
   const Underlying: any = (DurableObject as any)()(name);
   // `Underlying` is itself an Effect now, no `.asEffect()` hop required.
-  const underlyingEff = Underlying as Effect.Effect<
-    DurableObjectType<any>,
-    never,
-    any
-  >;
+  const underlyingEff = Underlying as Effect.Effect<DurableObjectType<any>, never, any>;
 
   return class extends effectClass(
-    underlyingEff.pipe(
-      Effect.map((rawNs) => rpcWrap(rawNs, schema)),
-    ) as unknown as Effect.Effect<RpcDurableObject<any>>,
+    underlyingEff.pipe(Effect.map((rawNs) => rpcWrap(rawNs, schema))) as unknown as Effect.Effect<
+      RpcDurableObject<any>
+    >,
   ) {
-    static make = (impl: Effect.Effect<Effect.Effect<any>>) =>
-      Underlying.make(wrapImpl(impl));
+    static make = (impl: Effect.Effect<Effect.Effect<any>>) => Underlying.make(wrapImpl(impl));
 
     static from = (
       worker: string | object | Effect.Effect<any, any, any>,

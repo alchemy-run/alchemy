@@ -1,10 +1,7 @@
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
-import type {
-  BindingHooks,
-  Module,
-} from "@alchemy.run/cloudflare-runtime/core";
+import type { BindingHooks, Module } from "@alchemy.run/cloudflare-runtime/core";
 import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
@@ -45,14 +42,8 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { PlatformServices } from "../Platform.ts";
-import type {
-  PrerenderRequest,
-  StaticPathsResponse,
-} from "./runtime/prerender-types.ts";
-import {
-  PRERENDER_ENDPOINT,
-  STATIC_PATHS_ENDPOINT,
-} from "./runtime/utils/prerender-constants.ts";
+import type { PrerenderRequest, StaticPathsResponse } from "./runtime/prerender-types.ts";
+import { PRERENDER_ENDPOINT, STATIC_PATHS_ENDPOINT } from "./runtime/utils/prerender-constants.ts";
 
 /** The subdirectory of the server output dir that hosts the prerender build. */
 const PRERENDER_OUTPUT_SUBDIR = "./.prerender/";
@@ -79,9 +70,7 @@ export interface WorkerdPrerendererOptions {
  * Creates the workerd prerenderer registered via `setPrerenderer` in the
  * `astro:build:start` hook when `prerenderEnvironment` is `"workerd"`.
  */
-export function createWorkerdPrerenderer(
-  options: WorkerdPrerendererOptions,
-): AstroPrerenderer {
+export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): AstroPrerenderer {
   const { serverDir, clientDir, trailingSlash, vite } = options;
   let scope: Scope.Closeable | undefined;
   let serverUrl: string | undefined;
@@ -100,9 +89,7 @@ export function createWorkerdPrerenderer(
     name: "@alchemy.run/frontend-frameworks/astro:workerd-prerenderer",
 
     async setup() {
-      const prerenderDir = fileURLToPath(
-        new URL(PRERENDER_OUTPUT_SUBDIR, serverDir),
-      );
+      const prerenderDir = fileURLToPath(new URL(PRERENDER_OUTPUT_SUBDIR, serverDir));
       const clientDirPath = fileURLToPath(clientDir);
       // The assets manifest is read from the client dir; make sure it exists
       // even for all-prerendered sites where the client build emitted nothing.
@@ -119,12 +106,8 @@ export function createWorkerdPrerenderer(
           ...worker,
           // Suffixed so the prerender instance never collides with a
           // concurrently running dev server in the local dev registry.
-          name:
-            worker?.name !== undefined
-              ? `${worker.name}-prerender`
-              : "astro-prerender",
-          compatibilityDate:
-            vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+          name: worker?.name !== undefined ? `${worker.name}-prerender` : "astro-prerender",
+          compatibilityDate: vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
           compatibilityFlags: vite?.compatibilityFlags ?? [],
           bindings: (worker?.bindings ?? []) as BindingHooks,
           modules,
@@ -136,9 +119,7 @@ export function createWorkerdPrerenderer(
       });
 
       const url = await program.pipe(
-        Effect.provide(
-          context as Context.Context<RuntimeServices.RuntimeServices>,
-        ),
+        Effect.provide(context as Context.Context<RuntimeServices.RuntimeServices>),
         Scope.provide(scope),
         Effect.runPromise,
       );
@@ -183,9 +164,7 @@ export function createWorkerdPrerenderer(
       // non-2xx responses while prerendering (e.g. a custom 404 page).
       const prerenderError = response.headers.get("x-astro-prerender-error");
       if (prerenderError) {
-        throw new Error(
-          `Failed to prerender ${request.url}: ${prerenderError}`,
-        );
+        throw new Error(`Failed to prerender ${request.url}: ${prerenderError}`);
       }
 
       return response;
@@ -196,9 +175,7 @@ export function createWorkerdPrerenderer(
       if (scope === undefined) return;
       const closing = scope;
       scope = undefined;
-      await Effect.runPromiseExit(
-        Scope.closeUnsafe(closing, Exit.void) ?? Effect.void,
-      );
+      await Effect.runPromiseExit(Scope.closeUnsafe(closing, Exit.void) ?? Effect.void);
     },
   };
 }
@@ -210,9 +187,7 @@ export function createWorkerdPrerenderer(
  * entry chunk (astro core names it `prerender-entry.[hash].mjs`) is listed
  * first, which makes it the worker's main module.
  */
-export const collectOutputModules = async (
-  outputDir: string,
-): Promise<Array<Module>> => {
+export const collectOutputModules = async (outputDir: string): Promise<Array<Module>> => {
   let entries: Array<{
     parentPath: string;
     name: string;
@@ -240,9 +215,7 @@ export const collectOutputModules = async (
   }
   // Deterministic order, entry first.
   modules.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  const entryIndex = modules.findIndex((module) =>
-    PRERENDER_ENTRY_PATTERN.test(module.name),
-  );
+  const entryIndex = modules.findIndex((module) => PRERENDER_ENTRY_PATTERN.test(module.name));
   if (entryIndex === -1) {
     throw new Error(
       `No prerender entry chunk (prerender-entry.*.mjs) found in "${outputDir}". ` +
@@ -256,10 +229,7 @@ export const collectOutputModules = async (
 
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".svg", ".txt", ".xml"]);
 
-const moduleForFile = async (
-  absolute: string,
-  relative: string,
-): Promise<Module | undefined> => {
+const moduleForFile = async (absolute: string, relative: string): Promise<Module | undefined> => {
   const extension = NodePath.extname(relative).toLowerCase();
   if (extension === ".map") return undefined;
   const name = relative.split(NodePath.sep).join("/");

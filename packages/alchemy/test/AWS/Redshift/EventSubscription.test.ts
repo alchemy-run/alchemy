@@ -55,10 +55,7 @@ test.provider(
       expect(created.subscriptionName).toBeDefined();
       expect(created.eventSubscriptionArn).toContain(":eventsubscription:");
       expect(created.sourceType).toBe("cluster");
-      expect([...created.eventCategories].sort()).toEqual([
-        "management",
-        "monitoring",
-      ]);
+      expect([...created.eventCategories].sort()).toEqual(["management", "monitoring"]);
       expect(created.severity).toBe("INFO");
       expect(created.enabled).toBe(true);
       expect(created.snsTopicArn).toContain(":sns:");
@@ -69,8 +66,7 @@ test.provider(
       expect(observed?.SourceType).toBe("cluster");
       expect(
         observed?.Tags?.some(
-          (t) =>
-            t.Key === "fixture" && t.Value === "redshift-event-subscription",
+          (t) => t.Key === "fixture" && t.Value === "redshift-event-subscription",
         ),
       ).toBe(true);
 

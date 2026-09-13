@@ -76,9 +76,7 @@ export interface AssetDeployment extends Resource<
  *
  * @resource
  */
-export const AssetDeployment = Resource<AssetDeployment>(
-  "Fly.Website.AssetDeployment",
-);
+export const AssetDeployment = Resource<AssetDeployment>("Fly.Website.AssetDeployment");
 
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";
@@ -219,8 +217,7 @@ export const AssetDeploymentProvider = () =>
           files.map((relative) =>
             Effect.gen(function* () {
               const body = yield* fs.readFile(path.join(root, relative));
-              const key =
-                prefix.length > 0 ? `${prefix}/${relative}` : relative;
+              const key = prefix.length > 0 ? `${prefix}/${relative}` : relative;
               const contentType = contentTypeOf(relative);
               const cacheControl = cacheControlOf(relative);
               return { relative, key, body, contentType, cacheControl };

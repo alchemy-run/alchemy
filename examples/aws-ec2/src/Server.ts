@@ -67,9 +67,7 @@ export default class Server extends AWS.EC2.Instance<Server>()(
         return HttpServerResponse.text("Not found", { status: 404 });
       }).pipe(
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Internal server error", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Internal server error", { status: 500 })),
         ),
       ),
     };

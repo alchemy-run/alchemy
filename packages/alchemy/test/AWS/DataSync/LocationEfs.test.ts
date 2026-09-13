@@ -27,8 +27,7 @@ test.provider(
     Effect.gen(function* () {
       const result = yield* datasync
         .describeLocationEfs({
-          LocationArn:
-            "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
+          LocationArn: "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
         })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");

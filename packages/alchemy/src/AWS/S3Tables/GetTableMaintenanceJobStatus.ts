@@ -38,7 +38,6 @@ export interface GetTableMaintenanceJobStatus extends Binding.Service<
     >
   >
 > {}
-export const GetTableMaintenanceJobStatus =
-  Binding.Service<GetTableMaintenanceJobStatus>(
-    "AWS.S3Tables.GetTableMaintenanceJobStatus",
-  );
+export const GetTableMaintenanceJobStatus = Binding.Service<GetTableMaintenanceJobStatus>(
+  "AWS.S3Tables.GetTableMaintenanceJobStatus",
+);

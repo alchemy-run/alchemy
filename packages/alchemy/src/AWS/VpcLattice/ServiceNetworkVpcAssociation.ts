@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
@@ -85,10 +80,9 @@ export interface ServiceNetworkVpcAssociation extends Resource<
  *
  * @resource
  */
-export const ServiceNetworkVpcAssociation =
-  Resource<ServiceNetworkVpcAssociation>(
-    "AWS.VpcLattice.ServiceNetworkVpcAssociation",
-  );
+export const ServiceNetworkVpcAssociation = Resource<ServiceNetworkVpcAssociation>(
+  "AWS.VpcLattice.ServiceNetworkVpcAssociation",
+);
 
 export const ServiceNetworkVpcAssociationProvider = () =>
   Provider.effect(
@@ -99,23 +93,13 @@ export const ServiceNetworkVpcAssociationProvider = () =>
           .getServiceNetworkVpcAssociation({
             serviceNetworkVpcAssociationIdentifier: id,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -156,26 +140,21 @@ export const ServiceNetworkVpcAssociationProvider = () =>
             vpcId: assoc.vpcId,
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          let assoc = output?.associationId
-            ? yield* observe(output.associationId)
-            : undefined;
+          let assoc = output?.associationId ? yield* observe(output.associationId) : undefined;
 
           if (!assoc?.arn || !assoc.id) {
-            const created =
-              yield* vpclattice.createServiceNetworkVpcAssociation({
-                serviceNetworkIdentifier: news.serviceNetworkIdentifier,
-                vpcIdentifier: news.vpcIdentifier,
-                securityGroupIds: news.securityGroupIds,
-                tags: desiredTags,
-              });
+            const created = yield* vpclattice.createServiceNetworkVpcAssociation({
+              serviceNetworkIdentifier: news.serviceNetworkIdentifier,
+              vpcIdentifier: news.vpcIdentifier,
+              securityGroupIds: news.securityGroupIds,
+              tags: desiredTags,
+            });
             if (!created.arn || !created.id) {
               return yield* Effect.fail(
                 new Error("Failed to create service network VPC association"),
@@ -190,10 +169,7 @@ export const ServiceNetworkVpcAssociationProvider = () =>
                 securityGroupIds: created.securityGroupIds,
               };
             }
-          } else if (
-            news.securityGroupIds &&
-            news.securityGroupIds.length > 0
-          ) {
+          } else if (news.securityGroupIds && news.securityGroupIds.length > 0) {
             // Sync security groups (association keeps at least one).
             const current = (assoc.securityGroupIds ?? []).slice().sort();
             const desired = news.securityGroupIds.slice().sort();
@@ -209,9 +185,7 @@ export const ServiceNetworkVpcAssociationProvider = () =>
           // `let` for the type-checker and guards a malformed API response.
           if (!assoc?.arn || !assoc.id) {
             return yield* Effect.fail(
-              new Error(
-                "service network VPC association is missing its id/arn",
-              ),
+              new Error("service network VPC association is missing its id/arn"),
             );
           }
 
@@ -233,18 +207,14 @@ export const ServiceNetworkVpcAssociationProvider = () =>
             // listing: at least one serviceNetworkIdentifier or vpcIdentifier
             // is required. Enumerate service networks first, then list each
             // network's associations so nuke can discover orphaned links.
-            const serviceNetworkIds = yield* vpclattice.listServiceNetworks
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.items ?? [])
-                    .flatMap((network) =>
-                      network.id === undefined ? [] : [network.id],
-                    ),
-                ),
-              );
+            const serviceNetworkIds = yield* vpclattice.listServiceNetworks.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.items ?? [])
+                  .flatMap((network) => (network.id === undefined ? [] : [network.id])),
+              ),
+            );
             const summaries = (yield* Effect.forEach(
               serviceNetworkIds,
               (serviceNetworkIdentifier) =>
@@ -252,16 +222,13 @@ export const ServiceNetworkVpcAssociationProvider = () =>
                   .pages({ serviceNetworkIdentifier })
                   .pipe(
                     Stream.runCollect,
-                    Effect.map((chunk) =>
-                      Array.from(chunk).flatMap((page) => page.items ?? []),
-                    ),
+                    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
                   ),
               { concurrency: 10 },
             )).flat();
             return yield* Effect.forEach(
               summaries.filter(
-                (s): s is typeof s & { id: string; arn: string } =>
-                  s.id != null && s.arn != null,
+                (s): s is typeof s & { id: string; arn: string } => s.id != null && s.arn != null,
               ),
               (summary) =>
                 Effect.gen(function* () {
@@ -285,9 +252,7 @@ export const ServiceNetworkVpcAssociationProvider = () =>
             vpclattice.deleteServiceNetworkVpcAssociation({
               serviceNetworkVpcAssociationIdentifier: output.associationId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Deletion is asynchronous (the association sits in
           // DELETE_IN_PROGRESS while hyperplane ENIs are torn down). Wait
           // until it is actually gone so a dependent ServiceNetwork delete

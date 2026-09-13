@@ -10,9 +10,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import DataExchangeTestFunctionLive, {
-  DataExchangeTestFunction,
-} from "./handler";
+import DataExchangeTestFunctionLive, { DataExchangeTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -20,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "DataExchangeBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -51,31 +46,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 class IamPropagationLag extends Data.TaggedError("IamPropagationLag")<{
   readonly path: string;
@@ -96,19 +82,14 @@ const postJsonThroughIamPropagation = (path: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "IamPropagationLag",
-      schedule: Schedule.max([
-        Schedule.spaced("10 seconds"),
-        Schedule.recurs(33),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(33)]),
     }),
   );
 
 describe.sequential("DataExchange Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "DataExchange test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("DataExchange test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("DataExchange test setup: deploying fixture");
@@ -124,9 +105,7 @@ describe.sequential("DataExchange Bindings", () => {
       functionName = attrs.functionName;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `DataExchange test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`DataExchange test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -134,9 +113,7 @@ describe.sequential("DataExchange Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `DataExchange test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`DataExchange test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -178,9 +155,7 @@ describe.sequential("DataExchange Bindings", () => {
             }),
           ).pipe(
             Effect.map((response) =>
-              (response.logGroups ?? []).some(
-                (group) => group.logGroupName === logGroupName,
-              ),
+              (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
             ),
           );
           if (present) {
@@ -218,20 +193,18 @@ describe.sequential("DataExchange Bindings", () => {
   });
 
   describe("GetDataSet", () => {
-    test.provider(
-      "reads the bound data set's detail (injected data set id)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/data-set")) as {
-            id: string;
-            name: string;
-            assetType: string;
-            origin: string;
-          };
-          expect(response.id).toBeTruthy();
-          expect(response.assetType).toBe("S3_SNAPSHOT");
-          expect(response.origin).toBe("OWNED");
-        }),
+    test.provider("reads the bound data set's detail (injected data set id)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/data-set")) as {
+          id: string;
+          name: string;
+          assetType: string;
+          origin: string;
+        };
+        expect(response.id).toBeTruthy();
+        expect(response.assetType).toBe("S3_SNAPSHOT");
+        expect(response.origin).toBe("OWNED");
+      }),
     );
   });
 
@@ -246,29 +219,25 @@ describe.sequential("DataExchange Bindings", () => {
   });
 
   describe("GetRevision", () => {
-    test.provider(
-      "reads the bound revision (injected data set + revision ids)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/revision")) as {
-            id: string;
-            finalized: boolean;
-          };
-          expect(response.id).toBeTruthy();
-          expect(response.finalized).toBe(false);
-        }),
+    test.provider("reads the bound revision (injected data set + revision ids)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/revision")) as {
+          id: string;
+          finalized: boolean;
+        };
+        expect(response.id).toBeTruthy();
+        expect(response.finalized).toBe(false);
+      }),
     );
   });
 
   describe("ListDataSets", () => {
-    test.provider(
-      "enumerates the account's owned data sets including the fixture's",
-      (_stack) =>
-        Effect.gen(function* () {
-          const dataSet = (yield* getJson("/data-set")) as { id: string };
-          const response = (yield* getJson("/data-sets")) as { ids: string[] };
-          expect(response.ids).toContain(dataSet.id);
-        }),
+    test.provider("enumerates the account's owned data sets including the fixture's", (_stack) =>
+      Effect.gen(function* () {
+        const dataSet = (yield* getJson("/data-set")) as { id: string };
+        const response = (yield* getJson("/data-sets")) as { ids: string[] };
+        expect(response.ids).toContain(dataSet.id);
+      }),
     );
   });
 
@@ -277,9 +246,7 @@ describe.sequential("DataExchange Bindings", () => {
       "imports an S3 object into the revision via a job and reads it back",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJsonThroughIamPropagation(
-            "/import",
-          )) as {
+          const response = (yield* postJsonThroughIamPropagation("/import")) as {
             jobState?: string;
             jobErrors?: unknown[];
             assetCount?: number;
@@ -315,18 +282,14 @@ describe.sequential("DataExchange Bindings", () => {
       "rejects a data set outside a Marketplace product with a typed error",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJsonThroughIamPropagation(
-            "/notify",
-          )) as {
+          const response = (yield* postJsonThroughIamPropagation("/notify")) as {
             ok: boolean;
             error: string | undefined;
             message: string | undefined;
           };
           expect(response.ok).toBe(false);
           expect(response.error).toBe("ValidationException");
-          expect(response.message).toContain(
-            "not configured for AWS Marketplace",
-          );
+          expect(response.message).toContain("not configured for AWS Marketplace");
         }),
       // Shares the IAM propagation retry budget with the /import test.
       { timeout: 420_000 },
@@ -358,18 +321,16 @@ describe.sequential("DataExchange Bindings", () => {
   });
 
   describe("consumeDataSetEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeDataSetEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeDataSetEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

@@ -23,15 +23,13 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getManagedThing on a nonexistent thing fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        pin(mi.getManagedThing({ Identifier: "alchemynonexistentthingprobe" })),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getManagedThing on a nonexistent thing fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      pin(mi.getManagedThing({ Identifier: "alchemynonexistentthingprobe" })),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
@@ -41,8 +39,7 @@ class ThingStillExists extends Data.TaggedError("ThingStillExists")<{
 const assertThingGone = (managedThingId: string) =>
   mi.getManagedThing({ Identifier: managedThingId }).pipe(
     Effect.flatMap((thing) =>
-      thing.ProvisioningStatus === "DELETED" ||
-      thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
+      thing.ProvisioningStatus === "DELETED" || thing.ProvisioningStatus === "DELETE_IN_PROGRESS"
         ? Effect.void
         : Effect.fail(new ThingStillExists({ managedThingId })),
     ),

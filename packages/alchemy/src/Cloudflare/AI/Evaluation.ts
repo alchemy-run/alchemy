@@ -84,13 +84,7 @@ export type EvaluationAttributes = {
   modifiedAt: string;
 };
 
-export type Evaluation = Resource<
-  TypeId,
-  EvaluationProps,
-  EvaluationAttributes,
-  never,
-  Providers
->;
+export type Evaluation = Resource<TypeId, EvaluationProps, EvaluationAttributes, never, Providers>;
 
 /**
  * An evaluation job on a Cloudflare.AI. Gateway.
@@ -141,14 +135,12 @@ export const isEvaluation = (value: unknown): value is Evaluation =>
  * evaluation.
  */
 export const listEvaluationTypes = (accountId: string) =>
-  aiGateway
-    .listEvaluationTypes({ accountId, perPage: 50 })
-    .pipe(Effect.map((page) => page.result));
+  aiGateway.listEvaluationTypes({ accountId, perPage: 50 }).pipe(Effect.map((page) => page.result));
 
 export const EvaluationProvider = () =>
   Provider.succeed(Evaluation, {
     stables: ["evaluationId", "accountId", "gatewayId", "createdAt"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -173,23 +165,14 @@ export const EvaluationProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const gatewayId =
-        output?.gatewayId ?? (olds?.gatewayId as string | undefined);
+      const gatewayId = output?.gatewayId ?? (olds?.gatewayId as string | undefined);
       if (gatewayId === undefined) return undefined;
       const knownTypeIds =
-        output?.evaluationTypeIds ??
-        (olds?.evaluationTypeIds as string[] | undefined) ??
-        [];
+        output?.evaluationTypeIds ?? (olds?.evaluationTypeIds as string[] | undefined) ?? [];
 
       if (output?.evaluationId) {
-        const observed = yield* getEvaluation(
-          acct,
-          gatewayId,
-          output.evaluationId,
-        );
-        return observed
-          ? toAttributes(observed, acct, knownTypeIds)
-          : undefined;
+        const observed = yield* getEvaluation(acct, gatewayId, output.evaluationId);
+        return observed ? toAttributes(observed, acct, knownTypeIds) : undefined;
       }
       // Cold read — recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
@@ -210,21 +193,13 @@ export const EvaluationProvider = () =>
       // Observe — the evaluationId cached on `output` is a hint, not a
       // guarantee: a missing evaluation falls through and we recreate.
       const observed = output?.evaluationId
-        ? yield* getEvaluation(
-            output.accountId ?? accountId,
-            gatewayId,
-            output.evaluationId,
-          )
+        ? yield* getEvaluation(output.accountId ?? accountId, gatewayId, output.evaluationId)
         : undefined;
 
       if (observed) {
         // Evaluations are immutable; diff routes every prop change to a
         // replacement, so an observed evaluation is already converged.
-        return toAttributes(
-          observed,
-          accountId,
-          output?.evaluationTypeIds ?? evaluationTypeIds,
-        );
+        return toAttributes(observed, accountId, output?.evaluationTypeIds ?? evaluationTypeIds);
       }
 
       // Ensure — greenfield (or out-of-band delete). Cloudflare enforces
@@ -274,16 +249,12 @@ export const EvaluationProvider = () =>
     // to the result-derived ids otherwise.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const gatewayIds = yield* aiGateway.listAiGateways
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((gateway) => gateway.id),
-            ),
-          ),
-        );
+      const gatewayIds = yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => (page.result ?? []).map((gateway) => gateway.id)),
+        ),
+      );
       const rows = yield* Effect.forEach(
         gatewayIds,
         (gatewayId) =>
@@ -291,9 +262,7 @@ export const EvaluationProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((evaluation) =>
-                  toAttributes(evaluation, accountId, []),
-                ),
+                (page.result ?? []).map((evaluation) => toAttributes(evaluation, accountId, [])),
               ),
             ),
           ),
@@ -311,9 +280,7 @@ export const EvaluationProvider = () =>
 const getEvaluation = (accountId: string, gatewayId: string, id: string) =>
   aiGateway
     .getEvaluation({ accountId, gatewayId, id })
-    .pipe(
-      Effect.catchTag("EvaluationNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find an evaluation by exact name. Cloudflare's `name` query is a fuzzy
@@ -322,17 +289,15 @@ const getEvaluation = (accountId: string, gatewayId: string, id: string) =>
  * returns an empty list on this endpoint.
  */
 const findByName = (accountId: string, gatewayId: string, name: string) =>
-  aiGateway.listEvaluations
-    .items({ accountId, gatewayId, name, perPage: 50 })
-    .pipe(
-      Stream.filter((e) => e.name === name),
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk)
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-          .at(0),
-      ),
-    );
+  aiGateway.listEvaluations.items({ accountId, gatewayId, name, perPage: 50 }).pipe(
+    Stream.filter((e) => e.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .at(0),
+    ),
+  );
 
 const createEvaluationName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

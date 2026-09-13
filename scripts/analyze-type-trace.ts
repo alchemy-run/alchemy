@@ -72,9 +72,7 @@ function bucketIdOf(p: string | undefined): number {
 // segment, purely for display.
 const rel = (p: string | undefined) => {
   if (!p) return "?";
-  const m = p.match(
-    /(?:packages|submodules|distilled|node_modules|examples|scripts)\/.*$/,
-  );
+  const m = p.match(/(?:packages|submodules|distilled|node_modules|examples|scripts)\/.*$/);
   return m ? m[0] : p;
 };
 
@@ -87,9 +85,7 @@ interface TraceEvent {
   args?: { path?: string; sourceId?: number; targetId?: number };
 }
 
-const trace: TraceEvent[] = JSON.parse(
-  fs.readFileSync(path.join(traceDir, "trace.json"), "utf8"),
-);
+const trace: TraceEvent[] = JSON.parse(fs.readFileSync(path.join(traceDir, "trace.json"), "utf8"));
 
 const stack: { p: string | undefined; start: number; child: number }[] = [];
 const fileSelf = new Map<string, number>();
@@ -129,9 +125,7 @@ for (const ev of relEvents) {
     neededIds.add(ev.args!.targetId!);
   }
 }
-const topPairs = [...pairTime.entries()]
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, 25);
+const topPairs = [...pairTime.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25);
 
 const out: string[] = [];
 out.push(
@@ -150,9 +144,7 @@ for (const [b, us] of [...bucketTime.entries()].sort((a, b) => b[1] - a[1])) {
   );
 }
 out.push("", "== Top 30 files by check self-time ==");
-for (const [p, us] of [...fileSelf.entries()]
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, 30)) {
+for (const [p, us] of [...fileSelf.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30)) {
   out.push(`${(us / 1000).toFixed(0).padStart(9)} ms  ${rel(p)}`);
 }
 out.push(
@@ -182,10 +174,7 @@ const rl = readline.createInterface({
 
 const MAX = 16_000_000;
 const bucketById = new Uint8Array(MAX);
-const idInfo = new Map<
-  number,
-  { sym?: string; path?: string; line?: number; flags?: string }
->();
+const idInfo = new Map<number, { sym?: string; path?: string; line?: number; flags?: string }>();
 const compositeByBucket = new Map<string, number>();
 const symCount = new Map<string, number>();
 const locatedByBucket = new Map<string, number>();
@@ -207,10 +196,7 @@ for await (let line of rl) {
   const decl = t.firstDeclaration ?? t.location;
   const p = decl && ("path" in decl ? decl.path : undefined);
   const lineNo =
-    decl &&
-    ("start" in decl && decl.start
-      ? decl.start.line
-      : (decl as { line?: number }).line);
+    decl && ("start" in decl && decl.start ? decl.start.line : (decl as { line?: number }).line);
   let b = 0;
   if (p) {
     b = bucketIdOf(p);
@@ -237,8 +223,7 @@ for await (let line of rl) {
           }
         }
       }
-      const bn =
-        BUCKETS[b] + (t.intersectionTypes ? " [intersection]" : " [union]");
+      const bn = BUCKETS[b] + (t.intersectionTypes ? " [intersection]" : " [union]");
       compositeByBucket.set(bn, (compositeByBucket.get(bn) ?? 0) + 1);
     }
   }
@@ -251,29 +236,19 @@ for await (let line of rl) {
       flags: t.flags?.join("|"),
     });
   }
-  if (total % 1_000_000 === 0)
-    process.stderr.write(`  ...streamed ${total} types\n`);
+  if (total % 1_000_000 === 0) process.stderr.write(`  ...streamed ${total} types\n`);
 }
 
 out.push("", `== ${total} types total; located types by bucket ==`);
-for (const [b, c] of [...locatedByBucket.entries()].sort(
-  (a, b) => b[1] - a[1],
-)) {
+for (const [b, c] of [...locatedByBucket.entries()].sort((a, b) => b[1] - a[1])) {
   out.push(`${String(c).padStart(9)}  ${b}`);
 }
-out.push(
-  "",
-  "== Locationless union/intersection types by first member's bucket ==",
-);
-for (const [b, c] of [...compositeByBucket.entries()].sort(
-  (a, b) => b[1] - a[1],
-)) {
+out.push("", "== Locationless union/intersection types by first member's bucket ==");
+for (const [b, c] of [...compositeByBucket.entries()].sort((a, b) => b[1] - a[1])) {
   out.push(`${String(c).padStart(9)}  ${b}`);
 }
 out.push("", "== Top 30 symbols by types created ==");
-for (const [k, c] of [...symCount.entries()]
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, 30)) {
+for (const [k, c] of [...symCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30)) {
   out.push(`${String(c).padStart(9)}  ${k}`);
 }
 out.push("", "== Top 25 top-level relation pairs by time ==");
@@ -285,10 +260,7 @@ const fmt = (id: number) => {
 };
 for (const [k, us] of topPairs) {
   const [s, tg] = k.split("->").map(Number);
-  out.push(
-    `${(us / 1000).toFixed(0).padStart(8)} ms  ${fmt(s)}`,
-    `             -> ${fmt(tg)}`,
-  );
+  out.push(`${(us / 1000).toFixed(0).padStart(8)} ms  ${fmt(s)}`, `             -> ${fmt(tg)}`);
 }
 
 const outPath = path.join(traceDir, "attribution.txt");

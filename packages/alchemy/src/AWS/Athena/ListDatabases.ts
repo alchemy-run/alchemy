@@ -34,6 +34,4 @@ export interface ListDatabases extends Binding.Service<
   >
 > {}
 
-export const ListDatabases = Binding.Service<ListDatabases>(
-  "AWS.Athena.ListDatabases",
-);
+export const ListDatabases = Binding.Service<ListDatabases>("AWS.Athena.ListDatabases");

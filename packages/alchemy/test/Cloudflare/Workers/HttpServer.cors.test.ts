@@ -12,9 +12,7 @@ import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
  */
 const ORIGIN = "https://example.test";
 
-const corsHandler = HttpMiddleware.cors()(
-  HttpServerResponse.json({ message: "world" }),
-);
+const corsHandler = HttpMiddleware.cors()(HttpServerResponse.json({ message: "world" }));
 
 const corsRequest = (method: string, extraHeaders?: Record<string, string>) =>
   new Request("https://worker.test/hello", {

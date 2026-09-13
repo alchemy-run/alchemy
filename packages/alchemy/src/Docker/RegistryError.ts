@@ -1,17 +1,17 @@
 import * as Data from "effect/Data";
 import type { PlatformError } from "effect/PlatformError";
 
-export class DockerRegistryBlobUnknown extends Data.TaggedError(
-  "DockerRegistryBlobUnknown",
-)<{ readonly cause: PlatformError }> {
+export class DockerRegistryBlobUnknown extends Data.TaggedError("DockerRegistryBlobUnknown")<{
+  readonly cause: PlatformError;
+}> {
   override get message() {
     return this.cause.message;
   }
 }
 
-export class DockerRegistryUnavailable extends Data.TaggedError(
-  "DockerRegistryUnavailable",
-)<{ readonly cause: PlatformError }> {
+export class DockerRegistryUnavailable extends Data.TaggedError("DockerRegistryUnavailable")<{
+  readonly cause: PlatformError;
+}> {
   override get message() {
     return this.cause.message;
   }
@@ -22,9 +22,7 @@ export type DockerImagePublicationError =
   | DockerRegistryBlobUnknown
   | DockerRegistryUnavailable;
 
-export const classifyDockerRegistryError = (
-  error: PlatformError,
-): DockerImagePublicationError => {
+export const classifyDockerRegistryError = (error: PlatformError): DockerImagePublicationError => {
   // Build logs can contain arbitrary Dockerfile output before the final error.
   const message =
     error.reason.description
@@ -33,9 +31,7 @@ export const classifyDockerRegistryError = (
       .filter(
         (line) =>
           line.length > 0 &&
-          !line.startsWith(
-            "View build details: docker-desktop://dashboard/build/",
-          ),
+          !line.startsWith("View build details: docker-desktop://dashboard/build/"),
       )
       .at(-1) ?? "";
   if (/(?:^|:\s*)(?:unknown:\s*)?blob unknown to registry$/i.test(message)) {

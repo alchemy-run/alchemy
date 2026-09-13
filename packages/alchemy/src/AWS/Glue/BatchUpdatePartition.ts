@@ -46,10 +46,7 @@ export interface BatchUpdatePartition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchUpdatePartitionRequest,
-    ) => Effect.Effect<
-      glue.BatchUpdatePartitionResponse,
-      glue.BatchUpdatePartitionError
-    >
+    ) => Effect.Effect<glue.BatchUpdatePartitionResponse, glue.BatchUpdatePartitionError>
   >
 > {}
 

@@ -131,20 +131,14 @@ export interface FarmEventSourceProps extends EventRouteProps {
  */
 export const consumeFarmEvents = <StreamReq = never, Req = never>(
   props: FarmEventSourceProps,
-  process: (
-    events: Stream.Stream<FarmEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<FarmEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "DeadlineFarmEvents",
     {
       source: ["aws.deadline"],
-      "detail-type": (props.kinds ?? (["job-run"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.farmIds !== undefined
-        ? { detail: { farmId: [...props.farmIds] } }
-        : {}),
+      "detail-type": (props.kinds ?? (["job-run"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.farmIds !== undefined ? { detail: { farmId: [...props.farmIds] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

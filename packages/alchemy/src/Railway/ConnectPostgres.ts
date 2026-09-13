@@ -60,9 +60,7 @@ export interface ConnectPostgres extends Binding.Service<
   (postgres: Postgres) => Effect.Effect<ConnectPostgresClient>
 > {}
 
-export const ConnectPostgres = Binding.Service<ConnectPostgres>(
-  "Railway.ConnectPostgres",
-);
+export const ConnectPostgres = Binding.Service<ConnectPostgres>("Railway.ConnectPostgres");
 
 export const DATABASE_URL_SECRET = "DATABASE_URL";
 export const DATABASE_PUBLIC_URL_SECRET = "DATABASE_PUBLIC_URL";
@@ -75,9 +73,7 @@ export const connectEnvKeys = (postgres: Pick<Postgres, "LogicalId">) => {
   };
 };
 
-export class PostgresUrlMissing extends Data.TaggedError(
-  "Railway.PostgresUrlMissing",
-)<{
+export class PostgresUrlMissing extends Data.TaggedError("Railway.PostgresUrlMissing")<{
   name: string;
 }> {}
 
@@ -86,11 +82,7 @@ export interface ConnectPostgresClient {
    * Private (`{name}.railway.internal`) connection string. Pass this to
    * {@link Drizzle.Postgres} or `SQL.Postgres` from a {@link Service}.
    */
-  connectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    PostgresUrlMissing,
-    RuntimeContext
-  >;
+  connectionString: Effect.Effect<Redacted.Redacted<string>, PostgresUrlMissing, RuntimeContext>;
   /**
    * Same private URI — Railway Postgres has no PgBouncer split. Kept so
    * callers matching the Fly `ConnectPostgres` shape keep working.

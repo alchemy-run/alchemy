@@ -22,11 +22,7 @@ export interface StopSandbox extends Binding.Service<
   <P extends Project>(
     project: P,
   ) => Effect.Effect<
-    (
-      request: SVC.StopSandboxInput,
-    ) => Effect.Effect<SVC.StopSandboxOutput, SVC.StopSandboxError>
+    (request: SVC.StopSandboxInput) => Effect.Effect<SVC.StopSandboxOutput, SVC.StopSandboxError>
   >
 > {}
-export const StopSandbox = Binding.Service<StopSandbox>(
-  "AWS.CodeBuild.StopSandbox",
-);
+export const StopSandbox = Binding.Service<StopSandbox>("AWS.CodeBuild.StopSandbox");

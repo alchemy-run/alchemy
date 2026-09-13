@@ -12,15 +12,9 @@ import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/nextjs-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
   ".gitignore",
   "package.json",
@@ -61,13 +55,7 @@ test.provider(
           const site = yield* Fly.Website.Nextjs("Web", {
             rootDir,
             memo: {
-              include: [
-                "app/**",
-                "public/**",
-                "package.json",
-                "next.config.ts",
-                "tsconfig.json",
-              ],
+              include: ["app/**", "public/**", "package.json", "next.config.ts", "tsconfig.json"],
             },
           });
           return { site };
@@ -84,14 +72,10 @@ test.provider(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "NEXTJS_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "NEXTJS_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
       yield* expectUrlContains(`${url!}/static`, "NEXTJS_AWS_STATIC_MARKER", {
         timeout: "30 seconds",
         label: "extra route",

@@ -36,7 +36,6 @@ export interface DeleteSuppressedDestination extends Binding.Service<
     >
   >
 > {}
-export const DeleteSuppressedDestination =
-  Binding.Service<DeleteSuppressedDestination>(
-    "AWS.SES.DeleteSuppressedDestination",
-  );
+export const DeleteSuppressedDestination = Binding.Service<DeleteSuppressedDestination>(
+  "AWS.SES.DeleteSuppressedDestination",
+);

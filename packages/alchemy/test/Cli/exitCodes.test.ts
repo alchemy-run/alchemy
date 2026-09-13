@@ -70,9 +70,7 @@ describe("CLI exit codes", () => {
     Effect.gen(function* () {
       const { stderr, exitCode } = yield* runInEmptyProject(["dev"]);
       expect(exitCode).toBe(1);
-      expect(stderr).toContain(
-        "Stack entrypoint 'alchemy.run.ts' does not exist",
-      );
+      expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
       expect(stderr).not.toContain("PlatformError");
       expect(stderr).not.toContain("at Effect.fn");
     }),
@@ -82,14 +80,9 @@ describe("CLI exit codes", () => {
     "dev without a stack entrypoint reports it and exits 1 under node",
     () =>
       Effect.gen(function* () {
-        const { stderr, exitCode } = yield* runInEmptyProject(
-          ["dev"],
-          nodePath!,
-        );
+        const { stderr, exitCode } = yield* runInEmptyProject(["dev"], nodePath!);
         expect(exitCode).toBe(1);
-        expect(stderr).toContain(
-          "Stack entrypoint 'alchemy.run.ts' does not exist",
-        );
+        expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
         expect(stderr).not.toContain("PlatformError");
       }),
   );
@@ -188,19 +181,9 @@ describe("CLI exit codes", () => {
   it.live("provider check-env accepts an explicit profile", () =>
     Effect.gen(function* () {
       expect(
-        yield* exitCodeOf(
-          [
-            "provider",
-            "check-env",
-            "--profile",
-            "default",
-            "--provider",
-            "neon",
-          ],
-          {
-            NEON_API_KEY: "napi_test_key",
-          },
-        ),
+        yield* exitCodeOf(["provider", "check-env", "--profile", "default", "--provider", "neon"], {
+          NEON_API_KEY: "napi_test_key",
+        }),
       ).toBe(0);
     }),
   );

@@ -11,23 +11,14 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../../../../examples/cloudflare-website-vocs",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "package.json",
-  "public",
-  "src",
-  "tsconfig.json",
-  "vocs.config.ts",
-];
+const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
 const waitUntilGone = (appName: string) =>
   machines.getApp({ app_name: appName }).pipe(
@@ -57,13 +48,7 @@ test.provider(
           const site = yield* Fly.Website.Vocs("Web", {
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "tsconfig.json",
-                "vocs.config.ts",
-              ],
+              include: ["src/**", "public/**", "package.json", "tsconfig.json", "vocs.config.ts"],
             },
           });
           return { site };

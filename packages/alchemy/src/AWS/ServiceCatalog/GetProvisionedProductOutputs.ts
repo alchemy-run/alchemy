@@ -37,7 +37,6 @@ export interface GetProvisionedProductOutputs extends Binding.Service<
     >
   >
 > {}
-export const GetProvisionedProductOutputs =
-  Binding.Service<GetProvisionedProductOutputs>(
-    "AWS.ServiceCatalog.GetProvisionedProductOutputs",
-  );
+export const GetProvisionedProductOutputs = Binding.Service<GetProvisionedProductOutputs>(
+  "AWS.ServiceCatalog.GetProvisionedProductOutputs",
+);

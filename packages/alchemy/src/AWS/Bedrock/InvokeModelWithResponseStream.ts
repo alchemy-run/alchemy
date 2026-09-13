@@ -78,7 +78,6 @@ export interface InvokeModelWithResponseStream extends Binding.Service<
     >
   >
 > {}
-export const InvokeModelWithResponseStream =
-  Binding.Service<InvokeModelWithResponseStream>(
-    "AWS.Bedrock.InvokeModelWithResponseStream",
-  );
+export const InvokeModelWithResponseStream = Binding.Service<InvokeModelWithResponseStream>(
+  "AWS.Bedrock.InvokeModelWithResponseStream",
+);

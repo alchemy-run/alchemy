@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Custom indicator feeds require the account to be approved as a
 // Cloudforce One feed provider. On the standard testing account
@@ -99,9 +96,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Intel.IndicatorFeed,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Intel.IndicatorFeed);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -134,9 +129,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Intel.IndicatorFeed,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Intel.IndicatorFeed);
       const all = yield* provider.list();
 
       const found = all.find((f) => f.feedId === feed.feedId);
@@ -192,9 +185,7 @@ test.provider.skipIf(!entitled)(
       expect(updated.isDownloadable).toEqual(true);
 
       const liveUpdated = yield* getFeed(accountId, feed.feedId);
-      expect(liveUpdated.description).toEqual(
-        "alchemy intel lifecycle feed v2",
-      );
+      expect(liveUpdated.description).toEqual("alchemy intel lifecycle feed v2");
       expect(liveUpdated.isAttributable).toEqual(true);
 
       // No-op redeploy keeps the same feed.

@@ -12,32 +12,25 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on (getMonitor's
 // Smithy model omits ResourceNotFoundException — patched in distilled).
-test.provider(
-  "getMonitor on a nonexistent monitor fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        im.getMonitor({
-          MonitorName: "alchemy-nonexistent-internetmonitor-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getMonitor on a nonexistent monitor fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      im.getMonitor({
+        MonitorName: "alchemy-nonexistent-internetmonitor-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Typed wait-until-gone after destroy.
 const assertMonitorGone = (monitorName: string) =>
   im.getMonitor({ MonitorName: monitorName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`monitor ${monitorName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`monitor ${monitorName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -117,9 +110,7 @@ describe("AWS.InternetMonitor.Monitor", () => {
           .describeLogGroups({
             logGroupNamePrefix: `/aws/internet-monitor/${created.monitorName}`,
           })
-          .pipe(
-            Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName)),
-          );
+          .pipe(Effect.map((r) => (r.logGroups ?? []).map((g) => g.logGroupName)));
         expect(remainingLogGroups).toEqual([]);
       }),
     { timeout: 300_000 },

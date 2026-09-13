@@ -117,13 +117,7 @@ export interface Attributes {
   profile: Profile | undefined;
 }
 
-export type Organization = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type Organization = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Organization — the hierarchical container above accounts.
@@ -208,9 +202,7 @@ export const OrganizationProvider = () =>
       organizations.listOrganizations.pages({}).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map(toAttributes),
-          ),
+          Array.from(chunk).flatMap((page) => (page.result ?? []).map(toAttributes)),
         ),
         // Organizations are a Tenant/reseller feature — a regular account
         // token gets `Forbidden` ("Authentication error"). Nothing to list.
@@ -223,15 +215,12 @@ export const OrganizationProvider = () =>
       if (!isResolved(news)) return undefined;
       // Re-parenting is not supported in place — hierarchy moves are
       // gated by `accountMobility`/flags, so a parent change replaces.
-      const oldParent =
-        output?.parent?.id ?? (olds?.parent as string | undefined);
+      const oldParent = output?.parent?.id ?? (olds?.parent as string | undefined);
       const newParent = news.parent;
       // `parent` is Input<string>; only compare once both are concrete.
       if (
         (oldParent === undefined) !== (newParent === undefined) ||
-        (typeof oldParent === "string" &&
-          typeof newParent === "string" &&
-          oldParent !== newParent)
+        (typeof oldParent === "string" && typeof newParent === "string" && oldParent !== newParent)
       ) {
         return { action: "replace" } as const;
       }
@@ -285,8 +274,7 @@ export const OrganizationProvider = () =>
       // observed one when the props omit it (the PUT would otherwise
       // clear it).
       const desiredProfile = news.profile ?? observed.profile ?? undefined;
-      const dirty =
-        observed.name !== name || !sameProfile(observed.profile, news.profile);
+      const dirty = observed.name !== name || !sameProfile(observed.profile, news.profile);
 
       if (!dirty) {
         return toAttributes(observed);
@@ -295,8 +283,7 @@ export const OrganizationProvider = () =>
       const updated = yield* organizations.updateOrganization({
         organizationId: observed.id,
         name,
-        parent:
-          observed.parent != null ? { id: observed.parent.id } : undefined,
+        parent: observed.parent != null ? { id: observed.parent.id } : undefined,
         profile: desiredProfile,
       });
       return toAttributes(updated);
@@ -335,11 +322,7 @@ const findByName = (name: string, parent: string | undefined) =>
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk)
-        .filter(
-          (org) =>
-            org.name === name &&
-            (parent === undefined || org.parent?.id === parent),
-        )
+        .filter((org) => org.name === name && (parent === undefined || org.parent?.id === parent))
         .sort((a, b) => a.createTime.localeCompare(b.createTime))
         .at(0),
     ),
@@ -354,10 +337,7 @@ const createOrganizationName = (id: string, name: string | undefined) =>
  * Compare the observed profile against the desired one. An omitted
  * desired profile is "keep whatever is there" — never a diff.
  */
-const sameProfile = (
-  observed: Profile | null | undefined,
-  desired: Profile | undefined,
-) =>
+const sameProfile = (observed: Profile | null | undefined, desired: Profile | undefined) =>
   desired === undefined ||
   (observed != null &&
     observed.businessAddress === desired.businessAddress &&

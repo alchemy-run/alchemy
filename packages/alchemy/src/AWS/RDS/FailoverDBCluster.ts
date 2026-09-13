@@ -34,6 +34,4 @@ export interface FailoverDBCluster extends Binding.Service<
     ) => Effect.Effect<rds.FailoverDBClusterResult, rds.FailoverDBClusterError>
   >
 > {}
-export const FailoverDBCluster = Binding.Service<FailoverDBCluster>(
-  "AWS.RDS.FailoverDBCluster",
-);
+export const FailoverDBCluster = Binding.Service<FailoverDBCluster>("AWS.RDS.FailoverDBCluster");

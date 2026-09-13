@@ -27,9 +27,7 @@ test.provider("list enumerates the deployed instance profile", (stack) =>
     const provider = yield* Provider.findProvider(InstanceProfile);
     const all = yield* provider.list();
 
-    expect(
-      all.some((p) => p.instanceProfileName === profile.instanceProfileName),
-    ).toBe(true);
+    expect(all.some((p) => p.instanceProfileName === profile.instanceProfileName)).toBe(true);
 
     yield* stack.destroy();
 

@@ -24,10 +24,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 // The Macie session is an account/region singleton with no tags, so ownership
@@ -52,31 +49,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -92,9 +80,7 @@ const getSession = macie2.getMacieSession({}).pipe(
 
 const skipForeign = () =>
   foreignSession
-    ? Effect.logInfo(
-        "Macie is already enabled by someone else — skipping",
-      ).pipe(Effect.as(true))
+    ? Effect.logInfo("Macie is already enabled by someone else — skipping").pipe(Effect.as(true))
     : Effect.succeed(false);
 
 describe.sequential("Macie2 Bindings", () => {
@@ -112,9 +98,7 @@ describe.sequential("Macie2 Bindings", () => {
       const preexisting = yield* aws(getSession);
       if (preexisting) {
         foreignSession = true;
-        yield* Effect.logInfo(
-          "Macie2 test setup: Macie already enabled — suite degrades to no-op",
-        );
+        yield* Effect.logInfo("Macie2 test setup: Macie already enabled — suite degrades to no-op");
         return;
       }
 
@@ -129,9 +113,7 @@ describe.sequential("Macie2 Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Macie2 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Macie2 test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -139,9 +121,7 @@ describe.sequential("Macie2 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Macie2 test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Macie2 test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -330,10 +310,9 @@ describe.sequential("Macie2 Bindings", () => {
             errorTag?: string;
           };
           if (response.errorTag) {
-            expect([
-              "ResourceNotFoundException",
-              "AccessDeniedException",
-            ]).toContain(response.errorTag);
+            expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
+              response.errorTag,
+            );
           } else {
             expect(response.administrator ?? null).toBeNull();
           }
@@ -372,9 +351,7 @@ describe.sequential("Macie2 Bindings", () => {
             errorTag?: string;
           };
           if (admins.errorTag) {
-            expect(["AccessDeniedException", "ValidationException"]).toContain(
-              admins.errorTag,
-            );
+            expect(["AccessDeniedException", "ValidationException"]).toContain(admins.errorTag);
           } else {
             expect(admins.admins).toBeGreaterThanOrEqual(0);
           }
@@ -384,9 +361,7 @@ describe.sequential("Macie2 Bindings", () => {
             errorTag?: string;
           };
           if (orgConfig.errorTag) {
-            expect(["AccessDeniedException", "ValidationException"]).toContain(
-              orgConfig.errorTag,
-            );
+            expect(["AccessDeniedException", "ValidationException"]).toContain(orgConfig.errorTag);
           } else {
             expect(typeof orgConfig.autoEnable).toBe("boolean");
           }

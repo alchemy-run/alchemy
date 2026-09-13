@@ -14,13 +14,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test record names. Each test owns a disjoint subdomain so
 // reruns and parallel runs never collide, and the same name is reused on every
@@ -53,9 +49,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -105,9 +99,7 @@ const purgeRecords = (zoneId: string, name: string, type: string) =>
   listByNameType(zoneId, name, type).pipe(
     Effect.flatMap(
       Effect.forEach((r) =>
-        dns
-          .deleteRecord({ zoneId, dnsRecordId: r.id })
-          .pipe(Effect.catch(() => Effect.void)),
+        dns.deleteRecord({ zoneId, dnsRecordId: r.id }).pipe(Effect.catch(() => Effect.void)),
       ),
     ),
   );
@@ -177,9 +169,7 @@ test.provider(
 
       const created = yield* getRecord(zoneId, initial.recordId);
       expect(created.type).toEqual("SVCB");
-      expect("data" in created ? created.data : undefined).toEqual(
-        SVCB_DATA_V1,
-      );
+      expect("data" in created ? created.data : undefined).toEqual(SVCB_DATA_V1);
 
       const provider = yield* Provider.findProvider(Cloudflare.DNS.Record);
       const listed = (yield* provider.list()).find(
@@ -493,205 +483,195 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
-  "adoption finds a normalized FQDN when given a relative record name",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("adoption finds a normalized FQDN when given a relative record name", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* purgeRecords(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
+    yield* stack.destroy();
+    yield* purgeRecords(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
 
-      const pre = yield* dns.createRecord({
-        zoneId,
-        name: NAME_ADOPT_RELATIVE_FQDN,
-        type: "TXT",
-        content: "pre-existing",
-        ttl: 1,
-      });
+    const pre = yield* dns.createRecord({
+      zoneId,
+      name: NAME_ADOPT_RELATIVE_FQDN,
+      type: "TXT",
+      content: "pre-existing",
+      ttl: 1,
+    });
 
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.DNS.Record("RelativeAdoptedRecord", {
-            zoneId,
-            name: NAME_ADOPT_RELATIVE,
-            type: "TXT",
-            content: "adopted",
-          }).pipe(adopt(true));
-        }),
-      );
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.DNS.Record("RelativeAdoptedRecord", {
+          zoneId,
+          name: NAME_ADOPT_RELATIVE,
+          type: "TXT",
+          content: "adopted",
+        }).pipe(adopt(true));
+      }),
+    );
 
-      expect(adopted.recordId).toEqual(pre.id);
-      expect(adopted.name).toEqual(NAME_ADOPT_RELATIVE_FQDN);
-      expect(adopted.content).toEqual("adopted");
+    expect(adopted.recordId).toEqual(pre.id);
+    expect(adopted.name).toEqual(NAME_ADOPT_RELATIVE_FQDN);
+    expect(adopted.content).toEqual("adopted");
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const gone = yield* findRecord(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
-      expect(gone).toBeUndefined();
-    }).pipe(logLevel),
+    const gone = yield* findRecord(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
+    expect(gone).toBeUndefined();
+  }).pipe(logLevel),
 );
 
 // Several records legitimately share `(name, type)` — e.g. a primary MX and
 // its fallback. Adoption must select the record whose `content`/`priority`
 // match the declaration exactly, never "the first match" (#1262).
-test.provider(
-  "adoption disambiguates records sharing (name, type) by content/priority",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("adoption disambiguates records sharing (name, type) by content/priority", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* purgeRecords(zoneId, NAME_MX, "MX");
+    yield* stack.destroy();
+    yield* purgeRecords(zoneId, NAME_MX, "MX");
 
-      // Two pre-existing MX records for the same name — only content and
-      // priority tell them apart.
-      const prePrimary = yield* dns
-        .createRecord({
+    // Two pre-existing MX records for the same name — only content and
+    // priority tell them apart.
+    const prePrimary = yield* dns
+      .createRecord({
+        zoneId,
+        name: NAME_MX,
+        type: "MX",
+        content: `mx1.${zoneName}`,
+        priority: 1,
+        ttl: 1,
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
+    const preBackup = yield* dns.createRecord({
+      zoneId,
+      name: NAME_MX,
+      type: "MX",
+      content: `mx2.${zoneName}`,
+      priority: 10,
+      ttl: 1,
+    });
+
+    const { primary, backup } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const primary = yield* Cloudflare.DNS.Record("PrimaryMx", {
           zoneId,
           name: NAME_MX,
           type: "MX",
           content: `mx1.${zoneName}`,
           priority: 1,
-          ttl: 1,
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
-      const preBackup = yield* dns.createRecord({
-        zoneId,
-        name: NAME_MX,
-        type: "MX",
-        content: `mx2.${zoneName}`,
-        priority: 10,
-        ttl: 1,
-      });
+        }).pipe(adopt(true));
+        const backup = yield* Cloudflare.DNS.Record("BackupMx", {
+          zoneId,
+          name: NAME_MX,
+          type: "MX",
+          content: `mx2.${zoneName}`,
+          priority: 10,
+        }).pipe(adopt(true));
+        return { primary, backup };
+      }),
+    );
 
-      const { primary, backup } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const primary = yield* Cloudflare.DNS.Record("PrimaryMx", {
-            zoneId,
-            name: NAME_MX,
-            type: "MX",
-            content: `mx1.${zoneName}`,
-            priority: 1,
-          }).pipe(adopt(true));
-          const backup = yield* Cloudflare.DNS.Record("BackupMx", {
-            zoneId,
-            name: NAME_MX,
-            type: "MX",
-            content: `mx2.${zoneName}`,
-            priority: 10,
-          }).pipe(adopt(true));
-          return { primary, backup };
-        }),
-      );
+    // Each logical resource adopted its own physical record.
+    expect(primary.recordId).toEqual(prePrimary.id);
+    expect(backup.recordId).toEqual(preBackup.id);
+    expect(primary.recordId).not.toEqual(backup.recordId);
 
-      // Each logical resource adopted its own physical record.
-      expect(primary.recordId).toEqual(prePrimary.id);
-      expect(backup.recordId).toEqual(preBackup.id);
-      expect(primary.recordId).not.toEqual(backup.recordId);
+    // Adopt-then-modify: change the backup's priority; same physical id.
+    const changed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const primary = yield* Cloudflare.DNS.Record("PrimaryMx", {
+          zoneId,
+          name: NAME_MX,
+          type: "MX",
+          content: `mx1.${zoneName}`,
+          priority: 1,
+        }).pipe(adopt(true));
+        const backup = yield* Cloudflare.DNS.Record("BackupMx", {
+          zoneId,
+          name: NAME_MX,
+          type: "MX",
+          content: `mx2.${zoneName}`,
+          priority: 20,
+        }).pipe(adopt(true));
+        return { primary, backup };
+      }),
+    );
+    expect(changed.backup.recordId).toEqual(preBackup.id);
+    const liveBackup = yield* getRecord(zoneId, changed.backup.recordId);
+    expect("priority" in liveBackup ? liveBackup.priority : undefined).toEqual(20);
+    const livePrimary = yield* getRecord(zoneId, changed.primary.recordId);
+    expect("priority" in livePrimary ? livePrimary.priority : undefined).toEqual(1);
 
-      // Adopt-then-modify: change the backup's priority; same physical id.
-      const changed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const primary = yield* Cloudflare.DNS.Record("PrimaryMx", {
-            zoneId,
-            name: NAME_MX,
-            type: "MX",
-            content: `mx1.${zoneName}`,
-            priority: 1,
-          }).pipe(adopt(true));
-          const backup = yield* Cloudflare.DNS.Record("BackupMx", {
-            zoneId,
-            name: NAME_MX,
-            type: "MX",
-            content: `mx2.${zoneName}`,
-            priority: 20,
-          }).pipe(adopt(true));
-          return { primary, backup };
-        }),
-      );
-      expect(changed.backup.recordId).toEqual(preBackup.id);
-      const liveBackup = yield* getRecord(zoneId, changed.backup.recordId);
-      expect(
-        "priority" in liveBackup ? liveBackup.priority : undefined,
-      ).toEqual(20);
-      const livePrimary = yield* getRecord(zoneId, changed.primary.recordId);
-      expect(
-        "priority" in livePrimary ? livePrimary.priority : undefined,
-      ).toEqual(1);
+    yield* stack.destroy();
 
-      yield* stack.destroy();
-
-      const leftovers = yield* listByNameType(zoneId, NAME_MX, "MX");
-      expect(leftovers).toEqual([]);
-    }).pipe(logLevel),
+    const leftovers = yield* listByNameType(zoneId, NAME_MX, "MX");
+    expect(leftovers).toEqual([]);
+  }).pipe(logLevel),
 );
 
 // When multiple candidates survive the content/priority filter, adoption must
 // fail with an actionable error instead of picking one arbitrarily.
-test.provider(
-  "adoption fails with an actionable error when the match stays ambiguous",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("adoption fails with an actionable error when the match stays ambiguous", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
+    yield* stack.destroy();
+    yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
 
-      // Same content on both records — only priority differs. A declaration
-      // without a priority cannot select one.
-      yield* dns
-        .createRecord({
-          zoneId,
-          name: NAME_MX_AMBIG,
-          type: "MX",
-          content: `mx.${zoneName}`,
-          priority: 1,
-          ttl: 1,
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
-      yield* dns.createRecord({
+    // Same content on both records — only priority differs. A declaration
+    // without a priority cannot select one.
+    yield* dns
+      .createRecord({
         zoneId,
         name: NAME_MX_AMBIG,
         type: "MX",
         content: `mx.${zoneName}`,
-        priority: 10,
+        priority: 1,
         ttl: 1,
-      });
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
+    yield* dns.createRecord({
+      zoneId,
+      name: NAME_MX_AMBIG,
+      type: "MX",
+      content: `mx.${zoneName}`,
+      priority: 10,
+      ttl: 1,
+    });
 
-      const error = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.DNS.Record("AmbiguousMx", {
-              zoneId,
-              name: NAME_MX_AMBIG,
-              type: "MX",
-              content: `mx.${zoneName}`,
-            }).pipe(adopt(true));
-          }),
-        )
-        .pipe(
-          Effect.as(undefined),
-          Effect.catchCause((cause) => Effect.succeed(findError(cause))),
-        );
-      expect(error).toBeInstanceOf(Cloudflare.DNS.AmbiguousDnsRecordError);
-      expect(String(error)).toContain("Multiple DNS records");
+    const error = yield* stack
+      .deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("AmbiguousMx", {
+            zoneId,
+            name: NAME_MX_AMBIG,
+            type: "MX",
+            content: `mx.${zoneName}`,
+          }).pipe(adopt(true));
+        }),
+      )
+      .pipe(
+        Effect.as(undefined),
+        Effect.catchCause((cause) => Effect.succeed(findError(cause))),
+      );
+    expect(error).toBeInstanceOf(Cloudflare.DNS.AmbiguousDnsRecordError);
+    expect(String(error)).toContain("Multiple DNS records");
 
-      yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Canonical `list()` test (zone-scoped collection): `list()` enumerates every
@@ -749,9 +729,7 @@ const findError = (cause: Cause.Cause<unknown>): unknown =>
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -760,7 +738,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

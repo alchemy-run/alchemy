@@ -123,10 +123,7 @@ export const registerMigration = ({
 export const applyMigrations = (
   support: NonNullable<DatabaseService["migrate"]>,
   options: BetterAuthOptions,
-) =>
-  Effect.flatMap(support.connect, (acquire) =>
-    runMigrationWith(acquire, options),
-  );
+) => Effect.flatMap(support.connect, (acquire) => runMigrationWith(acquire, options));
 
 const runMigrationWith = (
   acquire: Effect.Effect<
@@ -147,9 +144,7 @@ const runMigrationWith = (
           ),
         );
       }
-      const { getMigrations } = yield* Effect.promise(
-        () => import("better-auth/db/migration"),
-      );
+      const { getMigrations } = yield* Effect.promise(() => import("better-auth/db/migration"));
       const migrations = yield* Effect.tryPromise({
         try: () =>
           getMigrations({
@@ -187,9 +182,7 @@ const runMigrationWith = (
  * changes the fingerprint, which changes the migration Action's input and
  * re-runs it on the next deploy.
  */
-export const schemaFingerprint = (
-  options: BetterAuthOptions,
-): Effect.Effect<string> =>
+export const schemaFingerprint = (options: BetterAuthOptions): Effect.Effect<string> =>
   Effect.suspend(() => {
     const schema = getSchema(options);
     // Reduce to the migration-relevant field attributes; sha256Object's

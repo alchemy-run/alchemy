@@ -8,9 +8,7 @@ import * as Schedule from "effect/Schedule";
  * `available` within the bounded polling budget, or when the API returns a
  * structurally incomplete description.
  */
-export class S3FilesNotConverged extends Data.TaggedError(
-  "S3FilesNotConverged",
-)<{
+export class S3FilesNotConverged extends Data.TaggedError("S3FilesNotConverged")<{
   readonly resource: string;
   readonly status: string | undefined;
 }> {}
@@ -52,9 +50,7 @@ export const untilSettled = <A, E, R>(
  * Convert the wire tag list (`[{ key, value }]`) into a plain record for
  * diffing with `diffTags`.
  */
-export const toTagRecord = (
-  tags: readonly s3files.Tag[] | undefined,
-): Record<string, string> => {
+export const toTagRecord = (tags: readonly s3files.Tag[] | undefined): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const tag of tags ?? []) {
     out[tag.key] = tag.value;

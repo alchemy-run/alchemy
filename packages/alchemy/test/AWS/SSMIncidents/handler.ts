@@ -82,8 +82,7 @@ export default IncidentsTestFunction.make(
 
     // Findings
     const listIncidentFindings = yield* SSMIncidents.ListIncidentFindings();
-    const batchGetIncidentFindings =
-      yield* SSMIncidents.BatchGetIncidentFindings();
+    const batchGetIncidentFindings = yield* SSMIncidents.BatchGetIncidentFindings();
 
     const bound = {
       startIncident,

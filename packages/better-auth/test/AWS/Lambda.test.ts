@@ -36,9 +36,7 @@ beforeAll(
     baseUrl = functionUrl!.replace(/\/+$/, "");
 
     yield* getJson<{ email: string | null }>(`${baseUrl}/me`).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning(`Lambda not ready yet: ${error.message}`),
-      ),
+      Effect.tapError((error) => Effect.logWarning(`Lambda not ready yet: ${error.message}`)),
       readinessRetry,
     );
   }),
@@ -61,9 +59,7 @@ test(
       name: "Lambda User",
     }).pipe(
       Effect.filterOrFail(
-        (response) =>
-          response.status === 200 ||
-          response.body.includes("USER_ALREADY_EXISTS"),
+        (response) => response.status === 200 || response.body.includes("USER_ALREADY_EXISTS"),
         (response) => new AuthHttpError({ url: baseUrl, ...response }),
       ),
     );

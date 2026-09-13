@@ -12,9 +12,7 @@ import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
 import type { RateLimitProps } from "./RateLimitProps.shared.ts";
 
-export class RateLimit extends Plugin.Service<RateLimit>()(
-  "cloudflare-runtime/plugin/RateLimit",
-) {}
+export class RateLimit extends Plugin.Service<RateLimit>()("cloudflare-runtime/plugin/RateLimit") {}
 
 export const RateLimitLive = Layer.succeed(
   RateLimit,

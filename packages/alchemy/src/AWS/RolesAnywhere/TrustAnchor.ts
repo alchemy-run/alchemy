@@ -10,19 +10,13 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readRolesAnywhereTags,
-  syncRolesAnywhereTags,
-  toWireTags,
-} from "./internal.ts";
+import { readRolesAnywhereTags, syncRolesAnywhereTags, toWireTags } from "./internal.ts";
 
 /**
  * Raised before any AWS call when the trust anchor's source is misconfigured
  * — exactly one of `certificateBundle` or `acmPcaArn` must be provided.
  */
-export class TrustAnchorSourceConflict extends Data.TaggedError(
-  "TrustAnchorSourceConflict",
-)<{
+export class TrustAnchorSourceConflict extends Data.TaggedError("TrustAnchorSourceConflict")<{
   readonly message: string;
 }> {}
 
@@ -160,9 +154,7 @@ export interface TrustAnchor extends Resource<
  *
  * @resource
  */
-export const TrustAnchor = Resource<TrustAnchor>(
-  "AWS.RolesAnywhere.TrustAnchor",
-);
+export const TrustAnchor = Resource<TrustAnchor>("AWS.RolesAnywhere.TrustAnchor");
 
 const toAttrs = (detail: rolesanywhere.TrustAnchorDetail) => ({
   trustAnchorId: detail.trustAnchorId!,
@@ -172,10 +164,7 @@ const toAttrs = (detail: rolesanywhere.TrustAnchorDetail) => ({
 });
 
 const desiredSource = Effect.fn(function* (props: TrustAnchorProps) {
-  if (
-    (props.certificateBundle === undefined) ===
-    (props.acmPcaArn === undefined)
-  ) {
+  if ((props.certificateBundle === undefined) === (props.acmPcaArn === undefined)) {
     return yield* new TrustAnchorSourceConflict({
       message: "exactly one of certificateBundle or acmPcaArn must be provided",
     });
@@ -217,8 +206,7 @@ const sourceDrift = (
     return (
       observedData === undefined ||
       !("x509CertificateData" in observedData) ||
-      observedData.x509CertificateData?.trim() !==
-        desiredData.x509CertificateData
+      observedData.x509CertificateData?.trim() !== desiredData.x509CertificateData
     );
   }
   return (
@@ -232,14 +220,8 @@ export const TrustAnchorProvider = () =>
   Provider.effect(
     TrustAnchor,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: TrustAnchorProps,
-      ) {
-        return (
-          props.trustAnchorName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: TrustAnchorProps) {
+        return props.trustAnchorName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Find a trust anchor by its user-facing name across all pages. */
@@ -253,9 +235,7 @@ export const TrustAnchorProvider = () =>
       const getById = (trustAnchorId: string) =>
         rolesanywhere.getTrustAnchor({ trustAnchorId }).pipe(
           Effect.map((r) => r.trustAnchor),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -277,9 +257,7 @@ export const TrustAnchorProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const source = yield* desiredSource(news);
           const desiredEnabled = news.enabled ?? true;
-          const desiredNotifications = toWireNotificationSettings(
-            news.notificationSettings ?? [],
-          );
+          const desiredNotifications = toWireNotificationSettings(news.notificationSettings ?? []);
 
           // 1. Observe — cloud state is authoritative; output caches the id.
           let live = output?.trustAnchorId
@@ -294,9 +272,7 @@ export const TrustAnchorProvider = () =>
               enabled: desiredEnabled,
               tags: toWireTags(desiredTags),
               notificationSettings:
-                desiredNotifications.length > 0
-                  ? desiredNotifications
-                  : undefined,
+                desiredNotifications.length > 0 ? desiredNotifications : undefined,
             });
             live = created.trustAnchor;
           } else {
@@ -318,20 +294,14 @@ export const TrustAnchorProvider = () =>
           // resets are driven by the settings previously declared in `olds`
           // rather than full replacement of observed state.
           const observedNotifications = new Map(
-            (live.notificationSettings ?? []).map((setting) => [
-              notificationKey(setting),
-              setting,
-            ]),
+            (live.notificationSettings ?? []).map((setting) => [notificationKey(setting), setting]),
           );
           const notificationDrift = desiredNotifications.some((desired) => {
-            const observed = observedNotifications.get(
-              notificationKey(desired),
-            );
+            const observed = observedNotifications.get(notificationKey(desired));
             return (
               observed === undefined ||
               observed.enabled !== desired.enabled ||
-              (desired.threshold !== undefined &&
-                observed.threshold !== desired.threshold)
+              (desired.threshold !== undefined && observed.threshold !== desired.threshold)
             );
           });
           if (notificationDrift) {
@@ -341,14 +311,9 @@ export const TrustAnchorProvider = () =>
             });
             live = updated.trustAnchor;
           }
-          const desiredNotificationKeys = new Set(
-            desiredNotifications.map(notificationKey),
-          );
+          const desiredNotificationKeys = new Set(desiredNotifications.map(notificationKey));
           const resetKeys = (olds?.notificationSettings ?? [])
-            .filter(
-              (previous) =>
-                !desiredNotificationKeys.has(notificationKey(previous)),
-            )
+            .filter((previous) => !desiredNotificationKeys.has(notificationKey(previous)))
             .map((previous) => ({
               event: previous.event,
               channel: previous.channel,
@@ -359,11 +324,7 @@ export const TrustAnchorProvider = () =>
                 trustAnchorId: live.trustAnchorId!,
                 notificationSettingKeys: resetKeys,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
             live = reset?.trustAnchor ?? live;
           }
 
@@ -390,9 +351,7 @@ export const TrustAnchorProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* rolesanywhere
             .deleteTrustAnchor({ trustAnchorId: output.trustAnchorId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

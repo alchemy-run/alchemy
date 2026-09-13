@@ -14,9 +14,7 @@ import type { Providers } from "../Providers.ts";
  * origin, etc.) is available without re-declaring the struct.
  */
 export type OriginRequest = NonNullable<
-  NonNullable<
-    zeroTrust.PutTunnelCloudflaredConfigurationRequest["config"]
-  >["originRequest"]
+  NonNullable<zeroTrust.PutTunnelCloudflaredConfigurationRequest["config"]>["originRequest"]
 >;
 
 /**
@@ -154,9 +152,7 @@ export type Configuration = Resource<
  * @product Tunnels
  * @category Cloudflare One (Zero Trust)
  */
-export const Configuration = Resource<Configuration>(
-  "Cloudflare.Tunnel.Configuration",
-);
+export const Configuration = Resource<Configuration>("Cloudflare.Tunnel.Configuration");
 
 // ---------------------------------------------------------------------------
 // Observed-state types
@@ -175,8 +171,7 @@ interface ObservedConfig {
   readonly version?: number;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const stripNulls = (v: unknown): unknown => {
   if (Array.isArray(v)) return v.map(stripNulls);
@@ -280,9 +275,7 @@ export const ConfigurationProvider = () =>
           // A tunnel with no configuration yet surfaces as the tagged
           // `TunnelConfigurationNotFound` (code 1055) — swallow into "missing".
           const r = yield* getConfig({ accountId, tunnelId }).pipe(
-            Effect.catchTag("TunnelConfigurationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("TunnelConfigurationNotFound", () => Effect.succeed(undefined)),
           );
           if (r === undefined) return undefined;
           return narrowConfig(r as Parameters<typeof narrowConfig>[0]);
@@ -297,11 +290,7 @@ export const ConfigurationProvider = () =>
           // a tunnel's configuration is keyed by tunnelId in the URL.
           const oldId = (olds as ConfigurationProps).tunnelId;
           const newId = (news as ConfigurationProps).tunnelId;
-          if (
-            typeof oldId === "string" &&
-            typeof newId === "string" &&
-            oldId !== newId
-          ) {
+          if (typeof oldId === "string" && typeof newId === "string" && oldId !== newId) {
             return { action: "replace" } as const;
           }
         }),
@@ -310,8 +299,7 @@ export const ConfigurationProvider = () =>
           const { accountId } = yield* env;
           // Inputs have been resolved to concrete strings by the Plan layer.
           const tunnelId = news.tunnelId as string;
-          const catchAllService =
-            news.catchAllService ?? DEFAULT_CATCH_ALL_SERVICE;
+          const catchAllService = news.catchAllService ?? DEFAULT_CATCH_ALL_SERVICE;
           const desiredIngress = buildIngress(news.ingress, catchAllService);
 
           // Observe — falls through to a PUT if the tunnel has no config yet.
@@ -335,9 +323,7 @@ export const ConfigurationProvider = () =>
                 originRequest: news.originRequest,
               },
             });
-            observed = narrowConfig(
-              updated as Parameters<typeof narrowConfig>[0],
-            );
+            observed = narrowConfig(updated as Parameters<typeof narrowConfig>[0]);
           }
 
           return {
@@ -411,9 +397,7 @@ export const ConfigurationProvider = () =>
               { concurrency: 10 },
             );
 
-            return rows.filter(
-              (row): row is ConfigurationAttributes => row !== undefined,
-            );
+            return rows.filter((row): row is ConfigurationAttributes => row !== undefined);
           }),
       };
     }),

@@ -30,8 +30,7 @@ export default ResourceExplorerTestFunction.make(
     });
     const search = yield* ResourceExplorer.Search(view);
     const listResources = yield* ResourceExplorer.ListResources(view);
-    const listSupportedResourceTypes =
-      yield* ResourceExplorer.ListSupportedResourceTypes();
+    const listSupportedResourceTypes = yield* ResourceExplorer.ListSupportedResourceTypes();
 
     return {
       fetch: Effect.gen(function* () {
@@ -67,16 +66,11 @@ export default ResourceExplorerTestFunction.make(
             MaxResults: 100,
           });
           return yield* HttpServerResponse.json({
-            resourceTypes: (result.ResourceTypes ?? []).map(
-              (t) => t.ResourceType,
-            ),
+            resourceTypes: (result.ResourceTypes ?? []).map((t) => t.ResourceType),
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

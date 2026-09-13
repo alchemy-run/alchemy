@@ -24,11 +24,7 @@ export interface RateLimitClient {
   raw: Effect.Effect<cf.RateLimit, never, RuntimeContext>;
   limit(
     options: Parameters<cf.RateLimit["limit"]>[0],
-  ): Effect.Effect<
-    Awaited<ReturnType<cf.RateLimit["limit"]>>,
-    RateLimitError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<Awaited<ReturnType<cf.RateLimit["limit"]>>, RateLimitError, RuntimeContext>;
 }
 
 export type RateLimitProps = {
@@ -108,11 +104,7 @@ export type RateLimitProps = {
  * @product Rate Limiting
  * @category Application Security
  */
-export interface RateLimit extends Binding.Service<
-  RateLimit,
-  TypeId,
-  RateLimitClient
-> {
+export interface RateLimit extends Binding.Service<RateLimit, TypeId, RateLimitClient> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @param props Rate limit namespace + simple config.

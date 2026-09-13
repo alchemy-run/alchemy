@@ -110,14 +110,10 @@ export const MetricFilterProvider = () =>
         filterName: filter.filterName,
         logGroupName,
         filterPattern: filter.filterPattern ?? "",
-        metricTransformations: (filter.metricTransformations ??
-          []) as MetricTransformation[],
+        metricTransformations: (filter.metricTransformations ?? []) as MetricTransformation[],
       });
 
-      const observe = Effect.fn(function* (
-        logGroupName: string,
-        filterName: string,
-      ) {
+      const observe = Effect.fn(function* (logGroupName: string, filterName: string) {
         const described = yield* logs
           .describeMetricFilters({
             logGroupName,
@@ -160,25 +156,21 @@ export const MetricFilterProvider = () =>
           if (olds.logGroupName !== news.logGroupName) {
             return { action: "replace" } as const;
           }
-          if (
-            (yield* toFilterName(id, olds)) !== (yield* toFilterName(id, news))
-          ) {
+          if ((yield* toFilterName(id, olds)) !== (yield* toFilterName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const logGroupName = output?.logGroupName ?? olds?.logGroupName;
           if (logGroupName === undefined) return undefined;
-          const filterName =
-            output?.filterName ?? (yield* toFilterName(id, olds ?? {}));
+          const filterName = output?.filterName ?? (yield* toFilterName(id, olds ?? {}));
           const observed = yield* observe(logGroupName, filterName);
           if (!observed) return undefined;
           return toAttributes(logGroupName, observed);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const logGroupName = news.logGroupName;
-          const filterName =
-            output?.filterName ?? (yield* toFilterName(id, news));
+          const filterName = output?.filterName ?? (yield* toFilterName(id, news));
           const desiredPattern = news.filterPattern ?? "";
 
           // Observe — putMetricFilter has natural upsert semantics keyed by

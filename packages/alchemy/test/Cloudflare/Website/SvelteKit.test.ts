@@ -15,23 +15,13 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "sveltekit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-app");
 
 // Keep the temp clone under the alchemy package (same convention as the
 // Vite tests) so the project root stays representable relative to cwd.
@@ -69,16 +59,13 @@ describe.concurrent("SvelteKit", () => {
               // A REAL KV namespace bound into `platform.env.SITE_KV` — the
               // /api/kv routes round-trip it server-side.
               const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
-              const site = yield* Cloudflare.Website.SvelteKit(
-                "SvelteKitSite",
-                {
-                  ...svelteKitProps(rootDir),
-                  env: {
-                    TEST_BINDING: bindingMarker,
-                    SITE_KV: siteKv,
-                  },
+              const site = yield* Cloudflare.Website.SvelteKit("SvelteKitSite", {
+                ...svelteKitProps(rootDir),
+                env: {
+                  TEST_BINDING: bindingMarker,
+                  SITE_KV: siteKv,
                 },
-              );
+              });
               return { site, siteKv };
             }),
           );
@@ -109,14 +96,10 @@ describe.concurrent("SvelteKit", () => {
         });
 
         // Prerendered page served from assets.
-        yield* expectUrlContains(
-          `${site1.url!}/prerendered`,
-          "this-page-is-prerendered",
-          {
-            timeout: "60 seconds",
-            label: "prerendered page",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/prerendered`, "this-page-is-prerendered", {
+          timeout: "60 seconds",
+          label: "prerendered page",
+        });
 
         // ── form action: the first non-GET against an alchemy-deployed
         // framework worker. The urlencoded POST must route through the asset
@@ -160,9 +143,7 @@ describe.concurrent("SvelteKit", () => {
           .pipe(
             Effect.flatMap((res) =>
               Effect.tryPromise(() =>
-                new Response(
-                  Stream.toReadableStream(res.body) as BodyInit,
-                ).text(),
+                new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
               ),
             ),
             Effect.retry({
@@ -189,10 +170,7 @@ describe.concurrent("SvelteKit", () => {
         const page = yield* fs.readFileString(pagePath);
         yield* fs.writeFileString(
           pagePath,
-          page.replace(
-            "SvelteKit SSR home",
-            `SvelteKit SSR home ${editedMarker}`,
-          ),
+          page.replace("SvelteKit SSR home", `SvelteKit SSR home ${editedMarker}`),
         );
 
         const { site: site3 } = yield* deploy();
@@ -221,11 +199,7 @@ describe.concurrent("SvelteKit", () => {
   // in the worker with access to `platform.env`.
   // ─────────────────────────────────────────────────────────────────────
 
-  const spaFixtureDir = pathe.resolve(
-    import.meta.dirname,
-    "fixtures",
-    "sveltekit-spa-app",
-  );
+  const spaFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-spa-app");
 
   const SPA_SHELL_MARKER = "sveltekit-spa-shell";
 
@@ -280,9 +254,7 @@ describe.concurrent("SvelteKit", () => {
 
         // (b) A route that doesn't exist at all serves the shell too — the
         // client router owns 404 handling in SPA mode.
-        const unknownBody = yield* expectSpaShell(
-          `${site.url!}/definitely/not/a/route`,
-        );
+        const unknownBody = yield* expectSpaShell(`${site.url!}/definitely/not/a/route`);
         expect(unknownBody).toContain(SPA_SHELL_MARKER);
 
         // (c) The server endpoint executes in the worker with the binding.
@@ -293,11 +265,7 @@ describe.concurrent("SvelteKit", () => {
         }>(`${site.url!}/api/widgets`);
         expect(widgets.server).toBe(true);
         expect(widgets.message).toBe(bindingMarker);
-        expect(widgets.widgets.map((w) => w.name)).toEqual([
-          "sprocket",
-          "flange",
-          "grommet",
-        ]);
+        expect(widgets.widgets.map((w) => w.name)).toEqual(["sprocket", "flange", "grommet"]);
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
@@ -324,11 +292,7 @@ describe.concurrent("SvelteKit", () => {
   //
   // ─────────────────────────────────────────────────────────────────────
 
-  const notFoundFixtureDir = pathe.resolve(
-    import.meta.dirname,
-    "fixtures",
-    "sveltekit-404-app",
-  );
+  const notFoundFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-404-app");
 
   /** app.html marker — present in every response rendered through app.html. */
   const SHELL_404_MARKER = "sveltekit-404-shell";
@@ -376,47 +340,36 @@ describe.concurrent("SvelteKit", () => {
 
         // (a) Matched route SSRs normally: a plain (non-navigation) fetch
         // reaches the worker and the server `load` observes platform.env.
-        const homeBody = yield* expectUrlContains(
-          `${site.url!}/`,
-          `binding:${bindingMarker}`,
-          {
-            timeout: "120 seconds",
-            label: "404-page spa: SSR home",
-          },
-        );
+        const homeBody = yield* expectUrlContains(`${site.url!}/`, `binding:${bindingMarker}`, {
+          timeout: "120 seconds",
+          label: "404-page spa: SSR home",
+        });
         expect(homeBody).toContain(HOME_404_MARKER);
 
         // (b) An unmatched route on a navigation-shaped request serves the
         // generated app-shell 404.html from the assets layer with status
         // 404 — no kit error-page markup (the worker never ran) and no
         // page markup (the shell render has no page components).
-        const fallbackBody = yield* expectPageResponse(
-          `${site.url!}/definitely/not/a/route`,
-          {
-            label: "404-page spa: assets fallback (navigate)",
-            headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
-            expected: `status 404 with app-shell marker "${SHELL_404_MARKER}" and no "${KIT_ERROR_MARKER}"`,
-            check: (res) =>
-              res.status === 404 &&
-              res.body.includes(SHELL_404_MARKER) &&
-              !res.body.includes(KIT_ERROR_MARKER),
-          },
-        );
+        const fallbackBody = yield* expectPageResponse(`${site.url!}/definitely/not/a/route`, {
+          label: "404-page spa: assets fallback (navigate)",
+          headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+          expected: `status 404 with app-shell marker "${SHELL_404_MARKER}" and no "${KIT_ERROR_MARKER}"`,
+          check: (res) =>
+            res.status === 404 &&
+            res.body.includes(SHELL_404_MARKER) &&
+            !res.body.includes(KIT_ERROR_MARKER),
+        });
         expect(fallbackBody).not.toContain(HOME_404_MARKER);
 
         // (c) The same unmatched route WITHOUT `Sec-Fetch-Mode: navigate`
         // invokes the worker, and kit renders its own error page — the
         // shim never defers in 404-page mode (upstream parity).
-        const kitErrorBody = yield* expectPageResponse(
-          `${site.url!}/definitely/not/a/route`,
-          {
-            label: "404-page spa: worker-rendered 404 (non-navigation)",
-            headers: { accept: "text/html" },
-            expected: `status 404 with kit error marker "${KIT_ERROR_MARKER}"`,
-            check: (res) =>
-              res.status === 404 && res.body.includes(KIT_ERROR_MARKER),
-          },
-        );
+        const kitErrorBody = yield* expectPageResponse(`${site.url!}/definitely/not/a/route`, {
+          label: "404-page spa: worker-rendered 404 (non-navigation)",
+          headers: { accept: "text/html" },
+          expected: `status 404 with kit error marker "${KIT_ERROR_MARKER}"`,
+          check: (res) => res.status === 404 && res.body.includes(KIT_ERROR_MARKER),
+        });
         expect(kitErrorBody).toContain("status:404");
 
         yield* stack.destroy();
@@ -431,11 +384,7 @@ describe.concurrent("SvelteKit", () => {
   // page to HTML at build time and deploys them as static assets.
   // ─────────────────────────────────────────────────────────────────────
 
-  const staticFixtureDir = pathe.resolve(
-    import.meta.dirname,
-    "fixtures",
-    "sveltekit-static-app",
-  );
+  const staticFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-static-app");
 
   test.provider(
     "SvelteKit fully-prerendered: pages serve as static assets; the server bundle is still uploaded as a worker (behavior pin)",
@@ -478,14 +427,10 @@ describe.concurrent("SvelteKit", () => {
           timeout: "120 seconds",
           label: "prerendered home",
         });
-        yield* expectUrlContains(
-          `${site.url!}/about`,
-          "sveltekit-static-about",
-          {
-            timeout: "60 seconds",
-            label: "prerendered about",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/about`, "sveltekit-static-about", {
+          timeout: "60 seconds",
+          label: "prerendered about",
+        });
         yield* expectUrlContains(`${site.url!}/docs`, "sveltekit-static-docs", {
           timeout: "60 seconds",
           label: "prerendered docs",
@@ -510,19 +455,12 @@ describe.concurrent("SvelteKit", () => {
 
   class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
-  const waitForNamespaceToBeDeleted = Effect.fn(function* (
-    namespaceId: string,
-    accountId: string,
-  ) {
+  const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
     yield* kv.getNamespace({ accountId, namespaceId }).pipe(
       Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
       Effect.retry({
-        while: (e): e is NamespaceStillExists =>
-          e instanceof NamespaceStillExists,
-        schedule: Schedule.min([
-          Schedule.exponential(250),
-          Schedule.spaced("2 seconds"),
-        ]),
+        while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
+        schedule: Schedule.min([Schedule.exponential(250), Schedule.spaced("2 seconds")]),
         times: 10,
       }),
       Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -600,10 +538,7 @@ describe.concurrent("SvelteKit", () => {
         // Same ~127s budget as `expectSpaShell` (matches the 120s
         // first-request convention used by `expectUrlContains`).
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("750 millis", 1.5),
-            Schedule.spaced("8 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("750 millis", 1.5), Schedule.spaced("8 seconds")]),
           Schedule.recurs(20),
         ]),
       }),
@@ -659,10 +594,7 @@ describe.concurrent("SvelteKit", () => {
         // `expectUrlContains`: a fully concurrent suite creates dozens of
         // fresh workers.dev subdomains at once and propagation slows down.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("750 millis", 1.5),
-            Schedule.spaced("8 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("750 millis", 1.5), Schedule.spaced("8 seconds")]),
           Schedule.recurs(20),
         ]),
       }),
@@ -674,11 +606,7 @@ describe.concurrent("SvelteKit", () => {
    * `accept: text/html` so the action result is server-rendered into the
    * page. Retries until the route serves 200.
    */
-  const postFormReady = (
-    url: string,
-    origin: string,
-    form: Record<string, string>,
-  ) =>
+  const postFormReady = (url: string, origin: string, form: Record<string, string>) =>
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       return yield* client

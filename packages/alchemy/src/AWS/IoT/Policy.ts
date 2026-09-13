@@ -97,10 +97,7 @@ export const PolicyProvider = () =>
     Policy,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: PolicyProps) {
-        return (
-          props.policyName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.policyName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       return Policy.Provider.of({
@@ -120,15 +117,10 @@ export const PolicyProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const policyName =
-            output?.policyName ?? (yield* createName(id, olds ?? {}));
+          const policyName = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .getPolicy({ policyName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!found) return undefined;
           const attrs = {
             policyName,
@@ -145,33 +137,22 @@ export const PolicyProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const policyName =
-            output?.policyName ?? (yield* createName(id, news));
+          const policyName = output?.policyName ?? (yield* createName(id, news));
           const desiredDocument = stringifyDocument(news.policyDocument);
 
           // OBSERVE
           let live = yield* iot
             .getPolicy({ policyName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // ENSURE
           if (live === undefined) {
             yield* iot
               .createPolicy({ policyName, policyDocument: desiredDocument })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             live = yield* iot.getPolicy({ policyName });
           } else if (
-            normalizeDocument(live.policyDocument) !==
-            normalizeDocument(desiredDocument)
+            normalizeDocument(live.policyDocument) !== normalizeDocument(desiredDocument)
           ) {
             // SYNC document — a new default version. IoT caps a policy at 5
             // versions, so prune the oldest non-default version first.
@@ -187,12 +168,7 @@ export const PolicyProvider = () =>
                   policyName,
                   policyVersionId: nonDefault[0].versionId,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             }
             yield* iot.createPolicyVersion({
               policyName,
@@ -230,28 +206,19 @@ export const PolicyProvider = () =>
                   policyName,
                   policyVersionId: v.versionId!,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           // Detach any lingering targets (certificates/groups) before delete.
           const detachTargets = Effect.gen(function* () {
             const { targets = [] } = yield* iot
               .listTargetsForPolicy({ policyName })
               .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed({ targets: [] }),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ targets: [] })),
               );
             yield* Effect.forEach(targets, (target) =>
               iot
                 .detachPolicy({ policyName, target })
-                .pipe(
-                  Effect.catchTag("InvalidRequestException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("InvalidRequestException", () => Effect.void)),
             );
           });
           yield* iot.deletePolicy({ policyName }).pipe(
@@ -263,10 +230,7 @@ export const PolicyProvider = () =>
                     .deletePolicy({ policyName })
                     .pipe(
                       Effect.catchTag(
-                        [
-                          "ResourceNotFoundException",
-                          "DeleteConflictException",
-                        ],
+                        ["ResourceNotFoundException", "DeleteConflictException"],
                         () => Effect.void,
                       ),
                     ),

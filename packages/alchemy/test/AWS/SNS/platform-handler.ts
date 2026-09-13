@@ -30,9 +30,7 @@ export const PlatformFixtureLive = Layer.effect(
   Effect.gen(function* () {
     const application = yield* AWS.SNS.PlatformApplication("TestPushApp", {
       platform: process.env.AWS_TEST_SNS_PLATFORM_NAME ?? "GCM",
-      platformCredential: Redacted.make(
-        process.env.AWS_TEST_SNS_PLATFORM_CREDENTIAL ?? "",
-      ),
+      platformCredential: Redacted.make(process.env.AWS_TEST_SNS_PLATFORM_CREDENTIAL ?? ""),
     });
     return { application };
   }),
@@ -56,13 +54,10 @@ export const PlatformApiFunctionLive = PlatformApiFunction.make(
     const { application } = yield* PlatformFixture;
 
     const createEndpoint = yield* AWS.SNS.CreatePlatformEndpoint(application);
-    const getEndpointAttributes =
-      yield* AWS.SNS.GetEndpointAttributes(application);
-    const setEndpointAttributes =
-      yield* AWS.SNS.SetEndpointAttributes(application);
+    const getEndpointAttributes = yield* AWS.SNS.GetEndpointAttributes(application);
+    const setEndpointAttributes = yield* AWS.SNS.SetEndpointAttributes(application);
     const deleteEndpoint = yield* AWS.SNS.DeleteEndpoint(application);
-    const listEndpoints =
-      yield* AWS.SNS.ListEndpointsByPlatformApplication(application);
+    const listEndpoints = yield* AWS.SNS.ListEndpointsByPlatformApplication(application);
     const publishToEndpoint = yield* AWS.SNS.PublishToEndpoint(application);
 
     return {
@@ -105,10 +100,7 @@ export const PlatformApiFunctionLive = PlatformApiFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

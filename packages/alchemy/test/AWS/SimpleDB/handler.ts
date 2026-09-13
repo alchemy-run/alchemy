@@ -69,9 +69,7 @@ export default SimpleDBTestFunction.make(
           const where = url.searchParams.get("where");
           const result = yield* select({
             SelectExpression: (name) =>
-              where
-                ? `select * from \`${name}\` where ${where}`
-                : `select * from \`${name}\``,
+              where ? `select * from \`${name}\` where ${where}` : `select * from \`${name}\``,
             ConsistentRead: true,
           });
           return yield* HttpServerResponse.json({

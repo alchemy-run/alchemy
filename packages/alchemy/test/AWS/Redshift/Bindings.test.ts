@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "RedshiftBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -30,10 +27,7 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
@@ -41,9 +35,7 @@ const getJson = (path: string) =>
 describe.sequential("Redshift Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Redshift bindings setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Redshift bindings setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Redshift bindings setup: deploying fixture");
@@ -81,13 +73,11 @@ describe.sequential("Redshift Bindings", () => {
   });
 
   describe("DescribeClusters", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent cluster",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/clusters");
-          expect((response as any).tag).toBe("ClusterNotFoundFault");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent cluster", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/clusters");
+        expect((response as any).tag).toBe("ClusterNotFoundFault");
+      }),
     );
   });
 
@@ -110,24 +100,20 @@ describe.sequential("Redshift Bindings", () => {
   });
 
   describe("DeleteClusterSnapshot", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent snapshot",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/delete-snapshot-probe");
-          expect((response as any).tag).toBe("ClusterSnapshotNotFoundFault");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/delete-snapshot-probe");
+        expect((response as any).tag).toBe("ClusterSnapshotNotFoundFault");
+      }),
     );
   });
 
   describe("CopyClusterSnapshot", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent source snapshot",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/copy-snapshot-probe");
-          expect((response as any).tag).toBe("ClusterSnapshotNotFoundFault");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent source snapshot", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/copy-snapshot-probe");
+        expect((response as any).tag).toBe("ClusterSnapshotNotFoundFault");
+      }),
     );
   });
 });

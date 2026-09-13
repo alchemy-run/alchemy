@@ -44,7 +44,6 @@ export interface DeleteChatControlsConfiguration extends Binding.Service<
     >
   >
 > {}
-export const DeleteChatControlsConfiguration =
-  Binding.Service<DeleteChatControlsConfiguration>(
-    "AWS.QBusiness.DeleteChatControlsConfiguration",
-  );
+export const DeleteChatControlsConfiguration = Binding.Service<DeleteChatControlsConfiguration>(
+  "AWS.QBusiness.DeleteChatControlsConfiguration",
+);

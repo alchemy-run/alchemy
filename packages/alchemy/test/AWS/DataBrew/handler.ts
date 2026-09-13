@@ -132,8 +132,7 @@ export default DataBrewTestFunction.make(
     const publishRecipe = yield* DataBrew.PublishRecipe(base.recipe);
     // Interactive-session plane
     const startProjectSession = yield* DataBrew.StartProjectSession(project);
-    const sendProjectSessionAction =
-      yield* DataBrew.SendProjectSessionAction(project);
+    const sendProjectSessionAction = yield* DataBrew.SendProjectSessionAction(project);
 
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.databrew) targeting this Function. Runtime firing rides on the
@@ -173,9 +172,7 @@ export default DataBrewTestFunction.make(
             );
           }
           case "GET /run/get": {
-            const result = yield* errorTagged(
-              describeJobRun({ RunId: param("id") }),
-            );
+            const result = yield* errorTagged(describeJobRun({ RunId: param("id") }));
             return yield* HttpServerResponse.json(
               "errorTag" in result ? result : { state: result.State },
             );
@@ -203,9 +200,7 @@ export default DataBrewTestFunction.make(
           // ---- interactive-session plane ----
           case "POST /session/run": {
             const started = yield* errorTagged(
-              startProjectSession({ AssumeControl: true }).pipe(
-                Effect.retry(authorizationPolicy),
-              ),
+              startProjectSession({ AssumeControl: true }).pipe(Effect.retry(authorizationPolicy)),
             );
             if ("errorTag" in started) {
               return yield* HttpServerResponse.json({ started });
@@ -225,10 +220,7 @@ export default DataBrewTestFunction.make(
               }).pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(6),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(6)]),
                 }),
               ),
             );
@@ -237,18 +229,12 @@ export default DataBrewTestFunction.make(
                 name: started.Name,
                 hasSessionId: started.ClientSessionId !== undefined,
               },
-              action:
-                "errorTag" in action
-                  ? action
-                  : { actionId: action.ActionId ?? null },
+              action: "errorTag" in action ? action : { actionId: action.ActionId ?? null },
             });
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

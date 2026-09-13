@@ -34,12 +34,7 @@ export interface AssociateFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.AssociateFacesRequest,
-    ) => Effect.Effect<
-      rekognition.AssociateFacesResponse,
-      rekognition.AssociateFacesError
-    >
+    ) => Effect.Effect<rekognition.AssociateFacesResponse, rekognition.AssociateFacesError>
   >
 > {}
-export const AssociateFaces = Binding.Service<AssociateFaces>(
-  "AWS.Rekognition.AssociateFaces",
-);
+export const AssociateFaces = Binding.Service<AssociateFaces>("AWS.Rekognition.AssociateFaces");

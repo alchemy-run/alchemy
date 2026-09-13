@@ -42,12 +42,9 @@ export default S3TablesBindingsFunction.make(
     const listNamespaces = yield* S3Tables.ListNamespaces(bucket);
     const listTables = yield* S3Tables.ListTables(bucket);
     const getTable = yield* S3Tables.GetTable(table);
-    const getTableMetadataLocation =
-      yield* S3Tables.GetTableMetadataLocation(table);
-    const updateTableMetadataLocation =
-      yield* S3Tables.UpdateTableMetadataLocation(table);
-    const getTableMaintenanceJobStatus =
-      yield* S3Tables.GetTableMaintenanceJobStatus(table);
+    const getTableMetadataLocation = yield* S3Tables.GetTableMetadataLocation(table);
+    const updateTableMetadataLocation = yield* S3Tables.UpdateTableMetadataLocation(table);
+    const getTableMaintenanceJobStatus = yield* S3Tables.GetTableMaintenanceJobStatus(table);
 
     const bound = {
       listNamespaces,
@@ -104,10 +101,7 @@ export default S3TablesBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/metadata-location/commit"
-        ) {
+        if (request.method === "POST" && pathname === "/metadata-location/commit") {
           // The Iceberg commit protocol round-trip: read the current version
           // token, then commit a metadata pointer with it. The fixture
           // doesn't write a real Iceberg metadata file, so the service may

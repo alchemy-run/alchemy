@@ -60,14 +60,8 @@ export type PlatformServices =
 export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
   bun: async () => {
     const [BunServices, BunSocket] = await Promise.all([
-      importPlatformPeer(
-        "@effect/platform-bun",
-        () => import("@effect/platform-bun/BunServices"),
-      ),
-      importPlatformPeer(
-        "@effect/platform-bun",
-        () => import("@effect/platform-bun/BunSocket"),
-      ),
+      importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunServices")),
+      importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunSocket")),
     ]);
     return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
   },
@@ -77,15 +71,9 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
         "@effect/platform-node",
         () => import("@effect/platform-node/NodeServices"),
       ),
-      importPlatformPeer(
-        "@effect/platform-node",
-        () => import("@effect/platform-node/NodeSocket"),
-      ),
+      importPlatformPeer("@effect/platform-node", () => import("@effect/platform-node/NodeSocket")),
     ]);
-    return Layer.merge(
-      NodeServices.layer,
-      NodeSocket.layerWebSocketConstructor,
-    );
+    return Layer.merge(NodeServices.layer, NodeSocket.layerWebSocketConstructor);
   },
 });
 

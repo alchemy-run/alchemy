@@ -32,8 +32,7 @@ const MARKER = 'service: "orders-api"';
 const MARKER_V2 = 'service: "orders-api-v2"';
 
 // The whole suite needs docker (floci and the service containers).
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.
@@ -52,20 +51,12 @@ test.skipIf(!dockerAvailable)(
 
     // The first dev deploy builds the Api/SeedTask/Report images and pulls
     // the Web image before printing stack outputs.
-    const url = await cli.pollUntil(
-      "url in stack outputs",
-      () => cli.outputUrl("url"),
-      {
-        tries: 600,
-        delayMs: 1000,
-      },
-    );
-    const apiUrl = await cli.pollUntil("apiUrl in stack outputs", () =>
-      cli.outputUrl("apiUrl"),
-    );
-    const seedUrl = await cli.pollUntil("seedUrl in stack outputs", () =>
-      cli.outputUrl("seedUrl"),
-    );
+    const url = await cli.pollUntil("url in stack outputs", () => cli.outputUrl("url"), {
+      tries: 600,
+      delayMs: 1000,
+    });
+    const apiUrl = await cli.pollUntil("apiUrl in stack outputs", () => cli.outputUrl("apiUrl"));
+    const seedUrl = await cli.pollUntil("seedUrl in stack outputs", () => cli.outputUrl("seedUrl"));
 
     // Dev identity: the emulated ALB's DNS resolves to 127.0.0.1 — no real
     // AWS. The port is whatever the emulator gateway bound; only the URLs

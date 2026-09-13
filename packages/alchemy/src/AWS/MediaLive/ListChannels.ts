@@ -30,12 +30,7 @@ export interface ListChannels extends Binding.Service<
   () => Effect.Effect<
     (
       request?: medialive.ListChannelsRequest,
-    ) => Effect.Effect<
-      medialive.ListChannelsResponse,
-      medialive.ListChannelsError
-    >
+    ) => Effect.Effect<medialive.ListChannelsResponse, medialive.ListChannelsError>
   >
 > {}
-export const ListChannels = Binding.Service<ListChannels>(
-  "AWS.MediaLive.ListChannels",
-);
+export const ListChannels = Binding.Service<ListChannels>("AWS.MediaLive.ListChannels");

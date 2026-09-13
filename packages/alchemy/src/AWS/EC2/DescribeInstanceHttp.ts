@@ -19,27 +19,23 @@ export const DescribeInstanceHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, AWS.EC2.DescribeInstance(${instance}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["ec2:DescribeInstances"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.EC2.DescribeInstance(${instance}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["ec2:DescribeInstances"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.EC2.DescribeInstance(${instance.LogicalId})`)(
-        function* () {
-          const result = yield* describe({
-            InstanceIds: [yield* instanceId],
-          });
-          return result.Reservations?.[0]?.Instances?.[0];
-        },
-      );
+      return Effect.fn(`AWS.EC2.DescribeInstance(${instance.LogicalId})`)(function* () {
+        const result = yield* describe({
+          InstanceIds: [yield* instanceId],
+        });
+        return result.Reservations?.[0]?.Instances?.[0];
+      });
     });
   }),
 );

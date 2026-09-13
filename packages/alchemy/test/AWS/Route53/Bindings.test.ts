@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import Route53BindingsFunctionLive, {
-  Route53BindingsFunction,
-} from "./bindings-handler";
+import Route53BindingsFunctionLive, { Route53BindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "Route53Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,9 +34,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -55,9 +48,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
 describe.sequential("Route53 Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Route53 test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Route53 test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Route53 test setup: deploying fixture");
@@ -75,9 +66,7 @@ describe.sequential("Route53 Bindings", () => {
       // freshly attached policy — otherwise the first real test can hit a
       // 500 (AccessDenied via orDie) before the policy is live.
       const readinessUrl = `${baseUrl}/zone`;
-      yield* Effect.logInfo(
-        `Route53 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Route53 test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -85,9 +74,7 @@ describe.sequential("Route53 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Route53 test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Route53 test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -100,9 +87,9 @@ describe.sequential("Route53 Bindings", () => {
   describe("binding registration", () => {
     test.provider("all 10 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/bindings`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).bound).toHaveLength(10);
       }),
     );
@@ -111,9 +98,9 @@ describe.sequential("Route53 Bindings", () => {
   describe("GetHostedZone", () => {
     test.provider("reads the bound zone's delegation set", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/zone`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/zone`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.name).toBe("alchemy-route53-bindings.alchemy.");
         // Public zones get exactly 4 authoritative name servers.
         expect(response.nameServerCount).toBe(4);
@@ -124,9 +111,9 @@ describe.sequential("Route53 Bindings", () => {
   describe("ListHostedZones", () => {
     test.provider("lists the account's zones including ours", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/zones`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/zones`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.count).toBeGreaterThanOrEqual(1);
         expect(response.found).toBe(true);
       }),
@@ -136,43 +123,39 @@ describe.sequential("Route53 Bindings", () => {
   describe("ListHostedZonesByName", () => {
     test.provider("finds the fixture zone by DNS name", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/zones/by-name`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/zones/by-name`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.firstName).toBe("alchemy-route53-bindings.alchemy.");
       }),
     );
   });
 
   describe("ListHostedZonesByVPC", () => {
-    test.provider(
-      "round-trips the VPC ownership rejection for a foreign VPC id",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Route 53 rejects VPC ids the account doesn't own with the typed
-          // AccessDeniedException ("not owned by you") — reaching that
-          // ownership check proves the grant + query encoding end-to-end.
-          // notOwned=false would mean a genuine IAM denial: fail loudly.
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/zones/by-vpc`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
-          expect(response.count).toBe(0);
-          if (response.rejected && !response.notOwned) {
-            // Include the upstream rejection detail in the failure output.
-            expect.fail(
-              `unexpected rejection (genuine IAM denial?): ${response.detail}`,
-            );
-          }
-        }),
+    test.provider("round-trips the VPC ownership rejection for a foreign VPC id", (_stack) =>
+      Effect.gen(function* () {
+        // Route 53 rejects VPC ids the account doesn't own with the typed
+        // AccessDeniedException ("not owned by you") — reaching that
+        // ownership check proves the grant + query encoding end-to-end.
+        // notOwned=false would mean a genuine IAM denial: fail loudly.
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/zones/by-vpc`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
+        expect(response.count).toBe(0);
+        if (response.rejected && !response.notOwned) {
+          // Include the upstream rejection detail in the failure output.
+          expect.fail(`unexpected rejection (genuine IAM denial?): ${response.detail}`);
+        }
+      }),
     );
   });
 
   describe("TestDNSAnswer", () => {
     test.provider("answers the zone apex NS query", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/dns-test`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/dns-test`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.responseCode).toBe("NOERROR");
         expect(response.recordCount).toBe(4);
       }),
@@ -184,9 +167,9 @@ describe.sequential("Route53 Bindings", () => {
       "upserts a TXT record, waits INSYNC, lists it, deletes it",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/record/roundtrip`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/record/roundtrip`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.changeStatus).toBe("INSYNC");
           expect(response.found).toBe(true);
           expect(response.deleted).toBe(true);
@@ -201,9 +184,9 @@ describe.sequential("Route53 Bindings", () => {
         // A freshly created check may not have observations yet — the call
         // round-tripping (HealthCheckId injection + check-scoped IAM) is the
         // assertion.
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/health/status`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/health/status`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(response.observations).toBeGreaterThanOrEqual(0);
       }),
     );

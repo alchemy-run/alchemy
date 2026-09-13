@@ -1,9 +1,5 @@
 export * as Auth from "./AuthProvider.ts";
-export {
-  type BaseBranchAttributes,
-  type BaseBranchProps,
-  makeBranchProvider,
-} from "./Branch.ts";
+export { type BaseBranchAttributes, type BaseBranchProps, makeBranchProvider } from "./Branch.ts";
 export {
   Credentials,
   CredentialsFromEnv,

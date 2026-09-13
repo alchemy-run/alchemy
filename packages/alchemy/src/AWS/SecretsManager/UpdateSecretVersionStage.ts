@@ -47,7 +47,6 @@ export interface UpdateSecretVersionStage extends Binding.Service<
   >
 > {}
 
-export const UpdateSecretVersionStage =
-  Binding.Service<UpdateSecretVersionStage>(
-    "AWS.SecretsManager.UpdateSecretVersionStage",
-  );
+export const UpdateSecretVersionStage = Binding.Service<UpdateSecretVersionStage>(
+  "AWS.SecretsManager.UpdateSecretVersionStage",
+);

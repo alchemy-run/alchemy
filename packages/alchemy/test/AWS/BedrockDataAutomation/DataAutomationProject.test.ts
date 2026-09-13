@@ -33,9 +33,7 @@ const documentStandardOutput = (
 const findProject = (projectArn: string) =>
   bda.getDataAutomationProject({ projectArn }).pipe(
     Effect.map((r) => r.project),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class ProjectStillExists extends Data.TaggedError("ProjectStillExists")<{
@@ -45,9 +43,7 @@ class ProjectStillExists extends Data.TaggedError("ProjectStillExists")<{
 const assertProjectDeleted = (projectArn: string) =>
   findProject(projectArn).pipe(
     Effect.flatMap((project) =>
-      project === undefined
-        ? Effect.void
-        : Effect.fail(new ProjectStillExists({ projectArn })),
+      project === undefined ? Effect.void : Effect.fail(new ProjectStillExists({ projectArn })),
     ),
     Effect.retry({
       while: (e) => e._tag === "ProjectStillExists",
@@ -62,9 +58,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const { Account } = yield* sts.getCallerIdentity({});
-      const region = yield* Effect.sync(
-        () => process.env.AWS_REGION ?? "us-west-2",
-      );
+      const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-west-2");
       const error = yield* Effect.flip(
         bda.getDataAutomationProject({
           projectArn: `arn:aws:bedrock:${region}:${Account}:data-automation-project/nonexistent-alchemy-probe`,
@@ -84,10 +78,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* DataAutomationProject("TestProject", {
             projectDescription: "alchemy test project",
-            standardOutputConfiguration: documentStandardOutput([
-              "DOCUMENT",
-              "PAGE",
-            ]),
+            standardOutputConfiguration: documentStandardOutput(["DOCUMENT", "PAGE"]),
             tags: { Environment: "test" },
           });
         }),
@@ -100,20 +91,13 @@ test.provider(
       const created = yield* findProject(project.projectArn);
       expect(created).toBeDefined();
       expect(unredact(created!.projectName)).toBe(project.projectName);
-      expect(unredact(created!.projectDescription ?? "")).toBe(
-        "alchemy test project",
-      );
+      expect(unredact(created!.projectDescription ?? "")).toBe("alchemy test project");
       expect(
-        created!.standardOutputConfiguration?.document?.extraction?.granularity
-          ?.types,
+        created!.standardOutputConfiguration?.document?.extraction?.granularity?.types,
       ).toEqual(["DOCUMENT", "PAGE"]);
       const tags = yield* bda
         .listTagsForResource({ resourceARN: project.projectArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.tags ?? []).map((t) => [t.key, t.value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.tags ?? []).map((t) => [t.key, t.value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestProject");
 
@@ -122,11 +106,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* DataAutomationProject("TestProject", {
             projectDescription: "alchemy test project v2",
-            standardOutputConfiguration: documentStandardOutput([
-              "DOCUMENT",
-              "PAGE",
-              "ELEMENT",
-            ]),
+            standardOutputConfiguration: documentStandardOutput(["DOCUMENT", "PAGE", "ELEMENT"]),
             tags: { Environment: "test" },
           });
         }),
@@ -134,12 +114,9 @@ test.provider(
       expect(updated.projectArn).toBe(project.projectArn);
 
       const afterUpdate = yield* findProject(project.projectArn);
-      expect(unredact(afterUpdate!.projectDescription ?? "")).toBe(
-        "alchemy test project v2",
-      );
+      expect(unredact(afterUpdate!.projectDescription ?? "")).toBe("alchemy test project v2");
       expect(
-        afterUpdate!.standardOutputConfiguration?.document?.extraction
-          ?.granularity?.types,
+        afterUpdate!.standardOutputConfiguration?.document?.extraction?.granularity?.types,
       ).toEqual(["DOCUMENT", "PAGE", "ELEMENT"]);
 
       yield* stack.destroy();
@@ -187,11 +164,9 @@ test.provider(
 
       // out-of-band: the project references the blueprint
       const observed = yield* findProject(project.projectArn);
-      expect(
-        observed?.customOutputConfiguration?.blueprints?.map(
-          (b) => b.blueprintArn,
-        ),
-      ).toEqual([blueprint.blueprintArn]);
+      expect(observed?.customOutputConfiguration?.blueprints?.map((b) => b.blueprintArn)).toEqual([
+        blueprint.blueprintArn,
+      ]);
 
       yield* stack.destroy();
       yield* assertProjectDeleted(project.projectArn);

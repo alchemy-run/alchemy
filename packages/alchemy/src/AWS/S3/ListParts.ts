@@ -30,9 +30,7 @@ export interface ListParts extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: ListPartsRequest,
-    ) => Effect.Effect<S3.ListPartsOutput, S3.ListPartsError>
+    (request: ListPartsRequest) => Effect.Effect<S3.ListPartsOutput, S3.ListPartsError>
   >
 > {}
 export const ListParts = Binding.Service<ListParts>("AWS.S3.ListParts");

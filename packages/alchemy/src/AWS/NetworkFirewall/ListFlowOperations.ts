@@ -38,10 +38,7 @@ export interface ListFlowOperations extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListFlowOperationsRequest,
-    ) => Effect.Effect<
-      NFW.ListFlowOperationsResponse,
-      NFW.ListFlowOperationsError
-    >
+    ) => Effect.Effect<NFW.ListFlowOperationsResponse, NFW.ListFlowOperationsError>
   >
 > {}
 

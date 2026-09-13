@@ -12,10 +12,7 @@ import QueueWorker from "./round-trip-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class CountMismatch extends Data.TaggedError("CountMismatch")<{
   expected: number;
@@ -85,11 +82,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const messages = ["alpha", "beta", "gamma", "delta"];
       const secondaryMessages = ["one", "two"];
 
-      const sendMessage = (
-        pathname: string,
-        counterName: string,
-        text: string,
-      ) =>
+      const sendMessage = (pathname: string, counterName: string, text: string) =>
         HttpClient.execute(
           HttpClientRequest.post(
             `${baseUrl}${pathname}?name=${encodeURIComponent(counterName)}`,
@@ -103,10 +96,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.retry({
             // Bound fresh workers.dev readiness to roughly 25 seconds.
             schedule: Schedule.max([
-              Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("3 seconds"),
-              ]),
+              Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
               Schedule.recurs(10),
             ]),
           }),
@@ -125,11 +115,7 @@ test.provider.skipIf(!!process.env.FAST)(
       }
 
       for (const text of secondaryMessages) {
-        const sendResponse = yield* sendMessage(
-          "/send-secondary",
-          secondaryName,
-          text,
-        );
+        const sendResponse = yield* sendMessage("/send-secondary", secondaryName, text);
         expect(sendResponse.status).toBe(202);
         const sent = (yield* sendResponse.json) as {
           sent: { name: string; text: string };
@@ -144,9 +130,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // otherwise surface as a decode error), and edge propagation can
       // 404 the first calls; both are transient and must be retried.
       const readSnapshot = (counterName: string, expected: number) =>
-        HttpClient.get(
-          `${baseUrl}/count?name=${encodeURIComponent(counterName)}`,
-        ).pipe(
+        HttpClient.get(`${baseUrl}/count?name=${encodeURIComponent(counterName)}`).pipe(
           Effect.flatMap(HttpClientResponse.filterStatusOk),
           Effect.flatMap((res) => res.json),
           Effect.flatMap((body) => {
@@ -163,10 +147,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.retry({
             // Bound consumer catch-up to roughly 35 seconds.
             schedule: Schedule.max([
-              Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("4 seconds"),
-              ]),
+              Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("4 seconds")]),
               Schedule.recurs(10),
             ]),
           }),
@@ -189,12 +170,8 @@ test.provider.skipIf(!!process.env.FAST)(
       // expected message was observed at least once (set containment),
       // not exact multiset equality — the latter flakes whenever
       // Cloudflare redelivers a message.
-      expect([...new Set(snapshot.lastBodies)].sort()).toEqual(
-        [...messages].sort(),
-      );
-      expect(secondarySnapshot.count).toBeGreaterThanOrEqual(
-        secondaryMessages.length,
-      );
+      expect([...new Set(snapshot.lastBodies)].sort()).toEqual([...messages].sort());
+      expect(secondarySnapshot.count).toBeGreaterThanOrEqual(secondaryMessages.length);
       expect([...new Set(secondarySnapshot.lastBodies)].sort()).toEqual(
         [...secondaryMessages].sort(),
       );

@@ -22,22 +22,19 @@ const EXTENSION_MODULE_NAME = "cloudflare-runtime:dispatch-namespace";
 export const DispatchNamespaceLive = Layer.succeed(
   DispatchNamespace,
   DispatchNamespace.of(
-    Effect.map(
-      formatExtensionModule(DispatchNamespaceBindingWorker),
-      (esModule) => ({
-        extensions: [
-          {
-            modules: [
-              {
-                name: EXTENSION_MODULE_NAME,
-                internal: true,
-                esModule,
-              },
-            ],
-          },
-        ],
-      }),
-    ),
+    Effect.map(formatExtensionModule(DispatchNamespaceBindingWorker), (esModule) => ({
+      extensions: [
+        {
+          modules: [
+            {
+              name: EXTENSION_MODULE_NAME,
+              internal: true,
+              esModule,
+            },
+          ],
+        },
+      ],
+    })),
   ),
 );
 

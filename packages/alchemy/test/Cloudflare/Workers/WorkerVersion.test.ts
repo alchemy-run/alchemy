@@ -13,10 +13,7 @@ import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
@@ -69,9 +66,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
         // the per-version URL (`<version-prefix>-...`) rides in urls.
         expect(v1.preview.versionAlias).toBeDefined();
         expect(v1.preview.url).toEqual(
-          expect.stringContaining(
-            `https://${v1.preview.versionAlias}-${v1.parent.workerName}.`,
-          ),
+          expect.stringContaining(`https://${v1.preview.versionAlias}-${v1.parent.workerName}.`),
         );
         expect(v1.preview.urls[1]).toMatch(
           new RegExp(`^https://[0-9a-f]{8}-${v1.parent.workerName}\\.`),
@@ -82,9 +77,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
         const liveAfterPreview = yield* latestDeployment(v1.parent.workerName);
         expect(liveAfterPreview?.versions).toHaveLength(1);
         expect(liveAfterPreview?.versions[0].percentage).toEqual(100);
-        expect(liveAfterPreview?.versions[0].versionId).not.toEqual(
-          v1.preview.versionId,
-        );
+        expect(liveAfterPreview?.versions[0].versionId).not.toEqual(v1.preview.versionId);
 
         // Both URLs serve their own code.
         yield* expectUrlContains(v1.parent.url!, "parent-marker-v1", {
@@ -116,13 +109,9 @@ describe.concurrent("Cloudflare.Worker version", () => {
         expect(v2.canary.url).toEqual(v1.preview.url);
         const liveWithCanary = yield* latestDeployment(v2.parent.workerName);
         expect(liveWithCanary?.id).toEqual(v2.canary.deploymentId);
+        expect(liveWithCanary?.versions.map((v) => v.percentage).sort()).toEqual([25, 75]);
         expect(
-          liveWithCanary?.versions.map((v) => v.percentage).sort(),
-        ).toEqual([25, 75]);
-        expect(
-          liveWithCanary?.versions.find(
-            (v) => v.versionId === v2.canary.versionId,
-          )?.percentage,
+          liveWithCanary?.versions.find((v) => v.versionId === v2.canary.versionId)?.percentage,
         ).toEqual(25);
 
         // Remove the canary from the stack — delete restores 100% of
@@ -139,9 +128,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
         const liveAfterRelease = yield* latestDeployment(v3.parent.workerName);
         expect(liveAfterRelease?.versions).toHaveLength(1);
         expect(liveAfterRelease?.versions[0].percentage).toEqual(100);
-        expect(liveAfterRelease?.versions[0].versionId).not.toEqual(
-          v2.canary.versionId,
-        );
+        expect(liveAfterRelease?.versions[0].versionId).not.toEqual(v2.canary.versionId);
         yield* expectUrlContains(v3.parent.url!, "parent-marker-v1", {
           label: "parent still serves its own code after canary release",
         });
@@ -273,17 +260,11 @@ describe.concurrent("Cloudflare.Worker version", () => {
         expect(v2.deploymentId).toBeDefined();
         const liveV2 = yield* latestDeployment(v2.workerName);
         expect(liveV2?.id).toEqual(v2.deploymentId);
-        expect(liveV2?.versions.map((v) => v.percentage).sort()).toEqual([
-          50, 50,
-        ]);
-        expect(liveV2?.versions.some((v) => v.versionId === v2.versionId)).toBe(
-          true,
-        );
+        expect(liveV2?.versions.map((v) => v.percentage).sort()).toEqual([50, 50]);
+        expect(liveV2?.versions.some((v) => v.versionId === v2.versionId)).toBe(true);
         // urls ordering during a rollout: the stable workers.dev URL stays
         // primary; the uploaded version's preview URL trails.
-        expect(v2.urls[0]).toMatch(
-          new RegExp(`^https://${v2.workerName}\\..*\\.workers\\.dev$`),
-        );
+        expect(v2.urls[0]).toMatch(new RegExp(`^https://${v2.workerName}\\..*\\.workers\\.dev$`));
         expect(v2.urls[v2.urls.length - 1]).toMatch(
           new RegExp(
             `^https://${v2.versionId!.split("-")[0]}-${v2.workerName}\\..*\\.workers\\.dev$`,
@@ -334,9 +315,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
         );
 
         expect(preview.versionAlias).toBeDefined();
-        expect(preview.url).toEqual(
-          expect.stringContaining(`https://${preview.versionAlias}-`),
-        );
+        expect(preview.url).toEqual(expect.stringContaining(`https://${preview.versionAlias}-`));
         // The deployed version reports its own aliased preview URL.
         yield* expectUrlContains(preview.url!, preview.url!, {
           label: "version's PUBLIC_URL equals its aliased preview URL",

@@ -10,11 +10,7 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const TEST_NAME = "alchemy-test-account-name";
 

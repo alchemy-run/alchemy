@@ -106,23 +106,14 @@ export const VariantStoreProvider = () =>
   Provider.effect(
     VariantStore,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
-        return (
-          props.name ??
-          toStoreName(yield* createPhysicalName({ id, maxLength: 96 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
+        return props.name ?? toStoreName(yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
       const waitUntilActive = Effect.fn(function* (name: string) {
         const final = yield* omics.getVariantStore({ name }).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(23),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(23)]),
             until: (s) => s.status === "ACTIVE" || s.status === "FAILED",
           }),
         );
@@ -153,11 +144,7 @@ export const VariantStoreProvider = () =>
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const found = yield* omics
             .getVariantStore({ name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined) return undefined;
           const attrs = {
             variantStoreId: found.id,
@@ -165,9 +152,7 @@ export const VariantStoreProvider = () =>
             name: found.name,
             status: found.status,
           };
-          return (yield* hasAlchemyTags(id, tagRecord(found.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(found.tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -176,8 +161,7 @@ export const VariantStoreProvider = () =>
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
           if (
-            (prev.reference?.referenceArn ?? "") !==
-              (news.reference?.referenceArn ?? "") ||
+            (prev.reference?.referenceArn ?? "") !== (news.reference?.referenceArn ?? "") ||
             prev.sseConfig?.type !== news.sseConfig?.type ||
             prev.sseConfig?.keyArn !== news.sseConfig?.keyArn
           ) {
@@ -191,11 +175,7 @@ export const VariantStoreProvider = () =>
 
           let store = yield* omics
             .getVariantStore({ name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (store === undefined) {
             yield* omics
@@ -212,10 +192,7 @@ export const VariantStoreProvider = () =>
             store = yield* waitUntilActive(name);
           }
 
-          if (
-            news.description !== undefined &&
-            news.description !== store.description
-          ) {
+          if (news.description !== undefined && news.description !== store.description) {
             yield* omics.updateVariantStore({
               name,
               description: news.description,
@@ -236,9 +213,7 @@ export const VariantStoreProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* omics
             .deleteVariantStore({ name: output.name, force: true })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

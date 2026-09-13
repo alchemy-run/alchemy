@@ -137,18 +137,13 @@ export const CertificateProvider = () =>
       const o = olds as CertificateProps;
       const n = news as CertificateProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       if (
         (o.certificate !== undefined &&
           normalizePem(o.certificate) !== normalizePem(n.certificate)) ||
-        (o.privateKey !== undefined &&
-          unwrap(o.privateKey) !== unwrap(n.privateKey))
+        (o.privateKey !== undefined && unwrap(o.privateKey) !== unwrap(n.privateKey))
       ) {
         // There is no update API for zone client certificates — every change
         // is a replacement.
@@ -223,8 +218,7 @@ export const CertificateProvider = () =>
             // deploy.
             Effect.retry({
               while: (e) =>
-                e._tag === "CertificateAlreadyExists" ||
-                e._tag === "ZoneClientCertConflict",
+                e._tag === "CertificateAlreadyExists" || e._tag === "ZoneClientCertConflict",
               schedule: Schedule.spaced("5 seconds"),
               times: 10,
             }),
@@ -287,15 +281,11 @@ export const CertificateProvider = () =>
           // leaking the certificate.
           Effect.retry({
             while: (e) =>
-              e._tag === "CertificatePendingDeployment" ||
-              e._tag === "ZoneClientCertConflict",
+              e._tag === "CertificatePendingDeployment" || e._tag === "ZoneClientCertConflict",
             schedule: Schedule.spaced("5 seconds"),
             times: 12,
           }),
-          Effect.catchTag(
-            ["CertificateNotFound", "CertificateAlreadyDeleted"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
         );
     }),
   });
@@ -321,9 +311,7 @@ const findByContent = (zoneId: string, certificate: string) =>
     // Cloudflare returns `result: null` (not `[]`) for a zone whose cert store
     // is empty — treat it as no matches.
     return (list.result ?? []).find(
-      (c) =>
-        isLive(c.status) &&
-        normalizePem(c.certificate ?? "") === normalizePem(certificate),
+      (c) => isLive(c.status) && normalizePem(c.certificate ?? "") === normalizePem(certificate),
     );
   });
 
@@ -341,10 +329,7 @@ type CertificateShape = {
   uploadedOn?: string | null;
 };
 
-const toAttributes = (
-  cert: CertificateShape,
-  zoneId: string,
-): CertificateAttributes => ({
+const toAttributes = (cert: CertificateShape, zoneId: string): CertificateAttributes => ({
   certificateId: cert.id!,
   zoneId,
   status: cert.status ?? undefined,

@@ -16,17 +16,11 @@ import { makeObservabilityAdminTestLease } from "./TestLease.ts";
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const testLease = makeObservabilityAdminTestLease();
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "ObservabilityAdminBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "ObservabilityAdminBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 const readStatus = obs
   .getTelemetryEvaluationStatus({})
@@ -39,8 +33,7 @@ const awaitSettled = readStatus.pipe(
   }),
 );
 
-const isOn = (status: string): boolean =>
-  status === "RUNNING" || status === "STARTING";
+const isOn = (status: string): boolean => status === "RUNNING" || status === "STARTING";
 
 let baseUrl: string;
 // The account's pre-test onboarding state, restored in afterAll.
@@ -61,26 +54,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -99,14 +85,10 @@ describe.sequential("ObservabilityAdmin Bindings", () => {
       // Telemetry rules need the account onboarded to telemetry config.
       priorStatus = yield* aws(awaitSettled);
       if (!isOn(priorStatus)) {
-        yield* aws(
-          obs.startTelemetryEvaluation({}).pipe(Effect.andThen(awaitSettled)),
-        );
+        yield* aws(obs.startTelemetryEvaluation({}).pipe(Effect.andThen(awaitSettled)));
       }
 
-      yield* Effect.logInfo(
-        "ObservabilityAdmin test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ObservabilityAdmin test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("ObservabilityAdmin test setup: deploying fixture");
@@ -120,9 +102,7 @@ describe.sequential("ObservabilityAdmin Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `ObservabilityAdmin test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ObservabilityAdmin test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -175,15 +155,13 @@ describe.sequential("ObservabilityAdmin Bindings", () => {
   });
 
   describe("GetTelemetryEvaluationStatus", () => {
-    test.provider(
-      "reads the account onboarding status (RUNNING after setup)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/evaluation-status")) as {
-            status: string;
-          };
-          expect(response.status).toBe("RUNNING");
-        }),
+    test.provider("reads the account onboarding status (RUNNING after setup)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/evaluation-status")) as {
+          status: string;
+        };
+        expect(response.status).toBe("RUNNING");
+      }),
     );
   });
 
@@ -220,46 +198,38 @@ describe.sequential("ObservabilityAdmin Bindings", () => {
   });
 
   describe("GetTelemetryEnrichmentStatus", () => {
-    test.provider(
-      "reads the enrichment status (typed NotOnboarded tolerated)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/enrichment-status")) as {
-            status: string;
-          };
-          expect(["Running", "Stopped", "Impaired", "NotOnboarded"]).toContain(
-            response.status,
-          );
-        }),
+    test.provider("reads the enrichment status (typed NotOnboarded tolerated)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/enrichment-status")) as {
+          status: string;
+        };
+        expect(["Running", "Stopped", "Impaired", "NotOnboarded"]).toContain(response.status);
+      }),
     );
   });
 
   describe("ListTelemetryRules", () => {
-    test.provider(
-      "lists the account's rules including the bound one",
-      (_stack) =>
-        Effect.gen(function* () {
-          const rule = (yield* getJson("/rule")) as { ruleName: string };
-          const response = (yield* getJson("/rules")) as { names: string[] };
-          expect(response.names).toContain(rule.ruleName);
-        }),
+    test.provider("lists the account's rules including the bound one", (_stack) =>
+      Effect.gen(function* () {
+        const rule = (yield* getJson("/rule")) as { ruleName: string };
+        const response = (yield* getJson("/rules")) as { names: string[] };
+        expect(response.names).toContain(rule.ruleName);
+      }),
     );
   });
 
   describe("GetTelemetryRule", () => {
-    test.provider(
-      "reads the bound rule's configuration (injected identifier)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/rule")) as {
-            ruleName: string;
-            telemetryType: string;
-            retentionInDays: number;
-          };
-          expect(response.ruleName).toBeTruthy();
-          expect(response.telemetryType).toBe("Logs");
-          expect(response.retentionInDays).toBe(30);
-        }),
+    test.provider("reads the bound rule's configuration (injected identifier)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/rule")) as {
+          ruleName: string;
+          telemetryType: string;
+          retentionInDays: number;
+        };
+        expect(response.ruleName).toBeTruthy();
+        expect(response.telemetryType).toBe("Logs");
+        expect(response.retentionInDays).toBe(30);
+      }),
     );
   });
 });

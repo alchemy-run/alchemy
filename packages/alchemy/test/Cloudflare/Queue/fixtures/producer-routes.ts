@@ -53,14 +53,12 @@ export const producerRoutes = (
         );
       }
       case "/sendBatch":
-        return yield* q
-          .sendBatch([{ body: { text: "a" } }, { body: { text: "b" } }])
-          .pipe(
-            Effect.matchCauseEffect({
-              onSuccess: () => accepted,
-              onFailure: failed,
-            }),
-          );
+        return yield* q.sendBatch([{ body: { text: "a" } }, { body: { text: "b" } }]).pipe(
+          Effect.matchCauseEffect({
+            onSuccess: () => accepted,
+            onFailure: failed,
+          }),
+        );
       case "/sendBatch-text":
         return yield* q
           .sendBatch([

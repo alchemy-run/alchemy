@@ -24,15 +24,10 @@ export const TestIndex = Cloudflare.Vectorize.Index("VectorizeWorkerIndex", {
  * Metadata indexes must exist before vectors are inserted for them to be
  * queryable, so the stack yields this before any worker upserts.
  */
-export const ensureMetaIndex = Effect.fn(function* (
-  index: Cloudflare.Vectorize.Index,
-) {
-  return yield* Cloudflare.Vectorize.MetadataIndex(
-    "VectorizeWorkerKindMetaIndex",
-    {
-      indexName: index.indexName,
-      propertyName: "kind",
-      indexType: "string",
-    },
-  );
+export const ensureMetaIndex = Effect.fn(function* (index: Cloudflare.Vectorize.Index) {
+  return yield* Cloudflare.Vectorize.MetadataIndex("VectorizeWorkerKindMetaIndex", {
+    indexName: index.indexName,
+    propertyName: "kind",
+    indexType: "string",
+  });
 });

@@ -166,13 +166,10 @@ export const TopicProvider = () =>
         { concurrency: 10 },
       );
 
-      return rows.filter(
-        (row): row is NonNullable<typeof row> => row !== undefined,
-      );
+      return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const topicName =
-        output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
+      const topicName = output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
 
       const state = yield* readTopic({
         id,
@@ -196,14 +193,11 @@ export const TopicProvider = () =>
         return { action: "replace" } as const;
       }
 
-      if (
-        olds.dataProtectionPolicy !== undefined &&
-        news.dataProtectionPolicy === undefined
-      ) {
+      if (olds.dataProtectionPolicy !== undefined && news.dataProtectionPolicy === undefined) {
         return { action: "replace" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news = {}, olds, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, session }) {
       const topicName = yield* toTopicName(id, news);
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
@@ -230,9 +224,7 @@ export const TopicProvider = () =>
       // the delta.
       const observedState = yield* sns
         .getTopicAttributes({ TopicArn: topicArn })
-        .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       const observedAttributes = toAttributeMap(observedState?.Attributes);
 
       for (const [name, value] of Object.entries(desiredAttributes)) {
@@ -291,17 +283,11 @@ export const TopicProvider = () =>
       // getDataProtectionPolicy on FIFO topics, so we skip it there.
       let observedPolicy: string | undefined;
       if (!isFifo) {
-        observedPolicy = yield* sns
-          .getDataProtectionPolicy({ ResourceArn: topicArn })
-          .pipe(
-            Effect.map((r) => r.DataProtectionPolicy),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InvalidParameterException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        observedPolicy = yield* sns.getDataProtectionPolicy({ ResourceArn: topicArn }).pipe(
+          Effect.map((r) => r.DataProtectionPolicy),
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
+        );
       }
       if (
         !isFifo &&
@@ -384,7 +370,6 @@ const findTopicArnByName = Effect.fn(function* (topicName: string) {
 });
 
 const readTopic = Effect.fn(function* ({
-  id,
   topicArn,
   topicName,
 }: {
@@ -418,16 +403,12 @@ const readTopic = Effect.fn(function* ({
     { concurrency: "unbounded" },
   ).pipe(
     Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-    Effect.catchTag("InvalidParameterException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("InvalidParameterException", () => Effect.succeed(undefined)),
     // `list()` hydrates every topic in the account, so a topic deleted by a
     // parallel test between enumeration and hydration surfaces here —
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
     // vanished topic as "not present" rather than failing the whole listing.
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
   if (!topicState) {

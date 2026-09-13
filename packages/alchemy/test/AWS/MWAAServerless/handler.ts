@@ -103,9 +103,7 @@ export default MwaaServerlessTestFunction.make(
       { runStates: ["Succeeded", "Failed", "Stopped"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `mwaa-serverless run ${event.detail.runId} -> ${event["detail-type"]}`,
-          ),
+          Effect.log(`mwaa-serverless run ${event.detail.runId} -> ${event["detail-type"]}`),
         ),
     );
 
@@ -115,8 +113,7 @@ export default MwaaServerlessTestFunction.make(
     const listWorkflowRuns = yield* MWAAServerless.ListWorkflowRuns(workflow);
     const getTaskInstance = yield* MWAAServerless.GetTaskInstance(workflow);
     const listTaskInstances = yield* MWAAServerless.ListTaskInstances(workflow);
-    const listWorkflowVersions =
-      yield* MWAAServerless.ListWorkflowVersions(workflow);
+    const listWorkflowVersions = yield* MWAAServerless.ListWorkflowVersions(workflow);
 
     const bound = {
       startWorkflowRun,
@@ -132,9 +129,7 @@ export default MwaaServerlessTestFunction.make(
     // the error's `_tag` otherwise. Probes assert the tag — a typed service
     // error (not AccessDeniedException) proves the IAM grant and the
     // injected workflow ARN both work.
-    const probe = <A, E extends { _tag: string }>(
-      effect: Effect.Effect<A, E>,
-    ) =>
+    const probe = <A, E extends { _tag: string }>(effect: Effect.Effect<A, E>) =>
       effect.pipe(
         Effect.map(() => ({ tag: "ok", detail: "" }) as const),
         Effect.catch((error) =>
@@ -161,9 +156,7 @@ export default MwaaServerlessTestFunction.make(
           });
         }
         if (request.method === "GET" && pathname === "/versions") {
-          const { WorkflowVersions } = yield* listWorkflowVersions().pipe(
-            Effect.orDie,
-          );
+          const { WorkflowVersions } = yield* listWorkflowVersions().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             versions: (WorkflowVersions ?? []).map((v) => v.WorkflowVersion),
           });

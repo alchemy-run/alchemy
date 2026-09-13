@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link ListJobRunAttempts} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type ListJobRunAttemptsInput = Omit<
-  emr.ListJobRunAttemptsRequest,
-  "applicationId"
->;
+export type ListJobRunAttemptsInput = Omit<emr.ListJobRunAttemptsRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:ListJobRunAttempts`.
@@ -39,10 +36,7 @@ export interface ListJobRunAttempts extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListJobRunAttemptsInput,
-    ) => Effect.Effect<
-      emr.ListJobRunAttemptsResponse,
-      emr.ListJobRunAttemptsError
-    >
+    ) => Effect.Effect<emr.ListJobRunAttemptsResponse, emr.ListJobRunAttemptsError>
   >
 > {}
 export const ListJobRunAttempts = Binding.Service<ListJobRunAttempts>(

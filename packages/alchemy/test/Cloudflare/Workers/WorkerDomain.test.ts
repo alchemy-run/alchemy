@@ -12,10 +12,7 @@ import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
@@ -35,9 +32,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -49,9 +44,7 @@ const listAttachments = (hostname: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     return yield* workers.listDomains({ accountId, hostname }).pipe(
-      Effect.map((r) =>
-        (r.result ?? []).filter((d) => d.hostname === hostname),
-      ),
+      Effect.map((r) => (r.result ?? []).filter((d) => d.hostname === hostname)),
       Effect.retry({
         while: (e) => e._tag === "TooManyRequests",
         schedule: transientRetrySchedule,
@@ -137,8 +130,7 @@ test.provider(
             // attachDomain: PUT domains right after putScript can race the
             // script registry and return WorkerNotFound.
             Effect.retry({
-              while: (e): boolean =>
-                e._tag === "WorkerNotFound" || e._tag === "TooManyRequests",
+              while: (e): boolean => e._tag === "WorkerNotFound" || e._tag === "TooManyRequests",
               schedule: transientRetrySchedule,
               times: 8,
             }),
@@ -157,12 +149,8 @@ test.provider(
           }),
         );
 
-        expect((yield* findAttachment(DECLARED_HOSTNAME))?.service).toEqual(
-          worker.workerName,
-        );
-        expect((yield* findAttachment(OUT_OF_BAND_HOSTNAME))?.service).toEqual(
-          worker.workerName,
-        );
+        expect((yield* findAttachment(DECLARED_HOSTNAME))?.service).toEqual(worker.workerName);
+        expect((yield* findAttachment(OUT_OF_BAND_HOSTNAME))?.service).toEqual(worker.workerName);
         // Previously-observed custom domains carry forward in state so
         // subsequent reads keep observing them.
         expect(unmanaged.domain?.name).toEqual(DECLARED_HOSTNAME);
@@ -205,13 +193,9 @@ test.provider(
         Effect.ensuring(
           Effect.gen(function* () {
             yield* stack.destroy().pipe(Effect.ignore);
-            yield* purgeDomains(DECLARED_HOSTNAME, OUT_OF_BAND_HOSTNAME).pipe(
-              Effect.ignore,
-            );
+            yield* purgeDomains(DECLARED_HOSTNAME, OUT_OF_BAND_HOSTNAME).pipe(Effect.ignore);
             if (workerName) {
-              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(
-                Effect.ignore,
-              );
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
             }
           }),
         ),

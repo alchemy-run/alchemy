@@ -31,9 +31,7 @@ export interface Query extends Binding.Service<
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
-    (
-      request: QueryRequest,
-    ) => Effect.Effect<DynamoDB.QueryOutput, DynamoDB.QueryError>
+    (request: QueryRequest) => Effect.Effect<DynamoDB.QueryOutput, DynamoDB.QueryError>
   >
 > {}
 export const Query = Binding.Service<Query>("AWS.DynamoDB.Query");

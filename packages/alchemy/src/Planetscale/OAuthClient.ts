@@ -1,11 +1,7 @@
 import * as Redacted from "effect/Redacted";
 import { makeOAuthClient } from "../Auth/OAuthFlow.ts";
 
-export {
-  OAuthCredentials,
-  OAuthError,
-  type Authorization,
-} from "../Auth/OAuthFlow.ts";
+export { OAuthCredentials, OAuthError, type Authorization } from "../Auth/OAuthFlow.ts";
 
 /**
  * Registered PlanetScale OAuth application credentials.
@@ -59,11 +55,5 @@ const client = makeOAuthClient({
   tokenTransport: "query",
 });
 
-export const {
-  authorize,
-  callback,
-  exchange,
-  exchangeCallbackInput,
-  refresh,
-  usesCurrentClient,
-} = client;
+export const { authorize, callback, exchange, exchangeCallbackInput, refresh, usesCurrentClient } =
+  client;

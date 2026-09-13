@@ -62,6 +62,5 @@ export const feedBody = (
       feeder.end();
       return { total };
     },
-    catch: (error) =>
-      new StoreError({ reason: `incoming body read: ${String(error)}` }),
+    catch: (error) => new StoreError({ reason: `incoming body read: ${String(error)}` }),
   }).pipe(Effect.tapError((error) => Effect.sync(() => feeder.fail(error))));

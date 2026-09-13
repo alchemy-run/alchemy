@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -38,8 +35,7 @@ test.provider(
       // verify the capture-and-restore behaviour at the end.
       const baseline = yield* getLogging(accountId);
       const baselineRedactPii = baseline.redactPii ?? undefined;
-      const baselineDnsLogAll =
-        baseline.settingsByRuleType?.dns?.logAll ?? undefined;
+      const baselineDnsLogAll = baseline.settingsByRuleType?.dns?.logAll ?? undefined;
 
       // Drive both managed fields to the opposite of the baseline so the
       // deploy is guaranteed to change something.
@@ -58,9 +54,7 @@ test.provider(
       expect(logging.redactPii).toEqual(flippedRedactPii);
       expect(logging.dns?.logAll).toEqual(flippedDnsLogAll);
       // The pre-management snapshot was captured for restore.
-      expect(logging.initialSettings.redactPii ?? undefined).toEqual(
-        baselineRedactPii,
-      );
+      expect(logging.initialSettings.redactPii ?? undefined).toEqual(baselineRedactPii);
 
       const live = yield* getLogging(accountId);
       expect(live.redactPii).toEqual(flippedRedactPii);
@@ -84,9 +78,7 @@ test.provider(
       yield* stack.destroy();
       const restored = yield* getLogging(accountId);
       expect(restored.redactPii ?? undefined).toEqual(baselineRedactPii);
-      expect(restored.settingsByRuleType?.dns?.logAll ?? undefined).toEqual(
-        baselineDnsLogAll,
-      );
+      expect(restored.settingsByRuleType?.dns?.logAll ?? undefined).toEqual(baselineDnsLogAll);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

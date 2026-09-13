@@ -98,18 +98,11 @@ export const DomainProvider = () =>
       const getDomain = Effect.fn(function* (name: string) {
         const response = yield* codeartifact
           .describeDomain({ domain: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.domain;
       });
 
-      const toAttrs = (
-        domain: codeartifact.DomainDescription,
-        name: string,
-      ) => ({
+      const toAttrs = (domain: codeartifact.DomainDescription, name: string) => ({
         domainName: domain.name ?? name,
         domainArn: domain.arn!,
         owner: domain.owner ?? "",
@@ -118,17 +111,11 @@ export const DomainProvider = () =>
         s3BucketArn: domain.s3BucketArn ?? "",
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codeartifact
           .listTagsForResource({ resourceArn: arn })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        const { removed, upsert } = diffTags(
-          toTagRecord(observed?.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(toTagRecord(observed?.tags), desiredTags);
         if (upsert.length > 0) {
           yield* codeartifact.tagResource({
             resourceArn: arn,
@@ -148,16 +135,11 @@ export const DomainProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // The encryption key is immutable — replace on change.
-          if (
-            (news?.encryptionKey ?? undefined) !==
-            (olds?.encryptionKey ?? undefined)
-          ) {
+          if ((news?.encryptionKey ?? undefined) !== (olds?.encryptionKey ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),

@@ -56,11 +56,7 @@ import { Operations } from "./Operations.ts";
 import { concatBytes, utf8Decode } from "./Protocol/ObjectCodec.ts";
 import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
 import { decodePktLines, flushPkt, pktText } from "./Protocol/Pkt.ts";
-import {
-  progressMessage,
-  pumpPackBody,
-  wrapSideband,
-} from "./Protocol/Sideband.ts";
+import { progressMessage, pumpPackBody, wrapSideband } from "./Protocol/Sideband.ts";
 import { RegistryStore } from "./RegistryObject.ts";
 import {
   buildAdvertisement,
@@ -79,15 +75,12 @@ import { decodeHeadSnapshot } from "./Store/HeadSnapshot.ts";
 import { headKey } from "./Store/Keys.ts";
 
 /** A `Bearer` credential from the `Authorization` header (the hash route's internal secret). */
-const parseBearer = (
-  headers: Readonly<Record<string, string | undefined>>,
-): string | undefined => {
+const parseBearer = (headers: Readonly<Record<string, string | undefined>>): string | undefined => {
   const authorization = headers.authorization;
   if (authorization === undefined) return undefined;
   const space = authorization.indexOf(" ");
   if (space === -1) return undefined;
-  if (authorization.slice(0, space).toLowerCase() !== "bearer")
-    return undefined;
+  if (authorization.slice(0, space).toLowerCase() !== "bearer") return undefined;
   const credential = authorization.slice(space + 1).trim();
   return credential === "" ? undefined : credential;
 };
@@ -185,7 +178,7 @@ const makeCore = Effect.gen(function* () {
       remoteResult(operations.repos.import(input)),
   };
 
-  const wire401 = HttpServerResponse.empty({
+  const _wire401 = HttpServerResponse.empty({
     status: 401,
     headers: { "www-authenticate": WWW_AUTHENTICATE },
   });
@@ -238,12 +231,7 @@ const makeCore = Effect.gen(function* () {
     if (options.readable !== undefined) {
       const source = options.readable;
       const prefix = options.sideband
-        ? concatBytes([
-            nak,
-            progressMessage(
-              `Enumerating objects: ${options.objectCount}, done.`,
-            ),
-          ])
+        ? concatBytes([nak, progressMessage(`Enumerating objects: ${options.objectCount}, done.`)])
         : nak;
       const out = pumpPackBody({
         prefix,
@@ -327,8 +315,7 @@ const makeCore = Effect.gen(function* () {
       request.method === "GET" &&
       target.pathname.endsWith("/info/refs") &&
       target.searchParams.get("service") === "git-upload-pack";
-    const isUploadPack =
-      request.method === "POST" && target.pathname.endsWith("/git-upload-pack");
+    const isUploadPack = request.method === "POST" && target.pathname.endsWith("/git-upload-pack");
     if (!isAdvertisement && !isUploadPack) return undefined;
     // Compressed bodies carry big negotiation rounds — the DO owns
     // those (and the gunzip) anyway.
@@ -368,9 +355,7 @@ const makeCore = Effect.gen(function* () {
     // fall-through still forwards the original, unconsumed body.
     const source = request.source;
     if (!(source instanceof Request)) return undefined;
-    const bodyResult = yield* Effect.result(
-      Effect.tryPromise(() => source.clone().arrayBuffer()),
-    );
+    const bodyResult = yield* Effect.result(Effect.tryPromise(() => source.clone().arrayBuffer()));
     if (Result.isFailure(bodyResult)) return undefined;
     const req = yield* decodePktLines(new Uint8Array(bodyResult.success)).pipe(
       Effect.flatMap(parseUploadPackRequest),
@@ -463,10 +448,7 @@ const makeCore = Effect.gen(function* () {
       if (push._tag === "Probe") return ReceivePackHttp.probeResponse();
       return yield* Effect.gen(function* () {
         const prepared = yield* engine.preparePush(repo, push.input);
-        return ReceivePackHttp.response(
-          push,
-          yield* engine.commitPush(prepared),
-        );
+        return ReceivePackHttp.response(push, yield* engine.commitPush(prepared));
       }).pipe(
         Effect.catchTag("PushDenied", (error) =>
           Effect.succeed(ReceivePackHttp.reject(push, error.reason)),
@@ -475,9 +457,7 @@ const makeCore = Effect.gen(function* () {
     }),
   ).pipe(
     Effect.catchTag("RepoNotFound", () => Effect.succeed(notFound)),
-    Effect.catchTag("StoreError", (error) =>
-      Effect.succeed(ReceivePackHttp.failure(error.reason)),
-    ),
+    Effect.catchTag("StoreError", (error) => Effect.succeed(ReceivePackHttp.failure(error.reason))),
     Effect.catchTag(["WireProtocolError", "PackIngestError"], (error) =>
       Effect.succeed(ReceivePackHttp.failure(error.reason)),
     ),
@@ -486,7 +466,6 @@ const makeCore = Effect.gen(function* () {
   /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
   const rawRestPrelude = (ownerRaw: string, repoRaw: string) =>
     Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
       const resolved = yield* Effect.result(resolveCached(ownerRaw, repoRaw));
       if (Result.isFailure(resolved)) {
         return { kind: "halt", response: internalError } as const;
@@ -504,10 +483,7 @@ const makeCore = Effect.gen(function* () {
    */
   const blobRawRoute = Effect.gen(function* () {
     const params = yield* HttpRouter.params;
-    const prelude = yield* rawRestPrelude(
-      params.owner ?? "",
-      params.repo ?? "",
-    );
+    const prelude = yield* rawRestPrelude(params.owner ?? "", params.repo ?? "");
     if (prelude.kind === "halt") return prelude.response;
     return yield* repos
       .getByName(prelude.entry.repoId)
@@ -546,10 +522,7 @@ const makeCore = Effect.gen(function* () {
     if (path === null || path.length === 0) {
       return HttpServerResponse.text("missing ?path", { status: 400 });
     }
-    const prelude = yield* rawRestPrelude(
-      params.owner ?? "",
-      params.repo ?? "",
-    );
+    const prelude = yield* rawRestPrelude(params.owner ?? "", params.repo ?? "");
     if (prelude.kind === "halt") return prelude.response;
     return yield* repos
       .getByName(prelude.entry.repoId)
@@ -584,10 +557,7 @@ const makeCore = Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const presented = parseBearer(request.headers);
     const expected = Redacted.value(yield* internalSecret);
-    if (
-      presented === undefined ||
-      !(yield* timingSafeEqual(presented, expected))
-    ) {
+    if (presented === undefined || !(yield* timingSafeEqual(presented, expected))) {
       return HttpServerResponse.text("forbidden", { status: 403 });
     }
     const query = new URL(request.url, "http://x").searchParams;
@@ -612,10 +582,9 @@ const makeCore = Effect.gen(function* () {
           { status: 422 },
         );
       }
-      return HttpServerResponse.uint8Array(
-        frame(encodeDeltaResults(resolved.success)),
-        { contentType: "application/octet-stream" },
-      );
+      return HttpServerResponse.uint8Array(frame(encodeDeltaResults(resolved.success)), {
+        contentType: "application/octet-stream",
+      });
     }
     // A requested spill part uploads concurrently with the scan (DESIGN
     // §22.10): this isolate is the writer of the part it verifies.
@@ -679,14 +648,10 @@ const makeCore = Effect.gen(function* () {
             );
           }
           if (Result.isFailure(part)) {
-            await writable
-              .abort(new Error(part.failure.reason))
-              .catch(() => {});
+            await writable.abort(new Error(part.failure.reason)).catch(() => {});
             return;
           }
-          await writer.write(
-            frame(new TextEncoder().encode(JSON.stringify(part.success))),
-          );
+          await writer.write(frame(new TextEncoder().encode(JSON.stringify(part.success))));
           await writer.close();
         } catch (error) {
           await writable.abort(error).catch(() => {});
@@ -731,10 +696,9 @@ const makeCore = Effect.gen(function* () {
  * );
  * ```
  */
-export class Handlers extends Context.Service<
-  Handlers,
-  Effect.Success<typeof makeCore>
->()("alchemy/Git/Handlers") {}
+export class Handlers extends Context.Service<Handlers, Effect.Success<typeof makeCore>>()(
+  "alchemy/Git/Handlers",
+) {}
 
 /**
  * Builds reusable Git handlers from the storage and hasher services.
@@ -764,9 +728,7 @@ export const GroupsLive = Layer.mergeAll(
   HttpApiBuilder.group(GitApi, "repos", (h) =>
     Effect.map(Handlers, (git) => h.handleAll(git.repos)),
   ),
-  HttpApiBuilder.group(GitApi, "refs", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.refs)),
-  ),
+  HttpApiBuilder.group(GitApi, "refs", (h) => Effect.map(Handlers, (git) => h.handleAll(git.refs))),
   HttpApiBuilder.group(GitApi, "objects", (h) =>
     Effect.map(Handlers, (git) => h.handleAll(git.objects)),
   ),
@@ -794,9 +756,7 @@ export const GroupsLive = Layer.mergeAll(
  *
  * @layer
  */
-export const ApiLive = HttpApiBuilder.layer(GitApi).pipe(
-  Layer.provide(GroupsLive),
-);
+export const ApiLive = HttpApiBuilder.layer(GitApi).pipe(Layer.provide(GroupsLive));
 
 /**
  * The authenticated internal hashing route. Mount beside public routes,
@@ -804,9 +764,7 @@ export const ApiLive = HttpApiBuilder.layer(GitApi).pipe(
  *
  * @layer
  */
-export const InternalApiLive = HttpApiBuilder.layer(InternalApi).pipe(
-  Layer.provide(InternalLive),
-);
+export const InternalApiLive = HttpApiBuilder.layer(InternalApi).pipe(Layer.provide(InternalLive));
 
 /**
  * Hosts the `GitRepo` Durable Object (refs, objects, pulls, the wire

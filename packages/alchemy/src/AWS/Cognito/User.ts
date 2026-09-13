@@ -94,19 +94,11 @@ export interface User extends Resource<
  */
 export const User = Resource<User>("AWS.Cognito.User");
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 /** Observed user attributes as a plain name → value record. */
-const attributeRecordOf = (
-  attributes: cip.AttributeType[] | undefined,
-): Record<string, string> =>
+const attributeRecordOf = (attributes: cip.AttributeType[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (attributes ?? []).flatMap((attribute) => {
       const value = plain(attribute.Value);
@@ -118,25 +110,16 @@ export const UserProvider = () =>
   Provider.effect(
     User,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<UserProps, "username">,
-      ) {
-        return (
-          props.username ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<UserProps, "username">) {
+        return props.username ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const getUser = Effect.fn(function* (
-        userPoolId: string,
-        username: string,
-      ) {
+      const getUser = Effect.fn(function* (userPoolId: string, username: string) {
         return yield* cip
           .adminGetUser({ UserPoolId: userPoolId, Username: username })
           .pipe(
-            Effect.catchTag(
-              ["UserNotFoundException", "ResourceNotFoundException"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["UserNotFoundException", "ResourceNotFoundException"], () =>
+              Effect.succeed(undefined),
             ),
           );
       });
@@ -164,12 +147,9 @@ export const UserProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;
           if (userPoolId === undefined) return undefined;
-          const username =
-            output?.username ?? (yield* createName(id, olds ?? {}));
+          const username = output?.username ?? (yield* createName(id, olds ?? {}));
           const observed = yield* getUser(userPoolId, username);
-          return observed === undefined
-            ? undefined
-            : attributesOf(username, userPoolId, observed);
+          return observed === undefined ? undefined : attributesOf(username, userPoolId, observed);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -197,25 +177,19 @@ export const UserProvider = () =>
                 UserPoolId: userPoolId,
                 Username: username,
                 MessageAction: "SUPPRESS",
-                UserAttributes: Object.entries(desiredAttributes).map(
-                  ([Name, Value]) => ({
-                    Name,
-                    Value,
-                  }),
-                ),
+                UserAttributes: Object.entries(desiredAttributes).map(([Name, Value]) => ({
+                  Name,
+                  Value,
+                })),
               })
-              .pipe(
-                Effect.catchTag("UsernameExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("UsernameExistsException", () => Effect.void));
             observed = yield* getUser(userPoolId, username);
           } else {
             // 3. SYNC ATTRIBUTES — upsert declared attributes that drifted
             //    from the OBSERVED values; delete attributes that were
             //    previously declared but no longer are (`olds` is only the
             //    hint for which attributes we manage — never for values).
-            const observedAttributes = attributeRecordOf(
-              observed.UserAttributes,
-            );
+            const observedAttributes = attributeRecordOf(observed.UserAttributes);
             const upsert = Object.entries(desiredAttributes).filter(
               ([name, value]) => observedAttributes[name] !== value,
             );
@@ -231,8 +205,7 @@ export const UserProvider = () =>
             }
             const removed = Object.keys(olds?.attributes ?? {}).filter(
               (name) =>
-                desiredAttributes[name] === undefined &&
-                observedAttributes[name] !== undefined,
+                desiredAttributes[name] === undefined && observedAttributes[name] !== undefined,
             );
             if (removed.length > 0) {
               yield* cip.adminDeleteUserAttributes({
@@ -244,9 +217,7 @@ export const UserProvider = () =>
           }
 
           if (observed === undefined) {
-            return yield* Effect.die(
-              `Cognito user ${username} not observable after create`,
-            );
+            return yield* Effect.die(`Cognito user ${username} not observable after create`);
           }
 
           // 3b. SYNC PASSWORD — a permanent password confirms the account.

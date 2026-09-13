@@ -44,9 +44,7 @@ import { dockerAvailable, FLOCI_ENDPOINT } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = fileURLToPath(
-  new URL("./fixtures/microvm-dev", import.meta.url),
-);
+const fixtureDir = fileURLToPath(new URL("./fixtures/microvm-dev", import.meta.url));
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */
 const flociContext = Layer.mergeAll(
@@ -70,21 +68,17 @@ const bootsToRunning = (imageArn: string, imageVersion?: string) =>
       imageIdentifier: imageArn,
       ...(imageVersion !== undefined ? { imageVersion } : {}),
     });
-    const state = yield* microvms
-      .getMicrovm({ microvmIdentifier: vm.microvmId })
-      .pipe(
-        Effect.map((m) => m.state),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (s): boolean => s !== "PENDING",
-          times: 60,
-        }),
-        Effect.ensuring(
-          microvms
-            .terminateMicrovm({ microvmIdentifier: vm.microvmId })
-            .pipe(Effect.ignore),
-        ),
-      );
+    const state = yield* microvms.getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
+      Effect.map((m) => m.state),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (s): boolean => s !== "PENDING",
+        times: 60,
+      }),
+      Effect.ensuring(
+        microvms.terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
+      ),
+    );
     return { state, imageVersion: vm.imageVersion };
   }).pipe(Effect.provide(flociContext));
 
@@ -118,9 +112,7 @@ test.provider.skipIf(!dockerAvailable)(
       expect(first.imageArn).toContain(":000000000000:");
       // The host-build path: a pre-built local docker reference, not an
       // uploaded-zip S3 uri.
-      expect(first.codeArtifact?.uri).toMatch(
-        /^docker:\/\/alchemy-dev\/microvm-/,
-      );
+      expect(first.codeArtifact?.uri).toMatch(/^docker:\/\/alchemy-dev\/microvm-/);
       expect(first.codeArtifact?.hash).toBeDefined();
       const v1 = first.latestActiveImageVersion;
       expect(v1).toBeDefined();
@@ -145,23 +137,18 @@ test.provider.skipIf(!dockerAvailable)(
         mainPath,
         source.replace(`"microvm-marker-v1"`, `"microvm-marker-v2"`),
       );
-      const rebuilt = yield* microvms
-        .getMicrovmImage({ imageIdentifier: first.imageArn })
-        .pipe(
-          Effect.provide(flociContext),
-          Effect.repeat({
-            schedule: Schedule.spaced("500 millis"),
-            until: (image): boolean =>
-              image.latestActiveImageVersion !== undefined &&
-              image.latestActiveImageVersion !== v1,
-            times: 120,
-          }),
-        );
+      const rebuilt = yield* microvms.getMicrovmImage({ imageIdentifier: first.imageArn }).pipe(
+        Effect.provide(flociContext),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (image): boolean =>
+            image.latestActiveImageVersion !== undefined && image.latestActiveImageVersion !== v1,
+          times: 120,
+        }),
+      );
       const rebuildMs = Date.now() - editStartedAt;
       // eslint-disable-next-line no-console
-      console.log(
-        `microvm content edit -> new active version in ${rebuildMs}ms`,
-      );
+      console.log(`microvm content edit -> new active version in ${rebuildMs}ms`);
       expect(rebuilt.latestActiveImageVersion).not.toBe(v1);
       // The point of the docker:// path: a content edit is a cached docker
       // build, not a zip-upload-extract-rebuild. Well under a minute even
@@ -175,20 +162,16 @@ test.provider.skipIf(!dockerAvailable)(
 
       // Destroy: the image must be gone from the emulator.
       yield* stack.destroy();
-      const gone = yield* microvms
-        .getMicrovmImage({ imageIdentifier: first.imageArn })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-          Effect.provide(flociContext),
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (isGone): boolean => isGone,
-            times: 20,
-          }),
-        );
+      const gone = yield* microvms.getMicrovmImage({ imageIdentifier: first.imageArn }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+        Effect.provide(flociContext),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (isGone): boolean => isGone,
+          times: 20,
+        }),
+      );
       expect(gone).toBe(true);
     }),
   { timeout: 600_000 },

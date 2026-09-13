@@ -31,10 +31,7 @@ export interface GetEvidenceFolder extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetEvidenceFolderRequest,
-    ) => Effect.Effect<
-      auditmanager.GetEvidenceFolderResponse,
-      auditmanager.GetEvidenceFolderError
-    >
+    ) => Effect.Effect<auditmanager.GetEvidenceFolderResponse, auditmanager.GetEvidenceFolderError>
   >
 > {}
 

@@ -46,12 +46,10 @@ export default LakeFormationTestFunction.make(
       yield* LakeFormation.GetTemporaryGluePartitionCredentials();
     const getTemporaryDataLocationCredentials =
       yield* LakeFormation.GetTemporaryDataLocationCredentials();
-    const searchDatabasesByLFTags =
-      yield* LakeFormation.SearchDatabasesByLFTags();
+    const searchDatabasesByLFTags = yield* LakeFormation.SearchDatabasesByLFTags();
     const searchTablesByLFTags = yield* LakeFormation.SearchTablesByLFTags();
     const getResourceLFTags = yield* LakeFormation.GetResourceLFTags();
-    const getEffectivePermissionsForPath =
-      yield* LakeFormation.GetEffectivePermissionsForPath();
+    const getEffectivePermissionsForPath = yield* LakeFormation.GetEffectivePermissionsForPath();
     const getLFTag = yield* LakeFormation.GetLFTag();
     const listLFTags = yield* LakeFormation.ListLFTags();
     const listPermissions = yield* LakeFormation.ListPermissions();
@@ -74,8 +72,7 @@ export default LakeFormationTestFunction.make(
     // vending probes prove the IAM grant reaches the API by observing a
     // *typed* Lake Formation rejection rather than an IAM signature failure.
     const foreignTableArn = Effect.sync(
-      () =>
-        `arn:aws:glue:${process.env.AWS_REGION}:123456789012:table/missing_db/missing_table`,
+      () => `arn:aws:glue:${process.env.AWS_REGION}:123456789012:table/missing_db/missing_table`,
     );
 
     return {
@@ -107,9 +104,8 @@ export default LakeFormationTestFunction.make(
         if (request.method === "GET" && pathname === "/tag-missing") {
           const result = yield* getLFTag({ TagKey: MISSING_TAG_KEY }).pipe(
             Effect.map(() => ({ tag: "Ok" })),
-            Effect.catchTag(
-              ["EntityNotFoundException", "AccessDeniedException"],
-              (e) => Effect.succeed({ tag: e._tag }),
+            Effect.catchTag(["EntityNotFoundException", "AccessDeniedException"], (e) =>
+              Effect.succeed({ tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -133,9 +129,8 @@ export default LakeFormationTestFunction.make(
               tag: "Ok",
               count: (r.DatabaseList ?? []).length,
             })),
-            Effect.catchTag(
-              ["EntityNotFoundException", "AccessDeniedException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["EntityNotFoundException", "AccessDeniedException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -149,9 +144,8 @@ export default LakeFormationTestFunction.make(
               tag: "Ok",
               count: (r.TableList ?? []).length,
             })),
-            Effect.catchTag(
-              ["EntityNotFoundException", "AccessDeniedException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["EntityNotFoundException", "AccessDeniedException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -166,11 +160,7 @@ export default LakeFormationTestFunction.make(
               count: (r.LFTagOnDatabase ?? []).length,
             })),
             Effect.catchTag(
-              [
-                "EntityNotFoundException",
-                "AccessDeniedException",
-                "GlueEncryptionException",
-              ],
+              ["EntityNotFoundException", "AccessDeniedException", "GlueEncryptionException"],
               (e) => Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
@@ -185,9 +175,8 @@ export default LakeFormationTestFunction.make(
               tag: "Ok",
               count: (r.Permissions ?? []).length,
             })),
-            Effect.catchTag(
-              ["EntityNotFoundException", "InvalidInputException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["EntityNotFoundException", "InvalidInputException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -254,10 +243,7 @@ export default LakeFormationTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

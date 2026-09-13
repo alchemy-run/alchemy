@@ -6,11 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   readMailManagerTags,
@@ -111,26 +107,16 @@ export const ArchiveProvider = () =>
   Provider.effect(
     Archive,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { archiveName?: string },
-      ) {
-        return (
-          props.archiveName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { archiveName?: string }) {
+        return props.archiveName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       // A PENDING_DELETION archive is irrevocably deleted (contents already
       // inaccessible) — treat it as gone everywhere.
       const getById = (archiveId: string) =>
         mm.getArchive({ ArchiveId: archiveId }).pipe(
-          Effect.map((a) =>
-            a.ArchiveState === "PENDING_DELETION" ? undefined : a,
-          ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.map((a) => (a.ArchiveState === "PENDING_DELETION" ? undefined : a)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       // Archives have no name-keyed Get — enumerate and match, skipping
@@ -141,11 +127,7 @@ export const ArchiveProvider = () =>
           Effect.map((chunk) =>
             Array.from(chunk)
               .flatMap((page) => page.Archives ?? [])
-              .find(
-                (a) =>
-                  a.ArchiveName === name &&
-                  a.ArchiveState !== "PENDING_DELETION",
-              ),
+              .find((a) => a.ArchiveName === name && a.ArchiveState !== "PENDING_DELETION"),
           ),
         );
 
@@ -184,14 +166,11 @@ export const ArchiveProvider = () =>
                 (archiveId) => getById(archiveId),
               ),
             ),
-            Effect.map((results) =>
-              results.flatMap((a) => (a === undefined ? [] : [toAttrs(a)])),
-            ),
+            Effect.map((results) => results.flatMap((a) => (a === undefined ? [] : [toAttrs(a)]))),
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.archiveName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.archiveName ?? (yield* createName(id, olds ?? {}));
           const archive = yield* observe(output, name);
           if (archive === undefined) return undefined;
           const attrs = toAttrs(archive);
@@ -213,8 +192,7 @@ export const ArchiveProvider = () =>
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredRetention: mm.RetentionPeriod =
-            news.retentionPeriod ?? "PERMANENT";
+          const desiredRetention: mm.RetentionPeriod = news.retentionPeriod ?? "PERMANENT";
 
           // 1. OBSERVE — cloud state is authoritative; output is an id cache.
           let archive = yield* observe(output, name);
@@ -230,11 +208,7 @@ export const ArchiveProvider = () =>
                 KmsKeyArn: news.kmsKeyArn,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             archive =
               created !== undefined
                 ? yield* getById(created.ArchiveId)
@@ -242,9 +216,7 @@ export const ArchiveProvider = () =>
           }
           if (archive === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Mail Manager archive '${name}' not found after create`,
-              ),
+              new Error(`Mail Manager archive '${name}' not found after create`),
             );
           }
 

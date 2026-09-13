@@ -80,8 +80,7 @@ export const sortServerModules = (
 export const stringifyBuildOutput = (output: BuildOutput): string =>
   JSON.stringify(
     output,
-    (_, value) =>
-      value instanceof Set ? Array.from(value as Set<string>).sort() : value,
+    (_, value) => (value instanceof Set ? Array.from(value as Set<string>).sort() : value),
     2,
   );
 
@@ -104,9 +103,7 @@ export const parseBuildOutput = (content: string): BuildOutput => {
     return value;
   }) as BuildOutput & { externalWorkspaces: unknown };
   parsed.externalWorkspaces = new Set(
-    Array.isArray(parsed.externalWorkspaces)
-      ? (parsed.externalWorkspaces as Array<string>)
-      : [],
+    Array.isArray(parsed.externalWorkspaces) ? (parsed.externalWorkspaces as Array<string>) : [],
   );
   return parsed as BuildOutput;
 };

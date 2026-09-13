@@ -36,17 +36,13 @@ export interface CreateWorkspaceServiceAccount extends Binding.Service<
     workspace: Workspace,
   ) => Effect.Effect<
     (
-      request: Omit<
-        grafana.CreateWorkspaceServiceAccountRequest,
-        "workspaceId"
-      >,
+      request: Omit<grafana.CreateWorkspaceServiceAccountRequest, "workspaceId">,
     ) => Effect.Effect<
       grafana.CreateWorkspaceServiceAccountResponse,
       grafana.CreateWorkspaceServiceAccountError
     >
   >
 > {}
-export const CreateWorkspaceServiceAccount =
-  Binding.Service<CreateWorkspaceServiceAccount>(
-    "AWS.Grafana.CreateWorkspaceServiceAccount",
-  );
+export const CreateWorkspaceServiceAccount = Binding.Service<CreateWorkspaceServiceAccount>(
+  "AWS.Grafana.CreateWorkspaceServiceAccount",
+);

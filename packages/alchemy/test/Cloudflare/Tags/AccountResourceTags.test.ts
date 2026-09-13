@@ -12,10 +12,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic names — the same on every run (never Date.now()/random).
 const KV_TITLE_CRUD = "alchemy-account-tags-crud";
@@ -40,11 +37,7 @@ const getTags = (accountId: string, resourceId: string, resourceType: string) =>
 
 // Cloudflare reports untagged (and unknown) resources as an empty tag
 // set — poll until the set is empty after destroy.
-const expectTagsCleared = (
-  accountId: string,
-  resourceId: string,
-  resourceType: string,
-) =>
+const expectTagsCleared = (accountId: string, resourceId: string, resourceType: string) =>
   getTags(accountId, resourceId, resourceType).pipe(
     Effect.repeat({
       schedule: Schedule.exponential("500 millis"),
@@ -103,11 +96,7 @@ test.provider("create, update, and clear tags on a KV namespace", (stack) =>
     expect(v2.kv.namespaceId).toEqual(v1.kv.namespaceId);
     expect(v2.tags.tags).toEqual({ env: "prod", owner: "qa" });
 
-    const updated = yield* getTags(
-      accountId,
-      v2.kv.namespaceId,
-      "kv_namespace",
-    );
+    const updated = yield* getTags(accountId, v2.kv.namespaceId, "kv_namespace");
     expect(updated).toEqual({ env: "prod", owner: "qa" });
 
     yield* stack.destroy();
@@ -140,11 +129,7 @@ test.provider("changing resourceId triggers replacement", (stack) =>
     );
 
     expect(initial.tags.resourceId).toEqual(initial.a.namespaceId);
-    const onA = yield* getTags(
-      accountId,
-      initial.a.namespaceId,
-      "kv_namespace",
-    );
+    const onA = yield* getTags(accountId, initial.a.namespaceId, "kv_namespace");
     expect(onA).toEqual({ pinned: "yes" });
 
     // Repoint the tag set at namespace B — `(resourceType, resourceId)`
@@ -170,11 +155,7 @@ test.provider("changing resourceId triggers replacement", (stack) =>
     expect(replaced.tags.resourceId).toEqual(replaced.b.namespaceId);
     expect(replaced.tags.resourceId).not.toEqual(initial.a.namespaceId);
 
-    const onB = yield* getTags(
-      accountId,
-      replaced.b.namespaceId,
-      "kv_namespace",
-    );
+    const onB = yield* getTags(accountId, replaced.b.namespaceId, "kv_namespace");
     expect(onB).toEqual({ pinned: "yes" });
 
     // The old tag set on A was cleared as part of the replacement.
@@ -186,74 +167,72 @@ test.provider("changing resourceId triggers replacement", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider(
-  "adoption — existing tags error without adopt, take over with adopt(true)",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("adoption — existing tags error without adopt, take over with adopt(true)", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
-      // Normalize the baseline — clear any leftover tags on the account
-      // from interrupted runs.
-      yield* resourceTagging
-        .deleteAccountTag({
-          accountId,
-          resourceId: accountId,
-          resourceType: "account",
-        })
-        .pipe(Effect.retry(forbiddenRetry));
+    yield* stack.destroy();
+    // Normalize the baseline — clear any leftover tags on the account
+    // from interrupted runs.
+    yield* resourceTagging
+      .deleteAccountTag({
+        accountId,
+        resourceId: accountId,
+        resourceType: "account",
+      })
+      .pipe(Effect.retry(forbiddenRetry));
 
-      // Tag the account out-of-band so the stack has no state of its own
-      // for it — exactly the "tags already exist" scenario.
-      const pre = yield* resourceTagging
-        .putAccountTag({
-          accountId,
-          resourceId: accountId,
-          resourceType: "account",
-          tags: { "alchemy-adopt-probe": "pre-existing" },
-        })
-        .pipe(Effect.retry(forbiddenRetry));
-      expect(pre.tags).toEqual({ "alchemy-adopt-probe": "pre-existing" });
+    // Tag the account out-of-band so the stack has no state of its own
+    // for it — exactly the "tags already exist" scenario.
+    const pre = yield* resourceTagging
+      .putAccountTag({
+        accountId,
+        resourceId: accountId,
+        resourceType: "account",
+        tags: { "alchemy-adopt-probe": "pre-existing" },
+      })
+      .pipe(Effect.retry(forbiddenRetry));
+    expect(pre.tags).toEqual({ "alchemy-adopt-probe": "pre-existing" });
 
-      // Without `adopt`: tags carry no ownership markers, so the engine
-      // cannot prove we created them and refuses to clobber the set.
-      const error = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Tags.AccountResourceTags("AccountTags", {
-              resourceType: "account",
-              resourceId: accountId,
-              tags: { "alchemy-adopt-probe": "managed" },
-            });
-          }),
-        )
-        .pipe(
-          Effect.as(undefined),
-          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
-        );
-      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
-
-      // With `adopt(true)`: the engine takes over the pre-existing tag
-      // set and converges it to the desired tags.
-      const adopted = yield* stack.deploy(
+    // Without `adopt`: tags carry no ownership markers, so the engine
+    // cannot prove we created them and refuses to clobber the set.
+    const error = yield* stack
+      .deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Tags.AccountResourceTags("AccountTags", {
             resourceType: "account",
             resourceId: accountId,
             tags: { "alchemy-adopt-probe": "managed" },
-          }).pipe(adopt(true));
+          });
         }),
+      )
+      .pipe(
+        Effect.as(undefined),
+        Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
       );
+    expect(error).toBeInstanceOf(OwnedBySomeoneElse);
 
-      expect(adopted.tags).toEqual({ "alchemy-adopt-probe": "managed" });
+    // With `adopt(true)`: the engine takes over the pre-existing tag
+    // set and converges it to the desired tags.
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Tags.AccountResourceTags("AccountTags", {
+          resourceType: "account",
+          resourceId: accountId,
+          tags: { "alchemy-adopt-probe": "managed" },
+        }).pipe(adopt(true));
+      }),
+    );
 
-      const live = yield* getTags(accountId, accountId, "account");
-      expect(live).toEqual({ "alchemy-adopt-probe": "managed" });
+    expect(adopted.tags).toEqual({ "alchemy-adopt-probe": "managed" });
 
-      yield* stack.destroy();
+    const live = yield* getTags(accountId, accountId, "account");
+    expect(live).toEqual({ "alchemy-adopt-probe": "managed" });
 
-      yield* expectTagsCleared(accountId, accountId, "account");
-    }).pipe(logLevel),
+    yield* stack.destroy();
+
+    yield* expectTagsCleared(accountId, accountId, "account");
+  }).pipe(logLevel),
 );
 
 const KV_TITLE_LIST = "alchemy-account-tags-list";
@@ -278,15 +257,11 @@ test.provider("list enumerates account-wide tagged resources", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Tags.AccountResourceTags,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Tags.AccountResourceTags);
     const all = yield* provider.list();
 
     const match = all.find(
-      (x) =>
-        x.resourceType === "kv_namespace" &&
-        x.resourceId === deployed.kv.namespaceId,
+      (x) => x.resourceType === "kv_namespace" && x.resourceId === deployed.kv.namespaceId,
     );
     expect(match).toBeDefined();
     expect(match?.accountId).toEqual(accountId);
@@ -295,11 +270,7 @@ test.provider("list enumerates account-wide tagged resources", (stack) =>
 
     yield* stack.destroy();
 
-    yield* expectTagsCleared(
-      accountId,
-      deployed.kv.namespaceId,
-      "kv_namespace",
-    );
+    yield* expectTagsCleared(accountId, deployed.kv.namespaceId, "kv_namespace");
   }).pipe(logLevel),
 );
 
@@ -307,9 +278,7 @@ test.provider("list enumerates account-wide tagged resources", (stack) =>
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -318,7 +287,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

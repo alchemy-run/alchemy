@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic per-test project names (never derived from Date.now() or
 // randomness). Project names form globally-unique *.pages.dev subdomains,
@@ -45,10 +42,7 @@ const expectGone = (accountId: string, projectName: string) =>
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ProjectNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -70,9 +64,7 @@ test.provider("create and delete a project with generated name", (stack) =>
 
     yield* stack.destroy();
 
-    const project = yield* stack.deploy(
-      Cloudflare.Pages.Project("DefaultProject", {}),
-    );
+    const project = yield* stack.deploy(Cloudflare.Pages.Project("DefaultProject", {}));
 
     expect(project.projectId).toBeDefined();
     expect(project.accountId).toEqual(accountId);
@@ -161,17 +153,13 @@ test.provider("update mutable props in place (same project id)", (stack) =>
     expect(live.productionBranch).toEqual("develop");
     expect(live.buildConfig?.buildCommand).toEqual("npm run build:v2");
     expect(live.buildConfig?.destinationDir).toEqual("out");
-    expect(live.deploymentConfigs.production?.compatibilityDate).toEqual(
-      "2025-06-01",
-    );
+    expect(live.deploymentConfigs.production?.compatibilityDate).toEqual("2025-06-01");
     expect(live.deploymentConfigs.production?.envVars).toMatchObject({
       FOO: { value: "foo-v2" },
       BAR: { value: "bar-v1" },
     });
     // PATCH deep-merges — the reconciler must null out removed env vars.
-    expect(live.deploymentConfigs.production?.envVars).not.toHaveProperty(
-      "DROP_ME",
-    );
+    expect(live.deploymentConfigs.production?.envVars).not.toHaveProperty("DROP_ME");
 
     // Redeploying identical props is a no-op (still the same project).
     const noop = yield* stack.deploy(

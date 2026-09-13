@@ -33,6 +33,4 @@ export interface CreateCustomer extends Binding.Service<
   >
 > {}
 
-export const CreateCustomer = Binding.Service<CreateCustomer>(
-  "Stripe.CreateCustomer",
-);
+export const CreateCustomer = Binding.Service<CreateCustomer>("Stripe.CreateCustomer");

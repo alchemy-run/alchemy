@@ -40,9 +40,7 @@ export const EvalLive = Layer.effect(
           },
         })
         .pipe(
-          Effect.flatMap((worker) =>
-            worker.fetch(HttpClientRequest.get("https://worker/")),
-          ),
+          Effect.flatMap((worker) => worker.fetch(HttpClientRequest.get("https://worker/"))),
           Effect.flatMap((response) => response.text),
           Effect.catch((e) =>
             Effect.succeed({

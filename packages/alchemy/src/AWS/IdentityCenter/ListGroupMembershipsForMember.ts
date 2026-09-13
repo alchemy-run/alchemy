@@ -31,17 +31,13 @@ export interface ListGroupMembershipsForMember extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        identitystore.ListGroupMembershipsForMemberRequest,
-        "IdentityStoreId"
-      >,
+      request: Omit<identitystore.ListGroupMembershipsForMemberRequest, "IdentityStoreId">,
     ) => Effect.Effect<
       identitystore.ListGroupMembershipsForMemberResponse,
       identitystore.ListGroupMembershipsForMemberError
     >
   >
 > {}
-export const ListGroupMembershipsForMember =
-  Binding.Service<ListGroupMembershipsForMember>(
-    "AWS.IdentityCenter.ListGroupMembershipsForMember",
-  );
+export const ListGroupMembershipsForMember = Binding.Service<ListGroupMembershipsForMember>(
+  "AWS.IdentityCenter.ListGroupMembershipsForMember",
+);

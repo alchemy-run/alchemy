@@ -46,9 +46,7 @@ export const historyApplications = (converge = false) =>
           image: "docker.io/alpine:3.19",
         }).Application
       : undefined;
-    const image = target?.configuration.pipe(
-      Output.map((configuration) => configuration.image),
-    );
+    const image = target?.configuration.pipe(Output.map((configuration) => configuration.image));
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",
     }).Application;
@@ -66,8 +64,7 @@ export const recoveryApplications = (delay: number, includeSecond = false) =>
       },
       maxInstances: 2,
     };
-    const first = yield* Cloudflare.Container("RecoveryFirst", props)
-      .Application;
+    const first = yield* Cloudflare.Container("RecoveryFirst", props).Application;
     const second = includeSecond
       ? yield* Cloudflare.Container("RecoverySecond", props).Application
       : undefined;

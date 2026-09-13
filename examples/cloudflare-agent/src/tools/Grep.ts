@@ -4,9 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 
-export const regex = AI.Parameter("regex")(
-  S.String,
-)`The regex pattern to search for.`;
+export const regex = AI.Parameter("regex")(S.String)`The regex pattern to search for.`;
 
 export class Grep extends (AI.Tool<Grep>()("grep")`
 Search files for a ${regex} pattern and return the matching lines with their file paths and line numbers.`) {}

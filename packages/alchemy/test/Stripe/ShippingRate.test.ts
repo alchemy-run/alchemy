@@ -10,18 +10,13 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
   GetShippingRate({ shipping_rate_token: id }).pipe(
-    Effect.map((rate) =>
-      rate.active ? ("active" as const) : ("inactive" as const),
-    ),
+    Effect.map((rate) => (rate.active ? ("active" as const) : ("inactive" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("inactive" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -73,12 +68,8 @@ test.provider(
       expect(fetched.fixed_amount?.currency).toEqual("usd");
       expect(fetched.active).toEqual(true);
       expect(fetched.metadata?.region).toEqual("us");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(

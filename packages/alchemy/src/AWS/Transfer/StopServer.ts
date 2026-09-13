@@ -37,6 +37,4 @@ export interface StopServer extends Binding.Service<
     ) => Effect.Effect<transfer.StopServerResponse, transfer.StopServerError>
   >
 > {}
-export const StopServer = Binding.Service<StopServer>(
-  "AWS.Transfer.StopServer",
-);
+export const StopServer = Binding.Service<StopServer>("AWS.Transfer.StopServer");

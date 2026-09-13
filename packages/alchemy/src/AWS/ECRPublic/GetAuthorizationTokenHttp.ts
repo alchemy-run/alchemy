@@ -8,10 +8,7 @@ export const GetAuthorizationTokenHttp = Layer.effect(
   makePublicRegistryHttpBinding({
     capability: "GetAuthorizationToken",
     // The API requires both permissions; see the GetAuthorizationToken docs.
-    iamActions: [
-      "ecr-public:GetAuthorizationToken",
-      "sts:GetServiceBearerToken",
-    ],
+    iamActions: ["ecr-public:GetAuthorizationToken", "sts:GetServiceBearerToken"],
     operation: ecrpublic.getAuthorizationToken,
   }),
 );

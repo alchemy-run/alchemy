@@ -17,11 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "LambdaDurable");
 const unwrapSensitive = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 describe("Lambda DurableFunction", () => {
   // Ungated typed-error probe: proves the durable-execution management API is
@@ -55,9 +51,7 @@ describe("Lambda DurableFunction", () => {
       Effect.gen(function* () {
         yield* Effect.logInfo("Durable test setup: destroying previous stack");
         yield* sharedStack.destroy();
-        yield* Effect.logInfo(
-          "Durable test setup: deploying the DurableFunction",
-        );
+        yield* Effect.logInfo("Durable test setup: deploying the DurableFunction");
         const outputs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const flow = yield* DurableFlow;
@@ -113,9 +107,7 @@ describe("Lambda DurableFunction", () => {
                 FunctionName: functionName,
                 DurableExecutionName: "durable-test-flow-1",
               }).pipe(
-                Effect.map(
-                  (r) => r.DurableExecutions?.[0]?.DurableExecutionArn,
-                ),
+                Effect.map((r) => r.DurableExecutions?.[0]?.DurableExecutionArn),
                 Effect.repeat({
                   schedule: Schedule.spaced("2 seconds"),
                   until: (arn) => arn !== undefined,

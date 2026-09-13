@@ -8,12 +8,8 @@ import { destroy } from "@/RemovalPolicy";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
-const handlerV1Path = fileURLToPath(
-  new URL("./fixtures/version-handler-v1.ts", import.meta.url),
-);
-const handlerV2Path = fileURLToPath(
-  new URL("./fixtures/version-handler-v2.ts", import.meta.url),
-);
+const handlerV1Path = fileURLToPath(new URL("./fixtures/version-handler-v1.ts", import.meta.url));
+const handlerV2Path = fileURLToPath(new URL("./fixtures/version-handler-v2.ts", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -99,12 +95,8 @@ test.provider(
       expect(v2.codeSha256).not.toBe(v1.codeSha256);
       expect(codeChanged.live!.aliasArn).toBe(created.live!.aliasArn);
       expect(codeChanged.live!.functionVersion).toBe(v2.version);
-      expect((yield* numberedVersions(v1.functionName)).length).toBe(
-        countV1 + 1,
-      );
-      expect(
-        yield* getVersionOrUndefined(v1.functionName, v1.version),
-      ).toBeDefined();
+      expect((yield* numberedVersions(v1.functionName)).length).toBe(countV1 + 1);
+      expect(yield* getVersionOrUndefined(v1.functionName, v1.version)).toBeDefined();
 
       // --- versioned configuration change ---
       const configChanged = yield* stack.deploy(
@@ -126,9 +118,7 @@ test.provider(
         }),
       );
       expect(operational.version!.version).toBe(current.version);
-      expect((yield* numberedVersions(v1.functionName)).length).toBe(
-        countCurrent,
-      );
+      expect((yield* numberedVersions(v1.functionName)).length).toBe(countCurrent);
 
       // --- crash after PublishVersion, before state write ---
       // State resolves to an Effect that initializes and yields the concrete
@@ -137,14 +127,11 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const versionRow = rows.find(
         (row): row is { fqn: string; row: ResourceState } =>
-          isResourceState(row.row) &&
-          row.row.resourceType === "AWS.Lambda.Version",
+          isResourceState(row.row) && row.row.resourceType === "AWS.Lambda.Version",
       );
       if (!versionRow?.row.props) {
         return yield* Effect.die(
@@ -171,9 +158,7 @@ test.provider(
         }),
       );
       expect(recovered.version!.version).toBe(current.version);
-      expect((yield* numberedVersions(v1.functionName)).length).toBe(
-        countCurrent,
-      );
+      expect((yield* numberedVersions(v1.functionName)).length).toBe(countCurrent);
 
       // --- retain on removal and recover on re-add ---
       yield* stack.deploy(
@@ -185,9 +170,7 @@ test.provider(
           includeAlias: false,
         }),
       );
-      expect(
-        yield* getVersionOrUndefined(v1.functionName, current.version),
-      ).toBeDefined();
+      expect(yield* getVersionOrUndefined(v1.functionName, current.version)).toBeDefined();
 
       const readded = yield* stack.deploy(
         program({
@@ -197,20 +180,14 @@ test.provider(
         }),
       );
       expect(readded.version!.version).toBe(current.version);
-      expect((yield* numberedVersions(v1.functionName)).length).toBe(
-        countCurrent,
-      );
+      expect((yield* numberedVersions(v1.functionName)).length).toBe(countCurrent);
 
       // --- list + nuke posture ---
       const provider = yield* Provider.findProvider(AWS.Lambda.Version);
       expect(provider.nuke?.skip).toBe(true);
       const listed = yield* provider.list();
-      expect(
-        listed.some((version) => version.versionArn === current.versionArn),
-      ).toBe(true);
-      expect(listed.every((version) => version.version !== "$LATEST")).toBe(
-        true,
-      );
+      expect(listed.some((version) => version.versionArn === current.versionArn)).toBe(true);
+      expect(listed.every((version) => version.version !== "$LATEST")).toBe(true);
 
       // --- explicitly authorized, qualified-only deletion ---
       yield* stack.deploy(
@@ -233,18 +210,14 @@ test.provider(
         }),
       );
 
-      expect(
-        yield* getVersionOrUndefined(v1.functionName, current.version),
-      ).toBeUndefined();
+      expect(yield* getVersionOrUndefined(v1.functionName, current.version)).toBeUndefined();
       expect(
         yield* Lambda.getFunctionConfiguration({
           FunctionName: v1.functionName,
           Qualifier: "$LATEST",
         }),
       ).toBeDefined();
-      expect(
-        yield* getVersionOrUndefined(v1.functionName, v1.version),
-      ).toBeDefined();
+      expect(yield* getVersionOrUndefined(v1.functionName, v1.version)).toBeDefined();
 
       yield* stack.destroy();
     }).pipe(
@@ -258,21 +231,12 @@ const numberedVersions = Effect.fn(function* (functionName: string) {
   const response = yield* Lambda.listVersionsByFunction({
     FunctionName: functionName,
   });
-  return (response.Versions ?? []).filter(
-    (version) => version.Version !== "$LATEST",
-  );
+  return (response.Versions ?? []).filter((version) => version.Version !== "$LATEST");
 });
 
-const getVersionOrUndefined = Effect.fn(function* (
-  functionName: string,
-  version: string,
-) {
+const getVersionOrUndefined = Effect.fn(function* (functionName: string, version: string) {
   return yield* Lambda.getFunctionConfiguration({
     FunctionName: functionName,
     Qualifier: version,
-  }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });

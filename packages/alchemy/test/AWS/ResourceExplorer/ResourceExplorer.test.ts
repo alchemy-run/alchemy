@@ -7,9 +7,7 @@ import * as AWS from "@/AWS";
 import { Index, View } from "@/AWS/ResourceExplorer";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import ResourceExplorerTestFunctionLive, {
-  ResourceExplorerTestFunction,
-} from "./handler.ts";
+import ResourceExplorerTestFunctionLive, { ResourceExplorerTestFunction } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -29,8 +27,7 @@ const getLiveIndex = re2.getIndex({}).pipe(
 const foreignIndexExists = Effect.gen(function* () {
   const live = yield* getLiveIndex;
   return (
-    live !== undefined &&
-    !Object.keys(live.Tags ?? {}).some((key) => key.startsWith("alchemy::"))
+    live !== undefined && !Object.keys(live.Tags ?? {}).some((key) => key.startsWith("alchemy::"))
   );
 });
 
@@ -39,8 +36,7 @@ const waitForIndexGone = re2.getIndex({}).pipe(
   Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   Effect.repeat({
     schedule: Schedule.spaced("3 seconds"),
-    until: (state) =>
-      state === undefined || state === "DELETED" || state === "DELETING",
+    until: (state) => state === undefined || state === "DELETED" || state === "DELETING",
     times: 20,
   }),
 );
@@ -57,9 +53,8 @@ const getViewSafe = (viewArn: string) =>
   re2.getView({ ViewArn: viewArn }).pipe(
     Effect.map((r): re2.GetViewOutput | undefined => r),
     // Resource Explorer's "view not found" is the typed UnauthorizedException
-    Effect.catchTag(
-      ["UnauthorizedException", "ResourceNotFoundException"],
-      () => Effect.succeed(undefined),
+    Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
+      Effect.succeed(undefined),
     ),
   );
 
@@ -89,19 +84,14 @@ describe.sequential("ResourceExplorer", () => {
         }
         yield* stack.destroy();
 
-        const make = (props: {
-          type?: "LOCAL" | "AGGREGATOR";
-          tags?: Record<string, string>;
-        }) =>
+        const make = (props: { type?: "LOCAL" | "AGGREGATOR"; tags?: Record<string, string> }) =>
           Effect.gen(function* () {
             const index = yield* Index("Explorer", props);
             return { index };
           });
 
         // Create — LOCAL index, engine waits for ACTIVE.
-        const { index } = yield* stack.deploy(
-          make({ tags: { purpose: "alchemy-re2-test" } }),
-        );
+        const { index } = yield* stack.deploy(make({ tags: { purpose: "alchemy-re2-test" } }));
         expect(index.indexArn).toContain(":index/");
         expect(index.indexType).toBe("LOCAL");
         expect(index.indexState).toBe("ACTIVE");
@@ -119,9 +109,7 @@ describe.sequential("ResourceExplorer", () => {
         expect(all.map((i) => i.indexArn)).toContain(index.indexArn);
 
         // Update — tag sync (add one, drop one) without replacement.
-        const { index: retagged } = yield* stack.deploy(
-          make({ tags: { team: "platform" } }),
-        );
+        const { index: retagged } = yield* stack.deploy(make({ tags: { team: "platform" } }));
         expect(retagged.indexArn).toBe(index.indexArn);
         const afterTags = yield* re2.getIndex({});
         expect(afterTags.Tags?.team).toBe("platform");
@@ -197,9 +185,7 @@ describe.sequential("ResourceExplorer", () => {
 
         // Update — change the filter and clear included properties
         // (UpdateView replaces both).
-        const { view: updated } = yield* stack.deploy(
-          make({ filterString: "service:sqs" }),
-        );
+        const { view: updated } = yield* stack.deploy(make({ filterString: "service:sqs" }));
         expect(updated.viewArn).toBe(view.viewArn);
         const afterUpdate = yield* re2.getView({ ViewArn: view.viewArn });
         expect(afterUpdate.View?.Filters?.FilterString).toBe("service:sqs");
@@ -258,21 +244,16 @@ describe.sequential("ResourceExplorer", () => {
           const client = yield* HttpClient.HttpClient;
           // Fresh function URLs take a few seconds to start serving; 403/
           // 5xx during that window are transient.
-          const response = yield* client
-            .get(`${baseUrl}/search?q=service:s3`)
-            .pipe(
-              Effect.flatMap((res) =>
-                res.status === 200
-                  ? Effect.succeed(res)
-                  : Effect.fail(new Error(`status ${res.status}`)),
-              ),
-              Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(40),
-                ]),
-              }),
-            );
+          const response = yield* client.get(`${baseUrl}/search?q=service:s3`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.succeed(res)
+                : Effect.fail(new Error(`status ${res.status}`)),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
+            }),
+          );
           const body = (yield* response.json) as {
             viewArn: string;
             totalResources: number;
@@ -287,9 +268,7 @@ describe.sequential("ResourceExplorer", () => {
 
           // ListResources — structured-filter enumeration through the same
           // view (a brand-new index may be empty; assert the round-trip).
-          const listRes = yield* client.get(
-            `${baseUrl}/resources?filter=service:s3`,
-          );
+          const listRes = yield* client.get(`${baseUrl}/resources?filter=service:s3`);
           expect(listRes.status).toBe(200);
           const listBody = (yield* listRes.json) as {
             viewArn: string;

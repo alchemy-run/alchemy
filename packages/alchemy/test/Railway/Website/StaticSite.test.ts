@@ -13,10 +13,7 @@ import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
@@ -26,12 +23,8 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const waitUntilGone = (serviceId: string) =>
   railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -79,9 +72,7 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const health = yield* client.get(`${url!}/health`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`health returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),

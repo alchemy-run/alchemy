@@ -16,9 +16,8 @@ import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type RouteTableId<ID extends string = string> = `rtb-${ID}`;
-export const RouteTableId = <ID extends string>(
-  id: ID,
-): ID & RouteTableId<ID> => `rtb-${id}` as ID & RouteTableId<ID>;
+export const RouteTableId = <ID extends string>(id: ID): ID & RouteTableId<ID> =>
+  `rtb-${id}` as ID & RouteTableId<ID>;
 
 export interface RouteTableProps {
   /**
@@ -278,27 +277,22 @@ export const RouteTableProvider = () =>
                         ownerId: rt.OwnerId,
                         associations: rt.Associations?.map((assoc) => ({
                           main: assoc.Main ?? false,
-                          routeTableAssociationId:
-                            assoc.RouteTableAssociationId,
+                          routeTableAssociationId: assoc.RouteTableAssociationId,
                           routeTableId: assoc.RouteTableId,
                           subnetId: assoc.SubnetId,
                           gatewayId: assoc.GatewayId,
                           associationState: assoc.AssociationState
                             ? {
                                 state: assoc.AssociationState.State!,
-                                statusMessage:
-                                  assoc.AssociationState.StatusMessage,
+                                statusMessage: assoc.AssociationState.StatusMessage,
                               }
                             : undefined,
                         })),
                         routes: rt.Routes?.map((route) => ({
                           destinationCidrBlock: route.DestinationCidrBlock,
-                          destinationIpv6CidrBlock:
-                            route.DestinationIpv6CidrBlock,
-                          destinationPrefixListId:
-                            route.DestinationPrefixListId,
-                          egressOnlyInternetGatewayId:
-                            route.EgressOnlyInternetGatewayId,
+                          destinationIpv6CidrBlock: route.DestinationIpv6CidrBlock,
+                          destinationPrefixListId: route.DestinationPrefixListId,
+                          egressOnlyInternetGatewayId: route.EgressOnlyInternetGatewayId,
                           gatewayId: route.GatewayId,
                           instanceId: route.InstanceId,
                           instanceOwnerId: route.InstanceOwnerId,
@@ -366,14 +360,10 @@ export const RouteTableProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "InvalidVpcID.NotFound",
-                  schedule: Schedule.max([
-                    Schedule.fixed(500),
-                    Schedule.recurs(10),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed(500), Schedule.recurs(10)]),
                 }),
               );
-            const newId = createResult.RouteTable!
-              .RouteTableId! as RouteTableId;
+            const newId = createResult.RouteTable!.RouteTableId! as RouteTableId;
             yield* session.note(`Route table created: ${newId}`);
             routeTable = yield* describeRouteTable(newId, session);
           }
@@ -456,24 +446,16 @@ export const RouteTableProvider = () =>
             })
             .pipe(
               Effect.tapError(Effect.logDebug),
-              Effect.catchTag(
-                "InvalidRouteTableID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.void),
               // Retry on dependency violations (associations still being deleted)
               Effect.retry({
                 // DependencyViolation means there are still dependent resources
                 while: (e) => {
                   return e._tag === "DependencyViolation";
                 },
-                schedule: Schedule.max([
-                  Schedule.fixed(3000),
-                  Schedule.recurs(10),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(10)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt})`,
-                    ),
+                    session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
                   ),
                 ),
               }),
@@ -482,9 +464,7 @@ export const RouteTableProvider = () =>
           // 2. Wait for route table to be fully deleted
           yield* waitForRouteTableDeleted(routeTableId, session);
 
-          yield* session.note(
-            `Route table ${routeTableId} deleted successfully`,
-          );
+          yield* session.note(`Route table ${routeTableId} deleted successfully`);
         }),
       };
     }),
@@ -493,17 +473,12 @@ export const RouteTableProvider = () =>
 /**
  * Describe a route table by ID
  */
-const describeRouteTable = (
-  routeTableId: string,
-  _session?: ScopedPlanStatusSession,
-) =>
+const describeRouteTable = (routeTableId: string, _session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeRouteTables({ RouteTableIds: [routeTableId] })
       .pipe(
-        Effect.catchTag("InvalidRouteTableID.NotFound", () =>
-          Effect.succeed({ RouteTables: [] }),
-        ),
+        Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.succeed({ RouteTables: [] })),
       );
 
     const routeTable = result.RouteTables?.[0];
@@ -529,21 +504,16 @@ class RouteTableNotVisible extends Data.TaggedError("RouteTableNotVisible")<{
 /**
  * Wait for route table to be deleted
  */
-const waitForRouteTableDeleted = (
-  routeTableId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForRouteTableDeleted = (routeTableId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     yield* Effect.retry(
       Effect.gen(function* () {
-        const result = yield* ec2
-          .describeRouteTables({ RouteTableIds: [routeTableId] })
-          .pipe(
-            Effect.tapError(Effect.logDebug),
-            Effect.catchTag("InvalidRouteTableID.NotFound", () =>
-              Effect.succeed({ RouteTables: [] }),
-            ),
-          );
+        const result = yield* ec2.describeRouteTables({ RouteTableIds: [routeTableId] }).pipe(
+          Effect.tapError(Effect.logDebug),
+          Effect.catchTag("InvalidRouteTableID.NotFound", () =>
+            Effect.succeed({ RouteTables: [] }),
+          ),
+        );
 
         if (!result.RouteTables || result.RouteTables.length === 0) {
           return; // Successfully deleted
@@ -553,14 +523,9 @@ const waitForRouteTableDeleted = (
         return yield* Effect.fail(new Error("Route table still exists"));
       }),
       {
-        schedule: Schedule.max([
-          Schedule.fixed(2000),
-          Schedule.recurs(10),
-        ]).pipe(
+        schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]).pipe(
           Schedule.tap(({ attempt }) =>
-            session.note(
-              `Waiting for route table deletion... (${attempt * 2}s)`,
-            ),
+            session.note(`Waiting for route table deletion... (${attempt * 2}s)`),
           ),
         ),
       },

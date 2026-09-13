@@ -29,10 +29,6 @@ export interface StartPipeline extends Binding.Service<
   "AWS.OSIS.StartPipeline",
   (
     pipeline: Pipeline,
-  ) => Effect.Effect<
-    () => Effect.Effect<osis.StartPipelineResponse, osis.StartPipelineError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<osis.StartPipelineResponse, osis.StartPipelineError>>
 > {}
-export const StartPipeline = Binding.Service<StartPipeline>(
-  "AWS.OSIS.StartPipeline",
-);
+export const StartPipeline = Binding.Service<StartPipeline>("AWS.OSIS.StartPipeline");

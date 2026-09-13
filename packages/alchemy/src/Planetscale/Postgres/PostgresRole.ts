@@ -8,11 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  isKnownError,
-  PlanetscaleConflict,
-  waitForBranchReady,
-} from "../Util.ts";
+import { isKnownError, PlanetscaleConflict, waitForBranchReady } from "../Util.ts";
 import type { PostgresBranch } from "./PostgresBranch.ts";
 import type { PostgresDatabase } from "./PostgresDatabase.ts";
 import type { PostgresOrigin } from "./PostgresOrigin.ts";
@@ -196,9 +192,7 @@ export const PostgresRoleProvider = () =>
         return { action: "replace" } as const;
       }
       const newDb = resolveDatabaseName(news.database);
-      const oldDb = olds.database
-        ? resolveDatabaseName(olds.database)
-        : undefined;
+      const oldDb = olds.database ? resolveDatabaseName(olds.database) : undefined;
       if (oldDb && newDb !== oldDb) {
         return { action: "replace" } as const;
       }
@@ -359,10 +353,7 @@ export const PostgresRoleProvider = () =>
           // warning rather than failing — the role will be cleaned up
           // when the database/branch is deleted.
           Effect.catchIf(
-            isKnownError(
-              "UnprocessableEntity",
-              "Role is still referenced and cannot be dropped.",
-            ),
+            isKnownError("UnprocessableEntity", "Role is still referenced and cannot be dropped."),
             () => Effect.void,
           ),
         );
@@ -371,71 +362,64 @@ export const PostgresRoleProvider = () =>
     list: Effect.fn(function* () {
       const { organization } = yield* yield* Credentials;
 
-      const databases = yield* planetscale.listDatabases
-        .pages({ organization })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              page.data.filter((db) => db.kind === "postgresql"),
-            ),
-          ),
-        );
+      const databases = yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.data.filter((db) => db.kind === "postgresql")),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         databases,
         (db) =>
-          planetscale.listBranches
-            .pages({ organization, database: db.name })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((branchPages) =>
-                Array.from(branchPages).flatMap((page) =>
-                  page.data.filter((branch) => branch.kind === "postgresql"),
-                ),
-              ),
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([{ name: db.default_branch ?? "main" }]),
-              ),
-              Effect.flatMap((branches) =>
-                Effect.forEach(
-                  branches,
-                  (branch) =>
-                    planetscale.listRoles
-                      .pages({
-                        organization,
-                        database: db.name,
-                        branch: branch.name,
-                      })
-                      .pipe(
-                        Stream.runCollect,
-                        Effect.map((rolePages): PostgresRoleAttributes[] =>
-                          Array.from(rolePages).flatMap((page) =>
-                            page.data
-                              .filter((role) => !role.default)
-                              .map((role) =>
-                                buildAttributes(role, Redacted.make(""), {
-                                  inheritedRoles:
-                                    role.inherited_roles as InheritedRole[],
-                                  successor: "postgres",
-                                  organization,
-                                  database: db.name,
-                                  branch: branch.name,
-                                }),
-                              ),
-                          ),
-                        ),
-                        Effect.catchTag("NotFound", () =>
-                          Effect.succeed([] as PostgresRoleAttributes[]),
-                        ),
-                        Effect.catchTag("Forbidden", () =>
-                          Effect.succeed([] as PostgresRoleAttributes[]),
-                        ),
-                      ),
-                  { concurrency: 10 },
-                ).pipe(Effect.map((perBranch) => perBranch.flat())),
+          planetscale.listBranches.pages({ organization, database: db.name }).pipe(
+            Stream.runCollect,
+            Effect.map((branchPages) =>
+              Array.from(branchPages).flatMap((page) =>
+                page.data.filter((branch) => branch.kind === "postgresql"),
               ),
             ),
+            Effect.catchTag("NotFound", () =>
+              Effect.succeed([{ name: db.default_branch ?? "main" }]),
+            ),
+            Effect.flatMap((branches) =>
+              Effect.forEach(
+                branches,
+                (branch) =>
+                  planetscale.listRoles
+                    .pages({
+                      organization,
+                      database: db.name,
+                      branch: branch.name,
+                    })
+                    .pipe(
+                      Stream.runCollect,
+                      Effect.map((rolePages): PostgresRoleAttributes[] =>
+                        Array.from(rolePages).flatMap((page) =>
+                          page.data
+                            .filter((role) => !role.default)
+                            .map((role) =>
+                              buildAttributes(role, Redacted.make(""), {
+                                inheritedRoles: role.inherited_roles as InheritedRole[],
+                                successor: "postgres",
+                                organization,
+                                database: db.name,
+                                branch: branch.name,
+                              }),
+                            ),
+                        ),
+                      ),
+                      Effect.catchTag("NotFound", () =>
+                        Effect.succeed([] as PostgresRoleAttributes[]),
+                      ),
+                      Effect.catchTag("Forbidden", () =>
+                        Effect.succeed([] as PostgresRoleAttributes[]),
+                      ),
+                    ),
+                { concurrency: 10 },
+              ).pipe(Effect.map((perBranch) => perBranch.flat())),
+            ),
+          ),
         { concurrency: 10 },
       );
 
@@ -454,47 +438,35 @@ const resolveDatabaseName = (database: string | PostgresDatabase): string => {
   return typeof ref === "string" ? ref : ref.name;
 };
 
-const resolveDatabaseOrg = (
-  database: string | PostgresDatabase,
-): string | undefined => {
+const resolveDatabaseOrg = (database: string | PostgresDatabase): string | undefined => {
   const ref = database as unknown as DatabaseRef;
   return typeof ref === "string" ? undefined : ref.organization;
 };
 
-const resolveBranchName = (
-  branch: string | PostgresBranch | undefined,
-): string => {
+const resolveBranchName = (branch: string | PostgresBranch | undefined): string => {
   const ref = branch as unknown as BranchRef | undefined;
   return !ref ? "main" : typeof ref === "string" ? ref : ref.name;
 };
 
-const resolveSuccessorName = (
-  successor: string | PostgresRole | undefined,
-): string => {
+const resolveSuccessorName = (successor: string | PostgresRole | undefined): string => {
   const ref = successor as unknown as RoleRef | undefined;
   return !ref ? "postgres" : typeof ref === "string" ? ref : ref.name;
 };
 
-const resolveInheritedRoles = (
-  inheritedRoles: InheritedRole[] | PostgresRole,
-): InheritedRole[] => {
+const resolveInheritedRoles = (inheritedRoles: InheritedRole[] | PostgresRole): InheritedRole[] => {
   if (Array.isArray(inheritedRoles)) {
     return inheritedRoles;
   }
   // At runtime, a Role passed in is its resolved attributes (with
   // `inheritedRoles` as a plain array); statically `Role.inheritedRoles`
   // is `Output<InheritedRole[]>`.
-  return (
-    inheritedRoles as unknown as RoleRef as { inheritedRoles: InheritedRole[] }
-  ).inheritedRoles;
+  return (inheritedRoles as unknown as RoleRef as { inheritedRoles: InheritedRole[] })
+    .inheritedRoles;
 };
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 const buildAttributes = (

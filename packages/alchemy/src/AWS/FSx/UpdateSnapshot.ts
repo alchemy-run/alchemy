@@ -35,6 +35,4 @@ export interface UpdateSnapshot extends Binding.Service<
     ) => Effect.Effect<fsx.UpdateSnapshotResponse, fsx.UpdateSnapshotError>
   >
 > {}
-export const UpdateSnapshot = Binding.Service<UpdateSnapshot>(
-  "AWS.FSx.UpdateSnapshot",
-);
+export const UpdateSnapshot = Binding.Service<UpdateSnapshot>("AWS.FSx.UpdateSnapshot");

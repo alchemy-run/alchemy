@@ -28,10 +28,6 @@ import type { Pipe } from "./Pipe.ts";
 export interface StartPipe extends Binding.Service<
   StartPipe,
   "AWS.Pipes.StartPipe",
-  (
-    pipe: Pipe,
-  ) => Effect.Effect<
-    () => Effect.Effect<pipes.StartPipeResponse, pipes.StartPipeError>
-  >
+  (pipe: Pipe) => Effect.Effect<() => Effect.Effect<pipes.StartPipeResponse, pipes.StartPipeError>>
 > {}
 export const StartPipe = Binding.Service<StartPipe>("AWS.Pipes.StartPipe");

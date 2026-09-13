@@ -160,9 +160,7 @@ export interface NetworkConnector extends Resource<
  *
  * @resource
  */
-export const NetworkConnector = Resource<NetworkConnector>(
-  "AWS.Lambda.NetworkConnector",
-);
+export const NetworkConnector = Resource<NetworkConnector>("AWS.Lambda.NetworkConnector");
 
 export const NetworkConnectorProvider = () =>
   Provider.succeed(NetworkConnector, {
@@ -178,8 +176,7 @@ export const NetworkConnectorProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const identifier =
-        output?.networkConnectorId ?? output?.networkConnectorArn;
+      const identifier = output?.networkConnectorId ?? output?.networkConnectorArn;
       const connector = identifier
         ? yield* getConnector(identifier)
         : yield* getConnector(yield* resolveName(id, olds?.name));
@@ -188,12 +185,10 @@ export const NetworkConnectorProvider = () =>
 
     list: () =>
       Effect.gen(function* () {
-        const summaries = yield* lambdacore.listNetworkConnectors
-          .items({})
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        const summaries = yield* lambdacore.listNetworkConnectors.items({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
         const connectors = yield* Effect.forEach(
           summaries.filter((c) => c.State !== "DELETING"),
           (summary) => getConnector(summary.Id ?? summary.Arn),
@@ -211,8 +206,7 @@ export const NetworkConnectorProvider = () =>
       const found = output?.networkConnectorId
         ? yield* getConnector(output.networkConnectorId)
         : yield* getConnector(name);
-      const observed =
-        found && found.State !== "DELETE_FAILED" ? found : undefined;
+      const observed = found && found.State !== "DELETE_FAILED" ? found : undefined;
 
       // Ensure + sync — each branch returns the active connector, so we never
       // reassign across branches (which `tsc` narrows poorly).
@@ -236,26 +230,17 @@ export const NetworkConnectorProvider = () =>
 // === Helpers ===============================================================
 
 const resolveName = (id: string, name?: string) =>
-  name
-    ? Effect.succeed(name)
-    : createPhysicalName({ id, maxLength: 64, delimiter: "-" });
+  name ? Effect.succeed(name) : createPhysicalName({ id, maxLength: 64, delimiter: "-" });
 
 // A freshly-created IAM operator role (and its inline policies) takes a few
 // seconds to propagate before the Lambda service can assume/use it. The API
 // surfaces that as an InvalidParameterValueException, so retry it briefly
 // (same pattern as Function.ts's role-propagation retry). A genuinely
 // misconfigured role still fails once the bounded retry window elapses.
-const isOperatorRolePropagationError = (e: {
-  _tag: string;
-  message?: string;
-}) =>
+const isOperatorRolePropagationError = (e: { _tag: string; message?: string }) =>
   e._tag === "InvalidParameterValueException" &&
-  ((e.message?.includes(
-    "unable to assume the provided NetworkConnectorOperatorRole",
-  ) ??
-    false) ||
-    (e.message?.includes("invalid ConnectorOperatorRole permissions") ??
-      false));
+  ((e.message?.includes("unable to assume the provided NetworkConnectorOperatorRole") ?? false) ||
+    (e.message?.includes("invalid ConnectorOperatorRole permissions") ?? false));
 
 const retryRolePropagation =
   (session: ScopedPlanStatusSession) =>
@@ -265,9 +250,7 @@ const retryRolePropagation =
     self.pipe(
       Effect.tapError((e) =>
         isOperatorRolePropagationError(e)
-          ? session.note(
-              "Waiting for the operator role to become assumable by Lambda...",
-            )
+          ? session.note("Waiting for the operator role to become assumable by Lambda...")
           : Effect.void,
       ),
       Effect.retry({
@@ -279,11 +262,7 @@ const retryRolePropagation =
 const getConnector = (identifier: string) =>
   lambdacore
     .getNetworkConnector({ Identifier: identifier })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const normalizeList = (values: readonly string[] | undefined): string[] =>
   [...(values ?? [])].sort();
@@ -296,9 +275,7 @@ const desiredEgress = (
   NetworkProtocol: props.networkProtocol,
   // The API requires AssociatedComputeResourceTypes for VPC_EGRESS connectors,
   // so apply the documented default when the prop is omitted.
-  AssociatedComputeResourceTypes: props.associatedComputeResourceTypes ?? [
-    "MicroVm",
-  ],
+  AssociatedComputeResourceTypes: props.associatedComputeResourceTypes ?? ["MicroVm"],
 });
 
 const egressEqual = (
@@ -310,17 +287,13 @@ const egressEqual = (
       SubnetIds: normalizeList(a?.SubnetIds),
       SecurityGroupIds: normalizeList(a?.SecurityGroupIds),
       NetworkProtocol: a?.NetworkProtocol,
-      AssociatedComputeResourceTypes: normalizeList(
-        a?.AssociatedComputeResourceTypes,
-      ),
+      AssociatedComputeResourceTypes: normalizeList(a?.AssociatedComputeResourceTypes),
     },
     {
       SubnetIds: normalizeList(b?.SubnetIds),
       SecurityGroupIds: normalizeList(b?.SecurityGroupIds),
       NetworkProtocol: b?.NetworkProtocol,
-      AssociatedComputeResourceTypes: normalizeList(
-        b?.AssociatedComputeResourceTypes,
-      ),
+      AssociatedComputeResourceTypes: normalizeList(b?.AssociatedComputeResourceTypes),
     },
   );
 
@@ -371,9 +344,7 @@ const createConnector = Effect.fn(function* (
           Effect.flatMap((existing) =>
             existing
               ? Effect.succeed(existing)
-              : Effect.die(
-                  `Network connector ${name} conflicted but was not found.`,
-                ),
+              : Effect.die(`Network connector ${name} conflicted but was not found.`),
           ),
         ),
       ),
@@ -442,14 +413,9 @@ const waitForActive = (identifier: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConnectorPending",
-      schedule: Schedule.max([
-        Schedule.fixed(10_000),
-        Schedule.recurs(72),
-      ]).pipe(
+      schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(72)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(
-            `Waiting for network connector to become ACTIVE... (${attempt * 10}s)`,
-          ),
+          session.note(`Waiting for network connector to become ACTIVE... (${attempt * 10}s)`),
         ),
       ),
     }),
@@ -468,9 +434,7 @@ const waitForUpdate = (identifier: string, session: ScopedPlanStatusSession) =>
         return yield* new ConnectorFailed({
           identifier,
           state: connector.LastUpdateStatus,
-          reason:
-            connector.LastUpdateStatusReason ??
-            connector.LastUpdateStatusReasonCode,
+          reason: connector.LastUpdateStatusReason ?? connector.LastUpdateStatusReasonCode,
         });
       default:
         return yield* new ConnectorPending({
@@ -481,14 +445,9 @@ const waitForUpdate = (identifier: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConnectorPending",
-      schedule: Schedule.max([
-        Schedule.fixed(10_000),
-        Schedule.recurs(72),
-      ]).pipe(
+      schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(72)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(
-            `Waiting for network connector update... (${attempt * 10}s)`,
-          ),
+          session.note(`Waiting for network connector update... (${attempt * 10}s)`),
         ),
       ),
     }),
@@ -498,11 +457,7 @@ const waitForDeleted = (identifier: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const connector = yield* lambdacore
       .getNetworkConnector({ Identifier: identifier })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
     // A missing connector is the success signal — it has been deleted.
     if (!connector) return;
     if (connector.State === "DELETE_FAILED") {
@@ -519,14 +474,9 @@ const waitForDeleted = (identifier: string, session: ScopedPlanStatusSession) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ConnectorPending",
-      schedule: Schedule.max([
-        Schedule.fixed(10_000),
-        Schedule.recurs(72),
-      ]).pipe(
+      schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(72)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(
-            `Waiting for network connector deletion... (${attempt * 10}s)`,
-          ),
+          session.note(`Waiting for network connector deletion... (${attempt * 10}s)`),
         ),
       ),
     }),

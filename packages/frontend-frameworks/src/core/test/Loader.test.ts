@@ -10,17 +10,13 @@ const packageRoot = NodePath.resolve(import.meta.dirname, "..");
 
 describe("loadProjectModule", () => {
   it("loads a module from the project's dependency tree", async () => {
-    const mod = await run(
-      loadProjectModule<typeof ViteModule>(packageRoot, "vite"),
-    );
+    const mod = await run(loadProjectModule<typeof ViteModule>(packageRoot, "vite"));
     expect(typeof mod.createBuilder).toBe("function");
   });
 
   it("fails with ModuleLoadError for an unresolvable specifier", async () => {
     const result = await run(
-      Effect.result(
-        loadProjectModule(packageRoot, "definitely-not-a-real-package-xyz"),
-      ),
+      Effect.result(loadProjectModule(packageRoot, "definitely-not-a-real-package-xyz")),
     );
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") {

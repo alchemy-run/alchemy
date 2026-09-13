@@ -17,23 +17,15 @@ import {
   type CallbackFactory,
 } from "../../Callback.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  ensureAlarmTables,
-  reconcileDurableObjectAlarm,
-} from "./DurableObjectAlarmStorage.ts";
-import {
-  DurableObjectState,
-  fromDurableObjectState,
-} from "./DurableObjectState.ts";
+import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
+import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
 import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 
 type InvocationServices = RuntimeContext | DurableObjectState | Scope.Scope;
 interface RegisteredCallback {
   readonly retryDelay: number;
-  readonly handler: (
-    payload: unknown,
-  ) => Effect.Effect<unknown, unknown, InvocationServices>;
+  readonly handler: (payload: unknown) => Effect.Effect<unknown, unknown, InvocationServices>;
 }
 interface CallbackRegistry {
   readonly callbacks: Map<string, RegisteredCallback>;
@@ -58,12 +50,9 @@ export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
 };
 
 /** @internal */
-export const makeDurableObjectCallbackFactory = (
-  raw: cf.DurableObjectState,
-): CallbackFactory => {
+export const makeDurableObjectCallbackFactory = (raw: cf.DurableObjectState): CallbackFactory => {
   const state = fromDurableObjectState(raw);
-  return (name, handler, options) =>
-    makeAlarmCallback(state, name, handler, options);
+  return (name, handler, options) => makeAlarmCallback(state, name, handler, options);
 };
 
 const makeAlarmCallback = <Payload, E, R>(
@@ -71,11 +60,7 @@ const makeAlarmCallback = <Payload, E, R>(
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
   options?: CallbackOptions,
-): Effect.Effect<
-  Callback<Payload>,
-  never,
-  RuntimeContext | Exclude<R, Scope.Scope>
-> =>
+): Effect.Effect<Callback<Payload>, never, RuntimeContext | Exclude<R, Scope.Scope>> =>
   Effect.gen(function* () {
     const context = (yield* Effect.context<Exclude<R, Scope.Scope>>()).pipe(
       Context.omit(
@@ -117,9 +102,7 @@ const makeAlarmCallback = <Payload, E, R>(
           Effect.gen(function* () {
             const invocation = yield* Effect.context<InvocationServices>();
             return yield* handler(payload as Payload).pipe(
-              Effect.provide(
-                Context.merge(invocation, context) as Context.Context<R>,
-              ),
+              Effect.provide(Context.merge(invocation, context) as Context.Context<R>),
             );
           }),
       }),
@@ -127,24 +110,16 @@ const makeAlarmCallback = <Payload, E, R>(
 
     const raw = state.raw.storage;
     return {
-      schedule: Effect.fn(function* (
-        id: string,
-        schedule: CallbackScheduleOptions<Payload>,
-      ) {
+      schedule: Effect.fn(function* (id: string, schedule: CallbackScheduleOptions<Payload>) {
         const now = yield* Clock.currentTimeMillis;
         const { at, payload } = yield* Effect.try({
           try: () => {
             if (!id) throw new Error("Alarm IDs must be non-empty");
-            if (
-              (schedule.at === undefined) ===
-              (schedule.after === undefined)
-            ) {
+            if ((schedule.at === undefined) === (schedule.after === undefined)) {
               throw new Error("Specify exactly one of at or after");
             }
             const delay =
-              schedule.after === undefined
-                ? undefined
-                : Duration.toMillis(schedule.after);
+              schedule.after === undefined ? undefined : Duration.toMillis(schedule.after);
             const at =
               schedule.at === undefined
                 ? now + delay!
@@ -156,16 +131,13 @@ const makeAlarmCallback = <Payload, E, R>(
               at <= 0 ||
               (delay !== undefined && (!Number.isFinite(delay) || delay < 0))
             ) {
-              throw new Error(
-                "Alarm time must be finite and delay must be non-negative",
-              );
+              throw new Error("Alarm time must be finite and delay must be non-negative");
             }
             if (!Schema.is(Schema.Json)(schedule.payload)) {
               throw new Error("Alarm payload must be a JSON value");
             }
             const payload = JSON.stringify(schedule.payload);
-            if (payload === undefined)
-              throw new Error("Alarm payload must be JSON-serializable");
+            if (payload === undefined) throw new Error("Alarm payload must be JSON-serializable");
             return { at, payload };
           },
           catch: (cause) =>
@@ -239,10 +211,7 @@ const makeAlarmCallback = <Payload, E, R>(
   });
 
 /** @internal */
-export const dispatchAlarmCallbacks = (
-  state: cf.DurableObjectState,
-  hasLegacyHandler: boolean,
-) =>
+export const dispatchAlarmCallbacks = (state: cf.DurableObjectState, hasLegacyHandler: boolean) =>
   Effect.gen(function* () {
     const registry = registries.get(state);
     if (!registry) return;
@@ -262,9 +231,7 @@ export const dispatchAlarmCallbacks = (
     yield* ensureAlarmTables(raw);
     if (!hasLegacyHandler) {
       const legacy = yield* Effect.sync(() =>
-        raw.sql
-          .exec("SELECT id FROM alchemy_scheduled_events LIMIT 1")
-          .toArray(),
+        raw.sql.exec("SELECT id FROM alchemy_scheduled_events LIMIT 1").toArray(),
       );
       if (legacy.length > 0) {
         return yield* Effect.fail(
@@ -329,12 +296,8 @@ export const dispatchAlarmCallbacks = (
         yield* callback.handler(payload);
       }).pipe(Effect.scoped, Effect.exit);
       if (Exit.isFailure(result)) {
-        if (Cause.hasInterrupts(result.cause))
-          return yield* Effect.failCause(result.cause);
-        yield* Effect.logError(
-          "Durable Object alarm callback failed",
-          result.cause,
-        );
+        if (Cause.hasInterrupts(result.cause)) return yield* Effect.failCause(result.cause);
+        yield* Effect.logError("Durable Object alarm callback failed", result.cause);
         continue;
       }
       yield* storage.transaction(

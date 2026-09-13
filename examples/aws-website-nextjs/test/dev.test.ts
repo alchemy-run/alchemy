@@ -61,9 +61,7 @@ test(
     expect(home).toContain(MARKER);
 
     // App Router API route serves through the dev server.
-    const hello = (await (
-      await fetchOk(new URL("/api/hello", url))
-    ).json()) as { hello: string };
+    const hello = (await (await fetchOk(new URL("/api/hello", url))).json()) as { hello: string };
     expect(hello).toEqual({ hello: "world" });
 
     // Static asset from public/.

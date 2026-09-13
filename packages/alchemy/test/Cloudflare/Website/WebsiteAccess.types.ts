@@ -17,9 +17,7 @@ const App = Cloudflare.Access.Application("TypesApp", {
 const access = App;
 
 const dedicated = {
-  policies: [
-    { decision: "allow" as const, include: [{ emailDomain: "example.com" }] },
-  ],
+  policies: [{ decision: "allow" as const, include: [{ emailDomain: "example.com" }] }],
 };
 
 export const websites = Effect.gen(function* () {

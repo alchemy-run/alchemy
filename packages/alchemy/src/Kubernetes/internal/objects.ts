@@ -106,23 +106,18 @@ const supportedKinds: Record<string, KubernetesObjectKindSpec> = {
   },
 };
 
-const objectTypeKey = (
-  input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
-) => `${input.apiVersion}/${input.kind}`;
+const objectTypeKey = (input: Pick<KubernetesObjectRef, "apiVersion" | "kind">) =>
+  `${input.apiVersion}/${input.kind}`;
 
 /** Look up the static kind table; `undefined` for kinds needing discovery. */
 export const lookupKubernetesKindSpec = (
   input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
 ): KubernetesObjectKindSpec | undefined => supportedKinds[objectTypeKey(input)];
 
-export const getKubernetesKindSpec = (
-  input: Pick<KubernetesObjectRef, "apiVersion" | "kind">,
-) => {
+export const getKubernetesKindSpec = (input: Pick<KubernetesObjectRef, "apiVersion" | "kind">) => {
   const spec = lookupKubernetesKindSpec(input);
   if (!spec) {
-    throw new Error(
-      `Unsupported Kubernetes object ${input.apiVersion}/${input.kind}`,
-    );
+    throw new Error(`Unsupported Kubernetes object ${input.apiVersion}/${input.kind}`);
   }
   return spec;
 };
@@ -130,9 +125,7 @@ export const getKubernetesKindSpec = (
 const applyRankOf = (input: Pick<KubernetesObjectRef, "apiVersion" | "kind">) =>
   lookupKubernetesKindSpec(input)?.applyRank ?? DEFAULT_APPLY_RANK;
 
-export const toKubernetesObjectRef = (
-  object: KubernetesObjectDefinition,
-): KubernetesObjectRef => ({
+export const toKubernetesObjectRef = (object: KubernetesObjectDefinition): KubernetesObjectRef => ({
   apiVersion: object.apiVersion,
   kind: object.kind,
   name: object.metadata.name,
@@ -140,40 +133,23 @@ export const toKubernetesObjectRef = (
 });
 
 export const kubernetesObjectKey = (
-  input: Pick<
-    KubernetesObjectRef,
-    "apiVersion" | "kind" | "name" | "namespace"
-  >,
-) =>
-  [
-    input.apiVersion,
-    input.kind,
-    input.namespace ?? "_cluster",
-    input.name,
-  ].join("/");
+  input: Pick<KubernetesObjectRef, "apiVersion" | "kind" | "name" | "namespace">,
+) => [input.apiVersion, input.kind, input.namespace ?? "_cluster", input.name].join("/");
 
 const compareRefs = (a: KubernetesObjectRef, b: KubernetesObjectRef) =>
   kubernetesObjectKey(a).localeCompare(kubernetesObjectKey(b));
 
-export const sortObjectsForApply = (
-  objects: ReadonlyArray<KubernetesObjectDefinition>,
-) =>
+export const sortObjectsForApply = (objects: ReadonlyArray<KubernetesObjectDefinition>) =>
   [...objects].sort(
     (a, b) =>
       applyRankOf(a) - applyRankOf(b) ||
       compareRefs(toKubernetesObjectRef(a), toKubernetesObjectRef(b)),
   );
 
-export const sortRefsForDelete = (
-  objects: ReadonlyArray<KubernetesObjectRef>,
-) =>
-  [...objects].sort(
-    (a, b) => applyRankOf(b) - applyRankOf(a) || compareRefs(a, b),
-  );
+export const sortRefsForDelete = (objects: ReadonlyArray<KubernetesObjectRef>) =>
+  [...objects].sort((a, b) => applyRankOf(b) - applyRankOf(a) || compareRefs(a, b));
 
-export const chunkByApplyRank = (
-  objects: ReadonlyArray<KubernetesObjectDefinition>,
-) => {
+export const chunkByApplyRank = (objects: ReadonlyArray<KubernetesObjectDefinition>) => {
   const chunks: KubernetesObjectDefinition[][] = [];
 
   for (const object of sortObjectsForApply(objects)) {
@@ -200,10 +176,7 @@ export const chunkByApplyRank = (
  * discovered) kind spec.
  */
 export const buildKubernetesObjectPathWithSpec = (
-  input: Pick<
-    KubernetesObjectRef,
-    "apiVersion" | "kind" | "name" | "namespace"
-  >,
+  input: Pick<KubernetesObjectRef, "apiVersion" | "kind" | "name" | "namespace">,
   spec: KubernetesObjectKindSpec,
 ) => {
   const [group, version] = input.apiVersion.includes("/")
@@ -226,8 +199,5 @@ export const buildKubernetesObjectPathWithSpec = (
 };
 
 export const buildKubernetesObjectPath = (
-  input: Pick<
-    KubernetesObjectRef,
-    "apiVersion" | "kind" | "name" | "namespace"
-  >,
+  input: Pick<KubernetesObjectRef, "apiVersion" | "kind" | "name" | "namespace">,
 ) => buildKubernetesObjectPathWithSpec(input, getKubernetesKindSpec(input));

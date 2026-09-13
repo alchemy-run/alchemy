@@ -37,7 +37,6 @@ export interface RejectResourceShareInvitation extends Binding.Service<
     >
   >
 > {}
-export const RejectResourceShareInvitation =
-  Binding.Service<RejectResourceShareInvitation>(
-    "AWS.RAM.RejectResourceShareInvitation",
-  );
+export const RejectResourceShareInvitation = Binding.Service<RejectResourceShareInvitation>(
+  "AWS.RAM.RejectResourceShareInvitation",
+);

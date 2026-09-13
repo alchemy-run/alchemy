@@ -33,7 +33,6 @@ export interface ListAWSDefaultServiceQuotas extends Binding.Service<
     >
   >
 > {}
-export const ListAWSDefaultServiceQuotas =
-  Binding.Service<ListAWSDefaultServiceQuotas>(
-    "AWS.ServiceQuotas.ListAWSDefaultServiceQuotas",
-  );
+export const ListAWSDefaultServiceQuotas = Binding.Service<ListAWSDefaultServiceQuotas>(
+  "AWS.ServiceQuotas.ListAWSDefaultServiceQuotas",
+);

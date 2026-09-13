@@ -15,9 +15,7 @@ const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 // device exists. Checked in as a constant (never generated at test time).
 const ZIGBEE_QR_PAYLOAD = "Z:24FD5B0000015C63$I:83FED3407A939738";
 
-export class IoTMITestFunction extends Lambda.Function<Lambda.Function>()(
-  "IoTMITestFunction",
-) {}
+export class IoTMITestFunction extends Lambda.Function<Lambda.Function>()("IoTMITestFunction") {}
 
 /**
  * Every route answers `{ …fields }` on success or `{ errorTag }` when the
@@ -57,31 +55,21 @@ export default IoTMITestFunction.make(
       tags: { fixture: "iot-mi-bindings" },
     });
 
-    const sendCommand =
-      yield* IoTManagedIntegrations.SendManagedThingCommand(thing);
+    const sendCommand = yield* IoTManagedIntegrations.SendManagedThingCommand(thing);
     const getState = yield* IoTManagedIntegrations.GetManagedThingState(thing);
-    const getCapabilities =
-      yield* IoTManagedIntegrations.GetManagedThingCapabilities(thing);
-    const getCertificate =
-      yield* IoTManagedIntegrations.GetManagedThingCertificate(thing);
-    const getConnectivity =
-      yield* IoTManagedIntegrations.GetManagedThingConnectivityData(thing);
-    const getMetaData =
-      yield* IoTManagedIntegrations.GetManagedThingMetaData(thing);
-    const listThingSchemas =
-      yield* IoTManagedIntegrations.ListManagedThingSchemas(thing);
+    const getCapabilities = yield* IoTManagedIntegrations.GetManagedThingCapabilities(thing);
+    const getCertificate = yield* IoTManagedIntegrations.GetManagedThingCertificate(thing);
+    const getConnectivity = yield* IoTManagedIntegrations.GetManagedThingConnectivityData(thing);
+    const getMetaData = yield* IoTManagedIntegrations.GetManagedThingMetaData(thing);
+    const listThingSchemas = yield* IoTManagedIntegrations.ListManagedThingSchemas(thing);
     const startDiscovery = yield* IoTManagedIntegrations.StartDeviceDiscovery();
     const getDiscovery = yield* IoTManagedIntegrations.GetDeviceDiscovery();
-    const listDiscoveries =
-      yield* IoTManagedIntegrations.ListDeviceDiscoveries();
-    const listDiscovered =
-      yield* IoTManagedIntegrations.ListDiscoveredDevices();
+    const listDiscoveries = yield* IoTManagedIntegrations.ListDeviceDiscoveries();
+    const listDiscovered = yield* IoTManagedIntegrations.ListDiscoveredDevices();
     const getSchemaVersion = yield* IoTManagedIntegrations.GetSchemaVersion();
-    const listSchemaVersions =
-      yield* IoTManagedIntegrations.ListSchemaVersions();
+    const listSchemaVersions = yield* IoTManagedIntegrations.ListSchemaVersions();
     const getCustomEndpoint = yield* IoTManagedIntegrations.GetCustomEndpoint();
-    const sendConnectorEvent =
-      yield* IoTManagedIntegrations.SendConnectorEvent();
+    const sendConnectorEvent = yield* IoTManagedIntegrations.SendConnectorEvent();
 
     const bound = {
       sendCommand,
@@ -137,9 +125,7 @@ export default IoTMITestFunction.make(
         if (pathname === "/custom-endpoint") {
           const result = yield* errorTagged(getCustomEndpoint());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { endpointAddress: result.EndpointAddress },
+            "errorTag" in result ? result : { endpointAddress: result.EndpointAddress },
           );
         }
         if (pathname === "/discovery") {
@@ -151,18 +137,12 @@ export default IoTMITestFunction.make(
               ControllerIdentifier: "alchemy-nonexistent-controller",
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { id: result.Id },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { id: result.Id });
         }
         if (pathname === "/discoveries") {
-          const result = yield* errorTagged(
-            listDiscoveries({ StatusFilter: "RUNNING" }),
-          );
+          const result = yield* errorTagged(listDiscoveries({ StatusFilter: "RUNNING" }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.Items ?? []).length },
+            "errorTag" in result ? result : { count: (result.Items ?? []).length },
           );
         }
         if (pathname === "/get-discovery") {
@@ -178,9 +158,7 @@ export default IoTMITestFunction.make(
             listDiscovered({ Identifier: "alchemynonexistentdiscovery" }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.Items ?? []).length },
+            "errorTag" in result ? result : { count: (result.Items ?? []).length },
           );
         }
         if (pathname === "/connector-event") {
@@ -199,25 +177,19 @@ export default IoTMITestFunction.make(
         if (pathname === "/metadata") {
           const result = yield* errorTagged(getMetaData());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { managedThingId: result.ManagedThingId },
+            "errorTag" in result ? result : { managedThingId: result.ManagedThingId },
           );
         }
         if (pathname === "/capabilities") {
           const result = yield* errorTagged(getCapabilities());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { managedThingId: result.ManagedThingId },
+            "errorTag" in result ? result : { managedThingId: result.ManagedThingId },
           );
         }
         if (pathname === "/certificate") {
           const result = yield* errorTagged(getCertificate());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { hasPem: result.CertificatePem !== undefined },
+            "errorTag" in result ? result : { hasPem: result.CertificatePem !== undefined },
           );
         }
         if (pathname === "/connectivity") {
@@ -229,17 +201,13 @@ export default IoTMITestFunction.make(
         if (pathname === "/state") {
           const result = yield* errorTagged(getState());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { endpoints: result.Endpoints.length },
+            "errorTag" in result ? result : { endpoints: result.Endpoints.length },
           );
         }
         if (pathname === "/thing-schemas") {
           const result = yield* errorTagged(listThingSchemas());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.Items ?? []).length },
+            "errorTag" in result ? result : { count: (result.Items ?? []).length },
           );
         }
         if (pathname === "/command") {
@@ -267,10 +235,7 @@ export default IoTMITestFunction.make(
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

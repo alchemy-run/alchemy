@@ -36,10 +36,7 @@ export interface ListServiceDeployments extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListServiceDeploymentsRequest,
-    ) => Effect.Effect<
-      ECS.ListServiceDeploymentsResponse,
-      ECS.ListServiceDeploymentsError
-    >
+    ) => Effect.Effect<ECS.ListServiceDeploymentsResponse, ECS.ListServiceDeploymentsError>
   >
 > {}
 export const ListServiceDeployments = Binding.Service<ListServiceDeployments>(

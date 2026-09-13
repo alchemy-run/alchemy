@@ -8,18 +8,9 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Railway.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/solidstart-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/solidstart-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 describe("Railway.Website.SolidStart local", () => {
   test.provider(
@@ -58,13 +49,9 @@ describe("Railway.Website.SolidStart local", () => {
           "SOLIDSTART_AWS_API_MARKER",
           { label: "api route (dev)" },
         );
-        yield* expectUrlContains(
-          `${origin}/prerendered`,
-          "SOLIDSTART_AWS_PRERENDERED_MARKER",
-          {
-            label: "extra route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${origin}/prerendered`, "SOLIDSTART_AWS_PRERENDERED_MARKER", {
+          label: "extra route (dev)",
+        });
 
         yield* stack.destroy();
       }),

@@ -84,8 +84,7 @@ const mergeDuplicateImports = (source: string, specifier: string): string => {
   return source;
 };
 
-const escapeRegExp = (text: string): string =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const migrate = (source: string): string => {
   let out = source;

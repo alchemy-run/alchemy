@@ -43,24 +43,17 @@ test.provider.skipIf(!gated)(
     }),
 );
 
-class ApplicationStillExists extends Data.TaggedError(
-  "ApplicationStillExists",
-)<{
+class ApplicationStillExists extends Data.TaggedError("ApplicationStillExists")<{
   specifier: string;
 }> {}
 
 const assertApplicationGone = (specifier: string) =>
   appregistry.getApplication({ application: specifier }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ApplicationStillExists({ specifier })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ApplicationStillExists({ specifier }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ApplicationStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 

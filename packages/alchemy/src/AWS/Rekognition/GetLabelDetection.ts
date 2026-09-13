@@ -32,10 +32,7 @@ export interface GetLabelDetection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetLabelDetectionRequest,
-    ) => Effect.Effect<
-      rekognition.GetLabelDetectionResponse,
-      rekognition.GetLabelDetectionError
-    >
+    ) => Effect.Effect<rekognition.GetLabelDetectionResponse, rekognition.GetLabelDetectionError>
   >
 > {}
 export const GetLabelDetection = Binding.Service<GetLabelDetection>(

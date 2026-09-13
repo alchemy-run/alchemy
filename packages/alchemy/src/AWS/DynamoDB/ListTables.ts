@@ -31,6 +31,4 @@ export interface ListTables extends Binding.Service<
   >
 > {}
 
-export const ListTables = Binding.Service<ListTables>(
-  "AWS.DynamoDB.ListTables",
-);
+export const ListTables = Binding.Service<ListTables>("AWS.DynamoDB.ListTables");

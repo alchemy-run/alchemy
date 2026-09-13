@@ -9,11 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readQuickSightTags,
-  syncQuickSightTags,
-  toWireTags,
-} from "./internal.ts";
+import { readQuickSightTags, syncQuickSightTags, toWireTags } from "./internal.ts";
 
 /**
  * Properties for an Amazon QuickSight dataset — a prepared, queryable model
@@ -138,17 +134,10 @@ export const DataSetProvider = () =>
           ? Effect.succeed(props.dataSetId)
           : createPhysicalName({ id, maxLength: 64 });
 
-      const readSet = Effect.fn(function* (
-        accountId: string,
-        dataSetId: string,
-      ) {
+      const readSet = Effect.fn(function* (accountId: string, dataSetId: string) {
         const response = yield* quicksight
           .describeDataSet({ AwsAccountId: accountId, DataSetId: dataSetId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.DataSet;
       });
 
@@ -205,9 +194,7 @@ export const DataSetProvider = () =>
                 DatasetParameters: news.datasetParameters,
                 Tags: toWireTags(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
             // 3. Sync — idempotent update of the dataset definition.
             yield* quicksight.updateDataSet({
@@ -228,9 +215,7 @@ export const DataSetProvider = () =>
           observed = yield* readSet(accountId, dataSetId);
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `QuickSight dataset '${dataSetId}' not found after reconcile`,
-              ),
+              new Error(`QuickSight dataset '${dataSetId}' not found after reconcile`),
             );
           }
 
@@ -248,34 +233,30 @@ export const DataSetProvider = () =>
               AwsAccountId: accountId,
               DataSetId: output.dataSetId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            return yield* quicksight.listDataSets
-              .pages({ AwsAccountId: accountId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.DataSetSummaries ?? [])
-                    .flatMap((s) =>
-                      s.DataSetId !== undefined && s.Arn !== undefined
-                        ? [
-                            {
-                              dataSetId: s.DataSetId,
-                              arn: s.Arn,
-                              name: s.Name ?? "",
-                            },
-                          ]
-                        : [],
-                    ),
-                ),
-              );
+            return yield* quicksight.listDataSets.pages({ AwsAccountId: accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.DataSetSummaries ?? [])
+                  .flatMap((s) =>
+                    s.DataSetId !== undefined && s.Arn !== undefined
+                      ? [
+                          {
+                            dataSetId: s.DataSetId,
+                            arn: s.Arn,
+                            name: s.Name ?? "",
+                          },
+                        ]
+                      : [],
+                  ),
+              ),
+            );
           }),
       });
     }),

@@ -23,8 +23,7 @@ describe("toTimeoutSeconds", () => {
   });
 
   describe("after state JSON round-trip", () => {
-    const roundTrip = (d: Duration.Duration) =>
-      JSON.parse(JSON.stringify(d)) as Duration.Duration;
+    const roundTrip = (d: Duration.Duration) => JSON.parse(JSON.stringify(d)) as Duration.Duration;
 
     it("converts a rehydrated Millis Duration", () => {
       const json = roundTrip(Duration.seconds(42));

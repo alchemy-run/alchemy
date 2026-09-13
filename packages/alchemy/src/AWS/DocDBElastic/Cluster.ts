@@ -185,9 +185,7 @@ const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 export const ClusterProvider = () =>
@@ -202,11 +200,7 @@ export const ClusterProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* docdbelastic
           .getCluster({ clusterArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.cluster;
       });
 
@@ -223,10 +217,7 @@ export const ClusterProvider = () =>
         return yield* getByArn(summary.clusterArn);
       });
 
-      const readCluster = Effect.fn(function* (
-        name: string,
-        arn: string | undefined,
-      ) {
+      const readCluster = Effect.fn(function* (name: string, arn: string | undefined) {
         if (arn !== undefined) {
           const cluster = yield* getByArn(arn);
           if (cluster !== undefined) return cluster;
@@ -243,26 +234,16 @@ export const ClusterProvider = () =>
 
       // Bounded readiness wait. Elastic cluster provisioning/modification
       // typically completes in 8-10 minutes; budget ~20 min (80 * 15s).
-      const waitForActive = Effect.fn(function* (
-        name: string,
-        arn: string | undefined,
-      ) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(80),
-        ]);
+      const waitForActive = Effect.fn(function* (name: string, arn: string | undefined) {
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]);
         return yield* readCluster(name, arn).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(
-                new Error(`Elastic cluster '${name}' not found`),
-              );
+              return Effect.fail(new Error(`Elastic cluster '${name}' not found`));
             }
             if (cluster.status !== "ACTIVE") {
               return Effect.fail(
-                new Error(
-                  `Elastic cluster '${name}' not active (status: ${cluster.status})`,
-                ),
+                new Error(`Elastic cluster '${name}' not active (status: ${cluster.status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -325,9 +306,7 @@ export const ClusterProvider = () =>
           const cluster = yield* readCluster(name, output?.clusterArn);
           if (cluster === undefined) return undefined;
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
@@ -361,11 +340,7 @@ export const ClusterProvider = () =>
                 preferredBackupWindow: props.preferredBackupWindow,
                 tags: desiredTags,
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             observed = response?.cluster ?? (yield* findByName(name));
             created = true;
           }
@@ -384,17 +359,11 @@ export const ClusterProvider = () =>
           // 3. Sync — compute the update delta from OBSERVED state.
           const update: docdbelastic.UpdateClusterInput = { clusterArn: arn };
           let mutated = false;
-          if (
-            props.shardCapacity !== undefined &&
-            props.shardCapacity !== observed.shardCapacity
-          ) {
+          if (props.shardCapacity !== undefined && props.shardCapacity !== observed.shardCapacity) {
             update.shardCapacity = props.shardCapacity;
             mutated = true;
           }
-          if (
-            props.shardCount !== undefined &&
-            props.shardCount !== observed.shardCount
-          ) {
+          if (props.shardCount !== undefined && props.shardCount !== observed.shardCount) {
             update.shardCount = props.shardCount;
             mutated = true;
           }
@@ -407,10 +376,7 @@ export const ClusterProvider = () =>
           }
           if (
             props.vpcSecurityGroupIds !== undefined &&
-            !sameStringSet(
-              props.vpcSecurityGroupIds,
-              observed.vpcSecurityGroupIds,
-            )
+            !sameStringSet(props.vpcSecurityGroupIds, observed.vpcSecurityGroupIds)
           ) {
             update.vpcSecurityGroupIds = props.vpcSecurityGroupIds;
             mutated = true;
@@ -424,11 +390,9 @@ export const ClusterProvider = () =>
           }
           if (
             props.preferredMaintenanceWindow !== undefined &&
-            props.preferredMaintenanceWindow !==
-              observed.preferredMaintenanceWindow
+            props.preferredMaintenanceWindow !== observed.preferredMaintenanceWindow
           ) {
-            update.preferredMaintenanceWindow =
-              props.preferredMaintenanceWindow;
+            update.preferredMaintenanceWindow = props.preferredMaintenanceWindow;
             mutated = true;
           }
           const desiredRetentionDays = toWireDays(props.backupRetentionPeriod);
@@ -456,8 +420,7 @@ export const ClusterProvider = () =>
             // the password was just applied).
             !created &&
             olds !== undefined &&
-            Redacted.value(props.adminUserPassword) !==
-              Redacted.value(olds.adminUserPassword)
+            Redacted.value(props.adminUserPassword) !== Redacted.value(olds.adminUserPassword)
           ) {
             update.adminUserPassword = props.adminUserPassword;
             mutated = true;
@@ -473,9 +436,7 @@ export const ClusterProvider = () =>
           if (upsert.length > 0) {
             yield* docdbelastic.tagResource({
               resourceArn: arn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value]),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
             });
           }
           if (removed.length > 0) {
@@ -497,18 +458,13 @@ export const ClusterProvider = () =>
           if (observed === undefined || observed.status === "DELETING") {
             return;
           }
-          yield* docdbelastic
-            .deleteCluster({ clusterArn: output.clusterArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("15 seconds"),
-                  Schedule.recurs(60),
-                ]),
-              }),
-            );
+          yield* docdbelastic.deleteCluster({ clusterArn: output.clusterArn }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
+            }),
+          );
         }),
 
         list: () =>
@@ -520,17 +476,13 @@ export const ClusterProvider = () =>
                 (summary) =>
                   getByArn(summary.clusterArn).pipe(
                     Effect.flatMap((cluster) =>
-                      cluster === undefined
-                        ? Effect.succeed(undefined)
-                        : toAttrs(cluster),
+                      cluster === undefined ? Effect.succeed(undefined) : toAttrs(cluster),
                     ),
                   ),
                 { concurrency: 4 },
               ),
             ),
-            Effect.map((attrs) =>
-              attrs.filter((a): a is NonNullable<typeof a> => a !== undefined),
-            ),
+            Effect.map((attrs) => attrs.filter((a): a is NonNullable<typeof a> => a !== undefined)),
           ),
       };
     }),

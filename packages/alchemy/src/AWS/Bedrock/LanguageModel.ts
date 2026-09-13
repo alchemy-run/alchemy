@@ -77,13 +77,12 @@ export interface LanguageModelCallParameters extends LanguageModelParameters {
  * `LanguageModel`. Set it for a region of your program with
  * {@link withModelParameters}.
  */
-export const CurrentModelParameters =
-  Context.Reference<LanguageModelCallParameters>(
-    "AWS.Bedrock.CurrentModelParameters",
-    {
-      defaultValue: () => ({}),
-    },
-  );
+export const CurrentModelParameters = Context.Reference<LanguageModelCallParameters>(
+  "AWS.Bedrock.CurrentModelParameters",
+  {
+    defaultValue: () => ({}),
+  },
+);
 
 /**
  * Scope per-call inference parameters (and optionally the target model)
@@ -99,9 +98,7 @@ export const CurrentModelParameters =
  */
 export const withModelParameters =
   (parameters: LanguageModelCallParameters) =>
-  <S extends Effect.Effect<any, any, any> | Stream.Stream<any, any, any>>(
-    self: S,
-  ): S =>
+  <S extends Effect.Effect<any, any, any> | Stream.Stream<any, any, any>>(self: S): S =>
     (Effect.isEffect(self)
       ? Effect.provideService(CurrentModelParameters, parameters)(self)
       : Stream.provideService(
@@ -217,9 +214,7 @@ export interface LanguageModel extends Binding.Service<
     options?: LanguageModelOptions,
   ) => Effect.Effect<Layer.Layer<AiLanguageModel.LanguageModel>>
 > {}
-export const LanguageModel = Binding.Service<LanguageModel>(
-  "AWS.Bedrock.LanguageModel",
-);
+export const LanguageModel = Binding.Service<LanguageModel>("AWS.Bedrock.LanguageModel");
 
 /**
  * The already-bound Converse callables the adapter drives. Produced by
@@ -234,10 +229,7 @@ export interface MakeLanguageModelOptions {
   /** Streaming Converse callable (modelId already bound). */
   readonly converseStream: (
     request: ConverseStreamRequest,
-  ) => Effect.Effect<
-    bedrock.ConverseStreamResponse,
-    bedrock.ConverseStreamError
-  >;
+  ) => Effect.Effect<bedrock.ConverseStreamResponse, bedrock.ConverseStreamError>;
   /** Default inference parameters for every call. */
   readonly parameters?: LanguageModelParameters;
 }
@@ -328,9 +320,7 @@ const fileToImageBlock = (
   const bytes =
     data instanceof Uint8Array
       ? data
-      : base64ToUint8Array(
-          data.startsWith("data:") ? data.slice(data.indexOf(",") + 1) : data,
-        );
+      : base64ToUint8Array(data.startsWith("data:") ? data.slice(data.indexOf(",") + 1) : data);
   return { image: { format, source: { bytes } } };
 };
 
@@ -348,9 +338,7 @@ interface ConverseMessages {
   readonly messages: bedrock.Message[];
 }
 
-const toUserContent = (
-  parts: Prompt.UserMessage["content"],
-): bedrock.ContentBlock[] =>
+const toUserContent = (parts: Prompt.UserMessage["content"]): bedrock.ContentBlock[] =>
   parts.flatMap((p): bedrock.ContentBlock[] => {
     if (p.type === "text") return p.text.length > 0 ? [{ text: p.text }] : [];
     if (p.type === "file") {
@@ -360,9 +348,7 @@ const toUserContent = (
     return [];
   });
 
-const toAssistantContent = (
-  parts: Prompt.AssistantMessage["content"],
-): bedrock.ContentBlock[] =>
+const toAssistantContent = (parts: Prompt.AssistantMessage["content"]): bedrock.ContentBlock[] =>
   parts.flatMap((p): bedrock.ContentBlock[] => {
     // Reasoning parts are not replayed: Bedrock requires the original
     // cryptographic signature alongside replayed reasoning, which the
@@ -382,9 +368,7 @@ const toAssistantContent = (
     return [];
   });
 
-const toToolResultContent = (
-  parts: Prompt.ToolMessage["content"],
-): bedrock.ContentBlock[] =>
+const toToolResultContent = (parts: Prompt.ToolMessage["content"]): bedrock.ContentBlock[] =>
   parts.flatMap((p): bedrock.ContentBlock[] =>
     p.type === "tool-result"
       ? [
@@ -392,9 +376,7 @@ const toToolResultContent = (
             toolResult: {
               toolUseId: p.id,
               content:
-                typeof p.result === "string"
-                  ? [{ text: p.result }]
-                  : [{ json: p.result ?? {} }],
+                typeof p.result === "string" ? [{ text: p.result }] : [{ json: p.result ?? {} }],
               ...(p.isFailure ? { status: "error" as const } : {}),
             },
           },
@@ -406,10 +388,7 @@ const convertPrompt = (prompt: Prompt.Prompt): ConverseMessages => {
   const system: bedrock.SystemContentBlock[] = [];
   const messages: bedrock.Message[] = [];
 
-  const append = (
-    role: bedrock.ConversationRole,
-    content: bedrock.ContentBlock[],
-  ) => {
+  const append = (role: bedrock.ConversationRole, content: bedrock.ContentBlock[]) => {
     if (content.length === 0) return;
     const last = messages[messages.length - 1];
     // Converse requires user/assistant alternation; merge consecutive
@@ -456,9 +435,7 @@ const toToolSpec = (tool: Tool.Any): bedrock.Tool => ({
 
 const hasToolBlocks = (messages: ReadonlyArray<bedrock.Message>): boolean =>
   messages.some((m) =>
-    m.content.some(
-      (block) => block.toolUse !== undefined || block.toolResult !== undefined,
-    ),
+    m.content.some((block) => block.toolUse !== undefined || block.toolResult !== undefined),
   );
 
 const toToolConfig = (
@@ -473,9 +450,7 @@ const toToolConfig = (
     // Converse has no "none" mode. Omit toolConfig entirely — unless the
     // conversation already contains toolUse/toolResult blocks, which the API
     // rejects without a toolConfig; then send the tools with auto choice.
-    return hasToolBlocks(messages)
-      ? { tools: mapped, toolChoice: { auto: {} } }
-      : undefined;
+    return hasToolBlocks(messages) ? { tools: mapped, toolChoice: { auto: {} } } : undefined;
   }
   if (toolChoice === "required") {
     return { tools: mapped, toolChoice: { any: {} } };
@@ -489,9 +464,7 @@ const toToolConfig = (
   if (typeof toolChoice === "object" && "oneOf" in toolChoice) {
     const allowed = new Set(toolChoice.oneOf);
     return {
-      tools: mapped.filter(
-        (t) => t.toolSpec !== undefined && allowed.has(t.toolSpec.name),
-      ),
+      tools: mapped.filter((t) => t.toolSpec !== undefined && allowed.has(t.toolSpec.name)),
       toolChoice: toolChoice.mode === "required" ? { any: {} } : { auto: {} },
     };
   }
@@ -515,8 +488,7 @@ const mergeParameters = (
   topP: overrides.topP ?? defaults?.topP,
   stopSequences: overrides.stopSequences ?? defaults?.stopSequences,
   additionalModelRequestFields:
-    overrides.additionalModelRequestFields ??
-    defaults?.additionalModelRequestFields,
+    overrides.additionalModelRequestFields ?? defaults?.additionalModelRequestFields,
 });
 
 const toConverseRequest = ({
@@ -531,16 +503,10 @@ const toConverseRequest = ({
   const { system, messages } = convertPrompt(options.prompt);
   const toolConfig = toToolConfig(options.tools, options.toolChoice, messages);
   const inferenceConfig: bedrock.InferenceConfiguration = {
-    ...(parameters?.maxTokens !== undefined
-      ? { maxTokens: parameters.maxTokens }
-      : {}),
-    ...(parameters?.temperature !== undefined
-      ? { temperature: parameters.temperature }
-      : {}),
+    ...(parameters?.maxTokens !== undefined ? { maxTokens: parameters.maxTokens } : {}),
+    ...(parameters?.temperature !== undefined ? { temperature: parameters.temperature } : {}),
     ...(parameters?.topP !== undefined ? { topP: parameters.topP } : {}),
-    ...(parameters?.stopSequences !== undefined
-      ? { stopSequences: parameters.stopSequences }
-      : {}),
+    ...(parameters?.stopSequences !== undefined ? { stopSequences: parameters.stopSequences } : {}),
   };
   return {
     messages,
@@ -560,9 +526,7 @@ const toConverseRequest = ({
 // Finish reason / usage mapping
 // ---------------------------------------------------------------------------
 
-const mapStopReason = (
-  raw: bedrock.StopReason | undefined,
-): Response.FinishReason => {
+const mapStopReason = (raw: bedrock.StopReason | undefined): Response.FinishReason => {
   switch (raw) {
     case "end_turn":
     case "stop_sequence":
@@ -610,9 +574,7 @@ const mapUsage = (usage: bedrock.TokenUsage | undefined): Response.Usage => {
 // generateText: ConverseResponse → Response.PartEncoded[]
 // ---------------------------------------------------------------------------
 
-const toResponseParts = (
-  response: bedrock.ConverseResponse,
-): Array<Response.PartEncoded> => {
+const toResponseParts = (response: bedrock.ConverseResponse): Array<Response.PartEncoded> => {
   const content = response.output.message?.content ?? [];
   const parts = content.flatMap((block): Response.PartEncoded[] => {
     if (block.text !== undefined && block.text.length > 0) {
@@ -693,11 +655,7 @@ const openBlock = (
   return { ...state, blocks };
 };
 
-const closeBlock = (
-  state: StreamState,
-  index: number,
-  parts: StreamParts,
-): StreamState => {
+const closeBlock = (state: StreamState, index: number, parts: StreamParts): StreamState => {
   const block = state.blocks.get(index);
   if (block === undefined) return state;
   parts.push(
@@ -826,9 +784,7 @@ const handleStreamEvent = (
     return [s, parts] as const;
   });
 
-const finalizeStream = (
-  state: StreamState,
-): ReadonlyArray<Response.StreamPartEncoded> => {
+const finalizeStream = (state: StreamState): ReadonlyArray<Response.StreamPartEncoded> => {
   const parts: StreamParts = [];
   let s = state;
   for (const index of [...s.blocks.keys()].sort((a, b) => a - b)) {
@@ -865,10 +821,7 @@ const parseStream = (
 // Error mapping
 // ---------------------------------------------------------------------------
 
-const toAiError = (
-  cause: unknown,
-  method: "generateText" | "streamText",
-): AiError.AiError => {
+const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiError.AiError => {
   const tagged = cause as { _tag?: string; message?: string } | undefined;
   const description = [
     tagged?._tag ?? (cause instanceof Error ? cause.name : undefined),

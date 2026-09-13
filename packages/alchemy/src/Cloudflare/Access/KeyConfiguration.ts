@@ -96,13 +96,7 @@ export const KeyConfigurationProvider = () =>
       // instance and return it as a one-element array. The observed
       // interval becomes the value restored on destroy (adoption read).
       const observed = yield* zeroTrust.getAccessKey({ accountId });
-      return [
-        toAttributes(
-          accountId,
-          observed,
-          observed.keyRotationIntervalDays ?? undefined,
-        ),
-      ];
+      return [toAttributes(accountId, observed, observed.keyRotationIntervalDays ?? undefined)];
     }),
 
     diff: Effect.fn(function* ({ output }) {

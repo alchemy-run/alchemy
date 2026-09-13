@@ -69,10 +69,7 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
             });
           }).pipe(
             Effect.catchCause((cause) =>
-              HttpServerResponse.json(
-                { error: Cause.pretty(cause) },
-                { status: 500 },
-              ),
+              HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
             ),
           );
         }

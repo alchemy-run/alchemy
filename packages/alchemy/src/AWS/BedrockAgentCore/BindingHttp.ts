@@ -24,11 +24,7 @@ import type { Runtime } from "./Runtime.ts";
  */
 
 /** The AgentCore resources data-plane bindings can scope to. */
-export type AgentCoreBindable =
-  | Memory
-  | CodeInterpreter
-  | BrowserCustom
-  | Runtime;
+export type AgentCoreBindable = Memory | CodeInterpreter | BrowserCustom | Runtime;
 
 /**
  * Build the impl Effect for a single-operation AgentCore data-plane binding.
@@ -76,9 +72,7 @@ export const makeAgentCoreHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
           ...request,
           [options.requestKey]: yield* Identifier,

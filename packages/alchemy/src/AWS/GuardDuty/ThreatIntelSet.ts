@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -110,9 +105,7 @@ export interface ThreatIntelSet extends Resource<
  * });
  * ```
  */
-const ThreatIntelSetResource = Resource<ThreatIntelSet>(
-  "AWS.GuardDuty.ThreatIntelSet",
-);
+const ThreatIntelSetResource = Resource<ThreatIntelSet>("AWS.GuardDuty.ThreatIntelSet");
 
 export { ThreatIntelSetResource as ThreatIntelSet };
 
@@ -132,9 +125,7 @@ export const ThreatIntelSetProvider = () =>
     ThreatIntelSetResource,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string }) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       const getSet = (detectorId: string, threatIntelSetId: string) =>
         guardduty
@@ -142,18 +133,11 @@ export const ThreatIntelSetProvider = () =>
             DetectorId: detectorId,
             ThreatIntelSetId: threatIntelSetId,
           })
-          .pipe(
-            Effect.catchTag("BadRequestException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
 
       // Recover the set id after state loss by matching the deterministic
       // name across the detector's threat intel sets.
-      const findByName = Effect.fn(function* (
-        detectorId: string,
-        name: string,
-      ) {
+      const findByName = Effect.fn(function* (detectorId: string, name: string) {
         const pages = yield* guardduty.listThreatIntelSets
           .pages({ DetectorId: detectorId })
           .pipe(Stream.runCollect);
@@ -177,12 +161,7 @@ export const ThreatIntelSetProvider = () =>
         return {
           detectorId,
           threatIntelSetId,
-          threatIntelSetArn: threatIntelSetArn(
-            region,
-            accountId,
-            detectorId,
-            threatIntelSetId,
-          ),
+          threatIntelSetArn: threatIntelSetArn(region, accountId, detectorId, threatIntelSetId),
           name: s.Name,
           format: s.Format,
           location: s.Location,
@@ -195,10 +174,7 @@ export const ThreatIntelSetProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (olds === undefined) return;
-          if (
-            olds.detectorId !== news.detectorId ||
-            olds.format !== news.format
-          ) {
+          if (olds.detectorId !== news.detectorId || olds.format !== news.format) {
             return { action: "replace" } as const;
           }
         }),
@@ -206,14 +182,9 @@ export const ThreatIntelSetProvider = () =>
           const detectorId = output?.detectorId ?? olds?.detectorId;
           if (!detectorId) return undefined;
           let threatIntelSetId = output?.threatIntelSetId;
-          let set = threatIntelSetId
-            ? yield* getSet(detectorId, threatIntelSetId)
-            : undefined;
+          let set = threatIntelSetId ? yield* getSet(detectorId, threatIntelSetId) : undefined;
           if (!set) {
-            const found = yield* findByName(
-              detectorId,
-              yield* toName(id, olds ?? {}),
-            );
+            const found = yield* findByName(detectorId, yield* toName(id, olds ?? {}));
             if (!found) return undefined;
             ({ threatIntelSetId, set } = found);
           }
@@ -249,9 +220,7 @@ export const ThreatIntelSetProvider = () =>
           // 1. OBSERVE — output.threatIntelSetId is only a cache; fall back
           // to a name search so a crash-and-retry converges.
           let threatIntelSetId = output?.threatIntelSetId;
-          let live = threatIntelSetId
-            ? yield* getSet(detectorId, threatIntelSetId)
-            : undefined;
+          let live = threatIntelSetId ? yield* getSet(detectorId, threatIntelSetId) : undefined;
           if (!live) {
             const found = yield* findByName(detectorId, name);
             if (found) ({ threatIntelSetId, set: live } = found);
@@ -289,16 +258,8 @@ export const ThreatIntelSetProvider = () =>
 
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
             const { accountId, region } = yield* AWSEnvironment.current;
-            const arn = threatIntelSetArn(
-              region,
-              accountId,
-              detectorId,
-              threatIntelSetId,
-            );
-            const { upsert, removed } = diffTags(
-              tagRecord(live.Tags),
-              desiredTags,
-            );
+            const arn = threatIntelSetArn(region, accountId, detectorId, threatIntelSetId);
+            const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
             if (upsert.length > 0) {
               yield* guardduty.tagResource({
                 ResourceArn: arn,

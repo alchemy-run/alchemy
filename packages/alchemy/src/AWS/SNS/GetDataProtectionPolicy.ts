@@ -38,10 +38,7 @@ export interface GetDataProtectionPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetDataProtectionPolicyRequest,
-    ) => Effect.Effect<
-      sns.GetDataProtectionPolicyResponse,
-      sns.GetDataProtectionPolicyError
-    >
+    ) => Effect.Effect<sns.GetDataProtectionPolicyResponse, sns.GetDataProtectionPolicyError>
   >
 > {}
 export const GetDataProtectionPolicy = Binding.Service<GetDataProtectionPolicy>(

@@ -2,11 +2,7 @@ import * as crypto from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "@/Artifacts.ts";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "@/Artifacts.ts";
 import {
   makeSourceContext,
   resolveSource,
@@ -15,14 +11,8 @@ import {
 } from "@/Cloudflare/Workers/Source.ts";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker.ts";
 
-const providerModule = new URL(
-  "./fixtures/source-provider/provider.ts",
-  import.meta.url,
-).href;
-const invalidModule = new URL(
-  "./fixtures/source-provider/invalid.ts",
-  import.meta.url,
-).href;
+const providerModule = new URL("./fixtures/source-provider/provider.ts", import.meta.url).href;
+const invalidModule = new URL("./fixtures/source-provider/invalid.ts", import.meta.url).href;
 
 const ctx = (props: WorkerProps): SourceContext =>
   makeSourceContext({
@@ -35,17 +25,10 @@ const ctx = (props: WorkerProps): SourceContext =>
   });
 
 const provide = <A, E>(
-  effect: Effect.Effect<
-    A,
-    E,
-    Effect.Services<ReturnType<typeof resolveSource>> | Artifacts
-  >,
+  effect: Effect.Effect<A, E, Effect.Services<ReturnType<typeof resolveSource>> | Artifacts>,
 ) =>
   effect.pipe(
-    Effect.provideService(
-      Artifacts,
-      makeScopedArtifacts(createArtifactStore(), "test"),
-    ),
+    Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), "test")),
     Effect.provide(NodeServices.layer),
     Effect.scoped,
   );
@@ -59,9 +42,7 @@ describe("resolveSource", () => {
         const source = yield* resolveSource(props);
         expect(source.ownsAssets).toBe(false);
         const slots = yield* source.hash(ctx(props), undefined);
-        expect(slots.bundle).toBe(
-          crypto.createHash("sha256").update(script).digest("hex"),
-        );
+        expect(slots.bundle).toBe(crypto.createHash("sha256").update(script).digest("hex"));
         const out = yield* source.build(ctx(props));
         expect(out.bundle?.files[0].path).toBe("main.js");
         expect(out.bundle?.hash).toBe(slots.bundle);
@@ -122,25 +103,21 @@ describe("resolveSource", () => {
       ),
   );
 
-  it.effect(
-    "fails with SourceProviderError when the module's default export lacks make()",
-    () =>
-      provide(
-        Effect.gen(function* () {
-          const result = yield* Effect.result(
-            resolveSource({
-              source: { provider: invalidModule, devMode: "bundle" },
-            }),
-          );
-          expect(result._tag).toBe("Failure");
-          if (result._tag === "Failure") {
-            expect(result.failure).toBeInstanceOf(SourceProviderError);
-            expect((result.failure as SourceProviderError).message).toContain(
-              "WorkerSourceModule",
-            );
-          }
-        }),
-      ),
+  it.effect("fails with SourceProviderError when the module's default export lacks make()", () =>
+    provide(
+      Effect.gen(function* () {
+        const result = yield* Effect.result(
+          resolveSource({
+            source: { provider: invalidModule, devMode: "bundle" },
+          }),
+        );
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure).toBeInstanceOf(SourceProviderError);
+          expect((result.failure as SourceProviderError).message).toContain("WorkerSourceModule");
+        }
+      }),
+    ),
   );
 
   it.effect("rejects source combined with main/script/vite", () =>
@@ -155,9 +132,7 @@ describe("resolveSource", () => {
         expect(result._tag).toBe("Failure");
         if (result._tag === "Failure") {
           expect(result.failure).toBeInstanceOf(SourceProviderError);
-          expect((result.failure as SourceProviderError).message).toContain(
-            '"main"',
-          );
+          expect((result.failure as SourceProviderError).message).toContain('"main"');
         }
       }),
     ),

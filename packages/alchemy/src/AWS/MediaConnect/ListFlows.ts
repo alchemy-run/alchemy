@@ -28,12 +28,7 @@ export interface ListFlows extends Binding.Service<
   () => Effect.Effect<
     (
       request?: mediaconnect.ListFlowsRequest,
-    ) => Effect.Effect<
-      mediaconnect.ListFlowsResponse,
-      mediaconnect.ListFlowsError
-    >
+    ) => Effect.Effect<mediaconnect.ListFlowsResponse, mediaconnect.ListFlowsError>
   >
 > {}
-export const ListFlows = Binding.Service<ListFlows>(
-  "AWS.MediaConnect.ListFlows",
-);
+export const ListFlows = Binding.Service<ListFlows>("AWS.MediaConnect.ListFlows");

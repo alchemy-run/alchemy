@@ -31,6 +31,4 @@ export interface ListAttacks extends Binding.Service<
     ) => Effect.Effect<shield.ListAttacksResponse, shield.ListAttacksError>
   >
 > {}
-export const ListAttacks = Binding.Service<ListAttacks>(
-  "AWS.Shield.ListAttacks",
-);
+export const ListAttacks = Binding.Service<ListAttacks>("AWS.Shield.ListAttacks");

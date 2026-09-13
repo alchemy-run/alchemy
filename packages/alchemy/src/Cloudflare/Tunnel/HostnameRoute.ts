@@ -149,9 +149,7 @@ export const HostnameRouteProvider = () =>
                   until: (route) => route !== undefined,
                   times: 5,
                 }),
-                Effect.flatMap((route) =>
-                  route ? Effect.succeed(route) : Effect.fail(conflict),
-                ),
+                Effect.flatMap((route) => (route ? Effect.succeed(route) : Effect.fail(conflict))),
               ),
             ),
           );
@@ -190,18 +188,16 @@ export const HostnameRouteProvider = () =>
     // rows, and hydrate each into the exact `read` Attributes shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listNetworkHostnameRoutes
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((r) => r.id != null && r.deletedAt == null)
-                .map((r) => toAttributes(r, accountId)),
-            ),
+      return yield* zeroTrust.listNetworkHostnameRoutes.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((r) => r.id != null && r.deletedAt == null)
+              .map((r) => toAttributes(r, accountId)),
           ),
-        );
+        ),
+      );
     }),
   });
 
@@ -241,10 +237,7 @@ const findByHostname = (accountId: string, hostname: string) =>
       ),
     );
 
-const toAttributes = (
-  route: ObservedRoute,
-  accountId: string,
-): HostnameRouteAttributes => ({
+const toAttributes = (route: ObservedRoute, accountId: string): HostnameRouteAttributes => ({
   hostnameRouteId: route.id ?? "",
   accountId,
   hostname: route.hostname ?? "",

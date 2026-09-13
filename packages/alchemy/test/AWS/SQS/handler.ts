@@ -12,9 +12,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 
 // Shared Lambda fixture hosting every SQS message-plane binding, one HTTP
 // route per operation (see test/AWS/DynamoDB/handler.ts for the pattern).
-export class SQSTestFunction extends Lambda.Function<Lambda.Function>()(
-  "SQSTestFunction",
-) {}
+export class SQSTestFunction extends Lambda.Function<Lambda.Function>()("SQSTestFunction") {}
 
 export default SQSTestFunction.make(
   {
@@ -56,12 +54,10 @@ export default SQSTestFunction.make(
     const deleteMessage = yield* SQS.DeleteMessage(queue);
     const deleteMessageBatch = yield* SQS.DeleteMessageBatch(queue);
     const changeMessageVisibility = yield* SQS.ChangeMessageVisibility(queue);
-    const changeMessageVisibilityBatch =
-      yield* SQS.ChangeMessageVisibilityBatch(queue);
+    const changeMessageVisibilityBatch = yield* SQS.ChangeMessageVisibilityBatch(queue);
     const getQueueAttributes = yield* SQS.GetQueueAttributes(queue);
     const purgeQueue = yield* SQS.PurgeQueue(queue);
-    const listDeadLetterSourceQueues =
-      yield* SQS.ListDeadLetterSourceQueues(dlq);
+    const listDeadLetterSourceQueues = yield* SQS.ListDeadLetterSourceQueues(dlq);
     const startMessageMoveTask = yield* SQS.StartMessageMoveTask(dlq, {
       destination: moveSource,
     });
@@ -183,10 +179,7 @@ export default SQSTestFunction.make(
           return yield* HttpServerResponse.json({ success: true });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/change-visibility-batch"
-        ) {
+        if (request.method === "POST" && pathname === "/change-visibility-batch") {
           const body = (yield* request.json) as unknown as {
             entries: {
               id: string;
@@ -241,8 +234,7 @@ export default SQSTestFunction.make(
           const result = yield* startMessageMoveTask({
             ...(body.maxNumberOfMessagesPerSecond !== undefined
               ? {
-                  MaxNumberOfMessagesPerSecond:
-                    body.maxNumberOfMessagesPerSecond,
+                  MaxNumberOfMessagesPerSecond: body.maxNumberOfMessagesPerSecond,
                 }
               : {}),
           });
@@ -273,9 +265,7 @@ export default SQSTestFunction.make(
             TaskHandle: body.taskHandle,
           }).pipe(
             Effect.map(() => true),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(false),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
             Effect.catchTag("InvalidParameterValueException", (error) =>
               error.message === "Only active tasks can be cancelled."
                 ? Effect.succeed(false)
@@ -295,10 +285,7 @@ export default SQSTestFunction.make(
         // is a test-only handler: return the pretty Effect cause so the live
         // test log identifies the exact capability/IAM/consistency failure.
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

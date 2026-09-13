@@ -15,16 +15,11 @@ class PortfolioStillExists extends Data.TaggedError("PortfolioStillExists")<{
 
 const assertPortfolioGone = (portfolioId: string) =>
   servicecatalog.describePortfolio({ Id: portfolioId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new PortfolioStillExists({ portfolioId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new PortfolioStillExists({ portfolioId }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PortfolioStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -55,16 +50,10 @@ test.provider(
       const described = yield* servicecatalog.describePortfolio({
         Id: created.portfolioId,
       });
-      expect(described.PortfolioDetail?.DisplayName).toBe(
-        created.portfolioName,
-      );
+      expect(described.PortfolioDetail?.DisplayName).toBe(created.portfolioName);
       expect(described.PortfolioDetail?.ProviderName).toBe("alchemy-tests");
-      expect(described.PortfolioDetail?.Description).toBe(
-        "portfolio lifecycle test",
-      );
-      const tags = Object.fromEntries(
-        (described.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect(described.PortfolioDetail?.Description).toBe("portfolio lifecycle test");
+      const tags = Object.fromEntries((described.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.purpose).toBe("lifecycle");
       expect(tags["alchemy::id"]).toBe("TestPortfolio");
 
@@ -82,13 +71,9 @@ test.provider(
         Id: created.portfolioId,
       });
       expect(updated.PortfolioDetail?.Id).toBe(created.portfolioId);
-      expect(updated.PortfolioDetail?.ProviderName).toBe(
-        "alchemy-tests-updated",
-      );
+      expect(updated.PortfolioDetail?.ProviderName).toBe("alchemy-tests-updated");
       expect(updated.PortfolioDetail?.Description).toBe("updated description");
-      const updatedTags = Object.fromEntries(
-        (updated.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const updatedTags = Object.fromEntries((updated.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.purpose).toBe("lifecycle-updated");
       expect(updatedTags.extra).toBe("yes");
 

@@ -14,10 +14,9 @@ import { PORTS } from "./ports.ts";
  * that unrelated churn (worker-source edits, stack reloads, broken
  * intermediate states) must NOT bounce the container.
  */
-export class SandboxContainer extends Cloudflare.Container<
-  SandboxContainer,
-  {}
->()("SandboxContainer") {}
+export class SandboxContainer extends Cloudflare.Container<SandboxContainer, {}>()(
+  "SandboxContainer",
+) {}
 
 export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
   {

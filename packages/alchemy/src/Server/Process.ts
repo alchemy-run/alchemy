@@ -8,18 +8,9 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
-import {
-  packEnvValue,
-  unpackEnvValue,
-  type BaseRuntimeContext,
-} from "../RuntimeContext.ts";
+import { packEnvValue, unpackEnvValue, type BaseRuntimeContext } from "../RuntimeContext.ts";
 
-export type ProcessServices =
-  | ChildProcessSpawner
-  | FileSystem
-  | Path
-  | Stdio
-  | Terminal;
+export type ProcessServices = ChildProcessSpawner | FileSystem | Path | Stdio | Terminal;
 
 export interface ProcessContext extends BaseRuntimeContext {
   run: <Req = never, RunReq = never>(
@@ -36,10 +27,9 @@ export interface ProcessContext extends BaseRuntimeContext {
  * can `yield* ServerHost` and call `host.run(...)` during plan/deploy without
  * the caller providing the layer itself.
  */
-export class ServerHost extends Context.Service<
-  ServerHost,
-  Pick<ProcessContext, "run">
->()("Alchemy::ServerHost") {}
+export class ServerHost extends Context.Service<ServerHost, Pick<ProcessContext, "run">>()(
+  "Alchemy::ServerHost",
+) {}
 
 /**
  * Deploy-time / plan-time host context for platforms that bundle a long-lived

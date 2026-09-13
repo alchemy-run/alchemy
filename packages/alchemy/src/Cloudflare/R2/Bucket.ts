@@ -488,9 +488,7 @@ export declare namespace Bucket {
     abortMultipartUploadsTransition:
       | { condition: { type: "Age"; maxAge: number } | undefined }
       | undefined;
-    deleteObjectsTransition:
-      | { condition: BucketLifecycleCondition | undefined }
-      | undefined;
+    deleteObjectsTransition: { condition: BucketLifecycleCondition | undefined } | undefined;
     storageClassTransitions:
       | {
           condition: BucketLifecycleCondition;
@@ -514,20 +512,8 @@ export declare namespace Bucket {
     minTLS: "1.0" | "1.1" | "1.2" | "1.3" | undefined;
     status:
       | {
-          ownership:
-            | "pending"
-            | "active"
-            | "deactivated"
-            | "blocked"
-            | "error"
-            | "unknown";
-          ssl:
-            | "initializing"
-            | "pending"
-            | "active"
-            | "deactivated"
-            | "error"
-            | "unknown";
+          ownership: "pending" | "active" | "deactivated" | "blocked" | "error" | "unknown";
+          ssl: "initializing" | "pending" | "active" | "deactivated" | "error" | "unknown";
         }
       | undefined;
   };
@@ -551,8 +537,7 @@ export const ProviderLive = () =>
           })
           .pipe(
             Stream.filter(
-              (o): o is typeof o & { key: string } =>
-                typeof o.key === "string" && o.key !== "",
+              (o): o is typeof o & { key: string } => typeof o.key === "string" && o.key !== "",
             ),
             Stream.map((o) => o.key),
             Stream.runForEachArray((chunk) =>
@@ -610,9 +595,7 @@ export const ProviderLive = () =>
                 }),
               )
         ).pipe(
-          Effect.map((response) =>
-            response.domains.map(toCustomDomainAttributes),
-          ),
+          Effect.map((response) => response.domains.map(toCustomDomainAttributes)),
           Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
         );
       });
@@ -628,14 +611,10 @@ export const ProviderLive = () =>
           const observed = yield* listCustomDomains(bucketName, jurisdiction);
           if (!observed) {
             return yield* Effect.fail(
-              new Error(
-                `Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`,
-              ),
+              new Error(`Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`),
             );
           }
-          const observedByDomain = new Map(
-            observed.map((domain) => [domain.domain, domain]),
-          );
+          const observedByDomain = new Map(observed.map((domain) => [domain.domain, domain]));
           const desiredDomains = new Set(desired.map((domain) => domain.name));
 
           // Remove domains that are no longer desired. Domains that keep the
@@ -653,12 +632,7 @@ export const ProviderLive = () =>
                       domain: previousDomain.domain,
                       jurisdiction,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        ["DomainNotFound", "NoSuchBucket"],
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag(["DomainNotFound", "NoSuchBucket"], () => Effect.void)),
             { concurrency: "unbounded" },
           );
 
@@ -673,10 +647,7 @@ export const ProviderLive = () =>
                 });
                 const observedDomain = observedByDomain.get(domain.name);
 
-                if (
-                  observedDomain &&
-                  sameCustomDomainConfig(observedDomain, domain, zoneId)
-                ) {
+                if (observedDomain && sameCustomDomainConfig(observedDomain, domain, zoneId)) {
                   return observedDomain;
                 }
 
@@ -692,12 +663,7 @@ export const ProviderLive = () =>
                       domain: domain.name,
                       jurisdiction,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        ["DomainNotFound", "NoSuchBucket"],
-                        () => Effect.void,
-                      ),
-                    );
+                    .pipe(Effect.catchTag(["DomainNotFound", "NoSuchBucket"], () => Effect.void));
                 }
 
                 if (!observedDomain || observedDomain.zoneId !== zoneId) {
@@ -776,9 +742,7 @@ export const ProviderLive = () =>
         ).pipe(
           // The hostname exists whether or not public access is on; a
           // disabled domain serves 401, so only report it while enabled.
-          Effect.map((response) =>
-            response.enabled ? response.domain : undefined,
-          ),
+          Effect.map((response) => (response.enabled ? response.domain : undefined)),
           Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
         );
       });
@@ -828,10 +792,7 @@ export const ProviderLive = () =>
       // response omits a continuation cursor, so paginate exhaustively with the
       // `startAfter` query param: keep fetching full pages (capped at 1000)
       // until a short page signals the end.
-      const listBucketsInJurisdiction = (
-        accountId: string,
-        jurisdiction: Bucket.Jurisdiction,
-      ) =>
+      const listBucketsInJurisdiction = (accountId: string, jurisdiction: Bucket.Jurisdiction) =>
         Effect.gen(function* () {
           const all: {
             name: string;
@@ -850,16 +811,13 @@ export const ProviderLive = () =>
             });
             const raw = response.buckets ?? [];
             const page = raw.filter(
-              (b): b is typeof b & { name: string } =>
-                typeof b.name === "string" && b.name !== "",
+              (b): b is typeof b & { name: string } => typeof b.name === "string" && b.name !== "",
             );
             for (const b of page) {
               all.push({
                 name: b.name,
-                jurisdiction: (b.jurisdiction ??
-                  jurisdiction) as Bucket.Jurisdiction,
-                storageClass: (b.storageClass ??
-                  "Standard") as Bucket.StorageClass,
+                jurisdiction: (b.jurisdiction ?? jurisdiction) as Bucket.Jurisdiction,
+                storageClass: (b.storageClass ?? "Standard") as Bucket.StorageClass,
                 location: normalizeLocation(b.location),
               });
             }
@@ -933,9 +891,7 @@ export const ProviderLive = () =>
               Effect.map((response) => (response.rules ?? []).map(toCorsRule)),
               // A bucket with no CORS configuration is a typed error, not an
               // empty rule list — normalize it to [] for the diff below.
-              Effect.catchTag("NoCorsConfiguration", () =>
-                Effect.succeed([] as Bucket.CorsRule[]),
-              ),
+              Effect.catchTag("NoCorsConfiguration", () => Effect.succeed([] as Bucket.CorsRule[])),
               Effect.retry({
                 while: (e) => e._tag === "NoSuchBucket",
                 schedule: r2BucketEndpointConsistencySchedule,
@@ -989,11 +945,7 @@ export const ProviderLive = () =>
             // R2 buckets are account-scoped but partitioned by jurisdiction, so
             // enumerate each jurisdiction. Accounts not entitled to a given
             // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
-            const jurisdictions: Bucket.Jurisdiction[] = [
-              "default",
-              "eu",
-              "fedramp",
-            ];
+            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "fedramp"];
             const perJurisdiction = yield* Effect.forEach(
               jurisdictions,
               (jurisdiction) =>
@@ -1002,9 +954,7 @@ export const ProviderLive = () =>
                   // route with `Forbidden` ("Access Denied") or `InvalidRoute`
                   // — there are simply no buckets there, so treat as empty.
                   // @ts-expect-error
-                  Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
                 ),
               { concurrency: jurisdictions.length },
             );
@@ -1021,47 +971,41 @@ export const ProviderLive = () =>
                   // concurrently so each bucket costs one round-trip of wall
                   // clock instead of four (a large leaked-bucket census can
                   // otherwise blow the nuke scan's per-provider timeout).
-                  const [domains, lifecycleRules, cors, publicDomain] =
-                    yield* Effect.all(
-                      [
-                        listCustomDomains(bucket.name, bucket.jurisdiction, {
-                          retryMissing: false,
-                        }).pipe(Effect.map((d) => d ?? [])),
-                        r2
-                          .getBucketLifecycle({
-                            accountId,
-                            bucketName: bucket.name,
-                            jurisdiction: bucket.jurisdiction,
-                          })
-                          .pipe(
-                            Effect.map((observed) =>
-                              (observed.rules ?? []).map(toLifecycleRule),
-                            ),
-                            Effect.catchTag("NoSuchBucket", () =>
-                              Effect.succeed([] as Bucket.LifecycleRule[]),
-                            ),
+                  const [domains, lifecycleRules, cors, publicDomain] = yield* Effect.all(
+                    [
+                      listCustomDomains(bucket.name, bucket.jurisdiction, {
+                        retryMissing: false,
+                      }).pipe(Effect.map((d) => d ?? [])),
+                      r2
+                        .getBucketLifecycle({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) => (observed.rules ?? []).map(toLifecycleRule)),
+                          Effect.catchTag("NoSuchBucket", () =>
+                            Effect.succeed([] as Bucket.LifecycleRule[]),
                           ),
-                        r2
-                          .getBucketCors({
-                            accountId,
-                            bucketName: bucket.name,
-                            jurisdiction: bucket.jurisdiction,
-                          })
-                          .pipe(
-                            Effect.map((observed) =>
-                              (observed.rules ?? []).map(toCorsRule),
-                            ),
-                            Effect.catchTag(
-                              ["NoSuchBucket", "NoCorsConfiguration"],
-                              () => Effect.succeed([] as Bucket.CorsRule[]),
-                            ),
+                        ),
+                      r2
+                        .getBucketCors({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) => (observed.rules ?? []).map(toCorsRule)),
+                          Effect.catchTag(["NoSuchBucket", "NoCorsConfiguration"], () =>
+                            Effect.succeed([] as Bucket.CorsRule[]),
                           ),
-                        listManagedDomain(bucket.name, bucket.jurisdiction, {
-                          retryMissing: false,
-                        }),
-                      ] as const,
-                      { concurrency: 4 },
-                    );
+                        ),
+                      listManagedDomain(bucket.name, bucket.jurisdiction, {
+                        retryMissing: false,
+                      }),
+                    ] as const,
+                    { concurrency: 4 },
+                  );
                   return {
                     bucketName: bucket.name,
                     storageClass: bucket.storageClass,
@@ -1103,17 +1047,14 @@ export const ProviderLive = () =>
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const oldName =
-            output?.bucketName ?? (yield* createBucketName(id, olds.name));
+          const oldName = output?.bucketName ?? (yield* createBucketName(id, olds.name));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id
           // differently today. Only an explicit user-provided name can
           // force a replace.
           const name = news.name ?? oldName;
-          const oldJurisdiction =
-            output?.jurisdiction ?? olds.jurisdiction ?? "default";
-          const oldStorageClass =
-            output?.storageClass ?? olds.storageClass ?? "Standard";
+          const oldJurisdiction = output?.jurisdiction ?? olds.jurisdiction ?? "default";
+          const oldStorageClass = output?.storageClass ?? olds.storageClass ?? "Standard";
           if (
             (output?.accountId ?? accountId) !== accountId ||
             oldName !== name ||
@@ -1128,8 +1069,7 @@ export const ProviderLive = () =>
               // `accountId` is always stable across an update (a name/account
               // change is a `replace`); keep it now that `diff.stables`
               // overrides `provider.stables` rather than merging with it.
-              stables:
-                oldName === name ? ["bucketName", "accountId"] : ["accountId"],
+              stables: oldName === name ? ["bucketName", "accountId"] : ["accountId"],
             } as const;
           }
           if (!deepEqual(olds.domains, news.domains)) {
@@ -1149,11 +1089,9 @@ export const ProviderLive = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Prefer the deployed name: regenerating would target a different
           // bucket if the generator's output for this id ever drifts.
-          const name =
-            output?.bucketName ?? (yield* createBucketName(id, news.name));
+          const name = output?.bucketName ?? (yield* createBucketName(id, news.name));
           const acct = output?.accountId ?? accountId;
-          const jurisdiction =
-            output?.jurisdiction ?? news.jurisdiction ?? "default";
+          const jurisdiction = output?.jurisdiction ?? news.jurisdiction ?? "default";
 
           // Observe — fetch the bucket. R2 reports a deleted bucket as
           // `NoSuchBucket`; tolerate that so the reconciler falls
@@ -1164,9 +1102,7 @@ export const ProviderLive = () =>
               bucketName: name,
               jurisdiction,
             })
-            .pipe(
-              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
 
           // Ensure — create if missing. R2 reports a concurrent create
           // (or partial state-persistence failure) as
@@ -1231,10 +1167,8 @@ export const ProviderLive = () =>
           const attrs = {
             bucketName: observed.name ?? name,
             // Distilled widened generated string enums to open unions.
-            storageClass: (observed.storageClass ??
-              "Standard") as Bucket.StorageClass,
-            jurisdiction: (observed.jurisdiction ??
-              "default") as Bucket.Jurisdiction,
+            storageClass: (observed.storageClass ?? "Standard") as Bucket.StorageClass,
+            jurisdiction: (observed.jurisdiction ?? "default") as Bucket.Jurisdiction,
             location: normalizeLocation(observed.location),
             accountId: acct,
           };
@@ -1282,12 +1216,7 @@ export const ProviderLive = () =>
                   domain: domain.domain,
                   jurisdiction: output.jurisdiction,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    ["DomainNotFound", "NoSuchBucket"],
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag(["DomainNotFound", "NoSuchBucket"], () => Effect.void)),
             ),
             { concurrency: "unbounded" },
           );
@@ -1326,9 +1255,7 @@ export const ProviderLive = () =>
           yield* deleteBucket.pipe(
             Effect.catchTag("BucketNotEmpty", (error) =>
               Effect.sleep("2 seconds").pipe(
-                Effect.andThen(
-                  emptyBucket(output.bucketName, output.jurisdiction),
-                ),
+                Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
                 Effect.andThen(Effect.fail(error)),
               ),
             ),
@@ -1340,8 +1267,7 @@ export const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const name =
-            output?.bucketName ?? (yield* createBucketName(id, olds?.name));
+          const name = output?.bucketName ?? (yield* createBucketName(id, olds?.name));
           const acct = output?.accountId ?? accountId;
           return yield* r2
             .getBucket({
@@ -1353,10 +1279,8 @@ export const ProviderLive = () =>
               Effect.map((bucket) => ({
                 bucketName: bucket.name!,
                 // Distilled widened generated string enums to open unions.
-                storageClass: (bucket.storageClass ??
-                  "Standard") as Bucket.StorageClass,
-                jurisdiction: (bucket.jurisdiction ??
-                  "default") as Bucket.Jurisdiction,
+                storageClass: (bucket.storageClass ?? "Standard") as Bucket.StorageClass,
+                jurisdiction: (bucket.jurisdiction ?? "default") as Bucket.Jurisdiction,
                 location: normalizeLocation(bucket.location),
                 accountId: acct,
                 domains: output?.domains ?? [],
@@ -1434,14 +1358,6 @@ const r2BucketEndpointConsistencySchedule = Schedule.max([
   Schedule.recurs(5),
 ]);
 
-// R2 sub-resource reads (notably the custom-domain endpoint, which touches the
-// bucket's public-access policy) can return a transient 500 ("Failed to access
-// or modify the bucket policy"). Ride out the blip with a short bounded retry.
-const r2TransientServerErrorSchedule = Schedule.max([
-  Schedule.exponential("500 millis"),
-  Schedule.recurs(6),
-]);
-
 // Distilled widened generated string enums to open unions (`string & {}`); the
 // API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
 type CustomDomainResponse = {
@@ -1453,9 +1369,7 @@ type CustomDomainResponse = {
   status?: { ownership: string; ssl: string } | null;
 };
 
-const toCustomDomainAttributes = (
-  domain: CustomDomainResponse,
-): Bucket.CustomDomain => ({
+const toCustomDomainAttributes = (domain: CustomDomainResponse): Bucket.CustomDomain => ({
   domain: domain.domain,
   zoneId: domain.zoneId ?? undefined,
   enabled: domain.enabled ?? true,
@@ -1475,13 +1389,9 @@ const sameCustomDomainConfig = (
   deepEqual(observed.ciphers, desired.ciphers) &&
   observed.minTLS === desired.minTLS;
 
-type LifecycleRuleResponse = NonNullable<
-  r2.GetBucketLifecycleResponse["rules"]
->[number];
+type LifecycleRuleResponse = NonNullable<r2.GetBucketLifecycleResponse["rules"]>[number];
 
-const toLifecycleRule = (
-  rule: LifecycleRuleResponse,
-): Bucket.LifecycleRule => ({
+const toLifecycleRule = (rule: LifecycleRuleResponse): Bucket.LifecycleRule => ({
   id: rule.id,
   enabled: rule.enabled,
   prefix: rule.conditions.prefix ?? "",
@@ -1494,9 +1404,7 @@ const toLifecycleRule = (
   storageClassTransitions: rule.storageClassTransitions ?? undefined,
 });
 
-const normalizeLifecycleRule = (
-  rule: BucketLifecycleRule,
-): Bucket.LifecycleRule => ({
+const normalizeLifecycleRule = (rule: BucketLifecycleRule): Bucket.LifecycleRule => ({
   id: rule.id,
   enabled: rule.enabled ?? true,
   prefix: rule.prefix ?? "",

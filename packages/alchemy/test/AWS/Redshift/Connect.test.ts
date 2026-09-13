@@ -6,9 +6,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import RedshiftConnectFunctionLive, {
-  RedshiftConnectFunction,
-} from "./fixtures/connect-handler";
+import RedshiftConnectFunctionLive, { RedshiftConnectFunction } from "./fixtures/connect-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -54,10 +52,7 @@ const getInfo = (path: string) =>
         : Effect.fail(new Error(`${path} returned ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
     }),
     Effect.flatMap((res) => res.json),
     Effect.map(
@@ -94,9 +89,7 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)("Redshift.Connect", () => {
 
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
-      yield* Effect.logInfo(
-        `Redshift.Connect setup: function URL ready (${functionUrl})`,
-      );
+      yield* Effect.logInfo(`Redshift.Connect setup: function URL ready (${functionUrl})`);
     }),
     // cluster create (~5-10 min) + Lambda deploy.
     { timeout: 1_200_000 },

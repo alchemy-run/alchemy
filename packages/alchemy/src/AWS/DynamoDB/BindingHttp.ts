@@ -57,12 +57,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
  * injects the bound {@link Table}'s physical name as `TableName` and the
  * deploy-time half grants `actions` on `resources` (default: the table ARN).
  */
-export const makeTableHttpBinding = <
-  I extends { TableName?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeTableHttpBinding = <I extends { TableName?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DynamoDB.GetItem`. */
   tag: string;
   /** The distilled operation; `TableName` is injected from the table. */
@@ -145,9 +140,7 @@ export const makeTableArnHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
           ...request,
           [options.key]: yield* TableArn,
@@ -190,9 +183,7 @@ export const makeTableIamHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

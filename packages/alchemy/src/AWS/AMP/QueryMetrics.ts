@@ -41,17 +41,11 @@ export interface QueryMetricsClient {
   /** Evaluate a PromQL expression at a single instant (`api/v1/query`). */
   query(
     request: QueryMetricsRequest,
-  ): Effect.Effect<
-    PrometheusInstantResult,
-    PrometheusApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<PrometheusInstantResult, PrometheusApiError | Credentials.CredentialsError>;
   /** Evaluate a PromQL expression over a time range (`api/v1/query_range`). */
   queryRange(
     request: QueryRangeRequest,
-  ): Effect.Effect<
-    PrometheusRangeResult,
-    PrometheusApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<PrometheusRangeResult, PrometheusApiError | Credentials.CredentialsError>;
 }
 
 /**
@@ -89,6 +83,4 @@ export interface QueryMetrics extends Binding.Service<
   "AWS.AMP.QueryMetrics",
   (workspace: Workspace) => Effect.Effect<QueryMetricsClient>
 > {}
-export const QueryMetrics = Binding.Service<QueryMetrics>(
-  "AWS.AMP.QueryMetrics",
-);
+export const QueryMetrics = Binding.Service<QueryMetrics>("AWS.AMP.QueryMetrics");

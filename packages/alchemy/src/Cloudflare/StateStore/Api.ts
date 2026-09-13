@@ -10,11 +10,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  BearerTokenValidator,
-  StateApi,
-  StateAuthLive,
-} from "../../State/HttpStateApi.ts";
+import { BearerTokenValidator, StateApi, StateAuthLive } from "../../State/HttpStateApi.ts";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
 import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
@@ -120,8 +116,7 @@ export default Worker(
           const expected = yield* remoteSecret
             .get()
             .pipe(Effect.orDie, Effect.provide(RuntimeContext.phantom));
-          return !!expected &&
-            timingSafeEqual(token.trim(), Redacted.value(expected).trim())
+          return !!expected && timingSafeEqual(token.trim(), Redacted.value(expected).trim())
             ? yield* Effect.void
             : yield* new HttpApiError.Unauthorized();
         }),
@@ -200,9 +195,7 @@ export default Worker(
             .set({ stage: params.stage, fqn, value: payload as any })
             .pipe(
               Effect.tap(() =>
-                store
-                  .getByName(Store.ROOT_DO_NAME)
-                  .registerStack({ stack: params.stack }),
+                store.getByName(Store.ROOT_DO_NAME).registerStack({ stack: params.stack }),
               ),
               Effect.withSpan("state_store.setState", {
                 attributes: {
@@ -267,9 +260,7 @@ export default Worker(
             .setOutput({ stage: params.stage, value: payload as any })
             .pipe(
               Effect.tap(() =>
-                store
-                  .getByName(Store.ROOT_DO_NAME)
-                  .registerStack({ stack: params.stack }),
+                store.getByName(Store.ROOT_DO_NAME).registerStack({ stack: params.stack }),
               ),
               Effect.withSpan("state_store.setStackOutput", {
                 attributes: {
@@ -283,15 +274,11 @@ export default Worker(
         .handle("deleteStack", ({ params, query }) =>
           store
             .getByName(params.stack)
-            .deleteStack(
-              query.stage === undefined ? {} : { stage: query.stage },
-            )
+            .deleteStack(query.stage === undefined ? {} : { stage: query.stage })
             .pipe(
               Effect.flatMap(() =>
                 query.stage === undefined
-                  ? store
-                      .getByName(Store.ROOT_DO_NAME)
-                      .unregisterStack({ stack: params.stack })
+                  ? store.getByName(Store.ROOT_DO_NAME).unregisterStack({ stack: params.stack })
                   : Effect.void,
               ),
               Effect.asVoid,
@@ -300,8 +287,7 @@ export default Worker(
                   "alchemy.state_store.op": "deleteStack",
                   "alchemy.state_store.stack": params.stack,
                   "alchemy.state_store.stage": query.stage ?? "",
-                  "alchemy.state_store.scope":
-                    query.stage === undefined ? "stack" : "stage",
+                  "alchemy.state_store.scope": query.stage === undefined ? "stack" : "stage",
                 },
               }),
             ),
@@ -339,8 +325,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
     compressResponse: (response) => Effect.succeed(response),
   },
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () =>
-    Effect.die("HttpPlatform.fileWebResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
 });
 
 /**

@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  canonicalParameters,
-  observeControlTowerTags,
-  syncControlTowerTags,
-} from "./internal.ts";
+import { canonicalParameters, observeControlTowerTags, syncControlTowerTags } from "./internal.ts";
 
 export interface EnabledControlProps {
   /**
@@ -94,17 +90,13 @@ export interface EnabledControl extends Resource<
  *
  * @resource
  */
-export const EnabledControl = Resource<EnabledControl>(
-  "AWS.ControlTower.EnabledControl",
-);
+export const EnabledControl = Resource<EnabledControl>("AWS.ControlTower.EnabledControl");
 
 /**
  * An asynchronous control operation (ENABLE_CONTROL / DISABLE_CONTROL /
  * UPDATE_ENABLED_CONTROL) converged to the terminal `FAILED` status.
  */
-export class ControlOperationFailed extends Data.TaggedError(
-  "ControlOperationFailed",
-)<{
+export class ControlOperationFailed extends Data.TaggedError("ControlOperationFailed")<{
   readonly operationIdentifier: string;
   readonly status: string;
   readonly statusMessage: string | undefined;
@@ -114,9 +106,7 @@ export class ControlOperationFailed extends Data.TaggedError(
  * `EnableControl` succeeded but the enabled control's ARN could not be
  * resolved from either the operation output or `ListEnabledControls`.
  */
-export class EnabledControlArnUnavailable extends Data.TaggedError(
-  "EnabledControlArnUnavailable",
-)<{
+export class EnabledControlArnUnavailable extends Data.TaggedError("EnabledControlArnUnavailable")<{
   readonly controlIdentifier: string;
   readonly targetIdentifier: string;
 }> {}
@@ -125,9 +115,7 @@ export class EnabledControlArnUnavailable extends Data.TaggedError(
  * Internal signal that a control operation is still `IN_PROGRESS`,
  * consumed by {@link waitForControlOperation}'s bounded schedule.
  */
-class ControlOperationPending extends Data.TaggedError(
-  "ControlOperationPending",
-)<{
+class ControlOperationPending extends Data.TaggedError("ControlOperationPending")<{
   readonly operationIdentifier: string;
   readonly status: string | undefined;
 }> {}
@@ -136,21 +124,14 @@ class ControlOperationPending extends Data.TaggedError(
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
-const retryWhileControlOperationPending = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryWhileControlOperationPending = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ControlOperationPending",
     // Control operations deploy SCPs/Config rules across an OU's accounts
     // and typically take a few minutes; poll every 10s up to ~15 minutes.
-    schedule: Schedule.max([
-      Schedule.spaced("10 seconds"),
-      Schedule.recurs(90),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(90)]),
   });
 
 // Control Tower serializes control operations per OU — a concurrent
@@ -161,10 +142,7 @@ const retryWhileControlConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.max([
-      Schedule.spaced("15 seconds"),
-      Schedule.recurs(40),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(40)]),
   });
 
 const waitForControlOperation = (operationIdentifier: string) =>
@@ -195,34 +173,24 @@ const waitForControlOperation = (operationIdentifier: string) =>
   );
 
 const readEnabledControl = (enabledControlArn: string) =>
-  controltower
-    .getEnabledControl({ enabledControlIdentifier: enabledControlArn })
-    .pipe(
-      Effect.map((r) => r.enabledControlDetails),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  controltower.getEnabledControl({ enabledControlIdentifier: enabledControlArn }).pipe(
+    Effect.map((r) => r.enabledControlDetails),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  );
 
 // Find an enabled control by (controlIdentifier, targetIdentifier) —
 // covers the create-race and lost-output cases where we don't have the
 // ARN cached.
-const findEnabledControlArn = (
-  controlIdentifier: string,
-  targetIdentifier: string,
-) =>
+const findEnabledControlArn = (controlIdentifier: string, targetIdentifier: string) =>
   controltower.listEnabledControls.pages({ targetIdentifier }).pipe(
     Stream.runCollect,
     Effect.map(
       (chunk) =>
         Array.from(chunk)
           .flatMap((page) => page.enabledControls)
-          .find((summary) => summary.controlIdentifier === controlIdentifier)
-          ?.arn,
+          .find((summary) => summary.controlIdentifier === controlIdentifier)?.arn,
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 export const EnabledControlProvider = () =>
@@ -239,20 +207,15 @@ export const EnabledControlProvider = () =>
           const arn =
             output?.enabledControlArn ??
             (olds !== undefined
-              ? yield* findEnabledControlArn(
-                  olds.controlIdentifier,
-                  olds.targetIdentifier,
-                )
+              ? yield* findEnabledControlArn(olds.controlIdentifier, olds.targetIdentifier)
               : undefined);
           if (arn === undefined) return undefined;
           const details = yield* readEnabledControl(arn);
           if (details === undefined) return undefined;
           const attrs = {
             enabledControlArn: arn,
-            controlIdentifier:
-              details.controlIdentifier ?? olds?.controlIdentifier ?? "",
-            targetIdentifier:
-              details.targetIdentifier ?? olds?.targetIdentifier ?? "",
+            controlIdentifier: details.controlIdentifier ?? olds?.controlIdentifier ?? "",
+            targetIdentifier: details.targetIdentifier ?? olds?.targetIdentifier ?? "",
           };
           const tags = yield* observeControlTowerTags(arn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
@@ -270,15 +233,10 @@ export const EnabledControlProvider = () =>
           // 1. Observe — cloud state is authoritative; output is only an
           //    ARN cache.
           let arn = output?.enabledControlArn;
-          let details =
-            arn === undefined ? undefined : yield* readEnabledControl(arn);
+          let details = arn === undefined ? undefined : yield* readEnabledControl(arn);
           if (details === undefined) {
-            arn = yield* findEnabledControlArn(
-              news.controlIdentifier,
-              news.targetIdentifier,
-            );
-            details =
-              arn === undefined ? undefined : yield* readEnabledControl(arn);
+            arn = yield* findEnabledControlArn(news.controlIdentifier, news.targetIdentifier);
+            details = arn === undefined ? undefined : yield* readEnabledControl(arn);
           }
 
           // 2. Ensure — enable if missing and wait for the asynchronous
@@ -293,16 +251,11 @@ export const EnabledControlProvider = () =>
                 tags: { ...news.tags, ...internalTags },
               }),
             );
-            yield* session.note(
-              `control operation ${enabled.operationIdentifier}`,
-            );
+            yield* session.note(`control operation ${enabled.operationIdentifier}`);
             yield* waitForControlOperation(enabled.operationIdentifier);
             arn =
               enabled.arn ??
-              (yield* findEnabledControlArn(
-                news.controlIdentifier,
-                news.targetIdentifier,
-              ));
+              (yield* findEnabledControlArn(news.controlIdentifier, news.targetIdentifier));
             if (arn === undefined) {
               return yield* Effect.fail(
                 new EnabledControlArnUnavailable({
@@ -327,9 +280,7 @@ export const EnabledControlProvider = () =>
                   parameters: news.parameters,
                 }),
               );
-              yield* session.note(
-                `control operation ${updated.operationIdentifier}`,
-              );
+              yield* session.note(`control operation ${updated.operationIdentifier}`);
               yield* waitForControlOperation(updated.operationIdentifier);
             }
           }
@@ -349,15 +300,9 @@ export const EnabledControlProvider = () =>
             controltower.disableControl({
               enabledControlIdentifier: output.enabledControlArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (result !== undefined) {
-            yield* session.note(
-              `control operation ${result.operationIdentifier}`,
-            );
+            yield* session.note(`control operation ${result.operationIdentifier}`);
             yield* waitForControlOperation(result.operationIdentifier);
           }
         }),

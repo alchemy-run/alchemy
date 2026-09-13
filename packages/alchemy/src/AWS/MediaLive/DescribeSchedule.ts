@@ -32,12 +32,7 @@ export interface DescribeSchedule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<medialive.DescribeScheduleRequest, "ChannelId">,
-    ) => Effect.Effect<
-      medialive.DescribeScheduleResponse,
-      medialive.DescribeScheduleError
-    >
+    ) => Effect.Effect<medialive.DescribeScheduleResponse, medialive.DescribeScheduleError>
   >
 > {}
-export const DescribeSchedule = Binding.Service<DescribeSchedule>(
-  "AWS.MediaLive.DescribeSchedule",
-);
+export const DescribeSchedule = Binding.Service<DescribeSchedule>("AWS.MediaLive.DescribeSchedule");

@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A self-signed CA certificate generated once and checked in (never created at
 // test time, per the fixture convention). X.509 v3 with basicConstraints
@@ -48,9 +45,7 @@ const deleteTrustStoreByNameIdempotent = (name: string) =>
   elbv2.describeTrustStores({ Names: [name] }).pipe(
     Effect.flatMap((r) =>
       Effect.forEach(
-        (r.TrustStores ?? []).flatMap((t) =>
-          t.TrustStoreArn ? [t.TrustStoreArn] : [],
-        ),
+        (r.TrustStores ?? []).flatMap((t) => (t.TrustStoreArn ? [t.TrustStoreArn] : [])),
         (arn) => elbv2.deleteTrustStore({ TrustStoreArn: arn }),
       ),
     ),
@@ -68,11 +63,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const probeName =
-        `alchemy-mtls-probe-${stack.name.replace(/[^a-zA-Z0-9]/g, "")}`.slice(
-          0,
-          32,
-        );
+      const probeName = `alchemy-mtls-probe-${stack.name.replace(/[^a-zA-Z0-9]/g, "")}`.slice(
+        0,
+        32,
+      );
 
       // Pre-clean: reclaim a probe trust store leaked by a prior crashed run
       // (a leftover would turn the expected error into DuplicateTrustStoreName).
@@ -157,9 +151,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => r.TrustStores?.length ?? 0),
-          Effect.catchTag("TrustStoreNotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
     }).pipe(logLevel),

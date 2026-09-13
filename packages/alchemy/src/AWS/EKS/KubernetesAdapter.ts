@@ -133,9 +133,7 @@ const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
   const client = new AwsClient({
     accessKeyId: Redacted.value(credentials.accessKeyId),
     secretAccessKey: Redacted.value(credentials.secretAccessKey),
-    sessionToken: credentials.sessionToken
-      ? Redacted.value(credentials.sessionToken)
-      : undefined,
+    sessionToken: credentials.sessionToken ? Redacted.value(credentials.sessionToken) : undefined,
     service: "sts",
     region,
   });
@@ -209,11 +207,7 @@ export const eksConnectionOf = (options: {
 const narrowEksAuth = (connection: Connection) =>
   connection.auth.kind === "aws-eks"
     ? Effect.succeed(connection.auth)
-    : Effect.die(
-        new Error(
-          `aws-eks adapter received auth kind '${connection.auth.kind}'`,
-        ),
-      );
+    : Effect.die(new Error(`aws-eks adapter received auth kind '${connection.auth.kind}'`));
 
 /**
  * Provide a per-connection region override so a cluster in another region
@@ -223,15 +217,10 @@ const withRegion = (region: string | undefined) => {
   return <A, E, R>(self: Effect.Effect<A, E, R>) =>
     region === undefined
       ? self
-      : Effect.provideService(
-          self,
-          Region,
-          Effect.succeed(region as RegionName),
-        );
+      : Effect.provideService(self, Region, Effect.succeed(region as RegionName));
 };
 
-const createRoleName = (id: string) =>
-  createPhysicalName({ id: `${id}-pod-role`, maxLength: 64 });
+const createRoleName = (id: string) => createPhysicalName({ id: `${id}-pod-role`, maxLength: 64 });
 
 const createPolicyName = (id: string) =>
   createPhysicalName({ id: `${id}-pod-policy`, maxLength: 128 });
@@ -448,14 +437,10 @@ export const EksKubernetesAdapter = () =>
         clusterName: string;
         region?: string | undefined;
       }) {
-        const described = yield* eks
-          .describeCluster({ name: auth.clusterName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            withAws(auth.region),
-          );
+        const described = yield* eks.describeCluster({ name: auth.clusterName }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          withAws(auth.region),
+        );
         const cluster = described?.cluster;
         if (!cluster || cluster.status === "DELETING") {
           return yield* Effect.fail(
@@ -495,9 +480,7 @@ export const EksKubernetesAdapter = () =>
         }).pipe(withAws(auth.region));
       });
 
-      const identityReconcile = Effect.fn(function* (
-        options: WorkloadIdentityReconcileOptions,
-      ) {
+      const identityReconcile = Effect.fn(function* (options: WorkloadIdentityReconcileOptions) {
         const auth = yield* narrowEksAuth(options.connection);
         return yield* Effect.gen(function* () {
           const state = options.state;
@@ -555,9 +538,7 @@ export const EksKubernetesAdapter = () =>
       }) {
         const state = options.state;
         const auth =
-          options.connection !== undefined
-            ? yield* narrowEksAuth(options.connection)
-            : undefined;
+          options.connection !== undefined ? yield* narrowEksAuth(options.connection) : undefined;
         yield* Effect.gen(function* () {
           // The association is cluster-scoped: skip it when the cluster is
           // gone or DELETING (it dies with the cluster; EKS also rejects
@@ -565,17 +546,13 @@ export const EksKubernetesAdapter = () =>
           // invalid state` mid-teardown).
           if (auth !== undefined && typeof state?.associationId === "string") {
             const cluster = yield* describeLiveCluster(auth).pipe(
-              Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             );
             if (cluster) {
               yield* deleteAssociation({
                 clusterName: auth.clusterName,
                 associationId: state.associationId,
-              }).pipe(
-                Effect.catchTag("InvalidRequestException", () => Effect.void),
-              );
+              }).pipe(Effect.catchTag("InvalidRequestException", () => Effect.void));
             }
           }
           if (typeof state?.roleName === "string") {
@@ -584,9 +561,7 @@ export const EksKubernetesAdapter = () =>
         }).pipe(withAws(auth?.region));
       });
 
-      const registryResolve = Effect.fn(function* (
-        options: ImageRegistryResolveOptions,
-      ) {
+      const registryResolve = Effect.fn(function* (options: ImageRegistryResolveOptions) {
         const state = options.state;
         const repositoryName =
           typeof state?.repositoryName === "string"
@@ -596,8 +571,7 @@ export const EksKubernetesAdapter = () =>
               // layer-captured context.
               yield* createRepositoryName(options.id);
         const repositoryUri =
-          typeof state?.repositoryUri === "string" &&
-          state.repositoryName === repositoryName
+          typeof state?.repositoryUri === "string" && state.repositoryName === repositoryName
             ? state.repositoryUri
             : undefined;
         const resolved = yield* imageSource
@@ -658,9 +632,7 @@ export const EksKubernetesAdapter = () =>
           );
       });
 
-      const loadBalancerDefaults = Effect.fn(function* (options: {
-        connection: Connection;
-      }) {
+      const loadBalancerDefaults = Effect.fn(function* (options: { connection: Connection }) {
         const auth = yield* narrowEksAuth(options.connection);
         // EKS Auto Mode's built-in load balancer controller only
         // reconciles `LoadBalancer` Services whose `spec.loadBalancerClass`
@@ -670,18 +642,14 @@ export const EksKubernetesAdapter = () =>
         // default to an internet-facing NLB so the returned `url` is
         // actually reachable.
         const cluster = yield* describeLiveCluster(auth).pipe(
-          Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
         );
         return {
-          loadBalancerClass: cluster?.kubernetesNetworkConfig
-            ?.elasticLoadBalancing?.enabled
+          loadBalancerClass: cluster?.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled
             ? "eks.amazonaws.com/nlb"
             : undefined,
           annotations: {
-            "service.beta.kubernetes.io/aws-load-balancer-scheme":
-              "internet-facing",
+            "service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
           },
         };
       });

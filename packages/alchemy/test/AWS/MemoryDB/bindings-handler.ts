@@ -74,9 +74,7 @@ export default MemoryDBBindingsTestFunction.make(
         if (request.method === "GET" && pathname === "/cluster-probe") {
           const tag = yield* describeClusters({ ClusterName: name }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -98,9 +96,8 @@ export default MemoryDBBindingsTestFunction.make(
         if (request.method === "GET" && pathname === "/delete-probe") {
           const tag = yield* deleteSnapshot({ SnapshotName: name }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag(
-              ["SnapshotNotFoundFault", "ServiceLinkedRoleNotFoundFault"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["SnapshotNotFoundFault", "ServiceLinkedRoleNotFoundFault"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });

@@ -15,9 +15,7 @@ export default class LocalSendEmailWorker extends Cloudflare.Worker<LocalSendEma
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const stub = yield* Cloudflare.Email.Send(
-      Cloudflare.Email.SendEmail("STUB_EMAIL"),
-    );
+    const stub = yield* Cloudflare.Email.Send(Cloudflare.Email.SendEmail("STUB_EMAIL"));
     const live = yield* Cloudflare.Email.Send(
       Cloudflare.Email.SendEmail("LIVE_EMAIL").pipe(remote()),
     );

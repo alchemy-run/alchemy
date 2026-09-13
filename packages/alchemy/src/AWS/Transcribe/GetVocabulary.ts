@@ -28,12 +28,7 @@ export interface GetVocabulary extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.GetVocabularyRequest,
-    ) => Effect.Effect<
-      transcribe.GetVocabularyResponse,
-      transcribe.GetVocabularyError
-    >
+    ) => Effect.Effect<transcribe.GetVocabularyResponse, transcribe.GetVocabularyError>
   >
 > {}
-export const GetVocabulary = Binding.Service<GetVocabulary>(
-  "AWS.Transcribe.GetVocabulary",
-);
+export const GetVocabulary = Binding.Service<GetVocabulary>("AWS.Transcribe.GetVocabulary");

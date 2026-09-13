@@ -32,10 +32,7 @@ export interface GetImagePipeline extends Binding.Service<
   (
     pipeline: ImagePipeline,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      imagebuilder.GetImagePipelineResponse,
-      imagebuilder.GetImagePipelineError
-    >
+    () => Effect.Effect<imagebuilder.GetImagePipelineResponse, imagebuilder.GetImagePipelineError>
   >
 > {}
 export const GetImagePipeline = Binding.Service<GetImagePipeline>(

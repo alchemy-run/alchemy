@@ -34,14 +34,8 @@ export interface CreateDBClusterSnapshot extends Binding.Service<
     cluster: DBCluster,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        neptune.CreateDBClusterSnapshotMessage,
-        "DBClusterIdentifier"
-      >,
-    ) => Effect.Effect<
-      neptune.CreateDBClusterSnapshotResult,
-      neptune.CreateDBClusterSnapshotError
-    >
+      request?: Omit<neptune.CreateDBClusterSnapshotMessage, "DBClusterIdentifier">,
+    ) => Effect.Effect<neptune.CreateDBClusterSnapshotResult, neptune.CreateDBClusterSnapshotError>
   >
 > {}
 export const CreateDBClusterSnapshot = Binding.Service<CreateDBClusterSnapshot>(

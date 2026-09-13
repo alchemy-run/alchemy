@@ -18,7 +18,6 @@ import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,
@@ -221,16 +220,13 @@ class ImageNotResolved extends Data.TaggedError("Hetzner.ImageNotResolved")<{
   description: string;
 }> {}
 
-class ImageServerRequired extends Data.TaggedError(
-  "Hetzner.ImageServerRequired",
-)<{
+class ImageServerRequired extends Data.TaggedError("Hetzner.ImageServerRequired")<{
   description: string;
 }> {}
 
 const DEFAULT_TYPE: ImageType = "snapshot";
 
-const asType = (type: string): ImageType =>
-  type === "backup" ? "backup" : "snapshot";
+const asType = (type: string): ImageType => (type === "backup" ? "backup" : "snapshot");
 
 const asStatus = (status: string): ImageStatus =>
   status === "creating" || status === "unavailable" ? status : "available";
@@ -293,11 +289,7 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-const toDescription = (
-  id: string,
-  description: string | undefined,
-  existing?: string,
-) =>
+const toDescription = (id: string, description: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       description ??
@@ -321,13 +313,7 @@ const getByLabels = (labels: Record<string, string>) =>
     })
     .pipe(Effect.map(({ images }) => images[0]));
 
-const observe = Effect.fn(function* ({
-  id,
-  outputId,
-}: {
-  id: string;
-  outputId?: number;
-}) {
+const observe = Effect.fn(function* ({ id, outputId }: { id: string; outputId?: number }) {
   if (outputId !== undefined) {
     const byId = yield* getById(outputId);
     if (byId !== undefined) return byId;
@@ -387,14 +373,7 @@ const disableProtection = (id: number) =>
 
 export const ImageProvider = () =>
   Provider.succeed(Image, {
-    stables: [
-      "id",
-      "created",
-      "createdFromId",
-      "architecture",
-      "diskSize",
-      "osFlavor",
-    ],
+    stables: ["id", "created", "createdFromId", "architecture", "diskSize", "osFlavor"],
     list: Effect.fn(function* () {
       const items = yield* Services.images.listImages
         .items({
@@ -437,11 +416,7 @@ export const ImageProvider = () =>
       return owned ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const description = yield* toDescription(
-        id,
-        news.description,
-        output?.description,
-      );
+      const description = yield* toDescription(id, news.description, output?.description);
       const internalLabels = yield* createInternalLabels(id);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -454,8 +429,7 @@ export const ImageProvider = () =>
       // Observe by id only. Do not fall back to ownership labels — a
       // create-first replacement still has the old generation live under
       // the same logical id, and snapshots are not uniquely named.
-      let current =
-        output?.id !== undefined ? yield* getById(output.id) : undefined;
+      let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
 
       if (current === undefined) {
         if (desiredServerId === undefined) {
@@ -469,9 +443,7 @@ export const ImageProvider = () =>
         });
         const imageId =
           created.image?.id ??
-          created.action?.resources.find(
-            (resource) => resource.type === "image",
-          )?.id;
+          created.action?.resources.find((resource) => resource.type === "image")?.id;
         if (imageId === undefined) {
           return yield* new ImageNotResolved({
             serverId: desiredServerId,
@@ -489,8 +461,7 @@ export const ImageProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const convertToSnapshot =
-        current.type === "backup" && desiredType === "snapshot";
+      const convertToSnapshot = current.type === "backup" && desiredType === "snapshot";
       const descriptionChanged = current.description !== description;
       if (descriptionChanged || labelsChanged || convertToSnapshot) {
         const updated = yield* Services.images.updateImage({

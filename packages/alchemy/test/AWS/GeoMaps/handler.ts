@@ -82,8 +82,7 @@ export default GeoMapsTestFunction.make(
           const text = result.Blob ? new TextDecoder().decode(result.Blob) : "";
           let version: number | null = null;
           try {
-            version =
-              (JSON.parse(text) as { version?: number }).version ?? null;
+            version = (JSON.parse(text) as { version?: number }).version ?? null;
           } catch {
             version = null;
           }

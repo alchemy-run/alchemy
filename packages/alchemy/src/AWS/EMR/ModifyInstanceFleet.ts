@@ -28,10 +28,7 @@ export interface ModifyInstanceFleet extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.ModifyInstanceFleetInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.ModifyInstanceFleetResponse,
-      SVC.ModifyInstanceFleetError
-    >
+    ) => Effect.Effect<SVC.ModifyInstanceFleetResponse, SVC.ModifyInstanceFleetError>
   >
 > {}
 export const ModifyInstanceFleet = Binding.Service<ModifyInstanceFleet>(

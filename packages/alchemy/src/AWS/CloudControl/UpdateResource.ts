@@ -45,13 +45,8 @@ export interface UpdateResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: cloudcontrol.UpdateResourceInput,
-    ) => Effect.Effect<
-      cloudcontrol.UpdateResourceOutput,
-      cloudcontrol.UpdateResourceError
-    >
+    ) => Effect.Effect<cloudcontrol.UpdateResourceOutput, cloudcontrol.UpdateResourceError>
   >
 > {}
 
-export const UpdateResource = Binding.Service<UpdateResource>(
-  "AWS.CloudControl.UpdateResource",
-);
+export const UpdateResource = Binding.Service<UpdateResource>("AWS.CloudControl.UpdateResource");

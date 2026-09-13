@@ -148,12 +148,7 @@ export const makeS3ControlMrapHttpBinding = <
  * `sts:GetCallerIdentity` (needs no extra IAM permission) and injects it as
  * `AccountId`.
  */
-export const makeS3ControlAccountHttpBinding = <
-  I extends { AccountId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.S3Control.ListJobs`. */
   tag: string;
   /** The distilled operation; `AccountId` is injected. */

@@ -31,13 +31,8 @@ export interface StartCanary extends Binding.Service<
   (
     canary: Canary,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      synthetics.StartCanaryResponse,
-      synthetics.StartCanaryError
-    >
+    () => Effect.Effect<synthetics.StartCanaryResponse, synthetics.StartCanaryError>
   >
 > {}
 
-export const StartCanary = Binding.Service<StartCanary>(
-  "AWS.Synthetics.StartCanary",
-);
+export const StartCanary = Binding.Service<StartCanary>("AWS.Synthetics.StartCanary");

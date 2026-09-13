@@ -9,9 +9,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import RDSDrizzleIamFunctionLive, {
-  RDSDrizzleIamFunction,
-} from "./drizzle-iam-handler";
+import RDSDrizzleIamFunctionLive, { RDSDrizzleIamFunction } from "./drizzle-iam-handler";
 import RDSDataTestFunctionLive, { RDSDataTestFunction } from "./handler";
 import { reapRDSDataOrphans } from "./reap";
 
@@ -49,26 +47,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
     }),
   );
 
 const postJson = (url: string, body: unknown) =>
-  send(
-    HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), body),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(url), body)).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
 // The scratch stack's state store is IN MEMORY, so `sharedStack.destroy()`
 // can only see resources deployed by THIS process. A previous run killed
@@ -77,24 +70,16 @@ const postJson = (url: string, body: unknown) =>
 // The reaper deletes fixture leftovers out-of-band by deterministic
 // name-prefix / ownership tag; it runs as a pre-clean before deploy and as
 // an `ensuring` finalizer after destroy.
-const reapOrphans = Core.withProviders(
-  reapRDSDataOrphans,
-  testOptions,
-  sharedStack.name,
-);
+const reapOrphans = Core.withProviders(reapRDSDataOrphans, testOptions, sharedStack.name);
 
 describe("RDSData Bindings", () => {
   beforeAll(
     SLOW
       ? Effect.gen(function* () {
-          yield* Effect.logInfo(
-            "RDSData test setup: destroying previous resources",
-          );
+          yield* Effect.logInfo("RDSData test setup: destroying previous resources");
           yield* sharedStack.destroy();
 
-          yield* Effect.logInfo(
-            "RDSData test setup: reaping orphans from prior interrupted runs",
-          );
+          yield* Effect.logInfo("RDSData test setup: reaping orphans from prior interrupted runs");
           yield* reapOrphans;
 
           yield* Effect.logInfo(
@@ -109,12 +94,7 @@ describe("RDSData Bindings", () => {
                 drizzleIamUrl: drizzleIam.functionUrl,
               };
             }).pipe(
-              Effect.provide(
-                Layer.mergeAll(
-                  RDSDataTestFunctionLive,
-                  RDSDrizzleIamFunctionLive,
-                ),
-              ),
+              Effect.provide(Layer.mergeAll(RDSDataTestFunctionLive, RDSDrizzleIamFunctionLive)),
             ),
           );
 
@@ -132,20 +112,13 @@ describe("RDSData Bindings", () => {
             Effect.flatMap((response) =>
               response.status === 200
                 ? Effect.succeed(response)
-                : Effect.fail(
-                    new Error(`Fixture not ready: ${response.status}`),
-                  ),
+                : Effect.fail(new Error(`Fixture not ready: ${response.status}`)),
             ),
             Effect.tapError((error) =>
-              Effect.logWarning(
-                `RDSData test setup: fixture not ready yet (${String(error)})`,
-              ),
+              Effect.logWarning(`RDSData test setup: fixture not ready yet (${String(error)})`),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("10 seconds"),
-                Schedule.recurs(42),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(42)]),
             }),
           );
 
@@ -155,9 +128,7 @@ describe("RDSData Bindings", () => {
             Effect.flatMap((r) => r.json),
           )) as { clusterIdentifier: string };
           clusterIdentifier = meta.clusterIdentifier;
-          yield* Effect.logInfo(
-            `RDSData test setup: fixture ready (cluster ${clusterIdentifier})`,
-          );
+          yield* Effect.logInfo(`RDSData test setup: fixture ready (cluster ${clusterIdentifier})`);
 
           // Create the shared table once for all binding tests.
           yield* postJson(`${baseUrl}/setup`, {});
@@ -181,26 +152,21 @@ describe("RDSData Bindings", () => {
           // confirmation, not a long poll.
           if (clusterIdentifier) {
             yield* Core.withProviders(
-              rds
-                .describeDBClusters({ DBClusterIdentifier: clusterIdentifier })
-                .pipe(
-                  Effect.flatMap((response) =>
-                    (response.DBClusters ?? []).length === 0
-                      ? Effect.void
-                      : Effect.fail(
-                          new ClusterStillPresent({
-                            clusterIdentifier: clusterIdentifier!,
-                          }),
-                        ),
-                  ),
-                  Effect.catchTag("DBClusterNotFoundFault", () => Effect.void),
-                  Effect.retry({
-                    schedule: Schedule.max([
-                      Schedule.spaced("15 seconds"),
-                      Schedule.recurs(8),
-                    ]),
-                  }),
+              rds.describeDBClusters({ DBClusterIdentifier: clusterIdentifier }).pipe(
+                Effect.flatMap((response) =>
+                  (response.DBClusters ?? []).length === 0
+                    ? Effect.void
+                    : Effect.fail(
+                        new ClusterStillPresent({
+                          clusterIdentifier: clusterIdentifier!,
+                        }),
+                      ),
                 ),
+                Effect.catchTag("DBClusterNotFoundFault", () => Effect.void),
+                Effect.retry({
+                  schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(8)]),
+                }),
+              ),
               testOptions,
               sharedStack.name,
             );
@@ -228,9 +194,9 @@ describe("RDSData Bindings", () => {
           expect(insert.success).toBe(true);
           expect(insert.numberOfRecordsUpdated).toBe(1);
 
-          const select = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/select?id=1`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const select = (yield* send(HttpClientRequest.get(`${baseUrl}/select?id=1`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             records: { longValue?: number; stringValue?: string }[][];
           };
           expect(select.records).toHaveLength(1);
@@ -244,9 +210,9 @@ describe("RDSData Bindings", () => {
       "returns no records for a missing row",
       (_stack) =>
         Effect.gen(function* () {
-          const select = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/select?id=999999`),
-          ).pipe(Effect.flatMap((r) => r.json))) as { records: unknown[] };
+          const select = (yield* send(HttpClientRequest.get(`${baseUrl}/select?id=999999`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { records: unknown[] };
           expect(select.records).toHaveLength(0);
         }),
       { timeout: 120_000 },
@@ -266,9 +232,9 @@ describe("RDSData Bindings", () => {
           })) as { updateResults: unknown[] };
           expect(batch.updateResults).toHaveLength(2);
 
-          const select = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/select?id=11`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const select = (yield* send(HttpClientRequest.get(`${baseUrl}/select?id=11`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             records: { longValue?: number; stringValue?: string }[][];
           };
           expect(select.records[0]![1]!.stringValue).toBe("batch-b");
@@ -303,9 +269,9 @@ describe("RDSData Bindings", () => {
           })) as { transactionId: string; transactionStatus: string };
           expect(result.transactionId).toBeTruthy();
 
-          const select = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/select?id=30`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const select = (yield* send(HttpClientRequest.get(`${baseUrl}/select?id=30`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             records: { longValue?: number; stringValue?: string }[][];
           };
           expect(select.records).toHaveLength(1);
@@ -326,9 +292,9 @@ describe("RDSData Bindings", () => {
           })) as { transactionId: string; transactionStatus: string };
           expect(result.transactionId).toBeTruthy();
 
-          const select = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/select?id=40`),
-          ).pipe(Effect.flatMap((r) => r.json))) as { records: unknown[] };
+          const select = (yield* send(HttpClientRequest.get(`${baseUrl}/select?id=40`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { records: unknown[] };
           expect(select.records).toHaveLength(0);
         }),
       { timeout: 120_000 },
@@ -343,9 +309,9 @@ describe("RDSData Bindings", () => {
       "resolves host, port, database and credentials from the secret",
       (_stack) =>
         Effect.gen(function* () {
-          const info = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/connect-info`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const info = (yield* send(HttpClientRequest.get(`${baseUrl}/connect-info`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             host: string;
             port: number;
             database?: string;
@@ -374,9 +340,9 @@ describe("RDSData Bindings", () => {
       "mints an IAM auth token as the password and can re-mint via refreshPassword",
       (_stack) =>
         Effect.gen(function* () {
-          const info = (yield* send(
-            HttpClientRequest.get(`${drizzleUrl}/connect-info`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const info = (yield* send(HttpClientRequest.get(`${drizzleUrl}/connect-info`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             host: string;
             port: number;
             database?: string;
@@ -401,9 +367,9 @@ describe("RDSData Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           // Socket sanity check first — TLS + token auth + in-VPC route.
-          const health = (yield* send(
-            HttpClientRequest.get(`${drizzleUrl}/drizzle-health`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const health = (yield* send(HttpClientRequest.get(`${drizzleUrl}/drizzle-health`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             rows: { one: number }[];
           };
           expect(health.rows[0]?.one).toBe(1);
@@ -414,9 +380,9 @@ describe("RDSData Bindings", () => {
             id: 60,
             title: "written-via-data-api",
           });
-          const todos = (yield* send(
-            HttpClientRequest.get(`${drizzleUrl}/drizzle-todos`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const todos = (yield* send(HttpClientRequest.get(`${drizzleUrl}/drizzle-todos`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             rows: { count: number }[];
           };
           expect(todos.rows[0]!.count).toBeGreaterThanOrEqual(1);

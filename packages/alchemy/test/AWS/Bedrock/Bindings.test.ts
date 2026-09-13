@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "BedrockBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,28 +35,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe("Bedrock Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Bedrock test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Bedrock test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Bedrock test setup: deploying fixture");
@@ -73,9 +63,7 @@ describe("Bedrock Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `Bedrock test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Bedrock test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -83,9 +71,7 @@ describe("Bedrock Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Bedrock test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Bedrock test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -102,9 +88,9 @@ describe("Bedrock Bindings", () => {
       "counts input tokens without invoking the model",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/count-tokens`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/count-tokens`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             inputTokens: number;
           };
 
@@ -119,9 +105,9 @@ describe("Bedrock Bindings", () => {
       "reranks inline documents by relevance to the query",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/rerank`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/rerank`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             results: Array<{ index: number; relevanceScore: number }>;
           };
 
@@ -141,9 +127,9 @@ describe("Bedrock Bindings", () => {
       "invokes the bound agent alias and streams a completion",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/invoke-agent`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/invoke-agent`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             sessionId: string;
             chunkEvents: number;
             text: string;
@@ -163,9 +149,9 @@ describe("Bedrock Bindings", () => {
       "reads and clears the agent's long-term memory for a memory id",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/agent-memory`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/agent-memory`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             memoryContents: number;
             deleted: boolean;
           };
@@ -185,9 +171,9 @@ describe("Bedrock Bindings", () => {
       "converses with the bound model and returns a completion",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/converse`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/converse`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             text: string;
             stopReason: string;
             outputTokens: number;
@@ -208,9 +194,9 @@ describe("Bedrock Bindings", () => {
       "streams a conversation as typed events",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/converse-stream`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/converse-stream`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             text: string;
             deltaEvents: number;
             totalEvents: number;
@@ -254,9 +240,9 @@ describe("Bedrock Bindings", () => {
       "invokes the bound model with a raw payload and streams the response",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/invoke-model`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/invoke-model`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             contentType: string;
             text: string;
             stopReason: string;

@@ -38,13 +38,8 @@ export interface PutEvaluations extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.PutEvaluationsRequest,
-    ) => Effect.Effect<
-      config.PutEvaluationsResponse,
-      config.PutEvaluationsError
-    >
+    ) => Effect.Effect<config.PutEvaluationsResponse, config.PutEvaluationsError>
   >
 > {}
 
-export const PutEvaluations = Binding.Service<PutEvaluations>(
-  "AWS.Config.PutEvaluations",
-);
+export const PutEvaluations = Binding.Service<PutEvaluations>("AWS.Config.PutEvaluations");

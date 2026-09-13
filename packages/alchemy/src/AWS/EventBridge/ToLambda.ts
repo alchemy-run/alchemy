@@ -14,11 +14,7 @@ interface EventDescriptor {
 
 export interface LambdaRouteTargetProps extends Pick<
   RuleTarget,
-  | "Input"
-  | "InputPath"
-  | "InputTransformer"
-  | "RetryPolicy"
-  | "DeadLetterConfig"
+  "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
 > {}
 
 /**
@@ -50,8 +46,7 @@ export const toLambda = (
   props: LambdaRouteTargetProps = {},
 ) =>
   Effect.gen(function* () {
-    const routeId =
-      descriptor.id ?? createRouteId(descriptor, `${fn.LogicalId}Lambda`);
+    const routeId = descriptor.id ?? createRouteId(descriptor, `${fn.LogicalId}Lambda`);
 
     const rule = yield* Rule(routeId, {
       description: descriptor.props?.description,

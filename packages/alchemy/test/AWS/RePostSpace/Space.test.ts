@@ -11,17 +11,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/reconcile/delete paths depend on. Runs
 // in every CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "getSpace on a nonexistent space fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        repostspace.getSpace({
-          spaceId: "SPalchemynonexistentprobe0",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getSpace on a nonexistent space fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      repostspace.getSpace({
+        spaceId: "SPalchemynonexistentprobe0",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Deletion is verified as INITIATED (a DELETE* status, irreversible) or
@@ -30,21 +28,14 @@ const assertSpaceDeleting = (spaceId: string) =>
   Effect.gen(function* () {
     const status = yield* repostspace.getSpace({ spaceId }).pipe(
       Effect.map((space) => space.status),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && !status.startsWith("DELETE")) {
-      return yield* Effect.fail(
-        new Error(`space '${spaceId}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`space '${spaceId}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -87,9 +78,7 @@ test.provider.skipIf(!process.env.AWS_TEST_REPOSTSPACE)(
       expect(observed.tier).toBe("BASIC");
 
       // In-place update (no replacement): description changes, id is stable.
-      const { space: updated } = yield* stack.deploy(
-        make("alchemy repostspace test (updated)"),
-      );
+      const { space: updated } = yield* stack.deploy(make("alchemy repostspace test (updated)"));
       expect(updated.spaceId).toBe(space.spaceId);
       expect(updated.description).toBe("alchemy repostspace test (updated)");
 

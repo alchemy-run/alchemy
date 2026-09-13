@@ -53,8 +53,7 @@ export default TextractTestFunction.make(
     const analyzeID = yield* Textract.AnalyzeID();
 
     // --- asynchronous jobs ---
-    const startDocumentTextDetection =
-      yield* Textract.StartDocumentTextDetection();
+    const startDocumentTextDetection = yield* Textract.StartDocumentTextDetection();
     const getDocumentTextDetection = yield* Textract.GetDocumentTextDetection();
     const startDocumentAnalysis = yield* Textract.StartDocumentAnalysis();
     const getDocumentAnalysis = yield* Textract.GetDocumentAnalysis();
@@ -62,8 +61,7 @@ export default TextractTestFunction.make(
     const getExpenseAnalysis = yield* Textract.GetExpenseAnalysis();
     const startLendingAnalysis = yield* Textract.StartLendingAnalysis();
     const getLendingAnalysis = yield* Textract.GetLendingAnalysis();
-    const getLendingAnalysisSummary =
-      yield* Textract.GetLendingAnalysisSummary();
+    const getLendingAnalysisSummary = yield* Textract.GetLendingAnalysisSummary();
 
     // --- adapter management ---
     const listAdapters = yield* Textract.ListAdapters();
@@ -80,14 +78,11 @@ export default TextractTestFunction.make(
 
     // Textract's adapter management APIs throttle at ~1 TPS; bounded backoff
     // absorbs the bursts the adapter routes emit.
-    const throttleRetry = <A, E extends { readonly _tag: string }>(
-      effect: Effect.Effect<A, E>,
-    ) =>
+    const throttleRetry = <A, E extends { readonly _tag: string }>(effect: Effect.Effect<A, E>) =>
       effect.pipe(
         Effect.retry({
           while: (e): boolean =>
-            e._tag === "ProvisionedThroughputExceededException" ||
-            e._tag === "ThrottlingException",
+            e._tag === "ProvisionedThroughputExceededException" || e._tag === "ThrottlingException",
           schedule: Schedule.exponential("1 second"),
           times: 5,
         }),
@@ -238,17 +233,13 @@ export default TextractTestFunction.make(
         // the typed not-found/validation paths. An IAM gap would surface
         // AccessDeniedException (a 500 through the handler's orDie), so a
         // typed tag here proves the grant end-to-end.
-        if (
-          request.method === "GET" &&
-          pathname === "/adapter-version-probes"
-        ) {
+        if (request.method === "GET" && pathname === "/adapter-version-probes") {
           const getVersionProbe = yield* throttleRetry(
             getAdapterVersion({ AdapterVersion: "999" }),
           ).pipe(
             Effect.map(() => "unexpected-success"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           // DeleteAdapterVersion is idempotent — deleting a nonexistent
@@ -258,11 +249,7 @@ export default TextractTestFunction.make(
           ).pipe(
             Effect.map(() => "success"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "ValidationException",
-                "ConflictException",
-              ],
+              ["ResourceNotFoundException", "ValidationException", "ConflictException"],
               (e) => Effect.succeed(e._tag),
             ),
           );

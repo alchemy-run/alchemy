@@ -41,10 +41,7 @@ export interface CreateMultipartUpload extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateMultipartUploadRequest,
-    ) => Effect.Effect<
-      S3.CreateMultipartUploadOutput,
-      S3.CreateMultipartUploadError
-    >
+    ) => Effect.Effect<S3.CreateMultipartUploadOutput, S3.CreateMultipartUploadError>
   >
 > {}
 

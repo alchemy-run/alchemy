@@ -25,25 +25,16 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
  */
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import {
-  RELOAD_CONTAINER_PORT,
-  RELOAD_CONTEXT_DIR,
-} from "./fixtures/reload/container.ts";
+import { RELOAD_CONTAINER_PORT, RELOAD_CONTEXT_DIR } from "./fixtures/reload/container.ts";
 import ReloadContainerWorker from "./fixtures/reload/worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -97,10 +88,7 @@ describe.sequential("LocalContainerReload", () => {
           path.join(RELOAD_CONTEXT_DIR, "Dockerfile"),
           dockerfile("baked-v1"),
         );
-        yield* fs.writeFileString(
-          path.join(RELOAD_CONTEXT_DIR, "index.html"),
-          "content-v1\n",
-        );
+        yield* fs.writeFileString(path.join(RELOAD_CONTEXT_DIR, "index.html"), "content-v1\n");
 
         const deploy = Effect.gen(function* () {
           const worker = yield* ReloadContainerWorker;
@@ -118,19 +106,13 @@ describe.sequential("LocalContainerReload", () => {
         // ── 1. content change + REDEPLOY: the diff must see it (regression:
         // the sidecar-lifetime artifact memo made every later plan compare
         // the first run's hash and noop forever) ──
-        yield* fs.writeFileString(
-          path.join(RELOAD_CONTEXT_DIR, "index.html"),
-          "content-v2\n",
-        );
+        yield* fs.writeFileString(path.join(RELOAD_CONTEXT_DIR, "index.html"), "content-v2\n");
         yield* stack.deploy(deploy);
         yield* pollText({ url, path: "/index.html", expected: "content-v2" });
 
         // ── 2. content change, NO deploy: the worker runner's context
         // watcher must rebuild + restart on its own ──
-        yield* fs.writeFileString(
-          path.join(RELOAD_CONTEXT_DIR, "index.html"),
-          "content-v3\n",
-        );
+        yield* fs.writeFileString(path.join(RELOAD_CONTEXT_DIR, "index.html"), "content-v3\n");
         yield* pollText({ url, path: "/index.html", expected: "content-v3" });
 
         // ── 3. the DOCKERFILE itself, NO deploy ──

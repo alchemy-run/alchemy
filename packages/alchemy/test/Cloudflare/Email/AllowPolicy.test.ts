@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloudflare Email Security (Area 1) is an enterprise add-on — the standard
 // testing account has no entitlement and every settings call fails with the
@@ -70,17 +67,15 @@ test.provider.skipIf(entitled || !reachable)(
 
       // The testing account lacks the Email Security entitlement — the
       // distilled list call must fail with the typed entitlement tag.
-      const error = yield* emailSecurity.listSettingAllowPolicies
-        .items({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-          Effect.flip,
-        );
+      const error = yield* emailSecurity.listSettingAllowPolicies.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+        Effect.flip,
+      );
       expect(error._tag).toEqual("EmailSecurityNotEntitled");
 
       yield* stack.destroy();
@@ -97,9 +92,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.AllowPolicy,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.AllowPolicy);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
 
@@ -126,9 +119,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.AllowPolicy,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.AllowPolicy);
       const all = yield* provider.list();
       expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
 

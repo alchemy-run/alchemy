@@ -110,16 +110,11 @@ export default SchedulerTestFunction.make(
           return yield* listSchedules({ NamePrefix: namePrefix }).pipe(
             Effect.flatMap((listed) =>
               HttpServerResponse.json({
-                names: (listed.Schedules ?? []).flatMap((s) =>
-                  s.Name ? [s.Name] : [],
-                ),
+                names: (listed.Schedules ?? []).flatMap((s) => (s.Name ? [s.Name] : [])),
               }),
             ),
             Effect.catch((e) =>
-              HttpServerResponse.json(
-                { error: e._tag, message: String(e) },
-                { status: 424 },
-              ),
+              HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
             ),
           );
         }
@@ -128,12 +123,8 @@ export default SchedulerTestFunction.make(
           const name = pathname.slice("/schedules/".length);
 
           if (request.method === "POST") {
-            const delaySeconds = Number(
-              url.searchParams.get("delaySeconds") ?? "30",
-            );
-            const fireAt = yield* Effect.sync(
-              () => new Date(Date.now() + delaySeconds * 1000),
-            );
+            const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "30");
+            const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
             // One-shot at() expressions take second granularity, no timezone
             // suffix (UTC by default): at(yyyy-mm-ddThh:mm:ss)
             const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
@@ -146,11 +137,7 @@ export default SchedulerTestFunction.make(
                 Arn: yield* sinkQueueArn,
                 Input: JSON.stringify({ marker: name }),
               },
-            }).pipe(
-              Effect.catchTag("ConflictException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            }).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
 
             if (created === undefined) {
               return yield* HttpServerResponse.json(
@@ -165,14 +152,9 @@ export default SchedulerTestFunction.make(
           }
 
           if (request.method === "PUT") {
-            const delaySeconds = Number(
-              url.searchParams.get("delaySeconds") ?? "900",
-            );
-            const description =
-              url.searchParams.get("description") ?? undefined;
-            const fireAt = yield* Effect.sync(
-              () => new Date(Date.now() + delaySeconds * 1000),
-            );
+            const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "900");
+            const description = url.searchParams.get("description") ?? undefined;
+            const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
             const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
 
             // UpdateSchedule is a full PUT — resend the complete config.
@@ -185,17 +167,10 @@ export default SchedulerTestFunction.make(
                 Arn: yield* sinkQueueArn,
                 Input: JSON.stringify({ marker: name }),
               },
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
             if (updated === undefined) {
-              return yield* HttpServerResponse.json(
-                { error: "Not found", name },
-                { status: 404 },
-              );
+              return yield* HttpServerResponse.json({ error: "Not found", name }, { status: 404 });
             }
             return yield* HttpServerResponse.json({
               scheduleArn: updated.ScheduleArn,
@@ -205,15 +180,10 @@ export default SchedulerTestFunction.make(
 
           if (request.method === "GET") {
             const found = yield* getSchedule({ Name: name }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
             if (found === undefined) {
-              return yield* HttpServerResponse.json(
-                { error: "Not found", name },
-                { status: 404 },
-              );
+              return yield* HttpServerResponse.json({ error: "Not found", name }, { status: 404 });
             }
             return yield* HttpServerResponse.json({
               arn: found.Arn,
@@ -227,14 +197,9 @@ export default SchedulerTestFunction.make(
           if (request.method === "DELETE") {
             const deleted = yield* deleteSchedule({ Name: name }).pipe(
               Effect.as(true),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(false),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
             );
-            return yield* HttpServerResponse.json(
-              { deleted },
-              { status: deleted ? 200 : 404 },
-            );
+            return yield* HttpServerResponse.json({ deleted }, { status: deleted ? 200 : 404 });
           }
         }
 

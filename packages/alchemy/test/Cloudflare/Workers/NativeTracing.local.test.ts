@@ -22,10 +22,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "local Cloudflare.Telemetry() does not break the Worker under emulation",
@@ -49,10 +46,7 @@ test.provider(
       yield* expectUrlContains(`${url}/work?id=local-work`, "native-did-work");
       yield* expectUrlContains(`${url}/fanout?id=local-fanout`, "local-fanout");
       yield* expectUrlContains(`${url}/exits?id=local-exits`, "local-exits");
-      yield* expectUrlContains(
-        `${url}/rpc?id=local-rpc`,
-        "native-did-rpc:do-ok",
-      );
+      yield* expectUrlContains(`${url}/rpc?id=local-rpc`, "native-did-rpc:do-ok");
       yield* expectUrlContains(`${url}/enqueue?id=local-queue`, "local-queue");
       yield* expectUrlContains(`${url}/sampled`, "native-did-sample");
 
@@ -119,10 +113,7 @@ const compositionTest = (order: "cf-last" | "otlp-last") =>
           );
 
         yield* expectUrlContains(deployed.producer.url!, "native-tracing-ok");
-        yield* expectUrlContains(
-          `${deployed.producer.url}/work`,
-          "native-did-work",
-        );
+        yield* expectUrlContains(`${deployed.producer.url}/work`, "native-did-work");
 
         yield* Effect.sync(() => collector.completedRequests.value).pipe(
           Effect.repeat({

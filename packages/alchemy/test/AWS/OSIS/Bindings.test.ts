@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "OSISBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,26 +33,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("OSIS Bindings", () => {
   beforeAll(
@@ -74,9 +64,7 @@ describe.sequential("OSIS Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `OSIS test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`OSIS test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -84,9 +72,7 @@ describe.sequential("OSIS Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `OSIS test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`OSIS test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -130,24 +116,20 @@ describe.sequential("OSIS Bindings", () => {
   });
 
   describe("ListPipelineBlueprints + GetPipelineBlueprint", () => {
-    test.provider(
-      "lists the blueprint catalog and fetches one template",
-      (_stack) =>
-        Effect.gen(function* () {
-          const { names } = (yield* getJson("/blueprints")) as {
-            names: string[];
-          };
-          expect(names.length).toBeGreaterThan(0);
+    test.provider("lists the blueprint catalog and fetches one template", (_stack) =>
+      Effect.gen(function* () {
+        const { names } = (yield* getJson("/blueprints")) as {
+          names: string[];
+        };
+        expect(names.length).toBeGreaterThan(0);
 
-          const response = (yield* getJson(
-            `/blueprint?name=${encodeURIComponent(names[0]!)}`,
-          )) as {
-            name: string;
-            hasBody: boolean;
-          };
-          expect(response.name).toBe(names[0]);
-          expect(response.hasBody).toBe(true);
-        }),
+        const response = (yield* getJson(`/blueprint?name=${encodeURIComponent(names[0]!)}`)) as {
+          name: string;
+          hasBody: boolean;
+        };
+        expect(response.name).toBe(names[0]);
+        expect(response.hasBody).toBe(true);
+      }),
     );
   });
 

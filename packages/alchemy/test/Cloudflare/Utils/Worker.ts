@@ -26,19 +26,15 @@ export const expectWorkersDevSubdomain = Effect.fn(function* (
   accountId: string,
   expected: boolean,
 ) {
-  const final = yield* workers
-    .getScriptSubdomain({ accountId, scriptName: workerName })
-    .pipe(
-      Effect.flatMap((s) =>
-        s.enabled === expected
-          ? Effect.succeed(s)
-          : Effect.fail(
-              `subdomain not yet ${expected ? "enabled" : "disabled"}`,
-            ),
-      ),
-      Effect.tapError(Effect.logInfo),
-      Effect.retry({ schedule: Schedule.spaced("500 millis") }),
-    );
+  const final = yield* workers.getScriptSubdomain({ accountId, scriptName: workerName }).pipe(
+    Effect.flatMap((s) =>
+      s.enabled === expected
+        ? Effect.succeed(s)
+        : Effect.fail(`subdomain not yet ${expected ? "enabled" : "disabled"}`),
+    ),
+    Effect.tapError(Effect.logInfo),
+    Effect.retry({ schedule: Schedule.spaced("500 millis") }),
+  );
   expect(final.enabled).toBe(expected);
 });
 
@@ -56,20 +52,17 @@ export const expectWorkersDevPreviews = Effect.fn(function* (
   accountId: string,
   expected: { enabled: boolean; previewsEnabled: boolean },
 ) {
-  const final = yield* workers
-    .getScriptSubdomain({ accountId, scriptName: workerName })
-    .pipe(
-      Effect.flatMap((s) =>
-        s.enabled === expected.enabled &&
-        s.previewsEnabled === expected.previewsEnabled
-          ? Effect.succeed(s)
-          : Effect.fail(
-              `subdomain not yet { enabled: ${expected.enabled}, previewsEnabled: ${expected.previewsEnabled} }`,
-            ),
-      ),
-      Effect.tapError(Effect.logInfo),
-      Effect.retry({ schedule: Schedule.spaced("500 millis") }),
-    );
+  const final = yield* workers.getScriptSubdomain({ accountId, scriptName: workerName }).pipe(
+    Effect.flatMap((s) =>
+      s.enabled === expected.enabled && s.previewsEnabled === expected.previewsEnabled
+        ? Effect.succeed(s)
+        : Effect.fail(
+            `subdomain not yet { enabled: ${expected.enabled}, previewsEnabled: ${expected.previewsEnabled} }`,
+          ),
+    ),
+    Effect.tapError(Effect.logInfo),
+    Effect.retry({ schedule: Schedule.spaced("500 millis") }),
+  );
   expect(final).toEqual(expected);
 });
 
@@ -77,10 +70,7 @@ export const expectWorkersDevPreviews = Effect.fn(function* (
  * Look up a worker by name. Returns `undefined` if no script with that
  * name exists in the account.
  */
-export const findWorker = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
+export const findWorker = Effect.fn(function* (workerName: string, accountId: string) {
   const matches = yield* workers.searchScript({
     accountId,
     name: workerName,
@@ -93,10 +83,7 @@ export const findWorker = Effect.fn(function* (
  * Useful for asserting `alchemy:stack:*` / `alchemy:stage:*` ownership
  * tags without round-tripping through `searchScript`.
  */
-export const getWorkerTags = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
+export const getWorkerTags = Effect.fn(function* (workerName: string, accountId: string) {
   const settings = yield* workers.getScriptScriptAndVersionSetting({
     accountId,
     scriptName: workerName,
@@ -109,10 +96,7 @@ export const getWorkerTags = Effect.fn(function* (
  * checkpoint that doesn't take a propagation dependency on the
  * workers.dev subdomain.
  */
-export const expectWorkerExists = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
+export const expectWorkerExists = Effect.fn(function* (workerName: string, accountId: string) {
   const settings = yield* workers.getScriptScriptAndVersionSetting({
     accountId,
     scriptName: workerName,
@@ -138,9 +122,6 @@ export const waitForWorkerToBeDeleted = Effect.fn(function* (
     // Deletion propagates in stages: getScript can briefly report the
     // worker as existing-but-empty ("has no versions") before the 10007
     // not-found lands. Both mean the worker is gone for our purposes.
-    Effect.catchTag(
-      ["WorkerNotFound", "WorkerHasNoVersions"],
-      () => Effect.void,
-    ),
+    Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.void),
   );
 });

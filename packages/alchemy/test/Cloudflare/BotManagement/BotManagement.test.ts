@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -115,9 +109,9 @@ describe.sequential("BotManagement", () => {
           expect(created.zoneId).toEqual(zoneId);
           expect(created.sbfmDefinitelyAutomated).toEqual(target);
           // Snapshot captured the pre-management value.
-          expect(
-            created.initialSettings.sbfmDefinitelyAutomated ?? null,
-          ).toEqual(original.sbfmDefinitelyAutomated ?? null);
+          expect(created.initialSettings.sbfmDefinitelyAutomated ?? null).toEqual(
+            original.sbfmDefinitelyAutomated ?? null,
+          );
 
           const live1 = yield* getConfig(zoneId);
           expect(live1.sbfmDefinitelyAutomated).toEqual(target);
@@ -134,9 +128,9 @@ describe.sequential("BotManagement", () => {
           );
           expect(updated.zoneId).toEqual(zoneId);
           expect(updated.sbfmDefinitelyAutomated).toEqual(target2);
-          expect(
-            updated.initialSettings.sbfmDefinitelyAutomated ?? null,
-          ).toEqual(original.sbfmDefinitelyAutomated ?? null);
+          expect(updated.initialSettings.sbfmDefinitelyAutomated ?? null).toEqual(
+            original.sbfmDefinitelyAutomated ?? null,
+          );
 
           const live2 = yield* getConfig(zoneId);
           expect(live2.sbfmDefinitelyAutomated).toEqual(target2);
@@ -148,9 +142,7 @@ describe.sequential("BotManagement", () => {
 
           const after = yield* getConfig(zoneId);
           if (original.sbfmDefinitelyAutomated != null) {
-            expect(after.sbfmDefinitelyAutomated).toEqual(
-              original.sbfmDefinitelyAutomated,
-            );
+            expect(after.sbfmDefinitelyAutomated).toEqual(original.sbfmDefinitelyAutomated);
           }
         }).pipe(Effect.ensuring(restoreSbfm(zoneId, original)));
 
@@ -183,9 +175,7 @@ describe.sequential("BotManagement", () => {
         expect(afterDeploy.sbfmDefinitelyAutomated ?? null).toEqual(
           before.sbfmDefinitelyAutomated ?? null,
         );
-        expect(afterDeploy.sbfmVerifiedBots ?? null).toEqual(
-          before.sbfmVerifiedBots ?? null,
-        );
+        expect(afterDeploy.sbfmVerifiedBots ?? null).toEqual(before.sbfmVerifiedBots ?? null);
         expect(afterDeploy.sbfmStaticResourceProtection ?? null).toEqual(
           before.sbfmStaticResourceProtection ?? null,
         );
@@ -255,9 +245,7 @@ describe.sequential("BotManagement", () => {
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.BotManagement.BotManagement,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.BotManagement.BotManagement);
         const all = yield* provider.list();
 
         expect(all.length).toBeGreaterThan(0);

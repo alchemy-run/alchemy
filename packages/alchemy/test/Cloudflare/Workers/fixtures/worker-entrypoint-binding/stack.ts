@@ -4,14 +4,8 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index";
 import type { Api } from "./entrypoint-target-worker.ts";
 
-const targetMain = pathe.resolve(
-  import.meta.dirname,
-  "entrypoint-target-worker.ts",
-);
-const callerMain = pathe.resolve(
-  import.meta.dirname,
-  "entrypoint-caller-worker.ts",
-);
+const targetMain = pathe.resolve(import.meta.dirname, "entrypoint-target-worker.ts");
+const callerMain = pathe.resolve(import.meta.dirname, "entrypoint-caller-worker.ts");
 
 export const Caller = (target: Cloudflare.Worker) =>
   Cloudflare.Worker("EntrypointCaller", {

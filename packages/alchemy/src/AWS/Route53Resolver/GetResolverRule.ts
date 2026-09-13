@@ -28,9 +28,7 @@ export interface GetResolverRule extends Binding.Service<
   "AWS.Route53Resolver.GetResolverRule",
   (
     rule: ResolverRule,
-  ) => Effect.Effect<
-    () => Effect.Effect<r53r.GetResolverRuleResponse, r53r.GetResolverRuleError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<r53r.GetResolverRuleResponse, r53r.GetResolverRuleError>>
 > {}
 
 export const GetResolverRule = Binding.Service<GetResolverRule>(

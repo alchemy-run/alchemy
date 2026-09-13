@@ -36,6 +36,4 @@ export interface ListAlerts extends Binding.Service<
     ) => Effect.Effect<medialive.ListAlertsResponse, medialive.ListAlertsError>
   >
 > {}
-export const ListAlerts = Binding.Service<ListAlerts>(
-  "AWS.MediaLive.ListAlerts",
-);
+export const ListAlerts = Binding.Service<ListAlerts>("AWS.MediaLive.ListAlerts");

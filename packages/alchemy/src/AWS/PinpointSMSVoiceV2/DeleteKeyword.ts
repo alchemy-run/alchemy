@@ -40,12 +40,7 @@ export interface DeleteKeyword extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteKeywordRequest,
-    ) => Effect.Effect<
-      smsvoice.DeleteKeywordResult,
-      smsvoice.DeleteKeywordError
-    >
+    ) => Effect.Effect<smsvoice.DeleteKeywordResult, smsvoice.DeleteKeywordError>
   >
 > {}
-export const DeleteKeyword = Binding.Service<DeleteKeyword>(
-  "AWS.PinpointSMSVoiceV2.DeleteKeyword",
-);
+export const DeleteKeyword = Binding.Service<DeleteKeyword>("AWS.PinpointSMSVoiceV2.DeleteKeyword");

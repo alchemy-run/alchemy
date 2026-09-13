@@ -35,10 +35,7 @@ export interface ListImagePipelineImages extends Binding.Service<
     pipeline: ImagePipeline,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        imagebuilder.ListImagePipelineImagesRequest,
-        "imagePipelineArn"
-      >,
+      request?: Omit<imagebuilder.ListImagePipelineImagesRequest, "imagePipelineArn">,
     ) => Effect.Effect<
       imagebuilder.ListImagePipelineImagesResponse,
       imagebuilder.ListImagePipelineImagesError

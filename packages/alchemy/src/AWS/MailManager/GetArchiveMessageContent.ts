@@ -30,13 +30,9 @@ export interface GetArchiveMessageContent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: mm.GetArchiveMessageContentRequest,
-    ) => Effect.Effect<
-      mm.GetArchiveMessageContentResponse,
-      mm.GetArchiveMessageContentError
-    >
+    ) => Effect.Effect<mm.GetArchiveMessageContentResponse, mm.GetArchiveMessageContentError>
   >
 > {}
-export const GetArchiveMessageContent =
-  Binding.Service<GetArchiveMessageContent>(
-    "AWS.MailManager.GetArchiveMessageContent",
-  );
+export const GetArchiveMessageContent = Binding.Service<GetArchiveMessageContent>(
+  "AWS.MailManager.GetArchiveMessageContent",
+);

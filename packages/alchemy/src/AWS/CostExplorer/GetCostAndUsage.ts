@@ -41,6 +41,4 @@ export interface GetCostAndUsage extends Binding.Service<
   >
 > {}
 
-export const GetCostAndUsage = Binding.Service<GetCostAndUsage>(
-  "AWS.CostExplorer.GetCostAndUsage",
-);
+export const GetCostAndUsage = Binding.Service<GetCostAndUsage>("AWS.CostExplorer.GetCostAndUsage");

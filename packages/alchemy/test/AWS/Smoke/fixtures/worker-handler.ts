@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
-import {
-  ServerlessResources,
-  ServerlessResourcesLive,
-} from "./serverless-resources.ts";
+import { ServerlessResources, ServerlessResourcesLive } from "./serverless-resources.ts";
 
 /**
  * Worker Lambda: consumes the jobs queue through the SQS event source and
@@ -26,15 +23,12 @@ export const SmokeWorkerFunctionLive = SmokeWorkerFunction.make(
     const { jobsQueue, resultsQueue } = yield* ServerlessResources;
     const sink = yield* AWS.SQS.QueueSink(resultsQueue);
 
-    yield* AWS.SQS.consumeQueueMessages(
-      jobsQueue,
-      { batchSize: 10 },
-      (records) =>
-        records.pipe(
-          Stream.map((record) => ({ MessageBody: `processed:${record.body}` })),
-          Stream.run(sink),
-          Effect.orDie,
-        ),
+    yield* AWS.SQS.consumeQueueMessages(jobsQueue, { batchSize: 10 }, (records) =>
+      records.pipe(
+        Stream.map((record) => ({ MessageBody: `processed:${record.body}` })),
+        Stream.run(sink),
+        Effect.orDie,
+      ),
     );
   }).pipe(
     Effect.provide(

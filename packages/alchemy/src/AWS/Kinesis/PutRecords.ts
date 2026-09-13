@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface PutRecordsRequest extends Omit<
-  Kinesis.PutRecordsInput,
-  "StreamName"
-> {}
+export interface PutRecordsRequest extends Omit<Kinesis.PutRecordsInput, "StreamName"> {}
 
 /**
  * Runtime binding for `kinesis:PutRecords`.
@@ -40,9 +37,7 @@ export interface PutRecords extends Binding.Service<
   (
     stream: Stream,
   ) => Effect.Effect<
-    (
-      request: PutRecordsRequest,
-    ) => Effect.Effect<Kinesis.PutRecordsOutput, Kinesis.PutRecordsError>
+    (request: PutRecordsRequest) => Effect.Effect<Kinesis.PutRecordsOutput, Kinesis.PutRecordsError>
   >
 > {}
 

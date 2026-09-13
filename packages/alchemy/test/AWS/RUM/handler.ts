@@ -99,9 +99,5 @@ export default RumBindingsFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(RUM.PutRumEventsHttp, RUM.GetAppMonitorDataHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(RUM.PutRumEventsHttp, RUM.GetAppMonitorDataHttp))),
 );

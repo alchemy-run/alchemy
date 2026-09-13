@@ -7,9 +7,7 @@ import type { Stream } from "./Stream.ts";
 
 export type StreamSinkRecord = Kinesis.PutRecordsRequestEntry;
 
-export type StreamSinkError =
-  | Kinesis.PutRecordsError
-  | BatchRetryExhaustedError<StreamSinkRecord>;
+export type StreamSinkError = Kinesis.PutRecordsError | BatchRetryExhaustedError<StreamSinkRecord>;
 
 /**
  * A partition-aware sink for batching `PutRecords` requests into a stream
@@ -47,12 +45,7 @@ export interface StreamSink extends Binding.Service<
   (
     stream: Stream,
   ) => Effect.Effect<
-    Sink.Sink<
-      void,
-      StreamSinkRecord,
-      readonly StreamSinkRecord[],
-      StreamSinkError
-    >
+    Sink.Sink<void, StreamSinkRecord, readonly StreamSinkRecord[], StreamSinkError>
   >
 > {}
 

@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ApplePayDomain } from "./ApplePayDomain.ts";
 
-export interface RetrieveApplePayDomainRequest extends Omit<
-  GetApplePayDomainRequest,
-  "domain"
-> {}
+export interface RetrieveApplePayDomainRequest extends Omit<GetApplePayDomainRequest, "domain"> {}
 
 /**
  * Retrieve a bound Stripe Apple Pay Domain over HTTP.
@@ -33,11 +30,7 @@ export interface RetrieveApplePayDomain extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveApplePayDomainRequest,
-    ) => Effect.Effect<
-      StripeApplePayDomain,
-      GetApplePayDomainError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeApplePayDomain, GetApplePayDomainError, RuntimeContext>
   >
 > {}
 

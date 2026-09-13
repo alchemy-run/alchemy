@@ -13,10 +13,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 describe.skip("UserApiToken", () => {
   test.provider("create and delete user token with default props", (stack) =>
     Effect.gen(function* () {
@@ -88,10 +85,7 @@ describe.skip("UserApiToken", () => {
             policies: [
               {
                 effect: "allow",
-                permissionGroups: [
-                  "Workers Scripts Read",
-                  "Workers KV Storage Read",
-                ],
+                permissionGroups: ["Workers Scripts Read", "Workers KV Storage Read"],
                 resources: {
                   [`com.cloudflare.api.account.${accountId}`]: "*",
                 },
@@ -123,9 +117,7 @@ describe.skip("UserApiToken", () => {
         schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
       }),
       Effect.catchTag("TokenStillExists", () =>
-        Effect.die(
-          `Cloudflare API token ${tokenId} was not deleted after retries`,
-        ),
+        Effect.die(`Cloudflare API token ${tokenId} was not deleted after retries`),
       ),
       Effect.catchTag("TokenNotFound", () => Effect.void),
       Effect.catchTag("InvalidRoute", () => Effect.void),
@@ -147,9 +139,7 @@ describe("UserApiToken list", () => {
     "list enumerates user tokens",
     () =>
       Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(
-          Cloudflare.ApiToken.UserApiToken,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.ApiToken.UserApiToken);
         const all = yield* provider.list();
 
         expect(Array.isArray(all)).toBe(true);
@@ -171,9 +161,7 @@ describe("UserApiToken list", () => {
 describe("UserApiToken list probe", () => {
   test.provider("list rejects with typed Unauthorized under scoped token", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ApiToken.UserApiToken,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ApiToken.UserApiToken);
       const result = yield* Effect.result(provider.list());
       if (Result.isSuccess(result)) {
         // An entitled credential can list — that's fine, nothing to assert.

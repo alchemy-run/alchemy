@@ -32,12 +32,7 @@ export interface DescribeExport extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeExportRequest,
-    ) => Effect.Effect<
-      DynamoDB.DescribeExportOutput,
-      DynamoDB.DescribeExportError
-    >
+    ) => Effect.Effect<DynamoDB.DescribeExportOutput, DynamoDB.DescribeExportError>
   >
 > {}
-export const DescribeExport = Binding.Service<DescribeExport>(
-  "AWS.DynamoDB.DescribeExport",
-);
+export const DescribeExport = Binding.Service<DescribeExport>("AWS.DynamoDB.DescribeExport");

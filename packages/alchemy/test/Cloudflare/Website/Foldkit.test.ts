@@ -9,17 +9,11 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Same rationale as Vite.test.ts: Vite's `vite:build-html` plugin expresses
 // emitted asset paths relative to `cwd`, so the temp clone has to live under
@@ -27,10 +21,7 @@ const logLevel = Effect.provideService(
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "foldkit-fixture");
-const workerFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "foldkit-worker-fixture",
-);
+const workerFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-worker-fixture");
 
 const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
 
@@ -84,10 +75,7 @@ describe.concurrent("Foldkit", () => {
         const site = yield* stack.deploy(
           Effect.gen(function* () {
             // Deliberately no `assets` — the default is what's under test.
-            return yield* Cloudflare.Website.Foldkit(
-              "FixFoldkitDefault",
-              foldkitProps(rootDir),
-            );
+            return yield* Cloudflare.Website.Foldkit("FixFoldkitDefault", foldkitProps(rootDir));
           }),
         );
 
@@ -197,14 +185,10 @@ describe.concurrent("Foldkit", () => {
         yield* expectWorkerExists(site.workerName, accountId);
 
         // The Worker entry answers its own route from the binding.
-        yield* expectUrlContains(
-          `${site.url!}/api/hello`,
-          "foldkit-worker-fixture",
-          {
-            timeout: "120 seconds",
-            label: "foldkit worker api",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/api/hello`, "foldkit-worker-fixture", {
+          timeout: "120 seconds",
+          label: "foldkit worker api",
+        });
         // Everything else passes through to the assets binding.
         yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
           timeout: "60 seconds",
@@ -247,10 +231,7 @@ describe.concurrent("Foldkit", () => {
 
         const site1 = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.Foldkit(
-              "FixFoldkitEdit",
-              foldkitProps(rootDir),
-            );
+            return yield* Cloudflare.Website.Foldkit("FixFoldkitEdit", foldkitProps(rootDir));
           }),
         );
 
@@ -265,10 +246,7 @@ describe.concurrent("Foldkit", () => {
 
         const site2 = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.Foldkit(
-              "FixFoldkitEdit",
-              foldkitProps(rootDir),
-            );
+            return yield* Cloudflare.Website.Foldkit("FixFoldkitEdit", foldkitProps(rootDir));
           }),
         );
 

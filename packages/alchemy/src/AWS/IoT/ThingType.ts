@@ -75,9 +75,7 @@ export interface ThingType extends Resource<
  */
 export const ThingType = Resource<ThingType>("AWS.IoT.ThingType");
 
-export class ThingTypeDeletionTimedOut extends Data.TaggedError(
-  "ThingTypeDeletionTimedOut",
-)<{
+export class ThingTypeDeletionTimedOut extends Data.TaggedError("ThingTypeDeletionTimedOut")<{
   readonly thingTypeName: string;
   readonly waitedSeconds: number;
 }> {}
@@ -86,10 +84,7 @@ export const ThingTypeProvider = () =>
   Provider.effect(
     ThingType,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: ThingTypeProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: ThingTypeProps) {
         return props.thingTypeName ?? (yield* createPhysicalName({ id }));
       });
 
@@ -101,9 +96,7 @@ export const ThingTypeProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.thingTypes ?? [])
-                  .filter(
-                    (t) => t.thingTypeName != null && t.thingTypeArn != null,
-                  )
+                  .filter((t) => t.thingTypeName != null && t.thingTypeArn != null)
                   .map((t) => ({
                     thingTypeName: t.thingTypeName!,
                     thingTypeArn: t.thingTypeArn!,
@@ -112,15 +105,10 @@ export const ThingTypeProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const thingTypeName =
-            output?.thingTypeName ?? (yield* createName(id, olds ?? {}));
+          const thingTypeName = output?.thingTypeName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .describeThingType({ thingTypeName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!found) return undefined;
           const attrs = {
             thingTypeName,
@@ -142,17 +130,12 @@ export const ThingTypeProvider = () =>
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const thingTypeName =
-            output?.thingTypeName ?? (yield* createName(id, news));
+          const thingTypeName = output?.thingTypeName ?? (yield* createName(id, news));
 
           // OBSERVE
           let live = yield* iot
             .describeThingType({ thingTypeName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // ENSURE
           if (live === undefined) {
@@ -164,12 +147,7 @@ export const ThingTypeProvider = () =>
                   searchableAttributes: news.searchableAttributes,
                 },
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             live = yield* iot.describeThingType({ thingTypeName });
           }
 
@@ -202,11 +180,7 @@ export const ThingTypeProvider = () =>
           // they share this account-global type.
           const initial = yield* iot
             .describeThingType({ thingTypeName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (initial === undefined) return;
 
           if (!initial.thingTypeMetadata?.deprecated) {
@@ -231,29 +205,19 @@ export const ThingTypeProvider = () =>
           for (let attempt = 0; attempt < attempts; attempt++) {
             const absent = yield* iot.describeThingType({ thingTypeName }).pipe(
               Effect.as(false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             );
             if (absent) return;
 
-            const deleteAccepted = yield* iot
-              .deleteThingType({ thingTypeName })
-              .pipe(
-                Effect.as(true),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
-                Effect.catchTag("InvalidRequestException", () =>
-                  Effect.succeed(false),
-                ),
-              );
+            const deleteAccepted = yield* iot.deleteThingType({ thingTypeName }).pipe(
+              Effect.as(true),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+              Effect.catchTag("InvalidRequestException", () => Effect.succeed(false)),
+            );
             if (deleteAccepted) {
               const gone = yield* iot.describeThingType({ thingTypeName }).pipe(
                 Effect.as(false),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(true),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
               );
               if (gone) return;
             }

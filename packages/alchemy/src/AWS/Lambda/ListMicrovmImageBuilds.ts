@@ -26,10 +26,7 @@ export interface ListMicrovmImageBuilds extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListMicrovmImageBuildsRequest,
-    ) => Effect.Effect<
-      microvms.ListMicrovmImageBuildsOutput,
-      microvms.ListMicrovmImageBuildsError
-    >
+    ) => Effect.Effect<microvms.ListMicrovmImageBuildsOutput, microvms.ListMicrovmImageBuildsError>
   >
 > {}
 export const ListMicrovmImageBuilds = Binding.Service<ListMicrovmImageBuilds>(

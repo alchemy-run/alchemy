@@ -86,9 +86,7 @@ if (compatibilityName !== undefined) {
   process.argv.splice(index + 1);
 }
 
-const commandNames = new Set<CommandName>(
-  commandMetadata.map(([name]) => name),
-);
+const commandNames = new Set<CommandName>(commandMetadata.map(([name]) => name));
 const requestedCommand = argv.find((value): value is CommandName =>
   commandNames.has(value as CommandName),
 );
@@ -155,19 +153,12 @@ const devRunMode = import.meta.url.includes("/node_modules/")
 
 const cli = Command.run(root, {
   version:
-    devRunMode === undefined
-      ? packageJson.version
-      : `${packageJson.version} (${devRunMode})`,
+    devRunMode === undefined ? packageJson.version : `${packageJson.version} (${devRunMode})`,
 });
 
 const services = Layer.mergeAll(
   CliConfig.layer({
-    builtIns: [
-      GlobalFlag.Help,
-      GlobalFlag.Version,
-      GlobalFlag.Completions,
-      GlobalFlag.LogLevel,
-    ],
+    builtIns: [GlobalFlag.Help, GlobalFlag.Version, GlobalFlag.Completions, GlobalFlag.LogLevel],
   }),
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
@@ -192,10 +183,7 @@ const services = Layer.mergeAll(
   // Telemetry sits on top of the console/file loggers so its OTLP logger
   // merges with them. Listed as `mergeAll` siblings, whichever came last
   // would win the `CurrentLoggers` slot and silently drop the other.
-  Layer.provideMerge(
-    TelemetryLive,
-    Layer.provide(GlobalLogLive, PlatformServices),
-  ),
+  Layer.provideMerge(TelemetryLive, Layer.provide(GlobalLogLive, PlatformServices)),
 );
 
 const program = Effect.gen(function* () {
@@ -210,9 +198,7 @@ const program = Effect.gen(function* () {
   // The terminal shows the friendly message; the run log keeps the full
   // cause chain. Must sit inside the service provision so the file logger
   // is still installed.
-  Effect.tapCause((cause) =>
-    Effect.logDebug(`command failed:\n${Cause.pretty(cause)}`),
-  ),
+  Effect.tapCause((cause) => Effect.logDebug(`command failed:\n${Cause.pretty(cause)}`)),
 );
 
 const mainEffect = program.pipe(
@@ -223,7 +209,4 @@ const mainEffect = program.pipe(
 );
 
 /** Fully wired CLI program. */
-export const main = mainEffect as Effect.Effect<
-  void,
-  Effect.Error<typeof mainEffect>
->;
+export const main = mainEffect as Effect.Effect<void, Effect.Error<typeof mainEffect>>;

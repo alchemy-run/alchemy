@@ -5,13 +5,8 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
-import IsolatedProjectService, {
-  project,
-} from "./fixtures/isolated-project-service.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
+import IsolatedProjectService, { project } from "./fixtures/isolated-project-service.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,19 +36,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
         expect(service.status).toBe("RUNNING");
         expect(service.serviceUrl).toBeTruthy();
 
-        const health = yield* HttpClient.get(
-          `https://${service.serviceUrl}/health`,
-        ).pipe(
+        const health = yield* HttpClient.get(`https://${service.serviceUrl}/health`).pipe(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
               : Effect.fail(new Error(`/health returned ${res.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
           }),
         );
         expect(health).toEqual({ ok: true });
@@ -61,14 +51,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
         // Destroy immediately — App Runner services bill while running.
         const { serviceArn } = service;
         yield* stack.destroy();
-        const after = yield* apprunner
-          .describeService({ ServiceArn: serviceArn })
-          .pipe(
-            Effect.map((r) => (r.Service.Status ?? "UNKNOWN").toUpperCase()),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("GONE" as const),
-            ),
-          );
+        const after = yield* apprunner.describeService({ ServiceArn: serviceArn }).pipe(
+          Effect.map((r) => (r.Service.Status ?? "UNKNOWN").toUpperCase()),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+        );
         expect(["GONE", "DELETED"]).toContain(after);
       } finally {
         yield* removeIsolatedProject(project);

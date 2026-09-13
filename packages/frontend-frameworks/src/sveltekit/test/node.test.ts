@@ -19,9 +19,7 @@ describe("makeNodeTarget", () => {
 
   it("produces the in-memory kit adapter from the adapter hook", () => {
     const adapter = makeNodeAdapter();
-    expect(adapter.name).toBe(
-      "@alchemy.run/frontend-frameworks/sveltekit/node",
-    );
+    expect(adapter.name).toBe("@alchemy.run/frontend-frameworks/sveltekit/node");
     expect(adapter.result.current).toBeUndefined();
     expect(typeof adapter.adapt).toBe("function");
   });

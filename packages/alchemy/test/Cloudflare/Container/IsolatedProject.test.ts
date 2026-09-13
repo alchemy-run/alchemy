@@ -6,10 +6,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
 import { project } from "./fixtures/isolated/container.ts";
 import IsolatedStack from "./fixtures/isolated/stack.ts";
 
@@ -25,10 +22,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Container image build + push + worker/DO deploy comfortably exceeds the
 // default 120s hook budget.
@@ -46,9 +40,7 @@ afterAll(removeIsolatedProject(project));
 // Force `Connection: close` so each readiness attempt opens a fresh
 // connection and can land on an edge that already has the new deploy.
 const freshConn = HttpClient.HttpClient.pipe(
-  Effect.map(
-    HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close")),
-  ),
+  Effect.map(HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"))),
 );
 
 // While a freshly pre-created worker propagates, the edge serves Alchemy's
@@ -72,10 +64,7 @@ const fetchReady = (url: URL, expected: string) =>
       ),
       Effect.timeout("10 seconds"),
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         times: 60,
       }),
     );
@@ -95,10 +84,7 @@ test(
   "fetch: the container's HTTP server answers over its TCP port",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const hello = yield* fetchReady(
-      new URL("/hello", url),
-      "hello from isolated project",
-    );
+    const hello = yield* fetchReady(new URL("/hello", url), "hello from isolated project");
     expect(hello).toContain("hello from isolated project");
   }).pipe(logLevel),
   { timeout: 300_000 },

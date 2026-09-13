@@ -29,10 +29,7 @@ export interface StartJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.StartJobRequest,
-    ) => Effect.Effect<
-      dataexchange.StartJobResponse,
-      dataexchange.StartJobError
-    >
+    ) => Effect.Effect<dataexchange.StartJobResponse, dataexchange.StartJobError>
   >
 > {}
 export const StartJob = Binding.Service<StartJob>("AWS.DataExchange.StartJob");

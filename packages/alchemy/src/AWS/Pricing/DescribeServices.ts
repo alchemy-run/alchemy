@@ -2,8 +2,7 @@ import type * as pricing from "@distilled.cloud/aws/pricing";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeServicesRequest
-  extends pricing.DescribeServicesRequest {}
+export interface DescribeServicesRequest extends pricing.DescribeServicesRequest {}
 
 /**
  * Runtime binding for `pricing:DescribeServices` — list the service codes
@@ -38,12 +37,7 @@ export interface DescribeServices extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeServicesRequest,
-    ) => Effect.Effect<
-      pricing.DescribeServicesResponse,
-      pricing.DescribeServicesError
-    >
+    ) => Effect.Effect<pricing.DescribeServicesResponse, pricing.DescribeServicesError>
   >
 > {}
-export const DescribeServices = Binding.Service<DescribeServices>(
-  "AWS.Pricing.DescribeServices",
-);
+export const DescribeServices = Binding.Service<DescribeServices>("AWS.Pricing.DescribeServices");

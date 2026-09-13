@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Risk scoring (and its SSF push integrations) is an Enterprise Zero
 // Trust feature. On the standard testing account
@@ -110,9 +107,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.RiskScoring.Integration,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.RiskScoring.Integration);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -145,14 +140,10 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.RiskScoring.Integration,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.RiskScoring.Integration);
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.integrationId === deployed.integrationId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.integrationId === deployed.integrationId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -7,10 +7,7 @@ import type { Room } from "./Room.ts";
  * The `roomIdentifier` is injected by the binding from the bound room;
  * the caller supplies the event name and optional attributes.
  */
-export interface SendEventRequest extends Omit<
-  ivschat.SendEventRequest,
-  "roomIdentifier"
-> {}
+export interface SendEventRequest extends Omit<ivschat.SendEventRequest, "roomIdentifier"> {}
 
 /**
  * Send an application-defined event to every client connected to the bound
@@ -53,9 +50,7 @@ export interface SendEvent extends Binding.Service<
   (
     room: Room,
   ) => Effect.Effect<
-    (
-      request: SendEventRequest,
-    ) => Effect.Effect<ivschat.SendEventResponse, ivschat.SendEventError>
+    (request: SendEventRequest) => Effect.Effect<ivschat.SendEventResponse, ivschat.SendEventError>
   >
 > {}
 export const SendEvent = Binding.Service<SendEvent>("AWS.IVSChat.SendEvent");

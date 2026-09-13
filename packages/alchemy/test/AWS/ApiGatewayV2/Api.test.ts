@@ -18,10 +18,7 @@ const assertApiDeleted = (apiId: string) =>
     Effect.flatMap(() => Effect.fail(new ApiStillExists({ apiId }))),
     Effect.retry({
       while: (e) => e._tag === "ApiStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );
@@ -66,9 +63,7 @@ test.provider(
 
       const afterUpdate = yield* agw2.getApi({ ApiId: api.apiId });
       expect(afterUpdate.Description).toBe("v2");
-      expect(afterUpdate.CorsConfiguration?.AllowOrigins).toEqual([
-        "https://example.com",
-      ]);
+      expect(afterUpdate.CorsConfiguration?.AllowOrigins).toEqual(["https://example.com"]);
 
       // Removing CORS deletes the configuration.
       yield* stack.deploy(
@@ -131,16 +126,13 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const api = yield* AWS.ApiGatewayV2.Api("PrimApi", {});
-            const integration = yield* AWS.ApiGatewayV2.Integration(
-              "PrimIntegration",
-              {
-                api,
-                integrationType: "HTTP_PROXY",
-                integrationUri: `https://checkip.amazonaws.com${upstreamPath}`,
-                integrationMethod: "GET",
-                payloadFormatVersion: "1.0",
-              },
-            );
+            const integration = yield* AWS.ApiGatewayV2.Integration("PrimIntegration", {
+              api,
+              integrationType: "HTTP_PROXY",
+              integrationUri: `https://checkip.amazonaws.com${upstreamPath}`,
+              integrationMethod: "GET",
+              payloadFormatVersion: "1.0",
+            });
             const route = yield* AWS.ApiGatewayV2.Route("PrimRoute", {
               api,
               routeKey: "GET /ip",

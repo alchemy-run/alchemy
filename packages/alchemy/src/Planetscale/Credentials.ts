@@ -46,14 +46,8 @@ export const fromToken = (input: {
   Layer.succeed(
     Credentials,
     Effect.succeed({
-      tokenId:
-        typeof input.tokenId === "string"
-          ? Redacted.make(input.tokenId)
-          : input.tokenId,
-      token:
-        typeof input.token === "string"
-          ? Redacted.make(input.token)
-          : input.token,
+      tokenId: typeof input.tokenId === "string" ? Redacted.make(input.tokenId) : input.tokenId,
+      token: typeof input.token === "string" ? Redacted.make(input.token) : input.token,
       organization: input.organization,
       apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     }),
@@ -81,9 +75,8 @@ export const fromAuthProvider = () =>
       // thereby refreshes — the token instead of keeping the first, by then
       // dead, resolution forever. The cache wraps `resolve` (not the mapped
       // client config) because the mapping drops the `expires` timestamp.
-      const cached = yield* CredentialsCache.cacheUntilExpiry(
-        resolve,
-        (creds) => (creds.type === "oauth" ? creds.expires : undefined),
+      const cached = yield* CredentialsCache.cacheUntilExpiry(resolve, (creds) =>
+        creds.type === "oauth" ? creds.expires : undefined,
       );
       return cached.pipe(
         Effect.map((creds): PlanetscaleClientConfig =>

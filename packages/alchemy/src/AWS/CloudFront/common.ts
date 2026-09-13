@@ -19,9 +19,7 @@ export const withKvsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(KVS_REGION)));
 
 export const withKvsRegionFn =
-  <Args extends any[], A, E, R>(
-    fn: (...args: Args) => Effect.Effect<A, E, R>,
-  ) =>
+  <Args extends any[], A, E, R>(fn: (...args: Args) => Effect.Effect<A, E, R>) =>
   (...args: Args) =>
     withKvsRegion(fn(...args));
 
@@ -44,9 +42,7 @@ export const cappedKvsRetrySchedule = Schedule.max([
 ]).pipe(
   Schedule.modifyDelay(({ duration }) =>
     Effect.succeed(
-      Duration.isGreaterThan(duration, Duration.seconds(2))
-        ? Duration.seconds(2)
-        : duration,
+      Duration.isGreaterThan(duration, Duration.seconds(2)) ? Duration.seconds(2) : duration,
     ),
   ),
 );
@@ -65,5 +61,4 @@ export const getKvsEtag = Effect.fn(function* (store: string) {
 });
 
 export const isKvsPreconditionFailed = (err: kvs.ValidationException) =>
-  typeof err.message === "string" &&
-  err.message.includes("Pre-Condition failed");
+  typeof err.message === "string" && err.message.includes("Pre-Condition failed");

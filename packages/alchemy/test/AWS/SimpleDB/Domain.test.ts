@@ -21,16 +21,11 @@ class DomainStillExists extends Data.TaggedError("DomainStillExists")<{
 const assertDomainDeleted = (domainName: string) =>
   findDomain(domainName).pipe(
     Effect.flatMap((metadata) =>
-      metadata === undefined
-        ? Effect.void
-        : Effect.fail(new DomainStillExists({ domainName })),
+      metadata === undefined ? Effect.void : Effect.fail(new DomainStillExists({ domainName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "DomainStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 

@@ -42,9 +42,7 @@ const open = (path: string): Effect.Effect<BunDatabase, never, Scope.Scope> =>
  * @provides BetterAuth.Database
  * @product SQLite
  */
-export const SQLite = (
-  path = ".alchemy/better-auth.sqlite",
-): Layer.Layer<Database> =>
+export const SQLite = (path = ".alchemy/better-auth.sqlite"): Layer.Layer<Database> =>
   Layer.succeed(Database, {
     provider: "sqlite",
     runtime: open(path),

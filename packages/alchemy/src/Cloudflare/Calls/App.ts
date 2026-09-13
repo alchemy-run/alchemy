@@ -113,9 +113,7 @@ export const AppProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((app) =>
-              toAttributes(app, accountId, Redacted.make("")),
-            ),
+            (page.result ?? []).map((app) => toAttributes(app, accountId, Redacted.make(""))),
           ),
         ),
       );
@@ -132,9 +130,7 @@ export const AppProvider = () =>
       // be re-hydrated without prior state — no cold read / adoption path.
       if (!output?.appId) return undefined;
       const observed = yield* getApp(output.accountId, output.appId);
-      return observed
-        ? toAttributes(observed, output.accountId, output.secret)
-        : undefined;
+      return observed ? toAttributes(observed, output.accountId, output.secret) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -151,11 +147,7 @@ export const AppProvider = () =>
         // the create-only secret. Names are not unique on Cloudflare's
         // side, so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createSfu({ accountId, name });
-        return toAttributes(
-          created,
-          accountId,
-          Redacted.make(created.secret ?? ""),
-        );
+        return toAttributes(created, accountId, Redacted.make(created.secret ?? ""));
       }
 
       // Sync — the only mutable aspect is `name`; diff observed cloud

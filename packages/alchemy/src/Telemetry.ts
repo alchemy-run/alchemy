@@ -100,9 +100,7 @@ export const layer = (exporter: TelemetryLayer): Layer.Layer<never> =>
       const ctx = yield* CurrentRuntimeContext;
       if (ctx !== undefined) {
         ctx.telemetry =
-          ctx.telemetry === undefined
-            ? exporter
-            : Layer.mergeAll(ctx.telemetry, exporter);
+          ctx.telemetry === undefined ? exporter : Layer.mergeAll(ctx.telemetry, exporter);
       }
       return fromBoundConfig;
     }),
@@ -183,9 +181,7 @@ const destinationsOutput = (
   ): Record<string, Placeholder> | undefined =>
     headers === undefined
       ? undefined
-      : Object.fromEntries(
-          Object.entries(headers).map(([key, value]) => [key, capture(value)]),
-        );
+      : Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, capture(value)]));
   const template = list.map((options) => ({
     url: options.url !== undefined ? capture(options.url) : undefined,
     headers: captureHeaders(options.headers),
@@ -203,9 +199,9 @@ const destinationsOutput = (
     },
   }));
   return (
-    Output.all(
-      ...inputs.map((input) => Output.asOutput(input as never)),
-    ) as Output.Output<unknown[]>
+    Output.all(...inputs.map((input) => Output.asOutput(input as never))) as Output.Output<
+      unknown[]
+    >
   ).pipe(
     Output.map((values) => {
       let secret = false;
@@ -223,10 +219,7 @@ const destinationsOutput = (
         headers === undefined
           ? undefined
           : Object.fromEntries(
-              Object.entries(headers).map(([key, value]) => [
-                key,
-                resolve(value),
-              ]),
+              Object.entries(headers).map(([key, value]) => [key, resolve(value)]),
             );
       const resolveSignal = (
         entry: { url: Placeholder; headers?: Record<string, Placeholder> },
@@ -253,9 +246,7 @@ const destinationsOutput = (
           logs: resolveSignal(entry.logs as never, entry, "logs"),
           metrics: resolveSignal(entry.metrics as never, entry, "metrics"),
         };
-        return destination.traces || destination.logs || destination.metrics
-          ? [destination]
-          : [];
+        return destination.traces || destination.logs || destination.metrics ? [destination] : [];
       });
       const json = JSON.stringify(destinations);
       return secret ? Redacted.make(json) : json;
@@ -304,10 +295,7 @@ export const layerOtlp = (options: OtlpOptions): Layer.Layer<never> =>
         rcDestinations.set(rc, list);
         yield* rc.set(EXPORTERS_KEY, destinationsOutput(list));
         if (options.serviceName !== undefined) {
-          yield* rc.set(
-            "OTEL_SERVICE_NAME",
-            Output.asOutput(options.serviceName as never),
-          );
+          yield* rc.set("OTEL_SERVICE_NAME", Output.asOutput(options.serviceName as never));
         }
       }
       // The runtime half reads the bound destinations back per event (or

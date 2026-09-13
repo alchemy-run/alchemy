@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Advanced TCP Protection is a Magic Transit (Enterprise add-on)
 // entitlement that the testing account does not have — every API call fails
@@ -95,9 +92,7 @@ test.provider(
   "list returns a well-typed array of SYN protection rules",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.SynProtectionRule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.SynProtectionRule);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
       for (const r of all) {
@@ -118,21 +113,16 @@ test.provider.skipIf(!magicTransit)(
 
       const rule = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.SynProtectionRule(
-            "ListRule",
-            {
-              scope: "global",
-              mode: "monitoring",
-              burstSensitivity: "medium",
-              rateSensitivity: "medium",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.SynProtectionRule("ListRule", {
+            scope: "global",
+            mode: "monitoring",
+            burstSensitivity: "medium",
+            rateSensitivity: "medium",
+          });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.SynProtectionRule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.SynProtectionRule);
       const all = yield* provider.list();
       expect(all.some((r) => r.ruleId === rule.ruleId)).toBe(true);
 

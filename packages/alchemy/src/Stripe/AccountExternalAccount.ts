@@ -36,11 +36,7 @@ const LIST_CONCURRENCY = 10;
 export type AccountExternalAccountHolderType = "individual" | "company";
 
 /** Bank account type. `futsu` / `toza` are Japan-only. */
-export type AccountExternalAccountBankType =
-  | "checking"
-  | "savings"
-  | "futsu"
-  | "toza";
+export type AccountExternalAccountBankType = "checking" | "savings" | "futsu" | "toza";
 
 /** Discriminator for a bank vs card external account. */
 export type AccountExternalAccountObject = "bank_account" | "card";
@@ -190,14 +186,10 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const isBankAccount = (
-  value: StripeExternalAccount,
-): value is StripeBankAccount => value.object === "bank_account";
+const isBankAccount = (value: StripeExternalAccount): value is StripeBankAccount =>
+  value.object === "bank_account";
 
-const parentAccountId = (
-  ea: StripeExternalAccount,
-  fallback: string,
-): string => {
+const parentAccountId = (ea: StripeExternalAccount, fallback: string): string => {
   const raw = ea.account;
   if (typeof raw === "string" && raw.length > 0) return raw;
   if (raw !== null && raw !== undefined && typeof raw === "object") {
@@ -299,9 +291,7 @@ const listAllConnectAccounts = Effect.fn(function* () {
     }).pipe(
       Effect.catchIf(
         (e) =>
-          e._tag === "InvalidRequestError" ||
-          e._tag === "Forbidden" ||
-          e._tag === "Unauthorized",
+          e._tag === "InvalidRequestError" || e._tag === "Forbidden" || e._tag === "Unauthorized",
         () => Effect.succeed(undefined),
       ),
     );
@@ -320,10 +310,7 @@ const listAllConnectAccounts = Effect.fn(function* () {
   return accounts;
 });
 
-const findByAlchemyId = Effect.fn(function* (
-  logicalId: string,
-  account?: string,
-) {
+const findByAlchemyId = Effect.fn(function* (logicalId: string, account?: string) {
   const search = Effect.fn(function* (accountId: string) {
     const eas = yield* listExternalAccounts(accountId);
     const matches: StripeExternalAccount[] = [];
@@ -345,11 +332,7 @@ const findByAlchemyId = Effect.fn(function* (
   return undefined;
 });
 
-const observe = Effect.fn(function* (input: {
-  account?: string;
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { account?: string; id?: string; logicalId: string }) {
   if (input.account !== undefined && input.id !== undefined) {
     const byId = yield* getById(input.account, input.id);
     if (byId !== undefined) return byId;
@@ -411,8 +394,7 @@ export const AccountExternalAccountProvider = () =>
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const account =
-        output?.account ??
-        (typeof olds?.account === "string" ? olds.account : undefined);
+        output?.account ?? (typeof olds?.account === "string" ? olds.account : undefined);
       const existing = yield* observe({
         account,
         id: output?.id,
@@ -420,9 +402,7 @@ export const AccountExternalAccountProvider = () =>
       });
       if (existing === undefined || account === undefined) return undefined;
       const attrs = toAttrs(account, existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -433,11 +413,7 @@ export const AccountExternalAccountProvider = () =>
           listExternalAccounts(account.id).pipe(
             Effect.map((eas) =>
               eas
-                .filter(
-                  (ea) =>
-                    tagRecord(ea.metadata)[alchemyMetadataKeys.stack] !==
-                    undefined,
-                )
+                .filter((ea) => tagRecord(ea.metadata)[alchemyMetadataKeys.stack] !== undefined)
                 .map((ea) => toAttrs(account.id, ea)),
             ),
           ),
@@ -459,10 +435,7 @@ export const AccountExternalAccountProvider = () =>
         id: output?.id,
         logicalId: id,
       });
-      if (
-        current !== undefined &&
-        shouldReplace(news, olds, toAttrs(news.account, current))
-      ) {
+      if (current !== undefined && shouldReplace(news, olds, toAttrs(news.account, current))) {
         current = undefined;
       }
 
@@ -471,9 +444,7 @@ export const AccountExternalAccountProvider = () =>
           account: news.account,
           external_account: news.externalAccount,
           metadata,
-          ...(desiredDefault !== undefined
-            ? { default_for_currency: desiredDefault }
-            : {}),
+          ...(desiredDefault !== undefined ? { default_for_currency: desiredDefault } : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-account-external-account-${instanceId}`,
@@ -498,20 +469,16 @@ export const AccountExternalAccountProvider = () =>
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const defaultChanged =
-        desiredDefault !== undefined &&
-        attrs.defaultForCurrency !== desiredDefault;
+        desiredDefault !== undefined && attrs.defaultForCurrency !== desiredDefault;
       const holderNameChanged =
-        attrs.object === "bank_account" &&
-        (attrs.accountHolderName ?? "") !== desiredHolderName;
+        attrs.object === "bank_account" && (attrs.accountHolderName ?? "") !== desiredHolderName;
       const holderTypeChanged =
-        attrs.object === "bank_account" &&
-        (attrs.accountHolderType ?? "") !== desiredHolderType;
+        attrs.object === "bank_account" && (attrs.accountHolderType ?? "") !== desiredHolderType;
       const accountTypeChanged =
         attrs.object === "bank_account" &&
         desiredAccountType !== undefined &&
         (attrs.accountType ?? "") !== desiredAccountType;
-      const nameChanged =
-        attrs.object === "card" && (attrs.name ?? "") !== desiredName;
+      const nameChanged = attrs.object === "card" && (attrs.name ?? "") !== desiredName;
 
       if (
         !metadataChanged &&
@@ -527,9 +494,7 @@ export const AccountExternalAccountProvider = () =>
       const updated = yield* UpdateAccountExternalAccount({
         account: news.account,
         id: current.id,
-        ...(holderNameChanged
-          ? { account_holder_name: desiredHolderName }
-          : {}),
+        ...(holderNameChanged ? { account_holder_name: desiredHolderName } : {}),
         ...(holderTypeChanged
           ? {
               account_holder_type:
@@ -548,9 +513,7 @@ export const AccountExternalAccountProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

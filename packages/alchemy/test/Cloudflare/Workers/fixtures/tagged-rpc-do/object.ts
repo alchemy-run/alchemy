@@ -47,11 +47,9 @@ export const CounterLive = Counter.make(
           .run()
           .pipe(Effect.asVoid);
 
-      const readDO = () =>
-        state.storage.get<number>(DO_COUNT_KEY).pipe(Effect.map((v) => v ?? 0));
+      const readDO = () => state.storage.get<number>(DO_COUNT_KEY).pipe(Effect.map((v) => v ?? 0));
 
-      const writeDO = (value: number) =>
-        state.storage.put(DO_COUNT_KEY, value).pipe(Effect.asVoid);
+      const writeDO = (value: number) => state.storage.put(DO_COUNT_KEY, value).pipe(Effect.asVoid);
 
       const handlers = CounterRpcs.toLayer({
         incrementD1: ({ key }) =>

@@ -23,10 +23,7 @@ import {
 } from "@/AWS/EC2";
 import * as Test from "./VpcTest.ts";
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -39,8 +36,7 @@ test.provider.skip(
       // Get available AZs for multi-AZ stages
       const azResult = yield* EC2.describeAvailabilityZones({});
       const availableAzs =
-        azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
-        [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available") ?? [];
       const az1 = availableAzs[0]?.ZoneName!;
       const az2 = availableAzs[1]?.ZoneName!;
 
@@ -135,14 +131,10 @@ test.provider.skip(
 
         // Verify route to IGW
         expect(_stack.internetRoute.state).toEqual("active");
-        expect(_stack.internetRoute.gatewayId).toEqual(
-          _stack.internetGateway.internetGatewayId,
-        );
+        expect(_stack.internetRoute.gatewayId).toEqual(_stack.internetGateway.internetGatewayId);
 
         // Verify association
-        expect(_stack.publicSubnet1Association.associationId).toMatch(
-          /^rtbassoc-/,
-        );
+        expect(_stack.publicSubnet1Association.associationId).toMatch(/^rtbassoc-/);
       }
 
       // =========================================================================
@@ -356,18 +348,10 @@ test.provider.skip(
         expect(_stack.privateSubnet2.availabilityZone).toEqual(az2);
 
         // Verify all 4 associations exist
-        expect(_stack.publicSubnet1Association.associationId).toMatch(
-          /^rtbassoc-/,
-        );
-        expect(_stack.publicSubnet2Association.associationId).toMatch(
-          /^rtbassoc-/,
-        );
-        expect(_stack.privateSubnet1Association.associationId).toMatch(
-          /^rtbassoc-/,
-        );
-        expect(_stack.privateSubnet2Association.associationId).toMatch(
-          /^rtbassoc-/,
-        );
+        expect(_stack.publicSubnet1Association.associationId).toMatch(/^rtbassoc-/);
+        expect(_stack.publicSubnet2Association.associationId).toMatch(/^rtbassoc-/);
+        expect(_stack.privateSubnet1Association.associationId).toMatch(/^rtbassoc-/);
+        expect(_stack.privateSubnet2Association.associationId).toMatch(/^rtbassoc-/);
 
         // Verify both public subnets share the same route table
         expect(_stack.publicSubnet1Association.routeTableId).toEqual(
@@ -871,9 +855,7 @@ test.provider.skip(
 
         // Verify NAT route is active
         expect(_stack.natRoute.state).toEqual("active");
-        expect(_stack.natRoute.natGatewayId).toEqual(
-          _stack.natGateway.natGatewayId,
-        );
+        expect(_stack.natRoute.natGatewayId).toEqual(_stack.natGateway.natGatewayId);
 
         // Verify private route table now has internet route via NAT
         const privateRtResult = yield* EC2.describeRouteTables({
@@ -883,9 +865,7 @@ test.provider.skip(
         const privateInternetRoute = privateRoutes.find(
           (r) => r.DestinationCidrBlock === "0.0.0.0/0",
         );
-        expect(privateInternetRoute?.NatGatewayId).toEqual(
-          _stack.natGateway.natGatewayId,
-        );
+        expect(privateInternetRoute?.NatGatewayId).toEqual(_stack.natGateway.natGatewayId);
       }
 
       // =========================================================================
@@ -1056,9 +1036,9 @@ test.provider.skip(
         // Verify DB Security Group references Web Security Group
         expect(_stack.dbSecurityGroup.groupId).toMatch(/^sg-/);
         expect(_stack.dbSecurityGroup.ingressRules).toHaveLength(1);
-        expect(
-          _stack.dbSecurityGroup.ingressRules?.[0]?.referencedGroupId,
-        ).toEqual(_stack.webSecurityGroup.groupId);
+        expect(_stack.dbSecurityGroup.ingressRules?.[0]?.referencedGroupId).toEqual(
+          _stack.webSecurityGroup.groupId,
+        );
       }
 
       // =========================================================================
@@ -1154,11 +1134,7 @@ test.provider.skip(
           .describeNatGateways({
             Filter: [{ Name: "vpc-id", Values: [_stack.myVpc.vpcId] }],
           })
-          .pipe(
-            Effect.map((r) =>
-              r.NatGateways?.filter((gw) => gw.State !== "deleted"),
-            ),
-          );
+          .pipe(Effect.map((r) => r.NatGateways?.filter((gw) => gw.State !== "deleted")));
         expect(natGwResult).toHaveLength(0);
 
         // Verify Security Groups are deleted (only default should remain)
@@ -1203,8 +1179,7 @@ test.provider.skip(
       // Get available AZs
       const azResult = yield* EC2.describeAvailabilityZones({});
       const availableAzs =
-        azResult.AvailabilityZones?.filter((az) => az.State === "available") ??
-        [];
+        azResult.AvailabilityZones?.filter((az) => az.State === "available") ?? [];
       const az1 = availableAzs[0]?.ZoneName!;
       const az2 = availableAzs[1]?.ZoneName!;
 
@@ -1232,13 +1207,10 @@ test.provider.skip(
           });
 
           // Egress-Only Internet Gateway for IPv6 outbound traffic from private subnets
-          const egressOnlyIgw = yield* EgressOnlyInternetGateway(
-            "EgressOnlyIgw",
-            {
-              vpcId: myVpc.vpcId,
-              tags: { Name: "comprehensive-eigw" },
-            },
-          );
+          const egressOnlyIgw = yield* EgressOnlyInternetGateway("EgressOnlyIgw", {
+            vpcId: myVpc.vpcId,
+            tags: { Name: "comprehensive-eigw" },
+          });
 
           // Public Subnets in two AZs
           const publicSubnet1 = yield* Subnet("PublicSubnet1", {
@@ -1445,17 +1417,14 @@ test.provider.skip(
 
           // Network ACL Entries (rules)
           // Allow inbound traffic from VPC CIDR
-          const privateNaclIngressVpc = yield* NetworkAclEntry(
-            "PrivateNaclIngressVpc",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              ruleNumber: 100,
-              protocol: "-1", // All protocols
-              ruleAction: "allow",
-              egress: false,
-              cidrBlock: "10.0.0.0/16",
-            },
-          );
+          const privateNaclIngressVpc = yield* NetworkAclEntry("PrivateNaclIngressVpc", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            ruleNumber: 100,
+            protocol: "-1", // All protocols
+            ruleAction: "allow",
+            egress: false,
+            cidrBlock: "10.0.0.0/16",
+          });
 
           // Allow inbound ephemeral ports (for NAT return traffic)
           const privateNaclIngressEphemeral = yield* NetworkAclEntry(
@@ -1472,47 +1441,34 @@ test.provider.skip(
           );
 
           // Allow all outbound traffic
-          const privateNaclEgressAll = yield* NetworkAclEntry(
-            "PrivateNaclEgressAll",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              ruleNumber: 100,
-              protocol: "-1", // All protocols
-              ruleAction: "allow",
-              egress: true,
-              cidrBlock: "0.0.0.0/0",
-            },
-          );
+          const privateNaclEgressAll = yield* NetworkAclEntry("PrivateNaclEgressAll", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            ruleNumber: 100,
+            protocol: "-1", // All protocols
+            ruleAction: "allow",
+            egress: true,
+            cidrBlock: "0.0.0.0/0",
+          });
 
           // Network ACL Associations - associate private subnets with the custom NACL
-          const privateSubnet1NaclAssoc = yield* NetworkAclAssociation(
-            "PrivateSubnet1NaclAssoc",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              subnetId: privateSubnet1.subnetId,
-            },
-          );
+          const privateSubnet1NaclAssoc = yield* NetworkAclAssociation("PrivateSubnet1NaclAssoc", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            subnetId: privateSubnet1.subnetId,
+          });
 
-          const privateSubnet2NaclAssoc = yield* NetworkAclAssociation(
-            "PrivateSubnet2NaclAssoc",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              subnetId: privateSubnet2.subnetId,
-            },
-          );
+          const privateSubnet2NaclAssoc = yield* NetworkAclAssociation("PrivateSubnet2NaclAssoc", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            subnetId: privateSubnet2.subnetId,
+          });
 
           // VPC Gateway Endpoint for S3 (reduces NAT costs and improves latency)
           const s3Endpoint = yield* VpcEndpoint("S3Endpoint", {
             vpcId: myVpc.vpcId,
             serviceName: `com.amazonaws.${
-              (yield* EC2.describeAvailabilityZones({})).AvailabilityZones?.[0]
-                ?.RegionName
+              (yield* EC2.describeAvailabilityZones({})).AvailabilityZones?.[0]?.RegionName
             }.s3`,
             vpcEndpointType: "Gateway",
-            routeTableIds: [
-              privateRouteTable1.routeTableId,
-              privateRouteTable2.routeTableId,
-            ],
+            routeTableIds: [privateRouteTable1.routeTableId, privateRouteTable2.routeTableId],
             tags: { Name: "s3-endpoint" },
           });
 
@@ -1579,9 +1535,7 @@ test.provider.skip(
 
       // Verify VPC has IPv6 CIDR block
       expect(_stack.myVpc.ipv6CidrBlockAssociationSet).toBeDefined();
-      expect(_stack.myVpc.ipv6CidrBlockAssociationSet?.length).toBeGreaterThan(
-        0,
-      );
+      expect(_stack.myVpc.ipv6CidrBlockAssociationSet?.length).toBeGreaterThan(0);
 
       // =========================================================================
       // Verify Internet Gateway
@@ -1592,13 +1546,9 @@ test.provider.skip(
       // =========================================================================
       // Verify Egress-Only Internet Gateway
       // =========================================================================
-      expect(_stack.egressOnlyIgw.egressOnlyInternetGatewayId).toMatch(
-        /^eigw-/,
-      );
+      expect(_stack.egressOnlyIgw.egressOnlyInternetGatewayId).toMatch(/^eigw-/);
       expect(_stack.egressOnlyIgw.attachments).toBeDefined();
-      expect(_stack.egressOnlyIgw.attachments?.[0]?.vpcId).toEqual(
-        _stack.myVpc.vpcId,
-      );
+      expect(_stack.egressOnlyIgw.attachments?.[0]?.vpcId).toEqual(_stack.myVpc.vpcId);
 
       // =========================================================================
       // Verify Subnets
@@ -1637,87 +1587,57 @@ test.provider.skip(
       expect(_stack.natGateway1.natGatewayId).toMatch(/^nat-/);
       expect(_stack.natGateway1.state).toEqual("available");
       expect(_stack.natGateway1.publicIp).toEqual(_stack.natEip1.publicIp);
-      expect(_stack.natGateway1.subnetId).toEqual(
-        _stack.publicSubnet1.subnetId,
-      );
+      expect(_stack.natGateway1.subnetId).toEqual(_stack.publicSubnet1.subnetId);
 
       expect(_stack.natGateway2.natGatewayId).toMatch(/^nat-/);
       expect(_stack.natGateway2.state).toEqual("available");
       expect(_stack.natGateway2.publicIp).toEqual(_stack.natEip2.publicIp);
-      expect(_stack.natGateway2.subnetId).toEqual(
-        _stack.publicSubnet2.subnetId,
-      );
+      expect(_stack.natGateway2.subnetId).toEqual(_stack.publicSubnet2.subnetId);
 
       // =========================================================================
       // Verify Routes
       // =========================================================================
       // Internet route to IGW
       expect(_stack.internetRoute.state).toEqual("active");
-      expect(_stack.internetRoute.gatewayId).toEqual(
-        _stack.internetGateway.internetGatewayId,
-      );
+      expect(_stack.internetRoute.gatewayId).toEqual(_stack.internetGateway.internetGatewayId);
 
       // NAT routes
       expect(_stack.natRoute1.state).toEqual("active");
-      expect(_stack.natRoute1.natGatewayId).toEqual(
-        _stack.natGateway1.natGatewayId,
-      );
+      expect(_stack.natRoute1.natGatewayId).toEqual(_stack.natGateway1.natGatewayId);
 
       expect(_stack.natRoute2.state).toEqual("active");
-      expect(_stack.natRoute2.natGatewayId).toEqual(
-        _stack.natGateway2.natGatewayId,
-      );
+      expect(_stack.natRoute2.natGatewayId).toEqual(_stack.natGateway2.natGatewayId);
 
       // Verify public route table has internet route
       const publicRtResult = yield* EC2.describeRouteTables({
         RouteTableIds: [_stack.publicRouteTable.routeTableId],
       });
       const publicRoutes = publicRtResult.RouteTables?.[0]?.Routes ?? [];
-      const publicInternetRoute = publicRoutes.find(
-        (r) => r.DestinationCidrBlock === "0.0.0.0/0",
-      );
-      expect(publicInternetRoute?.GatewayId).toEqual(
-        _stack.internetGateway.internetGatewayId,
-      );
+      const publicInternetRoute = publicRoutes.find((r) => r.DestinationCidrBlock === "0.0.0.0/0");
+      expect(publicInternetRoute?.GatewayId).toEqual(_stack.internetGateway.internetGatewayId);
 
       // Verify private route tables have NAT routes
       const private1RtResult = yield* EC2.describeRouteTables({
         RouteTableIds: [_stack.privateRouteTable1.routeTableId],
       });
       const private1Routes = private1RtResult.RouteTables?.[0]?.Routes ?? [];
-      const private1NatRoute = private1Routes.find(
-        (r) => r.DestinationCidrBlock === "0.0.0.0/0",
-      );
-      expect(private1NatRoute?.NatGatewayId).toEqual(
-        _stack.natGateway1.natGatewayId,
-      );
+      const private1NatRoute = private1Routes.find((r) => r.DestinationCidrBlock === "0.0.0.0/0");
+      expect(private1NatRoute?.NatGatewayId).toEqual(_stack.natGateway1.natGatewayId);
 
       const private2RtResult = yield* EC2.describeRouteTables({
         RouteTableIds: [_stack.privateRouteTable2.routeTableId],
       });
       const private2Routes = private2RtResult.RouteTables?.[0]?.Routes ?? [];
-      const private2NatRoute = private2Routes.find(
-        (r) => r.DestinationCidrBlock === "0.0.0.0/0",
-      );
-      expect(private2NatRoute?.NatGatewayId).toEqual(
-        _stack.natGateway2.natGatewayId,
-      );
+      const private2NatRoute = private2Routes.find((r) => r.DestinationCidrBlock === "0.0.0.0/0");
+      expect(private2NatRoute?.NatGatewayId).toEqual(_stack.natGateway2.natGatewayId);
 
       // =========================================================================
       // Verify Route Table Associations
       // =========================================================================
-      expect(_stack.publicSubnet1Association.associationId).toMatch(
-        /^rtbassoc-/,
-      );
-      expect(_stack.publicSubnet2Association.associationId).toMatch(
-        /^rtbassoc-/,
-      );
-      expect(_stack.privateSubnet1Association.associationId).toMatch(
-        /^rtbassoc-/,
-      );
-      expect(_stack.privateSubnet2Association.associationId).toMatch(
-        /^rtbassoc-/,
-      );
+      expect(_stack.publicSubnet1Association.associationId).toMatch(/^rtbassoc-/);
+      expect(_stack.publicSubnet2Association.associationId).toMatch(/^rtbassoc-/);
+      expect(_stack.privateSubnet1Association.associationId).toMatch(/^rtbassoc-/);
+      expect(_stack.privateSubnet2Association.associationId).toMatch(/^rtbassoc-/);
 
       // Both public subnets share the same route table
       expect(_stack.publicSubnet1Association.routeTableId).toEqual(
@@ -1741,16 +1661,16 @@ test.provider.skip(
       expect(_stack.appSecurityGroup.groupId).toMatch(/^sg-/);
       expect(_stack.appSecurityGroup.vpcId).toEqual(_stack.myVpc.vpcId);
       expect(_stack.appSecurityGroup.ingressRules).toHaveLength(1);
-      expect(
-        _stack.appSecurityGroup.ingressRules?.[0]?.referencedGroupId,
-      ).toEqual(_stack.webSecurityGroup.groupId);
+      expect(_stack.appSecurityGroup.ingressRules?.[0]?.referencedGroupId).toEqual(
+        _stack.webSecurityGroup.groupId,
+      );
 
       expect(_stack.dbSecurityGroup.groupId).toMatch(/^sg-/);
       expect(_stack.dbSecurityGroup.vpcId).toEqual(_stack.myVpc.vpcId);
       expect(_stack.dbSecurityGroup.ingressRules).toHaveLength(1);
-      expect(
-        _stack.dbSecurityGroup.ingressRules?.[0]?.referencedGroupId,
-      ).toEqual(_stack.appSecurityGroup.groupId);
+      expect(_stack.dbSecurityGroup.ingressRules?.[0]?.referencedGroupId).toEqual(
+        _stack.appSecurityGroup.groupId,
+      );
 
       // Verify security groups in AWS
       const sgResult = yield* EC2.describeSecurityGroups({
@@ -1795,22 +1715,14 @@ test.provider.skip(
       // =========================================================================
       // Verify Network ACL Associations
       // =========================================================================
-      expect(_stack.privateSubnet1NaclAssoc.associationId).toMatch(
-        /^aclassoc-/,
-      );
+      expect(_stack.privateSubnet1NaclAssoc.associationId).toMatch(/^aclassoc-/);
       expect(_stack.privateSubnet1NaclAssoc.networkAclId).toEqual(
         _stack.privateNetworkAcl.networkAclId,
       );
-      expect(_stack.privateSubnet1NaclAssoc.subnetId).toEqual(
-        _stack.privateSubnet1.subnetId,
-      );
+      expect(_stack.privateSubnet1NaclAssoc.subnetId).toEqual(_stack.privateSubnet1.subnetId);
 
-      expect(_stack.privateSubnet2NaclAssoc.associationId).toMatch(
-        /^aclassoc-/,
-      );
-      expect(_stack.privateSubnet2NaclAssoc.subnetId).toEqual(
-        _stack.privateSubnet2.subnetId,
-      );
+      expect(_stack.privateSubnet2NaclAssoc.associationId).toMatch(/^aclassoc-/);
+      expect(_stack.privateSubnet2NaclAssoc.subnetId).toEqual(_stack.privateSubnet2.subnetId);
 
       // =========================================================================
       // Verify VPC Endpoint for S3
@@ -1819,12 +1731,8 @@ test.provider.skip(
       expect(_stack.s3Endpoint.vpcEndpointType).toEqual("Gateway");
       expect(_stack.s3Endpoint.vpcId).toEqual(_stack.myVpc.vpcId);
       expect(_stack.s3Endpoint.state).toEqual("available");
-      expect(_stack.s3Endpoint.routeTableIds).toContain(
-        _stack.privateRouteTable1.routeTableId,
-      );
-      expect(_stack.s3Endpoint.routeTableIds).toContain(
-        _stack.privateRouteTable2.routeTableId,
-      );
+      expect(_stack.s3Endpoint.routeTableIds).toContain(_stack.privateRouteTable1.routeTableId);
+      expect(_stack.s3Endpoint.routeTableIds).toContain(_stack.privateRouteTable2.routeTableId);
 
       // Verify VPC Endpoint in AWS
       const vpceResult = yield* EC2.describeVpcEndpoints({
@@ -1866,13 +1774,10 @@ test.provider.skip(
           });
 
           // Egress-Only Internet Gateway for IPv6 outbound traffic from private subnets
-          const egressOnlyIgw = yield* EgressOnlyInternetGateway(
-            "EgressOnlyIgw",
-            {
-              vpcId: myVpc.vpcId,
-              tags: { Name: "comprehensive-eigw" },
-            },
-          );
+          const egressOnlyIgw = yield* EgressOnlyInternetGateway("EgressOnlyIgw", {
+            vpcId: myVpc.vpcId,
+            tags: { Name: "comprehensive-eigw" },
+          });
 
           // Public Subnets in two AZs
           const publicSubnet1 = yield* Subnet("PublicSubnet1", {
@@ -2079,17 +1984,14 @@ test.provider.skip(
 
           // Network ACL Entries (rules)
           // Allow inbound traffic from VPC CIDR
-          const privateNaclIngressVpc = yield* NetworkAclEntry(
-            "PrivateNaclIngressVpc",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              ruleNumber: 100,
-              protocol: "-1", // All protocols
-              ruleAction: "allow",
-              egress: false,
-              cidrBlock: "10.0.0.0/16",
-            },
-          );
+          const privateNaclIngressVpc = yield* NetworkAclEntry("PrivateNaclIngressVpc", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            ruleNumber: 100,
+            protocol: "-1", // All protocols
+            ruleAction: "allow",
+            egress: false,
+            cidrBlock: "10.0.0.0/16",
+          });
 
           // Allow inbound ephemeral ports (for NAT return traffic)
           const privateNaclIngressEphemeral = yield* NetworkAclEntry(
@@ -2106,47 +2008,34 @@ test.provider.skip(
           );
 
           // Allow all outbound traffic
-          const privateNaclEgressAll = yield* NetworkAclEntry(
-            "PrivateNaclEgressAll",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              ruleNumber: 100,
-              protocol: "-1", // All protocols
-              ruleAction: "allow",
-              egress: true,
-              cidrBlock: "0.0.0.0/0",
-            },
-          );
+          const privateNaclEgressAll = yield* NetworkAclEntry("PrivateNaclEgressAll", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            ruleNumber: 100,
+            protocol: "-1", // All protocols
+            ruleAction: "allow",
+            egress: true,
+            cidrBlock: "0.0.0.0/0",
+          });
 
           // Network ACL Associations - associate private subnets with the custom NACL
-          const privateSubnet1NaclAssoc = yield* NetworkAclAssociation(
-            "PrivateSubnet1NaclAssoc",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              subnetId: privateSubnet1.subnetId,
-            },
-          );
+          const privateSubnet1NaclAssoc = yield* NetworkAclAssociation("PrivateSubnet1NaclAssoc", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            subnetId: privateSubnet1.subnetId,
+          });
 
-          const privateSubnet2NaclAssoc = yield* NetworkAclAssociation(
-            "PrivateSubnet2NaclAssoc",
-            {
-              networkAclId: privateNetworkAcl.networkAclId,
-              subnetId: privateSubnet2.subnetId,
-            },
-          );
+          const privateSubnet2NaclAssoc = yield* NetworkAclAssociation("PrivateSubnet2NaclAssoc", {
+            networkAclId: privateNetworkAcl.networkAclId,
+            subnetId: privateSubnet2.subnetId,
+          });
 
           // VPC Gateway Endpoint for S3 (reduces NAT costs and improves latency)
           const s3Endpoint = yield* VpcEndpoint("S3Endpoint", {
             vpcId: myVpc.vpcId,
             serviceName: `com.amazonaws.${
-              (yield* EC2.describeAvailabilityZones({})).AvailabilityZones?.[0]
-                ?.RegionName
+              (yield* EC2.describeAvailabilityZones({})).AvailabilityZones?.[0]?.RegionName
             }.s3`,
             vpcEndpointType: "Gateway",
-            routeTableIds: [
-              privateRouteTable1.routeTableId,
-              privateRouteTable2.routeTableId,
-            ],
+            routeTableIds: [privateRouteTable1.routeTableId, privateRouteTable2.routeTableId],
             tags: { Name: "s3-endpoint" },
           });
 
@@ -2194,18 +2083,10 @@ test.provider.skip(
       expect(stack2.egressOnlyIgw.egressOnlyInternetGatewayId).toEqual(
         _stack.egressOnlyIgw.egressOnlyInternetGatewayId,
       );
-      expect(stack2.natGateway1.natGatewayId).toEqual(
-        _stack.natGateway1.natGatewayId,
-      );
-      expect(stack2.natGateway2.natGatewayId).toEqual(
-        _stack.natGateway2.natGatewayId,
-      );
-      expect(stack2.privateNetworkAcl.networkAclId).toEqual(
-        _stack.privateNetworkAcl.networkAclId,
-      );
-      expect(stack2.s3Endpoint.vpcEndpointId).toEqual(
-        _stack.s3Endpoint.vpcEndpointId,
-      );
+      expect(stack2.natGateway1.natGatewayId).toEqual(_stack.natGateway1.natGatewayId);
+      expect(stack2.natGateway2.natGatewayId).toEqual(_stack.natGateway2.natGatewayId);
+      expect(stack2.privateNetworkAcl.networkAclId).toEqual(_stack.privateNetworkAcl.networkAclId);
+      expect(stack2.s3Endpoint.vpcEndpointId).toEqual(_stack.s3Endpoint.vpcEndpointId);
 
       // =========================================================================
       // Cleanup
@@ -2221,9 +2102,7 @@ test.provider.skip(
         Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
       );
 
-      yield* Effect.log(
-        "=== Comprehensive VPC test completed successfully! ===",
-      );
+      yield* Effect.log("=== Comprehensive VPC test completed successfully! ===");
     }).pipe(logLevel),
   { timeout: 1_000_000 },
 );
@@ -2240,10 +2119,7 @@ class TagsNotPropagated extends Data.TaggedError("TagsNotPropagated")<{
 /**
  * Asserts that a VPC has the expected tags, retrying until eventually consistent.
  */
-const assertVpcTags = Effect.fn(function* (
-  vpcId: string,
-  expectedTags: Record<string, string>,
-) {
+const assertVpcTags = Effect.fn(function* (vpcId: string, expectedTags: Record<string, string>) {
   yield* EC2.describeVpcs({ VpcIds: [vpcId] }).pipe(
     Effect.flatMap((result) => {
       const tags = result.Vpcs?.[0]?.Tags ?? [];
@@ -2253,15 +2129,11 @@ const assertVpcTags = Effect.fn(function* (
         actual[key] = tags.find((t) => t.Key === key)?.Value;
       }
 
-      const allMatch = Object.entries(expectedTags).every(
-        ([key, value]) => actual[key] === value,
-      );
+      const allMatch = Object.entries(expectedTags).every(([key, value]) => actual[key] === value);
 
       return allMatch
         ? Effect.succeed(result)
-        : Effect.fail(
-            new TagsNotPropagated({ expected: expectedTags, actual }),
-          );
+        : Effect.fail(new TagsNotPropagated({ expected: expectedTags, actual }));
     }),
     Effect.tapError(Effect.log),
     Effect.retry({

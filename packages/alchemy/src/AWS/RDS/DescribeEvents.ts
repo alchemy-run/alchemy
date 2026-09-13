@@ -32,6 +32,4 @@ export interface DescribeEvents extends Binding.Service<
     ) => Effect.Effect<rds.EventsMessage, rds.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.RDS.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.RDS.DescribeEvents");

@@ -80,9 +80,7 @@ export interface AstroCloudflareTarget extends AstroTarget<AstroCloudflareConfig
  * - `bundle` — workerd resolve conditions + `cloudflare:` externals
  *   (informational for Astro: the integration configures the bundler itself).
  */
-export const target = (
-  config: AstroCloudflareConfig = {},
-): AstroCloudflareTarget => {
+export const target = (config: AstroCloudflareConfig = {}): AstroCloudflareTarget => {
   // Written by the integration's `astro:config:done` (the client directory
   // before the `base !== "/"` remap nests it); read by `finish` below.
   let originalClientDir: string | undefined;

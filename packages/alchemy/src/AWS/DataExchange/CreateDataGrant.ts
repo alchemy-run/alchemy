@@ -32,12 +32,7 @@ export interface CreateDataGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.CreateDataGrantRequest,
-    ) => Effect.Effect<
-      dataexchange.CreateDataGrantResponse,
-      dataexchange.CreateDataGrantError
-    >
+    ) => Effect.Effect<dataexchange.CreateDataGrantResponse, dataexchange.CreateDataGrantError>
   >
 > {}
-export const CreateDataGrant = Binding.Service<CreateDataGrant>(
-  "AWS.DataExchange.CreateDataGrant",
-);
+export const CreateDataGrant = Binding.Service<CreateDataGrant>("AWS.DataExchange.CreateDataGrant");

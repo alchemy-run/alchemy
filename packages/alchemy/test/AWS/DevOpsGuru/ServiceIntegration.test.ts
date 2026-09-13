@@ -12,10 +12,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 const observed = devopsguru.describeServiceIntegration({}).pipe(
   Effect.map(({ ServiceIntegration: config }) => ({
     opsCenter: config?.OpsCenter?.OptInStatus === "ENABLED",
-    logsAnomalyDetection:
-      config?.LogsAnomalyDetection?.OptInStatus === "ENABLED",
-    encryptionType:
-      config?.KMSServerSideEncryption?.Type ?? "AWS_OWNED_KMS_KEY",
+    logsAnomalyDetection: config?.LogsAnomalyDetection?.OptInStatus === "ENABLED",
+    encryptionType: config?.KMSServerSideEncryption?.Type ?? "AWS_OWNED_KMS_KEY",
   })),
 );
 

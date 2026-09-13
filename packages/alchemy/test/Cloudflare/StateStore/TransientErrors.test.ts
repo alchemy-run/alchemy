@@ -29,16 +29,11 @@ import type { StateStoreError } from "@/State/State.ts";
  */
 
 /** Minimal fetch signature — Bun's `typeof fetch` also demands `preconnect`. */
-type FetchStub = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+type FetchStub = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 const stubHttpClient = (stub: FetchStub) =>
   FetchHttpClient.layer.pipe(
-    Layer.provide(
-      Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch),
-    ),
+    Layer.provide(Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch)),
   );
 
 /** Run a state-store write against a stubbed transport, return its failure. */
@@ -60,20 +55,14 @@ const failingWrite = (stub: FetchStub): Effect.Effect<StateStoreError> =>
   }).pipe(Effect.provide(stubHttpClient(stub)), Effect.orDie);
 
 describe("isTransientBootstrapWriteError", () => {
-  it.live(
-    "retries 401 Unauthorized (token-binding propagation) but not other 4xx",
-    () =>
-      Effect.gen(function* () {
-        const unauthorized = yield* failingWrite(
-          async () => new Response(null, { status: 401 }),
-        );
-        expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
+  it.live("retries 401 Unauthorized (token-binding propagation) but not other 4xx", () =>
+    Effect.gen(function* () {
+      const unauthorized = yield* failingWrite(async () => new Response(null, { status: 401 }));
+      expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
 
-        const badRequest = yield* failingWrite(
-          async () => new Response("no", { status: 400 }),
-        );
-        expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
-      }),
+      const badRequest = yield* failingWrite(async () => new Response("no", { status: 400 }));
+      expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
+    }),
   );
 
   it.live(

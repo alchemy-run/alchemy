@@ -43,9 +43,7 @@ export interface Publish extends Binding.Service<
   (
     topicFilter?: string,
   ) => Effect.Effect<
-    (
-      request: PublishRequest,
-    ) => Effect.Effect<iotdata.PublishResponse, iotdata.PublishError>
+    (request: PublishRequest) => Effect.Effect<iotdata.PublishResponse, iotdata.PublishError>
   >
 > {}
 

@@ -28,9 +28,7 @@ export interface GetTelemetryRule extends Binding.Service<
   "AWS.ObservabilityAdmin.GetTelemetryRule",
   (
     rule: TelemetryRule,
-  ) => Effect.Effect<
-    () => Effect.Effect<obs.GetTelemetryRuleOutput, obs.GetTelemetryRuleError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<obs.GetTelemetryRuleOutput, obs.GetTelemetryRuleError>>
 > {}
 
 export const GetTelemetryRule = Binding.Service<GetTelemetryRule>(

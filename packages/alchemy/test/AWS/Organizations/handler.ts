@@ -41,33 +41,25 @@ export default OrganizationsTestFunction.make(
     const listPolicies = yield* Organizations.ListPolicies();
     const listPoliciesForTarget = yield* Organizations.ListPoliciesForTarget();
     const listTargetsForPolicy = yield* Organizations.ListTargetsForPolicy();
-    const describeEffectivePolicy =
-      yield* Organizations.DescribeEffectivePolicy();
+    const describeEffectivePolicy = yield* Organizations.DescribeEffectivePolicy();
     const listAccountsWithInvalidEffectivePolicy =
       yield* Organizations.ListAccountsWithInvalidEffectivePolicy();
     const listEffectivePolicyValidationErrors =
       yield* Organizations.ListEffectivePolicyValidationErrors();
-    const listDelegatedAdministrators =
-      yield* Organizations.ListDelegatedAdministrators();
-    const listDelegatedServicesForAccount =
-      yield* Organizations.ListDelegatedServicesForAccount();
+    const listDelegatedAdministrators = yield* Organizations.ListDelegatedAdministrators();
+    const listDelegatedServicesForAccount = yield* Organizations.ListDelegatedServicesForAccount();
     const listAWSServiceAccessForOrganization =
       yield* Organizations.ListAWSServiceAccessForOrganization();
     const listTagsForResource = yield* Organizations.ListTagsForResource();
-    const describeCreateAccountStatus =
-      yield* Organizations.DescribeCreateAccountStatus();
-    const listCreateAccountStatus =
-      yield* Organizations.ListCreateAccountStatus();
-    const inviteAccountToOrganization =
-      yield* Organizations.InviteAccountToOrganization();
+    const describeCreateAccountStatus = yield* Organizations.DescribeCreateAccountStatus();
+    const listCreateAccountStatus = yield* Organizations.ListCreateAccountStatus();
+    const inviteAccountToOrganization = yield* Organizations.InviteAccountToOrganization();
     const acceptHandshake = yield* Organizations.AcceptHandshake();
     const declineHandshake = yield* Organizations.DeclineHandshake();
     const cancelHandshake = yield* Organizations.CancelHandshake();
     const describeHandshake = yield* Organizations.DescribeHandshake();
-    const listHandshakesForAccount =
-      yield* Organizations.ListHandshakesForAccount();
-    const listHandshakesForOrganization =
-      yield* Organizations.ListHandshakesForOrganization();
+    const listHandshakesForAccount = yield* Organizations.ListHandshakesForAccount();
+    const listHandshakesForOrganization = yield* Organizations.ListHandshakesForOrganization();
 
     // --- event source ---
     // Deploy-time: creates the EventBridge rule (default bus, source
@@ -143,9 +135,8 @@ export default OrganizationsTestFunction.make(
               id: r.Organization?.Id ?? null,
               managementAccountId: r.Organization?.MasterAccountId ?? null,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "AWSOrganizationsNotInUseException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "AWSOrganizationsNotInUseException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -158,9 +149,8 @@ export default OrganizationsTestFunction.make(
               count: r.Roots?.length ?? 0,
               rootId: r.Roots?.[0]?.Id ?? null,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "AWSOrganizationsNotInUseException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "AWSOrganizationsNotInUseException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -172,9 +162,8 @@ export default OrganizationsTestFunction.make(
               ok: true as const,
               count: r.Accounts?.length ?? 0,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "AWSOrganizationsNotInUseException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "AWSOrganizationsNotInUseException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -280,9 +269,8 @@ export default OrganizationsTestFunction.make(
               ok: true as const,
               count: r.Policies?.length ?? 0,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "AWSOrganizationsNotInUseException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "AWSOrganizationsNotInUseException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -364,10 +352,7 @@ export default OrganizationsTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/invalid-effective-policy-accounts"
-        ) {
+        if (request.method === "GET" && pathname === "/invalid-effective-policy-accounts") {
           const result = yield* listAccountsWithInvalidEffectivePolicy({
             PolicyType: "TAG_POLICY",
           }).pipe(
@@ -390,10 +375,7 @@ export default OrganizationsTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/effective-policy-validation-errors"
-        ) {
+        if (request.method === "GET" && pathname === "/effective-policy-validation-errors") {
           const result = yield* Effect.gen(function* () {
             const accountId = yield* managementAccountId;
             if (accountId === undefined) {
@@ -424,10 +406,7 @@ export default OrganizationsTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/delegated-administrators"
-        ) {
+        if (request.method === "GET" && pathname === "/delegated-administrators") {
           const result = yield* listDelegatedAdministrators().pipe(
             Effect.map((r) => ({
               ok: true as const,
@@ -514,10 +493,7 @@ export default OrganizationsTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/create-account-statuses"
-        ) {
+        if (request.method === "GET" && pathname === "/create-account-statuses") {
           const result = yield* listCreateAccountStatus().pipe(
             Effect.map((r) => ({
               ok: true as const,
@@ -535,10 +511,7 @@ export default OrganizationsTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/create-account-status-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/create-account-status-not-found") {
           const tag = yield* describeCreateAccountStatus({
             CreateAccountRequestId: NONEXISTENT_CAR_ID,
           }).pipe(
@@ -563,9 +536,8 @@ export default OrganizationsTestFunction.make(
               ok: true as const,
               count: r.Handshakes?.length ?? 0,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ConcurrentModificationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ConcurrentModificationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -595,21 +567,14 @@ export default OrganizationsTestFunction.make(
           }).pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "HandshakeNotFoundException",
-                "InvalidInputException",
-              ],
+              ["AccessDeniedException", "HandshakeNotFoundException", "InvalidInputException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/accept-handshake-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/accept-handshake-not-found") {
           const tag = yield* acceptHandshake({
             HandshakeId: NONEXISTENT_HANDSHAKE_ID,
           }).pipe(
@@ -627,40 +592,26 @@ export default OrganizationsTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/decline-handshake-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/decline-handshake-not-found") {
           const tag = yield* declineHandshake({
             HandshakeId: NONEXISTENT_HANDSHAKE_ID,
           }).pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "HandshakeNotFoundException",
-                "InvalidInputException",
-              ],
+              ["AccessDeniedException", "HandshakeNotFoundException", "InvalidInputException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/cancel-handshake-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/cancel-handshake-not-found") {
           const tag = yield* cancelHandshake({
             HandshakeId: NONEXISTENT_HANDSHAKE_ID,
           }).pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "HandshakeNotFoundException",
-                "InvalidInputException",
-              ],
+              ["AccessDeniedException", "HandshakeNotFoundException", "InvalidInputException"],
               (e) => Effect.succeed(e._tag),
             ),
           );

@@ -68,19 +68,15 @@ test.provider(
       yield* stack.destroy();
 
       // Typed wait-until-gone.
-      const gone = yield* eventbridge
-        .describeArchive({ ArchiveName: ARCHIVE_NAME })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (isGone): boolean => isGone,
-            times: 10,
-          }),
-        );
+      const gone = yield* eventbridge.describeArchive({ ArchiveName: ARCHIVE_NAME }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (isGone): boolean => isGone,
+          times: 10,
+        }),
+      );
       expect(gone).toBe(true);
     }),
   { timeout: 120_000 },

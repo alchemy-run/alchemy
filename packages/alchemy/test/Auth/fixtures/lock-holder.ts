@@ -8,8 +8,6 @@ if (!key) throw new Error("Missing lock key");
 await Effect.runPromise(
   withLock(
     key,
-    Effect.sync(() => process.stdout.write("ready\n")).pipe(
-      Effect.andThen(Effect.never),
-    ),
+    Effect.sync(() => process.stdout.write("ready\n")).pipe(Effect.andThen(Effect.never)),
   ).pipe(Effect.provide(NodeServices.layer)),
 );

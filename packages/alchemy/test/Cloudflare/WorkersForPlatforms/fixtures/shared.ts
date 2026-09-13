@@ -6,12 +6,9 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
  * and the user Worker (which is uploaded *into* it via the Worker `namespace`
  * prop). Deterministic, constant name per the test conventions.
  */
-export const DispatchNs = Cloudflare.WorkersForPlatforms.DispatchNamespace(
-  "WfpBindingNs",
-  {
-    name: "alchemy-wfp-binding-test-ns",
-  },
-);
+export const DispatchNs = Cloudflare.WorkersForPlatforms.DispatchNamespace("WfpBindingNs", {
+  name: "alchemy-wfp-binding-test-ns",
+});
 
 /**
  * Async (non-Effect) platform Worker that declares the dispatch namespace on
@@ -27,9 +24,7 @@ export const AsyncPlatformWorker = Cloudflare.Worker("WfpAsyncPlatformWorker", {
   },
 });
 
-export type AsyncPlatformWorkerEnv = Cloudflare.InferEnv<
-  typeof AsyncPlatformWorker
->;
+export type AsyncPlatformWorkerEnv = Cloudflare.InferEnv<typeof AsyncPlatformWorker>;
 
 /**
  * Raw ESM source for a trivial "user worker" uploaded into {@link DispatchNs}.

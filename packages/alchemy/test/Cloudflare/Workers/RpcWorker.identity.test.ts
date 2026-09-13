@@ -14,12 +14,9 @@ const ping = Rpc.make("ping", {
 
 class PingRpcs extends RpcGroup.make(ping) {}
 
-class ModularRpcWorker extends Cloudflare.RpcWorker<ModularRpcWorker>()(
-  "ModularRpcWorker",
-  {
-    schema: PingRpcs,
-  },
-) {}
+class ModularRpcWorker extends Cloudflare.RpcWorker<ModularRpcWorker>()("ModularRpcWorker", {
+  schema: PingRpcs,
+}) {}
 
 class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
   "InlineRpcWorker",
@@ -36,10 +33,6 @@ test("RpcWorker inline class copies LogicalId from the underlying Worker", () =>
 });
 
 test("RpcWorker class is a transferredFrom source by logical id", () => {
-  expect(normalizeTransferredFrom(ModularRpcWorker)).toEqual([
-    "ModularRpcWorker",
-  ]);
-  expect(normalizeTransferredFrom(InlineRpcWorker)).toEqual([
-    "InlineRpcWorker",
-  ]);
+  expect(normalizeTransferredFrom(ModularRpcWorker)).toEqual(["ModularRpcWorker"]);
+  expect(normalizeTransferredFrom(InlineRpcWorker)).toEqual(["InlineRpcWorker"]);
 });

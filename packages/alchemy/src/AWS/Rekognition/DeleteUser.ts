@@ -31,12 +31,7 @@ export interface DeleteUser extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DeleteUserRequest,
-    ) => Effect.Effect<
-      rekognition.DeleteUserResponse,
-      rekognition.DeleteUserError
-    >
+    ) => Effect.Effect<rekognition.DeleteUserResponse, rekognition.DeleteUserError>
   >
 > {}
-export const DeleteUser = Binding.Service<DeleteUser>(
-  "AWS.Rekognition.DeleteUser",
-);
+export const DeleteUser = Binding.Service<DeleteUser>("AWS.Rekognition.DeleteUser");

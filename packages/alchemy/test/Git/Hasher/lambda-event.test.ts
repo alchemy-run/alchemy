@@ -7,11 +7,7 @@ import {
   handleHashEvent,
   isHashEvent,
 } from "@/Git/Hasher/index.ts";
-import {
-  encodeTypeSize,
-  hashObject,
-  makeSha1,
-} from "@/Git/Protocol/ObjectCodec.ts";
+import { encodeTypeSize, hashObject, makeSha1 } from "@/Git/Protocol/ObjectCodec.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import { scanPart } from "@/Git/Protocol/PartialScan.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
@@ -53,9 +49,7 @@ describe("Lambda hash event (DESIGN §22.11)", () => {
           maxObjectSize: 1 << 20,
         });
         expect(scan.count).toBe(direct.count);
-        expect(scan.entries.map((e) => e.oid)).toEqual(
-          direct.entries.map((e) => e.oid),
-        );
+        expect(scan.entries.map((e) => e.oid)).toEqual(direct.entries.map((e) => e.oid));
         expect(scan.consumedTo).toBe(direct.consumedTo);
       }),
     );

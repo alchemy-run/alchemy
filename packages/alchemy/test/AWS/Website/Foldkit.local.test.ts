@@ -12,11 +12,7 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "foldkit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "foldkit-app");
 
 // Clone under the alchemy package so `vite`, `foldkit`, and
 // `@foldkit/vite-plugin` resolve from the workspace's hoisted node_modules
@@ -61,9 +57,7 @@ describe("AWS.Website.Foldkit local", () => {
         // it): a localhost URL and no cloud rows at all — proof no AWS call
         // ran, and specifically NOT a *.cloudfront.net URL.
         const url = deployed.site.url! as string;
-        expect(url).toMatch(
-          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-        );
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
         expect(deployed.site.distribution).toBeUndefined();
         expect(deployed.site.server).toBeUndefined();
         expect(deployed.site.bucket).toBeUndefined();
@@ -77,13 +71,9 @@ describe("AWS.Website.Foldkit local", () => {
         });
         // The Foldkit app's source modules serve straight from src/ — no
         // build ran.
-        yield* expectUrlContains(
-          `${url}/src/main.ts`,
-          "FOLDKIT_AWS_MODULE_MARKER",
-          {
-            label: "dev module source",
-          },
-        );
+        yield* expectUrlContains(`${url}/src/main.ts`, "FOLDKIT_AWS_MODULE_MARKER", {
+          label: "dev module source",
+        });
 
         // ── HMR surface: edit index.html in place. The stack is NOT
         // re-applied — Vite's dev server serves the transformed html per
@@ -92,10 +82,7 @@ describe("AWS.Website.Foldkit local", () => {
         const index = yield* fs.readFileString(indexPath);
         yield* fs.writeFileString(
           indexPath,
-          index.replaceAll(
-            "FOLDKIT_AWS_PAGE_MARKER",
-            "FOLDKIT_AWS_PAGE_MARKER_V2",
-          ),
+          index.replaceAll("FOLDKIT_AWS_PAGE_MARKER", "FOLDKIT_AWS_PAGE_MARKER_V2"),
         );
         yield* expectUrlContains(`${url}/`, "FOLDKIT_AWS_PAGE_MARKER_V2", {
           timeout: "90 seconds",

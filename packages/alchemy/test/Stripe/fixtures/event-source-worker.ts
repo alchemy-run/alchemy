@@ -41,10 +41,7 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
           const customer = yield* createCustomer({
             email: "event-source@example.com",
           }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { id: customer.id },
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json({ id: customer.id }, { status: 201 });
         }
         return HttpServerResponse.text("ok");
       }),

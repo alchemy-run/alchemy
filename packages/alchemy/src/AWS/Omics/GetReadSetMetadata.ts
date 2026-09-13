@@ -34,10 +34,7 @@ export interface GetReadSetMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetReadSetMetadataRequest,
-    ) => Effect.Effect<
-      omics.GetReadSetMetadataResponse,
-      omics.GetReadSetMetadataError
-    >
+    ) => Effect.Effect<omics.GetReadSetMetadataResponse, omics.GetReadSetMetadataError>
   >
 > {}
 

@@ -40,17 +40,12 @@ import { SignHttp } from "./SignHttp.ts";
 import { Sprite, SpriteProvider } from "./Sprite.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
 import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
-import {
-  AssetDeployment,
-  AssetDeploymentProvider,
-} from "./Website/AssetDeployment.ts";
+import { AssetDeployment, AssetDeploymentProvider } from "./Website/AssetDeployment.ts";
 import { WriteCertificatesHttp } from "./WriteCertificatesHttp.ts";
 import { WriteRedisHttp } from "./WriteRedisHttp.ts";
 import { WriteSecretHttp } from "./WriteSecretHttp.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Fly",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Fly") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

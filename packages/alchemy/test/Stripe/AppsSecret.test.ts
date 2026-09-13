@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ACCOUNT_SCOPE = { type: "account" as const };
 
@@ -32,12 +29,8 @@ const EXPIRES_AT_UPDATED = 2_100_000_000;
 
 const waitUntilGone = (name: string) =>
   GetAppsSecretsFind({ name, scope: ACCOUNT_SCOPE }).pipe(
-    Effect.map((secret) =>
-      secret.deleted === true ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((secret) => (secret.deleted === true ? ("gone" as const) : ("found" as const))),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

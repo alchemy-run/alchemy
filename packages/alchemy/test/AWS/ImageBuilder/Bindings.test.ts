@@ -9,9 +9,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import ImageBuilderTestFunctionLive, {
-  ImageBuilderTestFunction,
-} from "./handler";
+import ImageBuilderTestFunctionLive, { ImageBuilderTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -19,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "ImageBuilderBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -42,43 +37,30 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const deleteJson = (path: string) =>
-  send(HttpClientRequest.delete(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.delete(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("ImageBuilder Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "ImageBuilder test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ImageBuilder test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("ImageBuilder test setup: deploying fixture");
@@ -93,9 +75,7 @@ describe.sequential("ImageBuilder Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `ImageBuilder test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ImageBuilder test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -103,9 +83,7 @@ describe.sequential("ImageBuilder Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `ImageBuilder test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`ImageBuilder test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -129,22 +107,20 @@ describe.sequential("ImageBuilder Bindings", () => {
   });
 
   describe("GetImagePipeline", () => {
-    test.provider(
-      "reads the bound pipeline's state (injected pipeline arn)",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/pipeline")) as {
-            arn: string;
-            name: string;
-            status: string;
-            timeoutMinutes: number;
-          };
-          expect(response.arn).toContain(":image-pipeline/");
-          expect(response.status).toBe("ENABLED");
-          // The fixture's Duration timeout ("1 hour") landed as 60 wire
-          // minutes — proves the renamed duration prop converts correctly.
-          expect(response.timeoutMinutes).toBe(60);
-        }),
+    test.provider("reads the bound pipeline's state (injected pipeline arn)", () =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/pipeline")) as {
+          arn: string;
+          name: string;
+          status: string;
+          timeoutMinutes: number;
+        };
+        expect(response.arn).toContain(":image-pipeline/");
+        expect(response.status).toBe("ENABLED");
+        // The fixture's Duration timeout ("1 hour") landed as 60 wire
+        // minutes — proves the renamed duration prop converts correctly.
+        expect(response.timeoutMinutes).toBe(60);
+      }),
     );
   });
 
@@ -208,26 +184,18 @@ describe.sequential("ImageBuilder Bindings", () => {
             // Cancel it — early build states can briefly reject the
             // cancellation, so retry through the window (bounded).
             const cancelled = yield* postJson(`/build/cancel?arn=${arn}`).pipe(
-              Effect.map(
-                (body) =>
-                  body as { imageBuildVersionArn?: string; reason?: string },
-              ),
+              Effect.map((body) => body as { imageBuildVersionArn?: string; reason?: string }),
               Effect.repeat({
                 schedule: Schedule.spaced("5 seconds"),
-                until: (body): boolean =>
-                  body.imageBuildVersionArn !== undefined,
+                until: (body): boolean => body.imageBuildVersionArn !== undefined,
                 times: 12,
               }),
             );
-            expect(cancelled.imageBuildVersionArn).toBe(
-              started.imageBuildVersionArn,
-            );
+            expect(cancelled.imageBuildVersionArn).toBe(started.imageBuildVersionArn);
 
             // The build's workflow drill-down responds (may be empty this
             // early in the build).
-            const workflows = (yield* getJson(
-              `/build/workflows?arn=${arn}`,
-            )) as { ids: string[] };
+            const workflows = (yield* getJson(`/build/workflows?arn=${arn}`)) as { ids: string[] };
             expect(Array.isArray(workflows.ids)).toBe(true);
 
             // If the build already spawned a workflow execution, drill into
@@ -255,10 +223,7 @@ describe.sequential("ImageBuilder Bindings", () => {
 
             // The build version shows up under its image version ARN
             // (…:image/{name}/{version} — strip the build-number suffix).
-            const imageVersionArn = started.imageBuildVersionArn.replace(
-              /\/\d+$/,
-              "",
-            );
+            const imageVersionArn = started.imageBuildVersionArn.replace(/\/\d+$/, "");
             const versions = (yield* getJson(
               `/build-versions?arn=${encodeURIComponent(imageVersionArn)}`,
             )) as { arns: string[] };
@@ -270,9 +235,7 @@ describe.sequential("ImageBuilder Bindings", () => {
               count?: number;
               reason?: string;
             };
-            expect(
-              packages.count !== undefined || packages.reason !== undefined,
-            ).toBe(true);
+            expect(packages.count !== undefined || packages.reason !== undefined).toBe(true);
 
             // Observe the build settle into CANCELLED via the GetImage
             // binding (bounded).
@@ -280,8 +243,7 @@ describe.sequential("ImageBuilder Bindings", () => {
               Effect.map((body) => body as { status?: string }),
               Effect.repeat({
                 schedule: Schedule.spaced("5 seconds"),
-                until: (body): boolean =>
-                  body.status === "CANCELLED" || body.status === "FAILED",
+                until: (body): boolean => body.status === "CANCELLED" || body.status === "FAILED",
                 times: 24,
               }),
             );
@@ -290,9 +252,7 @@ describe.sequential("ImageBuilder Bindings", () => {
             // Prune the cancelled build via the DeleteImage binding; poll
             // through the not-yet-deletable window (bounded).
             const deleted = yield* deleteJson(`/build?arn=${arn}`).pipe(
-              Effect.map(
-                (body) => body as { deleted: boolean; reason?: string },
-              ),
+              Effect.map((body) => body as { deleted: boolean; reason?: string }),
               Effect.repeat({
                 schedule: Schedule.spaced("5 seconds"),
                 until: (body): boolean => body.deleted,
@@ -316,15 +276,9 @@ describe.sequential("ImageBuilder Bindings", () => {
                     while: (e): boolean =>
                       e._tag === "InvalidRequestException" ||
                       e._tag === "ResourceDependencyException",
-                    schedule: Schedule.max([
-                      Schedule.fixed("5 seconds"),
-                      Schedule.recurs(10),
-                    ]),
+                    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
                   }),
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
                   Effect.catch(() => Effect.void),
                 ),
             ),
@@ -335,18 +289,16 @@ describe.sequential("ImageBuilder Bindings", () => {
   });
 
   describe("consumeImageEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      () =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeImageEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", () =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeImageEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

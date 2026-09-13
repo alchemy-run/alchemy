@@ -44,14 +44,10 @@ describe("BetterAuth (bun:sqlite)", () => {
       expect(second.tablesAltered).toBe(0);
 
       // verify the core tables actually exist in the file
-      const { Database: BunSqlite } = yield* Effect.promise(
-        () => import("bun:sqlite"),
-      );
+      const { Database: BunSqlite } = yield* Effect.promise(() => import("bun:sqlite"));
       const raw = new BunSqlite(path);
       const tables = (
-        raw
-          .query("SELECT name FROM sqlite_master WHERE type = 'table'")
-          .all() as { name: string }[]
+        raw.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]
       ).map((row) => row.name);
       raw.close();
       for (const table of ["user", "session", "account", "verification"]) {

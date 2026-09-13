@@ -12,9 +12,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class GaTestFunction extends Lambda.Function<Lambda.Function>()(
-  "GaTestFunction",
-) {}
+export class GaTestFunction extends Lambda.Function<Lambda.Function>()("GaTestFunction") {}
 
 // Global Accelerator serializes config changes per accelerator; a mutation
 // racing an in-flight transaction is rejected with
@@ -25,8 +23,7 @@ const retryGaTransaction = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e): boolean =>
-      e._tag === "TransactionInProgressException" ||
-      e._tag === "ConflictException",
+      e._tag === "TransactionInProgressException" || e._tag === "ConflictException",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -40,10 +37,7 @@ export default GaTestFunction.make(
     // The accelerator/listener/endpoint group the bindings are bound to. The
     // endpoint group starts empty; the Add/RemoveEndpoints bindings register
     // and deregister the Elastic IP below at runtime.
-    const accelerator = yield* GlobalAccelerator.Accelerator(
-      "BindingAccelerator",
-      {},
-    );
+    const accelerator = yield* GlobalAccelerator.Accelerator("BindingAccelerator", {});
     const listener = yield* GlobalAccelerator.Listener("BindingListener", {
       acceleratorArn: accelerator.acceleratorArn,
       portRanges: [{ fromPort: 80, toPort: 80 }],
@@ -58,10 +52,8 @@ export default GaTestFunction.make(
     const eip = yield* EC2.EIP("BindingEip", {});
     const AllocationId = yield* eip.allocationId;
 
-    const describeAccelerator =
-      yield* GlobalAccelerator.DescribeAccelerator(accelerator);
-    const describeEndpointGroup =
-      yield* GlobalAccelerator.DescribeEndpointGroup(group);
+    const describeAccelerator = yield* GlobalAccelerator.DescribeAccelerator(accelerator);
+    const describeEndpointGroup = yield* GlobalAccelerator.DescribeEndpointGroup(group);
     const addEndpoints = yield* GlobalAccelerator.AddEndpoints(group);
     const removeEndpoints = yield* GlobalAccelerator.RemoveEndpoints(group);
 
@@ -106,12 +98,10 @@ export default GaTestFunction.make(
           const { EndpointGroup } = yield* describeEndpointGroup({});
           return yield* HttpServerResponse.json({
             region: EndpointGroup?.EndpointGroupRegion,
-            endpoints: (EndpointGroup?.EndpointDescriptions ?? []).map(
-              (endpoint) => ({
-                endpointId: endpoint.EndpointId,
-                healthState: endpoint.HealthState,
-              }),
-            ),
+            endpoints: (EndpointGroup?.EndpointDescriptions ?? []).map((endpoint) => ({
+              endpointId: endpoint.EndpointId,
+              healthState: endpoint.HealthState,
+            })),
           });
         }
 
@@ -123,9 +113,7 @@ export default GaTestFunction.make(
           const added = yield* Effect.result(
             retryGaTransaction(
               addEndpoints({
-                EndpointConfigurations: [
-                  { EndpointId: allocationId, Weight: 64 },
-                ],
+                EndpointConfigurations: [{ EndpointId: allocationId, Weight: 64 }],
               }),
             ),
           );

@@ -26,16 +26,12 @@ interface EventBody {
   } | null;
 }
 
-class DeploymentRequestFailed extends Data.TaggedError(
-  "DeploymentRequestFailed",
-)<{
+class DeploymentRequestFailed extends Data.TaggedError("DeploymentRequestFailed")<{
   readonly status: number;
   readonly body: string;
 }> {}
 
-class DeploymentEventPending extends Data.TaggedError(
-  "DeploymentEventPending",
-)<{
+class DeploymentEventPending extends Data.TaggedError("DeploymentEventPending")<{
   readonly deploymentNumber: number;
 }> {}
 
@@ -50,9 +46,7 @@ const startDeployment = Effect.suspend(() =>
         ? response.json
         : response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new DeploymentRequestFailed({ status: response.status, body }),
-              ),
+              Effect.fail(new DeploymentRequestFailed({ status: response.status, body })),
             ),
           ),
     ),
@@ -61,8 +55,7 @@ const startDeployment = Effect.suspend(() =>
     // as transient 5xx responses. Retry those only; genuine 4xx responses are
     // actionable test failures.
     Effect.retry({
-      while: (error) =>
-        error._tag === "DeploymentRequestFailed" && error.status >= 500,
+      while: (error) => error._tag === "DeploymentRequestFailed" && error.status >= 500,
       schedule: Schedule.exponential("1 second"),
       times: 6,
     }),
@@ -70,9 +63,7 @@ const startDeployment = Effect.suspend(() =>
 );
 
 const awaitCompleteEvent = (deploymentNumber: number) =>
-  HttpClient.get(
-    `${baseUrl}/event?number=${deploymentNumber}&type=OnDeploymentComplete`,
-  ).pipe(
+  HttpClient.get(`${baseUrl}/event?number=${deploymentNumber}&type=OnDeploymentComplete`).pipe(
     Effect.flatMap((response) => response.json),
     Effect.map((json) => json as unknown as EventBody),
     Effect.flatMap((body) =>
@@ -90,9 +81,7 @@ const awaitCompleteEvent = (deploymentNumber: number) =>
 describe("AppConfig DeploymentEventSource", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "AppConfig event source setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("AppConfig event source setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo(
@@ -115,10 +104,7 @@ describe("AppConfig DeploymentEventSource", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),

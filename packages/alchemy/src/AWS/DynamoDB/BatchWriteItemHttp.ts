@@ -29,9 +29,7 @@ export const BatchWriteItemHttp = Layer.effect(
         const TableName = tableNames.get(tableId);
         if (!TableName) {
           return yield* Effect.die(
-            new Error(
-              `BatchWriteItem request references unbound table '${tableId}'`,
-            ),
+            new Error(`BatchWriteItem request references unbound table '${tableId}'`),
           );
         }
         return yield* TableName;
@@ -40,36 +38,34 @@ export const BatchWriteItemHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchWriteItem(${sortedTables}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["dynamodb:BatchWriteItem"],
-                  Resource: sortedTables.map((table) => table.tableArn),
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchWriteItem(${sortedTables}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["dynamodb:BatchWriteItem"],
+                Resource: sortedTables.map((table) => table.tableArn),
+              },
+            ],
+          });
         }
       }
 
-      return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(
-        function* (request: BatchWriteItemRequest) {
-          const requestItems = yield* Effect.forEach(
-            Object.entries(request.RequestItems),
-            ([tableId, writes]) =>
-              Effect.gen(function* () {
-                return [yield* getTableName(tableId), writes] as const;
-              }),
-          );
+      return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(function* (
+        request: BatchWriteItemRequest,
+      ) {
+        const requestItems = yield* Effect.forEach(
+          Object.entries(request.RequestItems),
+          ([tableId, writes]) =>
+            Effect.gen(function* () {
+              return [yield* getTableName(tableId), writes] as const;
+            }),
+        );
 
-          return yield* batchWriteItem({
-            ...request,
-            RequestItems: Object.fromEntries(requestItems),
-          });
-        },
-      );
+        return yield* batchWriteItem({
+          ...request,
+          RequestItems: Object.fromEntries(requestItems),
+        });
+      });
     });
   }),
 );

@@ -20,9 +20,7 @@ const implementation = {
   logout: () => Effect.void,
   details: () => Effect.succeed({ lines: [] }),
   read: () => Effect.void,
-  readEnvironment: getEnvRedactedRequired("CUSTOM_PROVIDER_TOKEN").pipe(
-    Effect.asVoid,
-  ),
+  readEnvironment: getEnvRedactedRequired("CUSTOM_PROVIDER_TOKEN").pipe(Effect.asVoid),
   environment: [
     { name: "CUSTOM_PROVIDER_TOKEN", required: true, secret: true },
     {
@@ -35,115 +33,85 @@ const implementation = {
 
 it.effect("auth providers expose their declared environment contract", () =>
   Effect.gen(function* () {
-    yield* AuthProvider<{ method: "custom" }, void>()(
-      "CustomProvider",
-      implementation,
-    );
+    yield* AuthProvider<{ method: "custom" }, void>()("CustomProvider", implementation);
     const provider = yield* getAuthProvider("CustomProvider");
 
     expect(provider.environment).toEqual(implementation.environment);
     expect(describeEnvironment(provider.environment)).toBe(
       "CUSTOM_PROVIDER_TOKEN, [CUSTOM_PROVIDER_REGION | CUSTOM_PROVIDER_DEFAULT_REGION]",
     );
-  }).pipe(
-    Effect.provideService(AuthProviders, {}),
-    Effect.provide(NodeServices.layer),
-  ),
+  }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
 );
 
 it.effect("providers without environment credentials declare nothing", () =>
   Effect.gen(function* () {
-    const {
-      readEnvironment: _,
-      environment: __,
-      ...profileOnly
-    } = implementation;
-    yield* AuthProvider<{ method: "custom" }, void>()(
-      "ProfileOnlyProvider",
-      profileOnly,
-    );
+    const { readEnvironment: _, environment: __, ...profileOnly } = implementation;
+    yield* AuthProvider<{ method: "custom" }, void>()("ProfileOnlyProvider", profileOnly);
     const provider = yield* getAuthProvider("ProfileOnlyProvider");
 
     expect(provider.readEnvironment).toBeUndefined();
     expect(provider.environment).toEqual([]);
-  }).pipe(
-    Effect.provideService(AuthProviders, {}),
-    Effect.provide(NodeServices.layer),
-  ),
+  }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
 );
 
-it.effect(
-  "registration dies when readEnvironment lacks an environment declaration",
-  () =>
-    Effect.gen(function* () {
-      const { environment: _, ...undeclared } = implementation;
-      const exit = yield* AuthProvider<{ method: "custom" }, void>()(
-        "UndeclaredProvider",
-        undeclared,
-      ).pipe(Effect.exit);
+it.effect("registration dies when readEnvironment lacks an environment declaration", () =>
+  Effect.gen(function* () {
+    const { environment: _, ...undeclared } = implementation;
+    const exit = yield* AuthProvider<{ method: "custom" }, void>()(
+      "UndeclaredProvider",
+      undeclared,
+    ).pipe(Effect.exit);
 
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isFailure(exit)) {
-        expect(String(Cause.squash(exit.cause))).toContain(
-          "declare its `environment` variables",
-        );
-      }
-    }).pipe(
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(String(Cause.squash(exit.cause))).toContain("declare its `environment` variables");
+    }
+  }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
 );
 
-it.effect(
-  "call-time Interaction wins over the one ambient at registration",
-  () =>
-    Effect.gen(function* () {
-      const answered: string[] = [];
-      const scripted = (name: string): Interaction["Service"] => ({
-        output: {
-          info: () => Effect.void,
-          success: () => Effect.void,
-          warning: () => Effect.void,
-          error: () => Effect.void,
-        },
-        prompt: {
-          text: () =>
-            Effect.sync(() => {
-              answered.push(name);
-              return name;
-            }),
-          password: () => Effect.succeed(name),
-          confirm: () => Effect.succeed(true),
-          select: () => Effect.die("unused"),
-          multiSelect: () => Effect.die("unused"),
-          awaitExternal: () => Effect.succeed(name),
-        },
-        task: (_options, effect) => effect,
-      });
-
-      // Registered while "registration" is the ambient Interaction: the
-      // factory's context snapshot must NOT capture it — configure's declared
-      // requirement is resolved by whoever calls it.
-      yield* AuthProvider<{ method: "custom" }, void>()("OverrideProvider", {
-        ...implementation,
-        configure: () =>
-          Effect.gen(function* () {
-            const interaction = yield* Interaction;
-            yield* interaction.prompt
-              .text({ message: "token" })
-              .pipe(Effect.orDie);
-            return { method: "custom" as const };
+it.effect("call-time Interaction wins over the one ambient at registration", () =>
+  Effect.gen(function* () {
+    const answered: string[] = [];
+    const scripted = (name: string): Interaction["Service"] => ({
+      output: {
+        info: () => Effect.void,
+        success: () => Effect.void,
+        warning: () => Effect.void,
+        error: () => Effect.void,
+      },
+      prompt: {
+        text: () =>
+          Effect.sync(() => {
+            answered.push(name);
+            return name;
           }),
-      }).pipe(Effect.provideService(Interaction, scripted("registration")));
+        password: () => Effect.succeed(name),
+        confirm: () => Effect.succeed(true),
+        select: () => Effect.die("unused"),
+        multiSelect: () => Effect.die("unused"),
+        awaitExternal: () => Effect.succeed(name),
+      },
+      task: (_options, effect) => effect,
+    });
 
-      const provider = yield* getAuthProvider("OverrideProvider");
-      yield* provider
-        .configure("default")
-        .pipe(Effect.provideService(Interaction, scripted("call-time")));
+    // Registered while "registration" is the ambient Interaction: the
+    // factory's context snapshot must NOT capture it — configure's declared
+    // requirement is resolved by whoever calls it.
+    yield* AuthProvider<{ method: "custom" }, void>()("OverrideProvider", {
+      ...implementation,
+      configure: () =>
+        Effect.gen(function* () {
+          const interaction = yield* Interaction;
+          yield* interaction.prompt.text({ message: "token" }).pipe(Effect.orDie);
+          return { method: "custom" as const };
+        }),
+    }).pipe(Effect.provideService(Interaction, scripted("registration")));
 
-      expect(answered).toEqual(["call-time"]);
-    }).pipe(
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
+    const provider = yield* getAuthProvider("OverrideProvider");
+    yield* provider
+      .configure("default")
+      .pipe(Effect.provideService(Interaction, scripted("call-time")));
+
+    expect(answered).toEqual(["call-time"]);
+  }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
 );

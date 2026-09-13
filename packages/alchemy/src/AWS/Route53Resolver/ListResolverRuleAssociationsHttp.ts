@@ -33,10 +33,7 @@ export const ListResolverRuleAssociationsHttp = Layer.effect(
               policyStatements: [
                 {
                   Effect: "Allow",
-                  Action: [
-                    "route53resolver:ListResolverRuleAssociations",
-                    "ec2:DescribeVpcs",
-                  ],
+                  Action: ["route53resolver:ListResolverRuleAssociations", "ec2:DescribeVpcs"],
                   Resource: ["*"],
                 },
               ],
@@ -44,18 +41,14 @@ export const ListResolverRuleAssociationsHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(
-        `AWS.Route53Resolver.ListResolverRuleAssociations(${rule.LogicalId})`,
-      )(function* (
-        request?: Omit<r53r.ListResolverRuleAssociationsRequest, "Filters">,
-      ) {
-        return yield* op({
-          ...request,
-          Filters: [
-            { Name: "ResolverRuleId", Values: [yield* ResolverRuleId] },
-          ],
-        });
-      });
+      return Effect.fn(`AWS.Route53Resolver.ListResolverRuleAssociations(${rule.LogicalId})`)(
+        function* (request?: Omit<r53r.ListResolverRuleAssociationsRequest, "Filters">) {
+          return yield* op({
+            ...request,
+            Filters: [{ Name: "ResolverRuleId", Values: [yield* ResolverRuleId] }],
+          });
+        },
+      );
     });
   }),
 );

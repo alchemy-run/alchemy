@@ -1,8 +1,4 @@
-import {
-  DurableObject,
-  WorkerEntrypoint,
-  WorkflowEntrypoint,
-} from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint, WorkflowEntrypoint } from "cloudflare:workers";
 import { INIT_PATH } from "./constants.shared.ts";
 import type { Env as WrapperEnv } from "./env.worker.ts";
 import { stripInternalEnv } from "./env.worker.ts";
@@ -13,9 +9,7 @@ import { getWorkerEntryExport } from "./module-runner.worker.ts";
  * @template T - The `env` type
  */
 interface WorkerEntrypointConstructor<T = Cloudflare.Env> {
-  new (
-    ...args: ConstructorParameters<typeof WorkerEntrypoint<T>>
-  ): WorkerEntrypoint<T>;
+  new (...args: ConstructorParameters<typeof WorkerEntrypoint<T>>): WorkerEntrypoint<T>;
 }
 
 /**
@@ -23,9 +17,7 @@ interface WorkerEntrypointConstructor<T = Cloudflare.Env> {
  * @template T - The `env` type
  */
 interface DurableObjectConstructor<T = Cloudflare.Env> {
-  new (
-    ...args: ConstructorParameters<typeof DurableObject<T>>
-  ): DurableObject<T>;
+  new (...args: ConstructorParameters<typeof DurableObject<T>>): DurableObject<T>;
 }
 
 /**
@@ -33,9 +25,7 @@ interface DurableObjectConstructor<T = Cloudflare.Env> {
  * @template T - The `env` type
  */
 interface WorkflowEntrypointConstructor<T = Cloudflare.Env> {
-  new (
-    ...args: ConstructorParameters<typeof WorkflowEntrypoint<T>>
-  ): WorkflowEntrypoint<T>;
+  new (...args: ConstructorParameters<typeof WorkflowEntrypoint<T>>): WorkflowEntrypoint<T>;
 }
 
 /** Keys that should be ignored during RPC property access */
@@ -98,11 +88,7 @@ export function createWorkerEntrypointWrapper(
             return;
           }
 
-          const property = getWorkerEntrypointRpcProperty.call(
-            receiver,
-            exportName,
-            key,
-          );
+          const property = getWorkerEntrypointRpcProperty.call(receiver, exportName, key);
 
           return getRpcPropertyCallableThenable(key, property);
         },
@@ -189,10 +175,7 @@ async function getWorkerEntrypointRpcProperty(
   exportName: string,
   key: string,
 ): Promise<unknown> {
-  const ctor = (await getWorkerEntryExport(
-    this.env,
-    exportName,
-  )) as WorkerEntrypointConstructor;
+  const ctor = (await getWorkerEntryExport(this.env, exportName)) as WorkerEntrypointConstructor;
   const userEnv = stripInternalEnv(this.env);
   const expectedWorkerEntrypointMessage = `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be a subclass of \`WorkerEntrypoint\` for RPC.`;
 
@@ -274,10 +257,7 @@ async function getDurableObjectRpcProperty(
 export function createDurableObjectWrapper(
   exportName: string,
 ): DurableObjectConstructor<WrapperEnv> {
-  class Wrapper
-    extends DurableObject<WrapperEnv>
-    implements DurableObjectWrapper
-  {
+  class Wrapper extends DurableObject<WrapperEnv> implements DurableObjectWrapper {
     [kInstance]?: DurableObjectInstance;
 
     constructor(ctx: DurableObjectState, env: WrapperEnv) {
@@ -301,11 +281,7 @@ export function createDurableObjectWrapper(
             return;
           }
 
-          const property = getDurableObjectRpcProperty.call(
-            receiver,
-            exportName,
-            key,
-          );
+          const property = getDurableObjectRpcProperty.call(receiver, exportName, key);
 
           return getRpcPropertyCallableThenable(key, property);
         },
@@ -313,10 +289,7 @@ export function createDurableObjectWrapper(
     }
 
     async [kEnsureInstance]() {
-      const ctor = (await getWorkerEntryExport(
-        this.env,
-        exportName,
-      )) as DurableObjectConstructor;
+      const ctor = (await getWorkerEntryExport(this.env, exportName)) as DurableObjectConstructor;
 
       if (typeof ctor !== "function") {
         throw new TypeError(
@@ -351,10 +324,7 @@ export function createDurableObjectWrapper(
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (maybeFn as (...args: Array<unknown>) => any).apply(
-        instance,
-        args,
-      );
+      return (maybeFn as (...args: Array<unknown>) => any).apply(instance, args);
     };
   }
 
@@ -396,10 +366,7 @@ export function createWorkflowEntrypointWrapper(
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (maybeFn as (...args: Array<unknown>) => any).apply(
-        instance,
-        args,
-      );
+      return (maybeFn as (...args: Array<unknown>) => any).apply(instance, args);
     };
   }
 
@@ -428,6 +395,7 @@ function getRpcPropertyCallableThenable(
     return maybeFn(...args);
   } as Promise<unknown> & ((...args: Array<unknown>) => Promise<unknown>);
 
+  // oxlint-disable-next-line unicorn/no-thenable
   fn.then = (onFulfilled, onRejected) => property.then(onFulfilled, onRejected);
   fn.catch = (onRejected) => property.catch(onRejected);
   fn.finally = (onFinally) => property.finally(onFinally);

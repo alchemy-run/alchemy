@@ -30,11 +30,7 @@ const s3Policy = (arn: Output.Output<string>) => ({
   Statement: [
     {
       Effect: "Allow" as const,
-      Action: [
-        "s3:GetBucketLocation",
-        "s3:ListBucket",
-        "s3:ListBucketMultipartUploads",
-      ],
+      Action: ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
       Resource: [arn],
     },
     {
@@ -146,10 +142,7 @@ export default DataSyncTestFunction.make(
           const started = yield* startTaskExecution().pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "LocationAccessTestFailed",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(5)]),
             }),
             Effect.result,
           );
@@ -169,10 +162,7 @@ export default DataSyncTestFunction.make(
         }
 
         if (arn === null) {
-          return yield* HttpServerResponse.json(
-            { error: "missing arn" },
-            { status: 400 },
-          );
+          return yield* HttpServerResponse.json({ error: "missing arn" }, { status: 400 });
         }
 
         // Execution-addressed reads/writes: the execution ARN comes from

@@ -9,10 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readEntityResolutionTags,
-  syncEntityResolutionTags,
-} from "./internal.ts";
+import { readEntityResolutionTags, syncEntityResolutionTags } from "./internal.ts";
 
 export interface SchemaMappingProps {
   /**
@@ -91,9 +88,7 @@ export interface SchemaMapping extends Resource<
  *
  * @resource
  */
-export const SchemaMapping = Resource<SchemaMapping>(
-  "AWS.EntityResolution.SchemaMapping",
-);
+export const SchemaMapping = Resource<SchemaMapping>("AWS.EntityResolution.SchemaMapping");
 
 export const SchemaMappingProvider = () =>
   Provider.effect(
@@ -103,29 +98,21 @@ export const SchemaMappingProvider = () =>
         id: string,
         props: { schemaName?: string | undefined },
       ) {
-        return (
-          props.schemaName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.schemaName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Get a schema mapping by name; typed not-found → undefined. */
       const getByName = Effect.fn(function* (schemaName: string) {
         return yield* entityresolution
           .getSchemaMapping({ schemaName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
         stables: ["schemaName", "schemaArn"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.schemaName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.schemaName ?? (yield* createName(id, olds ?? {}));
           const mapping = yield* getByName(name);
           if (mapping === undefined) return undefined;
           const attrs = {
@@ -178,8 +165,7 @@ export const SchemaMappingProvider = () =>
           //    the schema). Only call the API on an actual delta.
           if (
             !deepEqual(mapping.mappedInputFields, news.mappedInputFields) ||
-            (mapping.description || undefined) !==
-              (news.description ?? undefined)
+            (mapping.description || undefined) !== (news.description ?? undefined)
           ) {
             // The update response omits createdAt/updatedAt/hasWorkflows;
             // name and ARN are stable, so keep the observed Get shape.
@@ -205,17 +191,12 @@ export const SchemaMappingProvider = () =>
           // gone; it conflicts while a matching workflow still references
           // the schema (the engine deletes dependents first — retry the
           // eventual-consistency window).
-          yield* entityresolution
-            .deleteSchemaMapping({ schemaName: output.schemaName })
-            .pipe(
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
-              }),
-            );
+          yield* entityresolution.deleteSchemaMapping({ schemaName: output.schemaName }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
+            }),
+          );
         }),
 
         list: () =>

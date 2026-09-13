@@ -8,9 +8,6 @@ export const ListPhoneNumbersOptedOutHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.ListPhoneNumbersOptedOut",
     operation: sns.listPhoneNumbersOptedOut,
-    actions: [
-      "sns:ListPhoneNumbersOptedOut",
-      "sms-voice:DescribeOptedOutNumbers",
-    ],
+    actions: ["sns:ListPhoneNumbersOptedOut", "sms-voice:DescribeOptedOutNumbers"],
   }),
 );

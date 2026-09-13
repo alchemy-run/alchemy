@@ -35,6 +35,4 @@ export interface DescribeEvents extends Binding.Service<
     ) => Effect.Effect<dax.DescribeEventsResponse, dax.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.DAX.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.DAX.DescribeEvents");

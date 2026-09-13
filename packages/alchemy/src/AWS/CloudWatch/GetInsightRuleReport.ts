@@ -41,10 +41,7 @@ export interface GetInsightRuleReport extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetInsightRuleReportRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetInsightRuleReportOutput,
-      cloudwatch.GetInsightRuleReportError
-    >
+    ) => Effect.Effect<cloudwatch.GetInsightRuleReportOutput, cloudwatch.GetInsightRuleReportError>
   >
 > {}
 

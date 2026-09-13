@@ -21,22 +21,20 @@ export const BatchGetDeploymentsHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.CodeDeploy.BatchGetDeployments(${group}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["codedeploy:BatchGetDeployments"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.CodeDeploy.BatchGetDeployments(${group}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["codedeploy:BatchGetDeployments"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.CodeDeploy.BatchGetDeployments(${group.LogicalId})`,
-      )(function* (request: codedeploy.BatchGetDeploymentsInput) {
+      return Effect.fn(`AWS.CodeDeploy.BatchGetDeployments(${group.LogicalId})`)(function* (
+        request: codedeploy.BatchGetDeploymentsInput,
+      ) {
         return yield* op(request);
       });
     });

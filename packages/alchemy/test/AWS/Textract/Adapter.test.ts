@@ -14,11 +14,7 @@ const adapterName = "alchemy-test-textract-adapter";
 const getAdapter = (adapterId: string) =>
   textract
     .getAdapter({ AdapterId: adapterId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "lifecycle: create adapter, update settings + tags, destroy",

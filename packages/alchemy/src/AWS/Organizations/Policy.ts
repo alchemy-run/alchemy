@@ -7,10 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
-import {
-  normalizePolicyDocument,
-  stringifyPolicyDocument,
-} from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -181,9 +178,7 @@ export const PolicyProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         // `listPolicies` REQUIRES a `Filter` (one policy type per call), so we
         // fan out across every policy-type filter and hydrate each summary via
@@ -198,17 +193,13 @@ export const PolicyProvider = () =>
               (type) =>
                 retryOrganizations(
                   collectPages(
-                    (NextToken) =>
-                      organizations.listPolicies({ Filter: type, NextToken }),
+                    (NextToken) => organizations.listPolicies({ Filter: type, NextToken }),
                     (page) => page.Policies,
                   ),
                 ).pipe(
                   // Not an org management/delegated account → nothing to list.
                   Effect.catchTag(
-                    [
-                      "AWSOrganizationsNotInUseException",
-                      "AccessDeniedException",
-                    ],
+                    ["AWSOrganizationsNotInUseException", "AccessDeniedException"],
                     () => Effect.succeed([] as organizations.PolicySummary[]),
                   ),
                 ),
@@ -220,13 +211,9 @@ export const PolicyProvider = () =>
               .map((summary) => summary.Id)
               .filter((policyId): policyId is string => policyId != null);
 
-            const hydrated = yield* Effect.forEach(
-              ids,
-              (policyId) => readPolicyById(policyId),
-              {
-                concurrency: 10,
-              },
-            );
+            const hydrated = yield* Effect.forEach(ids, (policyId) => readPolicyById(policyId), {
+              concurrency: 10,
+            });
 
             return hydrated.filter(
               (policy): policy is Policy["Attributes"] => policy !== undefined,
@@ -262,21 +249,14 @@ export const PolicyProvider = () =>
                   Type: news.type,
                   Content: desiredContent,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "DuplicatePolicyException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("DuplicatePolicyException", () => Effect.void)),
             );
             state = yield* readPolicyByName({
               type: news.type,
               name,
             });
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`policy '${name}' not found after create`),
-              );
+              return yield* Effect.fail(new Error(`policy '${name}' not found after create`));
             }
           }
 
@@ -290,8 +270,7 @@ export const PolicyProvider = () =>
           const observedDescription = state.description ?? "";
           if (
             observedDescription !== desiredDescription ||
-            normalizePolicyDocument(state.document) !==
-              normalizePolicyDocument(desiredContent)
+            normalizePolicyDocument(state.document) !== normalizePolicyDocument(desiredContent)
           ) {
             yield* retryOrganizations(
               organizations.updatePolicy({
@@ -359,16 +338,13 @@ const POLICY_TYPE_FILTERS = [
   "SECURITYHUB_POLICY",
 ] as const satisfies readonly organizations.PolicyType[];
 
-const toName = (id: string, props: { name?: string } = {}) =>
-  createName(id, props.name, 128);
+const toName = (id: string, props: { name?: string } = {}) => createName(id, props.name, 128);
 
 const readPolicyById = Effect.fn(function* (policyId: string) {
   const described = yield* retryOrganizations(
     organizations.describePolicy({ PolicyId: policyId }).pipe(
       Effect.map((response) => response.Policy),
-      Effect.catchTag("PolicyNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
     ),
   );
 
@@ -388,9 +364,7 @@ const readPolicyById = Effect.fn(function* (policyId: string) {
     description: summary.Description,
     type: summary.Type,
     awsManaged: summary.AwsManaged,
-    document: JSON.parse(
-      described?.Content ?? "{}",
-    ) as ServiceControlPolicyDocument,
+    document: JSON.parse(described?.Content ?? "{}") as ServiceControlPolicyDocument,
     tags,
   } satisfies Policy["Attributes"];
 });

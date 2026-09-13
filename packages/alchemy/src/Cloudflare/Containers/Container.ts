@@ -8,7 +8,6 @@ import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
 import type { ResourceClassLike } from "../../Resource.ts";
@@ -18,25 +17,17 @@ import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
 import { type WorkerShape } from "../Workers/Worker.ts";
-import type {
-  ContainerApplication,
-  ContainerApplicationProps,
-} from "./ContainerApplication.ts";
+import type { ContainerApplication } from "./ContainerApplication.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
 export type ContainerTypeId = typeof ContainerTypeId;
 
-export const ContainerTag = (
-  id: string,
-): Context.Key<Container.Instance, Container.Instance> =>
+export const ContainerTag = (id: string): Context.Key<Container.Instance, Container.Instance> =>
   Context.Service<Container.Instance>(`Container<${id}>`);
 
 export const isContainer = <T>(value: T): value is T & Container =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  value.Type === ContainerTypeId;
+  typeof value === "object" && value !== null && "Type" in value && value.Type === ContainerTypeId;
 
 export class ContainerError extends Data.TaggedError("ContainerError")<{
   readonly message: string;
@@ -49,9 +40,7 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
  * is still provisioning. Mirrors `@cloudflare/containers`'
  * `NO_CONTAINER_INSTANCE_ERROR` (surfaced as HTTP 503 by native).
  */
-export class NoContainerInstanceError extends Data.TaggedError(
-  "NoContainerInstanceError",
-)<{
+export class NoContainerInstanceError extends Data.TaggedError("NoContainerInstanceError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -62,9 +51,7 @@ export class NoContainerInstanceError extends Data.TaggedError(
  * Hammering `start()` while rate limited only prolongs it, so callers should
  * back off rather than retry tightly.
  */
-export class ContainerRateLimitedError extends Data.TaggedError(
-  "ContainerRateLimitedError",
-)<{
+export class ContainerRateLimitedError extends Data.TaggedError("ContainerRateLimitedError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -75,9 +62,7 @@ export class ContainerRateLimitedError extends Data.TaggedError(
  * detection (`!this.container.running` mid-wait); not curable by continuing to
  * poll the same instance.
  */
-export class ContainerCrashedError extends Data.TaggedError(
-  "ContainerCrashedError",
-)<{
+export class ContainerCrashedError extends Data.TaggedError("ContainerCrashedError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -92,11 +77,7 @@ import type {
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
 
-export type {
-  EffectfulContainerProps,
-  ExternalContainerProps,
-  RemoteContainerProps,
-};
+export type { EffectfulContainerProps, ExternalContainerProps, RemoteContainerProps };
 
 /**
  * Props for an image-backed container declaration — either the plain props
@@ -136,23 +117,14 @@ export type ImageContainerProps<Req = never> =
 
 export type Container<Id extends string = string> = Named<Id> & {
   get running(): Effect.Effect<boolean, never, RuntimeContext>;
-  start(
-    options?: ContainerStartupOptions,
-  ): Effect.Effect<void, never, RuntimeContext>;
+  start(options?: ContainerStartupOptions): Effect.Effect<void, never, RuntimeContext>;
   monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
   destroy(error?: any): Effect.Effect<void, never, RuntimeContext>;
   signal(signo: number): Effect.Effect<void, never, RuntimeContext>;
   getTcpPort(port: number): Effect.Effect<Fetcher, never, RuntimeContext>;
-  setInactivityTimeout(
-    durationMs: number | bigint,
-  ): Effect.Effect<void, never, RuntimeContext>;
-  interceptOutboundHttp(
-    addr: string,
-    binding: Fetcher,
-  ): Effect.Effect<void, never, RuntimeContext>;
-  interceptAllOutboundHttp(
-    binding: Fetcher,
-  ): Effect.Effect<void, never, RuntimeContext>;
+  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void, never, RuntimeContext>;
+  interceptOutboundHttp(addr: string, binding: Fetcher): Effect.Effect<void, never, RuntimeContext>;
+  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void, never, RuntimeContext>;
 };
 
 /**
@@ -655,9 +627,7 @@ export const Container: ResourceClassLike<ContainerApplication> & {
     ): Container.Decl<Self, {}, Id, PropsReq>;
   };
   <Self, Shape>(): {
-    <const Id extends string>(
-      id: Id,
-    ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
+    <const Id extends string>(id: Id): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
   };
 } = Object.assign(
   (...args: any[]) => {
@@ -738,10 +708,7 @@ export declare namespace Container {
      * identifies an async-bindable Container declaration in a Worker's `env`
      * (see `bindWorkerAsyncBindings`).
      */
-    readonly "~alchemy/Container/ClassName":
-      | string
-      | undefined
-      | Effect.Effect<string | undefined>;
+    readonly "~alchemy/Container/ClassName": string | undefined | Effect.Effect<string | undefined>;
     /**
      * The underlying {@link ContainerApplication} resource declaration —
      * `yield*` it to get the application's Output attributes.
@@ -750,16 +717,8 @@ export declare namespace Container {
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
       props:
         | InputProps<EffectfulContainerProps>
-        | Effect.Effect<
-            InputProps<EffectfulContainerProps>,
-            Config.ConfigError,
-            PropsReq
-          >,
-      impl: Effect.Effect<
-        Shape & WorkerShape<WorkerReq>,
-        Config.ConfigError,
-        InitReq
-      >,
+        | Effect.Effect<InputProps<EffectfulContainerProps>, Config.ConfigError, PropsReq>,
+      impl: Effect.Effect<Shape & WorkerShape<WorkerReq>, Config.ConfigError, InitReq>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;
   }

@@ -13,15 +13,13 @@ const TEST_PASSWORD = Redacted.make("AlchemyMemoryDbTestPass01");
 
 // Ungated typed-error probe: proves the not-found tag the read/delete paths
 // depend on is in the distilled error union.
-test.provider(
-  "describeACLs on a nonexistent ACL fails with ACLNotFoundFault",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        memorydb.describeACLs({ ACLName: "alchemy-nonexistent-acl-probe" }),
-      );
-      expect(error._tag).toBe("ACLNotFoundFault");
-    }),
+test.provider("describeACLs on a nonexistent ACL fails with ACLNotFoundFault", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      memorydb.describeACLs({ ACLName: "alchemy-nonexistent-acl-probe" }),
+    );
+    expect(error._tag).toBe("ACLNotFoundFault");
+  }),
 );
 
 const assertGone = (name: string) =>
@@ -29,10 +27,7 @@ const assertGone = (name: string) =>
     Effect.flatMap(() => Effect.fail(new Error(`acl '${name}' still exists`))),
     Effect.catchTag("ACLNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 

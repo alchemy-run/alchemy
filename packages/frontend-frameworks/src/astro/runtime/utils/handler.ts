@@ -67,8 +67,7 @@ export async function handle(
   // Handle prerender endpoints (only active during build prerender phase)
   if (isPrerender) {
     if (compileImageConfig) {
-      const { installAddStaticImage } =
-        await import("./static-image-collection.ts");
+      const { installAddStaticImage } = await import("./static-image-collection.ts");
       installAddStaticImage(compileImageConfig);
     }
 
@@ -124,10 +123,7 @@ export async function handle(
   // When the Cloudflare cache provider is configured, default uncached
   // responses to `no-store` so opting in to route caching never
   // accidentally caches a route that didn't set any cache intent.
-  if (
-    cacheProviderEnabled &&
-    !response.headers.has("Cloudflare-CDN-Cache-Control")
-  ) {
+  if (cacheProviderEnabled && !response.headers.has("Cloudflare-CDN-Cache-Control")) {
     response.headers.set("Cloudflare-CDN-Cache-Control", "no-store");
   }
 

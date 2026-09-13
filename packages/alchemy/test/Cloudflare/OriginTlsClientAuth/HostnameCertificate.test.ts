@@ -25,21 +25,15 @@ import {
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -73,10 +67,7 @@ const waitForLive = (zoneId: string, certificateId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotLive",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -93,10 +84,7 @@ const waitForGone = (zoneId: string, certificateId: string) =>
     Effect.catchTag("HostnameCertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -122,19 +110,17 @@ const purgeCertificates = (zoneId: string, pems: string[]) =>
           targets.includes((c.certificate ?? "").trim()),
       ),
       (c) =>
-        originTls
-          .deleteHostnameCertificate({ zoneId, certificateId: c.id! })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "CertificatePendingDeployment",
-              schedule: Schedule.spaced("5 seconds"),
-              times: 10,
-            }),
-            Effect.catchTag(
-              ["HostnameCertificateNotFound", "CertificatePendingDeletion"],
-              () => Effect.void,
-            ),
+        originTls.deleteHostnameCertificate({ zoneId, certificateId: c.id! }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "CertificatePendingDeployment",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 10,
+          }),
+          Effect.catchTag(
+            ["HostnameCertificateNotFound", "CertificatePendingDeletion"],
+            () => Effect.void,
           ),
+        ),
     );
   });
 
@@ -172,10 +158,7 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, cert.certificateId);
-    }).pipe(
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-      logLevel,
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );
 
@@ -217,10 +200,7 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, replaced.certificateId);
-    }).pipe(
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-      logLevel,
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );
 
@@ -255,20 +235,15 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) &&
-          r.row.resourceType ===
-            "Cloudflare.OriginTlsClientAuth.HostnameCertificate",
+          r.row.resourceType === "Cloudflare.OriginTlsClientAuth.HostnameCertificate",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no HostnameCertificate state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no HostnameCertificate state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -293,10 +268,7 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, recovered.certificateId);
-    }).pipe(
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-      logLevel,
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );
 
@@ -329,13 +301,9 @@ test.provider(
       // keeps serving the stale "gone" view for a while. Poll list() until it
       // appears, bounded to ~60s.
       const found = yield* provider.list().pipe(
-        Effect.map((all) =>
-          all.find((c) => c.certificateId === cert.certificateId),
-        ),
+        Effect.map((all) => all.find((c) => c.certificateId === cert.certificateId)),
         Effect.flatMap((match) =>
-          match
-            ? Effect.succeed(match)
-            : Effect.fail({ _tag: "CertificateNotListed" } as const),
+          match ? Effect.succeed(match) : Effect.fail({ _tag: "CertificateNotListed" } as const),
         ),
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
@@ -348,9 +316,6 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, cert.certificateId);
-    }).pipe(
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-      logLevel,
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );

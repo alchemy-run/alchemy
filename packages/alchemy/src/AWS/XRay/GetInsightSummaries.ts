@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetInsightSummariesRequest
-  extends xray.GetInsightSummariesRequest {}
+export interface GetInsightSummariesRequest extends xray.GetInsightSummariesRequest {}
 
 /**
  * Retrieve the summaries of all insights in a group (by name or ARN)
@@ -39,10 +38,7 @@ export interface GetInsightSummaries extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetInsightSummariesRequest,
-    ) => Effect.Effect<
-      xray.GetInsightSummariesResult,
-      xray.GetInsightSummariesError
-    >
+    ) => Effect.Effect<xray.GetInsightSummariesResult, xray.GetInsightSummariesError>
   >
 > {}
 export const GetInsightSummaries = Binding.Service<GetInsightSummaries>(

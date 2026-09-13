@@ -14,13 +14,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test hostname (never derive from Date.now()/random).
 const HOSTNAME = `alchemy-regional.${zoneName}`;
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -40,9 +34,7 @@ const resolveZoneId = Effect.gen(function* () {
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -60,10 +52,7 @@ const getRegionalHostname = (zoneId: string, hostname: string) =>
 
 const deleteRegionalHostname = (zoneId: string, hostname: string) =>
   retryForbidden(addressing.deleteRegionalHostname({ zoneId, hostname })).pipe(
-    Effect.catchTag(
-      ["RegionalHostnameNotFound", "RegionalHostnameEmpty"],
-      () => Effect.void,
-    ),
+    Effect.catchTag(["RegionalHostnameNotFound", "RegionalHostnameEmpty"], () => Effect.void),
   );
 
 // Regionalization only takes effect for hostnames with a DNS record — and
@@ -72,12 +61,10 @@ const deleteRegionalHostname = (zoneId: string, hostname: string) =>
 const ensureDnsRecord = (zoneId: string) =>
   Effect.gen(function* () {
     const existing = yield* retryForbidden(
-      dns.listRecords
-        .items({ zoneId, name: { exact: HOSTNAME }, type: "A" })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((c) => Array.from(c)),
-        ),
+      dns.listRecords.items({ zoneId, name: { exact: HOSTNAME }, type: "A" }).pipe(
+        Stream.runCollect,
+        Effect.map((c) => Array.from(c)),
+      ),
     );
     if (existing.length === 0) {
       yield* retryForbidden(
@@ -95,18 +82,14 @@ const ensureDnsRecord = (zoneId: string) =>
 
 const purgeDnsRecord = (zoneId: string) =>
   retryForbidden(
-    dns.listRecords
-      .items({ zoneId, name: { exact: HOSTNAME }, type: "A" })
-      .pipe(
-        Stream.runCollect,
-        Effect.map((c) => Array.from(c)),
-      ),
+    dns.listRecords.items({ zoneId, name: { exact: HOSTNAME }, type: "A" }).pipe(
+      Stream.runCollect,
+      Effect.map((c) => Array.from(c)),
+    ),
   ).pipe(
     Effect.flatMap(
       Effect.forEach((r) =>
-        dns
-          .deleteRecord({ zoneId, dnsRecordId: r.id })
-          .pipe(Effect.catch(() => Effect.void)),
+        dns.deleteRecord({ zoneId, dnsRecordId: r.id }).pipe(Effect.catch(() => Effect.void)),
       ),
     ),
   );
@@ -137,9 +120,7 @@ test.provider(
       if (Result.isFailure(probe)) {
         // Unentitled — must surface as a typed tag from the operation's
         // error union, never an untyped catch-all.
-        expect(["InvalidHostname", "RegionalHostnameEmpty"]).toContain(
-          probe.failure._tag,
-        );
+        expect(["InvalidHostname", "RegionalHostnameEmpty"]).toContain(probe.failure._tag);
         yield* purgeDnsRecord(zoneId);
         yield* stack.destroy();
         return;
@@ -150,14 +131,11 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RegionalHostname.RegionalHostname(
-            "Regional",
-            {
-              zoneId,
-              hostname: HOSTNAME,
-              regionKey: "eu",
-            },
-          );
+          return yield* Cloudflare.RegionalHostname.RegionalHostname("Regional", {
+            zoneId,
+            hostname: HOSTNAME,
+            regionKey: "eu",
+          });
         }),
       );
       expect(created.zoneId).toEqual(zoneId);
@@ -172,14 +150,11 @@ test.provider(
       // Move the hostname to another region in place — same identifier.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.RegionalHostname.RegionalHostname(
-            "Regional",
-            {
-              zoneId,
-              hostname: HOSTNAME,
-              regionKey: "us",
-            },
-          );
+          return yield* Cloudflare.RegionalHostname.RegionalHostname("Regional", {
+            zoneId,
+            hostname: HOSTNAME,
+            regionKey: "us",
+          });
         }),
       );
       expect(updated.hostname).toEqual(HOSTNAME);
@@ -237,29 +212,22 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_REGIONAL_HOSTNAME_LIST)(
 
       const entitled = Result.isSuccess(probe);
       if (!entitled) {
-        expect(["InvalidHostname", "RegionalHostnameEmpty"]).toContain(
-          probe.failure._tag,
-        );
+        expect(["InvalidHostname", "RegionalHostnameEmpty"]).toContain(probe.failure._tag);
       } else {
         // Remove the raw probe so the resource owns the hostname.
         yield* deleteRegionalHostname(zoneId, HOSTNAME);
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.RegionalHostname.RegionalHostname(
-              "Regional",
-              {
-                zoneId,
-                hostname: HOSTNAME,
-                regionKey: "eu",
-              },
-            );
+            return yield* Cloudflare.RegionalHostname.RegionalHostname("Regional", {
+              zoneId,
+              hostname: HOSTNAME,
+              regionKey: "eu",
+            });
           }),
         );
       }
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.RegionalHostname.RegionalHostname,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.RegionalHostname.RegionalHostname);
       const all = yield* provider.list();
 
       // `list()` always returns the full Attributes shape for each item.
@@ -272,11 +240,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_REGIONAL_HOSTNAME_LIST)(
 
       if (entitled) {
         // The deployed hostname must appear in the exhaustively-paginated result.
-        expect(
-          all.some(
-            (item) => item.zoneId === zoneId && item.hostname === HOSTNAME,
-          ),
-        ).toBe(true);
+        expect(all.some((item) => item.zoneId === zoneId && item.hostname === HOSTNAME)).toBe(true);
       }
 
       yield* stack.destroy();

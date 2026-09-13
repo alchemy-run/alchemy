@@ -39,12 +39,10 @@ export type AxiomResolvedCredentials =
 
 const readEnvironment = Effect.gen(function* () {
   const apiToken =
-    (yield* getEnvRedacted("AXIOM_TOKEN")) ??
-    (yield* getEnvRedacted("AXIOM_API_KEY"));
+    (yield* getEnvRedacted("AXIOM_TOKEN")) ?? (yield* getEnvRedacted("AXIOM_API_KEY"));
   if (!apiToken) {
     return yield* new AuthError({
-      message:
-        "Axiom CI credentials not found. Set AXIOM_TOKEN or AXIOM_API_KEY.",
+      message: "Axiom CI credentials not found. Set AXIOM_TOKEN or AXIOM_API_KEY.",
     });
   }
   const apiBaseUrl = (yield* getEnv("AXIOM_URL")) ?? DEFAULT_API_BASE_URL;
@@ -87,8 +85,7 @@ const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
   ],
   toResolved: (values, source) => {
     const apiToken = storedSecret(values.token) ?? Redacted.make("");
-    const apiBaseUrl =
-      storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL;
+    const apiBaseUrl = storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL;
     return values.orgId !== undefined
       ? {
           type: "pat",
@@ -121,8 +118,7 @@ const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
     {
       name: "AXIOM_ORG_ID",
       required: false,
-      description:
-        "Organization id; required when the token is a personal access token.",
+      description: "Organization id; required when the token is a personal access token.",
     },
   ],
 });

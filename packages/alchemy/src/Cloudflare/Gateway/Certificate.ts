@@ -225,10 +225,7 @@ export const CertificateProvider = () =>
           accountId,
           certificateId,
         });
-      } else if (
-        !wantActive &&
-        (status === "available" || status === "pending_deployment")
-      ) {
+      } else if (!wantActive && (status === "available" || status === "pending_deployment")) {
         yield* zeroTrust.deactivateGatewayCertificate({
           accountId,
           certificateId,
@@ -252,9 +249,7 @@ export const CertificateProvider = () =>
       if (status === "available" || status === "pending_deployment") {
         yield* zeroTrust
           .deactivateGatewayCertificate({ accountId, certificateId })
-          .pipe(
-            Effect.catchTag("GatewayCertificateNotFound", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("GatewayCertificateNotFound", () => Effect.void));
         yield* waitForStatus(accountId, certificateId, "inactive");
       }
       yield* zeroTrust
@@ -276,9 +271,7 @@ type ObservedCertificate =
 const getCertificate = (accountId: string, certificateId: string) =>
   zeroTrust.getGatewayCertificate({ accountId, certificateId }).pipe(
     Effect.map((c): zeroTrust.GetGatewayCertificateResponse | undefined => c),
-    Effect.catchTag("GatewayCertificateNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GatewayCertificateNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -299,10 +292,7 @@ const waitForStatus = (
     }),
   );
 
-const toAttributes = (
-  cert: ObservedCertificate,
-  accountId: string,
-): CertificateAttributes => ({
+const toAttributes = (cert: ObservedCertificate, accountId: string): CertificateAttributes => ({
   certificateId: cert.id ?? "",
   accountId,
   bindingStatus: cert.bindingStatus ?? undefined,

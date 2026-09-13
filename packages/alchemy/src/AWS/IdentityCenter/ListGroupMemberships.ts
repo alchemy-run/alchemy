@@ -31,10 +31,7 @@ export interface ListGroupMemberships extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        identitystore.ListGroupMembershipsRequest,
-        "IdentityStoreId"
-      >,
+      request: Omit<identitystore.ListGroupMembershipsRequest, "IdentityStoreId">,
     ) => Effect.Effect<
       identitystore.ListGroupMembershipsResponse,
       identitystore.ListGroupMembershipsError

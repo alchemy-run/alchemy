@@ -48,9 +48,7 @@ const foregroundChild = (program, args, stderrFilter) => {
   /** @type {Map<NodeJS.Signals, () => void>} */
   const listeners = new Map();
 
-  for (const signal of /** @type {Array<NodeJS.Signals>} */ (
-    Object.keys(constants.signals)
-  )) {
+  for (const signal of /** @type {Array<NodeJS.Signals>} */ (Object.keys(constants.signals))) {
     if (signal === "SIGKILL" || signal === "SIGSTOP") continue;
     const forward = () => child.kill(signal);
     try {
@@ -68,10 +66,7 @@ const foregroundChild = (program, args, stderrFilter) => {
     // the last line of every stderr burst (e.g. an error trace's final
     // frame) until the next write or stream end, where it surfaced after
     // Ctrl+C looking like unrelated output. Only buffer a genuine partial.
-    buffer =
-      lines.length > 0 && !lines[lines.length - 1].endsWith("\n")
-        ? (lines.pop() ?? "")
-        : "";
+    buffer = lines.length > 0 && !lines[lines.length - 1].endsWith("\n") ? (lines.pop() ?? "") : "";
     for (const line of lines) {
       if (stderrFilter(line)) process.stderr.write(line);
     }
@@ -82,16 +77,10 @@ const foregroundChild = (program, args, stderrFilter) => {
 
   if (process.send) {
     child.on("message", (message, handle) =>
-      process.send?.(
-        /** @type {import("node:child_process").Serializable} */ (message),
-        handle,
-      ),
+      process.send?.(/** @type {import("node:child_process").Serializable} */ (message), handle),
     );
     process.on("message", (message, handle) =>
-      child.send(
-        /** @type {import("node:child_process").Serializable} */ (message),
-        handle,
-      ),
+      child.send(/** @type {import("node:child_process").Serializable} */ (message), handle),
     );
   }
 
@@ -138,9 +127,7 @@ const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
 // `typeof Bun`: someone ran `bun bin/cli.js` directly (no bun env markers,
 // shebang bypassed) — the launcher itself IS bun, so bun is the runtime.
 const invokedByBun =
-  execpath.includes("bun") ||
-  userAgent.startsWith("bun/") ||
-  typeof globalThis.Bun !== "undefined";
+  execpath.includes("bun") || userAgent.startsWith("bun/") || typeof globalThis.Bun !== "undefined";
 
 // Derive the bin dir from this launcher's own location rather than
 // require.resolve("alchemy/bin/alchemy.js"). The bundled alchemy.js is a
@@ -151,9 +138,7 @@ const binDir = path.dirname(fileURLToPath(import.meta.url));
 const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
 
-const [nodeMajor = 0, nodeMinor = 0] = process.versions.node
-  .split(".")
-  .map(Number);
+const [nodeMajor = 0, nodeMinor = 0] = process.versions.node.split(".").map(Number);
 
 /**
  * Whether this node has `module.registerHooks` (v22.15 / v23.5 / v24+).
@@ -165,14 +150,10 @@ const [nodeMajor = 0, nodeMinor = 0] = process.versions.node
  * duplicated because this launcher must run under plain node first.
  */
 const nodeSupportsHooks =
-  (nodeMajor === 22 && nodeMinor >= 15) ||
-  (nodeMajor === 23 && nodeMinor >= 5) ||
-  nodeMajor >= 24;
+  (nodeMajor === 22 && nodeMinor >= 15) || (nodeMajor === 23 && nodeMinor >= 5) || nodeMajor >= 24;
 
 // Treat any install-tree path as published.
-const isDev = !(
-  binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
-);
+const isDev = !(binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\"));
 
 // We no longer force bun in dev when node is the invoker because this prevents us from testing in node.
 const runtime = invokedByBun ? "bun" : "node";
@@ -189,8 +170,7 @@ if (runtime === "node" && !nodeSupportsHooks) {
 const entry = runtime === "bun" || isDev ? tsEntry : jsEntry;
 if (entry === jsEntry && !existsSync(jsEntry)) {
   process.stderr.write(
-    `alchemy: ${jsEntry} has not been built.\n` +
-      "Run `pnpm build` in packages/alchemy.\n",
+    `alchemy: ${jsEntry} has not been built.\n` + "Run `pnpm build` in packages/alchemy.\n",
   );
   process.exit(1);
 }
@@ -205,23 +185,15 @@ process.env.NODE_ENV = "production";
 // above. Importing the CLI in this Bun process could call jsxDEV against
 // React's production runtime, where jsxDEV is undefined.
 if (runtime === "node") {
-  await import(
-    new URL(isDev ? "register-dev-mode.js" : "register-oxc.js", import.meta.url)
-      .href
-  );
+  await import(new URL(isDev ? "register-dev-mode.js" : "register-oxc.js", import.meta.url).href);
   await import(pathToFileURL(entry).href);
 } else {
   // The caller's tsconfig can force development JSX even in production.
   // Published installs ship a standalone config in bin; checkouts retain
   // their workspace paths. JSX import-source pragmas alone are insufficient.
   const tsconfig = path.join(binDir, isDev ? ".." : ".", "tsconfig.json");
-  const args = [
-    `--tsconfig-override=${tsconfig}`,
-    entry,
-    ...process.argv.slice(2),
-  ];
-  const bun =
-    typeof globalThis.Bun !== "undefined" ? process.execPath : findBun();
+  const args = [`--tsconfig-override=${tsconfig}`, entry, ...process.argv.slice(2)];
+  const bun = typeof globalThis.Bun !== "undefined" ? process.execPath : findBun();
   // Keep the launcher to filter Bun's tsconfig-override warning on every
   // path, including published installs invoked through the Node shebang.
   // Stderr filter — substring match (not regex), bun may wrap the line in
@@ -232,9 +204,5 @@ if (runtime === "node") {
   // against a cached dir fd that isn't its parent, falls back to an
   // absolute open, and logs. Bun's own tsconfig-override tests tolerate the
   // same line.
-  foregroundChild(
-    bun ?? "bun",
-    args,
-    (line) => !line.includes("directory mismatch for directory"),
-  );
+  foregroundChild(bun ?? "bun", args, (line) => !line.includes("directory mismatch for directory"));
 }

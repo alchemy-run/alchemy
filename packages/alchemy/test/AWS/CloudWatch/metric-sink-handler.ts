@@ -87,10 +87,7 @@ export const MetricSinkFunctionLive = MetricSinkFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.provideMerge(
-        AWS.CloudWatch.MetricSinkHttp,
-        AWS.CloudWatch.PutMetricDataHttp,
-      ),
+      Layer.provideMerge(AWS.CloudWatch.MetricSinkHttp, AWS.CloudWatch.PutMetricDataHttp),
     ),
   ),
 );

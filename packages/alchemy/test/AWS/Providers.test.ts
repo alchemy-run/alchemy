@@ -15,52 +15,44 @@ import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 
-it.live(
-  "building the AWS provider layers rejects an unknown explicit profile",
-  () =>
-    Effect.gen(function* () {
-      // AWSEnvironment is constructed lazily so `alchemy dev` can build
-      // provider layers without credentials. The unknown-profile rejection
-      // surfaces on first use, not at `Layer.build`.
-      const result = yield* Effect.result(
-        Effect.sandbox(
-          AWSEnvironment.current.pipe(Effect.provide(AWS.providers())),
-        ),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("does not exist");
-        expect(String(result.failure)).toContain("alchemy profile create");
-      }
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
-          Layer.sync(ArtifactStore, createArtifactStore),
-          Layer.succeed(Stage, "test"),
-          Layer.succeed(Stack, {
-            name: "test",
-            stage: "test",
-            resources: {},
-            bindings: {},
-            actions: {},
+it.live("building the AWS provider layers rejects an unknown explicit profile", () =>
+  Effect.gen(function* () {
+    // AWSEnvironment is constructed lazily so `alchemy dev` can build
+    // provider layers without credentials. The unknown-profile rejection
+    // surfaces on first use, not at `Layer.build`.
+    const result = yield* Effect.result(
+      Effect.sandbox(AWSEnvironment.current.pipe(Effect.provide(AWS.providers()))),
+    );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain("does not exist");
+      expect(String(result.failure)).toContain("alchemy profile create");
+    }
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.succeed(AuthProviders, {}),
+        Layer.sync(ArtifactStore, createArtifactStore),
+        Layer.succeed(Stage, "test"),
+        Layer.succeed(Stack, {
+          name: "test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Layer.succeed(AlchemyContext, {
+          dev: false,
+          adopt: false,
+          dotAlchemy: ".alchemy",
+        }),
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({
-              ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-            }),
-          ),
-          ProfileStoreLive,
-        ).pipe(
-          Layer.provideMerge(
-            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
-          ),
         ),
-      ),
+        ProfileStoreLive,
+      ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))),
     ),
+  ),
 );

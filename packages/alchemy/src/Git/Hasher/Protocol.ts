@@ -195,8 +195,7 @@ export const makeFrameReader = (body: ReadableStream<Uint8Array>) => {
           pendingBytes += value.length;
         }
       },
-      catch: (error) =>
-        new HashError({ reason: `hash part body: ${String(error)}` }),
+      catch: (error) => new HashError({ reason: `hash part body: ${String(error)}` }),
     });
 };
 
@@ -235,15 +234,12 @@ export const decodeDeltaBatch = (
   bytes: Uint8Array,
 ): { readonly bases: Array<DeltaBase>; readonly jobs: Array<DeltaJob> } => {
   const jsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
-  const wire = JSON.parse(
-    new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength)),
-  ) as {
+  const wire = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength))) as {
     bases: Array<{ r: [number, number]; c: number }>;
     jobs: Array<{ i: number; t: ObjectType; b: number; d: [number, number] }>;
   };
   const blobs = bytes.subarray(4 + jsonLength);
-  const slice = (ref: [number, number]) =>
-    blobs.subarray(ref[0], ref[0] + ref[1]);
+  const slice = (ref: [number, number]) => blobs.subarray(ref[0], ref[0] + ref[1]);
   return {
     bases: wire.bases.map((b) => ({ bytes: slice(b.r), isContent: b.c === 1 })),
     jobs: wire.jobs.map((j) => ({
@@ -255,9 +251,7 @@ export const decodeDeltaBatch = (
   };
 };
 
-export const encodeDeltaResults = (
-  results: ReadonlyArray<DeltaResolved>,
-): Uint8Array => {
+export const encodeDeltaResults = (results: ReadonlyArray<DeltaResolved>): Uint8Array => {
   const blobs: Array<Uint8Array> = [];
   let at = 0;
   const put = (bytes: Uint8Array): [number, number] => {
@@ -287,9 +281,7 @@ export const encodeDeltaResults = (
 
 export const decodeDeltaResults = (bytes: Uint8Array): Array<DeltaResolved> => {
   const jsonLength = new DataView(bytes.buffer, bytes.byteOffset).getUint32(0);
-  const wire = JSON.parse(
-    new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength)),
-  ) as Array<{
+  const wire = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + jsonLength))) as Array<{
     i: number;
     o: string;
     s: number;
@@ -297,8 +289,7 @@ export const decodeDeltaResults = (bytes: Uint8Array): Array<DeltaResolved> => {
     c?: [number, number];
   }>;
   const blobs = bytes.subarray(4 + jsonLength);
-  const slice = (ref: [number, number]) =>
-    blobs.subarray(ref[0], ref[0] + ref[1]);
+  const slice = (ref: [number, number]) => blobs.subarray(ref[0], ref[0] + ref[1]);
   return wire.map((r) => ({
     id: r.i,
     oid: r.o as Oid,

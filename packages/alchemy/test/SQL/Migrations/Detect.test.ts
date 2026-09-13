@@ -12,8 +12,7 @@ import {
   timestampPrefixMillis,
 } from "@/SQL/Migrations/index.ts";
 
-const fixture = (name: string) =>
-  new URL(`./fixtures/${name}`, import.meta.url).pathname;
+const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;
 
 const describe = layer(NodeServices.layer);
 
@@ -74,10 +73,7 @@ describe("readers", (it) => {
   it.effect("flat records are keyed by relative file path", () =>
     Effect.gen(function* () {
       const records = yield* readFlatRecords(fixture("flat"));
-      expect(records.map((r) => r.name)).toEqual([
-        "0001_users.sql",
-        "0002_posts.sql",
-      ]);
+      expect(records.map((r) => r.name)).toEqual(["0001_users.sql", "0002_posts.sql"]);
     }),
   );
 });
@@ -133,32 +129,20 @@ plainDescribe("normalizeMigrationsInput", () => {
 
 plainDescribe("helpers", () => {
   test("timestampPrefixMillis parses drizzle dir prefixes", () => {
-    expect(timestampPrefixMillis("20240101000000_init")).toBe(
-      Date.UTC(2024, 0, 1),
-    );
+    expect(timestampPrefixMillis("20240101000000_init")).toBe(Date.UTC(2024, 0, 1));
     expect(timestampPrefixMillis("0001_users.sql")).toBeUndefined();
   });
 
   test("inlineSqlParams inlines ? placeholders outside quotes", () => {
-    expect(
-      inlineSqlParams(
-        "INSERT INTO t (a, b) VALUES (?, ?);",
-        ["it's", 42],
-        "sqlite",
-      ),
-    ).toBe("INSERT INTO t (a, b) VALUES ('it''s', 42);");
-    expect(
-      inlineSqlParams(
-        "SELECT * FROM t WHERE a = 'lit?' AND b = ?;",
-        [1],
-        "sqlite",
-      ),
-    ).toBe("SELECT * FROM t WHERE a = 'lit?' AND b = 1;");
+    expect(inlineSqlParams("INSERT INTO t (a, b) VALUES (?, ?);", ["it's", 42], "sqlite")).toBe(
+      "INSERT INTO t (a, b) VALUES ('it''s', 42);",
+    );
+    expect(inlineSqlParams("SELECT * FROM t WHERE a = 'lit?' AND b = ?;", [1], "sqlite")).toBe(
+      "SELECT * FROM t WHERE a = 'lit?' AND b = 1;",
+    );
   });
 
   test("inlineSqlParams inlines $n placeholders for postgres", () => {
-    expect(inlineSqlParams("SELECT $1, $2;", ["x", null], "postgres")).toBe(
-      "SELECT 'x', NULL;",
-    );
+    expect(inlineSqlParams("SELECT $1, $2;", ["x", null], "postgres")).toBe("SELECT 'x', NULL;");
   });
 });

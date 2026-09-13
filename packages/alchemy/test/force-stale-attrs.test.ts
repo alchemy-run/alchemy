@@ -52,10 +52,7 @@ const makeHarness = (name: string) => {
   ): Effect.Effect<any, any, never> =>
     compile(effect).pipe(
       Effect.flatMap((compiled: any) =>
-        Plan.make(compiled, options).pipe(
-          Effect.flatMap(apply),
-          Effect.provide(compiled.services),
-        ),
+        Plan.make(compiled, options).pipe(Effect.flatMap(apply), Effect.provide(compiled.services)),
       ),
       Effect.provide(Layer.succeed(Stage, STAGE)),
       provideFreshArtifactStore,
@@ -71,8 +68,7 @@ const makeHarness = (name: string) => {
       Effect.provide(Layer.succeed(Stage, STAGE)),
       provideFreshArtifactStore,
     ) as unknown as Effect.Effect<any, any, never>;
-  const getRow = (fqn: string) =>
-    Effect.sync(() => store[name]?.[STAGE]?.[fqn] as ResourceState);
+  const getRow = (fqn: string) => Effect.sync(() => store[name]?.[STAGE]?.[fqn] as ResourceState);
   const setRow = (fqn: string, value: ResourceState) =>
     Effect.sync(() => void (store[name][STAGE][fqn] = value));
   return { deploy, plan, getRow, setRow };

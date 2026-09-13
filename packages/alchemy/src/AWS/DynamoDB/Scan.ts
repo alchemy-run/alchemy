@@ -29,9 +29,7 @@ export interface Scan extends Binding.Service<
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
-    (
-      request: ScanRequest,
-    ) => Effect.Effect<DynamoDB.ScanOutput, DynamoDB.ScanError>
+    (request: ScanRequest) => Effect.Effect<DynamoDB.ScanOutput, DynamoDB.ScanError>
   >
 > {}
 

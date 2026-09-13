@@ -12,10 +12,8 @@ import type { Pool, PoolOptions } from "mysql2/promise";
 export const importMySql = (): Promise<typeof import("mysql2/promise")> =>
   import("mysql2/promise")
     .then((mod) =>
-      (mod as { default?: { createPool?: unknown } }).default?.createPool !==
-      undefined
-        ? (mod as unknown as { default: typeof import("mysql2/promise") })
-            .default
+      (mod as { default?: { createPool?: unknown } }).default?.createPool !== undefined
+        ? (mod as unknown as { default: typeof import("mysql2/promise") }).default
         : mod,
     )
     .catch((cause) => {
@@ -41,9 +39,7 @@ export const openMySQLPool = (
     const mysql = yield* Effect.promise(importMySql);
     const uri = Redacted.value(yield* url);
     return yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        mysql.createPool({ uri, connectionLimit: 1, ...config }),
-      ),
+      Effect.sync(() => mysql.createPool({ uri, connectionLimit: 1, ...config })),
       (pool) => Effect.promise(() => pool.end()),
     );
   });

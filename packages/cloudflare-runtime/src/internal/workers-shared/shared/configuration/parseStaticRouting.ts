@@ -9,9 +9,7 @@ import { MAX_ROUTES_RULE_LENGTH, MAX_ROUTES_RULES } from "./constants.ts";
 
 export function parseStaticRouting(input: Array<string>): StaticRouting {
   if (input.length === 0) {
-    throw new Error(
-      "No `run_worker_first` rules were provided; must provide at least 1 rule.",
-    );
+    throw new Error("No `run_worker_first` rules were provided; must provide at least 1 rule.");
   }
   if (input.length > MAX_ROUTES_RULES) {
     throw new Error(
@@ -43,8 +41,7 @@ export function parseStaticRouting(input: Array<string>): StaticRouting {
     );
   }
 
-  const invalidAssetWorkerRules =
-    validateStaticRoutingRules(rawAssetWorkerRules);
+  const invalidAssetWorkerRules = validateStaticRoutingRules(rawAssetWorkerRules);
   const invalidUserWorkerRules = validateStaticRoutingRules(userWorkerRules);
   const errorMessage = formatInvalidRoutes([
     ...invalidRules,

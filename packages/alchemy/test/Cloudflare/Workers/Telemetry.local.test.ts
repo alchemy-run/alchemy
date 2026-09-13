@@ -38,9 +38,7 @@ test.provider(
         );
 
       if (deployment.url === undefined) {
-        return yield* Effect.die(
-          "OTLP event flush test Worker URL unavailable",
-        );
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
       }
       const client = yield* HttpClient.HttpClient;
       const response = yield* client.get(deployment.url);

@@ -12,10 +12,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The membership identity is an account-member id. Look one up from the
 // account's member roster (the testing account always has at least its
@@ -36,11 +33,7 @@ const findMemberId = (accountId: string) =>
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
 // declared in the distilled error union) on out-of-band verification calls.
-const getMembership = (
-  accountId: string,
-  userGroupId: string,
-  memberId: string,
-) =>
+const getMembership = (accountId: string, userGroupId: string, memberId: string) =>
   iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -55,10 +48,7 @@ const getMembership = (
 const expectGone = (accountId: string, userGroupId: string, memberId: string) =>
   getMembership(accountId, userGroupId, memberId).pipe(
     Effect.asSome,
-    Effect.catchTag(
-      ["UserGroupMemberNotFound", "UserGroupNotFound"],
-      () => Effect.succeedNone,
-    ),
+    Effect.catchTag(["UserGroupMemberNotFound", "UserGroupNotFound"], () => Effect.succeedNone),
     Effect.repeat({
       schedule: Schedule.exponential("500 millis"),
       until: (m) => m._tag === "None",
@@ -104,11 +94,7 @@ test.provider(
       expect(v1.membership.accountId).toEqual(accountId);
 
       // Out-of-band verification via the distilled API.
-      const live = yield* getMembership(
-        accountId,
-        v1.groupA.userGroupId,
-        memberId,
-      );
+      const live = yield* getMembership(accountId, v1.groupA.userGroupId, memberId);
       expect(live.id).toEqual(memberId);
 
       // Changing the target group is an identity change — the membership is
@@ -120,11 +106,7 @@ test.provider(
       expect(v2.membership.userGroupId).toEqual(v2.groupB.userGroupId);
       expect(v2.membership.memberId).toEqual(memberId);
 
-      const moved = yield* getMembership(
-        accountId,
-        v2.groupB.userGroupId,
-        memberId,
-      );
+      const moved = yield* getMembership(accountId, v2.groupB.userGroupId, memberId);
       expect(moved.id).toEqual(memberId);
 
       // The old membership in group A was deleted by the replacement.
@@ -152,9 +134,7 @@ test.provider(
 
       // Resolve the provider with the typed helper — element type is the
       // resource's exact Attributes shape (no `any`).
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Iam.UserGroupMembership,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Iam.UserGroupMembership);
 
       // Parent fan-out + per-group pagination must surface our deployed
       // membership somewhere in the exhaustively-collected result.

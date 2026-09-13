@@ -10,9 +10,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class ConfigTestFunction extends Lambda.Function<Lambda.Function>()(
-  "ConfigTestFunction",
-) {}
+export class ConfigTestFunction extends Lambda.Function<Lambda.Function>()("ConfigTestFunction") {}
 
 /**
  * Every route answers `{ …fields }` on success or `{ errorTag }` when the
@@ -28,9 +26,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { Message?: string }).Message ??
-          (e as { message?: string }).message,
+        errorMessage: (e as { Message?: string }).Message ?? (e as { message?: string }).message,
       }),
     ),
   );
@@ -75,34 +71,24 @@ export default ConfigTestFunction.make(
     const batchGetResourceConfig = yield* Config.BatchGetResourceConfig();
     const getResourceConfigHistory = yield* Config.GetResourceConfigHistory();
     const listDiscoveredResources = yield* Config.ListDiscoveredResources();
-    const getDiscoveredResourceCounts =
-      yield* Config.GetDiscoveredResourceCounts();
+    const getDiscoveredResourceCounts = yield* Config.GetDiscoveredResourceCounts();
     const selectResourceConfig = yield* Config.SelectResourceConfig();
-    const describeComplianceByConfigRule =
-      yield* Config.DescribeComplianceByConfigRule();
-    const describeComplianceByResource =
-      yield* Config.DescribeComplianceByResource();
-    const getComplianceDetailsByResource =
-      yield* Config.GetComplianceDetailsByResource();
-    const getComplianceSummaryByConfigRule =
-      yield* Config.GetComplianceSummaryByConfigRule();
-    const getComplianceSummaryByResourceType =
-      yield* Config.GetComplianceSummaryByResourceType();
-    const describeConfigRuleEvaluationStatus =
-      yield* Config.DescribeConfigRuleEvaluationStatus();
+    const describeComplianceByConfigRule = yield* Config.DescribeComplianceByConfigRule();
+    const describeComplianceByResource = yield* Config.DescribeComplianceByResource();
+    const getComplianceDetailsByResource = yield* Config.GetComplianceDetailsByResource();
+    const getComplianceSummaryByConfigRule = yield* Config.GetComplianceSummaryByConfigRule();
+    const getComplianceSummaryByResourceType = yield* Config.GetComplianceSummaryByResourceType();
+    const describeConfigRuleEvaluationStatus = yield* Config.DescribeConfigRuleEvaluationStatus();
     const putEvaluations = yield* Config.PutEvaluations();
     const putResourceConfig = yield* Config.PutResourceConfig();
     const deleteResourceConfig = yield* Config.DeleteResourceConfig();
     const startResourceEvaluation = yield* Config.StartResourceEvaluation();
-    const getResourceEvaluationSummary =
-      yield* Config.GetResourceEvaluationSummary();
+    const getResourceEvaluationSummary = yield* Config.GetResourceEvaluationSummary();
     const listResourceEvaluations = yield* Config.ListResourceEvaluations();
 
     // Rule-scoped bindings (the rule name is injected automatically).
-    const getComplianceDetailsByConfigRule =
-      yield* Config.GetComplianceDetailsByConfigRule(rule);
-    const startConfigRulesEvaluation =
-      yield* Config.StartConfigRulesEvaluation(rule);
+    const getComplianceDetailsByConfigRule = yield* Config.GetComplianceDetailsByConfigRule(rule);
+    const startConfigRulesEvaluation = yield* Config.StartConfigRulesEvaluation(rule);
     const putExternalEvaluation = yield* Config.PutExternalEvaluation(rule);
 
     const RuleName = yield* rule.configRuleName;
@@ -121,8 +107,7 @@ export default ConfigTestFunction.make(
 
           case "GET /select-resource-config": {
             const result = yield* selectResourceConfig({
-              Expression:
-                "SELECT resourceId WHERE resourceType = 'AWS::S3::Bucket'",
+              Expression: "SELECT resourceId WHERE resourceType = 'AWS::S3::Bucket'",
             });
             return yield* HttpServerResponse.json({
               results: result.Results ?? [],
@@ -167,9 +152,7 @@ export default ConfigTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { items: result.configurationItems ?? [] },
+              "errorTag" in result ? result : { items: result.configurationItems ?? [] },
             );
           }
 
@@ -231,18 +214,14 @@ export default ConfigTestFunction.make(
             });
             return yield* HttpServerResponse.json({
               ruleName,
-              statuses: (result.ConfigRulesEvaluationStatus ?? []).map(
-                (s) => s.ConfigRuleName,
-              ),
+              statuses: (result.ConfigRulesEvaluationStatus ?? []).map((s) => s.ConfigRuleName),
             });
           }
           case "POST /start-config-rules-evaluation": {
             // Back-to-back runs can reject with ResourceInUseException /
             // LimitExceededException — typed either way.
             const result = yield* errorTagged(startConfigRulesEvaluation());
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /put-evaluations": {
             // TestMode validates the evaluations without pushing them; an
@@ -263,9 +242,7 @@ export default ConfigTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { failed: result.FailedEvaluations ?? [] },
+              "errorTag" in result ? result : { failed: result.FailedEvaluations ?? [] },
             );
           }
           case "POST /put-external-evaluation": {
@@ -282,9 +259,7 @@ export default ConfigTestFunction.make(
                 },
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           // ── Custom resource recording ──────────────────────────────────
@@ -301,9 +276,7 @@ export default ConfigTestFunction.make(
                 Configuration: JSON.stringify({ fixture: true }),
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /delete-resource-config": {
             const result = yield* errorTagged(
@@ -312,9 +285,7 @@ export default ConfigTestFunction.make(
                 ResourceId: "alchemy-config-bindings-fixture",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           // ── Proactive resource evaluation ──────────────────────────────
@@ -334,9 +305,7 @@ export default ConfigTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { id: result.ResourceEvaluationId },
+              "errorTag" in result ? result : { id: result.ResourceEvaluationId },
             );
           }
           case "GET /get-resource-evaluation-summary": {
@@ -363,10 +332,7 @@ export default ConfigTestFunction.make(
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

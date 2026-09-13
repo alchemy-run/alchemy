@@ -2,10 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface PublishSmsRequest extends Omit<
-  sns.PublishInput,
-  "TopicArn" | "TargetArn"
-> {}
+export interface PublishSmsRequest extends Omit<sns.PublishInput, "TopicArn" | "TargetArn"> {}
 
 /**
  * Runtime binding for `sns:Publish`.
@@ -30,9 +27,7 @@ export interface PublishSms extends Binding.Service<
   PublishSms,
   "AWS.SNS.PublishSms",
   () => Effect.Effect<
-    (
-      request: PublishSmsRequest,
-    ) => Effect.Effect<sns.PublishResponse, sns.PublishError>
+    (request: PublishSmsRequest) => Effect.Effect<sns.PublishResponse, sns.PublishError>
   >
 > {}
 

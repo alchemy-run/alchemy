@@ -25,12 +25,7 @@ export interface ListParallelData extends Binding.Service<
   () => Effect.Effect<
     (
       request?: translate.ListParallelDataRequest,
-    ) => Effect.Effect<
-      translate.ListParallelDataResponse,
-      translate.ListParallelDataError
-    >
+    ) => Effect.Effect<translate.ListParallelDataResponse, translate.ListParallelDataError>
   >
 > {}
-export const ListParallelData = Binding.Service<ListParallelData>(
-  "AWS.Translate.ListParallelData",
-);
+export const ListParallelData = Binding.Service<ListParallelData>("AWS.Translate.ListParallelData");

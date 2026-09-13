@@ -71,8 +71,8 @@ test.provider(
           return {
             outcome,
             eventAction:
-              readBack.RiskConfiguration
-                ?.CompromisedCredentialsRiskConfiguration?.Actions?.EventAction,
+              readBack.RiskConfiguration?.CompromisedCredentialsRiskConfiguration?.Actions
+                ?.EventAction,
           };
         });
 

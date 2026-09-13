@@ -39,13 +39,8 @@ export interface GetShardIterator extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetShardIteratorRequest,
-    ) => Effect.Effect<
-      Kinesis.GetShardIteratorOutput,
-      Kinesis.GetShardIteratorError
-    >
+    ) => Effect.Effect<Kinesis.GetShardIteratorOutput, Kinesis.GetShardIteratorError>
   >
 > {}
 
-export const GetShardIterator = Binding.Service<GetShardIterator>(
-  "AWS.Kinesis.GetShardIterator",
-);
+export const GetShardIterator = Binding.Service<GetShardIterator>("AWS.Kinesis.GetShardIterator");

@@ -32,14 +32,11 @@ export default EfsBindingsFunction.make(
     const describeAccessPoints = yield* EFS.DescribeAccessPoints(files);
     const describeBackupPolicy = yield* EFS.DescribeBackupPolicy(files);
     const putBackupPolicy = yield* EFS.PutBackupPolicy(files);
-    const describeLifecycleConfiguration =
-      yield* EFS.DescribeLifecycleConfiguration(files);
-    const putLifecycleConfiguration =
-      yield* EFS.PutLifecycleConfiguration(files);
+    const describeLifecycleConfiguration = yield* EFS.DescribeLifecycleConfiguration(files);
+    const putLifecycleConfiguration = yield* EFS.PutLifecycleConfiguration(files);
     const createAccessPoint = yield* EFS.CreateAccessPoint(files);
     const deleteAccessPoint = yield* EFS.DeleteAccessPoint();
-    const describeReplicationConfigurations =
-      yield* EFS.DescribeReplicationConfigurations(files);
+    const describeReplicationConfigurations = yield* EFS.DescribeReplicationConfigurations(files);
 
     const bound = {
       describeFileSystem,
@@ -61,10 +58,7 @@ export default EfsBindingsFunction.make(
     ): Effect.Effect<A, E, R> =>
       Effect.retry(self, {
         while: (e): boolean => e._tag === "IncorrectFileSystemLifeCycleState",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(10),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
       });
 
     return {
@@ -124,10 +118,7 @@ export default EfsBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/backup-policy/disable"
-        ) {
+        if (request.method === "POST" && pathname === "/backup-policy/disable") {
           const response = yield* retryWhileUpdating(
             putBackupPolicy({ BackupPolicy: { Status: "DISABLED" } }),
           );
@@ -183,9 +174,7 @@ export default EfsBindingsFunction.make(
             Effect.catchTag("AccessPointAlreadyExists", () =>
               describeAccessPoints().pipe(
                 Effect.map((r) =>
-                  r.AccessPoints?.find(
-                    (ap) => ap.ClientToken === ACCESS_POINT_CLIENT_TOKEN,
-                  )!,
+                  r.AccessPoints?.find((ap) => ap.ClientToken === ACCESS_POINT_CLIENT_TOKEN)!,
                 ),
               ),
             ),
@@ -203,13 +192,10 @@ export default EfsBindingsFunction.make(
           // The fixture file system has no replication configuration — the
           // typed ReplicationNotFound proves the grant end-to-end (an IAM
           // gap would surface AccessDeniedException, a 500).
-          const hasReplication =
-            yield* describeReplicationConfigurations().pipe(
-              Effect.map((r) => (r.Replications ?? []).length > 0),
-              Effect.catchTag("ReplicationNotFound", () =>
-                Effect.succeed(false),
-              ),
-            );
+          const hasReplication = yield* describeReplicationConfigurations().pipe(
+            Effect.map((r) => (r.Replications ?? []).length > 0),
+            Effect.catchTag("ReplicationNotFound", () => Effect.succeed(false)),
+          );
           return yield* HttpServerResponse.json({ hasReplication });
         }
 

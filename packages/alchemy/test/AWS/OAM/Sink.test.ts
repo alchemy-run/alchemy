@@ -17,16 +17,11 @@ afterAll(serviceLease.release);
 
 const assertSinkGone = (sinkArn: string) =>
   oam.getSink({ Identifier: sinkArn }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`sink ${sinkArn} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`sink ${sinkArn} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -59,10 +54,7 @@ describe.sequential("AWS.OAM.Sink", () => {
         const { accountId } = yield* AWSEnvironment.current;
         yield* stack.destroy();
 
-        const deploySink = (props: {
-          policy: Record<string, any>;
-          tags: Record<string, string>;
-        }) =>
+        const deploySink = (props: { policy: Record<string, any>; tags: Record<string, string> }) =>
           stack.deploy(
             Effect.gen(function* () {
               const sink = yield* Sink("MonitoringSink", props);
@@ -118,10 +110,7 @@ describe.sequential("AWS.OAM.Sink", () => {
         // Update: widen the sink policy and change tags; the sink itself
         // (name/arn/id) is stable.
         const updated = yield* deploySink({
-          policy: sinkPolicy(accountId, [
-            "AWS::CloudWatch::Metric",
-            "AWS::Logs::LogGroup",
-          ]),
+          policy: sinkPolicy(accountId, ["AWS::CloudWatch::Metric", "AWS::Logs::LogGroup"]),
           tags: { purpose: "alchemy-test", updated: "true" },
         });
         expect(updated.sinkArn).toBe(created.sinkArn);
@@ -167,10 +156,7 @@ describe.sequential("AWS.OAM.Sink", () => {
         expect(live.ResourceTypes).toEqual(["AWS::CloudWatch::Metric"]);
 
         // Update mutates resource types in place (no replacement).
-        const updated = yield* deployLink([
-          "AWS::CloudWatch::Metric",
-          "AWS::Logs::LogGroup",
-        ]);
+        const updated = yield* deployLink(["AWS::CloudWatch::Metric", "AWS::Logs::LogGroup"]);
         expect(updated.linkArn).toBe(created.linkArn);
         const after = yield* oam.getLink({ Identifier: created.linkArn });
         expect([...(after.ResourceTypes ?? [])].sort()).toEqual([
@@ -179,9 +165,7 @@ describe.sequential("AWS.OAM.Sink", () => {
         ]);
 
         yield* stack.destroy();
-        const gone = yield* Effect.result(
-          oam.getLink({ Identifier: created.linkArn }),
-        );
+        const gone = yield* Effect.result(oam.getLink({ Identifier: created.linkArn }));
         expect(Result.isFailure(gone)).toBe(true);
       }),
     { timeout: 180_000 },

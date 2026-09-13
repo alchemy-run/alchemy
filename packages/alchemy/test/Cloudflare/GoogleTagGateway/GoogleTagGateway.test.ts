@@ -11,21 +11,15 @@ import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -77,17 +71,14 @@ describe.sequential("GoogleTagGateway", () => {
           // Create — enable the gateway with a deterministic config.
           const created = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
-                "Gtg",
-                {
-                  zone: { zoneId, name: zoneName },
-                  enabled: true,
-                  endpoint: "/metrics",
-                  measurementId: "G-TEST123456",
-                  hideOriginalIp: true,
-                  setUpTag: false,
-                },
-              );
+              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("Gtg", {
+                zone: { zoneId, name: zoneName },
+                enabled: true,
+                endpoint: "/metrics",
+                measurementId: "G-TEST123456",
+                hideOriginalIp: true,
+                setUpTag: false,
+              });
             }),
           );
 
@@ -110,17 +101,14 @@ describe.sequential("GoogleTagGateway", () => {
           // Update in place — same zone, new endpoint and IP setting.
           const updated = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
-                "Gtg",
-                {
-                  zone: { zoneId, name: zoneName },
-                  enabled: true,
-                  endpoint: "/collect2",
-                  measurementId: "G-TEST123456",
-                  hideOriginalIp: false,
-                  setUpTag: false,
-                },
-              );
+              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("Gtg", {
+                zone: { zoneId, name: zoneName },
+                enabled: true,
+                endpoint: "/collect2",
+                measurementId: "G-TEST123456",
+                hideOriginalIp: false,
+                setUpTag: false,
+              });
             }),
           );
 
@@ -158,17 +146,14 @@ describe.sequential("GoogleTagGateway", () => {
 
         yield* Effect.gen(function* () {
           const program = Effect.gen(function* () {
-            return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
-              "GtgNoop",
-              {
-                zone: { zoneId, name: zoneName },
-                enabled: false,
-                endpoint: "/noop",
-                measurementId: "GTM-TEST123",
-                hideOriginalIp: false,
-                setUpTag: false,
-              },
-            );
+            return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("GtgNoop", {
+              zone: { zoneId, name: zoneName },
+              enabled: false,
+              endpoint: "/noop",
+              measurementId: "GTM-TEST123",
+              hideOriginalIp: false,
+              setUpTag: false,
+            });
           });
 
           const first = yield* stack.deploy(program);
@@ -207,17 +192,14 @@ describe.sequential("GoogleTagGateway", () => {
           const deployGateway = () =>
             stack.deploy(
               Effect.gen(function* () {
-                return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
-                  "GtgWedged",
-                  {
-                    zone: { zoneId, name: zoneName },
-                    enabled: true,
-                    endpoint: "/wedged",
-                    measurementId: "G-WEDGED0001",
-                    hideOriginalIp: true,
-                    setUpTag: false,
-                  },
-                );
+                return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("GtgWedged", {
+                  zone: { zoneId, name: zoneName },
+                  enabled: true,
+                  endpoint: "/wedged",
+                  measurementId: "G-WEDGED0001",
+                  hideOriginalIp: true,
+                  setUpTag: false,
+                });
               }),
             );
 
@@ -231,20 +213,15 @@ describe.sequential("GoogleTagGateway", () => {
           const stage = stack.stage;
           const fqns = yield* state.list({ stack: stack.name, stage });
           const rows = yield* Effect.forEach(fqns, (fqn) =>
-            state
-              .get({ stack: stack.name, stage, fqn })
-              .pipe(Effect.map((row) => ({ fqn, row }))),
+            state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
           );
           const wedged = rows.find(
             (r): r is { fqn: string; row: ResourceState } =>
               isResourceState(r.row) &&
-              r.row.resourceType ===
-                "Cloudflare.GoogleTagGateway.GoogleTagGateway",
+              r.row.resourceType === "Cloudflare.GoogleTagGateway.GoogleTagGateway",
           );
           if (!wedged) {
-            return yield* Effect.die(
-              new Error("no GoogleTagGateway state row found after deploy"),
-            );
+            return yield* Effect.die(new Error("no GoogleTagGateway state row found after deploy"));
           }
           yield* state.set({
             stack: stack.name,
@@ -316,17 +293,14 @@ describe.sequential("GoogleTagGateway", () => {
         yield* Effect.gen(function* () {
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway(
-                "GtgList",
-                {
-                  zone: { zoneId, name: zoneName },
-                  enabled: true,
-                  endpoint: "/listcfg",
-                  measurementId: "G-LIST123456",
-                  hideOriginalIp: true,
-                  setUpTag: false,
-                },
-              );
+              return yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("GtgList", {
+                zone: { zoneId, name: zoneName },
+                enabled: true,
+                endpoint: "/listcfg",
+                measurementId: "G-LIST123456",
+                hideOriginalIp: true,
+                setUpTag: false,
+              });
             }),
           );
 

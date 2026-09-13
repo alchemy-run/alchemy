@@ -22,10 +22,7 @@ const makeTemporaryFixture = Effect.fn(function* () {
 // simulating state written by an older provider version. Both the test body and
 // the deploys driven through `stack` read/write the same store keyed by
 // (stack, stage, fqn).
-const seedLegacyState = Effect.fn(function* (
-  fqn: string,
-  value: ResourceState,
-) {
+const seedLegacyState = Effect.fn(function* (fqn: string, value: ResourceState) {
   const state = yield* yield* State;
   const stk = yield* Stack;
   yield* state.set({ stack: stk.name, stage: stk.stage, fqn, value });

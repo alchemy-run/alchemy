@@ -31,10 +31,7 @@ export default Alchemy.Stack(
     const bucket = yield* Cloudflare.R2.Bucket("AiSearchBindingBucket", {
       forceDestroy: true,
     });
-    const namespace = yield* Cloudflare.AI.SearchNamespace(
-      "AiSearchBindingNs",
-      {},
-    );
+    const namespace = yield* Cloudflare.AI.SearchNamespace("AiSearchBindingNs", {});
     const search = yield* Cloudflare.AI.Search("AiSearchBindingInstance", {
       source: bucket,
     });

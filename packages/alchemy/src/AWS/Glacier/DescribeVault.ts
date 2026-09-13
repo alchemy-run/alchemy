@@ -27,10 +27,6 @@ export interface DescribeVault extends Binding.Service<
   "AWS.Glacier.DescribeVault",
   (
     vault: Vault,
-  ) => Effect.Effect<
-    () => Effect.Effect<glacier.DescribeVaultOutput, glacier.DescribeVaultError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<glacier.DescribeVaultOutput, glacier.DescribeVaultError>>
 > {}
-export const DescribeVault = Binding.Service<DescribeVault>(
-  "AWS.Glacier.DescribeVault",
-);
+export const DescribeVault = Binding.Service<DescribeVault>("AWS.Glacier.DescribeVault");

@@ -16,10 +16,7 @@ export type WebSocketEvent = lambda.APIGatewayProxyWebsocketEventV2;
  * is only surfaced to the client when the route has a route response
  * configured. Returning `void` means `{ statusCode: 200 }`.
  */
-export type WebSocketResult =
-  | { statusCode: number; body?: string }
-  | undefined
-  | void;
+export type WebSocketResult = { statusCode: number; body?: string } | undefined | void;
 
 export interface WebSocketRouteProps {
   /**
@@ -33,9 +30,7 @@ export interface WebSocketRouteProps {
 export type WebSocketEventSourceService = <Req = never>(
   api: Api,
   props: WebSocketRouteProps,
-  handler: (
-    event: WebSocketEvent,
-  ) => Effect.Effect<WebSocketResult, never, Req>,
+  handler: (event: WebSocketEvent) => Effect.Effect<WebSocketResult, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
 /**
@@ -122,9 +117,7 @@ export class WebSocketEventSource extends Context.Service<
 export function onWebSocketRoute<Req = never>(
   api: Api,
   props: WebSocketRouteProps,
-  handler: (
-    event: WebSocketEvent,
-  ) => Effect.Effect<WebSocketResult, never, Req>,
+  handler: (event: WebSocketEvent) => Effect.Effect<WebSocketResult, never, Req>,
 ): Effect.Effect<void, never, WebSocketEventSource> {
   return WebSocketEventSource.use((source) => source(api, props, handler));
 }

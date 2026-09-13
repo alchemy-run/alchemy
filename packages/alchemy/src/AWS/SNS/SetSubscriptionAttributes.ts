@@ -41,13 +41,9 @@ export interface SetSubscriptionAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetSubscriptionAttributesRequest,
-    ) => Effect.Effect<
-      sns.SetSubscriptionAttributesResponse,
-      sns.SetSubscriptionAttributesError
-    >
+    ) => Effect.Effect<sns.SetSubscriptionAttributesResponse, sns.SetSubscriptionAttributesError>
   >
 > {}
-export const SetSubscriptionAttributes =
-  Binding.Service<SetSubscriptionAttributes>(
-    "AWS.SNS.SetSubscriptionAttributes",
-  );
+export const SetSubscriptionAttributes = Binding.Service<SetSubscriptionAttributes>(
+  "AWS.SNS.SetSubscriptionAttributes",
+);

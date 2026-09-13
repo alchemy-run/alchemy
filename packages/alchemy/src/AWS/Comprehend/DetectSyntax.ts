@@ -31,12 +31,7 @@ export interface DetectSyntax extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectSyntaxRequest,
-    ) => Effect.Effect<
-      comprehend.DetectSyntaxResponse,
-      comprehend.DetectSyntaxError
-    >
+    ) => Effect.Effect<comprehend.DetectSyntaxResponse, comprehend.DetectSyntaxError>
   >
 > {}
-export const DetectSyntax = Binding.Service<DetectSyntax>(
-  "AWS.Comprehend.DetectSyntax",
-);
+export const DetectSyntax = Binding.Service<DetectSyntax>("AWS.Comprehend.DetectSyntax");

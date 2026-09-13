@@ -12,9 +12,7 @@ import {
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface SvelteKitProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -175,9 +173,10 @@ export const SvelteKit: {
         | Effect.Effect<InputProps<SvelteKitProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -188,9 +187,10 @@ export const SvelteKit: {
       | Effect.Effect<InputProps<SvelteKitProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -200,39 +200,36 @@ export const SvelteKit: {
     ? (id: string, propsEff: any) => effectClass(SvelteKit(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // SvelteKit's server graph is built for Node and needs
-            // `nodejs_compat` — `getCompatibility` already adds it to every
-            // non-python Worker.
-            assets: props?.assets,
-            source: {
-              provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // SvelteKit's server graph is built for Node and needs
+          // `nodejs_compat` — `getCompatibility` already adds it to every
+          // non-python Worker.
+          assets: props?.assets,
+          source: {
+            provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-                kit: props?.kit,
-                // The adapter's build-time page GENERATION (404.html /
-                // app-shell index.html) is derived from the one
-                // platform-native knob, `assets.notFoundHandling`, so a
-                // single prop configures generation AND serving — the two
-                // halves can never disagree. The generated 404-page
-                // renders the app shell so kit's own error page shows.
-                ...(props?.assets?.notFoundHandling !== undefined &&
-                props.assets.notFoundHandling !== "none"
-                  ? {
-                      adapter: {
-                        notFoundHandling: props.assets.notFoundHandling,
-                        fallback: "spa",
-                      },
-                    }
-                  : {}),
-              },
+              memo: props?.memo,
+              kit: props?.kit,
+              // The adapter's build-time page GENERATION (404.html /
+              // app-shell index.html) is derived from the one
+              // platform-native knob, `assets.notFoundHandling`, so a
+              // single prop configures generation AND serving — the two
+              // halves can never disagree. The generated 404-page
+              // renders the app shell so kit's own error page shows.
+              ...(props?.assets?.notFoundHandling !== undefined &&
+              props.assets.notFoundHandling !== "none"
+                ? {
+                    adapter: {
+                      notFoundHandling: props.assets.notFoundHandling,
+                      fallback: "spa",
+                    },
+                  }
+                : {}),
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

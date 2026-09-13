@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * A small, stable, publicly hosted PNG for Cloudflare to download
@@ -41,10 +38,7 @@ const expectGone = (accountId: string, watermarkId: string) =>
     Effect.catchTag("WatermarkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WatermarkNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -153,14 +147,10 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Stream.Watermark,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Stream.Watermark);
       const all = yield* provider.list();
 
-      expect(all.some((w) => w.watermarkId === deployed.watermarkId)).toBe(
-        true,
-      );
+      expect(all.some((w) => w.watermarkId === deployed.watermarkId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

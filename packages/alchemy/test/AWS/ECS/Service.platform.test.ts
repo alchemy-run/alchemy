@@ -26,11 +26,7 @@ const defaultAzSubnets = (vpcId: string) =>
         { Name: "default-for-az", Values: ["true"] },
       ],
     })
-    .pipe(
-      Effect.map((r) =>
-        (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-      ),
-    );
+    .pipe(Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))));
 
 /**
  * Delete any leftover out-of-band "legacy" fixtures carrying {@link name}.
@@ -53,18 +49,14 @@ const reclaimLegacyFixtures = Effect.fn("reclaimLegacyFixtures")(function* (
       LoadBalancerArn: lbArn,
     });
     yield* Effect.forEach(
-      (listeners.Listeners ?? []).flatMap((l) =>
-        l.ListenerArn ? [l.ListenerArn] : [],
-      ),
+      (listeners.Listeners ?? []).flatMap((l) => (l.ListenerArn ? [l.ListenerArn] : [])),
       (ListenerArn) => elbv2.deleteListener({ ListenerArn }),
     );
     yield* elbv2.deleteLoadBalancer({ LoadBalancerArn: lbArn });
   }
 
   const tgs = yield* elbv2.describeTargetGroups({});
-  const tgArn = (tgs.TargetGroups ?? []).find(
-    (tg) => tg.TargetGroupName === name,
-  )?.TargetGroupArn;
+  const tgArn = (tgs.TargetGroups ?? []).find((tg) => tg.TargetGroupName === name)?.TargetGroupArn;
   if (tgArn) {
     yield* elbv2.deleteTargetGroup({ TargetGroupArn: tgArn });
   }
@@ -144,11 +136,7 @@ test.provider(
       });
       const container = described.taskDefinition?.containerDefinitions?.[0];
       expect(container?.image).toBe(deployed.imageUri);
-      expect(container?.command).toEqual([
-        "sh",
-        "-c",
-        "while true; do sleep 30; done",
-      ]);
+      expect(container?.command).toEqual(["sh", "-c", "while true; do sleep 30; done"]);
       expect(container?.portMappings?.[0]?.containerPort).toBe(80);
       // `environmentFiles` lands on the synthesized primary container, with
       // the execution role granted read access to the referenced object.
@@ -172,9 +160,7 @@ test.provider(
         services: [deployed.serviceName],
       });
       const svc = services.services?.[0];
-      expect(svc?.loadBalancers?.[0]?.targetGroupArn).toBe(
-        deployed.targetGroupArn,
-      );
+      expect(svc?.loadBalancers?.[0]?.targetGroupArn).toBe(deployed.targetGroupArn);
       expect(svc?.loadBalancers?.[0]?.containerPort).toBe(80);
 
       yield* stack.destroy();
@@ -187,9 +173,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("RepositoryNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(true)),
         );
       expect(repoGone).toBe(true);
 
@@ -199,9 +183,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(lbGone).toBe(true);
 
@@ -228,9 +210,7 @@ test.provider(
       const clusters = yield* ecs.describeClusters({
         clusters: ["alchemy-test-ecs-service-platform"],
       });
-      expect((clusters.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
-        false,
-      );
+      expect((clusters.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
     }),
   { timeout: 420_000 },
 );
@@ -291,9 +271,7 @@ test.provider(
       });
       const legacyLbArn = legacyLb.LoadBalancers?.[0]?.LoadBalancerArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteLoadBalancer({ LoadBalancerArn: legacyLbArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteLoadBalancer({ LoadBalancerArn: legacyLbArn }).pipe(Effect.ignore),
       );
       const legacyTg = yield* elbv2.createTargetGroup({
         Name: legacyName,
@@ -304,9 +282,7 @@ test.provider(
       });
       const legacyTgArn = legacyTg.TargetGroups?.[0]?.TargetGroupArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteTargetGroup({ TargetGroupArn: legacyTgArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteTargetGroup({ TargetGroupArn: legacyTgArn }).pipe(Effect.ignore),
       );
       const legacyListener = yield* elbv2.createListener({
         LoadBalancerArn: legacyLbArn,
@@ -316,9 +292,7 @@ test.provider(
       });
       const legacyListenerArn = legacyListener.Listeners?.[0]?.ListenerArn!;
       yield* Effect.addFinalizer(() =>
-        elbv2
-          .deleteListener({ ListenerArn: legacyListenerArn })
-          .pipe(Effect.ignore),
+        elbv2.deleteListener({ ListenerArn: legacyListenerArn }).pipe(Effect.ignore),
       );
       const legacySg = yield* ec2.createSecurityGroup({
         GroupName: legacyName,
@@ -335,18 +309,14 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const serviceRow = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) && r.row.resourceType === "AWS.ECS.Service",
       );
       if (!serviceRow) {
-        return yield* Effect.die(
-          new Error("no AWS.ECS.Service state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.ECS.Service state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -401,9 +371,7 @@ test.provider(
         .describeLoadBalancers({ LoadBalancerArns: [legacyLbArn] })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (gone) => gone,
@@ -415,17 +383,13 @@ test.provider(
         .describeTargetGroups({ TargetGroupArns: [legacyTgArn] })
         .pipe(
           Effect.map((r) => (r.TargetGroups ?? []).length === 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
         );
       expect(legacyTgGone).toBe(true);
-      const legacySgGone = yield* ec2
-        .describeSecurityGroups({ GroupIds: [legacySgId] })
-        .pipe(
-          Effect.map((r) => (r.SecurityGroups ?? []).length === 0),
-          Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(true)),
-        );
+      const legacySgGone = yield* ec2.describeSecurityGroups({ GroupIds: [legacySgId] }).pipe(
+        Effect.map((r) => (r.SecurityGroups ?? []).length === 0),
+        Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(true)),
+      );
       expect(legacySgGone).toBe(true);
 
       yield* stack.destroy();
@@ -437,9 +401,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(composedLbGone).toBe(true);
 
@@ -457,9 +419,7 @@ test.provider(
               arn.includes(`/${redeployed.taskFamily!}:`),
             ),
           ),
-          Effect.catchTag("ClientException", () =>
-            Effect.succeed([] as string[]),
-          ),
+          Effect.catchTag("ClientException", () => Effect.succeed([] as string[])),
         );
       expect(activeRevisions).toEqual([]);
     }),

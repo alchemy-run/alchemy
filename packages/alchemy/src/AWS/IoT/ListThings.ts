@@ -29,9 +29,7 @@ export interface ListThings extends Binding.Service<
   ListThings,
   "AWS.IoT.ListThings",
   () => Effect.Effect<
-    (
-      request?: ListThingsRequest,
-    ) => Effect.Effect<iot.ListThingsResponse, iot.ListThingsError>
+    (request?: ListThingsRequest) => Effect.Effect<iot.ListThingsResponse, iot.ListThingsError>
   >
 > {}
 

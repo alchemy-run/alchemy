@@ -27,9 +27,7 @@ export class Registry extends Context.Service<
     /**
      * Reads the registry and returns the resolved targets for the given subscribers.
      */
-    readonly read: (
-      subscribers: ReadonlyArray<Subscriber>,
-    ) => Effect.Effect<ResolvedTargetMap>;
+    readonly read: (subscribers: ReadonlyArray<Subscriber>) => Effect.Effect<ResolvedTargetMap>;
     /**
      * Subscribes to changes in the registry for the given subscribers.
      * Returns a stream containing an updated `ResolvedTargetMap` whenever the registry changes.
@@ -41,9 +39,7 @@ export class Registry extends Context.Service<
      * Writes an entry to the registry.
      * The entry is removed when the scope closes.
      */
-    readonly write: (
-      entry: RegistryEntry,
-    ) => Effect.Effect<void, SystemError, Scope.Scope>;
+    readonly write: (entry: RegistryEntry) => Effect.Effect<void, SystemError, Scope.Scope>;
   }
 >()("cloudflare-runtime/registry/Registry") {}
 
@@ -75,10 +71,7 @@ export const RegistryLive = Layer.effect(
       Effect.zip(readMtime(entryPath), DateTime.nowAsDate, {
         concurrent: true,
       }).pipe(
-        Effect.map(
-          ([mtime, now]) =>
-            !!mtime && mtime.getTime() > now.getTime() - STALE_AFTER_MS,
-        ),
+        Effect.map(([mtime, now]) => !!mtime && mtime.getTime() > now.getTime() - STALE_AFTER_MS),
       );
 
     const readEntry = (entry: string) => {
@@ -147,26 +140,19 @@ export const RegistryLive = Layer.effect(
 
     return Registry.of({
       read: (subscribers) =>
-        SubscriptionRef.get(ref).pipe(
-          Effect.map(pickSubscriberServices(subscribers)),
-        ),
+        SubscriptionRef.get(ref).pipe(Effect.map(pickSubscriberServices(subscribers))),
       subscribe: (subscribers) =>
         SubscriptionRef.changes(ref).pipe(
           Stream.map(pickSubscriberServices(subscribers)),
           Stream.changes,
         ),
       write: (entry) => {
-        const entryPath = path.join(
-          directory,
-          `${encodeURIComponent(entry.scriptName)}.json`,
-        );
+        const entryPath = path.join(directory, `${encodeURIComponent(entry.scriptName)}.json`);
         const serialized = JSON.stringify(entry, null, 2);
         return fs.writeFileString(entryPath, serialized).pipe(
           Effect.andThen(
             // Immediately update the in-memory registry so it's available without waiting on IO.
-            SubscriptionRef.update(ref, (map) =>
-              MutableHashMap.set(map, entry.scriptName, entry),
-            ),
+            SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
           updateLock.withPermits(1),
           Effect.tap(() => {
@@ -230,35 +216,27 @@ const pickSubscriberServices =
     return resolved;
   };
 
-const extractSubscriberService = (
-  subscriber: Subscriber,
-  entry: RegistryEntry,
-) => {
+const extractSubscriberService = (subscriber: Subscriber, entry: RegistryEntry) => {
   switch (subscriber.kind) {
     case "worker":
-      return entry.scriptName === subscriber.scriptName
-        ? entry.services[0]
-        : undefined;
+      return entry.scriptName === subscriber.scriptName ? entry.services[0] : undefined;
     case "durable-object":
       return entry.scriptName === subscriber.scriptName
         ? entry.services.find(
             (service) =>
-              service.kind === "durable-object" &&
-              service.className === subscriber.className,
+              service.kind === "durable-object" && service.className === subscriber.className,
           )
         : undefined;
     case "queue-consumer":
       return entry.services.find(
         (service) =>
-          service.kind === "queue-consumer" &&
-          service.queueName === subscriber.queueName,
+          service.kind === "queue-consumer" && service.queueName === subscriber.queueName,
       );
     case "workflow":
       return entry.scriptName === subscriber.scriptName
         ? entry.services.find(
             (service) =>
-              service.kind === "workflow" &&
-              service.workflowName === subscriber.workflowName,
+              service.kind === "workflow" && service.workflowName === subscriber.workflowName,
           )
         : undefined;
   }

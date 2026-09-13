@@ -25,23 +25,15 @@ export const PROBE_ENV_KEY = "ALCHEMY_TEST_BOUND_ENV";
 export interface ProbeEnv extends Binding.Service<
   ProbeEnv,
   "Test.ProbeEnv",
-  (
-    bucket: Bucket,
-  ) => Effect.Effect<Effect.Effect<string | undefined, never, RuntimeContext>>
+  (bucket: Bucket) => Effect.Effect<Effect.Effect<string | undefined, never, RuntimeContext>>
 > {}
 
 export const ProbeEnv = Binding.Service<ProbeEnv>("Test.ProbeEnv");
 
-type EnvBindingHost = Resource<
-  string,
-  object | undefined,
-  object,
-  { env?: Record<string, any> }
->;
+type EnvBindingHost = Resource<string, object | undefined, object, { env?: Record<string, any> }>;
 
-const acceptsEnvBinding = (
-  host: ResourceLike | undefined,
-): host is EnvBindingHost => host?.Type === "Cloudflare.Container";
+const acceptsEnvBinding = (host: ResourceLike | undefined): host is EnvBindingHost =>
+  host?.Type === "Cloudflare.Container";
 
 export const ProbeEnvBinding = Layer.effect(
   ProbeEnv,

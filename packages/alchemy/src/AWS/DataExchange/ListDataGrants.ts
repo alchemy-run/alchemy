@@ -25,12 +25,7 @@ export interface ListDataGrants extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dataexchange.ListDataGrantsRequest,
-    ) => Effect.Effect<
-      dataexchange.ListDataGrantsResponse,
-      dataexchange.ListDataGrantsError
-    >
+    ) => Effect.Effect<dataexchange.ListDataGrantsResponse, dataexchange.ListDataGrantsError>
   >
 > {}
-export const ListDataGrants = Binding.Service<ListDataGrants>(
-  "AWS.DataExchange.ListDataGrants",
-);
+export const ListDataGrants = Binding.Service<ListDataGrants>("AWS.DataExchange.ListDataGrants");

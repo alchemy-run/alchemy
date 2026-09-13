@@ -35,12 +35,7 @@ export interface GetDataSourceRun extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetDataSourceRunRequest,
-    ) => Effect.Effect<
-      datazone.GetDataSourceRunOutput,
-      datazone.GetDataSourceRunError
-    >
+    ) => Effect.Effect<datazone.GetDataSourceRunOutput, datazone.GetDataSourceRunError>
   >
 > {}
-export const GetDataSourceRun = Binding.Service<GetDataSourceRun>(
-  "AWS.DataZone.GetDataSourceRun",
-);
+export const GetDataSourceRun = Binding.Service<GetDataSourceRun>("AWS.DataZone.GetDataSourceRun");

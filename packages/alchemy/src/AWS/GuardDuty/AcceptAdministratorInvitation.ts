@@ -32,17 +32,13 @@ export interface AcceptAdministratorInvitation extends Binding.Service<
     detector: Detector,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        guardduty.AcceptAdministratorInvitationRequest,
-        "DetectorId"
-      >,
+      request?: Omit<guardduty.AcceptAdministratorInvitationRequest, "DetectorId">,
     ) => Effect.Effect<
       guardduty.AcceptAdministratorInvitationResponse,
       guardduty.AcceptAdministratorInvitationError
     >
   >
 > {}
-export const AcceptAdministratorInvitation =
-  Binding.Service<AcceptAdministratorInvitation>(
-    "AWS.GuardDuty.AcceptAdministratorInvitation",
-  );
+export const AcceptAdministratorInvitation = Binding.Service<AcceptAdministratorInvitation>(
+  "AWS.GuardDuty.AcceptAdministratorInvitation",
+);

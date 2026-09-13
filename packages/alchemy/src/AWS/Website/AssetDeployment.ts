@@ -151,9 +151,7 @@ export interface AssetDeployment extends Resource<
  *
  * @resource
  */
-export const AssetDeployment = Resource<AssetDeployment>(
-  "AWS.Website.AssetDeployment",
-);
+export const AssetDeployment = Resource<AssetDeployment>("AWS.Website.AssetDeployment");
 
 const defaultHtmlCacheControl = "max-age=0,no-cache,no-store,must-revalidate";
 const defaultAssetCacheControl = "max-age=31536000,public,immutable";
@@ -173,18 +171,13 @@ export const AssetDeploymentProvider = () =>
         // the upload walks the tree.
         const root = path.resolve(initialCwd, news.sourcePath);
         const files = yield* walkFiles(root);
-        const observed = yield* listObjects(
-          bucketName,
-          prefix ? `${prefix}/` : prefix,
-        );
+        const observed = yield* listObjects(bucketName, prefix ? `${prefix}/` : prefix);
         const prepared = yield* Effect.all(
           files.map((relativePath) =>
             Effect.gen(function* () {
               const body = yield* fs.readFile(path.join(root, relativePath));
               const normalizedRelativePath = toPosix(relativePath);
-              const key = prefix
-                ? `${prefix}/${normalizedRelativePath}`
-                : normalizedRelativePath;
+              const key = prefix ? `${prefix}/${normalizedRelativePath}` : normalizedRelativePath;
               const options = getFileOptions(
                 normalizedRelativePath,
                 news.fileOptions,
@@ -214,9 +207,7 @@ export const AssetDeploymentProvider = () =>
         const desiredKeys = new Set(prepared.map((file) => file.key));
         yield* Effect.all(
           prepared.flatMap((file) => {
-            const expectedETag = createHash("md5")
-              .update(file.body)
-              .digest("hex");
+            const expectedETag = createHash("md5").update(file.body).digest("hex");
             const observedETag = observed.get(file.key)?.replace(/^"|"$/g, "");
             if (observedETag === expectedETag) return [];
             return [
@@ -295,10 +286,7 @@ const extname = (file: string) => {
 const withCharset = (mimeType: string, textEncoding: WebsiteTextEncoding) =>
   textEncoding === "none" ? mimeType : `${mimeType}; charset=${textEncoding}`;
 
-const inferContentType = (
-  file: string,
-  textEncoding: WebsiteTextEncoding = "utf-8",
-) => {
+const inferContentType = (file: string, textEncoding: WebsiteTextEncoding = "utf-8") => {
   const ext = extname(file);
   switch (ext) {
     case ".html":
@@ -337,12 +325,9 @@ const inferContentType = (
 };
 
 const defaultCacheControlFor = (file: string) =>
-  extname(file) === ".html"
-    ? defaultHtmlCacheControl
-    : defaultAssetCacheControl;
+  extname(file) === ".html" ? defaultHtmlCacheControl : defaultAssetCacheControl;
 
-const escapeRegex = (value: string) =>
-  value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+const escapeRegex = (value: string) => value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 
 const globToRegExp = (glob: string) =>
   new RegExp(
@@ -353,9 +338,7 @@ const globToRegExp = (glob: string) =>
   );
 
 const matchesAny = (file: string, globs: string | string[]) =>
-  (Array.isArray(globs) ? globs : [globs]).some((glob) =>
-    globToRegExp(glob).test(file),
-  );
+  (Array.isArray(globs) ? globs : [globs]).some((glob) => globToRegExp(glob).test(file));
 
 const getFileOptions = (
   file: string,
@@ -369,13 +352,11 @@ const getFileOptions = (
     .reverse()
     .find(
       (option) =>
-        matchesAny(file, option.files) &&
-        !(option.ignore && matchesAny(file, option.ignore)),
+        matchesAny(file, option.files) && !(option.ignore && matchesAny(file, option.ignore)),
     );
 
   return {
-    contentType:
-      matched?.contentType ?? inferContentType(file, textEncoding ?? "utf-8"),
+    contentType: matched?.contentType ?? inferContentType(file, textEncoding ?? "utf-8"),
     cacheControl: matched?.cacheControl ?? defaultCacheControlFor(file),
   };
 };
@@ -447,22 +428,16 @@ const deleteKeys = Effect.fn(function* (bucketName: string, keys: string[]) {
   }
 });
 
-const isMissingBucket = (error: unknown) =>
-  (error as { _tag?: string })._tag === "NoSuchBucket";
+const isMissingBucket = (error: unknown) => (error as { _tag?: string })._tag === "NoSuchBucket";
 
 const retryForBucketReadiness = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: isMissingBucket,
-      schedule: Schedule.max([
-        Schedule.exponential("100 millis"),
-        Schedule.recurs(30),
-      ]).pipe(
+      schedule: Schedule.max([Schedule.exponential("100 millis"), Schedule.recurs(30)]).pipe(
         Schedule.modifyDelay(({ duration }) =>
           Effect.succeed(
-            Duration.isGreaterThan(duration, Duration.seconds(2))
-              ? Duration.seconds(2)
-              : duration,
+            Duration.isGreaterThan(duration, Duration.seconds(2)) ? Duration.seconds(2) : duration,
           ),
         ),
       ),

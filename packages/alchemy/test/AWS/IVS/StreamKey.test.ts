@@ -13,9 +13,7 @@ const assertStreamKeyGone = (arn: string) =>
   Effect.gen(function* () {
     const streamKey = yield* ivs.getStreamKey({ arn }).pipe(
       Effect.map((r) => r.streamKey),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (streamKey !== undefined) {
       return yield* Effect.fail(new Error(`stream key '${arn}' still exists`));
@@ -83,9 +81,7 @@ test.provider(
           return { channel, streamKey };
         }),
       );
-      expect(redeployed.streamKey.streamKeyArn).toBe(
-        deployed.streamKey.streamKeyArn,
-      );
+      expect(redeployed.streamKey.streamKeyArn).toBe(deployed.streamKey.streamKeyArn);
 
       // Destroy and verify out-of-band with a typed wait-until-gone.
       yield* stack.destroy();

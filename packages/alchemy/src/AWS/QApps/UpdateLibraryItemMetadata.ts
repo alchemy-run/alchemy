@@ -43,7 +43,6 @@ export interface UpdateLibraryItemMetadata extends Binding.Service<
   >
 > {}
 
-export const UpdateLibraryItemMetadata =
-  Binding.Service<UpdateLibraryItemMetadata>(
-    "AWS.QApps.UpdateLibraryItemMetadata",
-  );
+export const UpdateLibraryItemMetadata = Binding.Service<UpdateLibraryItemMetadata>(
+  "AWS.QApps.UpdateLibraryItemMetadata",
+);

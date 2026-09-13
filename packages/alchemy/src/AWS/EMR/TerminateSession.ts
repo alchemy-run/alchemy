@@ -26,6 +26,4 @@ export interface TerminateSession extends Binding.Service<
     ) => Effect.Effect<SVC.TerminateSessionOutput, SVC.TerminateSessionError>
   >
 > {}
-export const TerminateSession = Binding.Service<TerminateSession>(
-  "AWS.EMR.TerminateSession",
-);
+export const TerminateSession = Binding.Service<TerminateSession>("AWS.EMR.TerminateSession");

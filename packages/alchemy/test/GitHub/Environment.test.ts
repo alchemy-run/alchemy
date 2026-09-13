@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // These tests create, mutate, and delete a real deployment environment, so
 // they run against the dedicated test org (never a real one). Set
@@ -20,9 +17,7 @@ const logLevel = Effect.provideService(
 // environments (and their protection rules) on private repositories are
 // plan-gated.
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
-const repo =
-  process.env.GITHUB_TEST_ENVIRONMENT_REPOSITORY ??
-  "alchemy-effect-environment-test";
+const repo = process.env.GITHUB_TEST_ENVIRONMENT_REPOSITORY ?? "alchemy-effect-environment-test";
 
 // Derive the repository name from the `fullName` output — referencing an
 // output (rather than the `repo` constant) makes the engine order dependent
@@ -111,16 +106,10 @@ test.provider.skipIf(!owner)(
 
       const fetched = yield* getEnvironment(name);
       expect(fetched?.id).toEqual(created.environmentId);
-      expect(fetched?.deployment_branch_policy?.custom_branch_policies).toBe(
-        true,
-      );
-      const waitRule = fetched?.protection_rules?.find(
-        (rule) => rule.type === "wait_timer",
-      );
+      expect(fetched?.deployment_branch_policy?.custom_branch_policies).toBe(true);
+      const waitRule = fetched?.protection_rules?.find((rule) => rule.type === "wait_timer");
       expect(
-        waitRule !== undefined && "wait_timer" in waitRule
-          ? waitRule.wait_timer
-          : undefined,
+        waitRule !== undefined && "wait_timer" in waitRule ? waitRule.wait_timer : undefined,
       ).toEqual(5);
 
       const patterns = yield* listBranchPolicies(name);
@@ -177,9 +166,7 @@ test.provider.skipIf(!owner)(
 
       expect(switched.environmentId).toEqual(created.environmentId);
       const afterSwitch = yield* getEnvironment(name);
-      expect(afterSwitch?.deployment_branch_policy?.protected_branches).toBe(
-        true,
-      );
+      expect(afterSwitch?.deployment_branch_policy?.protected_branches).toBe(true);
 
       // Delete — the environment goes away; the retained repo stays.
       yield* stack.destroy();
@@ -231,13 +218,12 @@ test.provider.skipIf(!owner)(
         return yield* Effect.tryPromise({
           try: async () => {
             try {
-              const { data } =
-                await octokit.rest.actions.getEnvironmentVariable({
-                  owner,
-                  repo,
-                  environment_name: name,
-                  name: "ALCHEMY_ENV_TEST",
-                });
+              const { data } = await octokit.rest.actions.getEnvironmentVariable({
+                owner,
+                repo,
+                environment_name: name,
+                name: "ALCHEMY_ENV_TEST",
+              });
               return data;
             } catch (error: any) {
               if (error.status === 404) return undefined;

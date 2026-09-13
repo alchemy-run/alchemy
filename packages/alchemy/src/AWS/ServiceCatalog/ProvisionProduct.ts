@@ -36,10 +36,7 @@ export interface ProvisionProduct extends Binding.Service<
   () => Effect.Effect<
     (
       request: servicecatalog.ProvisionProductInput,
-    ) => Effect.Effect<
-      servicecatalog.ProvisionProductOutput,
-      servicecatalog.ProvisionProductError
-    >
+    ) => Effect.Effect<servicecatalog.ProvisionProductOutput, servicecatalog.ProvisionProductError>
   >
 > {}
 export const ProvisionProduct = Binding.Service<ProvisionProduct>(

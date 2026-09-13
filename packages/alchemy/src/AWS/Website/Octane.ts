@@ -3,12 +3,10 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Octane build. */
-export const OCTANE_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/octane";
+export const OCTANE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/octane";
 
 /** The AWS Lambda deploy target for the Octane build. */
-export const OCTANE_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/octane/aws";
+export const OCTANE_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/octane/aws";
 
 export interface OctaneProps extends FrameworkSiteProps {
   /**

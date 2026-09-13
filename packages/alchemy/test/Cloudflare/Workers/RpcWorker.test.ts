@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // otherwise surface as an opaque `RpcClientDefect`; see Test/Http.ts.
 const clientLayer = Test.rpcClientLayer;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).

@@ -28,9 +28,7 @@ describe("AWS.Keyspaces.TableStreams", () => {
             streamArn: `arn:aws:cassandra:${region}:${accountId}:/keyspace/alchemy_nonexistent_ks/table/nonexistent_tbl/stream/2024-01-01T00:00:00.000`,
           })
           .pipe(Effect.flip);
-        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-          error._tag,
-        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
       }),
     { timeout: 60_000 },
   );
@@ -79,15 +77,10 @@ describe("AWS.Keyspaces.TableStreams", () => {
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`traverse not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`traverse not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
           }),
         );
         const traverse = body as {

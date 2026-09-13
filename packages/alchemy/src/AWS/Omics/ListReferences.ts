@@ -38,6 +38,4 @@ export interface ListReferences extends Binding.Service<
   >
 > {}
 
-export const ListReferences = Binding.Service<ListReferences>(
-  "AWS.Omics.ListReferences",
-);
+export const ListReferences = Binding.Service<ListReferences>("AWS.Omics.ListReferences");

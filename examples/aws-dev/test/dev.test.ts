@@ -64,8 +64,7 @@ const markerPath = path.join(root, "src", "marker.ts");
 const markerSource = fs.readFileSync(markerPath, "utf8");
 
 // The whole suite needs docker (floci runs as a container).
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.
   fs.writeFileSync(markerPath, markerSource);
@@ -83,14 +82,10 @@ test.skipIf(!dockerAvailable)(
 
     // The first dev deploy may pull the floci image, provision the local
     // data plane, and package the function before printing stack outputs.
-    const api = await cli.pollUntil(
-      "api url in stack outputs",
-      () => cli.outputUrl("api"),
-      {
-        tries: 300,
-        delayMs: 1000,
-      },
-    );
+    const api = await cli.pollUntil("api url in stack outputs", () => cli.outputUrl("api"), {
+      tries: 300,
+      delayMs: 1000,
+    });
 
     // Dev identity: the function URL is served locally, not by AWS
     // (e.g. http://<id>.lambda-url.us-east-1.localhost:<port>/). The port
@@ -103,9 +98,8 @@ test.skipIf(!dockerAvailable)(
     // CLI's exec process and put/get an object through the S3 bindings.
     // The dummy account id proves the calls hit the emulator, not real
     // AWS; the roundtripped body proves the put actually landed.
-    const seedAccount = await cli.pollUntil(
-      "seedAccount in stack outputs",
-      () => cli.outputValue("seedAccount"),
+    const seedAccount = await cli.pollUntil("seedAccount in stack outputs", () =>
+      cli.outputValue("seedAccount"),
     );
     expect(seedAccount).toBe("000000000000");
     const seedText = await cli.pollUntil("seedText in stack outputs", () =>
@@ -144,9 +138,7 @@ test.skipIf(!dockerAvailable)(
     const received = await cli.pollUntil(
       "queue message to be consumed",
       async () => {
-        const res = await fetch(
-          new URL(`/queue/messages?id=${message.id}`, api),
-        );
+        const res = await fetch(new URL(`/queue/messages?id=${message.id}`, api));
         if (!res.ok) return undefined;
         const { body } = (await res.json()) as { body: string | null };
         return body ?? undefined;
@@ -169,9 +161,7 @@ test.skipIf(!dockerAvailable)(
     const delivered = await cli.pollUntil(
       "topic notification to be consumed",
       async () => {
-        const res = await fetch(
-          new URL(`/topic/messages?id=${notification.id}`, api),
-        );
+        const res = await fetch(new URL(`/topic/messages?id=${notification.id}`, api));
         if (!res.ok) return undefined;
         const { body } = (await res.json()) as { body: string | null };
         return body ?? undefined;
@@ -204,10 +194,7 @@ test.skipIf(!dockerAvailable)(
     // ── HOT RELOAD: rewrite src/marker.ts with the CLI still running. The
     // `--watch` exec child re-runs, the dev provider hot-swaps the function
     // code in floci, and the SAME url serves the new marker — no deploy ──
-    fs.writeFileSync(
-      markerPath,
-      markerSource.replace("aws-dev-marker-v1", "aws-dev-marker-v2"),
-    );
+    fs.writeFileSync(markerPath, markerSource.replace("aws-dev-marker-v1", "aws-dev-marker-v2"));
     await cli.pollUntil(
       "hot-swapped marker v2",
       async () => {

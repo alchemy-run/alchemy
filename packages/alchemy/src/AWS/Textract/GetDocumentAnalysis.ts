@@ -28,10 +28,7 @@ export interface GetDocumentAnalysis extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.GetDocumentAnalysisRequest,
-    ) => Effect.Effect<
-      textract.GetDocumentAnalysisResponse,
-      textract.GetDocumentAnalysisError
-    >
+    ) => Effect.Effect<textract.GetDocumentAnalysisResponse, textract.GetDocumentAnalysisError>
   >
 > {}
 export const GetDocumentAnalysis = Binding.Service<GetDocumentAnalysis>(

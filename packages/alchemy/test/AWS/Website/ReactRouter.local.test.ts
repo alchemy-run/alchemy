@@ -12,11 +12,7 @@ import { expectUrlContains, expectUrlOk } from "../../Cloudflare/Utils/Http.ts";
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "react-router-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "react-router-app");
 
 // Clone under the alchemy package so `@react-router/dev`, `react-router`,
 // `@react-router/node`, `isbot`, `react`, and `vite` resolve from the
@@ -60,9 +56,7 @@ describe("AWS.Website.ReactRouter local", () => {
         // The site is the framework's own dev server: a localhost URL and no
         // cloud rows at all (proof no AWS call ran).
         const url = deployed.site.url! as string;
-        expect(url).toMatch(
-          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-        );
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
         // The URL is an origin, not a directory — appending a path must not
         // produce a double slash.
         expect(url.endsWith("/")).toBe(false);
@@ -113,30 +107,18 @@ describe("AWS.Website.ReactRouter local", () => {
           label: "dev SSR home page",
         });
         // The fixture's own vite.config.ts applied in dev too.
-        yield* expectUrlContains(
-          `${url}/`,
-          "config:react-router-aws-user-config-loaded",
-          {
-            label: "user vite.config.ts applied (dev)",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "config:react-router-aws-user-config-loaded", {
+          label: "user vite.config.ts applied (dev)",
+        });
         // server.environment reaches the dev server's process env — the same
         // values the Lambda gets on deploy (dev/live parity).
-        yield* expectUrlContains(
-          `${url}/`,
-          "env:react-router-aws-dev-env-marker",
-          {
-            label: "server.environment injected into dev server",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "env:react-router-aws-dev-env-marker", {
+          label: "server.environment injected into dev server",
+        });
         // Resource route through the dev server.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "REACT_ROUTER_AWS_API_MARKER",
-          {
-            label: "resource route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "REACT_ROUTER_AWS_API_MARKER", {
+          label: "resource route (dev)",
+        });
 
         // ── HMR: edit the resource route in place. The stack is NOT
         // re-applied — vite's dev rebuild must pick the change up and serve
@@ -145,19 +127,12 @@ describe("AWS.Website.ReactRouter local", () => {
         const hello = yield* fs.readFileString(helloPath);
         yield* fs.writeFileString(
           helloPath,
-          hello.replace(
-            "REACT_ROUTER_AWS_API_MARKER",
-            "REACT_ROUTER_AWS_API_MARKER_V2",
-          ),
+          hello.replace("REACT_ROUTER_AWS_API_MARKER", "REACT_ROUTER_AWS_API_MARKER_V2"),
         );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "REACT_ROUTER_AWS_API_MARKER_V2",
-          {
-            timeout: "90 seconds",
-            label: "resource route after HMR edit",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "REACT_ROUTER_AWS_API_MARKER_V2", {
+          timeout: "90 seconds",
+          label: "resource route after HMR edit",
+        });
 
         yield* stack.destroy();
       }),

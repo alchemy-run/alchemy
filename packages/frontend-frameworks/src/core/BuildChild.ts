@@ -107,11 +107,7 @@ export interface BuildChildOptions {
  */
 export const runBuildChild = (
   options: BuildChildOptions,
-): Effect.Effect<
-  BuildOutput,
-  FrameworkError,
-  FileSystem.FileSystem | Path.Path
-> =>
+): Effect.Effect<BuildOutput, FrameworkError, FileSystem.FileSystem | Path.Path> =>
   Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -127,11 +123,7 @@ export const runBuildChild = (
 
       const outputDir = yield* fs
         .makeTempDirectoryScoped({ prefix: "alchemy-framework-build-" })
-        .pipe(
-          Effect.mapError(
-            fail("Failed to create the build child's temp directory"),
-          ),
-        );
+        .pipe(Effect.mapError(fail("Failed to create the build child's temp directory")));
       const outputPath = path.join(outputDir, "build.json");
 
       // The runner entry lives beside this module's core/ directory in both
@@ -147,8 +139,7 @@ export const runBuildChild = (
         ),
       );
       const isBun =
-        options.runtime !== "node" &&
-        typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+        options.runtime !== "node" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
       const executable = options.runtime === "node" ? "node" : process.execPath;
       const payload: BuildChildPayload = {
         module: options.module,
@@ -167,10 +158,7 @@ export const runBuildChild = (
 
       const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
         Layer.provide(
-          Layer.merge(
-            Layer.succeed(FileSystem.FileSystem)(fs),
-            Layer.succeed(Path.Path)(path),
-          ),
+          Layer.merge(Layer.succeed(FileSystem.FileSystem)(fs), Layer.succeed(Path.Path)(path)),
         ),
       );
 
@@ -185,18 +173,13 @@ export const runBuildChild = (
           env: { ...process.env, NODE_ENV: "production", ...options.env },
         }).pipe(
           Effect.mapError(
-            fail(
-              `Failed to spawn the ${options.framework} build child (${executable})`,
-            ),
+            fail(`Failed to spawn the ${options.framework} build child (${executable})`),
           ),
         );
         const forward = (
           stream: Stream.Stream<Uint8Array, PlatformError>,
           dest: NodeJS.WriteStream,
-        ) =>
-          Stream.runForEach(stream, (chunk) =>
-            Effect.sync(() => dest.write(chunk)),
-          );
+        ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
         const { code } = yield* Effect.all(
           {
             code: child.exitCode,
@@ -205,20 +188,14 @@ export const runBuildChild = (
           },
           { concurrency: "unbounded" },
         ).pipe(
-          Effect.mapError(
-            fail(
-              `Failed reading the ${options.framework} build child's output`,
-            ),
-          ),
+          Effect.mapError(fail(`Failed reading the ${options.framework} build child's output`)),
         );
         return code;
       }).pipe(Effect.provide(spawnerLayer));
 
       if (exitCode !== 0) {
         return yield* Effect.fail(
-          fail(
-            `The ${options.framework} build child exited with code ${exitCode}`,
-          )(undefined),
+          fail(`The ${options.framework} build child exited with code ${exitCode}`)(undefined),
         );
       }
 

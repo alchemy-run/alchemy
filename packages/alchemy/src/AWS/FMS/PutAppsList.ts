@@ -34,9 +34,7 @@ export interface PutAppsList extends Binding.Service<
   PutAppsList,
   "AWS.FMS.PutAppsList",
   () => Effect.Effect<
-    (
-      request: PutAppsListRequest,
-    ) => Effect.Effect<fms.PutAppsListResponse, fms.PutAppsListError>
+    (request: PutAppsListRequest) => Effect.Effect<fms.PutAppsListResponse, fms.PutAppsListError>
   >
 > {}
 

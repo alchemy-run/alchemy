@@ -5,13 +5,7 @@ import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  AuthHttpError,
-  edgeRetry,
-  getJson,
-  postJson,
-  toCookieHeader,
-} from "../http.ts";
+import { AuthHttpError, edgeRetry, getJson, postJson, toCookieHeader } from "../http.ts";
 import HyperdriveAuthWorker from "./fixtures/hyperdrive-worker.ts";
 
 const providers = Layer.mergeAll(Cloudflare.providers(), Neon.providers());
@@ -44,9 +38,7 @@ test(
       name: "Hyperdrive User",
     }).pipe(
       Effect.filterOrFail(
-        (response) =>
-          response.status === 200 ||
-          response.body.includes("USER_ALREADY_EXISTS"),
+        (response) => response.status === 200 || response.body.includes("USER_ALREADY_EXISTS"),
         (response) => new AuthHttpError({ url, ...response }),
       ),
       edgeRetry,

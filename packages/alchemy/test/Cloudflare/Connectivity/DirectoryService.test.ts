@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -57,19 +54,16 @@ test.provider("tcp service lifecycle: create, update, host switch", (stack) =>
           ingress: [{ service: "http://localhost:8080" }],
           adopt: true,
         });
-        const service = yield* Cloudflare.Connectivity.DirectoryService(
-          "PgService",
-          {
-            name: "alchemy-connectivity-dirsvc-tcp",
-            type: "tcp",
-            tcpPort: 5432,
-            appProtocol: "postgresql",
-            host: {
-              ipv4: "10.10.0.21",
-              network: { tunnelId: tunnel.tunnelId },
-            },
+        const service = yield* Cloudflare.Connectivity.DirectoryService("PgService", {
+          name: "alchemy-connectivity-dirsvc-tcp",
+          type: "tcp",
+          tcpPort: 5432,
+          appProtocol: "postgresql",
+          host: {
+            ipv4: "10.10.0.21",
+            network: { tunnelId: tunnel.tunnelId },
           },
-        );
+        });
         return { tunnel, service };
       }),
     );
@@ -267,9 +261,7 @@ test.provider("list enumerates the deployed directory service", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Connectivity.DirectoryService,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Connectivity.DirectoryService);
     const all = yield* provider.list();
 
     expect(all.some((s) => s.serviceId === service.serviceId)).toBe(true);
@@ -308,15 +300,13 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     // Delete the service out-of-band; a redeploy with changed props must
     // observe it as missing and recreate instead of failing on a 404.
-    yield* connectivity
-      .deleteDirectoryService({ accountId, serviceId: service.serviceId })
-      .pipe(
-        Effect.retry({
-          while: (e) => e._tag === "Forbidden",
-          schedule: Schedule.exponential("500 millis"),
-          times: 8,
-        }),
-      );
+    yield* connectivity.deleteDirectoryService({ accountId, serviceId: service.serviceId }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "Forbidden",
+        schedule: Schedule.exponential("500 millis"),
+        times: 8,
+      }),
+    );
 
     const healed = yield* stack.deploy(
       Effect.gen(function* () {

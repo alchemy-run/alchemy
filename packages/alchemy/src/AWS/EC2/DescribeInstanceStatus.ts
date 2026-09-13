@@ -44,10 +44,7 @@ export interface DescribeInstanceStatus extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeInstanceStatusRequest,
-    ) => Effect.Effect<
-      ec2.DescribeInstanceStatusResult,
-      ec2.DescribeInstanceStatusError
-    >
+    ) => Effect.Effect<ec2.DescribeInstanceStatusResult, ec2.DescribeInstanceStatusError>
   >
 > {}
 

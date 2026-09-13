@@ -167,9 +167,7 @@ export interface ImagePipeline extends Resource<
  *
  * @resource
  */
-export const ImagePipeline = Resource<ImagePipeline>(
-  "AWS.ImageBuilder.ImagePipeline",
-);
+export const ImagePipeline = Resource<ImagePipeline>("AWS.ImageBuilder.ImagePipeline");
 
 export const ImagePipelineProvider = () =>
   Provider.effect(
@@ -185,22 +183,14 @@ export const ImagePipelineProvider = () =>
       const getPipeline = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImagePipeline({ imagePipelineArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.imagePipeline;
       });
 
-      const toAttrs = Effect.fn(function* (
-        pipeline: imagebuilder.ImagePipeline,
-      ) {
+      const toAttrs = Effect.fn(function* (pipeline: imagebuilder.ImagePipeline) {
         if (!pipeline.arn || !pipeline.name) {
           return yield* Effect.fail(
-            new Error(
-              "Image Builder image pipeline is missing its ARN or name",
-            ),
+            new Error("Image Builder image pipeline is missing its ARN or name"),
           );
         }
         return {
@@ -239,8 +229,7 @@ export const ImagePipelineProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const arn =
-            output?.imagePipelineArn ?? (yield* toArn(yield* toName(id, olds)));
+          const arn = output?.imagePipelineArn ?? (yield* toArn(yield* toName(id, olds)));
           const pipeline = yield* getPipeline(arn);
           if (pipeline === undefined) return undefined;
           const attrs = yield* toAttrs(pipeline);
@@ -259,9 +248,7 @@ export const ImagePipelineProvider = () =>
           // so create/update/drift all compare like against like.
           const desired = {
             ...news,
-            imageTestsConfiguration: toWireImageTests(
-              news.imageTestsConfiguration,
-            ),
+            imageTestsConfiguration: toWireImageTests(news.imageTestsConfiguration),
           };
 
           // 1. Observe.
@@ -276,8 +263,7 @@ export const ImagePipelineProvider = () =>
                 description: news.description,
                 imageRecipeArn: news.imageRecipeArn,
                 containerRecipeArn: news.containerRecipeArn,
-                infrastructureConfigurationArn:
-                  news.infrastructureConfigurationArn,
+                infrastructureConfigurationArn: news.infrastructureConfigurationArn,
                 distributionConfigurationArn: news.distributionConfigurationArn,
                 imageTestsConfiguration: desired.imageTestsConfiguration,
                 enhancedImageMetadataEnabled: news.enhancedImageMetadataEnabled,
@@ -290,16 +276,12 @@ export const ImagePipelineProvider = () =>
                 clientToken,
               })
               .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
               );
             observed = yield* getPipeline(created?.imagePipelineArn ?? arn);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `created Image Builder pipeline '${name}' is not readable`,
-                ),
+                new Error(`created Image Builder pipeline '${name}' is not readable`),
               );
             }
           }
@@ -318,8 +300,7 @@ export const ImagePipelineProvider = () =>
               description: news.description,
               imageRecipeArn: news.imageRecipeArn,
               containerRecipeArn: news.containerRecipeArn,
-              infrastructureConfigurationArn:
-                news.infrastructureConfigurationArn,
+              infrastructureConfigurationArn: news.infrastructureConfigurationArn,
               distributionConfigurationArn: news.distributionConfigurationArn,
               imageTestsConfiguration: desired.imageTestsConfiguration,
               enhancedImageMetadataEnabled: news.enhancedImageMetadataEnabled,
@@ -348,9 +329,7 @@ export const ImagePipelineProvider = () =>
             imagebuilder.deleteImagePipeline({
               imagePipelineArn: output.imagePipelineArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // Image Builder creates this fixed group outside of the pipeline
           // API. Delete only the exact group derived from this owned output,
@@ -382,8 +361,7 @@ export const ImagePipelineProvider = () =>
                   ): pipeline is imagebuilder.ImagePipeline & {
                     arn: string;
                     name: string;
-                  } =>
-                    pipeline.arn !== undefined && pipeline.name !== undefined,
+                  } => pipeline.arn !== undefined && pipeline.name !== undefined,
                 ),
               ),
             ),

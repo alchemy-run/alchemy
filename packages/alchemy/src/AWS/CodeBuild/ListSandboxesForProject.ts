@@ -24,10 +24,7 @@ export interface ListSandboxesForProject extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListSandboxesForProjectInput, "projectName">,
-    ) => Effect.Effect<
-      SVC.ListSandboxesForProjectOutput,
-      SVC.ListSandboxesForProjectError
-    >
+    ) => Effect.Effect<SVC.ListSandboxesForProjectOutput, SVC.ListSandboxesForProjectError>
   >
 > {}
 export const ListSandboxesForProject = Binding.Service<ListSandboxesForProject>(

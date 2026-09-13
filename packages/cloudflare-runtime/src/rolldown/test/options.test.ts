@@ -43,12 +43,10 @@ const runBuildApp = async (
   const built: Array<string> = [];
   await buildApp({
     environments: Object.fromEntries(
-      environments.map(
-        ({ name, isBuilt = false, root = NO_HTML_ROOT, build = {} }) => [
-          name,
-          { name, isBuilt, config: { root, build } },
-        ],
-      ),
+      environments.map(({ name, isBuilt = false, root = NO_HTML_ROOT, build = {} }) => [
+        name,
+        { name, isBuilt, config: { root, build } },
+      ]),
     ),
     build: async (environment: { name: string }) => {
       built.push(environment.name);
@@ -61,10 +59,7 @@ describe("options plugin", () => {
   it("applies the Cloudflare defaults", () => {
     const plugin = optionsPlugin.rolldown({});
     const input = {};
-    assert(
-      typeof plugin.options === "function",
-      "plugin.options is not a function",
-    );
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
     const output = plugin.options.call({} as MinimalPluginContext, input);
     assert(output, "output is not defined");
     assert(!(output instanceof Promise), "output is a promise");
@@ -102,10 +97,7 @@ describe("options plugin", () => {
   it("defines production node env values and stubs process.env without nodejs_compat", () => {
     const plugin = optionsPlugin.rolldown({});
     const input = {};
-    assert(
-      typeof plugin.options === "function",
-      "plugin.options is not a function",
-    );
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
     const output = plugin.options!.call({} as MinimalPluginContext, input);
     assert(output, "output is not defined");
     assert(!(output instanceof Promise), "output is a promise");
@@ -120,31 +112,26 @@ describe("options plugin", () => {
     });
   });
 
-  it.each([
-    { compatibilityFlags: ["nodejs_compat"] },
-    { compatibilityDate: "2026-08-31" },
-  ])("preserves runtime process.env with Node compatibility: %j", (options) => {
-    const plugin = optionsPlugin.rolldown(options);
-    const input = {};
-    assert(
-      typeof plugin.options === "function",
-      "plugin.options is not a function",
-    );
-    const output = plugin.options!.call({} as MinimalPluginContext, input);
-    assert(output, "output is not defined");
-    assert(!(output instanceof Promise), "output is a promise");
+  it.each([{ compatibilityFlags: ["nodejs_compat"] }, { compatibilityDate: "2026-08-31" }])(
+    "preserves runtime process.env with Node compatibility: %j",
+    (options) => {
+      const plugin = optionsPlugin.rolldown(options);
+      const input = {};
+      assert(typeof plugin.options === "function", "plugin.options is not a function");
+      const output = plugin.options!.call({} as MinimalPluginContext, input);
+      assert(output, "output is not defined");
+      assert(!(output instanceof Promise), "output is a promise");
 
-    expect(output.transform?.define).toMatchObject({
-      "process.env.NODE_ENV": '"production"',
-      "global.process.env.NODE_ENV": '"production"',
-      "globalThis.process.env.NODE_ENV": '"production"',
-    });
-    expect(output.transform?.define?.["process.env"]).toBeUndefined();
-    expect(output.transform?.define?.["global.process.env"]).toBeUndefined();
-    expect(
-      output.transform?.define?.["globalThis.process.env"],
-    ).toBeUndefined();
-  });
+      expect(output.transform?.define).toMatchObject({
+        "process.env.NODE_ENV": '"production"',
+        "global.process.env.NODE_ENV": '"production"',
+        "globalThis.process.env.NODE_ENV": '"production"',
+      });
+      expect(output.transform?.define?.["process.env"]).toBeUndefined();
+      expect(output.transform?.define?.["global.process.env"]).toBeUndefined();
+      expect(output.transform?.define?.["globalThis.process.env"]).toBeUndefined();
+    },
+  );
 
   it("defines navigator.userAgent only when the compatibility date supports it", () => {
     const withNavigator = optionsPlugin.rolldown({
@@ -154,49 +141,29 @@ describe("options plugin", () => {
       compatibilityDate: "2022-03-20",
     });
 
-    assert(
-      typeof withNavigator.options === "function",
-      "withNavigator.options is not a function",
-    );
+    assert(typeof withNavigator.options === "function", "withNavigator.options is not a function");
     assert(
       typeof withoutNavigator.options === "function",
       "withoutNavigator.options is not a function",
     );
 
-    const withNavigatorOutput = withNavigator.options!.call(
-      {} as MinimalPluginContext,
-      {},
-    );
-    const withoutNavigatorOutput = withoutNavigator.options.call(
-      {} as MinimalPluginContext,
-      {},
-    );
+    const withNavigatorOutput = withNavigator.options!.call({} as MinimalPluginContext, {});
+    const withoutNavigatorOutput = withoutNavigator.options.call({} as MinimalPluginContext, {});
 
     assert(withNavigatorOutput, "withNavigatorOutput is not defined");
-    assert(
-      !(withNavigatorOutput instanceof Promise),
-      "withNavigatorOutput is a promise",
-    );
+    assert(!(withNavigatorOutput instanceof Promise), "withNavigatorOutput is a promise");
     assert(withoutNavigatorOutput, "withoutNavigatorOutput is not defined");
-    assert(
-      !(withoutNavigatorOutput instanceof Promise),
-      "withoutNavigatorOutput is a promise",
-    );
+    assert(!(withoutNavigatorOutput instanceof Promise), "withoutNavigatorOutput is a promise");
 
     expect(withNavigatorOutput.transform?.define?.["navigator.userAgent"]).toBe(
       '"Cloudflare-Workers"',
     );
-    expect(
-      withoutNavigatorOutput.transform?.define?.["navigator.userAgent"],
-    ).toBeUndefined();
+    expect(withoutNavigatorOutput.transform?.define?.["navigator.userAgent"]).toBeUndefined();
   });
 
   it("normalizes Windows backslashes in worker entry ids", () => {
     const plugin = optionsPlugin.rolldown({});
-    assert(
-      typeof plugin.options === "function",
-      "plugin.options is not a function",
-    );
+    assert(typeof plugin.options === "function", "plugin.options is not a function");
     const output = plugin.options.call({} as MinimalPluginContext, {
       input: { worker: "D:\\src\\app\\entry-server.ts" },
     });
@@ -256,10 +223,7 @@ describe("options plugin", () => {
     const plugin = optionsPlugin.vite({ main: "./worker.ts" });
     const result = await callViteConfig(plugin, {});
 
-    const built = await runBuildApp(result, [
-      { name: "ssr" },
-      { name: "client" },
-    ]);
+    const built = await runBuildApp(result, [{ name: "ssr" }, { name: "client" }]);
     expect(built).toEqual(["ssr"]);
   });
 
@@ -285,9 +249,7 @@ describe("options plugin", () => {
     const plugin = optionsPlugin.vite({ main: "./worker.ts" });
     const result = await callViteConfig(plugin, {});
 
-    const built = await runBuildApp(result, [
-      { name: "client", root: HTML_ROOT },
-    ]);
+    const built = await runBuildApp(result, [{ name: "client", root: HTML_ROOT }]);
     expect(built).toEqual(["client"]);
   });
 });

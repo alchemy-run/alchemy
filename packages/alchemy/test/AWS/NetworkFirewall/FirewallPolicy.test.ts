@@ -27,21 +27,11 @@ test.provider(
 // tag. Throttled polls count as "still waiting".
 const assertPolicyGone = (arn: string) =>
   Effect.gen(function* () {
-    const status = yield* nfw
-      .describeFirewallPolicy({ FirewallPolicyArn: arn })
-      .pipe(
-        Effect.map(
-          (r) =>
-            r.FirewallPolicyResponse.FirewallPolicyStatus ??
-            ("UNKNOWN" as const),
-        ),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("gone" as const),
-        ),
-        Effect.catchTag("ThrottlingException", () =>
-          Effect.succeed("THROTTLED" as const),
-        ),
-      );
+    const status = yield* nfw.describeFirewallPolicy({ FirewallPolicyArn: arn }).pipe(
+      Effect.map((r) => r.FirewallPolicyResponse.FirewallPolicyStatus ?? ("UNKNOWN" as const)),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
+      Effect.catchTag("ThrottlingException", () => Effect.succeed("THROTTLED" as const)),
+    );
     if (status !== "gone") {
       return yield* Effect.fail(
         new Error(`firewall policy '${arn}' still exists (status: ${status})`),
@@ -49,10 +39,7 @@ const assertPolicyGone = (arn: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -67,16 +54,13 @@ test.provider(
           const stateful = yield* RuleGroup("Stateful", {
             type: "STATEFUL",
             capacity: 100,
-            rules:
-              'pass tcp any any -> any 443 (msg:"allow https"; sid:200001; rev:1;)',
+            rules: 'pass tcp any any -> any 443 (msg:"allow https"; sid:200001; rev:1;)',
           });
           const policy = yield* FirewallPolicy("Policy", {
             firewallPolicy: {
               StatelessDefaultActions: ["aws:forward_to_sfe"],
               StatelessFragmentDefaultActions: ["aws:forward_to_sfe"],
-              StatefulRuleGroupReferences: [
-                { ResourceArn: stateful.ruleGroupArn },
-              ],
+              StatefulRuleGroupReferences: [{ ResourceArn: stateful.ruleGroupArn }],
             },
             description: "v1",
             tags: { fixture: "nfw-policy" },
@@ -92,12 +76,10 @@ test.provider(
       const observed = yield* nfw.describeFirewallPolicy({
         FirewallPolicyArn: policy.firewallPolicyArn,
       });
-      expect(observed.FirewallPolicyResponse.FirewallPolicyStatus).toBe(
-        "ACTIVE",
+      expect(observed.FirewallPolicyResponse.FirewallPolicyStatus).toBe("ACTIVE");
+      expect(observed.FirewallPolicy?.StatefulRuleGroupReferences?.[0]?.ResourceArn).toBe(
+        stateful.ruleGroupArn,
       );
-      expect(
-        observed.FirewallPolicy?.StatefulRuleGroupReferences?.[0]?.ResourceArn,
-      ).toBe(stateful.ruleGroupArn);
       expect(observed.FirewallPolicyResponse.Description).toBe("v1");
 
       yield* stack.destroy();
@@ -130,18 +112,12 @@ test.provider(
       const second = yield* deploy(["aws:drop"], "drop everything");
 
       // In-place update: same ARN, new definition.
-      expect(second.policy.firewallPolicyArn).toBe(
-        first.policy.firewallPolicyArn,
-      );
+      expect(second.policy.firewallPolicyArn).toBe(first.policy.firewallPolicyArn);
       const observed = yield* nfw.describeFirewallPolicy({
         FirewallPolicyArn: second.policy.firewallPolicyArn,
       });
-      expect(observed.FirewallPolicy?.StatelessDefaultActions).toEqual([
-        "aws:drop",
-      ]);
-      expect(observed.FirewallPolicyResponse.Description).toBe(
-        "drop everything",
-      );
+      expect(observed.FirewallPolicy?.StatelessDefaultActions).toEqual(["aws:drop"]);
+      expect(observed.FirewallPolicyResponse.Description).toBe("drop everything");
 
       yield* stack.destroy();
       yield* assertPolicyGone(second.policy.firewallPolicyArn);

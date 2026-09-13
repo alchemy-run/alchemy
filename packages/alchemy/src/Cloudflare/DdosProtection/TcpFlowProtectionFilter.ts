@@ -93,15 +93,12 @@ export type TcpFlowProtectionFilter = Resource<
  * @product DDoS Protection
  * @category Network
  */
-export const TcpFlowProtectionFilter =
-  Resource<TcpFlowProtectionFilter>(TypeId);
+export const TcpFlowProtectionFilter = Resource<TcpFlowProtectionFilter>(TypeId);
 
 /**
  * Returns true if the given value is a TcpFlowProtectionFilter resource.
  */
-export const isTcpFlowProtectionFilter = (
-  value: unknown,
-): value is TcpFlowProtectionFilter =>
+export const isTcpFlowProtectionFilter = (value: unknown): value is TcpFlowProtectionFilter =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TcpFlowProtectionFilterProvider = () =>
@@ -134,34 +131,29 @@ export const TcpFlowProtectionFilterProvider = () =>
 
       // 1. Observe — the filter id cached on `output` is a hint, not a
       //    guarantee: a missing filter falls through to create.
-      let observed = output?.filterId
-        ? yield* getFilter(accountId, output.filterId)
-        : undefined;
+      let observed = output?.filterId ? yield* getFilter(accountId, output.filterId) : undefined;
 
       // 2. Ensure — create when missing. Expressions are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
       //    tolerate.
       if (!observed) {
-        observed =
-          yield* ddos.createAdvancedTcpProtectionTcpFlowProtectionFilter({
-            accountId,
-            expression: news.expression,
-            mode: news.mode,
-          });
+        observed = yield* ddos.createAdvancedTcpProtectionTcpFlowProtectionFilter({
+          accountId,
+          expression: news.expression,
+          mode: news.mode,
+        });
       }
 
       // 3. Sync — diff observed expression/mode against desired; skip the
       //    patch entirely on a no-op.
-      const dirty =
-        observed.expression !== news.expression || observed.mode !== news.mode;
+      const dirty = observed.expression !== news.expression || observed.mode !== news.mode;
       if (dirty) {
-        observed =
-          yield* ddos.patchAdvancedTcpProtectionTcpFlowProtectionFilterItem({
-            accountId,
-            filterId: observed.id,
-            expression: news.expression,
-            mode: news.mode,
-          });
+        observed = yield* ddos.patchAdvancedTcpProtectionTcpFlowProtectionFilterItem({
+          accountId,
+          filterId: observed.id,
+          expression: news.expression,
+          mode: news.mode,
+        });
       }
 
       return toAttributes(observed, accountId);
@@ -175,16 +167,13 @@ export const TcpFlowProtectionFilterProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) =>
             Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((filter) =>
-                toAttributes(filter, accountId),
-              ),
+              (page.result ?? []).map((filter) => toAttributes(filter, accountId)),
             ),
           ),
           // Accounts without the Magic Transit / Advanced TCP Protection
           // entitlement reject the enumeration API; there is nothing to list.
-          Effect.catchTag(
-            ["AdvancedTcpProtectionNotEntitled", "Forbidden"],
-            () => Effect.succeed<TcpFlowProtectionFilterAttributes[]>([]),
+          Effect.catchTag(["AdvancedTcpProtectionNotEntitled", "Forbidden"], () =>
+            Effect.succeed<TcpFlowProtectionFilterAttributes[]>([]),
           ),
         );
     }),
@@ -195,14 +184,11 @@ export const TcpFlowProtectionFilterProvider = () =>
           accountId: output.accountId,
           filterId: output.filterId,
         })
-        .pipe(
-          Effect.catchTag("TcpFlowProtectionFilterNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("TcpFlowProtectionFilterNotFound", () => Effect.void));
     }),
   });
 
-type ObservedFilter =
-  ddos.GetAdvancedTcpProtectionTcpFlowProtectionFilterItemResponse;
+type ObservedFilter = ddos.GetAdvancedTcpProtectionTcpFlowProtectionFilterItemResponse;
 
 /**
  * Read a filter by id, mapping "gone" (`TcpFlowProtectionFilterNotFound`,
@@ -216,9 +202,7 @@ const getFilter = (accountId: string, filterId: string) =>
     })
     .pipe(
       Effect.map((filter): ObservedFilter | undefined => filter),
-      Effect.catchTag("TcpFlowProtectionFilterNotFound", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("TcpFlowProtectionFilterNotFound", () => Effect.succeed(undefined)),
     );
 
 /**
@@ -227,17 +211,15 @@ const getFilter = (accountId: string, filterId: string) =>
  * the oldest for determinism.
  */
 const findByExpression = (accountId: string, expression: string) =>
-  ddos.listAdvancedTcpProtectionTcpFlowProtectionFilters
-    .items({ accountId })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk)
-          .filter((filter) => filter.expression === expression)
-          .sort((a, b) => a.createdOn.localeCompare(b.createdOn))
-          .at(0),
-      ),
-    );
+  ddos.listAdvancedTcpProtectionTcpFlowProtectionFilters.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .filter((filter) => filter.expression === expression)
+        .sort((a, b) => a.createdOn.localeCompare(b.createdOn))
+        .at(0),
+    ),
+  );
 
 const toAttributes = (
   filter: ObservedFilter,

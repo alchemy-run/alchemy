@@ -48,7 +48,6 @@ export interface GetRepositoryCatalogData extends Binding.Service<
   >
 > {}
 
-export const GetRepositoryCatalogData =
-  Binding.Service<GetRepositoryCatalogData>(
-    "AWS.ECRPublic.GetRepositoryCatalogData",
-  );
+export const GetRepositoryCatalogData = Binding.Service<GetRepositoryCatalogData>(
+  "AWS.ECRPublic.GetRepositoryCatalogData",
+);

@@ -30,10 +30,7 @@ export interface CreateKxScalingGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.CreateKxScalingGroupRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.CreateKxScalingGroupResponse,
-      SVC.CreateKxScalingGroupError
-    >
+    ) => Effect.Effect<SVC.CreateKxScalingGroupResponse, SVC.CreateKxScalingGroupError>
   >
 > {}
 export const CreateKxScalingGroup = Binding.Service<CreateKxScalingGroup>(

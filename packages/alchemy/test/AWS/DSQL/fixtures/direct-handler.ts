@@ -13,9 +13,7 @@ import { Db } from "./db.ts";
 
 const main = path.resolve(import.meta.dirname, "direct-handler.ts");
 
-export class DsqlDirectFunction extends Lambda.Function<Lambda.Function>()(
-  "DsqlDirectFunction",
-) {}
+export class DsqlDirectFunction extends Lambda.Function<Lambda.Function>()("DsqlDirectFunction") {}
 
 /**
  * Lambda fixture proving the DIRECT public-endpoint path: a raw Postgres
@@ -35,8 +33,7 @@ export default DsqlDirectFunction.make(
   Effect.gen(function* () {
     const cluster = yield* Db;
     const conn = yield* DSQL.Connect(cluster, { admin: true });
-    const getVpcEndpointServiceName =
-      yield* DSQL.GetVpcEndpointServiceName(cluster);
+    const getVpcEndpointServiceName = yield* DSQL.GetVpcEndpointServiceName(cluster);
 
     return {
       fetch: Effect.gen(function* () {
@@ -46,8 +43,7 @@ export default DsqlDirectFunction.make(
 
         // PrivateLink service-name lookup via the management binding.
         if (request.method === "GET" && pathname === "/vpc-endpoint-service") {
-          const { serviceName, clusterVpcEndpoint } =
-            yield* getVpcEndpointServiceName();
+          const { serviceName, clusterVpcEndpoint } = yield* getVpcEndpointServiceName();
           return yield* HttpServerResponse.json({
             serviceName,
             clusterVpcEndpoint: clusterVpcEndpoint ?? null,
@@ -63,9 +59,7 @@ export default DsqlDirectFunction.make(
             port: info.port,
             database: info.database,
             username: info.username,
-            hasPassword:
-              info.password !== undefined &&
-              Redacted.value(info.password).length > 0,
+            hasPassword: info.password !== undefined && Redacted.value(info.password).length > 0,
             ssl: info.ssl,
             urlScheme: Redacted.value(info.url).split("://")[0],
           });
@@ -87,8 +81,7 @@ export default DsqlDirectFunction.make(
           yield* sqlClient`CREATE TABLE IF NOT EXISTS dsql_direct_widgets (id integer PRIMARY KEY, title text NOT NULL)`;
           yield* sqlClient`DELETE FROM dsql_direct_widgets WHERE id = 1`;
           yield* sqlClient`INSERT INTO dsql_direct_widgets (id, title) VALUES (1, 'direct')`;
-          const rows =
-            yield* sqlClient`SELECT id, title FROM dsql_direct_widgets WHERE id = 1`;
+          const rows = yield* sqlClient`SELECT id, title FROM dsql_direct_widgets WHERE id = 1`;
           return yield* HttpServerResponse.json({ rows, host: info.host });
         }
 
@@ -98,9 +91,5 @@ export default DsqlDirectFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(DSQL.ConnectHttp, DSQL.GetVpcEndpointServiceNameHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(DSQL.ConnectHttp, DSQL.GetVpcEndpointServiceNameHttp))),
 );

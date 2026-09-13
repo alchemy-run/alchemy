@@ -30,10 +30,7 @@ export interface GetTargetResourceType extends Binding.Service<
   () => Effect.Effect<
     (
       request: fis.GetTargetResourceTypeRequest,
-    ) => Effect.Effect<
-      fis.GetTargetResourceTypeResponse,
-      fis.GetTargetResourceTypeError
-    >
+    ) => Effect.Effect<fis.GetTargetResourceTypeResponse, fis.GetTargetResourceTypeError>
   >
 > {}
 export const GetTargetResourceType = Binding.Service<GetTargetResourceType>(

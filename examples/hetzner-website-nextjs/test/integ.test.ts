@@ -34,10 +34,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -140,10 +137,7 @@ if (!hasCreds) {
     "serves a static asset from public/",
     Effect.gen(function* () {
       const url = yield* base;
-      const body = yield* getBodyWhenReady(
-        `${url}/robots.txt`,
-        "User-agent: *",
-      );
+      const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
       expect(body).toContain("User-agent: *");
     }),
     { timeout: 180_000 },

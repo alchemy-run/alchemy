@@ -30,9 +30,7 @@ export interface StopFlow extends Binding.Service<
   "AWS.AppFlow.StopFlow",
   (
     flow: Flow,
-  ) => Effect.Effect<
-    () => Effect.Effect<appflow.StopFlowResponse, appflow.StopFlowError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<appflow.StopFlowResponse, appflow.StopFlowError>>
 > {}
 
 export const StopFlow = Binding.Service<StopFlow>("AWS.AppFlow.StopFlow");

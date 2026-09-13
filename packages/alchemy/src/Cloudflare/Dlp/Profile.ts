@@ -82,13 +82,7 @@ export type ProfileAttributes = {
   entryIds: Record<string, string>;
 };
 
-export type Profile = Resource<
-  TypeId,
-  ProfileProps,
-  ProfileAttributes,
-  never,
-  Providers
->;
+export type Profile = Resource<TypeId, ProfileProps, ProfileAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust **DLP custom profile** — a named collection of
@@ -170,21 +164,15 @@ export const ProfileProvider = () =>
         const created = yield* zeroTrust.createDlpProfileCustom({
           accountId,
           name,
-          ...(news.description !== undefined
-            ? { description: news.description }
-            : {}),
+          ...(news.description !== undefined ? { description: news.description } : {}),
           ...(news.allowedMatchCount !== undefined
             ? { allowedMatchCount: news.allowedMatchCount }
             : {}),
-          ...(news.ocrEnabled !== undefined
-            ? { ocrEnabled: news.ocrEnabled }
-            : {}),
+          ...(news.ocrEnabled !== undefined ? { ocrEnabled: news.ocrEnabled } : {}),
           ...(news.confidenceThreshold !== undefined
             ? { confidenceThreshold: news.confidenceThreshold }
             : {}),
-          ...(news.entries !== undefined
-            ? { entries: news.entries.map(encodeNewEntry) }
-            : {}),
+          ...(news.entries !== undefined ? { entries: news.entries.map(encodeNewEntry) } : {}),
         });
         const createdCustom = narrowCustom(created);
         return toAttributes(createdCustom, accountId);
@@ -199,8 +187,7 @@ export const ProfileProvider = () =>
         observed.allowedMatchCount !== (news.allowedMatchCount ?? 0) ||
         observed.ocrEnabled !== (news.ocrEnabled ?? false) ||
         (news.confidenceThreshold !== undefined &&
-          (observed.confidenceThreshold ?? undefined) !==
-            news.confidenceThreshold) ||
+          (observed.confidenceThreshold ?? undefined) !== news.confidenceThreshold) ||
         !sameEntries(observed, news.entries);
       if (!dirty) {
         return toAttributes(observed, accountId);
@@ -248,26 +235,22 @@ export const ProfileProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const profileIds = yield* zeroTrust.listDlpProfiles
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).flatMap((profile) =>
-                profile.type === "custom" ? [profile.id] : [],
-              ),
+      const profileIds = yield* zeroTrust.listDlpProfiles.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((profile) =>
+              profile.type === "custom" ? [profile.id] : [],
             ),
           ),
-        );
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         profileIds,
         (profileId) =>
           observeProfile(accountId, profileId).pipe(
-            Effect.map((observed) =>
-              observed ? toAttributes(observed, accountId) : undefined,
-            ),
+            Effect.map((observed) => (observed ? toAttributes(observed, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
@@ -279,10 +262,7 @@ export const ProfileProvider = () =>
 /**
  * The custom-profile member of the DLP profile response union.
  */
-type ObservedCustomProfile = Extract<
-  zeroTrust.GetDlpProfileCustomResponse,
-  { type: "custom" }
->;
+type ObservedCustomProfile = Extract<zeroTrust.GetDlpProfileCustomResponse, { type: "custom" }>;
 
 /**
  * Narrow a profile response union to its `custom` member. Create/update
@@ -322,26 +302,18 @@ const encodeNewEntry = (
   name: entry.name,
   pattern: {
     regex: entry.pattern.regex,
-    ...(entry.pattern.validation !== undefined
-      ? { validation: entry.pattern.validation }
-      : {}),
+    ...(entry.pattern.validation !== undefined ? { validation: entry.pattern.validation } : {}),
   },
-  ...(entry.description !== undefined
-    ? { description: entry.description }
-    : {}),
+  ...(entry.description !== undefined ? { description: entry.description } : {}),
 });
 
 /**
  * Custom regex entries observed on the profile, keyed by name.
  */
 const customEntries = (profile: ObservedCustomProfile | undefined) =>
-  (profile?.entries ?? []).flatMap((entry) =>
-    entry.type === "custom" ? [entry] : [],
-  );
+  (profile?.entries ?? []).flatMap((entry) => (entry.type === "custom" ? [entry] : []));
 
-const entryIdsByName = (
-  profile: ObservedCustomProfile | undefined,
-): Record<string, string> =>
+const entryIdsByName = (profile: ObservedCustomProfile | undefined): Record<string, string> =>
   Object.fromEntries(customEntries(profile).map((e) => [e.name, e.id]));
 
 const sameEntries = (
@@ -349,9 +321,7 @@ const sameEntries = (
   desired: ProfileEntry[] | undefined,
 ): boolean => {
   if (desired === undefined) return true;
-  const observedByName = new Map(
-    customEntries(observed).map((e) => [e.name, e]),
-  );
+  const observedByName = new Map(customEntries(observed).map((e) => [e.name, e]));
   if (observedByName.size !== desired.length) return false;
   return desired.every((entry) => {
     const live = observedByName.get(entry.name);

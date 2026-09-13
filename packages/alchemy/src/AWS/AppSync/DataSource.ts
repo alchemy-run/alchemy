@@ -150,9 +150,7 @@ export interface AppSyncDataSource extends Resource<
  *
  * @resource
  */
-export const DataSourceResource = Resource<AppSyncDataSource>(
-  "AWS.AppSync.DataSource",
-);
+export const DataSourceResource = Resource<AppSyncDataSource>("AWS.AppSync.DataSource");
 
 export interface DataSourceInputProps extends Omit<
   {
@@ -189,14 +187,8 @@ export const DataSourceProvider = () =>
   Provider.effect(
     DataSourceResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<DataSourceProps, "name">,
-      ) {
-        return (
-          props.name ??
-          sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<DataSourceProps, "name">) {
+        return props.name ?? sanitizeAppSyncName(yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getDataSourceSafe = (apiId: string, name: string) =>
@@ -223,10 +215,7 @@ export const DataSourceProvider = () =>
             Resource: /:function:[^:]+:/.test(arn) ? [arn] : [arn, `${arn}:*`],
           });
         }
-        if (
-          news.type === "AMAZON_DYNAMODB" &&
-          news.dynamodbConfig !== undefined
-        ) {
+        if (news.type === "AMAZON_DYNAMODB" && news.dynamodbConfig !== undefined) {
           const tableRegion = news.dynamodbConfig.awsRegion ?? region;
           const tableArn = `arn:aws:dynamodb:${tableRegion}:${accountId}:table/${news.dynamodbConfig.tableName}`;
           statements.push({
@@ -320,9 +309,7 @@ export const DataSourceProvider = () =>
                 RoleName: roleName,
                 PolicyName: policyName,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
           ),
           Stream.runDrain,
           Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -450,8 +437,7 @@ export const DataSourceProvider = () =>
                       : {
                           tableName: ds.dynamodbConfig.tableName,
                           awsRegion: ds.dynamodbConfig.awsRegion,
-                          useCallerCredentials:
-                            ds.dynamodbConfig.useCallerCredentials ?? false,
+                          useCallerCredentials: ds.dynamodbConfig.useCallerCredentials ?? false,
                           versioned: ds.dynamodbConfig.versioned ?? false,
                         },
                   httpConfig: ds.httpConfig,

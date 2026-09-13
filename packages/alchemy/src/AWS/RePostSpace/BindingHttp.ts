@@ -15,12 +15,7 @@ import type { Space } from "./Space.ts";
  * Private has a single `space` IAM resource type — channel- and
  * admin-scoped actions are all authorized against the space ARN).
  */
-export const makeRePostSpaceHttpBinding = <
-  I extends { spaceId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeRePostSpaceHttpBinding = <I extends { spaceId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.RePostSpace.SendInvites`. */
   tag: string;
   /** The distilled operation; `spaceId` is injected from the bound space. */

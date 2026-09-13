@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  isActiveStatus,
-  readAppRunnerTags,
-  syncAppRunnerTags,
-  toWireTags,
-} from "./internal.ts";
+import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
 /**
  * Derive the revision-less "name partial" ARN
@@ -154,20 +149,12 @@ export const AutoScalingConfigurationProvider = () =>
           .describeAutoScalingConfiguration({
             AutoScalingConfigurationArn: summary.AutoScalingConfigurationArn,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const config = described?.AutoScalingConfiguration;
-        return config !== undefined && isActiveStatus(config.Status)
-          ? config
-          : undefined;
+        return config !== undefined && isActiveStatus(config.Status) ? config : undefined;
       });
 
-      const toAttrs = Effect.fn(function* (
-        config: apprunner.AutoScalingConfiguration,
-      ) {
+      const toAttrs = Effect.fn(function* (config: apprunner.AutoScalingConfiguration) {
         if (
           !config.AutoScalingConfigurationName ||
           !config.AutoScalingConfigurationArn ||
@@ -182,8 +169,7 @@ export const AutoScalingConfigurationProvider = () =>
         return {
           autoScalingConfigurationName: config.AutoScalingConfigurationName,
           autoScalingConfigurationArn: config.AutoScalingConfigurationArn,
-          autoScalingConfigurationRevision:
-            config.AutoScalingConfigurationRevision,
+          autoScalingConfigurationRevision: config.AutoScalingConfigurationRevision,
           maxConcurrency: config.MaxConcurrency,
           minSize: config.MinSize,
           maxSize: config.MaxSize,
@@ -195,29 +181,22 @@ export const AutoScalingConfigurationProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.autoScalingConfigurationName ??
-            (yield* toName(id, olds ?? {}));
+          const name = output?.autoScalingConfigurationName ?? (yield* toName(id, olds ?? {}));
           const config = yield* findLatest(name);
           if (config === undefined) return undefined;
           const attrs = yield* toAttrs(config);
-          const tags = yield* readAppRunnerTags(
-            attrs.autoScalingConfigurationArn,
-          );
+          const tags = yield* readAppRunnerTags(attrs.autoScalingConfigurationArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const name =
-            output?.autoScalingConfigurationName ?? (yield* toName(id, news));
+          const name = output?.autoScalingConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -233,10 +212,8 @@ export const AutoScalingConfigurationProvider = () =>
             observed !== undefined &&
             ((news.maxConcurrency !== undefined &&
               news.maxConcurrency !== observed.MaxConcurrency) ||
-              (news.minSize !== undefined &&
-                news.minSize !== observed.MinSize) ||
-              (news.maxSize !== undefined &&
-                news.maxSize !== observed.MaxSize));
+              (news.minSize !== undefined && news.minSize !== observed.MinSize) ||
+              (news.maxSize !== undefined && news.maxSize !== observed.MaxSize));
 
           if (observed === undefined || drifted) {
             const created = yield* apprunner.createAutoScalingConfiguration({
@@ -252,10 +229,7 @@ export const AutoScalingConfigurationProvider = () =>
           // 3b. Sync tags on the latest revision ARN — diff against
           // OBSERVED cloud tags.
           if (observed.AutoScalingConfigurationArn) {
-            yield* syncAppRunnerTags(
-              observed.AutoScalingConfigurationArn,
-              desiredTags,
-            );
+            yield* syncAppRunnerTags(observed.AutoScalingConfigurationArn, desiredTags);
           }
 
           // 4. Return fresh attributes.
@@ -272,68 +246,56 @@ export const AutoScalingConfigurationProvider = () =>
           // retry through that window (bounded).
           yield* apprunner
             .deleteAutoScalingConfiguration({
-              AutoScalingConfigurationArn: toNamePartialArn(
-                output.autoScalingConfigurationArn,
-              ),
+              AutoScalingConfigurationArn: toNamePartialArn(output.autoScalingConfigurationArn),
               DeleteAllRevisions: true,
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "InvalidRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
               }),
             );
         }),
 
         list: () =>
-          apprunner.listAutoScalingConfigurations
-            .pages({ LatestOnly: true })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.AutoScalingConfigurationSummaryList ?? []).filter(
-                    (
-                      s,
-                    ): s is apprunner.AutoScalingConfigurationSummary & {
-                      AutoScalingConfigurationArn: string;
-                    } =>
-                      isActiveStatus(s.Status) &&
-                      s.AutoScalingConfigurationArn !== undefined &&
-                      // App Runner ships an AWS-managed `DefaultConfiguration`
-                      // revision that always exists and can never be deleted
-                      // — keep it out of enumeration for account-wide
-                      // teardown (nuke).
-                      s.AutoScalingConfigurationName !== "DefaultConfiguration",
-                  ),
+          apprunner.listAutoScalingConfigurations.pages({ LatestOnly: true }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.AutoScalingConfigurationSummaryList ?? []).filter(
+                  (
+                    s,
+                  ): s is apprunner.AutoScalingConfigurationSummary & {
+                    AutoScalingConfigurationArn: string;
+                  } =>
+                    isActiveStatus(s.Status) &&
+                    s.AutoScalingConfigurationArn !== undefined &&
+                    // App Runner ships an AWS-managed `DefaultConfiguration`
+                    // revision that always exists and can never be deleted
+                    // — keep it out of enumeration for account-wide
+                    // teardown (nuke).
+                    s.AutoScalingConfigurationName !== "DefaultConfiguration",
                 ),
               ),
-              Effect.flatMap(
-                Effect.forEach(
-                  (summary) =>
-                    apprunner
-                      .describeAutoScalingConfiguration({
-                        AutoScalingConfigurationArn:
-                          summary.AutoScalingConfigurationArn,
-                      })
-                      .pipe(
-                        Effect.flatMap((r) =>
-                          toAttrs(r.AutoScalingConfiguration),
-                        ),
-                        // Tolerate a delete race — drop the item.
-                        Effect.catchTag("ResourceNotFoundException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
-                  { concurrency: 4 },
-                ),
-              ),
-              Effect.map((items) => items.filter((item) => item !== undefined)),
             ),
+            Effect.flatMap(
+              Effect.forEach(
+                (summary) =>
+                  apprunner
+                    .describeAutoScalingConfiguration({
+                      AutoScalingConfigurationArn: summary.AutoScalingConfigurationArn,
+                    })
+                    .pipe(
+                      Effect.flatMap((r) => toAttrs(r.AutoScalingConfiguration)),
+                      // Tolerate a delete race — drop the item.
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    ),
+                { concurrency: 4 },
+              ),
+            ),
+            Effect.map((items) => items.filter((item) => item !== undefined)),
+          ),
       };
     }),
   );

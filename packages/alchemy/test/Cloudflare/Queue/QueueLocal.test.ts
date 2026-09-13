@@ -11,10 +11,7 @@ import { poll } from "@/Util/poll.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Sending to a Queue inside an Action via `WriteQueueLocal` — the local
 // (current-credentials) implementation of the `WriteQueue` binding. Exercises
@@ -65,10 +62,7 @@ test.provider(
                   );
 
                 yield* q.send({ marker, seq: 1 });
-                yield* q.sendBatch([
-                  { body: { marker, seq: 2 } },
-                  { body: { marker, seq: 3 } },
-                ]);
+                yield* q.sendBatch([{ body: { marker, seq: 2 } }, { body: { marker, seq: 3 } }]);
 
                 return { queueId: id };
               });
@@ -106,10 +100,7 @@ test.provider(
           return collected.size;
         }),
         predicate: (size) => size >= 3,
-        schedule: Schedule.max([
-          Schedule.spaced("2 seconds"),
-          Schedule.recurs(30),
-        ]),
+        schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]),
       });
 
       expect(collected.size).toBeGreaterThanOrEqual(3);

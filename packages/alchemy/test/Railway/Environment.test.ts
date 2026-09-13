@@ -10,19 +10,12 @@ import { suiteProject } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilEnvGone = (environmentId: string) =>
   railway.environment({ id: environmentId }, { deletedAt: true }).pipe(
-    Effect.map((env) =>
-      env.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((env) => (env.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -50,9 +43,7 @@ test.provider(
       expect(created.project.environmentId).toEqual(expect.any(String));
       expect(created.environment.environmentId).toEqual(expect.any(String));
       expect(created.environment.environmentId.length).toBeGreaterThan(0);
-      expect(created.environment.environmentId).not.toEqual(
-        created.project.environmentId,
-      );
+      expect(created.environment.environmentId).not.toEqual(created.project.environmentId);
       expect(created.environment.projectId).toEqual(created.project.projectId);
       expect(created.environment.name).toEqual(expect.any(String));
       expect(created.environment.name.length).toBeGreaterThan(0);
@@ -87,16 +78,12 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Environment);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (env) => env.environmentId === created.environment.environmentId,
-      );
+      const found = listed.find((env) => env.environmentId === created.environment.environmentId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.environment.name);
       expect(found?.projectId).toEqual(created.project.projectId);
       expect(
-        listed.find(
-          (env) => env.environmentId === created.project.environmentId,
-        ),
+        listed.find((env) => env.environmentId === created.project.environmentId),
       ).toBeUndefined();
 
       const nextName =
@@ -115,14 +102,10 @@ test.provider(
       );
 
       expect(updated.project.projectId).toEqual(created.project.projectId);
-      expect(updated.environment.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(updated.environment.environmentId).toEqual(created.environment.environmentId);
       expect(updated.environment.name).toEqual(nextName);
       expect(updated.environment.projectId).toEqual(created.project.projectId);
-      expect(updated.environment.environmentId).not.toEqual(
-        updated.project.environmentId,
-      );
+      expect(updated.environment.environmentId).not.toEqual(updated.project.environmentId);
 
       const fetchedUpdate = yield* railway.environment(
         {
@@ -136,9 +119,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const envGone = yield* waitUntilEnvGone(
-        created.environment.environmentId,
-      );
+      const envGone = yield* waitUntilEnvGone(created.environment.environmentId);
       expect(envGone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },

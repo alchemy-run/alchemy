@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (appName: string) =>
   machines.getApp({ app_name: appName }).pipe(
@@ -85,9 +82,7 @@ test.provider(
         }),
       );
 
-      const nextName =
-        created.appName.slice(0, -1) +
-        (created.appName.endsWith("z") ? "y" : "z");
+      const nextName = created.appName.slice(0, -1) + (created.appName.endsWith("z") ? "y" : "z");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {

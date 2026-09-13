@@ -10,19 +10,12 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
 // declared in the distilled error union) on out-of-band verification calls.
-const getNotification = (
-  accountId: string,
-  bucketName: string,
-  queueId: string,
-) =>
+const getNotification = (accountId: string, bucketName: string, queueId: string) =>
   r2.getBucketEventNotification({ accountId, bucketName, queueId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -37,9 +30,7 @@ const getNotification = (
 // All of those are the success condition here.
 const expectGone = (accountId: string, bucketName: string, queueId: string) =>
   getNotification(accountId, bucketName, queueId).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "NotificationNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "NotificationNotDeleted" } as const)),
     Effect.catchTag(
       [
         "NoEventNotificationConfig",
@@ -51,32 +42,24 @@ const expectGone = (accountId: string, bucketName: string, queueId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "NotificationNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
 // One program deploying the bucket, the queue, and the notification joining
 // them. The notification's props reference both resources' outputs, so the
 // engine orders notification-last on deploy (and first on destroy).
-const program = (opts: {
-  rules: Cloudflare.R2.BucketEventNotificationRule[];
-}) =>
+const program = (opts: { rules: Cloudflare.R2.BucketEventNotificationRule[] }) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("EventBucket", {
       forceDestroy: true,
     });
     const queue = yield* Cloudflare.Queues.Queue("EventQueueA");
-    const notification = yield* Cloudflare.R2.BucketEventNotification(
-      "Notification",
-      {
-        bucketName: bucket.bucketName,
-        queueId: queue.queueId,
-        rules: opts.rules,
-      },
-    );
+    const notification = yield* Cloudflare.R2.BucketEventNotification("Notification", {
+      bucketName: bucket.bucketName,
+      queueId: queue.queueId,
+      rules: opts.rules,
+    });
     return { bucket, queue, notification };
   });
 
@@ -94,14 +77,11 @@ const replacementProgram = (opts: {
     const queueA = yield* Cloudflare.Queues.Queue("EventQueueA");
     const queueB = yield* Cloudflare.Queues.Queue("EventQueueB");
     const target = opts.target === "B" ? queueB : queueA;
-    const notification = yield* Cloudflare.R2.BucketEventNotification(
-      "Notification",
-      {
-        bucketName: bucket.bucketName,
-        queueId: target.queueId,
-        rules: opts.rules,
-      },
-    );
+    const notification = yield* Cloudflare.R2.BucketEventNotification("Notification", {
+      bucketName: bucket.bucketName,
+      queueId: target.queueId,
+      rules: opts.rules,
+    });
     return { bucket, queueA, queueB, notification };
   });
 
@@ -126,9 +106,7 @@ test.provider(
       );
 
       expect(initial.notification.accountId).toEqual(accountId);
-      expect(initial.notification.bucketName).toEqual(
-        initial.bucket.bucketName,
-      );
+      expect(initial.notification.bucketName).toEqual(initial.bucket.bucketName);
       expect(initial.notification.queueId).toEqual(initial.queue.queueId);
       expect(initial.notification.jurisdiction).toEqual("default");
       expect(initial.notification.rules).toHaveLength(1);
@@ -171,12 +149,8 @@ test.provider(
       );
 
       // Same configuration mutated in place — not a replacement.
-      expect(updated.notification.bucketName).toEqual(
-        initial.notification.bucketName,
-      );
-      expect(updated.notification.queueId).toEqual(
-        initial.notification.queueId,
-      );
+      expect(updated.notification.bucketName).toEqual(initial.notification.bucketName);
+      expect(updated.notification.queueId).toEqual(initial.notification.queueId);
       expect(updated.notification.rules).toHaveLength(2);
 
       const liveUpdated = yield* getNotification(
@@ -192,10 +166,7 @@ test.provider(
       expect(liveRules[0].suffix).toEqual(".png");
       expect(liveRules[0].description).toEqual("new PNG images");
       expect(liveRules[1].prefix).toEqual("logs/");
-      expect([...liveRules[1].actions].sort()).toEqual([
-        "DeleteObject",
-        "LifecycleDeletion",
-      ]);
+      expect([...liveRules[1].actions].sort()).toEqual(["DeleteObject", "LifecycleDeletion"]);
 
       // Redeploying identical props is a no-op (same rule IDs survive).
       const noop = yield* stack.deploy(
@@ -223,11 +194,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      yield* expectGone(
-        accountId,
-        initial.bucket.bucketName,
-        initial.queue.queueId,
-      );
+      yield* expectGone(accountId, initial.bucket.bucketName, initial.queue.queueId);
 
       // Destroy again — delete must be idempotent (already gone).
       yield* stack.destroy();
@@ -264,11 +231,7 @@ test.provider(
       expect(replaced.notification.queueId).toEqual(replaced.queueB.queueId);
 
       // The old pair's configuration is gone; the new pair's is live.
-      yield* expectGone(
-        accountId,
-        initial.bucket.bucketName,
-        initial.queueA.queueId,
-      );
+      yield* expectGone(accountId, initial.bucket.bucketName, initial.queueA.queueId);
       const live = yield* getNotification(
         accountId,
         replaced.bucket.bucketName,
@@ -279,11 +242,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      yield* expectGone(
-        accountId,
-        replaced.bucket.bucketName,
-        replaced.queueB.queueId,
-      );
+      yield* expectGone(accountId, replaced.bucket.bucketName, replaced.queueB.queueId);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
@@ -296,32 +255,24 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         program({
-          rules: [
-            { actions: ["PutObject", "DeleteObject"], prefix: "incoming/" },
-          ],
+          rules: [{ actions: ["PutObject", "DeleteObject"], prefix: "incoming/" }],
         }),
       );
 
       // Parent fan-out over every R2 bucket, then each bucket's
       // event-notification queues — the deployed (bucket, queue) pair must
       // appear, hydrated into the exact `read` Attributes shape.
-      const provider = yield* Provider.findProvider(
-        Cloudflare.R2.BucketEventNotification,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.R2.BucketEventNotification);
       const all = yield* provider.list();
 
       const found = all.find(
-        (n) =>
-          n.bucketName === deployed.bucket.bucketName &&
-          n.queueId === deployed.queue.queueId,
+        (n) => n.bucketName === deployed.bucket.bucketName && n.queueId === deployed.queue.queueId,
       );
       expect(found).toBeDefined();
       expect(found?.accountId).toBeDefined();
       expect(found?.jurisdiction).toEqual("default");
       expect(found?.rules.length).toBeGreaterThanOrEqual(1);
-      expect(found?.rules.some((rule) => rule.prefix === "incoming/")).toBe(
-        true,
-      );
+      expect(found?.rules.some((rule) => rule.prefix === "incoming/")).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

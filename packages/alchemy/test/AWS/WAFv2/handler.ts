@@ -58,11 +58,9 @@ export default Wafv2BindingsFunction.make(
       getIPSet: yield* WAFv2.GetIPSet(ipSet),
       updateIPSet: yield* WAFv2.UpdateIPSet(ipSet),
       getSampledRequests: yield* WAFv2.GetSampledRequests(webAcl),
-      getRateBasedStatementManagedKeys:
-        yield* WAFv2.GetRateBasedStatementManagedKeys(webAcl),
+      getRateBasedStatementManagedKeys: yield* WAFv2.GetRateBasedStatementManagedKeys(webAcl),
       listResourcesForWebACL: yield* WAFv2.ListResourcesForWebACL(webAcl),
-      getTopPathStatisticsByTraffic:
-        yield* WAFv2.GetTopPathStatisticsByTraffic(webAcl),
+      getTopPathStatisticsByTraffic: yield* WAFv2.GetTopPathStatisticsByTraffic(webAcl),
       getPermissionPolicy: yield* WAFv2.GetPermissionPolicy(ruleGroup),
       putPermissionPolicy: yield* WAFv2.PutPermissionPolicy(ruleGroup),
       deletePermissionPolicy: yield* WAFv2.DeletePermissionPolicy(ruleGroup),
@@ -72,13 +70,10 @@ export default Wafv2BindingsFunction.make(
       listAPIKeys: yield* WAFv2.ListAPIKeys(),
       deleteAPIKey: yield* WAFv2.DeleteAPIKey(),
       describeManagedRuleGroup: yield* WAFv2.DescribeManagedRuleGroup(),
-      listAvailableManagedRuleGroups:
-        yield* WAFv2.ListAvailableManagedRuleGroups(),
-      listAvailableManagedRuleGroupVersions:
-        yield* WAFv2.ListAvailableManagedRuleGroupVersions(),
+      listAvailableManagedRuleGroups: yield* WAFv2.ListAvailableManagedRuleGroups(),
+      listAvailableManagedRuleGroupVersions: yield* WAFv2.ListAvailableManagedRuleGroupVersions(),
       describeAllManagedProducts: yield* WAFv2.DescribeAllManagedProducts(),
-      describeManagedProductsByVendor:
-        yield* WAFv2.DescribeManagedProductsByVendor(),
+      describeManagedProductsByVendor: yield* WAFv2.DescribeManagedProductsByVendor(),
       getWebACLForResource: yield* WAFv2.GetWebACLForResource(),
     };
 

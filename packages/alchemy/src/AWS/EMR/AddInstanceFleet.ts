@@ -32,6 +32,4 @@ export interface AddInstanceFleet extends Binding.Service<
     ) => Effect.Effect<SVC.AddInstanceFleetOutput, SVC.AddInstanceFleetError>
   >
 > {}
-export const AddInstanceFleet = Binding.Service<AddInstanceFleet>(
-  "AWS.EMR.AddInstanceFleet",
-);
+export const AddInstanceFleet = Binding.Service<AddInstanceFleet>("AWS.EMR.AddInstanceFleet");

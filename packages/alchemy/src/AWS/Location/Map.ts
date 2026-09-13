@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
 
@@ -116,11 +111,7 @@ const createMapName = (id: string, props: { mapName?: string | undefined }) =>
 const readMap = Effect.fn(function* (mapName: string) {
   const found = yield* location
     .describeMap({ MapName: mapName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!found) return undefined;
   return {
     mapName: found.MapName,
@@ -151,35 +142,23 @@ export const MapProvider = () =>
                 ),
               ),
             );
-            const hydrated = yield* Effect.forEach(
-              names,
-              (name) => readMap(name),
-              {
-                concurrency: 10,
-              },
-            );
-            return hydrated.filter(
-              (attrs): attrs is Map["Attributes"] => attrs !== undefined,
-            );
+            const hydrated = yield* Effect.forEach(names, (name) => readMap(name), {
+              concurrency: 10,
+            });
+            return hydrated.filter((attrs): attrs is Map["Attributes"] => attrs !== undefined);
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const mapName =
-            output?.mapName ?? (yield* createMapName(id, olds ?? {}));
+          const mapName = output?.mapName ?? (yield* createMapName(id, olds ?? {}));
           const state = yield* readMap(mapName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           const oldName = yield* createMapName(id, olds);
           const newName = yield* createMapName(id, news);
           // Name and base style are immutable — either change forces a replace.
-          if (
-            oldName !== newName ||
-            olds.configuration?.style !== news.configuration?.style
-          ) {
+          if (oldName !== newName || olds.configuration?.style !== news.configuration?.style) {
             return { action: "replace" } as const;
           }
         }),
@@ -206,17 +185,14 @@ export const MapProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readMap(mapName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created map ${mapName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created map ${mapName}`));
             }
           }
 
           // Sync description + political view.
           if (
             state.description !== (news.description ?? undefined) ||
-            state.politicalView !==
-              (news.configuration.politicalView ?? undefined)
+            state.politicalView !== (news.configuration.politicalView ?? undefined)
           ) {
             yield* location.updateMap({
               MapName: mapName,
@@ -246,18 +222,14 @@ export const MapProvider = () =>
 
           const final = yield* readMap(mapName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled map ${mapName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled map ${mapName}`));
           }
           return final;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* location
             .deleteMap({ MapName: output.mapName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

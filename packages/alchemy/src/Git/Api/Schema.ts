@@ -50,21 +50,14 @@ export const OwnerName = RepoName;
  * whitespace / `~^:?*[\` characters git itself forbids. HEAD is virtual
  * (symref to the default branch) and is never a valid `RefName` here.
  */
-export const RefName = Schema.String.check(
-  Schema.isPattern(/^refs\/[^\s~^:?*\[\\]+$/),
-);
+export const RefName = Schema.String.check(Schema.isPattern(/^refs\/[^\s~^:?*[\\]+$/));
 
 /**
  * Lifecycle status of a repo. Async operations (import/fork/delete) flip
  * this field; clients poll `GET /repos/:owner/:repo` until `ready` (or 404
  * once a `deleting` repo's purge completes). There is no jobs API.
  */
-export const RepoStatus = Schema.Literals([
-  "ready",
-  "importing",
-  "forking",
-  "deleting",
-]);
+export const RepoStatus = Schema.Literals(["ready", "importing", "forking", "deleting"]);
 
 /** The decoded type of {@link RepoStatus}. */
 export type RepoStatus = typeof RepoStatus.Type;

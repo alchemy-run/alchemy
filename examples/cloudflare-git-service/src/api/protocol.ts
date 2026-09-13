@@ -20,16 +20,12 @@ export const ProtocolLive = HttpApiBuilder.group(AppApi, "protocol", (h) =>
               .get(params)
               .pipe(Effect.catchTag("StoreError", Effect.die));
             const push = yield* GitHttp.ReceivePack.decode(request);
-            if (push._tag === "Probe")
-              return GitHttp.ReceivePack.probeResponse();
+            if (push._tag === "Probe") return GitHttp.ReceivePack.probeResponse();
             return yield* Effect.gen(function* () {
               yield* checkRefChanges(repo, push.updates);
               const prepared = yield* git.preparePush(repo, push.input);
               // Additional application validation can read prepared.readObject(oid) here.
-              return GitHttp.ReceivePack.response(
-                push,
-                yield* git.commitPush(prepared),
-              );
+              return GitHttp.ReceivePack.response(push, yield* git.commitPush(prepared));
             }).pipe(
               Effect.catchTag("PushDenied", (error) =>
                 Effect.succeed(GitHttp.ReceivePack.reject(push, error.reason)),

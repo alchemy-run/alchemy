@@ -24,12 +24,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { ChildProcess } from "effect/unstable/process";
 import { UserFacingError } from "./UserFacingError.ts";
-import {
-  ANSI_DIM,
-  ANSI_RESET,
-  ansiFg,
-  colorsEnabled,
-} from "./Util/Terminal.ts";
+import { ANSI_DIM, ANSI_RESET, ansiFg, colorsEnabled } from "./Util/Terminal.ts";
 import { unicodeEnabled } from "./Util/Terminal.ts";
 import { glyphsFor, statusColor, type StatusVariant } from "./Util/Theme.ts";
 
@@ -37,9 +32,7 @@ import { glyphsFor, statusColor, type StatusVariant } from "./Util/Theme.ts";
 export class TerminalCancelled extends Data.TaggedError("TerminalCancelled") {}
 
 /** An interactive operation was requested without an interactive terminal. */
-export class NonInteractiveTerminal extends Data.TaggedError(
-  "NonInteractiveTerminal",
-)<{
+export class NonInteractiveTerminal extends Data.TaggedError("NonInteractiveTerminal")<{
   readonly operation: string;
   readonly message: string;
 }> {
@@ -109,10 +102,7 @@ export interface SelectOptions<Value> {
   readonly descriptionPlacement?: "below" | "inline";
 }
 
-export interface MultiSelectOptions<Value> extends Omit<
-  SelectOptions<Value>,
-  "initialValue"
-> {
+export interface MultiSelectOptions<Value> extends Omit<SelectOptions<Value>, "initialValue"> {
   readonly initialValues?: ReadonlyArray<Value>;
   readonly required?: boolean;
 }
@@ -152,25 +142,15 @@ export class Interaction extends Context.Service<
   {
     readonly output: {
       readonly info: (message: string | MessageOptions) => Effect.Effect<void>;
-      readonly success: (
-        message: string | MessageOptions,
-      ) => Effect.Effect<void>;
-      readonly warning: (
-        message: string | MessageOptions,
-      ) => Effect.Effect<void>;
+      readonly success: (message: string | MessageOptions) => Effect.Effect<void>;
+      readonly warning: (message: string | MessageOptions) => Effect.Effect<void>;
       readonly error: (message: string | MessageOptions) => Effect.Effect<void>;
     };
 
     readonly prompt: {
-      readonly text: (
-        options: TextInputOptions,
-      ) => Effect.Effect<string, InteractionError>;
-      readonly password: (
-        options: PasswordInputOptions,
-      ) => Effect.Effect<string, InteractionError>;
-      readonly confirm: (
-        options: ConfirmOptions,
-      ) => Effect.Effect<boolean, InteractionError>;
+      readonly text: (options: TextInputOptions) => Effect.Effect<string, InteractionError>;
+      readonly password: (options: PasswordInputOptions) => Effect.Effect<string, InteractionError>;
+      readonly confirm: (options: ConfirmOptions) => Effect.Effect<boolean, InteractionError>;
       readonly select: <Value>(
         options: SelectOptions<Value>,
       ) => Effect.Effect<Value, InteractionError>;
@@ -206,17 +186,13 @@ export const accessors = {
     text: (options: TextInputOptions) =>
       Effect.flatMap(Interaction, (service) => service.prompt.text(options)),
     password: (options: PasswordInputOptions) =>
-      Effect.flatMap(Interaction, (service) =>
-        service.prompt.password(options),
-      ),
+      Effect.flatMap(Interaction, (service) => service.prompt.password(options)),
     confirm: (options: ConfirmOptions) =>
       Effect.flatMap(Interaction, (service) => service.prompt.confirm(options)),
     select: <Value>(options: SelectOptions<Value>) =>
       Effect.flatMap(Interaction, (service) => service.prompt.select(options)),
     multiSelect: <Value>(options: MultiSelectOptions<Value>) =>
-      Effect.flatMap(Interaction, (service) =>
-        service.prompt.multiSelect(options),
-      ),
+      Effect.flatMap(Interaction, (service) => service.prompt.multiSelect(options)),
   },
 };
 
@@ -239,13 +215,9 @@ export const openUrl = (url: string) =>
     const handle = yield* ChildProcess.make(command, [...args], {
       shell: false,
     });
-    const exitCode = yield* handle.exitCode.pipe(
-      Effect.timeoutOption("3 seconds"),
-    );
+    const exitCode = yield* handle.exitCode.pipe(Effect.timeoutOption("3 seconds"));
     if (Option.isSome(exitCode) && exitCode.value !== 0) {
-      return yield* Effect.fail(
-        new BrowserOpenFailed({ command, exitCode: exitCode.value }),
-      );
+      return yield* Effect.fail(new BrowserOpenFailed({ command, exitCode: exitCode.value }));
     }
   }).pipe(Effect.scoped);
 
@@ -255,35 +227,26 @@ export interface NonInteractiveOptions {
   readonly unicode?: boolean;
 }
 
-const makeNonInteractive = (
-  options: NonInteractiveOptions,
-): Interaction["Service"] => {
+const makeNonInteractive = (options: NonInteractiveOptions): Interaction["Service"] => {
   const stdout = options.stdout ?? process.stdout;
   const colors = options.colors ?? colorsEnabled(stdout);
   const glyphs = glyphsFor(options.unicode ?? unicodeEnabled());
 
   const colorize = (hex: string, value: string) =>
     colors ? `${ansiFg(hex)}${value}${ANSI_RESET}` : value;
-  const muted = (value: string) =>
-    colors ? `${ANSI_DIM}${value}${ANSI_RESET}` : value;
+  const muted = (value: string) => (colors ? `${ANSI_DIM}${value}${ANSI_RESET}` : value);
 
   // Plain-string equivalent of the CLI's `Status` component: colored glyph,
   // the message (painted for errors), and a muted `· detail` suffix.
-  const statusText = (
-    variant: StatusVariant,
-    message: string,
-    detail?: string,
-  ) => {
+  const statusText = (variant: StatusVariant, message: string, detail?: string) => {
     const glyph = colorize(statusColor(variant), glyphs[variant]);
-    const body =
-      variant === "error" ? colorize(statusColor(variant), message) : message;
+    const body = variant === "error" ? colorize(statusColor(variant), message) : message;
     return `${glyph} ${body}${detail === undefined ? "" : ` ${muted(`· ${detail}`)}`}`;
   };
 
   const log = (variant: StatusVariant) => (message: string | MessageOptions) =>
     Effect.sync(() => {
-      const { message: text, detail } =
-        typeof message === "string" ? { message } : message;
+      const { message: text, detail } = typeof message === "string" ? { message } : message;
       stdout.write(`${statusText(variant, text, detail)}\n`);
     });
 

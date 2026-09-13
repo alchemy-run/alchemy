@@ -47,6 +47,4 @@ export interface PutTraceSegments extends Binding.Service<
     ) => Effect.Effect<xray.PutTraceSegmentsResult, xray.PutTraceSegmentsError>
   >
 > {}
-export const PutTraceSegments = Binding.Service<PutTraceSegments>(
-  "AWS.XRay.PutTraceSegments",
-);
+export const PutTraceSegments = Binding.Service<PutTraceSegments>("AWS.XRay.PutTraceSegments");

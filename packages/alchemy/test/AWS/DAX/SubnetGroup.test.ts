@@ -39,24 +39,17 @@ const defaultSubnetIds = Effect.gen(function* () {
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .sort();
   if (ids.length < 3) {
-    return yield* Effect.die(
-      new Error("default VPC has fewer than 3 default-for-AZ subnets"),
-    );
+    return yield* Effect.die(new Error("default VPC has fewer than 3 default-for-AZ subnets"));
   }
   return ids;
 });
 
 const assertGone = (name: string) =>
   dax.describeSubnetGroups({ SubnetGroupNames: [name] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`subnet group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`subnet group '${name}' still exists`))),
     Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -101,16 +94,12 @@ test.provider(
         }),
       );
       expect(updated.subnetGroupName).toBe(group.subnetGroupName);
-      expect(new Set(updated.subnetIds)).toEqual(
-        new Set(subnetIds.slice(0, 3)),
-      );
+      expect(new Set(updated.subnetIds)).toEqual(new Set(subnetIds.slice(0, 3)));
 
       const redescribed = yield* dax.describeSubnetGroups({
         SubnetGroupNames: [group.subnetGroupName],
       });
-      expect(redescribed.SubnetGroups?.[0]?.Description).toBe(
-        "alchemy dax subnet group v2",
-      );
+      expect(redescribed.SubnetGroups?.[0]?.Description).toBe("alchemy dax subnet group v2");
 
       yield* stack.destroy();
       yield* assertGone(group.subnetGroupName);

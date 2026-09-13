@@ -11,23 +11,17 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "describeServer on a nonexistent server fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        transfer.describeServer({ ServerId: "s-00000000000000000" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeServer on a nonexistent server fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(transfer.describeServer({ ServerId: "s-00000000000000000" }));
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const describeServer = (serverId: string) =>
   transfer.describeServer({ ServerId: serverId }).pipe(
     Effect.map((r) => r.Server),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const assertServerGone = (serverId: string) =>
@@ -38,10 +32,7 @@ const assertServerGone = (serverId: string) =>
         : Effect.fail(new Error(`server '${serverId}' still exists`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 

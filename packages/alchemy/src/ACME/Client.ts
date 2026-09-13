@@ -189,22 +189,19 @@ const solveAuthorization = <R>(
             ? waitForTxt(record.fqdn, record.value, propagation)
             : solver.propagated(record, propagation);
           yield* acme.respondChallenge({ url: challenge.url });
-          const settled = yield* acme
-            .getAuthorization({ url: authorizationUrl })
-            .pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("2 seconds"),
-                until: (a) => !PENDING.has(a.status),
-                times: 8,
-              }),
-            );
+          const settled = yield* acme.getAuthorization({ url: authorizationUrl }).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (a) => !PENDING.has(a.status),
+              times: 8,
+            }),
+          );
           if (settled.status !== "valid") {
             const failed = settled.challenges.find((c) => c.type === "dns-01");
             return yield* new ChallengeFailed({
               identifier,
               type: failed?.error?.type,
-              detail:
-                failed?.error?.detail ?? `authorization is ${settled.status}`,
+              detail: failed?.error?.detail ?? `authorization is ${settled.status}`,
             });
           }
           return settled;
@@ -223,9 +220,7 @@ const chooseChain = (
         const blocks = splitPemChain(chain);
         const top = blocks[blocks.length - 1];
         if (top === undefined) return false;
-        const parsed = yield* parseCertificate(top).pipe(
-          Effect.orElseSucceed(() => undefined),
-        );
+        const parsed = yield* parseCertificate(top).pipe(Effect.orElseSucceed(() => undefined));
         return parsed?.issuer.includes(preferredChain!) === true;
       });
     if (preferredChain === undefined) return downloaded.chain;
@@ -244,11 +239,7 @@ const chooseChain = (
  */
 export const issueCertificate = <R = never>(
   request: IssueRequest<R>,
-): Effect.Effect<
-  IssuedCertificate,
-  IssueError,
-  Acme.Credentials | HttpClient.HttpClient | R
-> =>
+): Effect.Effect<IssuedCertificate, IssueError, Acme.Credentials | HttpClient.HttpClient | R> =>
   Effect.gen(function* () {
     const resolve = yield* Acme.Credentials;
     const config = yield* resolve;
@@ -291,15 +282,13 @@ export const issueCertificate = <R = never>(
     }
     const key = yield* generateKey(request.keyAlgorithm ?? "ES256");
     const csr = yield* createCsr({ key, identifiers: request.identifiers });
-    yield* acme
-      .finalizeOrder({ url: order.finalize, csr: csrToBase64Url(csr) })
-      .pipe(
-        Effect.retry({
-          while: (error) => error._tag === "AcmeOrderNotReady",
-          schedule: Schedule.spaced("1 second"),
-          times: 8,
-        }),
-      );
+    yield* acme.finalizeOrder({ url: order.finalize, csr: csrToBase64Url(csr) }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "AcmeOrderNotReady",
+        schedule: Schedule.spaced("1 second"),
+        times: 8,
+      }),
+    );
 
     const settled = yield* acme.getOrder({ url: orderUrl }).pipe(
       Effect.repeat({
@@ -394,16 +383,12 @@ export const revokeCertificate = (
     const leaf = splitPemChain(request.certificate)[0] ?? request.certificate;
     const der = yield* Effect.try({
       try: () => fromPem(leaf),
-      catch: (cause) =>
-        new PkiError({ message: "The certificate is not PEM.", cause }),
+      catch: (cause) => new PkiError({ message: "The certificate is not PEM.", cause }),
     });
     const revoke = acme
       .revokeCertificate({
         certificate: Acme.Jose.base64url(der),
-        reason:
-          request.reason === undefined
-            ? undefined
-            : REASON_CODES[request.reason],
+        reason: request.reason === undefined ? undefined : REASON_CODES[request.reason],
       })
       .pipe(Effect.catchTag("AcmeAlreadyRevoked", () => Effect.void));
     if (request.privateKey === undefined) {
@@ -415,8 +400,6 @@ export const revokeCertificate = (
     const config = yield* resolve;
     const jwk = yield* privateKeyToJwk(request.privateKey);
     return yield* revoke.pipe(
-      Effect.provide(
-        Acme.layer({ directoryUrl: config.directoryUrl, accountKey: jwk }),
-      ),
+      Effect.provide(Acme.layer({ directoryUrl: config.directoryUrl, accountKey: jwk })),
     );
   });

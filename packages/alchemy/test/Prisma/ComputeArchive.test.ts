@@ -3,10 +3,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import {
-  createComputeArchive,
-  normalizeEntrypoint,
-} from "@/Prisma/ComputeArchive";
+import { createComputeArchive, normalizeEntrypoint } from "@/Prisma/ComputeArchive";
 import { closeDirectoryHandle } from "@/Prisma/Internal/ArchivePlatform";
 import { PlatformServices } from "@/Util/PlatformServices";
 
@@ -50,12 +47,8 @@ const parseTar = (buffer: Uint8Array) => {
 
 describe("createComputeArchive", () => {
   it("closes Node and Bun directory handles without masking traversal", async () => {
-    await expect(
-      closeDirectoryHandle({ close: () => undefined }),
-    ).resolves.toBeUndefined();
-    await expect(
-      closeDirectoryHandle({ close: () => Promise.resolve() }),
-    ).resolves.toBeUndefined();
+    await expect(closeDirectoryHandle({ close: () => undefined })).resolves.toBeUndefined();
+    await expect(closeDirectoryHandle({ close: () => Promise.resolve() })).resolves.toBeUndefined();
     await expect(
       closeDirectoryHandle({
         close: () => Promise.reject(new Error("closed")),
@@ -79,10 +72,7 @@ describe("createComputeArchive", () => {
       });
       yield* fs.makeDirectory(path.join(root, "public"));
       yield* fs.writeFileString(path.join(root, "server.mjs"), "export {};");
-      yield* fs.writeFileString(
-        path.join(root, "public", "index.html"),
-        "site",
-      );
+      yield* fs.writeFileString(path.join(root, "public", "index.html"), "site");
 
       const error = yield* createComputeArchive({
         directory: root,
@@ -106,10 +96,7 @@ describe("createComputeArchive", () => {
         prefix: "alchemy-prisma-compute-",
       });
       yield* fs.makeDirectory(path.join(root, "src"));
-      yield* fs.writeFileString(
-        path.join(root, "src", "main.ts"),
-        "console.log('hello');",
-      );
+      yield* fs.writeFileString(path.join(root, "src", "main.ts"), "console.log('hello');");
       yield* fs.writeFileString(path.join(root, "package.json"), "{}");
 
       const archive = yield* createComputeArchive({
@@ -227,35 +214,33 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "preserves symlinked directories that stay inside the artifact root",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-compute-",
-        });
-        const realDir = path.join(root, "real");
-        yield* fs.makeDirectory(realDir);
-        yield* fs.writeFileString(path.join(root, "server.ts"), "export {};");
-        yield* fs.writeFileString(path.join(realDir, "nested.ts"), "nested");
-        yield* fs.symlink(realDir, path.join(root, "linked"));
+  it.effect("preserves symlinked directories that stay inside the artifact root", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-",
+      });
+      const realDir = path.join(root, "real");
+      yield* fs.makeDirectory(realDir);
+      yield* fs.writeFileString(path.join(root, "server.ts"), "export {};");
+      yield* fs.writeFileString(path.join(realDir, "nested.ts"), "nested");
+      yield* fs.symlink(realDir, path.join(root, "linked"));
 
-        const archive = yield* createComputeArchive({
-          directory: root,
-          entrypoint: "server.ts",
-        });
-        const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
-        const byName = new Map(entries.map((entry) => [entry.name, entry]));
+      const archive = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+      });
+      const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
+      const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
-        expect(byName.get("bundle/linked")).toMatchObject({
-          type: "2",
-          linkname: "real",
-        });
-        expect(byName.get("bundle/real/nested.ts")?.body).toBe("nested");
-        expect(byName.has("bundle/linked/nested.ts")).toBe(false);
-      }).pipe(Effect.provide(PlatformServices)),
+      expect(byName.get("bundle/linked")).toMatchObject({
+        type: "2",
+        linkname: "real",
+      });
+      expect(byName.get("bundle/real/nested.ts")?.body).toBe("nested");
+      expect(byName.has("bundle/linked/nested.ts")).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect("rejects symlinks that escape the artifact root", () =>
@@ -270,10 +255,7 @@ describe("createComputeArchive", () => {
       });
       yield* fs.writeFileString(path.join(root, "server.ts"), "export {};");
       yield* fs.writeFileString(path.join(outside, "secret.ts"), "secret");
-      yield* fs.symlink(
-        path.join(outside, "secret.ts"),
-        path.join(root, "secret.ts"),
-      );
+      yield* fs.symlink(path.join(outside, "secret.ts"), path.join(root, "secret.ts"));
 
       const result = yield* Effect.exit(
         createComputeArchive({
@@ -330,14 +312,8 @@ describe("createComputeArchive", () => {
         path.join(root, "apps", "api", ".env.production"),
         "NESTED_SECRET=x",
       );
-      yield* fs.writeFileString(
-        path.join(root, "apps", "api", ".git", "config"),
-        "credential=x",
-      );
-      yield* fs.writeFileString(
-        path.join(root, "apps", "api", ".alchemy", "state"),
-        "secret=x",
-      );
+      yield* fs.writeFileString(path.join(root, "apps", "api", ".git", "config"), "credential=x");
+      yield* fs.writeFileString(path.join(root, "apps", "api", ".alchemy", "state"), "secret=x");
       yield* fs.writeFileString(path.join(root, "debug.log"), "ignored");
 
       const archive = yield* createComputeArchive({
@@ -374,37 +350,35 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "allows dots in ignore names but rejects parent-segment patterns",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-compute-ignore-validation-",
-        });
-        yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
-        yield* fs.writeFileString(path.join(root, "foo..bar"), "ignored");
+  it.effect("allows dots in ignore names but rejects parent-segment patterns", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-ignore-validation-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+      yield* fs.writeFileString(path.join(root, "foo..bar"), "ignored");
 
-        const archive = yield* createComputeArchive({
+      const archive = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        ignore: ["foo..bar"],
+      });
+      const names = parseTar(yield* Effect.sync(() => gunzipSync(archive))).map(
+        (entry) => entry.name,
+      );
+      const unsafe = yield* Effect.exit(
+        createComputeArchive({
           directory: root,
           entrypoint: "server.ts",
-          ignore: ["foo..bar"],
-        });
-        const names = parseTar(
-          yield* Effect.sync(() => gunzipSync(archive)),
-        ).map((entry) => entry.name);
-        const unsafe = yield* Effect.exit(
-          createComputeArchive({
-            directory: root,
-            entrypoint: "server.ts",
-            ignore: ["../outside"],
-          }),
-        );
+          ignore: ["../outside"],
+        }),
+      );
 
-        expect(names).not.toContain("bundle/foo..bar");
-        expect(unsafe._tag).toBe("Failure");
-      }).pipe(Effect.provide(PlatformServices)),
+      expect(names).not.toContain("bundle/foo..bar");
+      expect(unsafe._tag).toBe("Failure");
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect("validates custom ignore patterns before applying a prefix", () =>
@@ -480,34 +454,32 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "creates a verified file-backed archive with explicit cleanup",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-compute-file-archive-",
-        });
-        yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+  it.effect("creates a verified file-backed archive with explicit cleanup", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-file-archive-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
 
-        const archive = yield* createComputeArchive({
-          directory: root,
-          entrypoint: "server.ts",
-          output: "file",
-        });
-        const bytes = yield* fs.readFile(archive.path);
-        const names = parseTar(yield* Effect.sync(() => gunzipSync(bytes))).map(
-          (entry) => entry.name,
-        );
+      const archive = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.ts",
+        output: "file",
+      });
+      const bytes = yield* fs.readFile(archive.path);
+      const names = parseTar(yield* Effect.sync(() => gunzipSync(bytes))).map(
+        (entry) => entry.name,
+      );
 
-        expect(archive.size).toBe(bytes.byteLength);
-        expect(archive.sha256).toMatch(/^[a-f0-9]{64}$/);
-        expect(names).toContain("bundle/server.ts");
-        expect(yield* fs.exists(archive.path)).toBe(true);
-        yield* archive.cleanup;
-        expect(yield* fs.exists(archive.path)).toBe(false);
-      }).pipe(Effect.provide(PlatformServices)),
+      expect(archive.size).toBe(bytes.byteLength);
+      expect(archive.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(names).toContain("bundle/server.ts");
+      expect(yield* fs.exists(archive.path)).toBe(true);
+      yield* archive.cleanup;
+      expect(yield* fs.exists(archive.path)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect("fails explicitly for oversized files and archives", () =>

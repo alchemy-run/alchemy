@@ -31,8 +31,7 @@ layer(services)((it) => {
               modules: [
                 {
                   name: "main.js",
-                  esModule:
-                    "export default { fetch: () => new Response('Hello, world!') };",
+                  esModule: "export default { fetch: () => new Response('Hello, world!') };",
                 },
               ],
             },
@@ -64,8 +63,7 @@ layer(services)((it) => {
                 modules: [
                   {
                     name: "main.js",
-                    esModule:
-                      "export default { fetch: () => new Response('Hello, world!') };",
+                    esModule: "export default { fetch: () => new Response('Hello, world!') };",
                   },
                 ],
               },
@@ -108,8 +106,7 @@ layer(services)((it) => {
               modules: [
                 {
                   name: "main.js",
-                  esModule:
-                    "export default { fetch: () => new Response('Hello, world!') };",
+                  esModule: "export default { fetch: () => new Response('Hello, world!') };",
                 },
               ],
             },
@@ -134,8 +131,7 @@ layer(services)((it) => {
                 modules: [
                   {
                     name: "main.js",
-                    esModule:
-                      "export default { fetch: () => new Response('Hello, world!') };",
+                    esModule: "export default { fetch: () => new Response('Hello, world!') };",
                   },
                 ],
               },
@@ -181,8 +177,7 @@ layer(services)((it) => {
                 modules: [
                   {
                     name: "main.js",
-                    esModule:
-                      "export default { fetch: () => new Response('ok') };",
+                    esModule: "export default { fetch: () => new Response('ok') };",
                   },
                 ],
               },
@@ -284,9 +279,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         wedgeAttempts += 1;
         if (wedgeAttempts === 1) {
-          return yield* Effect.fail(
-            new Error("simulated transient wedge (attempt 1)"),
-          );
+          return yield* Effect.fail(new Error("simulated transient wedge (attempt 1)"));
         }
         const workerd = yield* Workerd.Workerd;
         const ports = yield* workerd
@@ -306,8 +299,7 @@ layer(services)((it) => {
                   modules: [
                     {
                       name: "main.js",
-                      esModule:
-                        "export default { fetch: () => new Response('retried') };",
+                      esModule: "export default { fetch: () => new Response('retried') };",
                     },
                   ],
                 },
@@ -414,9 +406,7 @@ layer(services)((it) => {
                 ],
               })
               .pipe(
-                Effect.map(
-                  (ports) => new URL(`http://127.0.0.1:${ports.http}`),
-                ),
+                Effect.map((ports) => new URL(`http://127.0.0.1:${ports.http}`)),
                 Effect.flatMap((url) =>
                   Effect.promise(() =>
                     fetch(new URL("/", url)).then(async (res) => ({

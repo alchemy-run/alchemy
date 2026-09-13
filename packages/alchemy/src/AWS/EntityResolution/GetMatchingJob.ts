@@ -30,10 +30,7 @@ export interface GetMatchingJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<entityresolution.GetMatchingJobInput, "workflowName">,
-    ) => Effect.Effect<
-      entityresolution.GetMatchingJobOutput,
-      entityresolution.GetMatchingJobError
-    >
+    ) => Effect.Effect<entityresolution.GetMatchingJobOutput, entityresolution.GetMatchingJobError>
   >
 > {}
 

@@ -12,12 +12,8 @@ import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
  * edge-preview API. We reuse the distilled request schema so the
  * shape tracks Cloudflare's surface.
  */
-type EdgeMetadata = NonNullable<
-  NonNullable<workers.CreateScriptEdgePreviewRequest["metadata"]>
->;
-export type EdgeBinding = NonNullable<
-  NonNullable<EdgeMetadata["bindings"]>
->[number];
+type EdgeMetadata = NonNullable<NonNullable<workers.CreateScriptEdgePreviewRequest["metadata"]>>;
+export type EdgeBinding = NonNullable<NonNullable<EdgeMetadata["bindings"]>>[number];
 
 export class EdgeSessionError extends Data.TaggedError("EdgeSessionError")<{
   readonly message: string;
@@ -49,9 +45,7 @@ export interface EdgeSessionHandle {
 }
 
 const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>, message: string) =>
-  effect.pipe(
-    Effect.mapError((cause) => new EdgeSessionError({ message, cause })),
-  );
+  effect.pipe(Effect.mapError((cause) => new EdgeSessionError({ message, cause })));
 
 /**
  * Ask Cloudflare for a preview upload token. Some accounts return an
@@ -62,8 +56,7 @@ const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>, message: string) =>
 const createUploadToken = Effect.gen(function* () {
   const env = yield* yield* CloudflareEnvironment;
   const http = yield* HttpClient.HttpClient;
-  const createSubdomainEdgePreviewSession =
-    yield* workers.createSubdomainEdgePreviewSession;
+  const createSubdomainEdgePreviewSession = yield* workers.createSubdomainEdgePreviewSession;
   const { token, exchangeUrl } = yield* createSubdomainEdgePreviewSession({
     accountId: env.accountId,
   });
@@ -94,8 +87,7 @@ const uploadScript = (options: EdgeSessionOptions, uploadToken: string) =>
       cfPreviewUploadConfigToken: uploadToken,
       wranglerSessionConfig: { workersDev: true, minimalMode: true },
       metadata: {
-        compatibilityDate:
-          options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+        compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
         bindings: options.bindings as EdgeMetadata["bindings"],
         mainModule: options.files[0]!.name,
       },
@@ -137,9 +129,7 @@ export const createEdgeSession = (
         workerHost(options.scriptName).pipe(
           Effect.flatMap(
             Effect.fn(function* (host) {
-              const headers = yield* Access.use((access) =>
-                access.getAccessHeaders(host),
-              );
+              const headers = yield* Access.use((access) => access.getAccessHeaders(host));
               return { url: `https://${host}`, headers };
             }),
           ),

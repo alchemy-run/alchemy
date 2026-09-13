@@ -13,14 +13,8 @@ import type { Workgroup } from "./Workgroup.ts";
 const DEFAULT_PORT = 5439;
 const DEFAULT_DATABASE = "dev";
 
-const unwrap = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
  * SDK-backed implementation of {@link Connect}. Deploy half attaches the
@@ -34,10 +28,7 @@ export const ConnectHttp = Layer.effect(
   Effect.gen(function* () {
     const getCredentials = yield* serverless.getCredentials;
 
-    return Effect.fn(function* (
-      workgroup: Workgroup,
-      options: ConnectOptions = {},
-    ) {
+    return Effect.fn(function* (workgroup: Workgroup, options: ConnectOptions = {}) {
       const WorkgroupName = yield* workgroup.workgroupName;
       const Host = yield* workgroup.endpointAddress;
       const Port = yield* workgroup.endpointPort;
@@ -46,22 +37,20 @@ export const ConnectHttp = Layer.effect(
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           const prefix = connectEnvPrefix(workgroup.LogicalId);
-          yield* host.bind`Allow(${host}, AWS.RedshiftServerless.Connect(${workgroup}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["redshift-serverless:GetCredentials"],
-                  Resource: [workgroup.workgroupArn],
-                },
-              ],
-              env: {
-                [`${prefix}_HOST`]: workgroup.endpointAddress,
-                // Lambda environment variables are strings — stringify the port.
-                [`${prefix}_PORT`]: Output.interpolate`${workgroup.endpointPort}`,
+          yield* host.bind`Allow(${host}, AWS.RedshiftServerless.Connect(${workgroup}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["redshift-serverless:GetCredentials"],
+                Resource: [workgroup.workgroupArn],
               },
+            ],
+            env: {
+              [`${prefix}_HOST`]: workgroup.endpointAddress,
+              // Lambda environment variables are strings — stringify the port.
+              [`${prefix}_PORT`]: Output.interpolate`${workgroup.endpointPort}`,
             },
-          );
+          });
         }
       }
 
@@ -83,8 +72,7 @@ export const ConnectHttp = Layer.effect(
         });
         const username = unwrap(credentials.dbUser);
         const rawPassword = unwrap(credentials.dbPassword);
-        const password =
-          rawPassword === undefined ? undefined : Redacted.make(rawPassword);
+        const password = rawPassword === undefined ? undefined : Redacted.make(rawPassword);
         return {
           host,
           port,

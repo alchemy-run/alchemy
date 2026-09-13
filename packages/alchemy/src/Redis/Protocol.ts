@@ -32,9 +32,7 @@ export interface RedisUrl {
 export const parseUrl = (url: string): RedisUrl => {
   const parsed = new URL(url);
   const tls = parsed.protocol === "rediss:";
-  const path = parsed.pathname.startsWith("/")
-    ? parsed.pathname.slice(1)
-    : parsed.pathname;
+  const path = parsed.pathname.startsWith("/") ? parsed.pathname.slice(1) : parsed.pathname;
   const dbRaw = path.length === 0 ? undefined : Number(path);
   return {
     hostname: parsed.hostname,
@@ -42,10 +40,7 @@ export const parseUrl = (url: string): RedisUrl => {
     tls,
     username: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
-    db:
-      dbRaw !== undefined && Number.isInteger(dbRaw) && dbRaw >= 0
-        ? dbRaw
-        : undefined,
+    db: dbRaw !== undefined && Number.isInteger(dbRaw) && dbRaw >= 0 ? dbRaw : undefined,
   };
 };
 
@@ -71,10 +66,7 @@ const commandError = (command: string, cause: unknown): CommandError =>
 
 const asBytes = (data: Uint8Array): Uint8Array => new Uint8Array(data);
 
-const writeSocket = (
-  socket: RawSocket,
-  bytes: Uint8Array,
-): Effect.Effect<void, CommandError> => {
+const writeSocket = (socket: RawSocket, bytes: Uint8Array): Effect.Effect<void, CommandError> => {
   const written = socket.write(bytes);
   if (typeof written === "object" && written !== null && "then" in written) {
     return Effect.tryPromise({
@@ -105,8 +97,7 @@ const openBun = (
       settled = true;
       resume(Effect.fail(commandError("CONNECT", cause)));
     };
-    const Client = (globalThis as { Bun?: { connect: typeof Bun.connect } })
-      .Bun;
+    const Client = (globalThis as { Bun?: { connect: typeof Bun.connect } }).Bun;
     if (Client === undefined) {
       fail(new Error("Bun.connect is not available"));
       return;
@@ -210,10 +201,7 @@ const openNode = (
           ),
         )
       : import("node:net").then((net) =>
-          attach(
-            net.connect({ host: options.hostname, port: options.port }),
-            "connect",
-          ),
+          attach(net.connect({ host: options.hostname, port: options.port }), "connect"),
         );
     start.catch(fail);
 
@@ -231,9 +219,7 @@ const openRaw = (
   options: RedisUrl,
   events: Queue.Queue<SocketEvent>,
 ): Effect.Effect<RawSocket, CommandError> =>
-  typeof Bun !== "undefined"
-    ? openBun(options, events)
-    : openNode(options, events);
+  typeof Bun !== "undefined" ? openBun(options, events) : openNode(options, events);
 
 const unwrap = (
   frame: Exclude<import("./Resp.ts").ParseResult, { _tag: "Incomplete" }>,
@@ -251,26 +237,17 @@ const unwrap = (
   return Effect.succeed(frame.value);
 };
 
-const expectStatus = (
-  reply: Reply,
-  command: string,
-): Effect.Effect<void, CommandError> => {
+const expectStatus = (reply: Reply, command: string): Effect.Effect<void, CommandError> => {
   if (typeof reply === "string" && reply.toUpperCase() === "OK") {
     return Effect.void;
   }
   return Effect.fail(
-    commandError(
-      command,
-      new ProtocolError({ message: `expected OK, got ${String(reply)}` }),
-    ),
+    commandError(command, new ProtocolError({ message: `expected OK, got ${String(reply)}` })),
   );
 };
 
 export interface Connection {
-  readonly send: (
-    command: string,
-    args?: readonly Arg[],
-  ) => Effect.Effect<Reply, CommandError>;
+  readonly send: (command: string, args?: readonly Arg[]) => Effect.Effect<Reply, CommandError>;
   readonly pipeline: (
     commands: ReadonlyArray<readonly [string, ...Arg[]]>,
   ) => Effect.Effect<readonly Reply[], CommandError>;
@@ -291,10 +268,7 @@ const readReplies = (
       }
       if (event._tag === "End") {
         return yield* Effect.fail(
-          commandError(
-            command,
-            new ProtocolError({ message: "connection closed" }),
-          ),
+          commandError(command, new ProtocolError({ message: "connection closed" })),
         );
       }
       parser.push(event.bytes);
@@ -313,24 +287,20 @@ const readReplies = (
  * is released. Concurrent `send`/`pipeline` calls on one connection
  * are serialized so replies stay ordered.
  */
-export const connect = (
-  url: string,
-): Effect.Effect<Connection, CommandError, Scope.Scope> =>
+export const connect = (url: string): Effect.Effect<Connection, CommandError, Scope.Scope> =>
   Effect.gen(function* () {
     const options = yield* Effect.try({
       try: () => parseUrl(url),
       catch: (cause) => commandError("CONNECT", cause),
     });
     const events = yield* Queue.unbounded<SocketEvent>();
-    const socket = yield* Effect.acquireRelease(
-      openRaw(options, events),
-      (opened) =>
-        Effect.sync(() => {
-          opened.end();
-        }).pipe(
-          Effect.flatMap(() => Queue.shutdown(events)),
-          Effect.asVoid,
-        ),
+    const socket = yield* Effect.acquireRelease(openRaw(options, events), (opened) =>
+      Effect.sync(() => {
+        opened.end();
+      }).pipe(
+        Effect.flatMap(() => Queue.shutdown(events)),
+        Effect.asVoid,
+      ),
     );
     const parser = new Parser();
     const lock = yield* Semaphore.make(1);
@@ -348,20 +318,12 @@ export const connect = (
         options.username.length > 0 && options.username !== "default"
           ? [options.username, options.password]
           : [options.password];
-      const replies = yield* request(
-        encodeCommand("AUTH", authArgs),
-        1,
-        "AUTH",
-      );
+      const replies = yield* request(encodeCommand("AUTH", authArgs), 1, "AUTH");
       yield* expectStatus(replies[0] ?? null, "AUTH");
     }
 
     if (options.db !== undefined && options.db !== 0) {
-      const replies = yield* request(
-        encodeCommand("SELECT", [options.db]),
-        1,
-        "SELECT",
-      );
+      const replies = yield* request(encodeCommand("SELECT", [options.db]), 1, "SELECT");
       yield* expectStatus(replies[0] ?? null, "SELECT");
     }
 
@@ -372,9 +334,7 @@ export const connect = (
         ),
       pipeline: (commands) => {
         if (commands.length === 0) return Effect.succeed([]);
-        const chunks = commands.map(([name, ...args]) =>
-          encodeCommand(name, args),
-        );
+        const chunks = commands.map(([name, ...args]) => encodeCommand(name, args));
         let total = 0;
         for (const chunk of chunks) total += chunk.length;
         const payload = new Uint8Array(total);
@@ -383,11 +343,7 @@ export const connect = (
           payload.set(chunk, offset);
           offset += chunk.length;
         }
-        return request(
-          payload,
-          commands.length,
-          commands[0]?.[0] ?? "PIPELINE",
-        );
+        return request(payload, commands.length, commands[0]?.[0] ?? "PIPELINE");
       },
     } satisfies Connection;
   });
@@ -396,9 +352,7 @@ const scoped = <A>(
   command: string,
   effect: Effect.Effect<A, CommandError, Scope.Scope>,
 ): Effect.Effect<A, CommandError> =>
-  Effect.scoped(effect).pipe(
-    Effect.mapError((error) => commandError(command, error)),
-  );
+  Effect.scoped(effect).pipe(Effect.mapError((error) => commandError(command, error)));
 
 /**
  * Send one Redis command over RESP and close the connection.

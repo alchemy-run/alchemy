@@ -18,14 +18,10 @@ const POLICY_NAME = "alchemy-test-logs-resource-policy";
 const findPolicy = Effect.fn(function* (policyName: string) {
   // quota is 10 policies per region — one call is exhaustive
   const described = yield* logs.describeResourcePolicies({ limit: 50 });
-  return (described.resourcePolicies ?? []).find(
-    (policy) => policy.policyName === policyName,
-  );
+  return (described.resourcePolicies ?? []).find((policy) => policy.policyName === policyName);
 });
 
-class ResourcePolicyStillExists extends Data.TaggedError(
-  "ResourcePolicyStillExists",
-)<{
+class ResourcePolicyStillExists extends Data.TaggedError("ResourcePolicyStillExists")<{
   readonly policyName: string;
 }> {}
 
@@ -75,9 +71,7 @@ test.provider(
       // out-of-band verification via distilled
       const observedCreated = yield* findPolicy(POLICY_NAME);
       expect(observedCreated?.policyDocument).toContain("AlchemyTestV1");
-      expect(observedCreated?.policyDocument).toContain(
-        "route53.amazonaws.com",
-      );
+      expect(observedCreated?.policyDocument).toContain("route53.amazonaws.com");
 
       // update the document in place (same policy name)
       const updated = yield* stack.deploy(

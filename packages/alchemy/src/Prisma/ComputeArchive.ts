@@ -162,9 +162,7 @@ const createComputeArchiveFile = Effect.fn(function* (
   const validated = yield* Effect.try({
     try: () => ({
       ignore: [
-        ...ALWAYS_IGNORED_PATTERNS.map((pattern) =>
-          compileIgnorePattern(pattern),
-        ),
+        ...ALWAYS_IGNORED_PATTERNS.map((pattern) => compileIgnorePattern(pattern)),
         ...ignore.map((pattern) => compileIgnorePattern(pattern, ignorePrefix)),
       ],
       maxUncompressedBytes: boundedLimit(
@@ -175,8 +173,7 @@ const createComputeArchiveFile = Effect.fn(function* (
       maxFileBytes: boundedLimit("maxFileBytes", maxFileBytes, MAX_FILE_BYTES),
       maxEntries: boundedLimit("maxEntries", maxEntries, MAX_ENTRIES),
     }),
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
   const budget: ArchiveBudget = {
     ...validated,
@@ -184,15 +181,11 @@ const createComputeArchiveFile = Effect.fn(function* (
     entries: 0,
   };
   if (budget.maxFileBytes > budget.maxUncompressedBytes) {
-    return yield* Effect.fail(
-      new Error("maxFileBytes must not exceed maxUncompressedBytes"),
-    );
+    return yield* Effect.fail(new Error("maxFileBytes must not exceed maxUncompressedBytes"));
   }
   if (isIgnored(normalizedEntrypoint, budget.ignore)) {
     return yield* Effect.fail(
-      new Error(
-        `Entrypoint is excluded from the compute artifact: ${normalizedEntrypoint}`,
-      ),
+      new Error(`Entrypoint is excluded from the compute artifact: ${normalizedEntrypoint}`),
     );
   }
   const resolvedEntrypoint = yield* resolvePathWithinRoot(
@@ -202,9 +195,7 @@ const createComputeArchiveFile = Effect.fn(function* (
   const entrypointStat = yield* fs.stat(resolvedEntrypoint);
   if (entrypointStat.type !== "File") {
     return yield* Effect.fail(
-      new Error(
-        `Entrypoint must be a file in compute artifact: ${normalizedEntrypoint}`,
-      ),
+      new Error(`Entrypoint must be a file in compute artifact: ${normalizedEntrypoint}`),
     );
   }
 
@@ -213,9 +204,7 @@ const createComputeArchiveFile = Effect.fn(function* (
   const entrypointArchiveName = `bundle/${normalizedEntrypoint}`;
   if (!isArchivedRegularFile(entries, entrypointArchiveName)) {
     return yield* Effect.fail(
-      new Error(
-        `Entrypoint not found in compute artifact: ${normalizedEntrypoint}`,
-      ),
+      new Error(`Entrypoint not found in compute artifact: ${normalizedEntrypoint}`),
     );
   }
 
@@ -242,24 +231,15 @@ const createComputeArchiveFile = Effect.fn(function* (
     prefix: "alchemy-prisma-compute-",
     suffix: ".tar.gz",
   });
-  const cleanup = fs
-    .remove(archivePath, { force: true })
-    .pipe(Effect.catch(() => Effect.void));
+  const cleanup = fs.remove(archivePath, { force: true }).pipe(Effect.catch(() => Effect.void));
 
-  yield* writeCompressedArchiveSecure(
-    archivePath,
-    entries,
-    manifest,
-    MAX_COMPRESSED_BYTES,
-  ).pipe(
+  yield* writeCompressedArchiveSecure(archivePath, entries, manifest, MAX_COMPRESSED_BYTES).pipe(
     Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(error)))),
   );
   return yield* inspectArtifactFile(archivePath, MAX_COMPRESSED_BYTES, {
     cleanup,
     description: "Prisma compute archive",
-  }).pipe(
-    Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(error)))),
-  );
+  }).pipe(Effect.catch((error) => cleanup.pipe(Effect.andThen(Effect.fail(error)))));
 });
 
 const addDirectoryEntries: (
@@ -290,11 +270,7 @@ const addDirectoryEntries: (
       const tarName = `${tarPrefix}/${name}`;
       if (entry.type === "SymbolicLink") {
         const symlinkTarget = yield* fs.readLink(filePath);
-        const linkname = yield* resolveArchiveSymlinkTarget(
-          realRoot,
-          filePath,
-          symlinkTarget,
-        );
+        const linkname = yield* resolveArchiveSymlinkTarget(realRoot, filePath, symlinkTarget);
         entries.push({
           name: tarName,
           mode: 0o777,
@@ -306,33 +282,20 @@ const addDirectoryEntries: (
 
       if (entry.type === "Directory") {
         const realDirectory = yield* resolvePathWithinRoot(realRoot, filePath);
-        yield* addDirectoryEntries(
-          entries,
-          realRoot,
-          realDirectory,
-          tarName,
-          relativeName,
-          budget,
-        );
+        yield* addDirectoryEntries(entries, realRoot, realDirectory, tarName, relativeName, budget);
         continue;
       }
 
       if (entry.type !== "File") {
         return yield* Effect.fail(
-          new Error(
-            `Unsupported filesystem entry in compute artifact: ${relativeName}`,
-          ),
+          new Error(`Unsupported filesystem entry in compute artifact: ${relativeName}`),
         );
       }
 
-      const verified = yield* inspectVerifiedFile(
-        filePath,
-        budget.maxFileBytes,
-        {
-          allowEmpty: true,
-          description: `Compute artifact file '${relativeName}'`,
-        },
-      );
+      const verified = yield* inspectVerifiedFile(filePath, budget.maxFileBytes, {
+        allowEmpty: true,
+        description: `Compute artifact file '${relativeName}'`,
+      });
       yield* ensureResolvedPathWithinRoot(realRoot, verified.path);
       if (budget.bytes + verified.size > budget.maxUncompressedBytes) {
         return yield* Effect.fail(
@@ -363,17 +326,12 @@ export const normalizeEntrypoint = (entrypoint: string) =>
     }
     const parts = normalized.split("/").filter((part) => part !== ".");
     if (parts.some((part) => part === ".." || part.length === 0)) {
-      return yield* Effect.fail(
-        new Error("entrypoint must not contain empty or parent segments"),
-      );
+      return yield* Effect.fail(new Error("entrypoint must not contain empty or parent segments"));
     }
     return parts.join("/");
   });
 
-const resolvePathWithinRoot = Effect.fn(function* (
-  realRoot: string,
-  candidate: string,
-) {
+const resolvePathWithinRoot = Effect.fn(function* (realRoot: string, candidate: string) {
   const fs = yield* FileSystem.FileSystem;
   const realCandidate = yield* fs.realPath(candidate);
   yield* ensureResolvedPathWithinRoot(realRoot, realCandidate);
@@ -386,15 +344,9 @@ const ensureResolvedPathWithinRoot = Effect.fn(function* (
 ) {
   const path = yield* Path.Path;
   const relative = path.relative(realRoot, resolvedCandidate);
-  if (
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     return yield* Effect.fail(
-      new Error(
-        `Archive path escapes compute artifact root: ${resolvedCandidate}`,
-      ),
+      new Error(`Archive path escapes compute artifact root: ${resolvedCandidate}`),
     );
   }
 });
@@ -407,15 +359,11 @@ const resolveArchiveSymlinkTarget = Effect.fn(function* (
   const path = yield* Path.Path;
   if (path.sep === "/" && target.includes("\\")) {
     return yield* Effect.fail(
-      new Error(
-        `Archive symlink target contains an unsupported backslash: ${target}`,
-      ),
+      new Error(`Archive symlink target contains an unsupported backslash: ${target}`),
     );
   }
   const symlinkDir = path.dirname(symlinkPath);
-  const targetPath = path.isAbsolute(target)
-    ? target
-    : path.resolve(symlinkDir, target);
+  const targetPath = path.isAbsolute(target) ? target : path.resolve(symlinkDir, target);
   const realTarget = yield* resolvePathWithinRoot(realRoot, targetPath);
 
   if (!path.isAbsolute(target)) return target.replaceAll("\\", "/");

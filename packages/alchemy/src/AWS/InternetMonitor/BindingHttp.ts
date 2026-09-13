@@ -59,10 +59,7 @@ export const makeInternetMonitorMonitorHttpBinding = <
                 // Health events (and other per-monitor entities) are
                 // addressed as sub-resources of the monitor ARN, e.g.
                 // `{monitorArn}/health-event/{eventId}`.
-                Resource: [
-                  monitor.monitorArn,
-                  Output.interpolate`${monitor.monitorArn}/*`,
-                ],
+                Resource: [monitor.monitorArn, Output.interpolate`${monitor.monitorArn}/*`],
               },
             ],
           });

@@ -37,10 +37,7 @@ export interface DescribeQAppPermissions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeQAppPermissionsRequest,
-    ) => Effect.Effect<
-      qapps.DescribeQAppPermissionsOutput,
-      qapps.DescribeQAppPermissionsError
-    >
+    ) => Effect.Effect<qapps.DescribeQAppPermissionsOutput, qapps.DescribeQAppPermissionsError>
   >
 > {}
 

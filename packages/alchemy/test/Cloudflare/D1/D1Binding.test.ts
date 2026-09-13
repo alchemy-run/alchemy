@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 120_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -34,17 +31,13 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -75,9 +68,7 @@ const retryRows = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
 const exercise = (base: string) =>
   Effect.gen(function* () {
     // exec — CREATE TABLE. Don't assert exact count (0 on a re-run), only shape.
-    const initRes = yield* untilOk(
-      HttpClient.execute(HttpClientRequest.post(`${base}/init`)),
-    );
+    const initRes = yield* untilOk(HttpClient.execute(HttpClientRequest.post(`${base}/init`)));
     const initBody = (yield* initRes.json) as {
       count: number;
       duration: number;
@@ -86,9 +77,7 @@ const exercise = (base: string) =>
     expect(typeof initBody.duration).toBe("number");
 
     // batch — three inserts in one transactional call.
-    const seedRes = yield* untilOk(
-      HttpClient.execute(HttpClientRequest.post(`${base}/seed`)),
-    );
+    const seedRes = yield* untilOk(HttpClient.execute(HttpClientRequest.post(`${base}/seed`)));
     expect(yield* seedRes.json).toMatchObject({ batches: 3, success: true });
 
     // prepare.bind.run — single insert.
@@ -122,9 +111,7 @@ const exercise = (base: string) =>
         };
         return b.results.length === expected.length
           ? Effect.succeed(b)
-          : Effect.fail(
-              new RowsMismatch({ actual: JSON.stringify(b.results) }),
-            );
+          : Effect.fail(new RowsMismatch({ actual: JSON.stringify(b.results) }));
       }),
       retryRows,
     );

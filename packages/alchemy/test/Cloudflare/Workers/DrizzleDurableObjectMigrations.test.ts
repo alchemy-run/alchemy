@@ -71,9 +71,7 @@ test(
     expect(body.names).toEqual(["gimli", "legolas"]);
 
     // Relational query through the `relations` config.
-    const withPosts = yield* client.get(
-      `${url}/users-with-posts?do=${instance}`,
-    );
+    const withPosts = yield* client.get(`${url}/users-with-posts?do=${instance}`);
     expect(withPosts.status).toBe(200);
     const relational = (yield* withPosts.json) as {
       users: { name: string; posts: string[] }[];
@@ -88,9 +86,7 @@ test(
     const missing = yield* client.get(`${url}/missing-table?do=${instance}`);
     expect(missing.status).toBe(200);
     const caught = (yield* missing.json) as { result: string };
-    expect(caught.result).toMatch(
-      /^caught:(SqlError|EffectDrizzleQueryError)$/,
-    );
+    expect(caught.result).toMatch(/^caught:(SqlError|EffectDrizzleQueryError)$/);
   }),
   { timeout: 120_000 },
 );

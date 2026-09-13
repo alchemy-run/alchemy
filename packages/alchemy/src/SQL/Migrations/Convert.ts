@@ -6,11 +6,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import {
-  quoteIdentifier,
-  sqlLiteral,
-  timestampPrefixMillis,
-} from "./Records.ts";
+import { quoteIdentifier, sqlLiteral, timestampPrefixMillis } from "./Records.ts";
 
 /**
  * A row of applied history harvested from a foreign migration tool's table,
@@ -44,11 +40,7 @@ export const toTimestampString = (value: unknown): string | undefined =>
       ? value.toISOString()
       : String(value);
 
-const qualify = (
-  table: string,
-  dialect: SqlExecutor["dialect"],
-  schema?: string,
-) =>
+const qualify = (table: string, dialect: SqlExecutor["dialect"], schema?: string) =>
   schema
     ? `${quoteIdentifier(schema, dialect)}.${quoteIdentifier(table, dialect)}`
     : quoteIdentifier(table, dialect);
@@ -83,28 +75,19 @@ export const findForeignHistory = (options: {
     // drizzle
     const drizzleSchema = dialect === "postgres" ? "drizzle" : undefined;
     if (table !== "__drizzle_migrations") {
-      const columns = yield* tableColumns(
-        executor,
-        "__drizzle_migrations",
-        drizzleSchema,
-      );
+      const columns = yield* tableColumns(executor, "__drizzle_migrations", drizzleSchema);
       if (classifyTable(columns) === "drizzle-shaped") {
         const rows = yield* executor.query(
           `SELECT hash, created_at, name, applied_at FROM ${qualify("__drizzle_migrations", dialect, drizzleSchema)} ORDER BY id;`,
         );
         return {
           tool: "drizzle" as const,
-          source: drizzleSchema
-            ? `${drizzleSchema}.__drizzle_migrations`
-            : "__drizzle_migrations",
+          source: drizzleSchema ? `${drizzleSchema}.__drizzle_migrations` : "__drizzle_migrations",
           rows: rows
             .filter((row) => row.name !== null && row.name !== undefined)
             .map((row) => ({
               name: String(row.name),
-              hash:
-                row.hash === null || row.hash === undefined
-                  ? undefined
-                  : String(row.hash),
+              hash: row.hash === null || row.hash === undefined ? undefined : String(row.hash),
               createdAtMillis:
                 row.created_at === null || row.created_at === undefined
                   ? undefined
@@ -145,8 +128,7 @@ export const findForeignHistory = (options: {
               (row) =>
                 row.finished_at !== null &&
                 row.finished_at !== undefined &&
-                (row.rolled_back_at === null ||
-                  row.rolled_back_at === undefined),
+                (row.rolled_back_at === null || row.rolled_back_at === undefined),
             )
             .map((row) => ({
               name: String(row.migration_name),
@@ -154,9 +136,7 @@ export const findForeignHistory = (options: {
                 row.checksum === null || row.checksum === undefined
                   ? undefined
                   : String(row.checksum),
-              createdAtMillis: timestampPrefixMillis(
-                String(row.migration_name),
-              ),
+              createdAtMillis: timestampPrefixMillis(String(row.migration_name)),
               appliedAt: toTimestampString(row.finished_at),
             })),
         };
@@ -166,23 +146,14 @@ export const findForeignHistory = (options: {
     // wrangler / pre-registry Alchemy on D1 (which shared the
     // d1_migrations name — covers state-lost adoption of old deploys)
     if (dialect === "sqlite" && table !== "d1_migrations") {
-      const shape = classifyTable(
-        yield* tableColumns(executor, "d1_migrations"),
-      );
-      if (
-        shape === "wrangler" ||
-        shape === "legacy-alchemy" ||
-        shape === "legacy-2col"
-      ) {
+      const shape = classifyTable(yield* tableColumns(executor, "d1_migrations"));
+      if (shape === "wrangler" || shape === "legacy-alchemy" || shape === "legacy-2col") {
         const nameExpr = shape === "legacy-2col" ? "id" : "name";
         const rows = yield* executor.query(
           `SELECT ${nameExpr} AS name, applied_at FROM ${quoteIdentifier("d1_migrations", dialect)} ORDER BY id;`,
         );
         return {
-          tool:
-            shape === "wrangler"
-              ? ("wrangler" as const)
-              : ("legacy-alchemy" as const),
+          tool: shape === "wrangler" ? ("wrangler" as const) : ("legacy-alchemy" as const),
           source: "d1_migrations",
           rows: rows
             .filter((row) => row.name !== null && row.name !== undefined)

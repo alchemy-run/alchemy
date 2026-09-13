@@ -79,11 +79,7 @@ export interface FileSuite extends Suite {
   readonly file: string;
 }
 
-export const makeSuite = (
-  name: string,
-  parent: Suite | undefined,
-  mode: Mode = "run",
-): Suite => ({
+export const makeSuite = (name: string, parent: Suite | undefined, mode: Mode = "run"): Suite => ({
   type: "suite",
   name,
   mode,
@@ -117,14 +113,10 @@ export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
   return parts;
 };
 
-export const fullTitle = (node: Suite | TestCase): string =>
-  titlePath(node).join(" > ");
+export const fullTitle = (node: Suite | TestCase): string => titlePath(node).join(" > ");
 
 /** Walk every test in a suite subtree (depth-first, registration order). */
-export const forEachTest = (
-  suite: Suite,
-  f: (test: TestCase) => void,
-): void => {
+export const forEachTest = (suite: Suite, f: (test: TestCase) => void): void => {
   for (const child of suite.children) {
     if (child.type === "test") f(child);
     else forEachTest(child, f);

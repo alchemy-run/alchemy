@@ -33,13 +33,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const outputs = yield* stack.deploy(
         Effect.gen(function* () {
           const network = yield* BatchTestNetwork;
-          const computeEnvironment = yield* AWS.Batch.ComputeEnvironment(
-            "PlatformCE",
-            {
-              subnets: network.subnetIds,
-              securityGroupIds: network.securityGroupIds,
-            },
-          );
+          const computeEnvironment = yield* AWS.Batch.ComputeEnvironment("PlatformCE", {
+            subnets: network.subnetIds,
+            securityGroupIds: network.securityGroupIds,
+          });
           const queue = yield* AWS.Batch.JobQueue("PlatformQueue", {
             computeEnvironments: [computeEnvironment.computeEnvironmentArn],
           });
@@ -62,9 +59,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // Effect-native attributes: managed repo, roles, and image.
       expect(outputs.jobDefinitionName).toBe("alchemy-test-batch-platform-e2e");
       expect(outputs.repositoryUri).toBeTruthy();
-      expect(outputs.imageUri).toBe(
-        `${outputs.repositoryUri}:${outputs.codeHash}`,
-      );
+      expect(outputs.imageUri).toBe(`${outputs.repositoryUri}:${outputs.codeHash}`);
       expect(outputs.jobRoleArn).toContain(":role/");
 
       // Out-of-band verification via distilled: the registered revision runs
@@ -87,16 +82,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         Effect.map((result) => result.jobs?.[0]),
         Effect.repeat({
           schedule: Schedule.spaced("10 seconds"),
-          until: (j): boolean =>
-            j?.status === "SUCCEEDED" || j?.status === "FAILED",
+          until: (j): boolean => j?.status === "SUCCEEDED" || j?.status === "FAILED",
           times: 60,
         }),
       );
       // Include the reason so a FAILED run shows why (placement, pull, or a
       // bootstrap crash all land here with different statusReasons).
-      expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(
-        /^SUCCEEDED:/,
-      );
+      expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(/^SUCCEEDED:/);
 
       // The bundled Effect actually executed: its marker is in the job's
       // log stream (log delivery can lag the state change slightly).
@@ -119,12 +111,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       // Destroy — and verify zero leftovers: job definition revisions, the
       // managed repository, and both managed roles.
-      const {
-        jobDefinitionName,
-        repositoryName,
-        jobRoleName,
-        executionRoleName,
-      } = outputs;
+      const { jobDefinitionName, repositoryName, jobRoleName, executionRoleName } = outputs;
       yield* stack.destroy();
 
       const revisions = yield* batch.describeJobDefinitions({
@@ -139,9 +126,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(repoError._tag).toBe("RepositoryNotFoundException");
 
       for (const roleName of [jobRoleName!, executionRoleName!]) {
-        const roleError = yield* Effect.flip(
-          iam.getRole({ RoleName: roleName }),
-        );
+        const roleError = yield* Effect.flip(iam.getRole({ RoleName: roleName }));
         expect(roleError._tag).toBe("NoSuchEntityException");
       }
     }),

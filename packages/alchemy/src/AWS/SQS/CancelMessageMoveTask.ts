@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface CancelMessageMoveTaskRequest
-  extends sqs.CancelMessageMoveTaskRequest {}
+export interface CancelMessageMoveTaskRequest extends sqs.CancelMessageMoveTaskRequest {}
 
 /**
  * Runtime binding for `sqs:CancelMessageMoveTask` (dead-letter queue
@@ -37,10 +36,7 @@ export interface CancelMessageMoveTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CancelMessageMoveTaskRequest,
-    ) => Effect.Effect<
-      sqs.CancelMessageMoveTaskResult,
-      sqs.CancelMessageMoveTaskError
-    >
+    ) => Effect.Effect<sqs.CancelMessageMoveTaskResult, sqs.CancelMessageMoveTaskError>
   >
 > {}
 

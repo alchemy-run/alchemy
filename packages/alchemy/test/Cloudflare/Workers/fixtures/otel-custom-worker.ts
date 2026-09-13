@@ -30,9 +30,7 @@ export default class OtelCustomWorker extends Cloudflare.Worker<OtelCustomWorker
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         if (url.pathname === "/work") {
-          yield* Effect.log("custom-work-log").pipe(
-            Effect.withSpan("custom.child-span"),
-          );
+          yield* Effect.log("custom-work-log").pipe(Effect.withSpan("custom.child-span"));
           return yield* HttpServerResponse.json({ marker: "custom-did-work" });
         }
         return HttpServerResponse.text("otel-custom-ok");

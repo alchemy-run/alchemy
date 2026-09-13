@@ -28,11 +28,7 @@ export interface RenewCertificate extends Binding.Service<
   "AWS.ACM.RenewCertificate",
   (
     certificate: Certificate,
-  ) => Effect.Effect<
-    () => Effect.Effect<acm.RenewCertificateResponse, acm.RenewCertificateError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<acm.RenewCertificateResponse, acm.RenewCertificateError>>
 > {}
 
-export const RenewCertificate = Binding.Service<RenewCertificate>(
-  "AWS.ACM.RenewCertificate",
-);
+export const RenewCertificate = Binding.Service<RenewCertificate>("AWS.ACM.RenewCertificate");

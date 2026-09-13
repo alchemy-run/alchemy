@@ -57,17 +57,13 @@ export const isWorkerHost = (host: ResourceLike): host is WorkerHost =>
   (host as { Type?: string }).Type === WORKER_TYPE_ID;
 
 /** Region segment of an AWS ARN (`arn:partition:service:<region>:...`). */
-export const regionFromArn = (arn: string): string =>
-  arn.split(":")[3] ?? "us-east-1";
+export const regionFromArn = (arn: string): string => arn.split(":")[3] ?? "us-east-1";
 
 export interface WorkerAwsAccess {
   /** The least-privilege Role each binding contributes statements to. */
   readonly role: Role;
   /** Assumed-role credentials, cached and refreshed near expiry. */
-  readonly credentials: Effect.Effect<
-    ResolvedCredentials,
-    AwsCredentialProviderError
-  >;
+  readonly credentials: Effect.Effect<ResolvedCredentials, AwsCredentialProviderError>;
 }
 
 /**
@@ -92,9 +88,7 @@ export const workerAwsAccess = Effect.fn(function* (host: WorkerHost) {
     inlinePolicies: {
       AssumeRole: {
         Version: "2012-10-17",
-        Statement: [
-          { Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] },
-        ],
+        Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
       },
     },
   });
@@ -188,9 +182,7 @@ export const hostAwsAccess = Effect.fn(function* (
   grant: () => HostGrant,
 ) {
   const access =
-    host !== undefined && isWorkerHost(host)
-      ? yield* workerAwsAccess(host)
-      : undefined;
+    host !== undefined && isWorkerHost(host) ? yield* workerAwsAccess(host) : undefined;
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const grantee = isBindingHost(host) ? host : access?.role;
     if (grantee !== undefined) {
@@ -231,12 +223,7 @@ export const withRuntimeCredentials = <A, E>(
  * the bound {@link Function}'s ARN as `FunctionName` and the deploy-time
  * half grants `actions` on `resources` (default: the function ARN).
  */
-export const makeFunctionHttpBinding = <
-  I extends { FunctionName?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Lambda.GetFunction`. */
   tag: string;
   /**

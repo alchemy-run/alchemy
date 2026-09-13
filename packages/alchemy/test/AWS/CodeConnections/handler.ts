@@ -72,9 +72,7 @@ export default CodeConnectionsTestFunction.make(
             ProviderTypeFilter: "GitHub",
           });
           return yield* HttpServerResponse.json({
-            names: (result.Connections ?? []).map(
-              (c) => c.ConnectionName ?? null,
-            ),
+            names: (result.Connections ?? []).map((c) => c.ConnectionName ?? null),
           });
         }
 
@@ -88,9 +86,7 @@ export default CodeConnectionsTestFunction.make(
         if (request.method === "GET" && pathname === "/repository-links") {
           const result = yield* listRepositoryLinks();
           return yield* HttpServerResponse.json({
-            repositories: (result.RepositoryLinks ?? []).map(
-              (l) => l.RepositoryName ?? null,
-            ),
+            repositories: (result.RepositoryLinks ?? []).map((l) => l.RepositoryName ?? null),
           });
         }
 

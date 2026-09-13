@@ -2,10 +2,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  ensureAlarmTables,
-  reconcileDurableObjectAlarm,
-} from "./DurableObjectAlarmStorage.ts";
+import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
 import type { SqlStorageValue } from "./DurableObjectStorage.ts";
 
@@ -85,10 +82,7 @@ export const cancelEvent = Effect.fn(function* (id: string) {
   yield* ensureTable;
   const ctx = yield* DurableObjectState;
 
-  yield* ctx.storage.sql.exec(
-    `DELETE FROM alchemy_scheduled_events WHERE id = ?`,
-    id,
-  );
+  yield* ctx.storage.sql.exec(`DELETE FROM alchemy_scheduled_events WHERE id = ?`, id);
 
   yield* reconcileAlarm;
 }, inTransaction);
@@ -152,10 +146,7 @@ export const processScheduledEvents: Effect.Effect<
           now + row.repeat_ms,
           row.id,
         )
-      : ctx.storage.sql.exec(
-          `DELETE FROM alchemy_scheduled_events WHERE id = ?`,
-          row.id,
-        );
+      : ctx.storage.sql.exec(`DELETE FROM alchemy_scheduled_events WHERE id = ?`, row.id);
     fired.push(toScheduledEvent(row));
   }
 
@@ -166,12 +157,10 @@ export const processScheduledEvents: Effect.Effect<
 /**
  * Set the DO alarm to the earliest pending event, or clear it if none remain.
  */
-const reconcileAlarm: Effect.Effect<
-  void,
-  never,
-  DurableObjectState | RuntimeContext
-> = Effect.gen(function* () {
-  const ctx = yield* DurableObjectState;
+const reconcileAlarm: Effect.Effect<void, never, DurableObjectState | RuntimeContext> = Effect.gen(
+  function* () {
+    const ctx = yield* DurableObjectState;
 
-  yield* reconcileDurableObjectAlarm(ctx.raw.storage);
-});
+    yield* reconcileDurableObjectAlarm(ctx.raw.storage);
+  },
+);

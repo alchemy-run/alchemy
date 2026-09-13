@@ -36,12 +36,7 @@ export interface ListStreamSessions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListStreamSessionsRequest,
-    ) => Effect.Effect<
-      ivs.ListStreamSessionsResponse,
-      ivs.ListStreamSessionsError
-    >
+    ) => Effect.Effect<ivs.ListStreamSessionsResponse, ivs.ListStreamSessionsError>
   >
 > {}
-export const ListStreamSessions = Binding.Service<ListStreamSessions>(
-  "AWS.IVS.ListStreamSessions",
-);
+export const ListStreamSessions = Binding.Service<ListStreamSessions>("AWS.IVS.ListStreamSessions");

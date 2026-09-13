@@ -12,9 +12,7 @@ import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { PrismaSecretConnection } from "../Types.ts";
 import type { ObservedDatabase } from "./Observed.ts";
 
-export const hasCanonicalConnectionSecrets = (
-  secrets: PrismaSecretConnection,
-) =>
+export const hasCanonicalConnectionSecrets = (secrets: PrismaSecretConnection) =>
   secrets.directConnectionString !== undefined ||
   secrets.pooledConnectionString !== undefined ||
   secrets.accelerateConnectionString !== undefined;
@@ -50,10 +48,8 @@ export const mergeConnectionSecrets = (
   preferred: PrismaSecretConnection,
   fallback: PrismaSecretConnection,
 ): PrismaSecretConnection => ({
-  directConnectionString:
-    preferred.directConnectionString ?? fallback.directConnectionString,
-  pooledConnectionString:
-    preferred.pooledConnectionString ?? fallback.pooledConnectionString,
+  directConnectionString: preferred.directConnectionString ?? fallback.directConnectionString,
+  pooledConnectionString: preferred.pooledConnectionString ?? fallback.pooledConnectionString,
   accelerateConnectionString:
     preferred.accelerateConnectionString ?? fallback.accelerateConnectionString,
   host: preferred.host ?? fallback.host,
@@ -104,9 +100,10 @@ const waitForRotatableDatabase = (database: ObservedDatabase) =>
  * persistence. Prisma's ordinary database reads omit those values, so rotate
  * the observed default connection once when no canonical URL is available.
  */
-export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
-  D extends ObservedDatabase,
->(initialDatabase: D, known: PrismaSecretConnection) {
+export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends ObservedDatabase>(
+  initialDatabase: D,
+  known: PrismaSecretConnection,
+) {
   if (initialDatabase.status === "failure") {
     return yield* Effect.fail(
       new Error(
@@ -116,13 +113,9 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
   }
   let database: D | GetDatabaseResponse["data"] = initialDatabase;
   const observedConnection =
-    database.connections.find(
-      (connection) => connection.id === database.defaultConnectionId,
-    ) ?? database.connections[0];
-  const available = mergeConnectionSecrets(
-    extractConnectionSecrets(observedConnection),
-    known,
-  );
+    database.connections.find((connection) => connection.id === database.defaultConnectionId) ??
+    database.connections[0];
+  const available = mergeConnectionSecrets(extractConnectionSecrets(observedConnection), known);
   if (hasCanonicalConnectionSecrets(available)) {
     return { database, secrets: available };
   }
@@ -132,9 +125,8 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
   }
 
   const refreshedConnection =
-    database.connections.find(
-      (connection) => connection.id === database.defaultConnectionId,
-    ) ?? database.connections[0];
+    database.connections.find((connection) => connection.id === database.defaultConnectionId) ??
+    database.connections[0];
   const refreshed = mergeConnectionSecrets(
     extractConnectionSecrets(refreshedConnection),
     available,
@@ -164,10 +156,7 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
       ),
     );
   }
-  const recovered = mergeConnectionSecrets(
-    extractConnectionSecrets(rotated),
-    refreshed,
-  );
+  const recovered = mergeConnectionSecrets(extractConnectionSecrets(rotated), refreshed);
   if (!hasCanonicalConnectionSecrets(recovered)) {
     return yield* Effect.fail(
       new Error(

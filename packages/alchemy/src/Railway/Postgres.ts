@@ -25,17 +25,13 @@ import type { Providers } from "./Providers.ts";
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export const DEFAULT_POSTGRES_IMAGE =
-  "ghcr.io/railwayapp-templates/postgres-ssl:16";
+export const DEFAULT_POSTGRES_IMAGE = "ghcr.io/railwayapp-templates/postgres-ssl:16";
 export const DEFAULT_POSTGRES_USER = "postgres";
 export const DEFAULT_POSTGRES_DATABASE = "railway";
 export const POSTGRES_PORT = 5432;
 export const POSTGRES_MOUNT_PATH = "/var/lib/postgresql/data";
 export const POSTGRES_PGDATA = "/var/lib/postgresql/data/pgdata";
-import {
-  DATABASE_PUBLIC_URL_SECRET,
-  DATABASE_URL_SECRET,
-} from "./ConnectPostgres.ts";
+import { DATABASE_PUBLIC_URL_SECRET, DATABASE_URL_SECRET } from "./ConnectPostgres.ts";
 
 type VolumeState = railway.Scalars["VolumeState"];
 
@@ -74,35 +70,17 @@ const proxySelection = {
   proxyPort: true,
 } as const satisfies railway.Selection<"TCPProxy">;
 type ServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
-type CreateServiceResponse = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type UpdateServiceResponse = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type ProjectResponseServicesEdgesItemNode = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
-type ServiceInstanceResponse = railway.Result<
-  "ServiceInstance!",
-  typeof instanceSelection
->;
+type CreateServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
+type UpdateServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
+type ProjectResponseServicesEdgesItemNode = railway.Result<"Service!", typeof serviceSelection>;
+type ServiceInstanceResponse = railway.Result<"ServiceInstance!", typeof instanceSelection>;
 type EnvironmentResponseVolumeInstancesEdgesItemNode = railway.Result<
   "VolumeInstance!",
   typeof volumeSelection
 >;
-type VolumeInstanceResponse = railway.Result<
-  "VolumeInstance!",
-  typeof volumeSelection
->;
+type VolumeInstanceResponse = railway.Result<"VolumeInstance!", typeof volumeSelection>;
 type TcpProxiesResultItem = railway.Result<"TCPProxy!", typeof proxySelection>;
-type CreateTcpProxyResponse = railway.Result<
-  "TCPProxy!",
-  typeof proxySelection
->;
+type CreateTcpProxyResponse = railway.Result<"TCPProxy!", typeof proxySelection>;
 
 export { DATABASE_PUBLIC_URL_SECRET, DATABASE_URL_SECRET };
 
@@ -236,11 +214,7 @@ const resolvePostgresProps = (
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              PostgresEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<PostgresEnvironment, never, Providers>
           : resolved.environment;
     return { ...resolved, project, environment };
   });
@@ -340,37 +314,27 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * @resource
  */
 export const Postgres: typeof PostgresResource = Object.assign(
-  (
-    id: string,
-    props: PostgresProps | Effect.Effect<PostgresProps, never, Providers>,
-  ) => PostgresResource(id, resolvePostgresProps(props)),
+  (id: string, props: PostgresProps | Effect.Effect<PostgresProps, never, Providers>) =>
+    PostgresResource(id, resolvePostgresProps(props)),
   PostgresResource,
 );
 
-export class PostgresNotCreated extends Data.TaggedError(
-  "Railway.PostgresNotCreated",
-)<{
+export class PostgresNotCreated extends Data.TaggedError("Railway.PostgresNotCreated")<{
   name: string;
   projectId: string;
 }> {}
 
-export class PostgresProjectRequired extends Data.TaggedError(
-  "Railway.PostgresProjectRequired",
-)<{
+export class PostgresProjectRequired extends Data.TaggedError("Railway.PostgresProjectRequired")<{
   message: string;
 }> {}
 
-export class PostgresDeployFailed extends Data.TaggedError(
-  "Railway.PostgresDeployFailed",
-)<{
+export class PostgresDeployFailed extends Data.TaggedError("Railway.PostgresDeployFailed")<{
   serviceId: string;
   status: string;
   deploymentId: string | undefined;
 }> {}
 
-export class PostgresVolumeNotCreated extends Data.TaggedError(
-  "Railway.PostgresVolumeNotCreated",
-)<{
+export class PostgresVolumeNotCreated extends Data.TaggedError("Railway.PostgresVolumeNotCreated")<{
   name: string;
   serviceId: string;
 }> {}
@@ -380,9 +344,7 @@ class PostgresPending extends Data.TaggedError("Railway.PostgresPending")<{
   status: string;
 }> {}
 
-class PostgresDeployPending extends Data.TaggedError(
-  "Railway.PostgresDeployPending",
-)<{
+class PostgresDeployPending extends Data.TaggedError("Railway.PostgresDeployPending")<{
   serviceId: string;
   status: string;
 }> {}
@@ -402,18 +364,14 @@ type CloudService =
   | UpdateServiceResponse
   | ProjectResponseServicesEdgesItemNode;
 
-type CloudInstance =
-  | EnvironmentResponseVolumeInstancesEdgesItemNode
-  | VolumeInstanceResponse;
+type CloudInstance = EnvironmentResponseVolumeInstancesEdgesItemNode | VolumeInstanceResponse;
 
 type CloudProxy = TcpProxiesResultItem | CreateTcpProxyResponse;
 
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -454,9 +412,7 @@ const isGoneVolume = (instance: CloudInstance | undefined) =>
   goneVolumeState(instance.state);
 
 const isGoneProxy = (proxy: CloudProxy | undefined) =>
-  proxy === undefined ||
-  proxy.deletedAt != null ||
-  proxy.syncStatus === "DELETED";
+  proxy === undefined || proxy.deletedAt != null || proxy.syncStatus === "DELETED";
 
 const normalizeDomain = (domain: string) => domain.replace(/\.+$/, "");
 
@@ -466,9 +422,7 @@ const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed === `${desired}:latest` || desired === `${observed}:latest`) {
     return true;
   }
-  return (
-    observed.endsWith(`/${desired}`) || observed.endsWith(`/${desired}:latest`)
-  );
+  return observed.endsWith(`/${desired}`) || observed.endsWith(`/${desired}:latest`);
 };
 
 const isPostgresImage = (image: string | null | undefined) =>
@@ -527,9 +481,7 @@ const desiredVariables = (input: {
 
 const toAttrs = (input: {
   service: CloudService;
-  instance:
-    | railway.Result<"ServiceInstance!", typeof attributeInstanceSelection>
-    | undefined;
+  instance: railway.Result<"ServiceInstance!", typeof attributeInstanceSelection> | undefined;
   volume: CloudInstance | undefined;
   proxy: CloudProxy | undefined;
   projectId: string;
@@ -539,8 +491,7 @@ const toAttrs = (input: {
   database: string;
 }): Postgres["Attributes"] => {
   const name = input.service.name;
-  const domain =
-    input.proxy !== undefined ? normalizeDomain(input.proxy.domain) : undefined;
+  const domain = input.proxy !== undefined ? normalizeDomain(input.proxy.domain) : undefined;
   const proxyPort = input.proxy?.proxyPort;
   return {
     serviceId: input.service.id,
@@ -634,20 +585,12 @@ const findVolume = (
 const listProxies = (environmentId: string, serviceId: string) =>
   railway.tcpProxies({ environmentId, serviceId }, proxySelection).pipe(
     Effect.map((items) => items.filter((proxy) => !isGoneProxy(proxy))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as TcpProxiesResultItem[]),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed([] as TcpProxiesResultItem[])),
   );
 
-const findProxy = (
-  environmentId: string,
-  serviceId: string,
-  applicationPort: number,
-) =>
+const findProxy = (environmentId: string, serviceId: string, applicationPort: number) =>
   listProxies(environmentId, serviceId).pipe(
-    Effect.map((items) =>
-      items.find((proxy) => proxy.applicationPort === applicationPort),
-    ),
+    Effect.map((items) => items.find((proxy) => proxy.applicationPort === applicationPort)),
   );
 
 /**
@@ -679,11 +622,7 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const listVariableMap = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const listVariableMap = (projectId: string, environmentId: string, serviceId: string) =>
   railway
     .variables({
       projectId,
@@ -693,9 +632,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed({} as Record<string, string>)),
     );
 
 const upsertVariable = (input: {
@@ -722,11 +659,7 @@ const syncEnv = Effect.fn(function* (input: {
   serviceId: string;
   desired: Record<string, string>;
 }) {
-  const observed = yield* listVariableMap(
-    input.projectId,
-    input.environmentId,
-    input.serviceId,
-  );
+  const observed = yield* listVariableMap(input.projectId, input.environmentId, input.serviceId);
   let changed = false;
   for (const [name, value] of Object.entries(input.desired)) {
     if (observed[name] !== value) {
@@ -747,9 +680,7 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
   getInstance(environmentId, serviceId).pipe(
     Effect.flatMap((instance) => {
       if (instance === undefined) {
-        return Effect.fail(
-          new PostgresPending({ serviceId, status: "creating" }),
-        );
+        return Effect.fail(new PostgresPending({ serviceId, status: "creating" }));
       }
       return Effect.succeed(instance);
     }),
@@ -760,9 +691,7 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
+    Effect.catchTag("Railway.PostgresPending", () => getInstance(environmentId, serviceId)),
   );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
@@ -785,9 +714,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.PostgresDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
+    Effect.catchTag("Railway.PostgresDeployPending", () => getInstance(environmentId, serviceId)),
   );
 
 const waitForVolume = (
@@ -799,11 +726,7 @@ const waitForVolume = (
   const observe =
     volumeInstanceId !== undefined && volumeInstanceId.length > 0
       ? getVolumeByInstanceId(volumeInstanceId)
-      : findVolume(
-          environmentId,
-          projectId,
-          (instance) => instance.volumeId === volumeId,
-        );
+      : findVolume(environmentId, projectId, (instance) => instance.volumeId === volumeId);
   return observe.pipe(
     Effect.flatMap((instance) => {
       if (instance === undefined || transientVolumeState(instance.state)) {
@@ -844,13 +767,10 @@ export const PostgresProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const nextProject = projectIdOf(news.project);
-      const projectChanged =
-        nextProject !== undefined && nextProject !== output.projectId;
+      const projectChanged = nextProject !== undefined && nextProject !== output.projectId;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
-      const regionChanged =
-        news.region !== undefined && news.region !== output.region;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
+      const regionChanged = news.region !== undefined && news.region !== output.region;
       if (projectChanged || environmentChanged || regionChanged) {
         return { action: "replace" as const };
       }
@@ -859,8 +779,7 @@ export const PostgresProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const environmentId =
         output?.environmentId ??
         (olds !== undefined
@@ -872,24 +791,15 @@ export const PostgresProvider = () =>
           ? yield* getById(output.serviceId)
           : undefined;
       const found =
-        byId ??
-        (projectId !== undefined
-          ? yield* findByName(projectId, name)
-          : undefined);
+        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
       if (found === undefined) return undefined;
       const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
       const resolvedEnvId =
-        environmentId ??
-        environmentIdOf(olds?.project) ??
-        output?.environmentId ??
-        "";
+        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
       const instance =
-        resolvedEnvId.length > 0
-          ? yield* getInstance(resolvedEnvId, found.id)
-          : undefined;
+        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
       const volume =
-        output?.volumeInstanceId !== undefined &&
-        output.volumeInstanceId.length > 0
+        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)
           : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
             ? yield* findVolume(
@@ -897,8 +807,7 @@ export const PostgresProvider = () =>
                 resolvedProjectId,
                 (row) =>
                   (row.serviceId ?? undefined) === found.id ||
-                  (output?.volumeId !== undefined &&
-                    row.volumeId === output.volumeId),
+                  (output?.volumeId !== undefined && row.volumeId === output.volumeId),
               )
             : undefined;
       const proxy =
@@ -918,8 +827,7 @@ export const PostgresProvider = () =>
         environmentId: resolvedEnvId,
         user: vars.POSTGRES_USER ?? output?.user ?? DEFAULT_POSTGRES_USER,
         password: vars.POSTGRES_PASSWORD ?? "",
-        database:
-          vars.POSTGRES_DB ?? output?.database ?? DEFAULT_POSTGRES_DATABASE,
+        database: vars.POSTGRES_DB ?? output?.database ?? DEFAULT_POSTGRES_DATABASE,
       });
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
@@ -936,10 +844,7 @@ export const PostgresProvider = () =>
           );
           if (services.size === 0) return [];
           const envIds = yield* railway.environments
-            .items(
-              { projectId: project.projectId, first: 50 },
-              { id: true, deletedAt: true },
-            )
+            .items({ projectId: project.projectId, first: 50 }, { id: true, deletedAt: true })
             .pipe(
               Stream.filter((env) => env.deletedAt == null),
               Stream.map((env) => env.id),
@@ -963,10 +868,7 @@ export const PostgresProvider = () =>
                   isPostgresImage(instance.source?.image),
               );
               if (instances.length === 0) return [];
-              const volumes = yield* listVolumeInstances(
-                environmentId,
-                project.projectId,
-              );
+              const volumes = yield* listVolumeInstances(environmentId, project.projectId);
               return instances.flatMap((instance) => {
                 const service = services.get(instance.serviceId);
                 return service === undefined
@@ -977,9 +879,7 @@ export const PostgresProvider = () =>
                         instance,
                         projectId: project.projectId,
                         environmentId,
-                        volume: volumes.find(
-                          (row) => row.serviceId === service.id,
-                        ),
+                        volume: volumes.find((row) => row.serviceId === service.id),
                         proxy: undefined,
                         user: DEFAULT_POSTGRES_USER,
                         password: "",
@@ -1027,18 +927,12 @@ export const PostgresProvider = () =>
       }
 
       const existingVars =
-        current !== undefined
-          ? yield* listVariableMap(projectId, environmentId, current.id)
-          : {};
-      const user =
-        existingVars.POSTGRES_USER ?? props.user ?? DEFAULT_POSTGRES_USER;
-      const database =
-        existingVars.POSTGRES_DB ?? props.database ?? DEFAULT_POSTGRES_DATABASE;
+        current !== undefined ? yield* listVariableMap(projectId, environmentId, current.id) : {};
+      const user = existingVars.POSTGRES_USER ?? props.user ?? DEFAULT_POSTGRES_USER;
+      const database = existingVars.POSTGRES_DB ?? props.database ?? DEFAULT_POSTGRES_DATABASE;
       const password =
         existingVars.POSTGRES_PASSWORD ??
-        (props.password !== undefined
-          ? unwrapSecret(props.password)
-          : undefined) ??
+        (props.password !== undefined ? unwrapSecret(props.password) : undefined) ??
         (yield* generatePassword);
       const variables = desiredVariables({ user, password, database });
 
@@ -1056,11 +950,7 @@ export const PostgresProvider = () =>
             },
             serviceSelection,
           )
-          .pipe(
-            railway.catchTags("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(railway.catchTags("RailwayValidationError", () => Effect.succeed(undefined)));
         current = created ?? (yield* findByName(projectId, name));
       }
 
@@ -1082,11 +972,9 @@ export const PostgresProvider = () =>
       let needsDeploy = false;
 
       const observedImage = instance?.source?.image ?? undefined;
-      const imageChanged =
-        sourceImage !== undefined && !sameImage(observedImage, sourceImage);
+      const imageChanged = sourceImage !== undefined && !sameImage(observedImage, sourceImage);
       const observedRegion = instance?.region ?? undefined;
-      const regionChanged =
-        props.region !== undefined && props.region !== observedRegion;
+      const regionChanged = props.region !== undefined && props.region !== observedRegion;
       const sleepOn = instance?.sleepApplication !== false;
       if (imageChanged || regionChanged || sleepOn) {
         yield* railway.updateServiceInstance({
@@ -1111,8 +999,7 @@ export const PostgresProvider = () =>
       if (envChanged) needsDeploy = true;
 
       let volume: CloudInstance | undefined =
-        output?.volumeInstanceId !== undefined &&
-        output.volumeInstanceId.length > 0
+        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)
           : undefined;
       if (volume === undefined && output?.volumeId !== undefined) {
@@ -1126,9 +1013,7 @@ export const PostgresProvider = () =>
         volume = yield* findVolume(
           environmentId,
           projectId,
-          (row) =>
-            (row.serviceId ?? undefined) === current!.id ||
-            row.volume.name === volumeName,
+          (row) => (row.serviceId ?? undefined) === current!.id || row.volume.name === volumeName,
         );
       }
       if (volume === undefined) {
@@ -1171,9 +1056,7 @@ export const PostgresProvider = () =>
             ...(!attached ? { serviceId: current.id } : {}),
           },
         });
-        volume =
-          (yield* waitForVolume(environmentId, projectId, volume.volumeId)) ??
-          volume;
+        volume = (yield* waitForVolume(environmentId, projectId, volume.volumeId)) ?? volume;
         needsDeploy = true;
       }
 
@@ -1190,11 +1073,7 @@ export const PostgresProvider = () =>
             },
             proxySelection,
           )
-          .pipe(
-            railway.catchTags("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(railway.catchTags("RailwayValidationError", () => Effect.succeed(undefined)));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created
@@ -1214,8 +1093,7 @@ export const PostgresProvider = () =>
           .pipe(railway.catchTags("RailwayValidationError", () => Effect.void));
       }
 
-      instance =
-        (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+      instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
       let finalStatus = instance?.latestDeployment?.status;
       // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
       // container may serve, but Railway keeps its per-environment operation
@@ -1231,8 +1109,7 @@ export const PostgresProvider = () =>
         yield* railway
           .serviceInstanceDeployV2({ environmentId, serviceId: current.id })
           .pipe(railway.catchTags("RailwayValidationError", () => Effect.void));
-        instance =
-          (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+        instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
         finalStatus = instance?.latestDeployment?.status;
       }
       if (deployFailed(finalStatus) || !deployReady(finalStatus)) {
@@ -1285,9 +1162,7 @@ export const PostgresProvider = () =>
         yield* waitUntilDeleted(
           "Service",
           serviceId,
-          getById(serviceId).pipe(
-            Effect.map((service) => service === undefined),
-          ),
+          getById(serviceId).pipe(Effect.map((service) => service === undefined)),
         );
       }
       // Proxies usually disappear with the service; wait for the cascade
@@ -1307,14 +1182,9 @@ export const PostgresProvider = () =>
         yield* waitUntilDeleted(
           "TcpProxy",
           serviceId,
-          listProxies(environmentId, serviceId).pipe(
-            Effect.map((proxies) => proxies.length === 0),
-          ),
+          listProxies(environmentId, serviceId).pipe(Effect.map((proxies) => proxies.length === 0)),
         );
-      } else if (
-        output.tcpProxyId !== undefined &&
-        output.tcpProxyId.length > 0
-      ) {
+      } else if (output.tcpProxyId !== undefined && output.tcpProxyId.length > 0) {
         yield* deleteProxy(output.tcpProxyId);
       }
       if (output.volumeId.length > 0) {

@@ -9,8 +9,5 @@ export const GenericService =
   <Kind extends string>(Kind: Kind): ReturnType<Fn> & Fn => {
     const service = Context.Service<any, any>(Kind);
     const make = (Type: string) => Context.Service(`${Kind}<${Type}>`);
-    return Object.assign(
-      Object.setPrototypeOf(make, service),
-      service,
-    ) as ReturnType<Fn> & Fn;
+    return Object.assign(Object.setPrototypeOf(make, service), service) as ReturnType<Fn> & Fn;
   };

@@ -61,36 +61,30 @@ export default ApplicationSignalsTestFunction.make(
         WarningThreshold: 50,
       },
     });
-    const probe = yield* ApplicationSignals.InstrumentationConfiguration(
-      "BindingsProbe",
-      {
-        instrumentationType: "PROBE",
-        service: "alchemy-test-appsignals-bindings-ic",
-        environment: "alchemy-test-env",
-        signalType: "SNAPSHOT",
-        location: {
-          Language: "Python",
-          CodeUnit: "app.main",
-          MethodName: "handler",
-          FilePath: "app/main.py",
-          LineNumber: 10,
-        },
-        captureConfiguration: {
-          CaptureLocals: ["x"],
-          CaptureLimits: { MaxHits: 1 },
-        },
+    const probe = yield* ApplicationSignals.InstrumentationConfiguration("BindingsProbe", {
+      instrumentationType: "PROBE",
+      service: "alchemy-test-appsignals-bindings-ic",
+      environment: "alchemy-test-env",
+      signalType: "SNAPSHOT",
+      location: {
+        Language: "Python",
+        CodeUnit: "app.main",
+        MethodName: "handler",
+        FilePath: "app/main.py",
+        LineNumber: 10,
       },
-    );
+      captureConfiguration: {
+        CaptureLocals: ["x"],
+        CaptureLimits: { MaxHits: 1 },
+      },
+    });
 
     // --- account-level discovery bindings ---
     const listServices = yield* ApplicationSignals.ListServices();
     const getService = yield* ApplicationSignals.GetService();
-    const listServiceDependencies =
-      yield* ApplicationSignals.ListServiceDependencies();
-    const listServiceDependents =
-      yield* ApplicationSignals.ListServiceDependents();
-    const listServiceOperations =
-      yield* ApplicationSignals.ListServiceOperations();
+    const listServiceDependencies = yield* ApplicationSignals.ListServiceDependencies();
+    const listServiceDependents = yield* ApplicationSignals.ListServiceDependents();
+    const listServiceOperations = yield* ApplicationSignals.ListServiceOperations();
     const listServiceStates = yield* ApplicationSignals.ListServiceStates();
     const listEntityEvents = yield* ApplicationSignals.ListEntityEvents();
     const listAuditFindings = yield* ApplicationSignals.ListAuditFindings();
@@ -102,8 +96,7 @@ export default ApplicationSignalsTestFunction.make(
       yield* ApplicationSignals.BatchGetServiceLevelObjectiveBudgetReport(slo);
     const listExclusionWindows =
       yield* ApplicationSignals.ListServiceLevelObjectiveExclusionWindows(slo);
-    const updateExclusionWindows =
-      yield* ApplicationSignals.BatchUpdateExclusionWindows(slo);
+    const updateExclusionWindows = yield* ApplicationSignals.BatchUpdateExclusionWindows(slo);
 
     // --- instrumentation-configuration-scoped binding ---
     const getInstrumentationStatus =
@@ -212,9 +205,7 @@ export default ApplicationSignalsTestFunction.make(
         if (request.method === "GET" && pathname === "/audit-findings") {
           const result = yield* listAuditFindings({
             ...window(),
-            AuditTargets: [
-              { Type: "service", Data: { Service: PROBE_KEY_ATTRIBUTES } },
-            ],
+            AuditTargets: [{ Type: "service", Data: { Service: PROBE_KEY_ATTRIBUTES } }],
           });
           return yield* HttpServerResponse.json({
             count: result.AuditFindings.length,

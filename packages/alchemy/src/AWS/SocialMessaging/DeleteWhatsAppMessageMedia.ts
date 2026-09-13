@@ -43,7 +43,6 @@ export interface DeleteWhatsAppMessageMedia extends Binding.Service<
     >
   >
 > {}
-export const DeleteWhatsAppMessageMedia =
-  Binding.Service<DeleteWhatsAppMessageMedia>(
-    "AWS.SocialMessaging.DeleteWhatsAppMessageMedia",
-  );
+export const DeleteWhatsAppMessageMedia = Binding.Service<DeleteWhatsAppMessageMedia>(
+  "AWS.SocialMessaging.DeleteWhatsAppMessageMedia",
+);

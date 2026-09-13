@@ -95,9 +95,8 @@ export default DocDBElasticSlowTestFunction.make(
           // injection without waiting ~10 minutes for STOPPED.
           const status = yield* startCluster().pipe(
             Effect.map((result) => result.cluster.status),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ status });

@@ -37,9 +37,7 @@ test(
     const get = (q: string) =>
       client.get(`${url}/?${q}`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`status ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`status ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),

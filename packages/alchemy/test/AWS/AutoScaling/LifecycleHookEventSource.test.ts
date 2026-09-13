@@ -17,10 +17,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AutoScalingLifecycle");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -85,21 +82,17 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
     { timeout: 180_000 },
   );
 
-  test.provider(
-    "consumeLifecycleActions creates the launch lifecycle hook on the ASG",
-    (_stack) =>
-      Effect.gen(function* () {
-        const hooks = yield* autoscaling.describeLifecycleHooks({
-          AutoScalingGroupName: lifecycleFleetAsgName,
-          LifecycleHookNames: [lifecycleHookName],
-        } as any);
-        const hook = hooks.LifecycleHooks?.[0];
-        expect(hook?.LifecycleHookName).toEqual(lifecycleHookName);
-        expect(hook?.LifecycleTransition).toEqual(
-          "autoscaling:EC2_INSTANCE_LAUNCHING",
-        );
-        expect(hook?.HeartbeatTimeout).toEqual(300);
-      }),
+  test.provider("consumeLifecycleActions creates the launch lifecycle hook on the ASG", (_stack) =>
+    Effect.gen(function* () {
+      const hooks = yield* autoscaling.describeLifecycleHooks({
+        AutoScalingGroupName: lifecycleFleetAsgName,
+        LifecycleHookNames: [lifecycleHookName],
+      } as any);
+      const hook = hooks.LifecycleHooks?.[0];
+      expect(hook?.LifecycleHookName).toEqual(lifecycleHookName);
+      expect(hook?.LifecycleTransition).toEqual("autoscaling:EC2_INSTANCE_LAUNCHING");
+      expect(hook?.HeartbeatTimeout).toEqual(300);
+    }),
   );
 
   test.provider(
@@ -115,9 +108,7 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.map((json) => json as { ok: boolean; tag: string }),
           // `repeat` only re-runs successes: a transient 502 from the
@@ -125,8 +116,7 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
           // too, the way the /health probe is.
           Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
           Effect.repeat({
-            until: (b) =>
-              b.tag !== "AccessDenied" && b.tag !== "AccessDeniedException",
+            until: (b) => b.tag !== "AccessDenied" && b.tag !== "AccessDeniedException",
             schedule: Schedule.spaced("3 seconds"),
             times: 10,
           }),
@@ -134,9 +124,7 @@ describe("AutoScaling LifecycleHook event source + CompleteLifecycleAction", () 
         // The SDK call reached AWS with valid credentials/policy: either it
         // succeeded, or it failed for a resource reason (no active lifecycle
         // action) — never an authorization failure.
-        expect(["AccessDenied", "AccessDeniedException"]).not.toContain(
-          body.tag,
-        );
+        expect(["AccessDenied", "AccessDeniedException"]).not.toContain(body.tag);
       }),
     { timeout: 60_000 },
   );

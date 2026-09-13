@@ -120,10 +120,7 @@ export const ProfileAssociationProvider = () =>
   Provider.effect(
     ProfileAssociation,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
@@ -143,9 +140,7 @@ export const ProfileAssociationProvider = () =>
           })
           .pipe(
             Effect.map((r) => isLive(r.ProfileAssociation)),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
       const observeByPair = (profileId: string, resourceId: string) =>

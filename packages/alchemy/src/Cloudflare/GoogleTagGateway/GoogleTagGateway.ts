@@ -80,13 +80,7 @@ export type Attributes = Config & {
   initialConfig: Config | undefined;
 };
 
-export type GoogleTagGateway = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type GoogleTagGateway = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * Google Tag Gateway configuration for a Cloudflare zone
@@ -167,9 +161,7 @@ export const GoogleTagGatewayProvider = () =>
             }),
             // Zone deleted out-of-band, or the scoped token can't see this
             // zone — skip it rather than failing the whole enumeration.
-            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -191,8 +183,7 @@ export const GoogleTagGatewayProvider = () =>
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
         // before upstream Outputs resolved — report "not found" then.
-        output?.zoneId ??
-        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
+        output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* googleTagGateway.getConfig({ zoneId }).pipe(
         // Zone deleted out-of-band — the config is gone with it.
@@ -203,8 +194,7 @@ export const GoogleTagGatewayProvider = () =>
       // The config is a zone singleton with no ownership tags possible, so
       // a cold read adopts freely (never `Unowned`). The observed config at
       // adoption time becomes the `initialConfig` restored on destroy.
-      const initialConfig =
-        output !== undefined ? output.initialConfig : toConfig(observed);
+      const initialConfig = output !== undefined ? output.initialConfig : toConfig(observed);
       return { zoneId, ...toConfig(observed), initialConfig };
     }),
 
@@ -219,8 +209,7 @@ export const GoogleTagGatewayProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed config is
       //    the zone's original.
-      const initialConfig =
-        output !== undefined ? output.initialConfig : observed;
+      const initialConfig = output !== undefined ? output.initialConfig : observed;
 
       // 3. Sync — PUT is a full replace; skip the call on no-op.
       const desired: Config = {

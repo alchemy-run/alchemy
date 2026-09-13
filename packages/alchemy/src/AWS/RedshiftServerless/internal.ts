@@ -22,9 +22,7 @@ export const toTagRecord = (
  * Convert a desired tag record into the wire tag list (`{ key, value }`) used
  * by create/tag calls.
  */
-export const toWireTags = (
-  tags: Record<string, string>,
-): redshiftserverless.Tag[] =>
+export const toWireTags = (tags: Record<string, string>): redshiftserverless.Tag[] =>
   Object.entries(tags).map(([key, value]) => ({ key, value }));
 
 /**
@@ -42,10 +40,7 @@ export const readTags = Effect.fn(function* (arn: string) {
  * Sync tags on a Redshift Serverless resource: diff the OBSERVED cloud tags
  * against the desired set and apply only the delta.
  */
-export const syncTags = Effect.fn(function* (
-  arn: string,
-  desiredTags: Record<string, string>,
-) {
+export const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
   const observedTags = yield* readTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {

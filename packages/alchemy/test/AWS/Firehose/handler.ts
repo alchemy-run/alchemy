@@ -26,21 +26,18 @@ export const BucketAndDeliveryStreamLive = Layer.effect(
       forceDestroy: true,
     });
 
-    const deliveryStream = yield* AWS.Firehose.DeliveryStream(
-      "FixtureDeliveryStream",
-      {
-        destination: {
-          bucketArn: bucket.bucketArn,
-          prefix: "records/",
-          // Direct S3 supports zero buffering. Keep the binding fixture at
-          // zero so end-to-end delivery can be proven inside the normal test
-          // budget instead of imposing Firehose's one-minute flush delay.
-          bufferingInterval: "0 seconds",
-          bufferingSizeInMBs: 1,
-        },
-        tags: { fixture: "firehose-bindings" },
+    const deliveryStream = yield* AWS.Firehose.DeliveryStream("FixtureDeliveryStream", {
+      destination: {
+        bucketArn: bucket.bucketArn,
+        prefix: "records/",
+        // Direct S3 supports zero buffering. Keep the binding fixture at
+        // zero so end-to-end delivery can be proven inside the normal test
+        // budget instead of imposing Firehose's one-minute flush delay.
+        bufferingInterval: "0 seconds",
+        bufferingSizeInMBs: 1,
       },
-    );
+      tags: { fixture: "firehose-bindings" },
+    });
 
     return { bucket, deliveryStream };
   }),
@@ -91,9 +88,7 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/list-streams") {
-          return yield* HttpServerResponse.json(
-            yield* listDeliveryStreams({ Limit: 100 }),
-          );
+          return yield* HttpServerResponse.json(yield* listDeliveryStreams({ Limit: 100 }));
         }
 
         if (request.method === "POST" && pathname === "/sink") {
@@ -125,10 +120,7 @@ export const FirehoseApiFunctionLive = FirehoseApiFunction.make(
         // The sink layer consumes the PutRecordBatch binding, so the op
         // layers are provided *into* the sink group (and merged out for the
         // fetch routes that call them directly).
-        Layer.mergeAll(
-          AWS.Firehose.DeliveryStreamSinkHttp,
-          BucketAndDeliveryStreamLive,
-        ),
+        Layer.mergeAll(AWS.Firehose.DeliveryStreamSinkHttp, BucketAndDeliveryStreamLive),
         Layer.mergeAll(
           AWS.Firehose.PutRecordHttp,
           AWS.Firehose.PutRecordBatchHttp,

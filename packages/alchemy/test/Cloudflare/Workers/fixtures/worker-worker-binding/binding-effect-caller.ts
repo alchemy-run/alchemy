@@ -23,8 +23,7 @@ export default class BindingEffectCaller extends Cloudflare.Worker<BindingEffect
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const name =
-          new URL(request.url, "http://x").searchParams.get("name") ?? "world";
+        const name = new URL(request.url, "http://x").searchParams.get("name") ?? "world";
         const greeting = yield* target.greet(name);
         return HttpServerResponse.text(String(greeting));
       }).pipe(

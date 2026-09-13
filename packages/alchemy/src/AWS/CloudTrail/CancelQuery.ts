@@ -30,12 +30,7 @@ export interface CancelQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<cloudtrail.CancelQueryRequest, "EventDataStore">,
-    ) => Effect.Effect<
-      cloudtrail.CancelQueryResponse,
-      cloudtrail.CancelQueryError
-    >
+    ) => Effect.Effect<cloudtrail.CancelQueryResponse, cloudtrail.CancelQueryError>
   >
 > {}
-export const CancelQuery = Binding.Service<CancelQuery>(
-  "AWS.CloudTrail.CancelQuery",
-);
+export const CancelQuery = Binding.Service<CancelQuery>("AWS.CloudTrail.CancelQuery");

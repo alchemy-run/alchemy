@@ -24,9 +24,7 @@ describe("AWS.Timestream.ScheduledQuery", () => {
     "listScheduledQueries reports typed TimestreamNotOnboarded via endpoint discovery",
     (_stack) =>
       Effect.gen(function* () {
-        const error = yield* withQueryEndpoint(
-          TSQ.listScheduledQueries({}),
-        ).pipe(Effect.flip);
+        const error = yield* withQueryEndpoint(TSQ.listScheduledQueries({})).pipe(Effect.flip);
         expect(error._tag).toBe("TimestreamNotOnboarded");
       }),
     { timeout: 60_000 },
@@ -78,10 +76,7 @@ describe("AWS.Timestream.ScheduledQuery", () => {
                   {
                     Effect: "Allow",
                     Action: ["s3:PutObject", "s3:GetBucketAcl"],
-                    Resource: [
-                      bucket.bucketArn,
-                      Output.interpolate`${bucket.bucketArn}/*`,
-                    ],
+                    Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
                   },
                 ],
               },
@@ -119,9 +114,7 @@ describe("AWS.Timestream.ScheduledQuery", () => {
           }),
         ).pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
         expect(gone).toBe(true);
       }),

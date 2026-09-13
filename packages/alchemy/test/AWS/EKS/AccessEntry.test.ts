@@ -94,9 +94,7 @@ test.provider.skipIf(!clusterName)(
         const provider = yield* Provider.findProvider(AccessEntry);
         const all = yield* provider.list();
 
-        expect(
-          all.some((entry) => entry.accessEntryArn === deployed.accessEntryArn),
-        ).toBe(true);
+        expect(all.some((entry) => entry.accessEntryArn === deployed.accessEntryArn)).toBe(true);
 
         yield* stack.destroy();
       }).pipe(Effect.scoped);

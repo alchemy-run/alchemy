@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // dominates the runtime (create ~5-15 min, destroy ~5-15 min).
 const runLive = !process.env.FAST;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "sveltekit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-app");
 
 // Clone under the alchemy package so `@sveltejs/kit`/`svelte`/`vite`
 // resolve from the workspace's hoisted node_modules (the fixture has no
@@ -60,20 +56,14 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.SvelteKit", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "SVELTEKIT_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "SVELTEKIT_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "SVELTEKIT_AWS_PAGE_MARKER", {
@@ -81,38 +71,22 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.SvelteKit", () => {
           label: "SSR home page",
         });
         // Server API route through the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "SVELTEKIT_AWS_API_MARKER",
-          {
-            label: "API route",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "roundtrip",
-          {
-            label: "API route query echo",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "SVELTEKIT_AWS_API_MARKER", {
+          label: "API route",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+          label: "API route query echo",
+        });
         // Static file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "sveltekit-aws-robots-marker",
-          {
-            label: "static asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "sveltekit-aws-robots-marker", {
+          label: "static asset from S3",
+        });
         // Prerendered page (kit wrote `prerendered.html` into the assets
         // directory at build time; the edge router's `.html` fallback
         // serves it from S3).
-        yield* expectUrlContains(
-          `${url}/prerendered`,
-          "SVELTEKIT_AWS_PRERENDERED_MARKER",
-          {
-            label: "prerendered page",
-          },
-        );
+        yield* expectUrlContains(`${url}/prerendered`, "SVELTEKIT_AWS_PRERENDERED_MARKER", {
+          label: "prerendered page",
+        });
 
         const distributionId = deployed.site.distribution!.distributionId;
 
@@ -132,9 +106,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

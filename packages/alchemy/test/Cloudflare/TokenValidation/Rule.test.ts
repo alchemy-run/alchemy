@@ -11,13 +11,9 @@ import { JWKS_KEY_1 } from "./fixtures/jwks.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // JWT validation (API Shield) is entitlement-gated. On the standard testing
 // account every token_validation call fails with the typed
@@ -31,9 +27,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -47,9 +41,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidation.Rule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.TokenValidation.Rule);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -77,15 +69,12 @@ test.provider.skipIf(!entitledZoneId)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.TokenValidation.TokenConfiguration(
-            "JwtConfig",
-            {
-              zoneId,
-              description: "list-test",
-              tokenSources: ['http.request.headers["authorization"][0]'],
-              keys: [JWKS_KEY_1],
-            },
-          );
+          const config = yield* Cloudflare.TokenValidation.TokenConfiguration("JwtConfig", {
+            zoneId,
+            description: "list-test",
+            tokenSources: ['http.request.headers["authorization"][0]'],
+            keys: [JWKS_KEY_1],
+          });
           return yield* Cloudflare.TokenValidation.Rule("JwtRule", {
             zoneId,
             action: "log",
@@ -95,14 +84,10 @@ test.provider.skipIf(!entitledZoneId)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidation.Rule,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.TokenValidation.Rule);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (r) => r.zoneId === zoneId && r.ruleId === deployed.ruleId,
-      );
+      const found = all.find((r) => r.zoneId === zoneId && r.ruleId === deployed.ruleId);
       expect(found).toBeDefined();
       expect(found?.action).toEqual("log");
 

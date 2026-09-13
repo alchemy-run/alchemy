@@ -5,10 +5,7 @@ export class AttachmentContainerObject extends Container {
 }
 
 export default {
-  fetch(
-    request: Request,
-    env: { ECHO: DurableObjectNamespace<AttachmentContainerObject> },
-  ) {
+  fetch(request: Request, env: { ECHO: DurableObjectNamespace<AttachmentContainerObject> }) {
     return getContainer(env.ECHO, "default").fetch(request);
   },
 };

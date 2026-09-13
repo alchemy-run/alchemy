@@ -46,9 +46,7 @@ const ensureRecorder = Effect.gen(function* () {
   }
   yield* iam
     .createServiceLinkedRole({ AWSServiceName: "config.amazonaws.com" })
-    .pipe(
-      Effect.catchTag("InvalidInputException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("InvalidInputException", () => Effect.succeed(undefined)));
   const role = yield* iam.getRole({ RoleName: "AWSServiceRoleForConfig" });
   yield* config
     .putConfigurationRecorder({
@@ -61,10 +59,7 @@ const ensureRecorder = Effect.gen(function* () {
     .pipe(
       Effect.retry({
         while: (e) => e._tag === "InvalidRoleException",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
       }),
     );
   return true;
@@ -77,10 +72,7 @@ const removeRecorderIfCreated = (created: boolean) =>
           ConfigurationRecorderName: TEST_RECORDER_NAME,
         })
         .pipe(
-          Effect.catchTag(
-            "NoSuchConfigurationRecorderException",
-            () => Effect.void,
-          ),
+          Effect.catchTag("NoSuchConfigurationRecorderException", () => Effect.void),
           Effect.orDie,
         )
     : Effect.void;
@@ -88,10 +80,7 @@ const removeRecorderIfCreated = (created: boolean) =>
 let recorderCreated = false;
 let baseUrl: string;
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -107,31 +96,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe("Config Bindings", () => {
   beforeAll(
@@ -140,11 +120,7 @@ describe("Config Bindings", () => {
       yield* Effect.logInfo("Config test setup: ensuring recorder");
       // Direct distilled calls need the AWS provider context (credentials,
       // region) that `test.provider` bodies get implicitly.
-      recorderCreated = yield* Core.withProviders(
-        ensureRecorder,
-        testOptions,
-        "ConfigBindings",
-      );
+      recorderCreated = yield* Core.withProviders(ensureRecorder, testOptions, "ConfigBindings");
 
       yield* Effect.logInfo("Config test setup: destroying previous stack");
       yield* sharedStack.destroy();
@@ -159,9 +135,7 @@ describe("Config Bindings", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      yield* Effect.logInfo(
-        `Config test setup: probing readiness at ${baseUrl}/health`,
-      );
+      yield* Effect.logInfo(`Config test setup: probing readiness at ${baseUrl}/health`);
       yield* HttpClient.get(`${baseUrl}/health`).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -219,9 +193,7 @@ describe("Config Bindings", () => {
   describe("GetDiscoveredResourceCounts", () => {
     test.provider("counts discovered resources", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/get-discovered-resource-counts",
-        )) as {
+        const response = (yield* getJson("/get-discovered-resource-counts")) as {
           total: number;
           counts: unknown[];
         };
@@ -232,35 +204,31 @@ describe("Config Bindings", () => {
   });
 
   describe("BatchGetResourceConfig", () => {
-    test.provider(
-      "returns the undiscovered probe key as unprocessed",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/batch-get-resource-config")) as {
-            items: unknown[];
-            unprocessed: { resourceId?: string }[];
-          };
-          expect(Array.isArray(response.items)).toBe(true);
-          expect(Array.isArray(response.unprocessed)).toBe(true);
-        }),
+    test.provider("returns the undiscovered probe key as unprocessed", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/batch-get-resource-config")) as {
+          items: unknown[];
+          unprocessed: { resourceId?: string }[];
+        };
+        expect(Array.isArray(response.items)).toBe(true);
+        expect(Array.isArray(response.unprocessed)).toBe(true);
+      }),
     );
   });
 
   describe("GetResourceConfigHistory", () => {
-    test.provider(
-      "answers ok or the typed ResourceNotDiscoveredException",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/get-resource-config-history")) as {
-            items?: unknown[];
-            errorTag?: string;
-          };
-          if (response.errorTag !== undefined) {
-            expect(response.errorTag).toBe("ResourceNotDiscoveredException");
-          } else {
-            expect(Array.isArray(response.items)).toBe(true);
-          }
-        }),
+    test.provider("answers ok or the typed ResourceNotDiscoveredException", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/get-resource-config-history")) as {
+          items?: unknown[];
+          errorTag?: string;
+        };
+        if (response.errorTag !== undefined) {
+          expect(response.errorTag).toBe("ResourceNotDiscoveredException");
+        } else {
+          expect(Array.isArray(response.items)).toBe(true);
+        }
+      }),
     );
   });
 
@@ -269,9 +237,7 @@ describe("Config Bindings", () => {
   describe("DescribeComplianceByConfigRule", () => {
     test.provider("reads the fixture rule's compliance", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/describe-compliance-by-config-rule",
-        )) as {
+        const response = (yield* getJson("/describe-compliance-by-config-rule")) as {
           ruleName: string;
           compliances: unknown[];
         };
@@ -284,9 +250,7 @@ describe("Config Bindings", () => {
   describe("DescribeComplianceByResource", () => {
     test.provider("reads compliance by resource type", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/describe-compliance-by-resource",
-        )) as {
+        const response = (yield* getJson("/describe-compliance-by-resource")) as {
           compliances: unknown[];
         };
         expect(Array.isArray(response.compliances)).toBe(true);
@@ -297,9 +261,7 @@ describe("Config Bindings", () => {
   describe("GetComplianceDetailsByResource", () => {
     test.provider("reads evaluation results for a resource", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/get-compliance-details-by-resource",
-        )) as {
+        const response = (yield* getJson("/get-compliance-details-by-resource")) as {
           evaluations: unknown[];
         };
         expect(Array.isArray(response.evaluations)).toBe(true);
@@ -310,9 +272,7 @@ describe("Config Bindings", () => {
   describe("GetComplianceSummaryByConfigRule", () => {
     test.provider("reads the account rule-compliance summary", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/get-compliance-summary-by-config-rule",
-        )) as {
+        const response = (yield* getJson("/get-compliance-summary-by-config-rule")) as {
           summary: unknown;
         };
         expect(response).toHaveProperty("summary");
@@ -323,9 +283,7 @@ describe("Config Bindings", () => {
   describe("GetComplianceSummaryByResourceType", () => {
     test.provider("reads per-type compliance summaries", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/get-compliance-summary-by-resource-type",
-        )) as {
+        const response = (yield* getJson("/get-compliance-summary-by-resource-type")) as {
           summaries: unknown[];
         };
         expect(Array.isArray(response.summaries)).toBe(true);
@@ -334,19 +292,15 @@ describe("Config Bindings", () => {
   });
 
   describe("GetComplianceDetailsByConfigRule", () => {
-    test.provider(
-      "reads the bound rule's evaluation results (injected name)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/get-compliance-details-by-config-rule",
-          )) as {
-            ruleName: string;
-            evaluations: unknown[];
-          };
-          expect(response.ruleName).toBeTruthy();
-          expect(Array.isArray(response.evaluations)).toBe(true);
-        }),
+    test.provider("reads the bound rule's evaluation results (injected name)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/get-compliance-details-by-config-rule")) as {
+          ruleName: string;
+          evaluations: unknown[];
+        };
+        expect(response.ruleName).toBeTruthy();
+        expect(Array.isArray(response.evaluations)).toBe(true);
+      }),
     );
   });
 
@@ -355,9 +309,7 @@ describe("Config Bindings", () => {
   describe("DescribeConfigRuleEvaluationStatus", () => {
     test.provider("reads the fixture rule's evaluation status", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/describe-config-rule-evaluation-status",
-        )) as {
+        const response = (yield* getJson("/describe-config-rule-evaluation-status")) as {
           ruleName: string;
           statuses: string[];
         };
@@ -367,25 +319,18 @@ describe("Config Bindings", () => {
   });
 
   describe("StartConfigRulesEvaluation", () => {
-    test.provider(
-      "starts an on-demand evaluation of the bound rule",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson(
-            "/start-config-rules-evaluation",
-          )) as {
-            ok?: boolean;
-            errorTag?: string;
-          };
-          if (response.errorTag !== undefined) {
-            expect([
-              "ResourceInUseException",
-              "LimitExceededException",
-            ]).toContain(response.errorTag);
-          } else {
-            expect(response.ok).toBe(true);
-          }
-        }),
+    test.provider("starts an on-demand evaluation of the bound rule", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/start-config-rules-evaluation")) as {
+          ok?: boolean;
+          errorTag?: string;
+        };
+        if (response.errorTag !== undefined) {
+          expect(["ResourceInUseException", "LimitExceededException"]).toContain(response.errorTag);
+        } else {
+          expect(response.ok).toBe(true);
+        }
+      }),
     );
   });
 
@@ -426,24 +371,22 @@ describe("Config Bindings", () => {
   // ── Custom resource recording ────────────────────────────────────────────
 
   describe("PutResourceConfig", () => {
-    test.provider(
-      "records a custom resource (or the typed no-running-recorder error)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/put-resource-config")) as {
-            ok?: boolean;
-            errorTag?: string;
-          };
-          if (response.errorTag !== undefined) {
-            expect([
-              "NoRunningConfigurationRecorderException",
-              "ValidationException",
-              "MaxActiveResourcesExceededException",
-            ]).toContain(response.errorTag);
-          } else {
-            expect(response.ok).toBe(true);
-          }
-        }),
+    test.provider("records a custom resource (or the typed no-running-recorder error)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/put-resource-config")) as {
+          ok?: boolean;
+          errorTag?: string;
+        };
+        if (response.errorTag !== undefined) {
+          expect([
+            "NoRunningConfigurationRecorderException",
+            "ValidationException",
+            "MaxActiveResourcesExceededException",
+          ]).toContain(response.errorTag);
+        } else {
+          expect(response.ok).toBe(true);
+        }
+      }),
     );
   });
 
@@ -457,10 +400,9 @@ describe("Config Bindings", () => {
             errorTag?: string;
           };
           if (response.errorTag !== undefined) {
-            expect([
-              "NoRunningConfigurationRecorderException",
-              "ValidationException",
-            ]).toContain(response.errorTag);
+            expect(["NoRunningConfigurationRecorderException", "ValidationException"]).toContain(
+              response.errorTag,
+            );
           } else {
             expect(response.ok).toBe(true);
           }
@@ -471,37 +413,31 @@ describe("Config Bindings", () => {
   // ── Proactive resource evaluation ────────────────────────────────────────
 
   describe("StartResourceEvaluation / GetResourceEvaluationSummary", () => {
-    test.provider(
-      "starts a proactive evaluation and reads its summary",
-      (_stack) =>
-        Effect.gen(function* () {
-          const started = (yield* postJson("/start-resource-evaluation")) as {
-            id?: string;
-            errorTag?: string;
-            errorMessage?: string;
-          };
-          if (started.errorTag !== undefined) {
-            expect(started.errorTag, started.errorMessage).toBe(
-              "InvalidParameterValueException",
-            );
-            return;
-          }
-          expect(started.id).toBeTruthy();
+    test.provider("starts a proactive evaluation and reads its summary", (_stack) =>
+      Effect.gen(function* () {
+        const started = (yield* postJson("/start-resource-evaluation")) as {
+          id?: string;
+          errorTag?: string;
+          errorMessage?: string;
+        };
+        if (started.errorTag !== undefined) {
+          expect(started.errorTag, started.errorMessage).toBe("InvalidParameterValueException");
+          return;
+        }
+        expect(started.id).toBeTruthy();
 
-          const summary = (yield* getJson(
-            `/get-resource-evaluation-summary?id=${started.id}`,
-          )) as {
-            id?: string;
-            status?: string;
-            errorTag?: string;
-          };
-          if (summary.errorTag !== undefined) {
-            expect(summary.errorTag).toBe("ResourceNotFoundException");
-          } else {
-            expect(summary.id).toBe(started.id);
-            expect(summary.status).toBeTruthy();
-          }
-        }),
+        const summary = (yield* getJson(`/get-resource-evaluation-summary?id=${started.id}`)) as {
+          id?: string;
+          status?: string;
+          errorTag?: string;
+        };
+        if (summary.errorTag !== undefined) {
+          expect(summary.errorTag).toBe("ResourceNotFoundException");
+        } else {
+          expect(summary.id).toBe(started.id);
+          expect(summary.status).toBeTruthy();
+        }
+      }),
     );
   });
 

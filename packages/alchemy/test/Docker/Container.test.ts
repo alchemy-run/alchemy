@@ -3,12 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
-import {
-  inMemoryState,
-  isResourceState,
-  State,
-  type ResourceState,
-} from "@/State";
+import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "./Runtime.ts";
 
@@ -74,40 +69,38 @@ test.provider("diff replaces a container when its Docker context changes", () =>
   }),
 );
 
-test.provider(
-  "diff replaces a container when its labels or stop timeout change",
-  () =>
-    Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
+test.provider("diff replaces a container when its labels or stop timeout change", () =>
+  Effect.gen(function* () {
+    const containerProvider = yield* Provider.findProvider(Docker.Container);
+    const containerDiff = yield* containerProvider.diff!({
+      id: "web",
+      fqn: "web",
+      instanceId: "instance",
+      olds: {
+        name: "web",
+        image: "nginx:alpine",
+        labels: { "traefik.enable": "true" },
+        stopTimeout: "10 seconds",
+      },
+      news: {
+        name: "web",
+        image: "nginx:alpine",
+        labels: { "traefik.enable": "false" },
+        stopTimeout: "30 seconds",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output: {
         id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: {
-          name: "web",
-          image: "nginx:alpine",
-          labels: { "traefik.enable": "true" },
-          stopTimeout: "10 seconds",
-        },
-        news: {
-          name: "web",
-          image: "nginx:alpine",
-          labels: { "traefik.enable": "false" },
-          stopTimeout: "30 seconds",
-        },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
-      });
-      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
+        name: "web",
+        status: "created",
+        createdAt: 0,
+        imageRef: "nginx:alpine",
+        ports: {},
+      },
+    });
+    expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+  }),
 );
 
 describe("Docker.Container", { concurrent: false }, () => {
@@ -132,9 +125,7 @@ describe("Docker.Container", { concurrent: false }, () => {
       // assert the guaranteed IPv4 mapping is present rather than requiring
       // both.
       expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
-        expect.arrayContaining([
-          { HostIp: "0.0.0.0", HostPort: `${hostPort}` },
-        ]),
+        expect.arrayContaining([{ HostIp: "0.0.0.0", HostPort: `${hostPort}` }]),
       );
     }),
   );
@@ -178,35 +169,32 @@ describe("Docker.Container", { concurrent: false }, () => {
     }),
   );
 
-  test.provider(
-    "updates network aliases without replacing the container",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        // No explicit names: the engine generates stable physical names that
-        // stay constant across the two deploys (same instance id).
-        const deployWithAlias = (alias: string) =>
-          stack.deploy(
-            Effect.gen(function* () {
-              const network = yield* Docker.Network("alias-network");
-              const container = yield* Docker.Container("alias-container", {
-                image: "nginx:alpine",
-                networks: [{ name: network.name, aliases: [alias] }],
-              });
-              return { container, network };
-            }),
-          );
+  test.provider("updates network aliases without replacing the container", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      // No explicit names: the engine generates stable physical names that
+      // stay constant across the two deploys (same instance id).
+      const deployWithAlias = (alias: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Docker.Network("alias-network");
+            const container = yield* Docker.Container("alias-container", {
+              image: "nginx:alpine",
+              networks: [{ name: network.name, aliases: [alias] }],
+            });
+            return { container, network };
+          }),
+        );
 
-        const first = yield* deployWithAlias("old-alias");
-        const second = yield* deployWithAlias("new-alias");
-        expect(second.container.id).toBe(first.container.id);
+      const first = yield* deployWithAlias("old-alias");
+      const second = yield* deployWithAlias("new-alias");
+      expect(second.container.id).toBe(first.container.id);
 
-        const info = yield* docker.container.inspect(second.container.name);
-        const aliases =
-          info?.NetworkSettings.Networks?.[second.network.name]?.Aliases ?? [];
-        expect(aliases).toContain("new-alias");
-        expect(aliases).not.toContain("old-alias");
-      }),
+      const info = yield* docker.container.inspect(second.container.name);
+      const aliases = info?.NetworkSettings.Networks?.[second.network.name]?.Aliases ?? [];
+      expect(aliases).toContain("new-alias");
+      expect(aliases).not.toContain("old-alias");
+    }),
   );
 
   test.provider("replaces the container when published ports change", (stack) =>
@@ -233,27 +221,20 @@ describe("Docker.Container", { concurrent: false }, () => {
   // Rewrite the container's persisted row into the wedged shape an
   // interrupted deploy leaves behind: `creating`, no attributes, and the
   // Output-valued `image` prop lost in the round-trip (#736).
-  const wedgeContainerRow = (stack: {
-    readonly name: string;
-    readonly stage: string;
-  }) =>
+  const wedgeContainerRow = (stack: { readonly name: string; readonly stage: string }) =>
     Effect.gen(function* () {
       const state = yield* yield* State;
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) && r.row.resourceType === "Docker.Container",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no Docker.Container state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no Docker.Container state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -344,33 +325,28 @@ describe("Docker.Container", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider(
-    "passes environment values into the container (#1117)",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        // Environment values ride the Docker CLI's process environment (the
-        // create args carry name-only `--env KEY` flags to keep secrets off
-        // the command line) — before the fix every entry resolved empty.
-        const container = yield* stack.deploy(
-          Docker.Container("env-container", {
-            image: "nginx:alpine",
-            environment: {
-              PLAIN_VALUE: "plain-value",
-              SECRET_VALUE: Redacted.make("secret-value"),
-            },
-            start: false,
-          }),
-        );
+  test.provider("passes environment values into the container (#1117)", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      // Environment values ride the Docker CLI's process environment (the
+      // create args carry name-only `--env KEY` flags to keep secrets off
+      // the command line) — before the fix every entry resolved empty.
+      const container = yield* stack.deploy(
+        Docker.Container("env-container", {
+          image: "nginx:alpine",
+          environment: {
+            PLAIN_VALUE: "plain-value",
+            SECRET_VALUE: Redacted.make("secret-value"),
+          },
+          start: false,
+        }),
+      );
 
-        const info = yield* docker.container.inspect(container.name);
-        expect(info.Config.Env).toEqual(
-          expect.arrayContaining([
-            "PLAIN_VALUE=plain-value",
-            "SECRET_VALUE=secret-value",
-          ]),
-        );
-      }),
+      const info = yield* docker.container.inspect(container.name);
+      expect(info.Config.Env).toEqual(
+        expect.arrayContaining(["PLAIN_VALUE=plain-value", "SECRET_VALUE=secret-value"]),
+      );
+    }),
   );
 
   test.provider("applies a healthcheck with unit-suffixed durations", (stack) =>
@@ -404,34 +380,30 @@ describe("Docker.Container", { concurrent: false }, () => {
       expect(health?.StartPeriod).toBe(1_000_000_000);
     }),
   );
-  test.provider(
-    "reports the host port Docker assigned to a random publish (#1388)",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        const container = yield* stack.deploy(
-          Docker.Container("random-port-container", {
-            image: "nginx:alpine",
-            // `external: 0` = "any free host port".
-            ports: [{ external: 0, internal: 80 }],
-            start: true,
-          }),
-        );
+  test.provider("reports the host port Docker assigned to a random publish (#1388)", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = yield* stack.deploy(
+        Docker.Container("random-port-container", {
+          image: "nginx:alpine",
+          // `external: 0` = "any free host port".
+          ports: [{ external: 0, internal: 80 }],
+          start: true,
+        }),
+      );
 
-        // Before the fix this was 0: the create arg asked for host port 0
-        // literally, and the requested binding was then reported over the
-        // assigned one.
-        const assigned = container.ports["80/tcp"];
-        expect(assigned).toBeGreaterThan(0);
+      // Before the fix this was 0: the create arg asked for host port 0
+      // literally, and the requested binding was then reported over the
+      // assigned one.
+      const assigned = container.ports["80/tcp"];
+      expect(assigned).toBeGreaterThan(0);
 
-        // …and it is the port the container is actually published on.
-        const runtime = yield* docker.container.inspect(container.name);
-        expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ HostPort: `${assigned}` }),
-          ]),
-        );
-      }),
+      // …and it is the port the container is actually published on.
+      const runtime = yield* docker.container.inspect(container.name);
+      expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
+        expect.arrayContaining([expect.objectContaining({ HostPort: `${assigned}` })]),
+      );
+    }),
   );
 
   test.provider("forwards extra hosts to the container (#1387)", (stack) =>
@@ -440,20 +412,14 @@ describe("Docker.Container", { concurrent: false }, () => {
       const container = yield* stack.deploy(
         Docker.Container("extra-hosts-container", {
           image: "nginx:alpine",
-          extraHosts: [
-            "host.docker.internal:host-gateway",
-            "db.internal:10.1.2.3",
-          ],
+          extraHosts: ["host.docker.internal:host-gateway", "db.internal:10.1.2.3"],
           start: true,
         }),
       );
 
       const runtime = yield* docker.container.inspect(container.name);
       expect(runtime?.HostConfig.ExtraHosts).toEqual(
-        expect.arrayContaining([
-          "host.docker.internal:host-gateway",
-          "db.internal:10.1.2.3",
-        ]),
+        expect.arrayContaining(["host.docker.internal:host-gateway", "db.internal:10.1.2.3"]),
       );
     }),
   );
@@ -481,12 +447,8 @@ describe("Docker.Container", { concurrent: false }, () => {
 
         // A network alchemy never connected the container to — the case a
         // user, compose file, or another tool creates.
-        yield* docker.network
-          .create({ name: foreign, driver: "bridge" })
-          .pipe(Effect.ignore);
-        yield* Effect.addFinalizer(() =>
-          docker.network.remove(foreign).pipe(Effect.ignore),
-        );
+        yield* docker.network.create({ name: foreign, driver: "bridge" }).pipe(Effect.ignore);
+        yield* Effect.addFinalizer(() => docker.network.remove(foreign).pipe(Effect.ignore));
         yield* docker.network.connect({
           network: foreign,
           container: first.container.name,

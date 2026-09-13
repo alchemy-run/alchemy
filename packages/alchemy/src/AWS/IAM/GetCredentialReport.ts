@@ -37,10 +37,7 @@ export interface GetCredentialReport extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iam.GetCredentialReportRequest,
-    ) => Effect.Effect<
-      iam.GetCredentialReportResponse,
-      iam.GetCredentialReportError
-    >
+    ) => Effect.Effect<iam.GetCredentialReportResponse, iam.GetCredentialReportError>
   >
 > {}
 export const GetCredentialReport = Binding.Service<GetCredentialReport>(

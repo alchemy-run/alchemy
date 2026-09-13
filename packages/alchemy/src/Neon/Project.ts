@@ -28,7 +28,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "../SQL/Migrations/index.ts";
-import { hashImports, hashMigrations, readSqlFile } from "../SQL/SqlFile.ts";
+import { hashImports, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { runPgMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -237,8 +237,7 @@ export const ProjectProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;
-      const oldName =
-        output?.projectName ?? (yield* createProjectName(id, olds.name));
+      const oldName = output?.projectName ?? (yield* createProjectName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -249,20 +248,15 @@ export const ProjectProvider = () =>
           (output?.region ?? olds.region ?? DEFAULT_REGION) ||
         (news.pgVersion ?? output?.pgVersion ?? DEFAULT_PG_VERSION) !==
           (output?.pgVersion ?? olds.pgVersion ?? DEFAULT_PG_VERSION) ||
-        (news.defaultBranchName ?? output?.defaultBranchName) !==
-          output?.defaultBranchName
+        (news.defaultBranchName ?? output?.defaultBranchName) !== output?.defaultBranchName
       ) {
         return { action: "replace" } as const;
       }
-      if (
-        (news.historyRetentionSeconds ?? 86400) !==
-        (output?.historyRetentionSeconds ?? 86400)
-      ) {
+      if ((news.historyRetentionSeconds ?? 86400) !== (output?.historyRetentionSeconds ?? 86400)) {
         return { action: "update" } as const;
       }
       if (
-        (news.enableLogicalReplication ?? false) !==
-        (output?.enableLogicalReplication ?? false)
+        (news.enableLogicalReplication ?? false) !== (output?.enableLogicalReplication ?? false)
       ) {
         return { action: "update" } as const;
       }
@@ -283,12 +277,9 @@ export const ProjectProvider = () =>
           Effect.map(({ project }) => ({
             ...output,
             projectName: project.name,
-            pooledOrigin:
-              output.pooledOrigin ??
-              parsePostgresOrigin(output.pooledConnectionUri),
+            pooledOrigin: output.pooledOrigin ?? parsePostgresOrigin(output.pooledConnectionUri),
             historyRetentionSeconds: project.history_retention_seconds,
-            enableLogicalReplication:
-              project.settings?.enable_logical_replication === true,
+            enableLogicalReplication: project.settings?.enable_logical_replication === true,
           })),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
@@ -317,8 +308,7 @@ export const ProjectProvider = () =>
                 (news.enableLogicalReplication ?? false) !==
                 (output.enableLogicalReplication ?? false)
                   ? {
-                      enable_logical_replication:
-                        news.enableLogicalReplication ?? false,
+                      enable_logical_replication: news.enableLogicalReplication ?? false,
                     }
                   : undefined,
             },
@@ -335,14 +325,10 @@ export const ProjectProvider = () =>
               connectionUri: output.connectionUri,
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
-              pooledOrigin:
-                output.pooledOrigin ??
-                parsePostgresOrigin(output.pooledConnectionUri),
+              pooledOrigin: output.pooledOrigin ?? parsePostgresOrigin(output.pooledConnectionUri),
               historyRetentionSeconds:
-                r.project.history_retention_seconds ??
-                output.historyRetentionSeconds,
-              enableLogicalReplication:
-                r.project.settings?.enable_logical_replication === true,
+                r.project.history_retention_seconds ?? output.historyRetentionSeconds,
+              enableLogicalReplication: r.project.settings?.enable_logical_replication === true,
             })),
           )
         : yield* Effect.gen(function* () {
@@ -388,8 +374,7 @@ export const ProjectProvider = () =>
               pooledConnectionUri: conn.pooled,
               origin: parsePostgresOrigin(conn.uri),
               pooledOrigin: parsePostgresOrigin(conn.pooled),
-              historyRetentionSeconds:
-                created.project.history_retention_seconds ?? 86400,
+              historyRetentionSeconds: created.project.history_retention_seconds ?? 86400,
               enableLogicalReplication:
                 created.project.settings?.enable_logical_replication === true,
             };
@@ -523,27 +508,23 @@ export const waitForOperations = (
         project_id: op.project_id,
         operation_id: op.id,
       }).pipe(
-        Effect.flatMap(
-          ({
-            operation,
-          }): Effect.Effect<void, OperationFailed | OperationPending> => {
-            const status = operation.status as NeonOperationStatus;
-            if (status === "failed" || status === "error") {
-              return Effect.fail(
-                new OperationFailed({
-                  operationId: operation.id,
-                  action: operation.action,
-                  status,
-                  error: operation.error,
-                }),
-              );
-            }
-            if (!isOperationComplete(status)) {
-              return Effect.fail(new OperationPending({ operationId: op.id }));
-            }
-            return Effect.void;
-          },
-        ),
+        Effect.flatMap(({ operation }): Effect.Effect<void, OperationFailed | OperationPending> => {
+          const status = operation.status as NeonOperationStatus;
+          if (status === "failed" || status === "error") {
+            return Effect.fail(
+              new OperationFailed({
+                operationId: operation.id,
+                action: operation.action,
+                status,
+                error: operation.error,
+              }),
+            );
+          }
+          if (!isOperationComplete(status)) {
+            return Effect.fail(new OperationPending({ operationId: op.id }));
+          }
+          return Effect.void;
+        }),
         Effect.retry({
           while: (e: unknown) => {
             const tag = (e as { _tag?: string })._tag;
@@ -584,11 +565,7 @@ const findProjectByName = (name: string) =>
       // can't loop on cursor presence alone or we spin forever re-fetching
       // empty/identical pages. Stop once a page comes back empty or the
       // cursor stops advancing.
-      if (
-        page.projects.length === 0 ||
-        nextCursor === undefined ||
-        nextCursor === cursor
-      ) {
+      if (page.projects.length === 0 || nextCursor === undefined || nextCursor === cursor) {
         break;
       }
       cursor = nextCursor;
@@ -609,11 +586,7 @@ const listAllProjects = Effect.gen(function* () {
     const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
     projects.push(...page.projects);
     const nextCursor = page.pagination?.cursor;
-    if (
-      page.projects.length === 0 ||
-      nextCursor === undefined ||
-      nextCursor === cursor
-    ) {
+    if (page.projects.length === 0 || nextCursor === undefined || nextCursor === cursor) {
       break;
     }
     cursor = nextCursor;
@@ -640,8 +613,7 @@ const hydrateProjectAttributes = (
       project_id: project.id,
       search: opts.defaultBranchName ?? "main",
     });
-    const defaultBranch =
-      branches.branches.find((b) => b.default) ?? branches.branches[0];
+    const defaultBranch = branches.branches.find((b) => b.default) ?? branches.branches[0];
     if (!defaultBranch) return undefined;
     const databases = yield* listProjectBranchDatabases({
       project_id: project.id,
@@ -649,12 +621,7 @@ const hydrateProjectAttributes = (
     });
     const db = databases.databases[0];
     if (!db) return undefined;
-    const conn = yield* resolveConnection(
-      project.id,
-      defaultBranch.id,
-      db.name,
-      db.owner_name,
-    );
+    const conn = yield* resolveConnection(project.id, defaultBranch.id, db.name, db.owner_name);
     return {
       projectId: project.id,
       projectName: project.name,
@@ -669,8 +636,7 @@ const hydrateProjectAttributes = (
       origin: parsePostgresOrigin(conn.uri),
       pooledOrigin: parsePostgresOrigin(conn.pooled),
       historyRetentionSeconds: project.history_retention_seconds ?? 86400,
-      enableLogicalReplication:
-        project.settings?.enable_logical_replication === true,
+      enableLogicalReplication: project.settings?.enable_logical_replication === true,
       migrationsDir: opts.migrationsDir,
       migrationsTable: opts.migrationsTable,
       migrationsHashes: {},

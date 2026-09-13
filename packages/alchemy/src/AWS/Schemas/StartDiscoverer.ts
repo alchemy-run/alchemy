@@ -29,12 +29,7 @@ export interface StartDiscoverer extends Binding.Service<
   (
     discoverer: Discoverer,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      schemas.StartDiscovererResponse,
-      schemas.StartDiscovererError
-    >
+    () => Effect.Effect<schemas.StartDiscovererResponse, schemas.StartDiscovererError>
   >
 > {}
-export const StartDiscoverer = Binding.Service<StartDiscoverer>(
-  "AWS.Schemas.StartDiscoverer",
-);
+export const StartDiscoverer = Binding.Service<StartDiscoverer>("AWS.Schemas.StartDiscoverer");

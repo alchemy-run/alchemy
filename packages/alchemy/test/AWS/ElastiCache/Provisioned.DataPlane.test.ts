@@ -5,10 +5,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
-import {
-  cacheClusterConnectEnvPrefix,
-  replicationGroupConnectEnvPrefix,
-} from "@/AWS/ElastiCache";
+import { cacheClusterConnectEnvPrefix, replicationGroupConnectEnvPrefix } from "@/AWS/ElastiCache";
 import * as Test from "@/Test/Alchemy";
 import ProvisionedCacheDataPlaneLive, {
   ProvisionedCacheDataPlaneFunction,
@@ -54,9 +51,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const env = config.Environment?.Variables ?? {};
       const envValue = (key: string) => {
         const value = env[key];
-        return value === undefined || typeof value === "string"
-          ? value
-          : Redacted.value(value);
+        return value === undefined || typeof value === "string" ? value : Redacted.value(value);
       };
       const valkeyPrefix = replicationGroupConnectEnvPrefix("Valkey");
       expect(envValue(`${valkeyPrefix}_HOST`)).toBeTruthy();
@@ -64,9 +59,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(envValue(`${valkeyPrefix}_TLS`)).toBe("false");
       const memcachedPrefix = cacheClusterConnectEnvPrefix("Memcached");
       expect(envValue(`${memcachedPrefix}_TLS`)).toBe("false");
-      expect(
-        JSON.parse(envValue(`${memcachedPrefix}_ENDPOINTS`) ?? "[]"),
-      ).toHaveLength(1);
+      expect(JSON.parse(envValue(`${memcachedPrefix}_ENDPOINTS`) ?? "[]")).toHaveLength(1);
 
       const getJson = (path: string, times: number) =>
         HttpClient.get(`${baseUrl}${path}`).pipe(
@@ -75,17 +68,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               ? response.json
               : response.text.pipe(
                   Effect.flatMap((body) =>
-                    Effect.fail(
-                      new Error(`${path} returned ${response.status}: ${body}`),
-                    ),
+                    Effect.fail(new Error(`${path} returned ${response.status}: ${body}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(times),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(times)]),
           }),
         );
 

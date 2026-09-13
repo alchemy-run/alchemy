@@ -12,16 +12,12 @@ import * as XRay from "@/AWS/XRay";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class XRayTestFunction extends Lambda.Function<Lambda.Function>()(
-  "XRayTestFunction",
-) {}
+export class XRayTestFunction extends Lambda.Function<Lambda.Function>()("XRayTestFunction") {}
 
 /** Collapse a typed API call to `"ok"` or its typed error tag. */
 const outcome = <A, E extends { _tag: string }>(effect: Effect.Effect<A, E>) =>
   Effect.result(effect).pipe(
-    Effect.map((result) =>
-      Result.isFailure(result) ? result.failure._tag : "ok",
-    ),
+    Effect.map((result) => (Result.isFailure(result) ? result.failure._tag : "ok")),
   );
 
 export default XRayTestFunction.make(
@@ -38,9 +34,7 @@ export default XRayTestFunction.make(
     // proves the EventBridge rule + invoke permission wiring.
     yield* XRay.consumeInsightEvents({ states: ["ACTIVE"] }, (events) =>
       Stream.runForEach(events, (event) =>
-        Effect.log(
-          `xray insight: ${event.detail.InsightId} (${event.detail.State})`,
-        ),
+        Effect.log(`xray insight: ${event.detail.InsightId} (${event.detail.State})`),
       ),
     );
 
@@ -50,12 +44,10 @@ export default XRayTestFunction.make(
     const putTelemetryRecords = yield* XRay.PutTelemetryRecords();
     const getSamplingRules = yield* XRay.GetSamplingRules();
     const getSamplingTargets = yield* XRay.GetSamplingTargets();
-    const getSamplingStatisticSummaries =
-      yield* XRay.GetSamplingStatisticSummaries();
+    const getSamplingStatisticSummaries = yield* XRay.GetSamplingStatisticSummaries();
     const getServiceGraph = yield* XRay.GetServiceGraph();
     const getTraceGraph = yield* XRay.GetTraceGraph();
-    const getTimeSeriesServiceStatistics =
-      yield* XRay.GetTimeSeriesServiceStatistics();
+    const getTimeSeriesServiceStatistics = yield* XRay.GetTimeSeriesServiceStatistics();
     const getInsight = yield* XRay.GetInsight();
     const getInsightEvents = yield* XRay.GetInsightEvents();
     const getInsightImpactGraph = yield* XRay.GetInsightImpactGraph();
@@ -68,16 +60,11 @@ export default XRayTestFunction.make(
 
     // X-Ray read APIs have low TPS quotas; the test polls routes while
     // sibling suites run, so absorb throttling in the fixture.
-    const throttleRetry = <A, E extends { _tag: string }>(
-      effect: Effect.Effect<A, E>,
-    ) =>
+    const throttleRetry = <A, E extends { _tag: string }>(effect: Effect.Effect<A, E>) =>
       effect.pipe(
         Effect.retry({
           while: (error): boolean => error._tag === "ThrottledException",
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(5),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(5)]),
         }),
       );
 
@@ -89,9 +76,7 @@ export default XRayTestFunction.make(
         const now = yield* Effect.sync(() => Date.now());
 
         if (request.method === "GET" && pathname === "/ping") {
-          const functionName = yield* Effect.sync(
-            () => process.env.AWS_LAMBDA_FUNCTION_NAME,
-          );
+          const functionName = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_NAME);
           return yield* HttpServerResponse.json({ ok: true, functionName });
         }
 
@@ -172,9 +157,7 @@ export default XRayTestFunction.make(
 
         if (request.method === "GET" && pathname === "/sampling") {
           const rules = yield* throttleRetry(getSamplingRules());
-          const summaries = yield* throttleRetry(
-            getSamplingStatisticSummaries(),
-          );
+          const summaries = yield* throttleRetry(getSamplingStatisticSummaries());
           // Report sampling statistics for the built-in Default rule — the
           // real sampler protocol handshake.
           const clientId = Array.from({ length: 24 }, () =>
@@ -195,17 +178,13 @@ export default XRayTestFunction.make(
           );
           return yield* HttpServerResponse.json({
             ruleNames: (rules.SamplingRuleRecords ?? []).flatMap((record) =>
-              record.SamplingRule?.RuleName
-                ? [record.SamplingRule.RuleName]
-                : [],
+              record.SamplingRule?.RuleName ? [record.SamplingRule.RuleName] : [],
             ),
-            statisticSummaries: (summaries.SamplingStatisticSummaries ?? [])
-              .length,
+            statisticSummaries: (summaries.SamplingStatisticSummaries ?? []).length,
             targets: Result.isSuccess(targets)
               ? {
                   outcome: "ok",
-                  documents: (targets.success.SamplingTargetDocuments ?? [])
-                    .length,
+                  documents: (targets.success.SamplingTargetDocuments ?? []).length,
                 }
               : { outcome: targets.failure._tag, documents: null },
           });
@@ -230,9 +209,7 @@ export default XRayTestFunction.make(
         if (request.method === "GET" && pathname === "/trace-graph") {
           const ids = url.searchParams.get("ids");
           const graph = yield* Effect.result(
-            throttleRetry(
-              getTraceGraph({ TraceIds: ids ? ids.split(",") : [] }),
-            ),
+            throttleRetry(getTraceGraph({ TraceIds: ids ? ids.split(",") : [] })),
           );
           return yield* HttpServerResponse.json(
             Result.isSuccess(graph)
@@ -247,17 +224,14 @@ export default XRayTestFunction.make(
             getTimeSeriesServiceStatistics({
               StartTime: new Date(now - 10 * 60 * 1000),
               EndTime: new Date(now),
-              EntitySelectorExpression: service
-                ? `service("${service}")`
-                : undefined,
+              EntitySelectorExpression: service ? `service("${service}")` : undefined,
               Period: 60,
             }),
           );
           return yield* HttpServerResponse.json(
             Result.isSuccess(stats)
               ? {
-                  points: (stats.success.TimeSeriesServiceStatistics ?? [])
-                    .length,
+                  points: (stats.success.TimeSeriesServiceStatistics ?? []).length,
                   error: null,
                 }
               : { points: null, error: stats.failure._tag },
@@ -292,14 +266,10 @@ export default XRayTestFunction.make(
           // IAM grant by observing the API's typed validation error for a
           // syntactically-plausible but nonexistent insight id (an IAM
           // failure would surface as AccessDeniedException instead).
-          const insightId =
-            url.searchParams.get("id") ??
-            "00000000-0000-0000-0000-000000000000";
+          const insightId = url.searchParams.get("id") ?? "00000000-0000-0000-0000-000000000000";
           return yield* HttpServerResponse.json({
             getInsight: yield* outcome(getInsight({ InsightId: insightId })),
-            getInsightEvents: yield* outcome(
-              getInsightEvents({ InsightId: insightId }),
-            ),
+            getInsightEvents: yield* outcome(getInsightEvents({ InsightId: insightId })),
             getInsightImpactGraph: yield* outcome(
               getInsightImpactGraph({
                 InsightId: insightId,
@@ -314,9 +284,7 @@ export default XRayTestFunction.make(
           // Transaction Search requires a CloudWatch Logs trace destination;
           // on the default X-Ray destination the retrieval ops answer with
           // typed errors — either way each call proves its IAM grant.
-          const destination = yield* throttleRetry(
-            getTraceSegmentDestination(),
-          );
+          const destination = yield* throttleRetry(getTraceSegmentDestination());
           const epochHex = Math.floor(now / 1000).toString(16);
           const start = yield* Effect.result(
             startTraceRetrieval({
@@ -325,15 +293,11 @@ export default XRayTestFunction.make(
               EndTime: new Date(now),
             }),
           );
-          const retrievalToken = Result.isSuccess(start)
-            ? start.success.RetrievalToken
-            : undefined;
+          const retrievalToken = Result.isSuccess(start) ? start.success.RetrievalToken : undefined;
           const bogusToken = retrievalToken ?? "alchemy-nonexistent-token";
           return yield* HttpServerResponse.json({
             destination: destination.Destination,
-            startTraceRetrieval: Result.isFailure(start)
-              ? start.failure._tag
-              : "ok",
+            startTraceRetrieval: Result.isFailure(start) ? start.failure._tag : "ok",
             listRetrievedTraces: yield* outcome(
               listRetrievedTraces({ RetrievalToken: bogusToken }),
             ),

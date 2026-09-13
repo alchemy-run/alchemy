@@ -103,14 +103,11 @@ const fromWirePortRanges = (ranges: ga.PortRange[] | undefined): PortRange[] =>
   }));
 
 const normalizeRanges = (ranges: PortRange[]) =>
-  JSON.stringify(
-    [...ranges].sort((a, b) => a.fromPort - b.fromPort || a.toPort - b.toPort),
-  );
+  JSON.stringify([...ranges].sort((a, b) => a.fromPort - b.fromPort || a.toPort - b.toPort));
 
 // Listener ARNs embed the parent accelerator ARN:
 // arn:aws:globalaccelerator::{account}:accelerator/{id}/listener/{id}
-const acceleratorArnOf = (listenerArn: string) =>
-  listenerArn.split("/listener/")[0]!;
+const acceleratorArnOf = (listenerArn: string) => listenerArn.split("/listener/")[0]!;
 
 const toAttributes = (l: ga.Listener, listenerArn: string) => ({
   listenerArn,
@@ -121,13 +118,9 @@ const toAttributes = (l: ga.Listener, listenerArn: string) => ({
 });
 
 const describeListener = Effect.fn(function* (listenerArn: string) {
-  return yield* withGaRegion(
-    ga.describeListener({ ListenerArn: listenerArn }),
-  ).pipe(
+  return yield* withGaRegion(ga.describeListener({ ListenerArn: listenerArn })).pipe(
     Effect.map((r) => r.Listener),
-    Effect.catchTag("ListenerNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)),
   );
 });
 
@@ -140,18 +133,12 @@ const findListener = Effect.fn(function* (
   if (!acceleratorArn || !portRanges) return undefined;
   const desired = normalizeRanges(portRanges);
   const listeners = yield* withGaRegion(
-    ga.listListeners
-      .items({ AcceleratorArn: acceleratorArn })
-      .pipe(Stream.runCollect),
+    ga.listListeners.items({ AcceleratorArn: acceleratorArn }).pipe(Stream.runCollect),
   ).pipe(
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("AcceleratorNotFoundException", () =>
-      Effect.succeed([] as ga.Listener[]),
-    ),
+    Effect.catchTag("AcceleratorNotFoundException", () => Effect.succeed([] as ga.Listener[])),
   );
-  return listeners.find(
-    (l) => normalizeRanges(fromWirePortRanges(l.PortRanges)) === desired,
-  );
+  return listeners.find((l) => normalizeRanges(fromWirePortRanges(l.PortRanges)) === desired);
 });
 
 export const ListenerProvider = () =>
@@ -205,9 +192,7 @@ export const ListenerProvider = () =>
           }),
         ).pipe(Effect.map((r) => r.Listener));
         if (!created?.ListenerArn) {
-          return yield* Effect.die(
-            new Error("CreateListener returned no listener"),
-          );
+          return yield* Effect.die(new Error("CreateListener returned no listener"));
         }
         live = created;
         listenerArn = created.ListenerArn;

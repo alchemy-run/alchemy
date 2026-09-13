@@ -32,7 +32,6 @@ export interface ListCallAnalyticsCategories extends Binding.Service<
     >
   >
 > {}
-export const ListCallAnalyticsCategories =
-  Binding.Service<ListCallAnalyticsCategories>(
-    "AWS.Transcribe.ListCallAnalyticsCategories",
-  );
+export const ListCallAnalyticsCategories = Binding.Service<ListCallAnalyticsCategories>(
+  "AWS.Transcribe.ListCallAnalyticsCategories",
+);

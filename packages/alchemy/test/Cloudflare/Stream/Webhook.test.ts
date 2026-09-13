@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) from scoped-token propagation on the
 // test's own out-of-band verification calls.
@@ -35,10 +32,7 @@ const expectGone = (accountId: string) =>
     Effect.catchTag("WebhookNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WebhookNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -60,9 +54,7 @@ test.provider(
       );
 
       expect(webhook.accountId).toEqual(accountId);
-      expect(webhook.notificationUrl).toEqual(
-        "https://example.com/hooks/stream",
-      );
+      expect(webhook.notificationUrl).toEqual("https://example.com/hooks/stream");
       expect(Redacted.value(webhook.secret)).toBeTruthy();
 
       const live = yield* getWebhook(accountId);
@@ -75,14 +67,10 @@ test.provider(
         }),
       );
 
-      expect(updated.notificationUrl).toEqual(
-        "https://example.com/hooks/stream-v2",
-      );
+      expect(updated.notificationUrl).toEqual("https://example.com/hooks/stream-v2");
 
       const observed = yield* getWebhook(accountId);
-      expect(observed.notificationUrl).toEqual(
-        "https://example.com/hooks/stream-v2",
-      );
+      expect(observed.notificationUrl).toEqual("https://example.com/hooks/stream-v2");
 
       // Redeploying identical props is a no-op.
       const noop = yield* stack.deploy(
@@ -90,9 +78,7 @@ test.provider(
           notificationUrl: "https://example.com/hooks/stream-v2",
         }),
       );
-      expect(noop.notificationUrl).toEqual(
-        "https://example.com/hooks/stream-v2",
-      );
+      expect(noop.notificationUrl).toEqual("https://example.com/hooks/stream-v2");
 
       yield* stack.destroy();
 

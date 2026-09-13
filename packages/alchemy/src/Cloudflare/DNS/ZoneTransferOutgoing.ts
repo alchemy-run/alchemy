@@ -119,9 +119,7 @@ export const ZoneTransferOutgoing = Resource<ZoneTransferOutgoing>(TypeId, {
 /**
  * Returns true if the given value is a ZoneTransferOutgoing resource.
  */
-export const isZoneTransferOutgoing = (
-  value: unknown,
-): value is ZoneTransferOutgoing =>
+export const isZoneTransferOutgoing = (value: unknown): value is ZoneTransferOutgoing =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferOutgoingProvider = () =>
@@ -140,24 +138,18 @@ export const ZoneTransferOutgoingProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           getOutgoing(zoneId).pipe(
-            Effect.catchTag("OutgoingZoneTransfersNotAllowed", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("OutgoingZoneTransfersNotAllowed", () => Effect.succeed(undefined)),
             Effect.flatMap((observed) =>
               observed === undefined
                 ? Effect.succeed(undefined)
                 : getEnabled(zoneId).pipe(
-                    Effect.map((enabled) =>
-                      toAttributes(observed, zoneId, enabled),
-                    ),
+                    Effect.map((enabled) => toAttributes(observed, zoneId, enabled)),
                   ),
             ),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ZoneTransferOutgoingAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is ZoneTransferOutgoingAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
@@ -165,22 +157,15 @@ export const ZoneTransferOutgoingProvider = () =>
       const n = news as ZoneTransferOutgoingProps;
       // zoneId is the resource's identity (per-zone singleton).
       // Input<string> — compare only once concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* getOutgoing(zoneId);
       if (observed === undefined) return undefined;
@@ -211,9 +196,7 @@ export const ZoneTransferOutgoingProvider = () =>
       } else {
         // Sync — PUT with the full desired body; skip the call when the
         // observed configuration already matches.
-        const dirty =
-          undef(observed.name) !== news.name ||
-          !samePeers(observed.peers ?? [], peers);
+        const dirty = undef(observed.name) !== news.name || !samePeers(observed.peers ?? [], peers);
         if (dirty) {
           observed = yield* dns.updateZoneTransferOutgoing({
             zoneId,
@@ -251,18 +234,13 @@ type ObservedOutgoing =
   | dns.CreateZoneTransferOutgoingResponse
   | dns.UpdateZoneTransferOutgoingResponse;
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 /** Read the outgoing configuration, mapping "not linked" to undefined. */
 const getOutgoing = (zoneId: string) =>
   dns
     .getZoneTransferOutgoing({ zoneId })
-    .pipe(
-      Effect.catchTag("OutgoingZoneTransferNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("OutgoingZoneTransferNotFound", () => Effect.succeed(undefined)));
 
 /** Observe the enable/disable toggle (reported as e.g. "Enabled"). */
 const getEnabled = (zoneId: string) =>

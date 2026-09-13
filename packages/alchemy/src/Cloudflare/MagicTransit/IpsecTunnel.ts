@@ -204,9 +204,7 @@ export const IpsecTunnelProvider = () =>
 
       // Observe — the id on `output` is a hint; fall through to the
       // unique-name lookup when it is gone.
-      let observed = output?.tunnelId
-        ? yield* getTunnel(accountId, output.tunnelId)
-        : undefined;
+      let observed = output?.tunnelId ? yield* getTunnel(accountId, output.tunnelId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.name);
       }
@@ -259,9 +257,7 @@ export const IpsecTunnelProvider = () =>
           healthCheck: toHealthCheckRequest(news.healthCheck),
         });
         observed =
-          updated.modifiedIpsecTunnel ??
-          (yield* getTunnel(accountId, observed.id)) ??
-          observed;
+          updated.modifiedIpsecTunnel ?? (yield* getTunnel(accountId, observed.id)) ?? observed;
       }
 
       return toAttributes(observed, accountId, news.psk);
@@ -282,21 +278,17 @@ export const IpsecTunnelProvider = () =>
     // returned, so it is `undefined` here — matching `read`'s cold-read shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* magicTransit
-        .listIpsecTunnels({ accountId, xMagicNewHcTarget: true })
-        .pipe(
-          Effect.map((r) =>
-            (r.ipsecTunnels ?? []).map((tunnel) =>
-              toAttributes(tunnel, accountId, undefined),
-            ),
-          ),
-          // Accounts that aren't onboarded onto Magic Transit (code 1012)
-          // or lack the entitlement can't enumerate tunnels — treat as none.
-          Effect.catchTag(
-            ["MagicTransitNotOnboarded", "Forbidden"],
-            (): Effect.Effect<IpsecTunnelAttributes[]> => Effect.succeed([]),
-          ),
-        );
+      return yield* magicTransit.listIpsecTunnels({ accountId, xMagicNewHcTarget: true }).pipe(
+        Effect.map((r) =>
+          (r.ipsecTunnels ?? []).map((tunnel) => toAttributes(tunnel, accountId, undefined)),
+        ),
+        // Accounts that aren't onboarded onto Magic Transit (code 1012)
+        // or lack the entitlement can't enumerate tunnels — treat as none.
+        Effect.catchTag(
+          ["MagicTransitNotOnboarded", "Forbidden"],
+          (): Effect.Effect<IpsecTunnelAttributes[]> => Effect.succeed([]),
+        ),
+      );
     }),
   });
 
@@ -314,10 +306,7 @@ interface ObservedIpsecTunnel {
     direction?: string | null;
     enabled?: boolean | null;
     rate?: string | null;
-    target?:
-      | { effective?: string | null; saved?: string | null }
-      | string
-      | null;
+    target?: { effective?: string | null; saved?: string | null } | string | null;
     type?: string | null;
   } | null;
   createdOn?: string | null;
@@ -329,14 +318,10 @@ interface ObservedIpsecTunnel {
  * error code 1032) to `undefined`.
  */
 const getTunnel = (accountId: string, ipsecTunnelId: string) =>
-  magicTransit
-    .getIpsecTunnel({ accountId, ipsecTunnelId, xMagicNewHcTarget: true })
-    .pipe(
-      Effect.map(
-        (r): ObservedIpsecTunnel | undefined => r.ipsecTunnel ?? undefined,
-      ),
-      Effect.catchTag("IpsecTunnelNotFound", () => Effect.succeed(undefined)),
-    );
+  magicTransit.getIpsecTunnel({ accountId, ipsecTunnelId, xMagicNewHcTarget: true }).pipe(
+    Effect.map((r): ObservedIpsecTunnel | undefined => r.ipsecTunnel ?? undefined),
+    Effect.catchTag("IpsecTunnelNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a tunnel by exact name. Names are unique per account, so at most
@@ -379,18 +364,14 @@ const observedHealthTarget = (
   return target?.saved ?? undefined;
 };
 
-const dirty = (
-  observed: ObservedIpsecTunnel,
-  news: IpsecTunnelProps,
-): boolean =>
+const dirty = (observed: ObservedIpsecTunnel, news: IpsecTunnelProps): boolean =>
   observed.cloudflareEndpoint !== news.cloudflareEndpoint ||
   observed.interfaceAddress !== news.interfaceAddress ||
   (news.customerEndpoint !== undefined &&
     (observed.customerEndpoint ?? undefined) !== news.customerEndpoint) ||
   (news.interfaceAddress6 !== undefined &&
     (observed.interfaceAddress6 ?? undefined) !== news.interfaceAddress6) ||
-  (news.description !== undefined &&
-    (observed.description ?? undefined) !== news.description) ||
+  (news.description !== undefined && (observed.description ?? undefined) !== news.description) ||
   (news.replayProtection !== undefined &&
     (observed.replayProtection ?? false) !== news.replayProtection) ||
   healthCheckDirty(observed.healthCheck, news.healthCheck);
@@ -402,14 +383,11 @@ const healthCheckDirty = (
   if (desired === undefined) return false;
   const hc = observed ?? {};
   return (
-    (desired.enabled !== undefined &&
-      (hc.enabled ?? undefined) !== desired.enabled) ||
-    (desired.direction !== undefined &&
-      (hc.direction ?? undefined) !== desired.direction) ||
+    (desired.enabled !== undefined && (hc.enabled ?? undefined) !== desired.enabled) ||
+    (desired.direction !== undefined && (hc.direction ?? undefined) !== desired.direction) ||
     (desired.rate !== undefined && (hc.rate ?? undefined) !== desired.rate) ||
     (desired.type !== undefined && (hc.type ?? undefined) !== desired.type) ||
-    (desired.target !== undefined &&
-      observedHealthTarget(hc) !== desired.target)
+    (desired.target !== undefined && observedHealthTarget(hc) !== desired.target)
   );
 };
 

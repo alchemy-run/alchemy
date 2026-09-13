@@ -25,9 +25,7 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/seed") {
-      const insert = db.prepare(
-        "INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)",
-      );
+      const insert = db.prepare("INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)");
       const results = await db.batch([
         insert.bind(1, STYLE, "alice"),
         insert.bind(2, STYLE, "bob"),
@@ -42,9 +40,7 @@ export default {
     if (request.method === "POST" && url.pathname === "/users") {
       const body = (await request.json()) as { id: number; name: string };
       const result = await db
-        .prepare(
-          "INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)",
-        )
+        .prepare("INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)")
         .bind(body.id, STYLE, body.name)
         .run();
       return Response.json({

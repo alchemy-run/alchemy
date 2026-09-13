@@ -200,14 +200,11 @@ export const TeamAccessProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const teams = await octokit.paginate(
-                  octokit.rest.repos.listTeams,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const teams = await octokit.paginate(octokit.rest.repos.listTeams, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return teams.map((team: any) => ({
                   teamSlug: team.slug,
                   permission: team.permission ?? "push",

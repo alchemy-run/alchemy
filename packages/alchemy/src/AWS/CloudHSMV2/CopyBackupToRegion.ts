@@ -31,10 +31,7 @@ export interface CopyBackupToRegion extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.CopyBackupToRegionRequest,
-    ) => Effect.Effect<
-      cloudhsm.CopyBackupToRegionResponse,
-      cloudhsm.CopyBackupToRegionError
-    >
+    ) => Effect.Effect<cloudhsm.CopyBackupToRegionResponse, cloudhsm.CopyBackupToRegionError>
   >
 > {}
 export const CopyBackupToRegion = Binding.Service<CopyBackupToRegion>(

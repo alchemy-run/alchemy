@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Parameter } from "./Parameter.ts";
 
-export interface GetParametersByPathRequest extends Omit<
-  SSM.GetParametersByPathRequest,
-  "Path"
-> {}
+export interface GetParametersByPathRequest extends Omit<SSM.GetParametersByPathRequest, "Path"> {}
 
 /**
  * Runtime binding for `ssm:GetParametersByPath`.
@@ -41,10 +38,7 @@ export interface GetParametersByPath extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetParametersByPathRequest,
-    ) => Effect.Effect<
-      SSM.GetParametersByPathResult,
-      SSM.GetParametersByPathError
-    >
+    ) => Effect.Effect<SSM.GetParametersByPathResult, SSM.GetParametersByPathError>
   >
 > {}
 export const GetParametersByPath = Binding.Service<GetParametersByPath>(

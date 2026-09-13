@@ -43,7 +43,6 @@ export interface GetResourceRequestStatus extends Binding.Service<
   >
 > {}
 
-export const GetResourceRequestStatus =
-  Binding.Service<GetResourceRequestStatus>(
-    "AWS.CloudControl.GetResourceRequestStatus",
-  );
+export const GetResourceRequestStatus = Binding.Service<GetResourceRequestStatus>(
+  "AWS.CloudControl.GetResourceRequestStatus",
+);

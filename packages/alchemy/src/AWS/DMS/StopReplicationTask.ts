@@ -29,10 +29,7 @@ export interface StopReplicationTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: dms.StopReplicationTaskMessage,
-    ) => Effect.Effect<
-      dms.StopReplicationTaskResponse,
-      dms.StopReplicationTaskError
-    >
+    ) => Effect.Effect<dms.StopReplicationTaskResponse, dms.StopReplicationTaskError>
   >
 > {}
 

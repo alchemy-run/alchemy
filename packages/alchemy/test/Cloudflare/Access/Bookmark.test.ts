@@ -12,10 +12,7 @@ const { test } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The dedicated bookmarks API is deprecated: Cloudflare no longer allows
 // creating NEW bookmark records through it. `POST
@@ -99,11 +96,7 @@ test.provider.skipIf(!entitled)(
           accountId,
           bookmarkId: bookmark.bookmarkId,
         })
-        .pipe(
-          Effect.catchTag("AccessBookmarkNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy?.id ?? undefined).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },

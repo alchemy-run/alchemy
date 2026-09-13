@@ -225,10 +225,7 @@ export const SubscriptionProvider = () =>
       const acct = output?.accountId ?? accountId;
 
       if (output?.subscriptionId) {
-        const observed = yield* getSubscriptionOrUndefined(
-          acct,
-          output.subscriptionId,
-        );
+        const observed = yield* getSubscriptionOrUndefined(acct, output.subscriptionId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
       // Cold read — recover from lost state by matching the deterministic
@@ -266,9 +263,7 @@ export const SubscriptionProvider = () =>
           .pipe(
             Effect.catchTag("SubscriptionAlreadyExists", (error) =>
               findBySource(acct, news.source).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
+                Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
               ),
             ),
           );
@@ -334,15 +329,10 @@ type ObservedSubscription =
  * Read a subscription by ID, mapping "gone" (`SubscriptionNotFound`,
  * HTTP 404 "No subscription with this ID") to `undefined`.
  */
-const getSubscriptionOrUndefined = (
-  accountId: string,
-  subscriptionId: string,
-) =>
+const getSubscriptionOrUndefined = (accountId: string, subscriptionId: string) =>
   queues
     .getSubscription({ accountId, subscriptionId })
-    .pipe(
-      Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a subscription by exact name. Cloudflare's list endpoint has no

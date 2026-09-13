@@ -30,12 +30,7 @@ export interface ListCollections extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rekognition.ListCollectionsRequest,
-    ) => Effect.Effect<
-      rekognition.ListCollectionsResponse,
-      rekognition.ListCollectionsError
-    >
+    ) => Effect.Effect<rekognition.ListCollectionsResponse, rekognition.ListCollectionsError>
   >
 > {}
-export const ListCollections = Binding.Service<ListCollections>(
-  "AWS.Rekognition.ListCollections",
-);
+export const ListCollections = Binding.Service<ListCollections>("AWS.Rekognition.ListCollections");

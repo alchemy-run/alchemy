@@ -2,8 +2,7 @@ import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetRetainedMessageRequest
-  extends iotdata.GetRetainedMessageRequest {}
+export interface GetRetainedMessageRequest extends iotdata.GetRetainedMessageRequest {}
 
 /**
  * Runtime binding for the IoT data-plane `GetRetainedMessage` operation (IAM
@@ -31,13 +30,8 @@ export interface GetRetainedMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetRetainedMessageRequest,
-    ) => Effect.Effect<
-      iotdata.GetRetainedMessageResponse,
-      iotdata.GetRetainedMessageError
-    >
+    ) => Effect.Effect<iotdata.GetRetainedMessageResponse, iotdata.GetRetainedMessageError>
   >
 > {}
 
-export const GetRetainedMessage = Binding.Service<GetRetainedMessage>(
-  "AWS.IoT.GetRetainedMessage",
-);
+export const GetRetainedMessage = Binding.Service<GetRetainedMessage>("AWS.IoT.GetRetainedMessage");

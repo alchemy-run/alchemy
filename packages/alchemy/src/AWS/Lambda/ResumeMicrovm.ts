@@ -27,12 +27,7 @@ export interface ResumeMicrovm extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ResumeMicrovmRequest,
-    ) => Effect.Effect<
-      microvms.ResumeMicrovmResponse,
-      microvms.ResumeMicrovmError
-    >
+    ) => Effect.Effect<microvms.ResumeMicrovmResponse, microvms.ResumeMicrovmError>
   >
 > {}
-export const ResumeMicrovm = Binding.Service<ResumeMicrovm>(
-  "AWS.Lambda.ResumeMicrovm",
-);
+export const ResumeMicrovm = Binding.Service<ResumeMicrovm>("AWS.Lambda.ResumeMicrovm");

@@ -22,10 +22,7 @@ const assertContactGone = (arn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -36,10 +33,7 @@ describe("AWS.NotificationsContacts.EmailContact", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const deployContact = (props: {
-          emailAddress: string;
-          tags: Record<string, string>;
-        }) =>
+        const deployContact = (props: { emailAddress: string; tags: Record<string, string> }) =>
           stack.deploy(
             Effect.gen(function* () {
               const contact = yield* EmailContact("OnCall", {

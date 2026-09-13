@@ -39,9 +39,9 @@ test.provider(
       );
 
       expect(first.discovery.accountId).toMatch(/^\d{12}$/);
-      expect(
-        first.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName),
-      ).toEqual(["AlchemyTestTeam"]);
+      expect(first.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName)).toEqual([
+        "AlchemyTestTeam",
+      ]);
 
       // Out-of-band verification via distilled.
       const observed = yield* observedDefinitions;
@@ -69,9 +69,10 @@ test.provider(
         }),
       );
 
-      expect(
-        second.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName),
-      ).toEqual(["AlchemyTestTeam", "AlchemyTestCostCenter"]);
+      expect(second.grouping.groupingAttributeDefinitions.map((d) => d.GroupingName)).toEqual([
+        "AlchemyTestTeam",
+        "AlchemyTestCostCenter",
+      ]);
       const updated = yield* observedDefinitions;
       expect(updated).toHaveLength(2);
 

@@ -22,12 +22,7 @@ import type { Recipe } from "./Recipe.ts";
  * injects the bound {@link Job}'s name as `Name` and the deploy-time half
  * grants `actions` on the job ARN.
  */
-export const makeDataBrewJobHttpBinding = <
-  I extends { Name?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDataBrewJobHttpBinding = <I extends { Name?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DataBrew.StartJobRun`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the job. */
@@ -55,9 +50,7 @@ export const makeDataBrewJobHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (
-        request?: Omit<I, "Name">,
-      ) {
+      return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (request?: Omit<I, "Name">) {
         return yield* op({ ...request, Name: yield* JobName } as I);
       });
     });
@@ -68,12 +61,7 @@ export const makeDataBrewJobHttpBinding = <
  * callable injects the bound {@link Project}'s name as `Name` and the
  * deploy-time half grants `actions` on the project ARN.
  */
-export const makeDataBrewProjectHttpBinding = <
-  I extends { Name?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDataBrewProjectHttpBinding = <I extends { Name?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DataBrew.StartProjectSession`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the project. */
@@ -113,12 +101,7 @@ export const makeDataBrewProjectHttpBinding = <
  * callable injects the bound {@link Recipe}'s name as `Name` and the
  * deploy-time half grants `actions` on the recipe ARN.
  */
-export const makeDataBrewRecipeHttpBinding = <
-  I extends { Name?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDataBrewRecipeHttpBinding = <I extends { Name?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DataBrew.PublishRecipe`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the recipe. */

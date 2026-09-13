@@ -55,9 +55,7 @@ export interface HarnessOptions {
 }
 
 /** Map the harness's options onto {@link TanStackStartOptions}. */
-export const fromHarnessOptions = (
-  options: HarnessOptions,
-): TanStackStartOptions => ({
+export const fromHarnessOptions = (options: HarnessOptions): TanStackStartOptions => ({
   outDir: options.tanstackStart?.outDir,
 });
 

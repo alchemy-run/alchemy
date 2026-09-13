@@ -9,9 +9,7 @@ import * as AWS from "@/AWS";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import MediaConvertTestFunctionLive, {
-  MediaConvertTestFunction,
-} from "./handler";
+import MediaConvertTestFunctionLive, { MediaConvertTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -38,40 +36,29 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("MediaConvert Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "MediaConvert test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("MediaConvert test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("MediaConvert test setup: deploying fixture");
@@ -93,10 +80,7 @@ describe.sequential("MediaConvert Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),
@@ -191,9 +175,7 @@ describe.sequential("MediaConvert Bindings", () => {
             role: "arn:aws:iam::000000000000:role/alchemy-does-not-exist",
           })) as { jobId?: string; error?: string };
           expect(body.jobId).toBeUndefined();
-          expect(["BadRequestException", "AccessDeniedException"]).toContain(
-            body.error,
-          );
+          expect(["BadRequestException", "AccessDeniedException"]).toContain(body.error);
         }),
       { timeout: 60_000 },
     );
@@ -211,18 +193,12 @@ describe.sequential("MediaConvert Bindings", () => {
           expect(started.error).toBeUndefined();
           expect(started.queryId).toBeTruthy();
 
-          const result = yield* getJson(
-            `/jobsQueryResults?id=${started.queryId}`,
-          ).pipe(
-            Effect.map(
-              (r) => r as { status?: string; count: number; error?: string },
-            ),
+          const result = yield* getJson(`/jobsQueryResults?id=${started.queryId}`).pipe(
+            Effect.map((r) => r as { status?: string; count: number; error?: string }),
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
               until: (r): boolean =>
-                r.status === "COMPLETE" ||
-                r.status === "ERROR" ||
-                r.error !== undefined,
+                r.status === "COMPLETE" || r.status === "ERROR" || r.error !== undefined,
               times: 20,
             }),
           );

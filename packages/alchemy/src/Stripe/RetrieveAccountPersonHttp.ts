@@ -33,20 +33,19 @@ export const RetrieveAccountPersonHttp = Layer.effect(
       );
       const id = yield* asStringEffect(person.id);
       const account = yield* asStringEffect(person.account);
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
-      return Effect.fn(`Stripe.RetrieveAccountPerson(${person.LogicalId})`)(
-        function* (request?: { expand?: string[] }) {
-          return yield* auth(
-            GetAccountPerson({
-              ...(request ?? {}),
-              person: yield* id,
-              account: yield* account,
-            }),
-          );
-        },
-      );
+      return Effect.fn(`Stripe.RetrieveAccountPerson(${person.LogicalId})`)(function* (request?: {
+        expand?: string[];
+      }) {
+        return yield* auth(
+          GetAccountPerson({
+            ...(request ?? {}),
+            person: yield* id,
+            account: yield* account,
+          }),
+        );
+      });
     });
   }),
 );

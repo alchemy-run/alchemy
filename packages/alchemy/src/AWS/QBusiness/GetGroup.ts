@@ -35,9 +35,7 @@ export interface GetGroup extends Binding.Service<
   (
     index: Index,
   ) => Effect.Effect<
-    (
-      request: GetGroupRequest,
-    ) => Effect.Effect<qbusiness.GetGroupResponse, qbusiness.GetGroupError>
+    (request: GetGroupRequest) => Effect.Effect<qbusiness.GetGroupResponse, qbusiness.GetGroupError>
   >
 > {}
 export const GetGroup = Binding.Service<GetGroup>("AWS.QBusiness.GetGroup");

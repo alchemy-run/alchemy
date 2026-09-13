@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the harness mints propagates eventually-consistently
 // across Cloudflare's edge — ride out mid-deploy 403 blips.
@@ -38,9 +35,7 @@ test.provider(
       );
       expect(deployed.streamId).toBeTruthy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Pipelines.Stream,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Pipelines.Stream);
       const all = yield* provider.list();
 
       // Exhaustively-paginated result contains the deployed stream, hydrated

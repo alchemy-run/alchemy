@@ -23,12 +23,7 @@ import type { LicenseConfiguration } from "./LicenseConfiguration.ts";
  * license-specification operations — none of which are resource-scoped in
  * IAM).
  */
-export const makeLicenseManagerHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeLicenseManagerHttpBinding = <I extends object, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"CheckoutLicense"`.
@@ -46,22 +41,18 @@ export const makeLicenseManagerHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.LicenseManager.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.LicenseManager.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.LicenseManager.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.LicenseManager.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });
@@ -112,13 +103,13 @@ export const makeLicenseConfigurationHttpBinding = <
           );
         }
       }
-      return Effect.fn(
-        `AWS.LicenseManager.${options.capability}(${configuration.LogicalId})`,
-      )(function* (request?: Omit<I, "LicenseConfigurationArn">) {
-        return yield* op({
-          ...request,
-          LicenseConfigurationArn: yield* ConfigurationArn,
-        } as I);
-      });
+      return Effect.fn(`AWS.LicenseManager.${options.capability}(${configuration.LogicalId})`)(
+        function* (request?: Omit<I, "LicenseConfigurationArn">) {
+          return yield* op({
+            ...request,
+            LicenseConfigurationArn: yield* ConfigurationArn,
+          } as I);
+        },
+      );
     });
   });

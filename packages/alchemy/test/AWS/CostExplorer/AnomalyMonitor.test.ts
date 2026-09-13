@@ -31,9 +31,7 @@ const assertMonitorGone = (monitorArn: string) =>
   Effect.gen(function* () {
     const found = yield* getMonitor(monitorArn);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`monitor '${monitorArn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`monitor '${monitorArn}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -89,12 +87,8 @@ test.provider(
       const created = yield* getMonitor(deployed.monitorArn);
       expect(created?.MonitorName).toBe(monitorName);
       expect(created?.MonitorType).toBe("CUSTOM");
-      const tags = yield* pin(
-        ce.listTagsForResource({ ResourceArn: deployed.monitorArn }),
-      );
-      const tagRecord = Object.fromEntries(
-        (tags.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = yield* pin(ce.listTagsForResource({ ResourceArn: deployed.monitorArn }));
+      const tagRecord = Object.fromEntries((tags.ResourceTags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.fixture).toBe("cost-explorer-anomaly-monitor");
       expect(tagRecord["alchemy::id"]).toBe("Monitor");
 
@@ -157,9 +151,7 @@ test.provider(
       expect(replaced.monitorArn).not.toBe(deployed.monitorArn);
       yield* assertMonitorGone(deployed.monitorArn);
       const after = yield* getMonitor(replaced.monitorArn);
-      expect(after?.MonitorSpecification?.Tags?.Values).toEqual([
-        "alchemy-replace-2",
-      ]);
+      expect(after?.MonitorSpecification?.Tags?.Values).toEqual(["alchemy-replace-2"]);
 
       // Destroy — the replacement monitor is gone.
       yield* stack.destroy();

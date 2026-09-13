@@ -10,21 +10,15 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -44,9 +38,7 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 const probeAvailability = (zoneId: string) =>
   cache.listOriginCloudRegions({ zoneId }).pipe(
     Effect.map(() => "available" as const),
-    Effect.catchTag("InvalidRoute", () =>
-      Effect.succeed("unreleased" as const),
-    ),
+    Effect.catchTag("InvalidRoute", () => Effect.succeed("unreleased" as const)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,
@@ -57,9 +49,7 @@ const probeAvailability = (zoneId: string) =>
 /** Observe a single mapping out-of-band, `undefined` when gone (typed). */
 const getMapping = (zoneId: string, ip: string) =>
   cache.getOriginCloudRegion({ zoneId, originIP: ip }).pipe(
-    Effect.catchTag("OriginCloudRegionNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("OriginCloudRegionNotFound", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,

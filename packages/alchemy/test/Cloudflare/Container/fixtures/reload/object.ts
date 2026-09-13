@@ -15,16 +15,10 @@ export class ReloadContainerObject extends Cloudflare.DurableObject<ReloadContai
       return {
         read: (path: string) =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get(`http://container${path}`),
-            );
+            const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
             return yield* response.text;
           }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Cloudflare.Containers.layer(ReloadContainer, { enableInternet: false }),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.Containers.layer(ReloadContainer, { enableInternet: false }))),
 ) {}

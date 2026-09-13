@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ServiceLevelObjectiveProps {
@@ -171,9 +166,7 @@ export const ServiceLevelObjective = Resource<ServiceLevelObjective>(
  * Rebuild `Date` instances that the engine's state serialization flattened
  * to ISO strings (calendar intervals carry a `StartTime` timestamp).
  */
-const normalizeGoal = (
-  goal: appsignals.Goal | undefined,
-): appsignals.Goal | undefined => {
+const normalizeGoal = (goal: appsignals.Goal | undefined): appsignals.Goal | undefined => {
   const interval = goal?.Interval;
   if (interval && "CalendarInterval" in interval && interval.CalendarInterval) {
     return {
@@ -190,15 +183,10 @@ const normalizeGoal = (
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  !(value instanceof Date);
+  typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Date);
 
 const toTime = (value: unknown): number =>
-  value instanceof Date
-    ? value.getTime()
-    : new Date(value as string | number).getTime();
+  value instanceof Date ? value.getTime() : new Date(value as string | number).getTime();
 
 /**
  * Structural subset comparison: every DEFINED field of `desired` must
@@ -222,9 +210,7 @@ const subsetMatches = (desired: unknown, observed: unknown): boolean => {
   if (isPlainObject(desired)) {
     return (
       isPlainObject(observed) &&
-      Object.entries(desired).every(([key, value]) =>
-        subsetMatches(value, observed[key]),
-      )
+      Object.entries(desired).every(([key, value]) => subsetMatches(value, observed[key]))
     );
   }
   return desired === observed;
@@ -265,25 +251,19 @@ export const ServiceLevelObjectiveProvider = () =>
         props: Pick<ServiceLevelObjectiveProps, "sloName">,
       ) {
         // SLO names are limited to 127 characters.
-        return (
-          props.sloName ?? (yield* createPhysicalName({ id, maxLength: 127 }))
-        );
+        return props.sloName ?? (yield* createPhysicalName({ id, maxLength: 127 }));
       });
 
       // `Id` accepts the SLO name or ARN interchangeably.
       const observeSlo = (id: string) =>
         appsignals.getServiceLevelObjective({ Id: id }).pipe(
           Effect.map((r) => r.Slo),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const observedTags = (sloArn: string) =>
         appsignals.listTagsForResource({ ResourceArn: sloArn }).pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
+          Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
           ),
@@ -303,8 +283,7 @@ export const ServiceLevelObjectiveProvider = () =>
             }));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const sloName =
-            output?.sloName ?? (yield* createSloName(id, olds ?? {}));
+          const sloName = output?.sloName ?? (yield* createSloName(id, olds ?? {}));
           const found = yield* observeSlo(sloName);
           if (!found) return undefined;
           const attrs = {
@@ -324,12 +303,8 @@ export const ServiceLevelObjectiveProvider = () =>
           }
           // An SLO cannot switch between period-based and request-based
           // evaluation — swapping the SLI config kind replaces the SLO.
-          const oldKind = olds?.requestBasedSliConfig
-            ? "RequestBased"
-            : "PeriodBased";
-          const newKind = news?.requestBasedSliConfig
-            ? "RequestBased"
-            : "PeriodBased";
+          const oldKind = olds?.requestBasedSliConfig ? "RequestBased" : "PeriodBased";
+          const newKind = news?.requestBasedSliConfig ? "RequestBased" : "PeriodBased";
           if (oldKind !== newKind) {
             return { action: "replace" } as const;
           }
@@ -369,9 +344,7 @@ export const ServiceLevelObjectiveProvider = () =>
           }
 
           if (live === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to reconcile SLO '${sloName}'`),
-            );
+            return yield* Effect.fail(new Error(`failed to reconcile SLO '${sloName}'`));
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
@@ -399,12 +372,10 @@ export const ServiceLevelObjectiveProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* appsignals
-            .deleteServiceLevelObjective({ Id: output.sloName })
-            .pipe(
-              // Idempotent delete — already-gone is success.
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* appsignals.deleteServiceLevelObjective({ Id: output.sloName }).pipe(
+            // Idempotent delete — already-gone is success.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

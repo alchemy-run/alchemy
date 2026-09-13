@@ -9,12 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type DbInstanceStatus = influxdb.Status;
@@ -211,27 +206,17 @@ const toAttrs = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* influxdb
     .listTagsForResource({ resourceArn: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const tags = response?.tags ?? {};
   return Object.fromEntries(
-    Object.entries(tags).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
+    Object.entries(tags).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
 });
 
 const readInstanceById = Effect.fn(function* (identifier: string) {
   const instance = yield* influxdb
     .getDbInstance({ identifier })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!instance) return undefined;
   return toAttrs(instance, yield* fetchTags(instance.arn));
 });
@@ -239,9 +224,7 @@ const readInstanceById = Effect.fn(function* (identifier: string) {
 const findInstanceByName = Effect.fn(function* (name: string) {
   const summaries = yield* influxdb.listDbInstances.pages({}).pipe(
     EffectStream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.items ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
   );
   const match = summaries.find((summary) => summary.name === name);
   if (!match) return undefined;
@@ -261,9 +244,7 @@ class DbInstanceNotReady extends Data.TaggedError("DbInstanceNotReady")<{
  * A DB instance whose asynchronous provisioning converged to a terminal
  * failure status (`FAILED` / `REBOOT_FAILED`).
  */
-export class DbInstanceProvisioningFailed extends Data.TaggedError(
-  "DbInstanceProvisioningFailed",
-)<{
+export class DbInstanceProvisioningFailed extends Data.TaggedError("DbInstanceProvisioningFailed")<{
   readonly identifier: string;
   readonly status: string;
 }> {}
@@ -280,10 +261,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     // while fields are still being populated — treat it as not-ready.
     while: (e) => e._tag === "DbInstanceNotReady" || e._tag === "ParseError",
     // Provisioning is slow (~15–20 min); poll every 20s up to ~30 min.
-    schedule: Schedule.max([
-      Schedule.spaced("20 seconds"),
-      Schedule.recurs(90),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(90)]),
   });
 
 const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
@@ -291,22 +269,13 @@ const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
     Effect.gen(function* () {
       const instance = yield* influxdb
         .getDbInstance({ identifier })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (instance === undefined) return;
-        return yield* Effect.fail(
-          new DbInstanceNotReady({ identifier, status: instance.status }),
-        );
+        return yield* Effect.fail(new DbInstanceNotReady({ identifier, status: instance.status }));
       }
       if (instance?.status === "AVAILABLE") return;
-      if (
-        instance?.status === "FAILED" ||
-        instance?.status === "REBOOT_FAILED"
-      ) {
+      if (instance?.status === "FAILED" || instance?.status === "REBOOT_FAILED") {
         return yield* Effect.fail(
           new DbInstanceProvisioningFailed({
             identifier,
@@ -314,9 +283,7 @@ const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
           }),
         );
       }
-      return yield* Effect.fail(
-        new DbInstanceNotReady({ identifier, status: instance?.status }),
-      );
+      return yield* Effect.fail(new DbInstanceNotReady({ identifier, status: instance?.status }));
     }),
   );
 
@@ -330,9 +297,7 @@ export const DbInstanceProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* influxdb.listDbInstances.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
             );
             const hydrated = yield* Effect.forEach(
               summaries,
@@ -346,13 +311,9 @@ export const DbInstanceProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.id
             ? yield* readInstanceById(output.id)
-            : yield* findInstanceByName(
-                yield* createInstanceName(id, olds ?? {}),
-              );
+            : yield* findInstanceByName(yield* createInstanceName(id, olds ?? {}));
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds = {} }) {
           if (!isResolved(news)) return;
@@ -361,8 +322,7 @@ export const DbInstanceProvider = () =>
           // Name and the networking/credential aspects are immutable — changing
           // any of them requires a replacement.
           const arraysDiffer = (a?: string[], b?: string[]) =>
-            JSON.stringify([...(a ?? [])].sort()) !==
-            JSON.stringify([...(b ?? [])].sort());
+            JSON.stringify([...(a ?? [])].sort()) !== JSON.stringify([...(b ?? [])].sort());
           if (
             oldName !== newName ||
             arraysDiffer(olds.vpcSubnetIds, news.vpcSubnetIds) ||
@@ -378,9 +338,7 @@ export const DbInstanceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("Timestream DbInstance requires props"),
-            );
+            return yield* Effect.fail(new Error("Timestream DbInstance requires props"));
           }
           const name = output?.name ?? (yield* createInstanceName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -414,23 +372,18 @@ export const DbInstanceProvider = () =>
               networkType: news.networkType,
               tags: desiredTags,
             });
-            yield* session.note(
-              `Creating DB instance ${name} (${created.id})...`,
-            );
+            yield* session.note(`Creating DB instance ${name} (${created.id})...`);
             yield* waitForStatus(created.id, "AVAILABLE");
             state = yield* readInstanceById(created.id);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created DB instance ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created DB instance ${name}`));
             }
           }
 
           // Sync mutable settings via UpdateDbInstance. It is a partial upsert;
           // only send it when a mutable aspect drifted from observed state.
           const needsUpdate =
-            (news.dbInstanceType !== undefined &&
-              news.dbInstanceType !== state.dbInstanceType) ||
+            (news.dbInstanceType !== undefined && news.dbInstanceType !== state.dbInstanceType) ||
             (news.allocatedStorage !== undefined &&
               news.allocatedStorage !== state.allocatedStorage) ||
             (news.port !== undefined && news.port !== state.port) ||
@@ -464,9 +417,7 @@ export const DbInstanceProvider = () =>
           if (upsert.length > 0) {
             yield* influxdb.tagResource({
               resourceArn: state.arn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
 
@@ -474,18 +425,14 @@ export const DbInstanceProvider = () =>
 
           const final = yield* readInstanceById(state.id);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled DB instance ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled DB instance ${name}`));
           }
           return final;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* influxdb
             .deleteDbInstance({ identifier: output.id })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitForStatus(output.id, "DELETED");
         }),
       };

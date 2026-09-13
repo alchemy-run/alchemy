@@ -34,33 +34,29 @@ test.provider("list returns the account password policy singleton", () =>
 // so concurrently-running IAM login-profile tests using strong passwords are
 // unaffected, and `stack.destroy()` deletes the policy (resetting the account
 // to AWS defaults) at the end.
-test.provider(
-  "deploys MaxPasswordAge as whole wire days and deletes the policy",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("deploys MaxPasswordAge as whole wire days and deletes the policy", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* AccountPasswordPolicy("PasswordPolicy", {
-            MinimumPasswordLength: 8,
-            AllowUsersToChangePassword: true,
-            // Duration.Input prop — converted to whole wire days.
-            MaxPasswordAge: "90 days",
-          });
-        }),
-      );
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* AccountPasswordPolicy("PasswordPolicy", {
+          MinimumPasswordLength: 8,
+          AllowUsersToChangePassword: true,
+          // Duration.Input prop — converted to whole wire days.
+          MaxPasswordAge: "90 days",
+        });
+      }),
+    );
 
-      // Out-of-band read: the Duration prop landed as 90 wire days.
-      const live = yield* IAM.getAccountPasswordPolicy({});
-      expect(live.PasswordPolicy.MaxPasswordAge).toBe(90);
-      expect(live.PasswordPolicy.MinimumPasswordLength).toBe(8);
+    // Out-of-band read: the Duration prop landed as 90 wire days.
+    const live = yield* IAM.getAccountPasswordPolicy({});
+    expect(live.PasswordPolicy.MaxPasswordAge).toBe(90);
+    expect(live.PasswordPolicy.MinimumPasswordLength).toBe(8);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const afterDestroy = yield* IAM.getAccountPasswordPolicy({}).pipe(
-        Effect.option,
-      );
-      expect(afterDestroy._tag).toBe("None");
-    }),
+    const afterDestroy = yield* IAM.getAccountPasswordPolicy({}).pipe(Effect.option);
+    expect(afterDestroy._tag).toBe("None");
+  }),
 );

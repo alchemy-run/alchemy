@@ -36,9 +36,7 @@ const compile = <A, Err = never, Req = never>(
 const fqns = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
 ): Effect.Effect<string[], Err, State> =>
-  compile(effect).pipe(
-    Effect.map((resources) => Object.keys(resources).sort()),
-  );
+  compile(effect).pipe(Effect.map((resources) => Object.keys(resources).sort()));
 
 test(
   "StaticSite declares env resources in the caller's namespace",

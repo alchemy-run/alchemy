@@ -16,8 +16,7 @@ const NONEXISTENT_BACKUP_ID = "backup-aaaaaaaaaaa";
 
 // Placeholder PEM material for InitializeCluster — the nonexistent cluster
 // id is rejected before the certificates are parsed.
-const PLACEHOLDER_PEM =
-  "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
+const PLACEHOLDER_PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
 
 export class CloudHSMV2TestFunction extends Lambda.Function<Lambda.Function>()(
   "CloudHSMV2TestFunction",
@@ -93,9 +92,7 @@ export default CloudHSMV2TestFunction.make(
             BackupId: NONEXISTENT_BACKUP_ID,
           }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("CloudHsmResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("CloudHsmResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -105,9 +102,7 @@ export default CloudHSMV2TestFunction.make(
             BackupId: NONEXISTENT_BACKUP_ID,
           }).pipe(
             Effect.map(() => "Restored"),
-            Effect.catchTag("CloudHsmResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("CloudHsmResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -118,28 +113,20 @@ export default CloudHSMV2TestFunction.make(
             NeverExpires: true,
           }).pipe(
             Effect.map(() => "Modified"),
-            Effect.catchTag("CloudHsmResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("CloudHsmResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
         if (request.method === "GET" && pathname === "/backup-copy") {
-          const region = yield* Effect.sync(
-            () => process.env.AWS_REGION ?? "us-west-2",
-          );
+          const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-west-2");
           const tag = yield* copyBackupToRegion({
-            DestinationRegion:
-              region === "us-east-1" ? "us-west-2" : "us-east-1",
+            DestinationRegion: region === "us-east-1" ? "us-west-2" : "us-east-1",
             BackupId: NONEXISTENT_BACKUP_ID,
           }).pipe(
             Effect.map(() => "Copied"),
             Effect.catchTag(
-              [
-                "CloudHsmResourceNotFoundException",
-                "CloudHsmInvalidRequestException",
-              ],
+              ["CloudHsmResourceNotFoundException", "CloudHsmInvalidRequestException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -154,10 +141,7 @@ export default CloudHSMV2TestFunction.make(
           }).pipe(
             Effect.map(() => "Initialized"),
             Effect.catchTag(
-              [
-                "CloudHsmResourceNotFoundException",
-                "CloudHsmInvalidRequestException",
-              ],
+              ["CloudHsmResourceNotFoundException", "CloudHsmInvalidRequestException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -170,10 +154,7 @@ export default CloudHSMV2TestFunction.make(
           const tag = yield* getResourcePolicy().pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "CloudHsmInvalidRequestException",
-                "CloudHsmResourceNotFoundException",
-              ],
+              ["CloudHsmInvalidRequestException", "CloudHsmResourceNotFoundException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -184,10 +165,7 @@ export default CloudHSMV2TestFunction.make(
           const tag = yield* putResourcePolicy({}).pipe(
             Effect.map(() => "Put"),
             Effect.catchTag(
-              [
-                "CloudHsmInvalidRequestException",
-                "CloudHsmResourceNotFoundException",
-              ],
+              ["CloudHsmInvalidRequestException", "CloudHsmResourceNotFoundException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -198,10 +176,7 @@ export default CloudHSMV2TestFunction.make(
           const tag = yield* deleteResourcePolicy({}).pipe(
             Effect.map(() => "PolicyDeleted"),
             Effect.catchTag(
-              [
-                "CloudHsmInvalidRequestException",
-                "CloudHsmResourceNotFoundException",
-              ],
+              ["CloudHsmInvalidRequestException", "CloudHsmResourceNotFoundException"],
               (e) => Effect.succeed(e._tag),
             ),
           );

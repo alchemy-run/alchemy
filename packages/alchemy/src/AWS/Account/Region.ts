@@ -121,10 +121,7 @@ export const RegionProvider = () =>
           }),
         );
 
-      const toAttributes = (
-        regionName: string,
-        status: string | undefined,
-      ) => ({
+      const toAttributes = (regionName: string, status: string | undefined) => ({
         regionName,
         enabled: isEnabledStatus(status),
         regionOptStatus: status ?? "DISABLED",
@@ -185,21 +182,14 @@ export const RegionProvider = () =>
         list: () =>
           account.listRegions
             .items({
-              RegionOptStatusContains: [
-                "ENABLED",
-                "ENABLING",
-                "DISABLING",
-                "DISABLED",
-              ],
+              RegionOptStatusContains: ["ENABLED", "ENABLING", "DISABLING", "DISABLED"],
             })
             .pipe(
               Stream.runCollect,
               Effect.map((regions) =>
                 Array.from(regions)
                   .filter((region) => region.RegionName != null)
-                  .map((region) =>
-                    toAttributes(region.RegionName!, region.RegionOptStatus),
-                  ),
+                  .map((region) => toAttributes(region.RegionName!, region.RegionOptStatus)),
               ),
             ),
         // Destroy intentionally leaves the Region's opt-in status untouched:

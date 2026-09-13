@@ -71,11 +71,7 @@ const routeDrift = Effect.fn(function* ({
           initialValue: "cancel" as const,
         }),
       )
-      .pipe(
-        Effect.catchTag("TerminalCancelled", () =>
-          Effect.succeed("cancel" as const),
-        ),
-      );
+      .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed("cancel" as const)));
     if (decision === "cancel") return;
   }
 

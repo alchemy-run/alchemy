@@ -10,13 +10,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Custom scan expressions require WAF Content Scanning (an Enterprise paid
 // add-on) to be enabled on the zone. On the testing account's zone every
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -86,21 +80,16 @@ describe.sequential("Expression", () => {
 
         yield* stack.destroy();
 
-        const firstPayload =
-          'lookup_json_string(http.request.body.raw, "file")';
-        const secondPayload =
-          'lookup_json_string(http.request.body.raw, "document")';
+        const firstPayload = 'lookup_json_string(http.request.body.raw, "file")';
+        const secondPayload = 'lookup_json_string(http.request.body.raw, "document")';
 
         // Scanning must be enabled for payload calls; the expression depends
         // on the singleton through its zoneId output.
         const first = yield* stack.deploy(
           Effect.gen(function* () {
-            const scanning = yield* Cloudflare.ContentScanning.ContentScanning(
-              "UploadScanning",
-              {
-                zoneId,
-              },
-            );
+            const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
+              zoneId,
+            });
             return yield* Cloudflare.ContentScanning.Expression("ScanField", {
               zoneId: scanning.zoneId,
               payload: firstPayload,
@@ -120,12 +109,9 @@ describe.sequential("Expression", () => {
         // endpoint, so a new expression is created and the old one deleted.
         const replaced = yield* stack.deploy(
           Effect.gen(function* () {
-            const scanning = yield* Cloudflare.ContentScanning.ContentScanning(
-              "UploadScanning",
-              {
-                zoneId,
-              },
-            );
+            const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
+              zoneId,
+            });
             return yield* Cloudflare.ContentScanning.Expression("ScanField", {
               zoneId: scanning.zoneId,
               payload: secondPayload,
@@ -137,12 +123,8 @@ describe.sequential("Expression", () => {
         expect(replaced.expressionId).not.toEqual(first.expressionId);
 
         const afterReplace = yield* listExpressions(zoneId);
-        expect(afterReplace.some((e) => e.id === replaced.expressionId)).toBe(
-          true,
-        );
-        expect(afterReplace.some((e) => e.id === first.expressionId)).toBe(
-          false,
-        );
+        expect(afterReplace.some((e) => e.id === replaced.expressionId)).toBe(true);
+        expect(afterReplace.some((e) => e.id === first.expressionId)).toBe(false);
 
         yield* stack.destroy();
 
@@ -153,9 +135,7 @@ describe.sequential("Expression", () => {
           // Zone was already enabled before the test — expressions must
           // still be cleaned up.
           const remaining = yield* listExpressions(zoneId);
-          expect(remaining.some((e) => e.id === replaced.expressionId)).toBe(
-            false,
-          );
+          expect(remaining.some((e) => e.id === replaced.expressionId)).toBe(false);
         }
       }).pipe(logLevel),
     { timeout: 120_000 },
@@ -172,9 +152,7 @@ describe.sequential("Expression", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.ContentScanning.Expression,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.ContentScanning.Expression);
         const all = yield* provider.list();
 
         expect(Array.isArray(all)).toBe(true);
@@ -204,12 +182,9 @@ describe.sequential("Expression", () => {
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const scanning = yield* Cloudflare.ContentScanning.ContentScanning(
-              "UploadScanning",
-              {
-                zoneId,
-              },
-            );
+            const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
+              zoneId,
+            });
             return yield* Cloudflare.ContentScanning.Expression("ListField", {
               zoneId: scanning.zoneId,
               payload,
@@ -217,9 +192,7 @@ describe.sequential("Expression", () => {
           }),
         );
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.ContentScanning.Expression,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.ContentScanning.Expression);
         const all = yield* provider.list();
 
         const found = all.find((e) => e.expressionId === deployed.expressionId);

@@ -8,9 +8,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class AmpTestFunction extends Lambda.Function<Lambda.Function>()(
-  "AmpTestFunction",
-) {}
+export class AmpTestFunction extends Lambda.Function<Lambda.Function>()("AmpTestFunction") {}
 
 export default AmpTestFunction.make(
   {
@@ -30,8 +28,7 @@ export default AmpTestFunction.make(
     const getMetricMetadata = yield* AMP.GetMetricMetadata(workspace);
     const describeWorkspace = yield* AMP.DescribeWorkspace(workspace);
     const listWorkspaces = yield* AMP.ListWorkspaces();
-    const getDefaultScraperConfiguration =
-      yield* AMP.GetDefaultScraperConfiguration();
+    const getDefaultScraperConfiguration = yield* AMP.GetDefaultScraperConfiguration();
 
     return {
       fetch: Effect.gen(function* () {
@@ -127,10 +124,7 @@ export default AmpTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/default-scraper-config"
-        ) {
+        if (request.method === "GET" && pathname === "/default-scraper-config") {
           const configuration = yield* getDefaultScraperConfiguration();
           return yield* HttpServerResponse.json({ configuration });
         }

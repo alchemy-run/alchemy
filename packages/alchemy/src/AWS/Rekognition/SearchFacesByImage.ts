@@ -34,10 +34,7 @@ export interface SearchFacesByImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.SearchFacesByImageRequest,
-    ) => Effect.Effect<
-      rekognition.SearchFacesByImageResponse,
-      rekognition.SearchFacesByImageError
-    >
+    ) => Effect.Effect<rekognition.SearchFacesByImageResponse, rekognition.SearchFacesByImageError>
   >
 > {}
 export const SearchFacesByImage = Binding.Service<SearchFacesByImage>(

@@ -13,9 +13,7 @@ import SageMakerEndpointTestFunctionLive, {
 // requires a working inference container. Same gate as Endpoint.test.ts:
 //   AWS_TEST_SAGEMAKER_ENDPOINT=1
 //   AWS_TEST_SAGEMAKER_IMAGE=<ECR URI of a serving container>
-const gated =
-  !process.env.AWS_TEST_SAGEMAKER_ENDPOINT ||
-  !process.env.AWS_TEST_SAGEMAKER_IMAGE;
+const gated = !process.env.AWS_TEST_SAGEMAKER_ENDPOINT || !process.env.AWS_TEST_SAGEMAKER_IMAGE;
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -45,10 +43,7 @@ describe("SageMaker Endpoint Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),

@@ -10,10 +10,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import type { PlatformProps } from "../../Platform.ts";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import type { ResourceBinding } from "../../Resource.ts";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-} from "../../Server/Process.ts";
+import { createHostRuntimeContext, type HostRuntimeContext } from "../../Server/Process.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
@@ -119,9 +116,7 @@ export const createEc2HostedSupport = ({
   stackName: string;
   stage: string;
   fs: FileSystem.FileSystem;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
   resourceType: string;
 }) => {
   const alchemyEnv = {
@@ -158,15 +153,10 @@ export const createEc2HostedSupport = ({
   const normalizeSecurityGroups = (groups?: readonly string[]) =>
     [...(groups ?? [])].sort((a, b) => a.localeCompare(b));
 
-  const bundleProgram = Effect.fn(function* (
-    id: string,
-    props: Ec2HostedProps,
-  ) {
+  const bundleProgram = Effect.fn(function* (id: string, props: Ec2HostedProps) {
     if (!props.main) {
       return yield* Effect.fail(
-        new Error(
-          `${resourceType} '${id}' requires 'main' when bundling a hosted process`,
-        ),
+        new Error(`${resourceType} '${id}' requires 'main' when bundling a hosted process`),
       );
     }
 
@@ -240,8 +230,7 @@ await bootstrap(entrypoint);
   });
 
   const quoteEnvValue = (value: any) => {
-    const text =
-      typeof value === "string" ? value : JSON.stringify(value ?? null);
+    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
     return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
   };
 
@@ -409,10 +398,7 @@ systemctl enable --now ${unitName}.service
           iam.getRole({ RoleName: roleName }).pipe(
             Effect.filterOrFail(
               (existing) => hasTags(tags, existing.Role?.Tags),
-              () =>
-                new Error(
-                  `Role '${roleName}' already exists and is not managed by alchemy`,
-                ),
+              () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
             ),
           ),
         ),
@@ -564,8 +550,7 @@ systemctl enable --now ${unitName}.service
         roleName: output?.roleName,
         roleArn: output?.roleArn,
         policyName: output?.policyName,
-        instanceProfileName:
-          news.instanceProfileName ?? output?.instanceProfileName,
+        instanceProfileName: news.instanceProfileName ?? output?.instanceProfileName,
         instanceProfileArn: output?.instanceProfileArn,
         managedIam: output?.managedIam ?? false,
         runtimeUnitName: output?.runtimeUnitName,
@@ -574,10 +559,7 @@ systemctl enable --now ${unitName}.service
       } satisfies Ec2HostedRuntimeState;
     }
 
-    if (
-      news.instanceProfileName &&
-      (news.roleManagedPolicyArns?.length ?? 0) > 0
-    ) {
+    if (news.instanceProfileName && (news.roleManagedPolicyArns?.length ?? 0) > 0) {
       return yield* Effect.fail(
         new Error(
           `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
@@ -586,8 +568,7 @@ systemctl enable --now ${unitName}.service
     }
 
     const { region } = yield* AWSEnvironment.current;
-    const runtimeUnitName =
-      output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
+    const runtimeUnitName = output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
     const assetPrefix = output?.assetPrefix ?? `ec2/${runtimeUnitName}`;
     const bundleKey = `${assetPrefix}/bundle.zip`;
     const envKey = `${assetPrefix}/env`;
@@ -608,8 +589,7 @@ systemctl enable --now ${unitName}.service
           roleName,
           managedPolicyArns: news.roleManagedPolicyArns ?? [],
         }));
-      const profileName =
-        output?.instanceProfileName ?? (yield* createManagedProfileName(id));
+      const profileName = output?.instanceProfileName ?? (yield* createManagedProfileName(id));
       const profile = yield* ensureManagedInstanceProfile({
         id,
         profileName,
@@ -701,9 +681,9 @@ systemctl enable --now ${unitName}.service
     }
 
     if (output.managedIam && output.instanceProfileName && output.roleName) {
-      const attachedPolicyArns = yield* listAttachedPolicyArns(
-        output.roleName,
-      ).pipe(Effect.catch(() => Effect.succeed([])));
+      const attachedPolicyArns = yield* listAttachedPolicyArns(output.roleName).pipe(
+        Effect.catch(() => Effect.succeed([])),
+      );
       yield* iam
         .removeRoleFromInstanceProfile({
           InstanceProfileName: output.instanceProfileName,
@@ -731,10 +711,7 @@ systemctl enable --now ${unitName}.service
     }
 
     if (output.assetPrefix) {
-      for (const key of [
-        `${output.assetPrefix}/bundle.zip`,
-        `${output.assetPrefix}/env`,
-      ]) {
+      for (const key of [`${output.assetPrefix}/bundle.zip`, `${output.assetPrefix}/env`]) {
         yield* s3
           .deleteObject({
             Bucket: yield* Assets.BucketName,
@@ -756,10 +733,7 @@ systemctl enable --now ${unitName}.service
     privateIpAddress,
   }: Pick<
     Ec2HostedProps,
-    | "subnetId"
-    | "securityGroupIds"
-    | "associatePublicIpAddress"
-    | "privateIpAddress"
+    "subnetId" | "securityGroupIds" | "associatePublicIpAddress" | "privateIpAddress"
   >) => {
     const groups = normalizeSecurityGroups(securityGroupIds);
     const usePrimaryNetworkInterface =
@@ -830,9 +804,7 @@ systemctl enable --now ${unitName}.service
         : network.groups.length > 0
           ? network.groups
           : undefined,
-      PrivateIpAddress: network.usePrimaryNetworkInterface
-        ? undefined
-        : news.privateIpAddress,
+      PrivateIpAddress: network.usePrimaryNetworkInterface ? undefined : news.privateIpAddress,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [

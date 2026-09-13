@@ -30,9 +30,7 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
     const response = yield* HttpClient.execute(request);
     const body = yield* response.text;
     if (response.status >= 500) {
-      return yield* Effect.fail(
-        new TransientUpstream({ status: response.status, body }),
-      );
+      return yield* Effect.fail(new TransientUpstream({ status: response.status, body }));
     }
     if (response.status !== 200) {
       // Terminal — fail fast with the typed tag in the message.
@@ -42,10 +40,7 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -81,10 +76,7 @@ describe("LexV2 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(15),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
         }),
       );
     }),
@@ -110,10 +102,7 @@ describe("LexV2 Bindings", () => {
       "routes an unmatched utterance to the fallback intent",
       () =>
         Effect.gen(function* () {
-          const body = yield* recognize(
-            "purple monkey dishwasher",
-            "alchemy-e2e-fallback",
-          );
+          const body = yield* recognize("purple monkey dishwasher", "alchemy-e2e-fallback");
           expect(body.intent).toBe("FallbackIntent");
         }),
       { timeout: 120_000 },
@@ -128,9 +117,7 @@ describe("LexV2 Bindings", () => {
           const body = yield* recognize("order a pizza", "alchemy-e2e-order");
           expect(body.intent).toBe("OrderPizza");
           expect(body.state).toBe("Fulfilled");
-          expect(body.messages).toContain(
-            "Order placed for alchemy-e2e-order!",
-          );
+          expect(body.messages).toContain("Order placed for alchemy-e2e-order!");
         }),
       { timeout: 120_000 },
     );
@@ -162,16 +149,12 @@ describe("LexV2 Bindings", () => {
 
           // DeleteSession ends the conversation ...
           const deleted = yield* call(
-            HttpClientRequest.delete(
-              `${baseUrl}/session?sessionId=${sessionId}`,
-            ),
+            HttpClientRequest.delete(`${baseUrl}/session?sessionId=${sessionId}`),
           );
           expect(deleted.sessionId).toBe(sessionId);
 
           // ... so a fresh GetSession reports the typed not-found tag.
-          const response = yield* HttpClient.get(
-            `${baseUrl}/session?sessionId=${sessionId}`,
-          );
+          const response = yield* HttpClient.get(`${baseUrl}/session?sessionId=${sessionId}`);
           const body = (yield* response.json) as { error?: string };
           expect(body.error).toBe("ResourceNotFoundException");
         }),

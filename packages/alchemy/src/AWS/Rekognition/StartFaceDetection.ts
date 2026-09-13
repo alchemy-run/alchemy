@@ -37,10 +37,7 @@ export interface StartFaceDetection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.StartFaceDetectionRequest,
-    ) => Effect.Effect<
-      rekognition.StartFaceDetectionResponse,
-      rekognition.StartFaceDetectionError
-    >
+    ) => Effect.Effect<rekognition.StartFaceDetectionResponse, rekognition.StartFaceDetectionError>
   >
 > {}
 export const StartFaceDetection = Binding.Service<StartFaceDetection>(

@@ -31,19 +31,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
@@ -64,14 +59,10 @@ const postJson = <T>(path: string) =>
 describe("ECR Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "ECR Bindings setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ECR Bindings setup: destroying previous resources");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "ECR Bindings setup: deploying repository -> Lambda",
-      );
+      yield* Effect.logInfo("ECR Bindings setup: deploying repository -> Lambda");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* EcrTestFunction;
@@ -89,10 +80,7 @@ describe("ECR Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),
@@ -133,9 +121,7 @@ describe("ECR Bindings", () => {
           const res = yield* ecr.getAuthorizationToken({});
           const token = res.authorizationData?.[0]?.authorizationToken;
           expect(Redacted.isRedacted(token)).toBe(true);
-          expect(
-            Redacted.value(token as Redacted.Redacted<string>).length,
-          ).toBeGreaterThan(100);
+          expect(Redacted.value(token as Redacted.Redacted<string>).length).toBeGreaterThan(100);
         }),
       { timeout: 120_000 },
     );
@@ -177,9 +163,7 @@ describe("ECR Bindings", () => {
             mediaType?: string;
             manifestLength: number;
           }>("/manifest?tag=1.0.0");
-          expect(manifest.mediaType).toBe(
-            "application/vnd.docker.distribution.manifest.v2+json",
-          );
+          expect(manifest.mediaType).toBe("application/vnd.docker.distribution.manifest.v2+json");
           expect(manifest.manifestLength).toBeGreaterThan(100);
 
           // GetDownloadUrlForLayer.
@@ -197,9 +181,7 @@ describe("ECR Bindings", () => {
           // StartImageScan — the synthetic image is not a supported OS
           // image, so the typed UnsupportedImageTypeException is as much a
           // proof of the binding as a successful scan.
-          const scan = yield* postJson<{ status?: string; error?: string }>(
-            "/scan?tag=1.0.0",
-          );
+          const scan = yield* postJson<{ status?: string; error?: string }>("/scan?tag=1.0.0");
           expect(
             scan.status !== undefined ||
               scan.error === "UnsupportedImageTypeException" ||
@@ -220,9 +202,7 @@ describe("ECR Bindings", () => {
           ).toBe(true);
 
           // BatchDeleteImage.
-          const deleted = yield* postJson<{ deleted: number }>(
-            "/delete?tag=1.0.0",
-          );
+          const deleted = yield* postJson<{ deleted: number }>("/delete?tag=1.0.0");
           expect(deleted.deleted).toBe(1);
           const after = yield* getJson<{ tags: string[] }>("/image-ids");
           expect(after.tags).not.toContain("1.0.0");
@@ -242,9 +222,9 @@ describe("ECR Bindings", () => {
           // the default bus takes up to ~a minute to become effective, so
           // successive fresh-tag pushes ride out the propagation window.
           const probe = (tag: string) =>
-            getJson<{ seen: boolean; tag: string }>(
-              `/events/probe?tag=${tag}`,
-            ).pipe(Effect.map((body) => body.seen));
+            getJson<{ seen: boolean; tag: string }>(`/events/probe?tag=${tag}`).pipe(
+              Effect.map((body) => body.seen),
+            );
           const seen = yield* Effect.gen(function* () {
             for (const tag of ["2.0.0", "2.0.1", "2.0.2", "2.0.3"]) {
               if (yield* probe(tag)) return true;

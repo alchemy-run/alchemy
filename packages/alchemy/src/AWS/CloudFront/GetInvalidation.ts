@@ -36,13 +36,8 @@ export interface GetInvalidation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetInvalidationRequest,
-    ) => Effect.Effect<
-      cloudfront.GetInvalidationResult,
-      cloudfront.GetInvalidationError
-    >
+    ) => Effect.Effect<cloudfront.GetInvalidationResult, cloudfront.GetInvalidationError>
   >
 > {}
 
-export const GetInvalidation = Binding.Service<GetInvalidation>(
-  "AWS.CloudFront.GetInvalidation",
-);
+export const GetInvalidation = Binding.Service<GetInvalidation>("AWS.CloudFront.GetInvalidation");

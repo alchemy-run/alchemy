@@ -13,9 +13,7 @@ import { bundleSource } from "./shared.ts";
  * across the refactor.
  */
 export const makeInlineScriptSource = (script: string): SourceProvider => {
-  const bundle = Effect.sync(() =>
-    crypto.createHash("sha256").update(script).digest("hex"),
-  ).pipe(
+  const bundle = Effect.sync(() => crypto.createHash("sha256").update(script).digest("hex")).pipe(
     Effect.map((hash): Bundle.BundleOutput => ({
       files: [{ path: "main.js", content: script, hash }],
       hash,
@@ -27,9 +25,7 @@ export const makeInlineScriptSource = (script: string): SourceProvider => {
     // props, which restart the instance via `structuralSignature`.
     watch: () =>
       bundle.pipe(
-        Effect.map((output) =>
-          Stream.make({ _tag: "Success", output } as Bundle.BundleWatchEvent),
-        ),
+        Effect.map((output) => Stream.make({ _tag: "Success", output } as Bundle.BundleWatchEvent)),
       ),
   });
 };

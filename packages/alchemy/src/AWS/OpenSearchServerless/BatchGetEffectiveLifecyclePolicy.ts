@@ -41,7 +41,6 @@ export interface BatchGetEffectiveLifecyclePolicy extends Binding.Service<
     >
   >
 > {}
-export const BatchGetEffectiveLifecyclePolicy =
-  Binding.Service<BatchGetEffectiveLifecyclePolicy>(
-    "AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy",
-  );
+export const BatchGetEffectiveLifecyclePolicy = Binding.Service<BatchGetEffectiveLifecyclePolicy>(
+  "AWS.OpenSearchServerless.BatchGetEffectiveLifecyclePolicy",
+);

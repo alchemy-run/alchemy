@@ -47,38 +47,28 @@ const makeNodeAdapterTarget = (
       conditions: [...NODE_BUNDLE_CONDITIONS],
     },
     adapter: (context) =>
-      Effect.succeed(
-        NodePath.join(context.wakuDirectory, "dist/adapters/node.js"),
-      ),
+      Effect.succeed(NodePath.join(context.wakuDirectory, "dist/adapters/node.js")),
     vitePlugins: () => Effect.sync(() => []),
     finish: (output, _context) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (output.distDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The waku build produced no dist directory")(undefined),
-          );
+          return yield* Effect.fail(fail("The waku build produced no dist directory")(undefined));
         }
         if (output.clientDirectory === undefined) {
           return yield* Effect.fail(
-            fail(
-              "The waku build produced no client directory for the Node serve entry",
-            )(undefined),
+            fail("The waku build produced no client directory for the Node serve entry")(undefined),
           );
         }
         const serverDir = path.join(output.distDirectory, "server");
         const serverIndex = path.join(serverDir, "index.js");
         const hasServerIndex = yield* fs
           .exists(serverIndex)
-          .pipe(
-            Effect.mapError(fail("Failed to probe the built server entry")),
-          );
+          .pipe(Effect.mapError(fail("Failed to probe the built server entry")));
         if (!hasServerIndex) {
           return yield* Effect.fail(
-            fail(`The waku build produced no server entry at ${serverIndex}`)(
-              undefined,
-            ),
+            fail(`The waku build produced no server entry at ${serverIndex}`)(undefined),
           );
         }
         yield* fs
@@ -86,20 +76,13 @@ const makeNodeAdapterTarget = (
             path.join(serverDir, "package.json"),
             `${JSON.stringify({ type: "module" }, null, 2)}\n`,
           )
-          .pipe(
-            Effect.mapError(fail("Failed to write dist/server/package.json")),
-          );
+          .pipe(Effect.mapError(fail("Failed to write dist/server/package.json")));
         const servePath = path.join(serverDir, NODE_SERVE_ENTRY_FILE_NAME);
         return yield* writeNodeServeEntry({
           output,
           servePath,
-          serveModuleName: path
-            .join("server", NODE_SERVE_ENTRY_FILE_NAME)
-            .replaceAll("\\", "/"),
-          clientDirExpression: relativeClientDirExpression(
-            servePath,
-            output.clientDirectory,
-          ),
+          serveModuleName: path.join("server", NODE_SERVE_ENTRY_FILE_NAME).replaceAll("\\", "/"),
+          clientDirExpression: relativeClientDirExpression(servePath, output.clientDirectory),
           handler: {
             kind: "fetch",
             imports: `import { INTERNAL_runFetch } from "./index.js";`,

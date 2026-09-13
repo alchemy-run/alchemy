@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetRecordsRequest extends Omit<
-  Kinesis.GetRecordsInput,
-  "StreamARN"
-> {}
+export interface GetRecordsRequest extends Omit<Kinesis.GetRecordsInput, "StreamARN"> {}
 
 /**
  * Runtime binding for `kinesis:GetRecords`.
@@ -44,9 +41,7 @@ export interface GetRecords extends Binding.Service<
   (
     stream: Stream,
   ) => Effect.Effect<
-    (
-      request: GetRecordsRequest,
-    ) => Effect.Effect<Kinesis.GetRecordsOutput, Kinesis.GetRecordsError>
+    (request: GetRecordsRequest) => Effect.Effect<Kinesis.GetRecordsOutput, Kinesis.GetRecordsError>
   >
 > {}
 

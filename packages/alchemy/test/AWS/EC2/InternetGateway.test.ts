@@ -9,10 +9,7 @@ import { assertInternetGatewayGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("list enumerates the deployed InternetGateway", (stack) =>
   Effect.gen(function* () {
@@ -27,9 +24,7 @@ test.provider("list enumerates the deployed InternetGateway", (stack) =>
     const provider = yield* Provider.findProvider(InternetGateway);
     const all = yield* provider.list();
 
-    expect(
-      all.some((x) => x.internetGatewayId === deployed.internetGatewayId),
-    ).toBe(true);
+    expect(all.some((x) => x.internetGatewayId === deployed.internetGatewayId)).toBe(true);
 
     yield* stack.destroy();
 

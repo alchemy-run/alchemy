@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface GetQueryStatusRequest extends Omit<
-  im.GetQueryStatusInput,
-  "MonitorName"
-> {}
+export interface GetQueryStatusRequest extends Omit<im.GetQueryStatusInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:GetQueryStatus` — check whether a
@@ -46,6 +43,4 @@ export interface GetQueryStatus extends Binding.Service<
   >
 > {}
 
-export const GetQueryStatus = Binding.Service<GetQueryStatus>(
-  "AWS.InternetMonitor.GetQueryStatus",
-);
+export const GetQueryStatus = Binding.Service<GetQueryStatus>("AWS.InternetMonitor.GetQueryStatus");

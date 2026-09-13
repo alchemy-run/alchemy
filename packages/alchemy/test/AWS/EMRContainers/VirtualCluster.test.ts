@@ -26,9 +26,7 @@ test.provider("typed error semantics on a nonexistent virtual cluster", () =>
   Effect.gen(function* () {
     const id = "abcdefabcdefabcdefabcdef01";
 
-    const describeError = yield* Effect.flip(
-      emrc.describeVirtualCluster({ id }),
-    );
+    const describeError = yield* Effect.flip(emrc.describeVirtualCluster({ id }));
     expect(describeError._tag).toBe("ResourceNotFoundException");
 
     const deleteError = yield* Effect.flip(emrc.deleteVirtualCluster({ id }));
@@ -55,9 +53,7 @@ test.provider("typed error semantics for job run ops on a nonexistent vc", () =>
     );
     expect(describeError._tag).toBe("ValidationException");
 
-    const cancelError = yield* Effect.flip(
-      emrc.cancelJobRun({ id: jobRunId, virtualClusterId }),
-    );
+    const cancelError = yield* Effect.flip(emrc.cancelJobRun({ id: jobRunId, virtualClusterId }));
     expect(cancelError._tag).toBe("ValidationException");
 
     const list = yield* emrc.listJobRuns({ virtualClusterId });
@@ -122,9 +118,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"],
           });
           const cluster = yield* Cluster("Cluster", {
             clusterName: EKS_CLUSTER_NAME,
@@ -151,9 +145,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         id: vc.virtualClusterId,
       });
       expect(observed.virtualCluster?.name).toBe(VC_NAME);
-      expect(observed.virtualCluster?.containerProvider?.id).toBe(
-        EKS_CLUSTER_NAME,
-      );
+      expect(observed.virtualCluster?.containerProvider?.id).toBe(EKS_CLUSTER_NAME);
 
       // Destroy immediately and verify the virtual cluster terminated.
       yield* stack.destroy();
@@ -166,20 +158,13 @@ const assertVirtualClusterGone = (id: string) =>
   Effect.gen(function* () {
     const state = yield* emrc.describeVirtualCluster({ id }).pipe(
       Effect.map((response) => response.virtualCluster?.state ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone"),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone")),
     );
     if (state !== "gone" && state !== "TERMINATED" && state !== "TERMINATING") {
-      return yield* Effect.fail(
-        new Error(`virtual cluster ${id} still exists (${state})`),
-      );
+      return yield* Effect.fail(new Error(`virtual cluster ${id} still exists (${state})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );

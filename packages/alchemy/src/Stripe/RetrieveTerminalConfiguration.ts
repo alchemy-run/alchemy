@@ -41,7 +41,6 @@ export interface RetrieveTerminalConfiguration extends Binding.Service<
   >
 > {}
 
-export const RetrieveTerminalConfiguration =
-  Binding.Service<RetrieveTerminalConfiguration>(
-    "Stripe.RetrieveTerminalConfiguration",
-  );
+export const RetrieveTerminalConfiguration = Binding.Service<RetrieveTerminalConfiguration>(
+  "Stripe.RetrieveTerminalConfiguration",
+);

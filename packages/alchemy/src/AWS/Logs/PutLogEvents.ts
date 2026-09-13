@@ -72,6 +72,4 @@ export interface PutLogEvents extends Binding.Service<
     ) => Effect.Effect<Logs.PutLogEventsResponse, Logs.PutLogEventsError>
   >
 > {}
-export const PutLogEvents = Binding.Service<PutLogEvents>(
-  "AWS.Logs.PutLogEvents",
-);
+export const PutLogEvents = Binding.Service<PutLogEvents>("AWS.Logs.PutLogEvents");

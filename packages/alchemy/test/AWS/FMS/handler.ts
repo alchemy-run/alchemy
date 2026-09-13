@@ -9,9 +9,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class FMSTestFunction extends Lambda.Function<Lambda.Function>()(
-  "FMSTestFunction",
-) {}
+export class FMSTestFunction extends Lambda.Function<Lambda.Function>()("FMSTestFunction") {}
 
 // The testing organization is deliberately NOT onboarded to Firewall Manager
 // (see AdminAccount.test.ts — onboarding blocks offboarding for >10 minutes),
@@ -78,15 +76,12 @@ export default FMSTestFunction.make(
 
     // --- administrator management (pinned to us-east-1) ---
     const getAdminScope = yield* FMS.GetAdminScope();
-    const listAdminAccountsForOrganization =
-      yield* FMS.ListAdminAccountsForOrganization();
+    const listAdminAccountsForOrganization = yield* FMS.ListAdminAccountsForOrganization();
     const listAdminsManagingAccount = yield* FMS.ListAdminsManagingAccount();
 
     // --- third-party firewalls (marketplace-subscription gated) ---
-    const associateThirdPartyFirewall =
-      yield* FMS.AssociateThirdPartyFirewall();
-    const disassociateThirdPartyFirewall =
-      yield* FMS.DisassociateThirdPartyFirewall();
+    const associateThirdPartyFirewall = yield* FMS.AssociateThirdPartyFirewall();
+    const disassociateThirdPartyFirewall = yield* FMS.DisassociateThirdPartyFirewall();
     const getThirdPartyFirewallAssociationStatus =
       yield* FMS.GetThirdPartyFirewallAssociationStatus();
     const listThirdPartyFirewallFirewallPolicies =
@@ -142,10 +137,7 @@ export default FMSTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/admins-managing-account"
-        ) {
+        if (request.method === "GET" && pathname === "/admins-managing-account") {
           const result = yield* listAdminsManagingAccount().pipe(
             Effect.map((r) => ({
               tag: "Ok",
@@ -158,18 +150,14 @@ export default FMSTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/admin-accounts-for-organization"
-        ) {
+        if (request.method === "GET" && pathname === "/admin-accounts-for-organization") {
           const result = yield* listAdminAccountsForOrganization().pipe(
             Effect.map((r) => ({
               tag: "Ok",
               count: (r.AdminAccounts ?? []).length,
             })),
-            Effect.catchTag(
-              ["InvalidOperationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["InvalidOperationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -182,11 +170,7 @@ export default FMSTestFunction.make(
               count: (r.PolicyList ?? []).length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "InvalidOperationException",
-                "ResourceNotFoundException",
-              ],
+              ["AccessDeniedException", "InvalidOperationException", "ResourceNotFoundException"],
               (e) => Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
@@ -199,9 +183,8 @@ export default FMSTestFunction.make(
               tag: "Ok",
               count: (r.ResourceSets ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "InvalidOperationException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["AccessDeniedException", "InvalidOperationException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -213,9 +196,8 @@ export default FMSTestFunction.make(
               tag: "Ok",
               count: (r.MemberAccounts ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["AccessDeniedException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -228,11 +210,7 @@ export default FMSTestFunction.make(
               topicArn: r.SnsTopicArn ?? null,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "InvalidOperationException",
-                "ResourceNotFoundException",
-              ],
+              ["AccessDeniedException", "InvalidOperationException", "ResourceNotFoundException"],
               (e) => Effect.succeed({ tag: e._tag, topicArn: null }),
             ),
           );
@@ -246,11 +224,7 @@ export default FMSTestFunction.make(
               count: (r.AppsLists ?? []).length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "InvalidOperationException",
-                "ResourceNotFoundException",
-              ],
+              ["AccessDeniedException", "InvalidOperationException", "ResourceNotFoundException"],
               (e) => Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
@@ -264,21 +238,14 @@ export default FMSTestFunction.make(
               count: (r.ProtocolsLists ?? []).length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "InvalidOperationException",
-                "ResourceNotFoundException",
-              ],
+              ["AccessDeniedException", "InvalidOperationException", "ResourceNotFoundException"],
               (e) => Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/third-party-firewall-status"
-        ) {
+        if (request.method === "GET" && pathname === "/third-party-firewall-status") {
           const result = yield* getThirdPartyFirewallAssociationStatus({
             ThirdPartyFirewall: "PALO_ALTO_NETWORKS_CLOUD_NGFW",
           }).pipe(

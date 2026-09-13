@@ -41,13 +41,9 @@ export interface ReplaceDiff {
 export const hasUnresolvedInputs = <T>(value: Input<NoInfer<T>>): value is T =>
   _hasUnresolved(value);
 
-export const isResolved = <T>(value: Input<T>): value is T =>
-  !_hasUnresolved(value);
+export const isResolved = <T>(value: Input<T>): value is T => !_hasUnresolved(value);
 
-const _hasUnresolved = (
-  value: unknown,
-  seen: WeakSet<object> = new WeakSet(),
-): boolean => {
+const _hasUnresolved = (value: unknown, seen: WeakSet<object> = new WeakSet()): boolean => {
   if (value == null || isPrimitive(value)) return false;
   if (Output.isExpr(value) || Effect.isEffect(value)) return true;
   // Only plain data is traversed; any other class instance (Layer, Context,
@@ -90,17 +86,11 @@ const _stripUnresolved = (
   // Serializable leaves — the only class instances persisted state may
   // carry (StateEncoding knows Redacted/Duration; Date JSON-encodes).
   // Rebuilding them structurally would strip their prototype.
-  if (
-    Redacted.isRedacted(value) ||
-    Duration.isDuration(value) ||
-    value instanceof Date
-  ) {
+  if (Redacted.isRedacted(value) || Duration.isDuration(value) || value instanceof Date) {
     return value;
   }
   if (isPlainData(value)) {
-    return mapPlainData(value, ancestors, (child) =>
-      _stripUnresolved(child, ancestors),
-    );
+    return mapPlainData(value, ancestors, (child) => _stripUnresolved(child, ancestors));
   }
   // Any other class instance (Layer, Context, SDK objects) is runtime-only
   // wiring that can't round-trip through JSON — a beta.103 Context is even
@@ -133,17 +123,11 @@ const _stripEffects = (
   // yieldable and would otherwise be misclassified as plain Effects.
   if (Output.isExpr(value)) return value;
   if (Effect.isEffect(value)) return undefined;
-  if (
-    Redacted.isRedacted(value) ||
-    Duration.isDuration(value) ||
-    value instanceof Date
-  ) {
+  if (Redacted.isRedacted(value) || Duration.isDuration(value) || value instanceof Date) {
     return value;
   }
   if (isPlainData(value)) {
-    return mapPlainData(value, ancestors, (child) =>
-      _stripEffects(child, ancestors),
-    );
+    return mapPlainData(value, ancestors, (child) => _stripEffects(child, ancestors));
   }
   // Non-plain instances (Layer, Context, SDK objects) are dropped with
   // Effects — same runtime-only rationale, and their internals may be
@@ -217,11 +201,7 @@ export type DeepEqualOptions = {
  * By default, `null` and `undefined` are treated as distinct. Pass
  * `{ stripNullish: true }` to opt into treating them as equivalent.
  */
-export const deepEqual = (
-  a: unknown,
-  b: unknown,
-  options?: DeepEqualOptions,
-): boolean =>
+export const deepEqual = (a: unknown, b: unknown, options?: DeepEqualOptions): boolean =>
   JSON.stringify(canonicalize(a, options?.stripNullish ?? false)) ===
   JSON.stringify(canonicalize(b, options?.stripNullish ?? false));
 

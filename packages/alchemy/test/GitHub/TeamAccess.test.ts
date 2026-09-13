@@ -42,9 +42,7 @@ const getTeams = (repo: string) =>
 
 const listTestOrgAccess = Effect.gen(function* () {
   const credentials = yield* yield* GitHubCredentials;
-  const provider = yield* Provider.findProviderByType<GitHub.TeamAccess>(
-    GitHub.TeamAccess.Type,
-  );
+  const provider = yield* Provider.findProviderByType<GitHub.TeamAccess>(GitHub.TeamAccess.Type);
   return yield* provider.list().pipe(
     Effect.provideService(
       GitHubCredentials,
@@ -63,13 +61,10 @@ const listTestOrgAccess = Effect.gen(function* () {
               !(
                 url.pathname === `/orgs/${owner}/repos` ||
                 url.pathname.startsWith(`/repos/${owner}/`) ||
-                (options.url === "/repos/{owner}/{repo}/teams" &&
-                  options.owner === owner)
+                (options.url === "/repos/{owner}/{repo}/teams" && options.owner === owner)
               )
             ) {
-              throw new Error(
-                `Refusing GitHub enumeration outside ${owner}: ${options.url}`,
-              );
+              throw new Error(`Refusing GitHub enumeration outside ${owner}: ${options.url}`);
             }
           });
           return octokit;
@@ -97,9 +92,7 @@ test.provider(
       });
       expect(team.slug).toBe(teamName);
 
-      const deployAccess = (
-        permission?: GitHub.TeamAccessProps["permission"],
-      ) =>
+      const deployAccess = (permission?: GitHub.TeamAccessProps["permission"]) =>
         stack.deploy(
           Effect.gen(function* () {
             // Retained intentionally: the default gh token does not have delete_repo.
@@ -111,10 +104,7 @@ test.provider(
             });
             return yield* GitHub.TeamAccess("TeamAccess", {
               owner,
-              repository: Output.map(
-                repo.fullName,
-                (fullName) => fullName.split("/")[1]!,
-              ),
+              repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
               teamSlug: team.slug,
               permission,
             }).pipe(destroy());
@@ -125,9 +115,7 @@ test.provider(
         const created = yield* deployAccess();
         expect(created).toEqual({ teamSlug: team.slug, permission: "push" });
         expect(
-          (yield* getTeams(repositoryName)).find(
-            (item) => item.slug === team.slug,
-          )?.permission,
+          (yield* getTeams(repositoryName)).find((item) => item.slug === team.slug)?.permission,
         ).toBe("push");
         expect(yield* listTestOrgAccess).toContainEqual({
           teamSlug: team.slug,
@@ -137,9 +125,7 @@ test.provider(
         const updated = yield* deployAccess("admin");
         expect(updated.permission).toBe("admin");
         expect(
-          (yield* getTeams(repositoryName)).find(
-            (item) => item.slug === team.slug,
-          )?.permission,
+          (yield* getTeams(repositoryName)).find((item) => item.slug === team.slug)?.permission,
         ).toBe("admin");
       }).pipe(
         Effect.onExit(() =>
@@ -147,9 +133,7 @@ test.provider(
             yield* stack.destroy();
             // Verify access removal while both the repository and team still exist.
             expect(
-              (yield* getTeams(repositoryName)).find(
-                (item) => item.slug === team.slug,
-              ),
+              (yield* getTeams(repositoryName)).find((item) => item.slug === team.slug),
             ).toBeUndefined();
             yield* Effect.tryPromise({
               try: () =>
@@ -167,9 +151,7 @@ test.provider(
                 }),
               catch: (error) => error as Error,
             });
-            expect(remaining.some((item) => item.slug === team.slug)).toBe(
-              false,
-            );
+            expect(remaining.some((item) => item.slug === team.slug)).toBe(false);
           }).pipe(Effect.orDie),
         ),
       );
@@ -201,11 +183,7 @@ const mockedCredentials = Layer.succeed(
             Effect.runPromise(
               Effect.sync(() => {
                 const url = new URL(
-                  typeof input === "string"
-                    ? input
-                    : input instanceof URL
-                      ? input.href
-                      : input.url,
+                  typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
                 );
                 const method = init?.method ?? "GET";
                 requests.push({ method, path: url.pathname });
@@ -223,10 +201,7 @@ const mockedCredentials = Layer.succeed(
                   const key = `${match[2]}/${match[4]}`;
                   if (method === "PUT") {
                     if (rejectWrites)
-                      return json(
-                        { message: "Resource not accessible by integration" },
-                        403,
-                      );
+                      return json({ message: "Resource not accessible by integration" }, 403);
                     grants.set(key, JSON.parse(String(init?.body)).permission);
                     return new Response(null, { status: 204 });
                   }
@@ -237,9 +212,7 @@ const mockedCredentials = Layer.succeed(
                   }
                 }
                 if (method === "GET" && url.pathname === "/user/repos") {
-                  return json([
-                    { owner: { login: owner }, name: repositoryName },
-                  ]);
+                  return json([{ owner: { login: owner }, name: repositoryName }]);
                 }
                 if (
                   method === "GET" &&
@@ -252,9 +225,7 @@ const mockedCredentials = Layer.succeed(
                     })),
                   );
                 }
-                throw new Error(
-                  `Unexpected mocked request: ${method} ${url.pathname}`,
-                );
+                throw new Error(`Unexpected mocked request: ${method} ${url.pathname}`);
               }),
             ),
         },
@@ -262,10 +233,7 @@ const mockedCredentials = Layer.succeed(
   }),
 );
 const { test: unit } = Test.make({
-  providers: Layer.effect(
-    GitHub.Providers,
-    Provider.collection([GitHub.TeamAccess]),
-  ).pipe(
+  providers: Layer.effect(GitHub.Providers, Provider.collection([GitHub.TeamAccess])).pipe(
     Layer.provide(GitHub.TeamAccessProvider()),
     Layer.provideMerge(mockedCredentials),
   ),
@@ -300,9 +268,7 @@ unit.provider(
       const provider = yield* Provider.findProviderByType<GitHub.TeamAccess>(
         GitHub.TeamAccess.Type,
       );
-      expect(yield* provider.list()).toEqual([
-        { teamSlug: teamName, permission: "admin" },
-      ]);
+      expect(yield* provider.list()).toEqual([{ teamSlug: teamName, permission: "admin" }]);
 
       const replacement = `${teamName}-replacement`;
       yield* deploy(replacement, "pull");
@@ -341,9 +307,7 @@ unit(
   "unit: rejects production and arbitrary fixture owners",
   Effect.sync(() => {
     expect(() => testOwner("alchemy-run")).toThrow("Unsafe GITHUB_TEST_OWNER");
-    expect(() => testOwner("personal-account")).toThrow(
-      "Unsafe GITHUB_TEST_OWNER",
-    );
+    expect(() => testOwner("personal-account")).toThrow("Unsafe GITHUB_TEST_OWNER");
     expect(() => testOwner("")).toThrow("Unsafe GITHUB_TEST_OWNER");
     expect(testOwner("alchemy-run-test")).toBe("alchemy-run-test");
     expect(testOwner("alchemy-run-test-2")).toBe("alchemy-run-test-2");

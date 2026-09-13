@@ -4,10 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { Accessor } from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  BatchGetSecretValue,
-  type BatchGetSecretValueRequest,
-} from "./BatchGetSecretValue.ts";
+import { BatchGetSecretValue, type BatchGetSecretValueRequest } from "./BatchGetSecretValue.ts";
 import type { Secret } from "./Secret.ts";
 
 /**
@@ -29,32 +26,25 @@ export const BatchGetSecretValueHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.SecretsManager.BatchGetSecretValue())`(
-            {
+          yield* host.bind`Allow(${host}, AWS.SecretsManager.BatchGetSecretValue())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["secretsmanager:BatchGetSecretValue"],
+                Resource: ["*"],
+              },
+            ],
+          });
+          for (const secret of secrets) {
+            yield* host.bind`Allow(${host}, AWS.SecretsManager.BatchGetSecretValue(${secret}))`({
               policyStatements: [
                 {
                   Effect: "Allow",
-                  Action: ["secretsmanager:BatchGetSecretValue"],
-                  Resource: ["*"],
+                  Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                  Resource: [secret.secretArn],
                 },
               ],
-            },
-          );
-          for (const secret of secrets) {
-            yield* host.bind`Allow(${host}, AWS.SecretsManager.BatchGetSecretValue(${secret}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "secretsmanager:GetSecretValue",
-                      "secretsmanager:DescribeSecret",
-                    ],
-                    Resource: [secret.secretArn],
-                  },
-                ],
-              },
-            );
+            });
           }
         }
       }

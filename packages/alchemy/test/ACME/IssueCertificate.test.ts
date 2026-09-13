@@ -24,14 +24,11 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const enabled =
   process.env.ACME_TEST_ZEROSSL === "1" &&
-  (process.env.ZERO_SSL_KEY !== undefined ||
-    process.env.ZEROSSL_ACCESS_KEY !== undefined);
+  (process.env.ZERO_SSL_KEY !== undefined || process.env.ZEROSSL_ACCESS_KEY !== undefined);
 
 // No `beforeAll.skipIf`: deploy only when enabled, else hand the (skipped)
 // test an empty handle.
-const stack = beforeAll(
-  enabled ? deploy(Stack) : Effect.succeed({ url: "" } as { url: string }),
-);
+const stack = beforeAll(enabled ? deploy(Stack) : Effect.succeed({ url: "" } as { url: string }));
 afterAll.skipIf(!enabled || !!process.env.NO_DESTROY)(destroy(Stack));
 
 const NAME = `alchemy-acme-worker.${ZONE_NAME}`;
@@ -55,9 +52,7 @@ test.skipIf(!enabled)(
 
     const response = yield* client.get(`${url}/issue?name=${NAME}`);
     const text = yield* response.text;
-    expect(text, `status ${response.status}: ${text.slice(0, 2000)}`).toMatch(
-      /^\{/,
-    );
+    expect(text, `status ${response.status}: ${text.slice(0, 2000)}`).toMatch(/^\{/);
     const body = JSON.parse(text) as {
       issuer?: string;
       notAfter?: string;

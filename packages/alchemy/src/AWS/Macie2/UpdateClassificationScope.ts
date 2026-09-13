@@ -36,7 +36,6 @@ export interface UpdateClassificationScope extends Binding.Service<
     >
   >
 > {}
-export const UpdateClassificationScope =
-  Binding.Service<UpdateClassificationScope>(
-    "AWS.Macie2.UpdateClassificationScope",
-  );
+export const UpdateClassificationScope = Binding.Service<UpdateClassificationScope>(
+  "AWS.Macie2.UpdateClassificationScope",
+);

@@ -61,11 +61,7 @@ export const bundleSource = (spec: {
   ) => Effect.Effect<Bundle.BundleOutput, SourceError, SourceServices>;
   readonly watch: (
     ctx: DevContext,
-  ) => Effect.Effect<
-    Stream.Stream<Bundle.BundleWatchEvent, SourceError, any>,
-    SourceError,
-    any
-  >;
+  ) => Effect.Effect<Stream.Stream<Bundle.BundleWatchEvent, SourceError, any>, SourceError, any>;
 }): SourceProvider => ({
   ownsAssets: false,
   build: (ctx) =>
@@ -76,16 +72,9 @@ export const bundleSource = (spec: {
         hash: { bundle: bundle.hash },
       })),
     ),
-  hash: (ctx) =>
-    spec.build(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
+  hash: (ctx) => spec.build(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
   dev: (ctx) =>
-    spec
-      .watch(ctx)
-      .pipe(
-        Effect.map(
-          (bundles) => ({ mode: "bundle", bundles }) as SourceDevHandle,
-        ),
-      ),
+    spec.watch(ctx).pipe(Effect.map((bundles) => ({ mode: "bundle", bundles }) as SourceDevHandle)),
 });
 
 /**
@@ -115,14 +104,10 @@ export const watchBundleDirectory = <R>(options: {
           _tag: "Success",
           output,
         })),
-        Effect.catch((error) =>
-          Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error }),
-        ),
+        Effect.catch((error) => Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error })),
       );
       const rebuilds = fs.watch(path.dirname(main)).pipe(
-        options.ignore
-          ? Stream.filter((event) => !options.ignore!(event.path))
-          : (self) => self,
+        options.ignore ? Stream.filter((event) => !options.ignore!(event.path)) : (self) => self,
         Stream.debounce("200 millis"),
         Stream.flatMap(() =>
           Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent).pipe(

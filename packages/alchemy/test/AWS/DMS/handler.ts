@@ -10,9 +10,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class DmsTestFunction extends Lambda.Function<Lambda.Function>()(
-  "DmsTestFunction",
-) {}
+export class DmsTestFunction extends Lambda.Function<Lambda.Function>()("DmsTestFunction") {}
 
 export default DmsTestFunction.make(
   {
@@ -61,9 +59,7 @@ export default DmsTestFunction.make(
     // instance/task lifecycle; the test verifies the rule deploys.
     yield* DMS.consumeReplicationEvents({ kinds: ["task-state"] }, (events) =>
       Stream.runForEach(events, (event) =>
-        Effect.log(
-          `dms replication event: ${event.detail.sourceId} -> ${event.detail.eventType}`,
-        ),
+        Effect.log(`dms replication event: ${event.detail.sourceId} -> ${event.detail.eventType}`),
       ),
     );
 
@@ -109,10 +105,8 @@ export default DmsTestFunction.make(
               schemas: response.Schemas ?? [],
               fault: null as string | null,
             })),
-            Effect.catchTag(
-              ["ResourceNotFoundFault", "InvalidResourceStateFault"],
-              (error) =>
-                Effect.succeed({ schemas: [], fault: error._tag as string }),
+            Effect.catchTag(["ResourceNotFoundFault", "InvalidResourceStateFault"], (error) =>
+              Effect.succeed({ schemas: [], fault: error._tag as string }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -124,10 +118,8 @@ export default DmsTestFunction.make(
               status: response.RefreshSchemasStatus?.Status ?? null,
               fault: null as string | null,
             })),
-            Effect.catchTag(
-              ["ResourceNotFoundFault", "InvalidResourceStateFault"],
-              (error) =>
-                Effect.succeed({ status: null, fault: error._tag as string }),
+            Effect.catchTag(["ResourceNotFoundFault", "InvalidResourceStateFault"], (error) =>
+              Effect.succeed({ status: null, fault: error._tag as string }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -208,11 +200,7 @@ export default DmsTestFunction.make(
           }).pipe(
             Effect.map(() => "Started"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundFault",
-                "InvalidResourceStateFault",
-                "AccessDeniedFault",
-              ],
+              ["ResourceNotFoundFault", "InvalidResourceStateFault", "AccessDeniedFault"],
               (error) => Effect.succeed(error._tag),
             ),
           );
@@ -224,9 +212,8 @@ export default DmsTestFunction.make(
             ReplicationTaskArn: NONEXISTENT_TASK_ARN,
           }).pipe(
             Effect.map(() => "Stopped"),
-            Effect.catchTag(
-              ["ResourceNotFoundFault", "InvalidResourceStateFault"],
-              (error) => Effect.succeed(error._tag),
+            Effect.catchTag(["ResourceNotFoundFault", "InvalidResourceStateFault"], (error) =>
+              Effect.succeed(error._tag),
             ),
           );
           return yield* HttpServerResponse.json({ fault });
@@ -238,11 +225,7 @@ export default DmsTestFunction.make(
           }).pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundFault",
-                "InvalidResourceStateFault",
-                "AccessDeniedFault",
-              ],
+              ["ResourceNotFoundFault", "InvalidResourceStateFault", "AccessDeniedFault"],
               (error) => Effect.succeed(error._tag),
             ),
           );
@@ -252,14 +235,11 @@ export default DmsTestFunction.make(
         if (request.method === "POST" && pathname === "/task/reload") {
           const fault = yield* reloadTables({
             ReplicationTaskArn: NONEXISTENT_TASK_ARN,
-            TablesToReload: [
-              { SchemaName: "public", TableName: "nonexistent" },
-            ],
+            TablesToReload: [{ SchemaName: "public", TableName: "nonexistent" }],
           }).pipe(
             Effect.map(() => "Reloaded"),
-            Effect.catchTag(
-              ["ResourceNotFoundFault", "InvalidResourceStateFault"],
-              (error) => Effect.succeed(error._tag),
+            Effect.catchTag(["ResourceNotFoundFault", "InvalidResourceStateFault"], (error) =>
+              Effect.succeed(error._tag),
             ),
           );
           return yield* HttpServerResponse.json({ fault });
@@ -292,11 +272,7 @@ export default DmsTestFunction.make(
           }).pipe(
             Effect.map(() => "Started"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundFault",
-                "InvalidResourceStateFault",
-                "AccessDeniedFault",
-              ],
+              ["ResourceNotFoundFault", "InvalidResourceStateFault", "AccessDeniedFault"],
               (error) => Effect.succeed(error._tag),
             ),
           );
@@ -309,11 +285,7 @@ export default DmsTestFunction.make(
           }).pipe(
             Effect.map(() => "Stopped"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundFault",
-                "InvalidResourceStateFault",
-                "AccessDeniedFault",
-              ],
+              ["ResourceNotFoundFault", "InvalidResourceStateFault", "AccessDeniedFault"],
               (error) => Effect.succeed(error._tag),
             ),
           );

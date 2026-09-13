@@ -108,9 +108,7 @@ export class DatastoreNotReady extends Data.TaggedError("DatastoreNotReady")<{
  * Raised when the HealthImaging API omits an expected field (e.g. the
  * data store ARN) from a response.
  */
-export class DatastoreIncomplete extends Data.TaggedError(
-  "DatastoreIncomplete",
-)<{
+export class DatastoreIncomplete extends Data.TaggedError("DatastoreIncomplete")<{
   message: string;
 }> {}
 
@@ -142,9 +140,7 @@ const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 export const DatastoreProvider = () =>
@@ -159,17 +155,10 @@ export const DatastoreProvider = () =>
       const getById = Effect.fn(function* (datastoreId: string) {
         const response = yield* medicalimaging
           .getDatastore({ datastoreId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const properties = response?.datastoreProperties;
         if (properties === undefined) return undefined;
-        if (
-          properties.datastoreStatus === "DELETED" ||
-          properties.datastoreStatus === "DELETING"
-        ) {
+        if (properties.datastoreStatus === "DELETED" || properties.datastoreStatus === "DELETING") {
           return undefined;
         }
         return properties;
@@ -194,10 +183,7 @@ export const DatastoreProvider = () =>
         return yield* getById(summary.datastoreId);
       });
 
-      const observe = Effect.fn(function* (
-        datastoreId: string | undefined,
-        name: string,
-      ) {
+      const observe = Effect.fn(function* (datastoreId: string | undefined, name: string) {
         if (datastoreId !== undefined) {
           const properties = yield* getById(datastoreId);
           if (properties !== undefined) return properties;
@@ -205,9 +191,7 @@ export const DatastoreProvider = () =>
         return yield* findByName(name);
       });
 
-      const requireArn = Effect.fn(function* (
-        properties: medicalimaging.DatastoreProperties,
-      ) {
+      const requireArn = Effect.fn(function* (properties: medicalimaging.DatastoreProperties) {
         if (properties.datastoreArn === undefined) {
           return yield* Effect.fail(
             new DatastoreIncomplete({
@@ -225,9 +209,7 @@ export const DatastoreProvider = () =>
         return toTagRecord(response?.tags);
       });
 
-      const toAttrs = Effect.fn(function* (
-        properties: medicalimaging.DatastoreProperties,
-      ) {
+      const toAttrs = Effect.fn(function* (properties: medicalimaging.DatastoreProperties) {
         const arn = yield* requireArn(properties);
         return {
           datastoreId: properties.datastoreId,
@@ -283,16 +265,10 @@ export const DatastoreProvider = () =>
           if ((n.kmsKeyArn ?? undefined) !== (o.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.lambdaAuthorizerArn ?? undefined) !==
-            (o.lambdaAuthorizerArn ?? undefined)
-          ) {
+          if ((n.lambdaAuthorizerArn ?? undefined) !== (o.lambdaAuthorizerArn ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.losslessStorageFormat ?? undefined) !==
-            (o.losslessStorageFormat ?? undefined)
-          ) {
+          if ((n.losslessStorageFormat ?? undefined) !== (o.losslessStorageFormat ?? undefined)) {
             return { action: "replace" } as const;
           }
           // tags → default update
@@ -303,18 +279,10 @@ export const DatastoreProvider = () =>
           const properties = yield* observe(output?.datastoreId, name);
           if (properties === undefined) return undefined;
           const attrs = yield* toAttrs(properties);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const props = news!;
           const name = output?.datastoreName ?? (yield* toName(id, props));
           const internalTags = yield* createInternalTags(id);
@@ -336,15 +304,9 @@ export const DatastoreProvider = () =>
                 losslessStorageFormat: props.losslessStorageFormat,
                 tags: desiredTags,
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             observed =
-              created !== undefined
-                ? yield* getById(created.datastoreId)
-                : yield* findByName(name);
+              created !== undefined ? yield* getById(created.datastoreId) : yield* findByName(name);
           }
           if (observed === undefined) {
             return yield* Effect.fail(
@@ -365,9 +327,7 @@ export const DatastoreProvider = () =>
           if (upsert.length > 0) {
             yield* medicalimaging.tagResource({
               resourceArn: arn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value]),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
             });
           }
           if (removed.length > 0) {
@@ -388,33 +348,22 @@ export const DatastoreProvider = () =>
           // once the retry budget is exhausted.
           const observed = yield* medicalimaging
             .getDatastore({ datastoreId: output.datastoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           const status = observed?.datastoreProperties.datastoreStatus;
-          if (
-            status === undefined ||
-            status === "DELETING" ||
-            status === "DELETED"
-          ) {
+          if (status === undefined || status === "DELETING" || status === "DELETED") {
             return;
           }
-          yield* medicalimaging
-            .deleteDatastore({ datastoreId: output.datastoreId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              retryWhileConflict,
-            );
+          yield* medicalimaging.deleteDatastore({ datastoreId: output.datastoreId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            retryWhileConflict,
+          );
         }),
 
         list: () =>
           medicalimaging.listDatastores.items({}).pipe(
             Stream.filter(
               (summary) =>
-                summary.datastoreStatus !== "DELETED" &&
-                summary.datastoreStatus !== "DELETING",
+                summary.datastoreStatus !== "DELETED" && summary.datastoreStatus !== "DELETING",
             ),
             Stream.runCollect,
             Effect.flatMap((summaries) =>
@@ -423,17 +372,13 @@ export const DatastoreProvider = () =>
                 (summary) =>
                   getById(summary.datastoreId).pipe(
                     Effect.flatMap((properties) =>
-                      properties === undefined
-                        ? Effect.succeed(undefined)
-                        : toAttrs(properties),
+                      properties === undefined ? Effect.succeed(undefined) : toAttrs(properties),
                     ),
                   ),
                 { concurrency: 4 },
               ),
             ),
-            Effect.map((attrs) =>
-              attrs.filter((a): a is NonNullable<typeof a> => a !== undefined),
-            ),
+            Effect.map((attrs) => attrs.filter((a): a is NonNullable<typeof a> => a !== undefined)),
           ),
       };
     }),

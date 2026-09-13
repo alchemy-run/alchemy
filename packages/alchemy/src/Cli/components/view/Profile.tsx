@@ -136,15 +136,11 @@ function ProfileList({
         borderColor={theme.color.muted}
         borderDimColor
       >
-        <SectionHeading annotation={`${profiles.length}`}>
-          Profiles
-        </SectionHeading>
+        <SectionHeading annotation={`${profiles.length}`}>Profiles</SectionHeading>
       </Box>
       {profiles.length === 0 ? (
         <Gutter>
-          <Text tone="muted">
-            {"No profiles configured. Run `alchemy profile` to create one."}
-          </Text>
+          <Text tone="muted">{"No profiles configured. Run `alchemy profile` to create one."}</Text>
         </Gutter>
       ) : (
         profiles.map((profile) => (
@@ -193,10 +189,8 @@ export const providerColumnWidths = (
  * refresh spinner fits inside the same reserved height). The dashboard
  * windows providers by this number, so keep it in step with the layout.
  */
-export const providerBlockHeight = (
-  provider: ProfileProviderDisplay,
-  first: boolean,
-): number => (first ? 0 : 1) + 1 + Math.max(provider.lines.length, 1);
+export const providerBlockHeight = (provider: ProfileProviderDisplay, first: boolean): number =>
+  (first ? 0 : 1) + 1 + Math.max(provider.lines.length, 1);
 
 /**
  * Detail lines arrive as `key: value` strings (plus free-form diagnostic
@@ -266,16 +260,12 @@ export function ProviderBlock({
           </Text>
           {reauthHint !== undefined &&
           provider.status === "reauth" &&
-          (focusedProvider === undefined ||
-            provider.name === focusedProvider) ? (
+          (focusedProvider === undefined || provider.name === focusedProvider) ? (
             <Text tone="muted"> — {reauthHint}</Text>
           ) : null}
         </Box>
       </Gutter>
-      <Box
-        flexDirection="column"
-        minHeight={Math.max(provider.lines.length, 1)}
-      >
+      <Box flexDirection="column" minHeight={Math.max(provider.lines.length, 1)}>
         {provider.name === refreshingProvider ? (
           <Gutter>
             <Box paddingLeft={detailIndent}>
@@ -423,24 +413,20 @@ function CurrentProfile({
 /**
  * View builders consumed by `CliKit.print` and the interactive profile app.
  */
-export const profileListNode = (
-  profiles: ReadonlyArray<ProfileListDisplay>,
-): JSX.Element => <ProfileList profiles={profiles} />;
+export const profileListNode = (profiles: ReadonlyArray<ProfileListDisplay>): JSX.Element => (
+  <ProfileList profiles={profiles} />
+);
 
 export const profileDetailsNode = (
   profile: string,
   providers: ReadonlyArray<ProfileProviderDisplay>,
   active: boolean,
-): JSX.Element => (
-  <ProfileDetails profile={profile} providers={providers} active={active} />
+): JSX.Element => <ProfileDetails profile={profile} providers={providers} active={active} />;
+
+export const profileNoticeNode = (profile: string, message: string): JSX.Element => (
+  <ProfileNotice profile={profile} message={message} />
 );
 
-export const profileNoticeNode = (
-  profile: string,
-  message: string,
-): JSX.Element => <ProfileNotice profile={profile} message={message} />;
-
-export const currentProfileNode = (
-  name: string,
-  source: string,
-): JSX.Element => <CurrentProfile name={name} source={source} />;
+export const currentProfileNode = (name: string, source: string): JSX.Element => (
+  <CurrentProfile name={name} source={source} />
+);

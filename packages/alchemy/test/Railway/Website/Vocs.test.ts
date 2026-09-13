@@ -12,32 +12,19 @@ import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../../../../examples/cloudflare-website-vocs",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "package.json",
-  "public",
-  "src",
-  "tsconfig.json",
-  "vocs.config.ts",
-];
+const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
 const waitUntilGone = (serviceId: string) =>
   railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -65,13 +52,7 @@ test.provider(
             environment,
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "tsconfig.json",
-                "vocs.config.ts",
-              ],
+              include: ["src/**", "public/**", "package.json", "tsconfig.json", "vocs.config.ts"],
             },
           });
           return { site };

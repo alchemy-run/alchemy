@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Topic } from "../SNS/Topic.ts";
-import {
-  consumeTopicNotifications,
-  type TopicNotification,
-} from "../SNS/TopicEventSource.ts";
+import { consumeTopicNotifications, type TopicNotification } from "../SNS/TopicEventSource.ts";
 import type { Directory } from "./Directory.ts";
 import { EventTopic } from "./EventTopic.ts";
 
@@ -23,9 +20,7 @@ export interface DirectoryStatusEvent {
   detail: Record<string, unknown> | undefined;
 }
 
-const parseDirectoryStatus = (
-  notification: TopicNotification,
-): DirectoryStatusEvent => {
+const parseDirectoryStatus = (notification: TopicNotification): DirectoryStatusEvent => {
   let detail: Record<string, unknown> | undefined;
   try {
     const parsed: unknown = JSON.parse(notification.Message);

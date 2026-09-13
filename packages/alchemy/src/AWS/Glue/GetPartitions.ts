@@ -42,6 +42,4 @@ export interface GetPartitions extends Binding.Service<
   >
 > {}
 
-export const GetPartitions = Binding.Service<GetPartitions>(
-  "AWS.Glue.GetPartitions",
-);
+export const GetPartitions = Binding.Service<GetPartitions>("AWS.Glue.GetPartitions");

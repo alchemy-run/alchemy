@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "IoTBindings");
 
 // Bound environment propagation can lag the code update; keep the readiness
 // wait bounded to about 50 seconds.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("5 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]);
 
 let baseUrl: string;
 let thingName: string;
@@ -43,39 +40,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string, body: unknown) =>
-  send(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(`${baseUrl}${path}`),
-      body,
-    ),
-  ).pipe(Effect.flatMap((r) => r.json));
-
-const del = (path: string) =>
-  send(HttpClientRequest.delete(`${baseUrl}${path}`)).pipe(
+  send(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}${path}`), body)).pipe(
     Effect.flatMap((r) => r.json),
   );
+
+const del = (path: string) =>
+  send(HttpClientRequest.delete(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe("IoT Bindings", () => {
   beforeAll(
@@ -179,10 +164,7 @@ describe("IoT Bindings", () => {
             }),
             Effect.retry({
               while: (e): boolean => e._tag === "NotYetConsistent",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(result).toContain("inventory");
@@ -246,10 +228,7 @@ describe("IoT Bindings", () => {
             }),
             Effect.retry({
               while: (e): boolean => e._tag === "NotYetConsistent",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(names).toContain(thingName);
@@ -286,23 +265,16 @@ describe("IoT Bindings", () => {
           });
 
           // Retained-message read is eventually consistent after publish.
-          const read = yield* getJson(
-            `/retained?topic=${encodeURIComponent(RETAINED_TOPIC)}`,
-          ).pipe(
+          const read = yield* getJson(`/retained?topic=${encodeURIComponent(RETAINED_TOPIC)}`).pipe(
             Effect.flatMap((r) => {
               const result = r as { found: boolean; payload?: string };
               return result.found
                 ? Effect.succeed(result)
-                : Effect.fail(
-                    new NotYetConsistent({ what: "retained message" }),
-                  );
+                : Effect.fail(new NotYetConsistent({ what: "retained message" }));
             }),
             Effect.retry({
               while: (e): boolean => e._tag === "NotYetConsistent",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(JSON.parse(read.payload!).marker).toBe(marker);
@@ -326,10 +298,7 @@ describe("IoT Bindings", () => {
             }),
             Effect.retry({
               while: (e): boolean => e._tag === "NotYetConsistent",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
             }),
           );
           expect(cleared.found).toBe(false);
@@ -343,9 +312,7 @@ describe("IoT Bindings", () => {
       "returns a typed ResourceNotFoundException for a never-connected client",
       (_stack) =>
         Effect.gen(function* () {
-          const result = (yield* getJson(
-            "/connection?clientId=alchemy-bindings-nonexistent",
-          )) as {
+          const result = (yield* getJson("/connection?clientId=alchemy-bindings-nonexistent")) as {
             ok: boolean;
             tag?: string;
             connected?: boolean;
@@ -385,9 +352,7 @@ describe("IoT Bindings", () => {
       "returns a typed ResourceNotFoundException for a never-connected client",
       (_stack) =>
         Effect.gen(function* () {
-          const result = (yield* del(
-            "/connection?clientId=alchemy-bindings-nonexistent",
-          )) as {
+          const result = (yield* del("/connection?clientId=alchemy-bindings-nonexistent")) as {
             ok: boolean;
             tag?: string;
           };

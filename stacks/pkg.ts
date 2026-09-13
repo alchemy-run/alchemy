@@ -17,11 +17,7 @@ export default Alchemy.Stack(
       worker: {
         domain: {
           name: "pkg.alchemy.run",
-          aliases: [
-            "pkg.distilled.cloud",
-            "📦.alchemy.run",
-            "📦.distilled.cloud",
-          ],
+          aliases: ["pkg.distilled.cloud", "📦.alchemy.run", "📦.distilled.cloud"],
         },
       },
       github: {

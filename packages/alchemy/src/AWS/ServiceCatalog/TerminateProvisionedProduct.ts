@@ -40,7 +40,6 @@ export interface TerminateProvisionedProduct extends Binding.Service<
     >
   >
 > {}
-export const TerminateProvisionedProduct =
-  Binding.Service<TerminateProvisionedProduct>(
-    "AWS.ServiceCatalog.TerminateProvisionedProduct",
-  );
+export const TerminateProvisionedProduct = Binding.Service<TerminateProvisionedProduct>(
+  "AWS.ServiceCatalog.TerminateProvisionedProduct",
+);

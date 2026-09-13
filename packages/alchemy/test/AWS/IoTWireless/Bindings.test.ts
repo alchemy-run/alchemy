@@ -8,18 +8,13 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import IoTWirelessTestFunctionLive, {
-  IoTWirelessTestFunction,
-} from "./fixtures/handler.ts";
+import IoTWirelessTestFunctionLive, { IoTWirelessTestFunction } from "./fixtures/handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "IoTWirelessBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]);
 
 let baseUrl: string;
 let resultQueueUrl: string;
@@ -38,31 +33,23 @@ const post = (path: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
-const postJson = (path: string) =>
-  post(path).pipe(Effect.flatMap((response) => response.json));
+const postJson = (path: string) => post(path).pipe(Effect.flatMap((response) => response.json));
 
 describe("IoTWireless Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "IoTWireless test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("IoTWireless test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("IoTWireless test setup: deploying fixture");
@@ -76,9 +63,7 @@ describe("IoTWireless Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `IoTWireless test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`IoTWireless test setup: probing readiness at ${readinessUrl}`);
       // Ride out cold-start / URL propagation until /ping reports the
       // result queue (early invocations can briefly resolve outputs late).
       const ready = yield* HttpClient.get(readinessUrl).pipe(
@@ -96,9 +81,7 @@ describe("IoTWireless Bindings", () => {
             : Effect.fail(new Error("no result queue url yet")),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `IoTWireless test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`IoTWireless test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -257,10 +240,7 @@ describe("IoTWireless Bindings", () => {
           if (response.ok) {
             expect(response.geoJson).toBeTruthy();
           } else {
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
+            expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
           }
         }),
       { timeout: 120_000 },
@@ -319,10 +299,7 @@ describe("IoTWireless Bindings", () => {
           }).pipe(
             Effect.retry({
               while: (error): boolean => error._tag === "UplinkNotDelivered",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(40)]),
             }),
           );
 

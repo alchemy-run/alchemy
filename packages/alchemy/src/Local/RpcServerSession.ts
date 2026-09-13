@@ -22,10 +22,7 @@ export type ServerRpcSession<T extends RpcCompatible<T>> = ReturnType<
  * @param main - The main object to use for the session.
  * @returns A ServerRpcSession.
  */
-export function makeServerRpcSession<T extends RpcCompatible<T>>(
-  ws: ServerWebSocketLike,
-  main: T,
-) {
+export function makeServerRpcSession<T extends RpcCompatible<T>>(ws: ServerWebSocketLike, main: T) {
   const { transport, dispatch } = makeWebSocketRpcTransport(ws);
   const session = new RpcSession(transport, main);
   return { session, dispatch };
@@ -52,8 +49,7 @@ function makeWebSocketRpcTransport(ws: ServerWebSocketLike) {
         });
       },
       abort: (reason: unknown) => {
-        const message =
-          reason instanceof Error ? reason.message : String(reason);
+        const message = reason instanceof Error ? reason.message : String(reason);
         ws.close(3000, message);
         error ??= reason;
       },

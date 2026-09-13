@@ -37,13 +37,8 @@ export interface GetSearchJob extends Binding.Service<
   (
     searchJob: SearchJob,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      backupsearch.GetSearchJobOutput,
-      backupsearch.GetSearchJobError
-    >
+    () => Effect.Effect<backupsearch.GetSearchJobOutput, backupsearch.GetSearchJobError>
   >
 > {}
 
-export const GetSearchJob = Binding.Service<GetSearchJob>(
-  "AWS.BackupSearch.GetSearchJob",
-);
+export const GetSearchJob = Binding.Service<GetSearchJob>("AWS.BackupSearch.GetSearchJob");

@@ -52,11 +52,7 @@ import * as Runtime from "../../Runtime.ts";
 import * as RuntimeServices from "../../RuntimeServices.ts";
 import * as Workerd from "../../workerd/Workerd.ts";
 import type { TestWorker } from "../helpers/runtime.ts";
-import {
-  localRuntimeLayer,
-  makeTempDirectory,
-  startTestWorker,
-} from "../helpers/runtime.ts";
+import { localRuntimeLayer, makeTempDirectory, startTestWorker } from "../helpers/runtime.ts";
 
 // Mock image / video bytes (upstream constants)
 const TEST_VIDEO_BYTES = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
@@ -251,9 +247,7 @@ async function handleCommand(stream, op, args) {
 `;
 
 const compatibilityDate = "2026-03-23";
-const modules = [
-  { name: "main.js", type: "ESModule", content: TEST_SCRIPT },
-] as const;
+const modules = [{ name: "main.js", type: "ESModule", content: TEST_SCRIPT }] as const;
 
 // Raw binding to the `stream` service's default entrypoint, used to send
 // control operations (fake timers, storage inspection) to the `StreamObject`
@@ -274,11 +268,7 @@ const makeStreamWorker = (name: string) =>
     bindings: [Stream.local({ binding: "STREAM" }), controlBinding],
   });
 
-const sendCmd = <T>(
-  worker: TestWorker,
-  op: string,
-  args: Record<string, unknown> = {},
-) =>
+const sendCmd = <T>(worker: TestWorker, op: string, args: Record<string, unknown> = {}) =>
   Effect.gen(function* () {
     const body = yield* worker.fetchJson<
       | { ok: true; result: T }
@@ -305,11 +295,7 @@ const sendCmd = <T>(
  * workers see too. Upstream asserts messages with `.rejects.toThrow(...)`,
  * which is substring matching, so message assertions here use `toContain`.
  */
-const sendCmdError = (
-  worker: TestWorker,
-  op: string,
-  args: Record<string, unknown> = {},
-) =>
+const sendCmdError = (worker: TestWorker, op: string, args: Record<string, unknown> = {}) =>
   sendCmd(worker, op, args).pipe(
     Effect.flip,
     Effect.map((error) => error.message),
@@ -328,10 +314,7 @@ class ControlStub {
       method: "POST",
       body: JSON.stringify({ name, args }),
     });
-    assert(
-      res.status === 200 || res.status === 404,
-      `Control op ${name} failed: ${res.status}`,
-    );
+    assert(res.status === 200 || res.status === 404, `Control op ${name} failed: ${res.status}`);
     return res;
   }
 
@@ -347,10 +330,7 @@ class ControlStub {
     await this.#op("waitForFakeTasks");
   }
 
-  async sqlQuery<Row>(
-    query: string,
-    ...params: Array<unknown>
-  ): Promise<Array<Row>> {
+  async sqlQuery<Row>(query: string, ...params: Array<unknown>): Promise<Array<Row>> {
     const res = await this.#op("sqlQuery", query, ...params);
     return (await res.json()) as Array<Row>;
   }
@@ -362,11 +342,7 @@ class ControlStub {
   }
 }
 
-const uploadVideo = (
-  worker: TestWorker,
-  videoUrl: URL,
-  params?: Record<string, unknown>,
-) =>
+const uploadVideo = (worker: TestWorker, videoUrl: URL, params?: Record<string, unknown>) =>
   sendCmd<Video>(worker, "upload", {
     url: videoUrl.toString(),
     ...(params ? { params } : {}),
@@ -380,10 +356,7 @@ class StreamTestWorker extends Context.Service<StreamTestWorker, TestWorker>()(
   "test/StreamTestWorker",
 ) {}
 
-const StreamTestWorkerLive = Layer.effect(
-  StreamTestWorker,
-  makeStreamWorker("stream-test"),
-);
+const StreamTestWorkerLive = Layer.effect(StreamTestWorker, makeStreamWorker("stream-test"));
 
 const StreamTestLayer = StreamTestWorkerLive.pipe(
   Layer.provideMerge(localRuntimeLayer),
@@ -399,9 +372,7 @@ const IsolatedStreamLayer = localRuntimeLayer.pipe(
   Layer.provide(Layer.succeed(Plugin.UnsafeEnableControlEndpoints, true)),
 );
 
-const isolated = <A, E>(
-  run: (worker: TestWorker) => Effect.Effect<A, E, Scope.Scope>,
-) =>
+const isolated = <A, E>(run: (worker: TestWorker) => Effect.Effect<A, E, Scope.Scope>) =>
   Effect.gen(function* () {
     const worker = yield* makeStreamWorker("stream-isolated-test");
     return yield* run(worker);
@@ -416,9 +387,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("upload and retrieve details", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -445,9 +414,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("upload with params", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl, {
           creator: "test-creator",
@@ -488,9 +455,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("update video metadata", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         const originalModified = video.modified;
@@ -524,9 +489,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("delete video", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "video.delete", { id: video.id });
@@ -551,9 +514,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("partial update preserves untouched fields", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl, {
           creator: "original-creator",
@@ -578,9 +539,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("update can null-clear creator and scheduledDeletion", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl, {
           creator: "will-be-cleared",
@@ -603,9 +562,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("generate token", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         const token = yield* sendCmd<string>(worker, "video.generateToken", {
@@ -640,18 +597,12 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("serve video via /cdn-cgi/mf/stream/:id/watch", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
-        const resp = yield* worker.fetch(
-          `/cdn-cgi/mf/stream/${video.id}/watch`,
-        );
-        const bytes = new Uint8Array(
-          yield* Effect.promise(() => resp.arrayBuffer()),
-        );
+        const resp = yield* worker.fetch(`/cdn-cgi/mf/stream/${video.id}/watch`);
+        const bytes = new Uint8Array(yield* Effect.promise(() => resp.arrayBuffer()));
         expect(resp.status).toBe(200);
         expect(bytes).toEqual(TEST_VIDEO_BYTES);
       }).pipe(Effect.scoped),
@@ -671,18 +622,14 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("preview URL from upload is directly fetchable over HTTP", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
         expect(video.preview).toBeDefined();
         const resp = yield* Effect.promise(() => fetch(video.preview));
         expect(resp.status).toBe(200);
-        const bytes = new Uint8Array(
-          yield* Effect.promise(() => resp.arrayBuffer()),
-        );
+        const bytes = new Uint8Array(yield* Effect.promise(() => resp.arrayBuffer()));
         expect(bytes).toEqual(TEST_VIDEO_BYTES);
       }).pipe(Effect.scoped),
     );
@@ -690,21 +637,15 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("preview URLs use runtime entry URL", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
         // The preview URL uses the runtime entry URL (http://127.0.0.1:<port>)
         expect(video.preview).toMatch(
-          new RegExp(
-            `^http://127\\.0\\.0\\.1:\\d+/cdn-cgi/mf/stream/${video.id}/watch$`,
-          ),
+          new RegExp(`^http://127\\.0\\.0\\.1:\\d+/cdn-cgi/mf/stream/${video.id}/watch$`),
         );
-        expect(video.preview).toBe(
-          `${worker.baseUrl.origin}/cdn-cgi/mf/stream/${video.id}/watch`,
-        );
+        expect(video.preview).toBe(`${worker.baseUrl.origin}/cdn-cgi/mf/stream/${video.id}/watch`);
       }).pipe(Effect.scoped),
     );
   });
@@ -713,9 +654,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("generate caption", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         const caption = yield* sendCmd<Caption>(worker, "captions.generate", {
@@ -733,9 +672,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("list captions", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "captions.generate", {
@@ -747,11 +684,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
           language: "fr",
         });
 
-        const captions = yield* sendCmd<Array<Caption>>(
-          worker,
-          "captions.list",
-          { id: video.id },
-        );
+        const captions = yield* sendCmd<Array<Caption>>(worker, "captions.list", { id: video.id });
         expect(captions).toHaveLength(2);
         const languages = captions.map((caption) => caption.language);
         expect(languages).toContain("en");
@@ -762,9 +695,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("list captions filtered by language", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "captions.generate", {
@@ -788,9 +719,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("list captions empty language filter", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "captions.generate", {
@@ -809,9 +738,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("delete caption", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "captions.generate", {
@@ -823,11 +750,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
           language: "en",
         });
 
-        const remaining = yield* sendCmd<Array<Caption>>(
-          worker,
-          "captions.list",
-          { id: video.id },
-        );
+        const remaining = yield* sendCmd<Array<Caption>>(worker, "captions.list", { id: video.id });
         expect(remaining).toHaveLength(0);
       }).pipe(Effect.scoped),
     );
@@ -835,9 +758,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("throws when deleting non existent caption", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -863,9 +784,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("caption upload via ReadableStream", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -894,9 +813,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("upload caption is idempotent (upsert)", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -911,23 +828,15 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         });
 
         // Should still only have one caption, not two
-        const captions = yield* sendCmd<Array<Caption>>(
-          worker,
-          "captions.list",
-          { id: video.id },
-        );
-        expect(
-          captions.filter((caption) => caption.language === "en"),
-        ).toHaveLength(1);
+        const captions = yield* sendCmd<Array<Caption>>(worker, "captions.list", { id: video.id });
+        expect(captions.filter((caption) => caption.language === "en")).toHaveLength(1);
       }).pipe(Effect.scoped),
     );
 
     it.effect("generate caption is idempotent (upsert)", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -942,14 +851,8 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         });
 
         // Should still only have one caption, not two
-        const captions = yield* sendCmd<Array<Caption>>(
-          worker,
-          "captions.list",
-          { id: video.id },
-        );
-        expect(
-          captions.filter((caption) => caption.language === "en"),
-        ).toHaveLength(1);
+        const captions = yield* sendCmd<Array<Caption>>(worker, "captions.list", { id: video.id });
+        expect(captions.filter((caption) => caption.language === "en")).toHaveLength(1);
       }).pipe(Effect.scoped),
     );
 
@@ -979,18 +882,12 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("create watermark from URL", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
-        const watermark = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate",
-          {
-            url: imageUrl.toString(),
-            params: { name: "test-watermark" },
-          },
-        );
+        const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+          url: imageUrl.toString(),
+          params: { name: "test-watermark" },
+        });
 
         expect(watermark.id).toBeTruthy();
         expect(watermark.name).toBe("test-watermark");
@@ -1007,24 +904,18 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("create watermark with custom params", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
-        const watermark = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate",
-          {
-            url: imageUrl.toString(),
-            params: {
-              name: "custom",
-              opacity: 0.5,
-              padding: 0.1,
-              scale: 0.3,
-              position: "center",
-            },
+        const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+          url: imageUrl.toString(),
+          params: {
+            name: "custom",
+            opacity: 0.5,
+            padding: 0.1,
+            scale: 0.3,
+            position: "center",
           },
-        );
+        });
 
         expect(watermark.opacity).toBe(0.5);
         expect(watermark.padding).toBe(0.1);
@@ -1038,30 +929,20 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         const worker = yield* StreamTestWorker;
         const imageUrl = yield* useServer(statusListener(404, "Missing"));
 
-        const message = yield* sendCmdError(
-          worker,
-          "watermarks.generate.fromUrl",
-          {
-            url: imageUrl.toString(),
-            params: { name: "missing" },
-          },
-        );
-        expect(message).toContain(
-          "Failed to fetch watermark from URL: 404 Missing",
-        );
+        const message = yield* sendCmdError(worker, "watermarks.generate.fromUrl", {
+          url: imageUrl.toString(),
+          params: { name: "missing" },
+        });
+        expect(message).toContain("Failed to fetch watermark from URL: 404 Missing");
       }).pipe(Effect.scoped),
     );
 
     it.effect("create watermark from ReadableStream", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const watermark = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate.fromStream",
-          {
-            params: { name: "from-stream" },
-          },
-        );
+        const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate.fromStream", {
+          params: { name: "from-stream" },
+        });
         expect(watermark.name).toBe("from-stream");
       }),
     );
@@ -1069,18 +950,12 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("get watermark", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
-        const created = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate",
-          {
-            url: imageUrl.toString(),
-            params: { name: "get-test" },
-          },
-        );
+        const created = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+          url: imageUrl.toString(),
+          params: { name: "get-test" },
+        });
         const fetched = yield* sendCmd<Watermark>(worker, "watermarks.get", {
           id: created.id,
         });
@@ -1113,9 +988,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("opacity out of range throws", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
         const message = yield* sendCmdError(worker, "watermarks.generate", {
           url: imageUrl.toString(),
@@ -1128,9 +1001,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("padding out of range throws", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
         const message = yield* sendCmdError(worker, "watermarks.generate", {
           url: imageUrl.toString(),
@@ -1143,9 +1014,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("scale out of range throws", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
         const message = yield* sendCmdError(worker, "watermarks.generate", {
           url: imageUrl.toString(),
@@ -1158,19 +1027,13 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("boundary values 0.0 and 1.0 are accepted for range params", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
         // 0.0 and 1.0 are valid boundary values — should not throw
-        const watermark = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate",
-          {
-            url: imageUrl.toString(),
-            params: { opacity: 0.0, padding: 1.0, scale: 0.0 },
-          },
-        );
+        const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+          url: imageUrl.toString(),
+          params: { opacity: 0.0, padding: 1.0, scale: 0.0 },
+        });
 
         expect(watermark.id).toBeTruthy();
         expect(watermark.opacity).toBe(0.0);
@@ -1182,18 +1045,12 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("watermark created with empty name stores empty string", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
-        const watermark = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate",
-          {
-            url: imageUrl.toString(),
-            params: {},
-          },
-        );
+        const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+          url: imageUrl.toString(),
+          params: {},
+        });
 
         expect(watermark.name).toBe("");
       }).pipe(Effect.scoped),
@@ -1202,20 +1059,14 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("create watermark from ReadableStream stores correct size", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const imageUrl = yield* useServer(
-          staticBytesListener(TEST_IMAGE_BYTES),
-        );
+        const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
         // The "watermarks.generate" op fetches the URL and passes resp.body
         // (a ReadableStream)
-        const watermark = yield* sendCmd<Watermark>(
-          worker,
-          "watermarks.generate",
-          {
-            url: imageUrl.toString(),
-            params: { name: "stream-wm" },
-          },
-        );
+        const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+          url: imageUrl.toString(),
+          params: { name: "stream-wm" },
+        });
 
         expect(watermark.size).toBe(TEST_IMAGE_BYTES.byteLength);
         // downloadedFrom is null when created from a stream (not a URL)
@@ -1228,18 +1079,12 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("generate default download", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
-        const result = yield* sendCmd<DownloadGetResponse>(
-          worker,
-          "downloads.generate",
-          {
-            id: video.id,
-          },
-        );
+        const result = yield* sendCmd<DownloadGetResponse>(worker, "downloads.generate", {
+          id: video.id,
+        });
 
         expect(result.default).toBeDefined();
         expect(result.default?.status).toBe("ready");
@@ -1250,19 +1095,13 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("generate audio download", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
-        const result = yield* sendCmd<DownloadGetResponse>(
-          worker,
-          "downloads.generate",
-          {
-            id: video.id,
-            type: "audio",
-          },
-        );
+        const result = yield* sendCmd<DownloadGetResponse>(worker, "downloads.generate", {
+          id: video.id,
+          type: "audio",
+        });
 
         expect(result.audio).toBeDefined();
         expect(result.audio?.status).toBe("ready");
@@ -1272,9 +1111,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("get downloads", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "downloads.generate", {
@@ -1286,13 +1123,9 @@ layer(StreamTestLayer)("Stream binding", (it) => {
           type: "audio",
         });
 
-        const result = yield* sendCmd<DownloadGetResponse>(
-          worker,
-          "downloads.get",
-          {
-            id: video.id,
-          },
-        );
+        const result = yield* sendCmd<DownloadGetResponse>(worker, "downloads.get", {
+          id: video.id,
+        });
         expect(result.default).toBeDefined();
         expect(result.audio).toBeDefined();
       }).pipe(Effect.scoped),
@@ -1301,18 +1134,12 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("get downloads when none exist returns empty object", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
-        const result = yield* sendCmd<DownloadGetResponse>(
-          worker,
-          "downloads.get",
-          {
-            id: video.id,
-          },
-        );
+        const result = yield* sendCmd<DownloadGetResponse>(worker, "downloads.get", {
+          id: video.id,
+        });
 
         expect(result.default).toBeUndefined();
         expect(result.audio).toBeUndefined();
@@ -1322,9 +1149,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("delete download", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         yield* sendCmd(worker, "downloads.generate", {
@@ -1336,13 +1161,9 @@ layer(StreamTestLayer)("Stream binding", (it) => {
           type: "default",
         });
 
-        const result = yield* sendCmd<DownloadGetResponse>(
-          worker,
-          "downloads.get",
-          {
-            id: video.id,
-          },
-        );
+        const result = yield* sendCmd<DownloadGetResponse>(worker, "downloads.get", {
+          id: video.id,
+        });
         expect(result.default).toBeUndefined();
       }).pipe(Effect.scoped),
     );
@@ -1350,9 +1171,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("throws when deleting non existent download", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -1387,9 +1206,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("generate download is idempotent (upsert)", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
 
@@ -1404,13 +1221,9 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         });
 
         // Should still only have one default download entry
-        const result = yield* sendCmd<DownloadGetResponse>(
-          worker,
-          "downloads.get",
-          {
-            id: video.id,
-          },
-        );
+        const result = yield* sendCmd<DownloadGetResponse>(worker, "downloads.get", {
+          id: video.id,
+        });
         expect(result.default).toBeDefined();
         expect(result.default?.status).toBe("ready");
         // audio should not be present
@@ -1435,9 +1248,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
         const message = yield* sendCmdError(worker, "createDirectUpload");
-        expect(message).toContain(
-          "createDirectUpload is not supported in local mode",
-        );
+        expect(message).toContain("createDirectUpload is not supported in local mode");
       }),
     );
   });
@@ -1446,9 +1257,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     it.effect("deleting video cleans up captions and downloads", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         const id = video.id;
@@ -1461,28 +1270,20 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         yield* sendCmd(worker, "video.delete", { id });
 
         // Video is gone
-        expect(yield* sendCmdError(worker, "video.details", { id })).toContain(
-          "Video not found",
-        );
+        expect(yield* sendCmdError(worker, "video.details", { id })).toContain("Video not found");
 
         // Captions are gone (via FK cascade)
-        expect(yield* sendCmdError(worker, "captions.list", { id })).toContain(
-          "Video not found",
-        );
+        expect(yield* sendCmdError(worker, "captions.list", { id })).toContain("Video not found");
 
         // Downloads are gone (via explicit delete + cascade)
-        expect(yield* sendCmdError(worker, "downloads.get", { id })).toContain(
-          "Video not found",
-        );
+        expect(yield* sendCmdError(worker, "downloads.get", { id })).toContain("Video not found");
       }).pipe(Effect.scoped),
     );
 
     it.effect("deleting video cleans up its blob from storage", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
-        const videoUrl = yield* useServer(
-          staticBytesListener(TEST_VIDEO_BYTES),
-        );
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
         const video = yield* uploadVideo(worker, videoUrl);
         // Grab the blob id before deleting so its removal can be asserted
@@ -1511,59 +1312,47 @@ layer(StreamTestLayer)("Stream binding", (it) => {
       }).pipe(Effect.scoped),
     );
 
-    it.effect(
-      "deleting one video does not affect another video's captions and downloads",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* StreamTestWorker;
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+    it.effect("deleting one video does not affect another video's captions and downloads", () =>
+      Effect.gen(function* () {
+        const worker = yield* StreamTestWorker;
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
-          const videoA = yield* uploadVideo(worker, videoUrl);
-          const videoB = yield* uploadVideo(worker, videoUrl);
+        const videoA = yield* uploadVideo(worker, videoUrl);
+        const videoB = yield* uploadVideo(worker, videoUrl);
 
-          // Add captions and downloads to both
-          yield* sendCmd(worker, "captions.generate", {
-            id: videoA.id,
-            language: "en",
-          });
-          yield* sendCmd(worker, "captions.generate", {
-            id: videoB.id,
-            language: "en",
-          });
-          yield* sendCmd(worker, "downloads.generate", {
-            id: videoA.id,
-            type: "default",
-          });
-          yield* sendCmd(worker, "downloads.generate", {
-            id: videoB.id,
-            type: "default",
-          });
+        // Add captions and downloads to both
+        yield* sendCmd(worker, "captions.generate", {
+          id: videoA.id,
+          language: "en",
+        });
+        yield* sendCmd(worker, "captions.generate", {
+          id: videoB.id,
+          language: "en",
+        });
+        yield* sendCmd(worker, "downloads.generate", {
+          id: videoA.id,
+          type: "default",
+        });
+        yield* sendCmd(worker, "downloads.generate", {
+          id: videoB.id,
+          type: "default",
+        });
 
-          // Delete only video A
-          yield* sendCmd(worker, "video.delete", { id: videoA.id });
+        // Delete only video A
+        yield* sendCmd(worker, "video.delete", { id: videoA.id });
 
-          // videoB's captions and downloads should be unaffected
-          const captionsB = yield* sendCmd<Array<Caption>>(
-            worker,
-            "captions.list",
-            {
-              id: videoB.id,
-            },
-          );
-          expect(captionsB).toHaveLength(1);
-          expect(captionsB[0].language).toBe("en");
+        // videoB's captions and downloads should be unaffected
+        const captionsB = yield* sendCmd<Array<Caption>>(worker, "captions.list", {
+          id: videoB.id,
+        });
+        expect(captionsB).toHaveLength(1);
+        expect(captionsB[0].language).toBe("en");
 
-          const downloadsB = yield* sendCmd<DownloadGetResponse>(
-            worker,
-            "downloads.get",
-            {
-              id: videoB.id,
-            },
-          );
-          expect(downloadsB.default).toBeDefined();
-        }).pipe(Effect.scoped),
+        const downloadsB = yield* sendCmd<DownloadGetResponse>(worker, "downloads.get", {
+          id: videoB.id,
+        });
+        expect(downloadsB.default).toBeDefined();
+      }).pipe(Effect.scoped),
     );
   });
 });
@@ -1590,9 +1379,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
           yield* uploadVideo(worker, videoUrl);
           yield* uploadVideo(worker, videoUrl);
@@ -1613,9 +1400,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
 
           for (let i = 0; i < 5; i++) {
             yield* uploadVideo(worker, videoUrl);
@@ -1663,9 +1448,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
           const object = new ControlStub(worker.baseUrl);
           yield* Effect.promise(() => object.enableFakeTimers(FAKE_TIME_START));
 
@@ -1690,9 +1473,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
           const object = new ControlStub(worker.baseUrl);
           yield* Effect.promise(() => object.enableFakeTimers(FAKE_TIME_START));
 
@@ -1718,9 +1499,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
           const object = new ControlStub(worker.baseUrl);
           yield* Effect.promise(() => object.enableFakeTimers(FAKE_TIME_START));
 
@@ -1746,9 +1525,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
           const object = new ControlStub(worker.baseUrl);
           yield* Effect.promise(() => object.enableFakeTimers(FAKE_TIME_START));
 
@@ -1776,9 +1553,7 @@ describe("Stream videos list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const videoUrl = yield* useServer(
-            staticBytesListener(TEST_VIDEO_BYTES),
-          );
+          const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
           const object = new ControlStub(worker.baseUrl);
           yield* Effect.promise(() => object.enableFakeTimers(FAKE_TIME_START));
 
@@ -1787,24 +1562,16 @@ describe("Stream videos list", () => {
           const v2 = yield* uploadVideo(worker, videoUrl); // t=10s
 
           // afterComp=gt with v1's exact created time should NOT include v1
-          const afterGtResult = yield* sendCmd<Array<Video>>(
-            worker,
-            "videos.list",
-            {
-              params: { after: v1.created, afterComp: "gt" },
-            },
-          );
+          const afterGtResult = yield* sendCmd<Array<Video>>(worker, "videos.list", {
+            params: { after: v1.created, afterComp: "gt" },
+          });
           expect(afterGtResult.map((video) => video.id)).not.toContain(v1.id);
           expect(afterGtResult.map((video) => video.id)).toContain(v2.id);
 
           // beforeComp=lte with v1's exact created time should include v1
-          const beforeLteResult = yield* sendCmd<Array<Video>>(
-            worker,
-            "videos.list",
-            {
-              params: { before: v1.created, beforeComp: "lte" },
-            },
-          );
+          const beforeLteResult = yield* sendCmd<Array<Video>>(worker, "videos.list", {
+            params: { before: v1.created, beforeComp: "lte" },
+          });
           expect(beforeLteResult.map((video) => video.id)).toContain(v1.id);
           expect(beforeLteResult.map((video) => video.id)).not.toContain(v2.id);
         }),
@@ -1819,9 +1586,7 @@ describe("Stream watermarks list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const imageUrl = yield* useServer(
-            staticBytesListener(TEST_IMAGE_BYTES),
-          );
+          const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
           yield* sendCmd(worker, "watermarks.generate", {
             url: imageUrl.toString(),
@@ -1832,10 +1597,7 @@ describe("Stream watermarks list", () => {
             params: { name: "wm2" },
           });
 
-          const list = yield* sendCmd<Array<Watermark>>(
-            worker,
-            "watermarks.list",
-          );
+          const list = yield* sendCmd<Array<Watermark>>(worker, "watermarks.list");
           expect(list).toHaveLength(2);
           const names = list.map((watermark) => watermark.name);
           expect(names).toContain("wm1");
@@ -1850,24 +1612,15 @@ describe("Stream watermarks list", () => {
     () =>
       isolated((worker) =>
         Effect.gen(function* () {
-          const imageUrl = yield* useServer(
-            staticBytesListener(TEST_IMAGE_BYTES),
-          );
+          const imageUrl = yield* useServer(staticBytesListener(TEST_IMAGE_BYTES));
 
-          const watermark = yield* sendCmd<Watermark>(
-            worker,
-            "watermarks.generate",
-            {
-              url: imageUrl.toString(),
-              params: { name: "delete-me" },
-            },
-          );
+          const watermark = yield* sendCmd<Watermark>(worker, "watermarks.generate", {
+            url: imageUrl.toString(),
+            params: { name: "delete-me" },
+          });
           yield* sendCmd(worker, "watermarks.delete", { id: watermark.id });
 
-          const list = yield* sendCmd<Array<Watermark>>(
-            worker,
-            "watermarks.list",
-          );
+          const list = yield* sendCmd<Array<Watermark>>(worker, "watermarks.list");
           expect(list).toHaveLength(0);
         }),
       ),
@@ -1899,9 +1652,7 @@ describe("Stream binding persistence", () => {
           Layer.provide(Paths.PathsLive),
           Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
-          Layer.provideMerge(
-            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
-          ),
+          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
         );
 
         const runAgainstStorage = Effect.fn(
@@ -1909,17 +1660,14 @@ describe("Stream binding persistence", () => {
             const worker = yield* makeStreamWorker("stream-persist-test");
             yield* run(worker);
           },
-          (self) =>
-            self.pipe(Effect.provide(runtimeLayerTempDir), Effect.scoped),
+          (self) => self.pipe(Effect.provide(runtimeLayerTempDir), Effect.scoped),
         );
 
         let videoId: string | undefined;
 
         yield* runAgainstStorage((worker) =>
           Effect.gen(function* () {
-            const videoUrl = yield* useServer(
-              staticBytesListener(TEST_VIDEO_BYTES),
-            );
+            const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
             const video = yield* uploadVideo(worker, videoUrl);
             videoId = video.id;
             expect(video.size).toBe(TEST_VIDEO_BYTES.byteLength);
@@ -1930,9 +1678,7 @@ describe("Stream binding persistence", () => {
         // blob store, mirroring the KV/R2 persistence layout under a distinct
         // `stream` root.
         const names = yield* fs.readDirectory(path.join(tmp, "stream"));
-        expect(names).toContain(
-          `cloudflare-runtime-${Stream.STREAM_OBJECT_CLASS_NAME}`,
-        );
+        expect(names).toContain(`cloudflare-runtime-${Stream.STREAM_OBJECT_CLASS_NAME}`);
         expect(names).toContain(Stream.STREAM_OBJECT_NAME);
 
         // "Restarting" keeps persisted data, and the preview route still
@@ -1946,12 +1692,8 @@ describe("Stream binding persistence", () => {
             expect(details.id).toBe(videoId);
             expect(details.size).toBe(TEST_VIDEO_BYTES.byteLength);
 
-            const resp = yield* worker.fetch(
-              `/cdn-cgi/mf/stream/${videoId}/watch`,
-            );
-            const bytes = new Uint8Array(
-              yield* Effect.promise(() => resp.arrayBuffer()),
-            );
+            const resp = yield* worker.fetch(`/cdn-cgi/mf/stream/${videoId}/watch`);
+            const bytes = new Uint8Array(yield* Effect.promise(() => resp.arrayBuffer()));
             expect(resp.status).toBe(200);
             expect(bytes).toEqual(TEST_VIDEO_BYTES);
           }),

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "alchemy-test";
-import type {
-  DatabaseCreateResult,
-  ProjectCreateResult,
-} from "@/Prisma/Client";
+import type { DatabaseCreateResult, ProjectCreateResult } from "@/Prisma/Client";
 import type {
   Database,
   DatabaseConnectionWithOptionalSecrets,
@@ -10,13 +7,12 @@ import type {
 } from "@/Prisma/Types";
 
 const nullableDatabaseSource: Database["source"] = null;
-const endpointSecretMayBeAbsent: DatabaseConnectionWithOptionalSecrets["endpoints"] =
-  {
-    direct: {
-      host: "db.prisma.test",
-      port: 5432,
-    },
-  };
+const endpointSecretMayBeAbsent: DatabaseConnectionWithOptionalSecrets["endpoints"] = {
+  direct: {
+    host: "db.prisma.test",
+    port: 5432,
+  },
+};
 const validDatabaseSourceInput: DatabaseSourceInput = {
   type: "backup",
   databaseId: "db_source",
@@ -24,9 +20,7 @@ const validDatabaseSourceInput: DatabaseSourceInput = {
 };
 // @ts-expect-error Prisma only accepts the documented source discriminator.
 const invalidDatabaseSourceInput: DatabaseSourceInput = { type: "snapshot" };
-const projectCreateDatabaseWithoutProject: NonNullable<
-  ProjectCreateResult["database"]
-> = {
+const projectCreateDatabaseWithoutProject: NonNullable<ProjectCreateResult["database"]> = {
   id: "db_1",
   type: "database",
   url: "https://api.prisma.test/v1/databases/db_1",

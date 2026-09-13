@@ -73,8 +73,7 @@ export const provisionCodeBucket = Effect.fn(function* (bucketName: string) {
     .pipe(
       Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
       Effect.retry({
-        while: (e): boolean =>
-          e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
+        while: (e): boolean => e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
         schedule: Schedule.fixed("5 seconds"),
         times: 8,
       }),

@@ -27,12 +27,7 @@ export interface ListAccounts extends Binding.Service<
   () => Effect.Effect<
     (
       request?: organizations.ListAccountsRequest,
-    ) => Effect.Effect<
-      organizations.ListAccountsResponse,
-      organizations.ListAccountsError
-    >
+    ) => Effect.Effect<organizations.ListAccountsResponse, organizations.ListAccountsError>
   >
 > {}
-export const ListAccounts = Binding.Service<ListAccounts>(
-  "AWS.Organizations.ListAccounts",
-);
+export const ListAccounts = Binding.Service<ListAccounts>("AWS.Organizations.ListAccounts");

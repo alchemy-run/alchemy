@@ -45,9 +45,7 @@ test.provider.skipIf(!!process.env.FAST)(
           ],
         })
         .pipe(
-          Effect.map((r) =>
-            (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-          ),
+          Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))),
         );
 
       const deployed = yield* stack.deploy(
@@ -145,9 +143,7 @@ test.provider.skipIf(!!process.env.FAST)(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(nlbGone).toBe(true);
 
@@ -157,9 +153,7 @@ test.provider.skipIf(!!process.env.FAST)(
         })
         .pipe(
           Effect.map((r) => (r.TargetGroups ?? []).length === 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
         );
       expect(targetGroupGone).toBe(true);
     }),

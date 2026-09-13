@@ -14,10 +14,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Neon.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const expectPooledOrigin = (project: {
   pooledConnectionUri: string;
@@ -151,142 +148,129 @@ test.provider("list enumerates the deployed project", (stack) =>
  * table. This is the only place the schema-qualified source read and the
  * pg-dialect conversion DDL execute against a real Postgres.
  */
-test.provider(
-  "adopts a drizzle-kit-migrated Postgres database via one-way conversion",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-neon-drizzle-",
-      });
-      const initSql =
-        "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);";
-      yield* fs.makeDirectory(path.join(migrationsDir, "20240101000000_init"));
-      yield* fs.writeFileString(
-        path.join(migrationsDir, "20240101000000_init", "migration.sql"),
-        initSql,
-      );
-      const initHash = yield* hashMigrations(migrationsDir).pipe(
-        Effect.map((hashes) => Object.values(hashes)[0]),
-      );
+test.provider("adopts a drizzle-kit-migrated Postgres database via one-way conversion", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const migrationsDir = yield* fs.makeTempDirectory({
+      prefix: "alchemy-neon-drizzle-",
+    });
+    const initSql = "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);";
+    yield* fs.makeDirectory(path.join(migrationsDir, "20240101000000_init"));
+    yield* fs.writeFileString(
+      path.join(migrationsDir, "20240101000000_init", "migration.sql"),
+      initSql,
+    );
+    const initHash = yield* hashMigrations(migrationsDir).pipe(
+      Effect.map((hashes) => Object.values(hashes)[0]),
+    );
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Phase 1: what `drizzle-kit migrate` left behind on Postgres.
-      const seeded = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Neon.Project("DrizzleAdoptionProject");
-        }),
-      );
-      const connectionUri = Redacted.make(seeded.connectionUri);
-      yield* runSql(connectionUri, initSql);
-      yield* runSql(connectionUri, "CREATE SCHEMA IF NOT EXISTS drizzle;");
-      yield* runSql(
-        connectionUri,
-        `CREATE TABLE drizzle.__drizzle_migrations (
+    // Phase 1: what `drizzle-kit migrate` left behind on Postgres.
+    const seeded = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("DrizzleAdoptionProject");
+      }),
+    );
+    const connectionUri = Redacted.make(seeded.connectionUri);
+    yield* runSql(connectionUri, initSql);
+    yield* runSql(connectionUri, "CREATE SCHEMA IF NOT EXISTS drizzle;");
+    yield* runSql(
+      connectionUri,
+      `CREATE TABLE drizzle.__drizzle_migrations (
            id SERIAL PRIMARY KEY,
            hash text NOT NULL,
            created_at bigint,
            name text,
            applied_at timestamp with time zone DEFAULT now()
          );`,
-      );
-      yield* runSql(
-        connectionUri,
-        `INSERT INTO drizzle.__drizzle_migrations (hash, created_at, name)
+    );
+    yield* runSql(
+      connectionUri,
+      `INSERT INTO drizzle.__drizzle_migrations (hash, created_at, name)
          VALUES ('${initHash}', 1704067200000, '20240101000000_init');`,
-      );
+    );
 
-      // Phase 2: first deploy with migrations + a pending one.
-      yield* fs.makeDirectory(path.join(migrationsDir, "20240102000000_posts"));
-      yield* fs.writeFileString(
-        path.join(migrationsDir, "20240102000000_posts", "migration.sql"),
-        "CREATE TABLE posts (id SERIAL PRIMARY KEY, title TEXT NOT NULL);",
-      );
-      const project = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Neon.Project("DrizzleAdoptionProject", {
-            migrations: migrationsDir,
-          });
-        }),
-      );
-      expect(project.projectId).toEqual(seeded.projectId);
-      expect(project.migrationsTable).toEqual("__alchemy_migrations");
+    // Phase 2: first deploy with migrations + a pending one.
+    yield* fs.makeDirectory(path.join(migrationsDir, "20240102000000_posts"));
+    yield* fs.writeFileString(
+      path.join(migrationsDir, "20240102000000_posts", "migration.sql"),
+      "CREATE TABLE posts (id SERIAL PRIMARY KEY, title TEXT NOT NULL);",
+    );
+    const project = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("DrizzleAdoptionProject", {
+          migrations: migrationsDir,
+        });
+      }),
+    );
+    expect(project.projectId).toEqual(seeded.projectId);
+    expect(project.migrationsTable).toEqual("__alchemy_migrations");
 
-      // History converted (hash verbatim), only the pending migration ran
-      // (a replay of init's bare CREATE TABLE would fail).
-      const applied = yield* withPgClient(connectionUri, (client) =>
-        makePgMigrationExecutor(client).query(
-          "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
-        ),
-      );
-      expect(applied.map((r) => r.name)).toEqual([
-        "20240101000000_init",
-        "20240102000000_posts",
-      ]);
-      expect(applied[0].hash).toBe(initHash);
+    // History converted (hash verbatim), only the pending migration ran
+    // (a replay of init's bare CREATE TABLE would fail).
+    const applied = yield* withPgClient(connectionUri, (client) =>
+      makePgMigrationExecutor(client).query(
+        "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
+      ),
+    );
+    expect(applied.map((r) => r.name)).toEqual(["20240101000000_init", "20240102000000_posts"]);
+    expect(applied[0].hash).toBe(initHash);
 
-      // drizzle's schema-qualified table is frozen.
-      const frozen = yield* withPgClient(connectionUri, (client) =>
-        makePgMigrationExecutor(client).query(
-          "SELECT name FROM drizzle.__drizzle_migrations ORDER BY id;",
-        ),
-      );
-      expect(frozen.map((r) => r.name)).toEqual(["20240101000000_init"]);
+    // drizzle's schema-qualified table is frozen.
+    const frozen = yield* withPgClient(connectionUri, (client) =>
+      makePgMigrationExecutor(client).query(
+        "SELECT name FROM drizzle.__drizzle_migrations ORDER BY id;",
+      ),
+    );
+    expect(frozen.map((r) => r.name)).toEqual(["20240101000000_init"]);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
-test.provider(
-  "create project, apply migrations and seed data, then create a branch",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-neon-migrations-",
-      });
-      yield* fs.writeFileString(
-        path.join(migrationsDir, "0001_users.sql"),
-        "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
-      );
-      const seedDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-neon-seed-",
-      });
-      const seedPath = path.join(seedDir, "seed.sql");
-      yield* fs.writeFileString(
-        seedPath,
-        "INSERT INTO users (name) VALUES ('alice'), ('bob');",
-      );
+test.provider("create project, apply migrations and seed data, then create a branch", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const migrationsDir = yield* fs.makeTempDirectory({
+      prefix: "alchemy-neon-migrations-",
+    });
+    yield* fs.writeFileString(
+      path.join(migrationsDir, "0001_users.sql"),
+      "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
+    );
+    const seedDir = yield* fs.makeTempDirectory({
+      prefix: "alchemy-neon-seed-",
+    });
+    const seedPath = path.join(seedDir, "seed.sql");
+    yield* fs.writeFileString(seedPath, "INSERT INTO users (name) VALUES ('alice'), ('bob');");
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const { project, branch } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const project = yield* Neon.Project("MigrationProject", {
-            migrations: migrationsDir,
-            importFiles: [seedPath],
-          });
-          const branch = yield* Neon.Branch("FeatureBranch", {
-            project,
-          });
-          return { project, branch };
-        }),
-      );
+    const { project, branch } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Neon.Project("MigrationProject", {
+          migrations: migrationsDir,
+          importFiles: [seedPath],
+        });
+        const branch = yield* Neon.Branch("FeatureBranch", {
+          project,
+        });
+        return { project, branch };
+      }),
+    );
 
-      // Fresh deploys use Alchemy's one table; legacy rows that persisted
-      // neon_migrations keep converging against it via state.
-      expect(project.migrationsTable).toEqual("__alchemy_migrations");
-      expect(Object.keys(project.migrationsHashes).sort()).toEqual([
-        "0001_users.sql",
-      ]);
-      expect(project.importHashes[seedPath]).toBeDefined();
+    // Fresh deploys use Alchemy's one table; legacy rows that persisted
+    // neon_migrations keep converging against it via state.
+    expect(project.migrationsTable).toEqual("__alchemy_migrations");
+    expect(Object.keys(project.migrationsHashes).sort()).toEqual(["0001_users.sql"]);
+    expect(project.importHashes[seedPath]).toBeDefined();
 
-      expect(branch.projectId).toEqual(project.projectId);
-      expect(branch.parentBranchId).toEqual(project.defaultBranchId);
+    expect(branch.projectId).toEqual(project.projectId);
+    expect(branch.parentBranchId).toEqual(project.defaultBranchId);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

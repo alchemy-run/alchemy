@@ -33,6 +33,4 @@ export interface UpdateKxDataview extends Binding.Service<
     ) => Effect.Effect<SVC.UpdateKxDataviewResponse, SVC.UpdateKxDataviewError>
   >
 > {}
-export const UpdateKxDataview = Binding.Service<UpdateKxDataview>(
-  "AWS.FinSpace.UpdateKxDataview",
-);
+export const UpdateKxDataview = Binding.Service<UpdateKxDataview>("AWS.FinSpace.UpdateKxDataview");

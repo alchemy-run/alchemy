@@ -31,11 +31,7 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type * as Output from "../../Output.ts";
-import {
-  defaultProviderMode,
-  remote,
-  type ProviderMode,
-} from "../../ProviderMode.ts";
+import { defaultProviderMode, remote, type ProviderMode } from "../../ProviderMode.ts";
 import { Random } from "../../Random.ts";
 import { Worker } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";

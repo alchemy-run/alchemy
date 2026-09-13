@@ -51,16 +51,13 @@ export const TopicEventSource = Layer.effect(
               sourceArn: topic.topicArn,
             });
 
-            yield* Subscription(
-              `AWS.SNS.Subscription(${topic.LogicalId}, ${host.LogicalId})`,
-              {
-                topicArn: topic.topicArn,
-                protocol: "lambda",
-                endpoint: host.functionArn,
-                attributes: props.attributes,
-                returnSubscriptionArn: true,
-              },
-            );
+            yield* Subscription(`AWS.SNS.Subscription(${topic.LogicalId}, ${host.LogicalId})`, {
+              topicArn: topic.topicArn,
+              protocol: "lambda",
+              endpoint: host.functionArn,
+              attributes: props.attributes,
+              returnSubscriptionArn: true,
+            });
           }),
         );
       }
@@ -71,15 +68,11 @@ export const TopicEventSource = Layer.effect(
 
           return (event: any) => {
             if (isSNSEvent(event)) {
-              const records = event.Records.filter(
-                (record) => record.Sns?.TopicArn === topicArn,
-              );
+              const records = event.Records.filter((record) => record.Sns?.TopicArn === topicArn);
 
               if (records.length > 0) {
                 return process(
-                  Stream.fromArray(
-                    records.map((record) => record.Sns as TopicNotification),
-                  ),
+                  Stream.fromArray(records.map((record) => record.Sns as TopicNotification)),
                 ).pipe(Effect.orDie);
               }
             }

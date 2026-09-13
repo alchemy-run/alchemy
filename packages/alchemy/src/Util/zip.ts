@@ -31,9 +31,7 @@ export const zipCode = Effect.fn(function* (
 export const zipFiles = Effect.fn(function* (files: ReadonlyArray<ZipFile>) {
   const { zipSync, strToU8 } = yield* Effect.promise(() => import("fflate"));
   const entries: Zippable = Object.create(null);
-  for (const file of [...files].sort((a, b) =>
-    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
-  )) {
+  for (const file of [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
     entries[file.path] = [
       typeof file.content === "string" ? strToU8(file.content) : file.content,
       { attrs: (file.mode ?? 0o100644) << 16 },

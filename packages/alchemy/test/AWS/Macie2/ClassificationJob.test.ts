@@ -41,9 +41,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     Effect.gen(function* () {
       const preexisting = yield* getSession;
       if (preexisting) {
-        yield* Effect.logInfo(
-          "Macie already enabled — skipping ClassificationJob lifecycle test",
-        );
+        yield* Effect.logInfo("Macie already enabled — skipping ClassificationJob lifecycle test");
         return;
       }
 

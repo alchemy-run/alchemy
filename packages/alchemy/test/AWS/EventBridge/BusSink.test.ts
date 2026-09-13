@@ -40,10 +40,7 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(75),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
     }),
   );
 
@@ -57,9 +54,7 @@ const postSink = Effect.fn(function* (
   });
   if (response.status !== 200) {
     const text = yield* response.text;
-    return yield* Effect.fail(
-      new SinkRequestFailed({ status: response.status, body: text }),
-    );
+    return yield* Effect.fail(new SinkRequestFailed({ status: response.status, body: text }));
   }
   return (yield* response.json) as { ok: boolean; count: number };
 });
@@ -69,10 +64,7 @@ const postSink = Effect.fn(function* (
  * until every expected marker has been observed. Bounded — fails with
  * `EventsNotDelivered` when the schedule is exhausted.
  */
-const waitForMarkers = Effect.fn(function* (
-  queueUrl: string,
-  expected: readonly string[],
-) {
+const waitForMarkers = Effect.fn(function* (queueUrl: string, expected: readonly string[]) {
   const received = new Set<string>();
   yield* Effect.gen(function* () {
     const result = yield* SQS.receiveMessage({
@@ -99,17 +91,12 @@ const waitForMarkers = Effect.fn(function* (
     }
     const missing = expected.filter((marker) => !received.has(marker));
     if (missing.length > 0) {
-      return yield* Effect.fail(
-        new EventsNotDelivered({ missing: missing.length }),
-      );
+      return yield* Effect.fail(new EventsNotDelivered({ missing: missing.length }));
     }
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "EventsNotDelivered",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
     }),
   );
   return received;
@@ -122,11 +109,7 @@ const waitForMarkers = Effect.fn(function* (
  * re-publishes the probe marker through the sink and long-polls the routed
  * queue for it.
  */
-const probeUntilRouted = Effect.fn(function* (
-  baseUrl: string,
-  queueUrl: string,
-  marker: string,
-) {
+const probeUntilRouted = Effect.fn(function* (baseUrl: string, queueUrl: string, marker: string) {
   yield* Effect.gen(function* () {
     const response = yield* postSink(baseUrl, { markers: [marker] });
     expect(response.ok).toBe(true);
@@ -140,18 +123,13 @@ const probeUntilRouted = Effect.fn(function* (
       message.Body ? message.Body.includes(marker) : false,
     );
     if (!match) {
-      yield* Effect.logInfo(
-        "BusSink test: probe event not routed yet (rule still propagating?)",
-      );
+      yield* Effect.logInfo("BusSink test: probe event not routed yet (rule still propagating?)");
       return yield* Effect.fail(new EventsNotDelivered({ missing: 1 }));
     }
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "EventsNotDelivered",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(17),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(17)]),
     }),
   );
 });
@@ -164,9 +142,7 @@ test.provider(
       // a previous crashed run (physical names are deterministic constants).
       yield* stack.destroy();
 
-      const fn = yield* stack.deploy(
-        BusSinkFunction.pipe(Effect.provide(BusSinkFunctionLive)),
-      );
+      const fn = yield* stack.deploy(BusSinkFunction.pipe(Effect.provide(BusSinkFunctionLive)));
       const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
 
       const { queueUrl } = yield* waitForFunctionReady(`${baseUrl}/ready`);
@@ -176,10 +152,7 @@ test.provider(
 
       // 25 entries > the PutEvents limit of 10, so the batched sink must
       // split the chunk into 3 sequential API calls (10 + 10 + 5).
-      const markers = Array.from(
-        { length: 25 },
-        (_, i) => `bussink-${i}-${crypto.randomUUID()}`,
-      );
+      const markers = Array.from({ length: 25 }, (_, i) => `bussink-${i}-${crypto.randomUUID()}`);
       const response = yield* postSink(baseUrl, { markers });
       expect(response.ok).toBe(true);
       expect(response.count).toBe(markers.length);
@@ -205,19 +178,15 @@ test.provider(
       yield* stack.destroy();
 
       // Typed wait-until-gone: the sink's event bus must be deleted.
-      const gone = yield* eventbridge
-        .describeEventBus({ Name: "alchemy-test-eb-bus-sink" })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (isGone): boolean => isGone,
-            times: 10,
-          }),
-        );
+      const gone = yield* eventbridge.describeEventBus({ Name: "alchemy-test-eb-bus-sink" }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (isGone): boolean => isGone,
+          times: 10,
+        }),
+      );
       expect(gone).toBe(true);
     }),
   { timeout: 240_000 },

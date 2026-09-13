@@ -17,8 +17,7 @@ export default class FetchTargetWorker extends Cloudflare.Worker<FetchTargetWork
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const name =
-          new URL(request.url, "http://x").searchParams.get("name") ?? "world";
+        const name = new URL(request.url, "http://x").searchParams.get("name") ?? "world";
         return HttpServerResponse.text(`fetch-binding-target: hello ${name}`);
       }),
     };

@@ -11,16 +11,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 /** Typed wait-until-gone: getRule must settle on RULE_NOT_FOUND. */
 const assertRuleGone = (identifier: string) =>
   rbin.getRule({ Identifier: identifier }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`retention rule ${identifier} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`retention rule ${identifier} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -97,12 +92,8 @@ describe("AWS.Rbin.Rule", () => {
         const observedUpdated = yield* rbin.getRule({
           Identifier: updated.identifier,
         });
-        expect(observedUpdated.RetentionPeriod?.RetentionPeriodValue).toEqual(
-          14,
-        );
-        expect(observedUpdated.Description).toEqual(
-          "alchemy rbin lifecycle test (updated)",
-        );
+        expect(observedUpdated.RetentionPeriod?.RetentionPeriodValue).toEqual(14);
+        expect(observedUpdated.Description).toEqual("alchemy rbin lifecycle test (updated)");
         expect(observedUpdated.ResourceTags).toEqual([
           { ResourceTagKey: "alchemy-rbin-test", ResourceTagValue: "updated" },
         ]);

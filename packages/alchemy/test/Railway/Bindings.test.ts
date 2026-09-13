@@ -18,26 +18,17 @@ import { RailwayAuth } from "@/Railway/AuthProvider.ts";
 import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import * as Test from "@/Test/Alchemy";
 import { Site } from "./fixtures/bindings-shared.ts";
-import BucketApi, {
-  Data as BucketData,
-  OBJECT_BODY,
-  OBJECT_KEY,
-} from "./fixtures/bucket-api.ts";
+import BucketApi, { Data as BucketData, OBJECT_BODY, OBJECT_KEY } from "./fixtures/bucket-api.ts";
 import RedisApi, { Cache, REDIS_VALUE } from "./fixtures/redis-api.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(
-    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
-  );
+  effect.pipe(Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))));
 
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
@@ -63,11 +54,7 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const readServiceVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const readServiceVariables = (projectId: string, environmentId: string, serviceId: string) =>
   railway
     .variables({
       projectId,
@@ -77,16 +64,10 @@ const readServiceVariables = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed({} as Record<string, string>)),
     );
 
-const firstCredentials = (
-  bucketId: string,
-  environmentId: string,
-  projectId: string,
-) =>
+const firstCredentials = (bucketId: string, environmentId: string, projectId: string) =>
   railway
     .bucketS3Credentials(
       {
@@ -187,15 +168,11 @@ const retryTransient = {
       e.status === 500 ||
       e.status === 502 ||
       e.status === 503),
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.upTo({ duration: "45 seconds" }),
-  ),
+  schedule: Schedule.exponential("500 millis").pipe(Schedule.upTo({ duration: "45 seconds" })),
   times: 10,
 } as const;
 
-const readJson = (
-  res: HttpClientResponse.HttpClientResponse,
-): Effect.Effect<unknown, NotReady> =>
+const readJson = (res: HttpClientResponse.HttpClientResponse): Effect.Effect<unknown, NotReady> =>
   res.json.pipe(
     Effect.catch(() => Effect.fail(new NotReady({ status: res.status }))),
     Effect.flatMap((body) =>
@@ -214,9 +191,7 @@ const getJson = (url: string, path: string) =>
         orElse: () => Effect.fail(new NotReady({ status: 0 })),
       }),
       Effect.flatMap(readJson),
-      Effect.mapError((e) =>
-        e instanceof NotReady ? e : new NotReady({ status: 0, body: e }),
-      ),
+      Effect.mapError((e) => (e instanceof NotReady ? e : new NotReady({ status: 0, body: e }))),
       Effect.retry(retryTransient),
     );
   });
@@ -231,14 +206,10 @@ const getText = (url: string) =>
       }),
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.text.pipe(
-              Effect.mapError(() => new NotReady({ status: res.status })),
-            )
+          ? res.text.pipe(Effect.mapError(() => new NotReady({ status: res.status })))
           : Effect.fail(new NotReady({ status: res.status })),
       ),
-      Effect.mapError((e) =>
-        e instanceof NotReady ? e : new NotReady({ status: 0, body: e }),
-      ),
+      Effect.mapError((e) => (e instanceof NotReady ? e : new NotReady({ status: 0, body: e }))),
       Effect.retry(retryTransient),
     );
   });
@@ -295,11 +266,7 @@ describe("Railway Bindings", () => {
         // registry. ReadWriteRedis still packed REDIS_URL onto the
         // Service; set/get runs over the public TCP proxy.
         const cacheVars = yield* distilled(
-          readServiceVariables(
-            out.redisProjectId,
-            out.redisEnvironmentId,
-            out.cacheServiceId,
-          ),
+          readServiceVariables(out.redisProjectId, out.redisEnvironmentId, out.cacheServiceId),
         );
         const password = cacheVars[Railway.REDIS_PASSWORD_ENV];
         expect(password !== undefined && password.length > 0).toEqual(true);
@@ -347,21 +314,13 @@ describe("Railway Bindings", () => {
         // registry. PutObject/GetObject still packed AWS_* onto the
         // Service; put/get runs over the S3 API from the test process.
         const vars = yield* distilled(
-          readServiceVariables(
-            out.bucketProjectId,
-            out.bucketEnvironmentId,
-            out.bucketServiceId,
-          ),
+          readServiceVariables(out.bucketProjectId, out.bucketEnvironmentId, out.bucketServiceId),
         );
         expect((vars.AWS_ACCESS_KEY_ID ?? "").length).toBeGreaterThan(0);
         expect((vars.BUCKET_NAME ?? "").length).toBeGreaterThan(0);
 
         const creds = yield* distilled(
-          firstCredentials(
-            out.bucketId,
-            out.bucketEnvironmentId,
-            out.bucketProjectId,
-          ),
+          firstCredentials(out.bucketId, out.bucketEnvironmentId, out.bucketProjectId),
         );
         yield* withBucketS3(
           creds,
@@ -380,9 +339,7 @@ describe("Railway Bindings", () => {
           }),
         );
         const text =
-          got.Body === undefined
-            ? ""
-            : yield* Stream.mkString(Stream.decodeText(got.Body));
+          got.Body === undefined ? "" : yield* Stream.mkString(Stream.decodeText(got.Body));
         expect(text).toEqual(OBJECT_BODY);
       }).pipe(logLevel),
       { timeout: 120_000 },

@@ -95,9 +95,7 @@ export const consumeExpiryEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.acm"],
       "detail-type": ["ACM Certificate Approaching Expiration"],
-      ...(props.certificateArns !== undefined
-        ? { resources: [...props.certificateArns] }
-        : {}),
+      ...(props.certificateArns !== undefined ? { resources: [...props.certificateArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

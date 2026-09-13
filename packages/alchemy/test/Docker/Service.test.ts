@@ -45,9 +45,7 @@ describe("Docker.Service", { concurrent: false }, () => {
         const docker = yield* Docker.Docker;
         const gone = yield* docker.service.inspect(service.id).pipe(
           Effect.map(() => false),
-          Effect.catchReason("PlatformError", "NotFound", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
         );
         expect(gone).toBe(true);
       }),
@@ -128,15 +126,11 @@ describe("Docker.Service", { concurrent: false }, () => {
         const docker = yield* Docker.Docker;
         const serviceName = "alchemy-test-service-adopt-existing";
 
-        yield* Effect.addFinalizer(() =>
-          docker.service.remove(serviceName).pipe(Effect.ignore),
-        );
+        yield* Effect.addFinalizer(() => docker.service.remove(serviceName).pipe(Effect.ignore));
 
         yield* docker.service
           .remove(serviceName)
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          );
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
 
         yield* docker.service.create({
           name: serviceName,
@@ -207,9 +201,7 @@ describe("Docker.Service", { concurrent: false }, () => {
   );
 });
 
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -218,7 +210,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

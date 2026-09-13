@@ -13,13 +13,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test URL targets. Each test owns a disjoint path so
 // reruns never collide, and the same target is reused on every run (never
@@ -35,9 +31,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -50,9 +44,7 @@ const resolveZoneId = Effect.gen(function* () {
 // patches).
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -61,17 +53,13 @@ const retryForbidden = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const targetOf = (rule: {
-  targets: ReadonlyArray<{ constraint?: { value: string } | null }>;
-}) => rule.targets[0]?.constraint?.value;
+const targetOf = (rule: { targets: ReadonlyArray<{ constraint?: { value: string } | null }> }) =>
+  rule.targets[0]?.constraint?.value;
 
-const listRules = (zoneId: string) =>
-  retryForbidden(pageRules.listPageRules({ zoneId }));
+const listRules = (zoneId: string) => retryForbidden(pageRules.listPageRules({ zoneId }));
 
 const findRule = (zoneId: string, target: string) =>
-  listRules(zoneId).pipe(
-    Effect.map((rules) => rules.find((r) => targetOf(r) === target)),
-  );
+  listRules(zoneId).pipe(Effect.map((rules) => rules.find((r) => targetOf(r) === target)));
 
 const getRule = (zoneId: string, pageruleId: string) =>
   retryForbidden(pageRules.getPageRule({ zoneId, pageruleId }));
@@ -133,80 +121,78 @@ test.provider("create, verify out-of-band, and destroy a page rule", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider(
-  "updating actions, status, priority and target syncs in place",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("updating actions, status, priority and target syncs in place", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* purgeRules(zoneId, [TARGET_UPDATE, TARGET_UPDATE_MOVED]);
+    yield* stack.destroy();
+    yield* purgeRules(zoneId, [TARGET_UPDATE, TARGET_UPDATE_MOVED]);
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
-            zoneId,
-            target: TARGET_UPDATE,
-            actions: [{ id: "cache_level", value: "bypass" }],
-            status: "disabled",
-          }).pipe(adopt(true));
-        }),
-      );
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
+          zoneId,
+          target: TARGET_UPDATE,
+          actions: [{ id: "cache_level", value: "bypass" }],
+          status: "disabled",
+        }).pipe(adopt(true));
+      }),
+    );
 
-      expect(initial.status).toEqual("disabled");
-      expect(initial.target).toEqual(TARGET_UPDATE);
+    expect(initial.status).toEqual("disabled");
+    expect(initial.target).toEqual(TARGET_UPDATE);
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
-            zoneId,
-            // Targets are mutable via PUT — same rule, new URL pattern.
-            target: TARGET_UPDATE_MOVED,
-            actions: [
-              { id: "cache_level", value: "cache_everything" },
-              { id: "browser_cache_ttl", value: 3600 },
-            ],
-            status: "active",
-          }).pipe(adopt(true));
-        }),
-      );
+    const updated = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
+          zoneId,
+          // Targets are mutable via PUT — same rule, new URL pattern.
+          target: TARGET_UPDATE_MOVED,
+          actions: [
+            { id: "cache_level", value: "cache_everything" },
+            { id: "browser_cache_ttl", value: 3600 },
+          ],
+          status: "active",
+        }).pipe(adopt(true));
+      }),
+    );
 
-      // Same rule updated in place — not a replacement.
-      expect(updated.pageRuleId).toEqual(initial.pageRuleId);
-      expect(updated.target).toEqual(TARGET_UPDATE_MOVED);
-      expect(updated.status).toEqual("active");
-      // Cloudflare clamps priority to the number of rules on the zone
-      // (priority is positional) — a lone rule is always priority 1.
-      expect(updated.priority).toEqual(1);
+    // Same rule updated in place — not a replacement.
+    expect(updated.pageRuleId).toEqual(initial.pageRuleId);
+    expect(updated.target).toEqual(TARGET_UPDATE_MOVED);
+    expect(updated.status).toEqual("active");
+    // Cloudflare clamps priority to the number of rules on the zone
+    // (priority is positional) — a lone rule is always priority 1.
+    expect(updated.priority).toEqual(1);
 
-      const live = yield* getRule(zoneId, updated.pageRuleId);
-      expect(targetOf(live)).toEqual(TARGET_UPDATE_MOVED);
-      expect(live.status).toEqual("active");
-      const actionIds = live.actions.map((a) => a.id).sort();
-      expect(actionIds).toEqual(["browser_cache_ttl", "cache_level"]);
+    const live = yield* getRule(zoneId, updated.pageRuleId);
+    expect(targetOf(live)).toEqual(TARGET_UPDATE_MOVED);
+    expect(live.status).toEqual("active");
+    const actionIds = live.actions.map((a) => a.id).sort();
+    expect(actionIds).toEqual(["browser_cache_ttl", "cache_level"]);
 
-      // Re-deploying the identical desired state is a no-op (sync skips
-      // the PUT entirely) and keeps the same physical rule.
-      const noop = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
-            zoneId,
-            target: TARGET_UPDATE_MOVED,
-            actions: [
-              { id: "cache_level", value: "cache_everything" },
-              { id: "browser_cache_ttl", value: 3600 },
-            ],
-            status: "active",
-          }).pipe(adopt(true));
-        }),
-      );
-      expect(noop.pageRuleId).toEqual(initial.pageRuleId);
+    // Re-deploying the identical desired state is a no-op (sync skips
+    // the PUT entirely) and keeps the same physical rule.
+    const noop = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.PageRule.PageRule("UpdateRule", {
+          zoneId,
+          target: TARGET_UPDATE_MOVED,
+          actions: [
+            { id: "cache_level", value: "cache_everything" },
+            { id: "browser_cache_ttl", value: 3600 },
+          ],
+          status: "active",
+        }).pipe(adopt(true));
+      }),
+    );
+    expect(noop.pageRuleId).toEqual(initial.pageRuleId);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const gone = yield* findRule(zoneId, TARGET_UPDATE_MOVED);
-      expect(gone).toBeUndefined();
-    }).pipe(logLevel),
+    const gone = yield* findRule(zoneId, TARGET_UPDATE_MOVED);
+    expect(gone).toBeUndefined();
+  }).pipe(logLevel),
 );
 
 test.provider(
@@ -269,9 +255,9 @@ test.provider(
 
       const live = yield* getRule(zoneId, adopted.pageRuleId);
       const cacheLevel = live.actions.find((a) => a.id === "cache_level");
-      expect(
-        cacheLevel?.id === "cache_level" ? cacheLevel.value : undefined,
-      ).toEqual("cache_everything");
+      expect(cacheLevel?.id === "cache_level" ? cacheLevel.value : undefined).toEqual(
+        "cache_everything",
+      );
 
       yield* stack.destroy();
 
@@ -320,9 +306,7 @@ test.provider("list enumerates the deployed page rule", (stack) =>
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -331,7 +315,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

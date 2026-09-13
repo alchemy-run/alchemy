@@ -49,9 +49,7 @@ test.provider(
       });
       expect(observed.TemplateContent.Subject).toBe("Welcome, {{name}}!");
       expect(observed.TemplateContent.Html).toBe("<h1>Hi {{name}}</h1>");
-      const tags = Object.fromEntries(
-        (observed.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((observed.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("WelcomeTemplate");
 
@@ -70,9 +68,7 @@ test.provider(
         TemplateName: template.templateName,
       });
       expect(updated.TemplateContent.Subject).toBe("Hello again, {{name}}!");
-      const updatedTags = Object.fromEntries(
-        (updated.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const updatedTags = Object.fromEntries((updated.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.Extra).toBe("1");
 
       yield* stack.destroy();

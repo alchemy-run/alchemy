@@ -23,7 +23,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "../SQL/Migrations/index.ts";
-import { hashImports, hashMigrations, readSqlFile } from "../SQL/SqlFile.ts";
+import { hashImports, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { runPgMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -32,10 +32,7 @@ import type { Providers } from "./Providers.ts";
 
 export type BranchSource = Project | { projectId: string };
 
-export type ParentBranchSource =
-  | Branch
-  | { branchId: string }
-  | { name: string };
+export type ParentBranchSource = Branch | { branchId: string } | { name: string };
 
 export type BranchEndpointConfig = {
   type: "read_only" | "read_write";
@@ -219,23 +216,15 @@ export const BranchProvider = () =>
           ? maybeResolveProjectId(olds.project as BranchSource)
           : undefined);
       const newProjectId =
-        "project" in news
-          ? maybeResolveProjectId(news.project as BranchSource)
-          : undefined;
+        "project" in news ? maybeResolveProjectId(news.project as BranchSource) : undefined;
       if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;
-      if (
-        news.parentLsn !== undefined &&
-        output?.parentLsn !== news.parentLsn
-      ) {
+      if (news.parentLsn !== undefined && output?.parentLsn !== news.parentLsn) {
         return { action: "replace" } as const;
       }
-      if (
-        news.parentTimestamp !== undefined &&
-        output?.parentTimestamp !== news.parentTimestamp
-      ) {
+      if (news.parentTimestamp !== undefined && output?.parentTimestamp !== news.parentTimestamp) {
         return { action: "replace" } as const;
       }
       if (
@@ -244,8 +233,7 @@ export const BranchProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.branchName ?? (yield* createBranchName(id, olds.name));
+      const oldName = output?.branchName ?? (yield* createBranchName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
@@ -280,9 +268,7 @@ export const BranchProvider = () =>
             protected: branch.protected,
             default: branch.default,
             expiresAt: branch.expires_at,
-            pooledOrigin:
-              output.pooledOrigin ??
-              parsePostgresOrigin(output.pooledConnectionUri),
+            pooledOrigin: output.pooledOrigin ?? parsePostgresOrigin(output.pooledConnectionUri),
           })),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
@@ -304,12 +290,7 @@ export const BranchProvider = () =>
       });
       const db = dbs.databases[0];
       if (!db) return undefined;
-      const conn = yield* fetchConnection(
-        projectId,
-        match.id,
-        db.name,
-        db.owner_name,
-      );
+      const conn = yield* fetchConnection(projectId, match.id, db.name, db.owner_name);
       return {
         branchId: match.id,
         branchName: match.name,
@@ -317,10 +298,7 @@ export const BranchProvider = () =>
         parentBranchId: match.parent_id,
         parentLsn: match.parent_lsn,
         parentTimestamp: match.parent_timestamp,
-        initSource: match.init_source as
-          | "schema-only"
-          | "parent-data"
-          | undefined,
+        initSource: match.init_source as "schema-only" | "parent-data" | undefined,
         protected: match.protected,
         default: match.default,
         expiresAt: match.expires_at,
@@ -340,10 +318,7 @@ export const BranchProvider = () =>
       // Prefer the deployed name: regenerating would target a different
       // resource if the generator's output for this id ever drifts. An
       // explicit `news.name` still renames the branch in place.
-      const newName =
-        news.name ??
-        output?.branchName ??
-        (yield* createBranchName(id, news.name));
+      const newName = news.name ?? output?.branchName ?? (yield* createBranchName(id, news.name));
 
       // Ensure — when no prior output exists we create the branch;
       // otherwise sync the mutable scalar fields on the existing
@@ -374,9 +349,7 @@ export const BranchProvider = () =>
               connectionUri: output.connectionUri,
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
-              pooledOrigin:
-                output.pooledOrigin ??
-                parsePostgresOrigin(output.pooledConnectionUri),
+              pooledOrigin: output.pooledOrigin ?? parsePostgresOrigin(output.pooledConnectionUri),
             })),
           )
         : yield* Effect.gen(function* () {
@@ -419,10 +392,7 @@ export const BranchProvider = () =>
               parentBranchId: created.branch.parent_id,
               parentLsn: created.branch.parent_lsn,
               parentTimestamp: created.branch.parent_timestamp,
-              initSource: created.branch.init_source as
-                | "schema-only"
-                | "parent-data"
-                | undefined,
+              initSource: created.branch.init_source as "schema-only" | "parent-data" | undefined,
               protected: created.branch.protected,
               default: created.branch.default,
               expiresAt: created.branch.expires_at,
@@ -476,22 +446,16 @@ export const BranchProvider = () =>
         (project) =>
           Effect.gen(function* () {
             const branches = yield* listAllBranches(project.id);
-            return yield* Effect.forEach(
-              branches,
-              (branch) => hydrateBranch(project.id, branch),
-              {
-                concurrency: 10,
-              },
-            );
+            return yield* Effect.forEach(branches, (branch) => hydrateBranch(project.id, branch), {
+              concurrency: 10,
+            });
           }).pipe(
             // The project may be deleted between enumeration and listing.
             Effect.catchTag("NotFound", () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
-      return perProject
-        .flat()
-        .filter((row): row is Branch["Attributes"] => row !== undefined);
+      return perProject.flat().filter((row): row is Branch["Attributes"] => row !== undefined);
     }),
   });
 
@@ -505,11 +469,7 @@ const listAllProjects = Effect.gen(function* () {
     // Neon returns a `pagination.cursor` on every response (the `created_at`
     // of the last row), not a "has next page" flag — stop once a page comes
     // back empty or the cursor stops advancing to avoid an infinite loop.
-    if (
-      page.projects.length === 0 ||
-      nextCursor === undefined ||
-      nextCursor === cursor
-    ) {
+    if (page.projects.length === 0 || nextCursor === undefined || nextCursor === cursor) {
       break;
     }
     cursor = nextCursor;
@@ -543,12 +503,7 @@ const hydrateBranch = (
     });
     const db = dbs.databases[0];
     if (!db) return undefined;
-    const conn = yield* fetchConnection(
-      projectId,
-      branch.id,
-      db.name,
-      db.owner_name,
-    );
+    const conn = yield* fetchConnection(projectId, branch.id, db.name, db.owner_name);
     const attributes: Branch["Attributes"] = {
       branchId: branch.id,
       branchName: branch.name,
@@ -556,10 +511,7 @@ const hydrateBranch = (
       parentBranchId: branch.parent_id,
       parentLsn: branch.parent_lsn,
       parentTimestamp: branch.parent_timestamp,
-      initSource: branch.init_source as
-        | "schema-only"
-        | "parent-data"
-        | undefined,
+      initSource: branch.init_source as "schema-only" | "parent-data" | undefined,
       protected: branch.protected,
       default: branch.default,
       expiresAt: branch.expires_at,
@@ -614,15 +566,10 @@ const maybeResolveProjectId = (source: BranchSource): string | undefined => {
 const resolveProjectId = (source: BranchSource): string => {
   const projectId = maybeResolveProjectId(source);
   if (projectId) return projectId;
-  throw new Error(
-    "Invalid Neon project source: must be a Project or { projectId }",
-  );
+  throw new Error("Invalid Neon project source: must be a Project or { projectId }");
 };
 
-const resolveParentBranchId = (
-  source: ParentBranchSource | undefined,
-  projectId: string,
-) =>
+const resolveParentBranchId = (source: ParentBranchSource | undefined, projectId: string) =>
   Effect.gen(function* () {
     if (!source) return undefined as string | undefined;
     if ("branchId" in source && source.branchId) {

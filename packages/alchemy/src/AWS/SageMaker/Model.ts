@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ModelProps {
@@ -127,27 +122,18 @@ export interface Model extends Resource<
  */
 export const Model = Resource<Model>("AWS.SageMaker.Model");
 
-const createModelName = (
-  id: string,
-  props: { modelName?: string | undefined },
-) =>
-  props.modelName
-    ? Effect.succeed(props.modelName)
-    : createPhysicalName({ id, maxLength: 63 });
+const createModelName = (id: string, props: { modelName?: string | undefined }) =>
+  props.modelName ? Effect.succeed(props.modelName) : createPhysicalName({ id, maxLength: 63 });
 
 const fetchModelTags = Effect.fn(function* (arn: string) {
   const tags = yield* sagemaker.listTags.items({ ResourceArn: arn }).pipe(
     EffectStream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     // A just-deleted (or foreign) resource ARN surfaces as AccessDenied.
-    Effect.catchTag("AccessDeniedException", () =>
-      Effect.succeed<sagemaker.Tag[]>([]),
-    ),
+    Effect.catchTag("AccessDeniedException", () => Effect.succeed<sagemaker.Tag[]>([])),
   );
   return Object.fromEntries(
-    tags.flatMap((tag) =>
-      tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
-    ),
+    tags.flatMap((tag) => (tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [])),
   );
 });
 
@@ -185,9 +171,7 @@ export const ModelProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* sagemaker.listModels.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Models ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Models ?? [])),
             );
             return summaries.flatMap((s) =>
               s.ModelName !== undefined && s.ModelArn !== undefined
@@ -196,14 +180,11 @@ export const ModelProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const modelName =
-            output?.modelName ?? (yield* createModelName(id, olds ?? {}));
+          const modelName = output?.modelName ?? (yield* createModelName(id, olds ?? {}));
           const attrs = yield* readModel(modelName);
           if (!attrs) return undefined;
           const tags = yield* fetchModelTags(attrs.modelArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -228,12 +209,9 @@ export const ModelProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker Model requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker Model requires props"));
           }
-          const modelName =
-            output?.modelName ?? (yield* createModelName(id, news));
+          const modelName = output?.modelName ?? (yield* createModelName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -259,9 +237,7 @@ export const ModelProvider = () =>
             ).pipe(Effect.catchTag("ModelAlreadyExists", () => Effect.void));
             attrs = yield* readModel(modelName);
             if (attrs === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created model ${modelName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created model ${modelName}`));
             }
           }
 

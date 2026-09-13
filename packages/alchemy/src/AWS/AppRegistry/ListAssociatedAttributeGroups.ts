@@ -44,7 +44,6 @@ export interface ListAssociatedAttributeGroups extends Binding.Service<
   >
 > {}
 
-export const ListAssociatedAttributeGroups =
-  Binding.Service<ListAssociatedAttributeGroups>(
-    "AWS.AppRegistry.ListAssociatedAttributeGroups",
-  );
+export const ListAssociatedAttributeGroups = Binding.Service<ListAssociatedAttributeGroups>(
+  "AWS.AppRegistry.ListAssociatedAttributeGroups",
+);

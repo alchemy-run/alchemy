@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import AuditManagerTestFunctionLive, {
-  AuditManagerTestFunction,
-} from "./handler";
+import AuditManagerTestFunctionLive, { AuditManagerTestFunction } from "./handler";
 import AuditManagerAssessmentTestFunctionLive, {
   AuditManagerAssessmentTestFunction,
 } from "./handler-assessment";
@@ -17,17 +15,11 @@ import AuditManagerAssessmentTestFunctionLive, {
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AuditManagerBindings");
-const assessmentStack = Core.scratchStack(
-  testOptions,
-  "AuditManagerAssessmentBindings",
-);
+const assessmentStack = Core.scratchStack(testOptions, "AuditManagerAssessmentBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -45,26 +37,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // The testing account is NOT registered with Audit Manager, and the service
 // entered maintenance mode on 2026-04-30 so it can never be registered. On
@@ -72,10 +57,7 @@ const getJson = (path: string) =>
 // AccessDeniedException; a registered account (AWS_TEST_AUDITMANAGER=1)
 // answers real data. Both prove the binding + IAM grant + typed union
 // end-to-end.
-const expectOkOrAccessDenied = (
-  response: unknown,
-  extraTags: string[] = [],
-) => {
+const expectOkOrAccessDenied = (response: unknown, extraTags: string[] = []) => {
   const r = response as { ok: boolean; tag?: string };
   if (!r.ok) {
     expect(["AccessDeniedException", ...extraTags]).toContain(r.tag);
@@ -85,9 +67,7 @@ const expectOkOrAccessDenied = (
 describe.sequential("AuditManager Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "AuditManager test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("AuditManager test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("AuditManager test setup: deploying fixture");
@@ -101,9 +81,7 @@ describe.sequential("AuditManager Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `AuditManager test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`AuditManager test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -111,9 +89,7 @@ describe.sequential("AuditManager Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `AuditManager test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`AuditManager test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -133,21 +109,17 @@ describe.sequential("AuditManager Bindings", () => {
   });
 
   describe("GetAccountStatus", () => {
-    test.provider(
-      "succeeds end-to-end through the binding's IAM grant",
-      (_stack) =>
-        Effect.gen(function* () {
-          // GetAccountStatus answers even on unregistered accounts — this is
-          // a REAL data-plane success through the attached policy.
-          const response = (yield* getJson("/account-status")) as {
-            ok: boolean;
-            status: string;
-          };
-          expect(response.ok).toBe(true);
-          expect(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION"]).toContain(
-            response.status,
-          );
-        }),
+    test.provider("succeeds end-to-end through the binding's IAM grant", (_stack) =>
+      Effect.gen(function* () {
+        // GetAccountStatus answers even on unregistered accounts — this is
+        // a REAL data-plane success through the attached policy.
+        const response = (yield* getJson("/account-status")) as {
+          ok: boolean;
+          status: string;
+        };
+        expect(response.ok).toBe(true);
+        expect(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION"]).toContain(response.status);
+      }),
     );
   });
 
@@ -220,23 +192,21 @@ describe.sequential("AuditManager Bindings", () => {
   });
 
   describe("ValidateAssessmentReportIntegrity", () => {
-    test.provider(
-      "answers the typed tag for a nonexistent report path",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/validate-report")) as {
-            ok: boolean;
-            tag?: string;
-          };
-          // Never ok — the S3 path doesn't exist; on unregistered accounts
-          // the request is rejected before it is even looked at.
-          expect(response.ok).toBe(false);
-          expect([
-            "AccessDeniedException",
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
-        }),
+    test.provider("answers the typed tag for a nonexistent report path", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/validate-report")) as {
+          ok: boolean;
+          tag?: string;
+        };
+        // Never ok — the S3 path doesn't exist; on unregistered accounts
+        // the request is rejected before it is even looked at.
+        expect(response.ok).toBe(false);
+        expect([
+          "AccessDeniedException",
+          "ResourceNotFoundException",
+          "ValidationException",
+        ]).toContain(response.tag);
+      }),
     );
   });
 
@@ -267,9 +237,7 @@ describe.sequential("AuditManager Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           yield* assessmentStack.destroy();
-          const cleanup = assessmentStack
-            .destroy()
-            .pipe(Effect.catchCause(() => Effect.void));
+          const cleanup = assessmentStack.destroy().pipe(Effect.catchCause(() => Effect.void));
 
           yield* Effect.gen(function* () {
             const { functionUrl } = yield* assessmentStack.deploy(
@@ -279,15 +247,11 @@ describe.sequential("AuditManager Bindings", () => {
             );
             const assessmentBaseUrl = functionUrl!.replace(/\/+$/, "");
 
-            const ready = yield* HttpClient.get(
-              `${assessmentBaseUrl}/bindings`,
-            ).pipe(
+            const ready = yield* HttpClient.get(`${assessmentBaseUrl}/bindings`).pipe(
               Effect.flatMap((response) =>
                 response.status === 200
                   ? response.json
-                  : Effect.fail(
-                      new Error(`Function not ready: ${response.status}`),
-                    ),
+                  : Effect.fail(new Error(`Function not ready: ${response.status}`)),
               ),
               Effect.retry({ schedule: readinessPolicy }),
             );
@@ -303,9 +267,7 @@ describe.sequential("AuditManager Bindings", () => {
             ).pipe(Effect.flatMap((r) => r.json))) as {
               totalAssessmentControlsCount: number;
             };
-            expect(
-              insights.totalAssessmentControlsCount,
-            ).toBeGreaterThanOrEqual(0);
+            expect(insights.totalAssessmentControlsCount).toBeGreaterThanOrEqual(0);
 
             const changelogs = (yield* send(
               HttpClientRequest.get(`${assessmentBaseUrl}/changelogs`),

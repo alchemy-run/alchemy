@@ -36,22 +36,16 @@ const cfRequire = createRequire(path.join(cfRoot, "package.json"));
 /** Import a file from the @opennextjs/cloudflare dist (bypasses the exports map). */
 const importCf = (p) => import(pathToFileURL(path.join(cfRoot, p)).href);
 /** Import a subpath of @opennextjs/aws resolved from the cloudflare package. */
-const importAws = (p) =>
-  import(pathToFileURL(cfRequire.resolve(`@opennextjs/aws/${p}`)).href);
+const importAws = (p) => import(pathToFileURL(cfRequire.resolve(`@opennextjs/aws/${p}`)).href);
 
 const { compileOpenNextConfig } = await importAws("build/compileConfig.js");
 const { normalizeOptions } = await importAws("build/helper.js");
 const { default: logger } = await importAws("logger.js");
-const { ensureCloudflareConfig } = await importCf(
-  "dist/cli/build/utils/ensure-cf-config.js",
-);
+const { ensureCloudflareConfig } = await importCf("dist/cli/build/utils/ensure-cf-config.js");
 const { build } = await importCf("dist/cli/build/build.js");
 
 // --- compileConfig equivalent (utils.ts) without the TTY/prompt coupling ---
-const configPath = path.resolve(
-  appDir,
-  runnerConfig.configPath ?? "open-next.config.ts",
-);
+const configPath = path.resolve(appDir, runnerConfig.configPath ?? "open-next.config.ts");
 const { config, buildDir } = await compileOpenNextConfig(configPath, {
   compileEdge: true,
 });
@@ -63,9 +57,7 @@ ensureCloudflareConfig(config);
 config.buildCommand ??= runnerConfig.buildCommand ?? "npx next build";
 
 // --- getNormalizedOptions equivalent (utils.ts) ---
-const openNextDistDir = path.dirname(
-  cfRequire.resolve("@opennextjs/aws/index.js"),
-);
+const openNextDistDir = path.dirname(cfRequire.resolve("@opennextjs/aws/index.js"));
 const options = normalizeOptions(config, openNextDistDir, buildDir);
 logger.setLevel(runnerConfig.debug ? "debug" : "info");
 
@@ -85,6 +77,4 @@ const projectOptions = {
 };
 
 await build(options, config, projectOptions, wranglerConfig, false);
-console.log(
-  "[@alchemy.run/frontend-frameworks/nextjs] OpenNext build finished OK",
-);
+console.log("[@alchemy.run/frontend-frameworks/nextjs] OpenNext build finished OK");

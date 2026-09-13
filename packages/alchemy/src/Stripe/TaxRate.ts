@@ -193,9 +193,7 @@ export type TaxRate = Resource<
  */
 export const TaxRate = Resource<TaxRate>("Stripe.TaxRate");
 
-export class TaxRateNotResolved extends Data.TaggedError(
-  "Stripe.TaxRateNotResolved",
-)<{
+export class TaxRateNotResolved extends Data.TaggedError("Stripe.TaxRateNotResolved")<{
   displayName: string;
 }> {}
 
@@ -205,11 +203,7 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       displayName ??
@@ -263,10 +257,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllTaxRates = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const rates: StripeTaxRate[] = [];
   for (const rate of [...active, ...inactive]) {
@@ -289,10 +282,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -310,10 +300,7 @@ const desiredMetadata = Effect.fn(function* (
   };
 });
 
-const shouldReplace = (
-  news: TaxRateProps,
-  output: TaxRateAttributes | undefined,
-): boolean => {
+const shouldReplace = (news: TaxRateProps, output: TaxRateAttributes | undefined): boolean => {
   if (output === undefined) return false;
   if (news.percentage !== output.percentage) return true;
   if (news.inclusive !== output.inclusive) return true;
@@ -339,9 +326,7 @@ export const TaxRateProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -358,11 +343,7 @@ export const TaxRateProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const metadata = yield* desiredMetadata(id, news.metadata);
       const desiredActive = news.active ?? true;
 
@@ -381,13 +362,9 @@ export const TaxRateProvider = () =>
           inclusive: news.inclusive,
           active: desiredActive,
           metadata,
-          ...(news.description !== undefined
-            ? { description: news.description }
-            : {}),
+          ...(news.description !== undefined ? { description: news.description } : {}),
           ...(news.country !== undefined ? { country: news.country } : {}),
-          ...(news.jurisdiction !== undefined
-            ? { jurisdiction: news.jurisdiction }
-            : {}),
+          ...(news.jurisdiction !== undefined ? { jurisdiction: news.jurisdiction } : {}),
           ...(news.state !== undefined ? { state: news.state } : {}),
           ...(news.taxType !== undefined ? { tax_type: news.taxType } : {}),
         }).pipe(
@@ -407,19 +384,15 @@ export const TaxRateProvider = () =>
       const displayNameChanged = current.display_name !== displayName;
       const activeChanged = current.active !== desiredActive;
       const descriptionChanged =
-        news.description !== undefined &&
-        (current.description ?? undefined) !== news.description;
+        news.description !== undefined && (current.description ?? undefined) !== news.description;
       const countryChanged =
-        news.country !== undefined &&
-        (current.country ?? undefined) !== news.country;
+        news.country !== undefined && (current.country ?? undefined) !== news.country;
       const jurisdictionChanged =
         news.jurisdiction !== undefined &&
         (current.jurisdiction ?? undefined) !== news.jurisdiction;
-      const stateChanged =
-        news.state !== undefined && (current.state ?? undefined) !== news.state;
+      const stateChanged = news.state !== undefined && (current.state ?? undefined) !== news.state;
       const taxTypeChanged =
-        news.taxType !== undefined &&
-        (current.tax_type ?? undefined) !== news.taxType;
+        news.taxType !== undefined && (current.tax_type ?? undefined) !== news.taxType;
 
       if (
         !displayNameChanged &&
@@ -446,9 +419,7 @@ export const TaxRateProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

@@ -31,9 +31,7 @@ export interface EnableInsightRules extends Binding.Service<
   "AWS.CloudWatch.EnableInsightRules",
   (
     ...rules: InsightRules
-  ) => Effect.Effect<
-    () => Effect.Effect<cloudwatch.EnableInsightRulesOutput, any>
-  >
+  ) => Effect.Effect<() => Effect.Effect<cloudwatch.EnableInsightRulesOutput, any>>
 > {}
 
 export const EnableInsightRules = Binding.Service<EnableInsightRules>(

@@ -48,59 +48,52 @@ const deleteProbeStoreIfExists = Effect.gen(function* () {
     (s) => s.Name === PROBE_STORE_NAME && s.Status !== "PENDING_DELETION",
   );
   if (existing?.EventDataStoreArn !== undefined) {
-    yield* cloudtrail
-      .deleteEventDataStore({ EventDataStore: existing.EventDataStoreArn })
-      .pipe(
-        // A store still finishing creation can transiently conflict.
-        Effect.retry({
-          while: (e) => e._tag === "ConflictException",
-          schedule: Schedule.exponential("2 seconds"),
-          times: 8,
-        }),
-        Effect.catchTag(
-          [
-            "EventDataStoreNotFoundException",
-            "InactiveEventDataStoreException",
-          ],
-          () => Effect.void,
-        ),
-      );
+    yield* cloudtrail.deleteEventDataStore({ EventDataStore: existing.EventDataStoreArn }).pipe(
+      // A store still finishing creation can transiently conflict.
+      Effect.retry({
+        while: (e) => e._tag === "ConflictException",
+        schedule: Schedule.exponential("2 seconds"),
+        times: 8,
+      }),
+      Effect.catchTag(
+        ["EventDataStoreNotFoundException", "InactiveEventDataStoreException"],
+        () => Effect.void,
+      ),
+    );
   }
 });
 
-test.provider(
-  "createEventDataStore is either typed onboarding-closed or a real create",
-  () =>
-    Effect.gen(function* () {
-      // Pre-clean: reclaim a leftover probe store from a killed prior run
-      // so the deterministic name is free and the test converges.
-      yield* deleteProbeStoreIfExists;
-      const attempt = yield* Effect.result(
-        cloudtrail.createEventDataStore({
-          Name: PROBE_STORE_NAME,
-          MultiRegionEnabled: false,
-          RetentionPeriod: 7,
-          TerminationProtectionEnabled: false,
-        }),
-      );
-      if (Result.isFailure(attempt)) {
-        expect([
-          "CloudTrailLakeOnboardingClosed",
-          // A prior probe's store still pending deletion holds the name on
-          // an onboarded account.
-          "EventDataStoreAlreadyExistsException",
-        ]).toContain(attempt.failure._tag);
-      }
-      // Onboarded-account success path: the ensuring finalizer below
-      // deletes the store (PENDING_DELETION incurs no cost).
-    }).pipe(
-      // Guaranteed cleanup on success, failure, AND interruption. Keyed on
-      // the deterministic name, so it also covers the create-succeeded-but-
-      // fiber-killed-before-response window on the next run's pre-clean.
-      // orDie (not swallow): a failed cleanup must fail the test loudly —
-      // a green run must imply zero leftovers.
-      Effect.ensuring(deleteProbeStoreIfExists.pipe(Effect.orDie)),
-    ),
+test.provider("createEventDataStore is either typed onboarding-closed or a real create", () =>
+  Effect.gen(function* () {
+    // Pre-clean: reclaim a leftover probe store from a killed prior run
+    // so the deterministic name is free and the test converges.
+    yield* deleteProbeStoreIfExists;
+    const attempt = yield* Effect.result(
+      cloudtrail.createEventDataStore({
+        Name: PROBE_STORE_NAME,
+        MultiRegionEnabled: false,
+        RetentionPeriod: 7,
+        TerminationProtectionEnabled: false,
+      }),
+    );
+    if (Result.isFailure(attempt)) {
+      expect([
+        "CloudTrailLakeOnboardingClosed",
+        // A prior probe's store still pending deletion holds the name on
+        // an onboarded account.
+        "EventDataStoreAlreadyExistsException",
+      ]).toContain(attempt.failure._tag);
+    }
+    // Onboarded-account success path: the ensuring finalizer below
+    // deletes the store (PENDING_DELETION incurs no cost).
+  }).pipe(
+    // Guaranteed cleanup on success, failure, AND interruption. Keyed on
+    // the deterministic name, so it also covers the create-succeeded-but-
+    // fiber-killed-before-response window on the next run's pre-clean.
+    // orDie (not swallow): a failed cleanup must fail the test loudly —
+    // a green run must imply zero leftovers.
+    Effect.ensuring(deleteProbeStoreIfExists.pipe(Effect.orDie)),
+  ),
 );
 
 const STORE_NAME = "alchemy-test-cloudtrail-eds";
@@ -144,9 +137,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       );
       expect(store.name).toBe(STORE_NAME);
       expect(store.eventDataStoreArn).toContain(":eventdatastore/");
-      expect(["CREATED", "ENABLED", "STARTING_INGESTION"]).toContain(
-        store.status,
-      );
+      expect(["CREATED", "ENABLED", "STARTING_INGESTION"]).toContain(store.status);
 
       // Out-of-band verification via distilled.
       const observed = yield* cloudtrail.getEventDataStore({
@@ -160,10 +151,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
         ResourceIdList: [store.eventDataStoreArn],
       });
       const tagRecord = Object.fromEntries(
-        (tags.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (tags.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(tagRecord.fixture).toBe("cloudtrail-eds");
       expect(tagRecord["alchemy::id"]).toBe("Lake");
@@ -181,10 +169,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
         ResourceIdList: [store.eventDataStoreArn],
       });
       const tagRecordAfter = Object.fromEntries(
-        (tagsAfter.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (tagsAfter.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(tagRecordAfter.team).toBe("audit");
       expect(tagRecordAfter.fixture).toBeUndefined();
@@ -202,9 +187,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
       const observedStopped = yield* cloudtrail.getEventDataStore({
         EventDataStore: store.eventDataStoreArn,
       });
-      expect(["STOPPING_INGESTION", "STOPPED_INGESTION"]).toContain(
-        observedStopped.Status,
-      );
+      expect(["STOPPING_INGESTION", "STOPPED_INGESTION"]).toContain(observedStopped.Status);
 
       // 3. Delete — schedules PENDING_DELETION (7-day wait, zero cost);
       // do NOT wait for the store to disappear.
@@ -213,9 +196,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
         .getEventDataStore({ EventDataStore: store.eventDataStoreArn })
         .pipe(
           Effect.map((r) => r.Status ?? "UNKNOWN"),
-          Effect.catchTag("EventDataStoreNotFoundException", () =>
-            Effect.succeed("GONE" as const),
-          ),
+          Effect.catchTag("EventDataStoreNotFoundException", () => Effect.succeed("GONE" as const)),
         );
       expect(["PENDING_DELETION", "GONE"]).toContain(afterDelete);
     }),

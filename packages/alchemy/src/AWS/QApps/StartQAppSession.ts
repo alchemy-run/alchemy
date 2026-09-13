@@ -37,13 +37,8 @@ export interface StartQAppSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartQAppSessionRequest,
-    ) => Effect.Effect<
-      qapps.StartQAppSessionOutput,
-      qapps.StartQAppSessionError
-    >
+    ) => Effect.Effect<qapps.StartQAppSessionOutput, qapps.StartQAppSessionError>
   >
 > {}
 
-export const StartQAppSession = Binding.Service<StartQAppSession>(
-  "AWS.QApps.StartQAppSession",
-);
+export const StartQAppSession = Binding.Service<StartQAppSession>("AWS.QApps.StartQAppSession");

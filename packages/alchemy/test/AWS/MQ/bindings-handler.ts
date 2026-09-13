@@ -9,9 +9,7 @@ import * as MQ from "@/AWS/MQ";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
-export class MQBindingsFunction extends Lambda.Function<Lambda.Function>()(
-  "MQBindingsFunction",
-) {}
+export class MQBindingsFunction extends Lambda.Function<Lambda.Function>()("MQBindingsFunction") {}
 
 export default MQBindingsFunction.make(
   {
@@ -113,10 +111,7 @@ export default MQBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/users/typed-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/users/typed-not-found") {
           // UpdateUser on a nonexistent user round-trips the typed
           // NotFoundException — an IAM gap would surface AccessDenied (500),
           // so the typed tag proves grant + injection end-to-end.

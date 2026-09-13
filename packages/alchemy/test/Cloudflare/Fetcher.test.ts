@@ -32,22 +32,17 @@ const flakyFetcher = (failures: number, message: string) => {
 describe("fromCloudflareFetcher", () => {
   // `it.live` uses the real clock so the retry's backoff delays actually
   // elapse (the default `it.effect` TestClock would never advance them).
-  it.live(
-    "retries the just-deployed 'no fetch handler' propagation window",
-    () =>
-      Effect.gen(function* () {
-        const fetcher = flakyFetcher(
-          2,
-          "Handler does not export a fetch() function.",
-        );
-        const client = fromCloudflareFetcher(fetcher as any);
+  it.live("retries the just-deployed 'no fetch handler' propagation window", () =>
+    Effect.gen(function* () {
+      const fetcher = flakyFetcher(2, "Handler does not export a fetch() function.");
+      const client = fromCloudflareFetcher(fetcher as any);
 
-        const res = yield* client.fetch(HttpClientRequest.get("http://do/"));
+      const res = yield* client.fetch(HttpClientRequest.get("http://do/"));
 
-        expect(res.status).toBe(200);
-        // Two not-ready failures + one success.
-        expect(fetcher.attempts()).toBe(3);
-      }),
+      expect(res.status).toBe(200);
+      // Two not-ready failures + one success.
+      expect(fetcher.attempts()).toBe(3);
+    }),
   );
 
   it.live("does not retry unrelated failures", () =>
@@ -55,9 +50,7 @@ describe("fromCloudflareFetcher", () => {
       const fetcher = flakyFetcher(99, "some other boom");
       const client = fromCloudflareFetcher(fetcher as any);
 
-      const outcome = yield* client
-        .fetch(HttpClientRequest.get("http://do/"))
-        .pipe(Effect.exit);
+      const outcome = yield* client.fetch(HttpClientRequest.get("http://do/")).pipe(Effect.exit);
 
       expect(outcome._tag).toBe("Failure");
       // A non-propagation error is surfaced on the first attempt — no retry.

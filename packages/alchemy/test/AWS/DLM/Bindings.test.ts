@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "DLMBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -39,26 +36,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("DLM Bindings", () => {
   beforeAll(
@@ -78,9 +68,7 @@ describe.sequential("DLM Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `DLM test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`DLM test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -88,9 +76,7 @@ describe.sequential("DLM Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `DLM test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`DLM test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -110,49 +96,43 @@ describe.sequential("DLM Bindings", () => {
   });
 
   describe("GetLifecyclePolicy", () => {
-    test.provider(
-      "reads the bound policy's detail (injected policy id)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/policy")) as {
-            policyId: string;
-            state: string;
-            policyType: string;
-          };
-          expect(response.policyId).toMatch(/^policy-/);
-          expect(response.state).toBe("DISABLED");
-          expect(response.policyType).toBe("EBS_SNAPSHOT_MANAGEMENT");
-        }),
+    test.provider("reads the bound policy's detail (injected policy id)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/policy")) as {
+          policyId: string;
+          state: string;
+          policyType: string;
+        };
+        expect(response.policyId).toMatch(/^policy-/);
+        expect(response.state).toBe("DISABLED");
+        expect(response.policyType).toBe("EBS_SNAPSHOT_MANAGEMENT");
+      }),
     );
   });
 
   describe("GetLifecyclePolicies", () => {
-    test.provider(
-      "enumerates the account's policies including the fixture's",
-      (_stack) =>
-        Effect.gen(function* () {
-          const policy = (yield* getJson("/policy")) as { policyId: string };
-          const response = (yield* getJson("/policies")) as {
-            ids: string[];
-          };
-          expect(response.ids).toContain(policy.policyId);
-        }),
+    test.provider("enumerates the account's policies including the fixture's", (_stack) =>
+      Effect.gen(function* () {
+        const policy = (yield* getJson("/policy")) as { policyId: string };
+        const response = (yield* getJson("/policies")) as {
+          ids: string[];
+        };
+        expect(response.ids).toContain(policy.policyId);
+      }),
     );
   });
 
   describe("consumePolicyEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumePolicyEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumePolicyEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

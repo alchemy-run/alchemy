@@ -85,9 +85,7 @@ interface BeforeEachFn {
 
 interface AfterAllFn {
   (eff: TestEffect<any>, options?: TestOptions): void;
-  skipIf: (
-    predicate: boolean,
-  ) => (eff: TestEffect<any>, options?: TestOptions) => void;
+  skipIf: (predicate: boolean) => (eff: TestEffect<any>, options?: TestOptions) => void;
 }
 
 interface AfterEachFn {
@@ -139,8 +137,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // which `destroy(Stack)` closes mid-file in self-contained tests — and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
-  const wrap = <A>(eff: TestEffect<A>) =>
-    Core.toEffect(eff, options, sharedScope, sidecar);
+  const wrap = <A>(eff: TestEffect<A>) => Core.toEffect(eff, options, sharedScope, sidecar);
 
   const addTest = (
     name: string,
@@ -190,12 +187,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
       Effect.ensuring(scratch.destroy().pipe(Effect.ignore)),
     );
-    return Core.toEffect(
-      body,
-      { ...options, state: scratch.state },
-      sharedScope,
-      sidecar,
-    );
+    return Core.toEffect(body, { ...options, state: scratch.state }, sharedScope, sidecar);
   };
 
   const addProvider = (
@@ -225,10 +217,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     addProvider(name, fn, opts, condition ? "skip" : "run");
   test.provider = provider;
 
-  const beforeAll: BeforeAllFn = <A>(
-    eff: TestEffect<A>,
-    hookOptions?: TestOptions,
-  ) => {
+  const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: TestOptions) => {
     let result: A;
     registerHook("beforeAll", {
       body: () =>
@@ -277,9 +266,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // for each worker. We close the shared scope only AFTER destroy completes.
   // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
   // the destroy wrapper AND the fallback cleanup hook below to call it.
-  const closeScope = Effect.suspend(() =>
-    Scope.close(sharedScope, Exit.void),
-  ).pipe(Effect.ignore);
+  const closeScope = Effect.suspend(() => Scope.close(sharedScope, Exit.void)).pipe(Effect.ignore);
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
@@ -292,9 +279,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // before sealing the file's suite tree. (Files are collected in parallel,
   // but the microtask carries the AsyncLocalStorage context of this file's
   // import, so the hook lands on the right suite.)
-  const closeAll = sidecar
-    ? Effect.andThen(closeScope, sidecar.close)
-    : closeScope;
+  const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
   queueMicrotask(() => {
     registerHook("afterAll", {
       body: () => closeAll,
@@ -308,8 +293,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     beforeEach,
     afterAll,
     afterEach,
-    deploy: (stack, callOpts) =>
-      Core.deploy(options, stack, { ...callOpts, scope: sharedScope }),
+    deploy: (stack, callOpts) => Core.deploy(options, stack, { ...callOpts, scope: sharedScope }),
     destroy: (stack, callOpts) =>
       Core.destroy(options, stack, { ...callOpts, scope: sharedScope }).pipe(
         Effect.ensuring(closeScope),

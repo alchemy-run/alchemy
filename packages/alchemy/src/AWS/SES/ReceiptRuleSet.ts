@@ -63,9 +63,7 @@ export interface ReceiptRuleSet extends Resource<
  *
  * @resource
  */
-export const ReceiptRuleSet = Resource<ReceiptRuleSet>(
-  "AWS.SES.ReceiptRuleSet",
-);
+export const ReceiptRuleSet = Resource<ReceiptRuleSet>("AWS.SES.ReceiptRuleSet");
 
 export const ReceiptRuleSetProvider = () =>
   Provider.effect(
@@ -75,20 +73,13 @@ export const ReceiptRuleSetProvider = () =>
         id: string,
         props: Pick<ReceiptRuleSetProps, "ruleSetName">,
       ) {
-        return (
-          props.ruleSetName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.ruleSetName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const describe = Effect.fn(function* (name: string) {
         return yield* ses
           .describeReceiptRuleSet({ RuleSetName: name })
-          .pipe(
-            Effect.catchTag("RuleSetDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.succeed(undefined)));
       });
 
       return ReceiptRuleSet.Provider.of({
@@ -141,11 +132,7 @@ export const ReceiptRuleSetProvider = () =>
           if (observed === undefined) {
             yield* ses
               .createReceiptRuleSet({ RuleSetName: name })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
           }
 
           // A rule set has no mutable aspects of its own; rules are separate

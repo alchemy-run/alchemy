@@ -31,10 +31,7 @@ export const readAmpTags = Effect.fn(function* (arn: string) {
  * desired set and apply only the delta. AMP's `tagResource` takes a tag
  * map (not a list), so the `upsert` delta is folded back into a record.
  */
-export const syncAmpTags = Effect.fn(function* (
-  arn: string,
-  desiredTags: Record<string, string>,
-) {
+export const syncAmpTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
   const observedTags = yield* readAmpTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {
@@ -57,9 +54,7 @@ export const normalizeAmpLogGroupArn = (arn: string): string =>
   arn.endsWith(":*") ? arn : `${arn}:*`;
 
 /** Encode a UTF-8 string definition into the wire blob AMP expects. */
-export const encodeDefinition = (
-  definition: string,
-): Effect.Effect<Uint8Array> =>
+export const encodeDefinition = (definition: string): Effect.Effect<Uint8Array> =>
   Effect.sync(() => new TextEncoder().encode(definition));
 
 /** Decode an AMP definition blob back into a UTF-8 string. */

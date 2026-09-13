@@ -29,10 +29,7 @@ export interface GetKxConnectionString extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.GetKxConnectionStringRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.GetKxConnectionStringResponse,
-      SVC.GetKxConnectionStringError
-    >
+    ) => Effect.Effect<SVC.GetKxConnectionStringResponse, SVC.GetKxConnectionStringError>
   >
 > {}
 export const GetKxConnectionString = Binding.Service<GetKxConnectionString>(

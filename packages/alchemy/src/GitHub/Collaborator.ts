@@ -181,14 +181,11 @@ export const CollaboratorProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const collaborators = await octokit.paginate(
-                  octokit.rest.repos.listCollaborators,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const collaborators = await octokit.paginate(octokit.rest.repos.listCollaborators, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return collaborators.map((collab: any) => ({
                   username: collab.login,
                   permission: collab.permissions?.admin

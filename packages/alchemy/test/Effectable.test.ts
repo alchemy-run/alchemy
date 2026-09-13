@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: TestLayers() });
 
 // A throwaway resource type used to exercise the `({ methods })` overload
 // without mutating the shared `TestResource`.
-interface MethodsResource extends Resource<
-  "Test.EffectableMethods",
-  {},
-  { value: string }
-> {}
+interface MethodsResource extends Resource<"Test.EffectableMethods", {}, { value: string }> {}
 
 describe("Effectable: migrated constructs are real Effects", () => {
   test(
@@ -50,9 +46,7 @@ describe("Effectable: migrated constructs are real Effects", () => {
       const Klass = effectClass(Effect.succeed(1));
       expect(Effect.isEffect(Klass)).toBe(true);
 
-      class Sub extends effectClass<{ x: number }>()(
-        Effect.succeed({ x: 1 }),
-      ) {}
+      class Sub extends effectClass<{ x: number }>()(Effect.succeed({ x: 1 })) {}
       // static Effect protocol is inherited through the constructor chain
       expect(Effect.isEffect(Sub)).toBe(true);
     }),
@@ -119,33 +113,29 @@ describe("Effectable: Effect.all / Effect.forEach over constructs", () => {
     }),
   );
 
-  test.provider(
-    "Effect.all over resource constructor calls deploys all of them",
-    (stack) =>
-      Effect.gen(function* () {
-        const strings = yield* Effect.gen(function* () {
-          const resources = yield* Effect.all([
-            TestResource("A", { string: "a" }),
-            TestResource("B", { string: "b" }),
-          ]);
-          return resources.map((r) => r.string);
-        }).pipe(stack.deploy);
-        expect(strings).toEqual(["a", "b"]);
-      }),
+  test.provider("Effect.all over resource constructor calls deploys all of them", (stack) =>
+    Effect.gen(function* () {
+      const strings = yield* Effect.gen(function* () {
+        const resources = yield* Effect.all([
+          TestResource("A", { string: "a" }),
+          TestResource("B", { string: "b" }),
+        ]);
+        return resources.map((r) => r.string);
+      }).pipe(stack.deploy);
+      expect(strings).toEqual(["a", "b"]);
+    }),
   );
 
-  test.provider(
-    "Effect.forEach over resource constructor calls deploys all of them",
-    (stack) =>
-      Effect.gen(function* () {
-        const strings = yield* Effect.gen(function* () {
-          const resources = yield* Effect.forEach(["A", "B", "C"], (id) =>
-            TestResource(id, { string: id.toLowerCase() }),
-          );
-          return resources.map((r) => r.string);
-        }).pipe(stack.deploy);
-        expect(strings).toEqual(["a", "b", "c"]);
-      }),
+  test.provider("Effect.forEach over resource constructor calls deploys all of them", (stack) =>
+    Effect.gen(function* () {
+      const strings = yield* Effect.gen(function* () {
+        const resources = yield* Effect.forEach(["A", "B", "C"], (id) =>
+          TestResource(id, { string: id.toLowerCase() }),
+        );
+        return resources.map((r) => r.string);
+      }).pipe(stack.deploy);
+      expect(strings).toEqual(["a", "b", "c"]);
+    }),
   );
 });
 
@@ -179,19 +169,14 @@ describe("Effectable: overloads", () => {
     }),
   );
 
-  test.provider(
-    "Resource accepts props-as-Effect (Effect<Props> overload)",
-    (stack) =>
-      Effect.gen(function* () {
-        const value = yield* Effect.gen(function* () {
-          const A = yield* TestResource(
-            "A",
-            Effect.succeed({ string: "fromEffect" }),
-          );
-          return A.string;
-        }).pipe(stack.deploy);
-        expect(value).toEqual("fromEffect");
-      }),
+  test.provider("Resource accepts props-as-Effect (Effect<Props> overload)", (stack) =>
+    Effect.gen(function* () {
+      const value = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", Effect.succeed({ string: "fromEffect" }));
+        return A.string;
+      }).pipe(stack.deploy);
+      expect(value).toEqual("fromEffect");
+    }),
   );
 
   test(

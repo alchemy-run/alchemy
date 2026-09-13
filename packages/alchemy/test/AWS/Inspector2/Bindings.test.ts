@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "Inspector2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,26 +35,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // Accounts where Inspector scanning is not enabled answer some data-plane
 // reads with a typed AccessDeniedException — either outcome proves the
@@ -67,9 +57,7 @@ const DISABLED_OK = ["AccessDeniedException", "ValidationException"];
 describe.sequential("Inspector2 Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Inspector2 test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Inspector2 test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Inspector2 test setup: deploying fixture");
@@ -83,9 +71,7 @@ describe.sequential("Inspector2 Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Inspector2 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Inspector2 test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -93,9 +79,7 @@ describe.sequential("Inspector2 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Inspector2 test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Inspector2 test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -158,9 +142,7 @@ describe.sequential("Inspector2 Bindings", () => {
   describe("SearchVulnerabilities", () => {
     test.provider("looks up log4shell in the vulnerability intel", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* getJson(
-          "/vulnerability?id=CVE-2021-44228",
-        )) as {
+        const response = (yield* getJson("/vulnerability?id=CVE-2021-44228")) as {
           ids?: string[];
           errorTag?: string;
         };
@@ -264,9 +246,7 @@ describe.sequential("Inspector2 Bindings", () => {
         };
         if (response.errorTag) {
           // ResourceNotFoundException = no customer-managed key configured.
-          expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(
-            response.errorTag,
-          );
+          expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(response.errorTag);
         } else {
           expect(response.kmsKeyId).toBeTruthy();
         }
@@ -307,60 +287,50 @@ describe.sequential("Inspector2 Bindings", () => {
   });
 
   describe("DescribeOrganizationConfiguration", () => {
-    test.provider(
-      "answers (or rejects with a typed error for a non-delegated account)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/org-config")) as {
-            maxAccountLimitReached?: boolean;
-            errorTag?: string;
-          };
-          if (response.errorTag) {
-            expect(DISABLED_OK).toContain(response.errorTag);
-          } else {
-            expect(typeof response.maxAccountLimitReached).toBe("boolean");
-          }
-        }),
+    test.provider("answers (or rejects with a typed error for a non-delegated account)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/org-config")) as {
+          maxAccountLimitReached?: boolean;
+          errorTag?: string;
+        };
+        if (response.errorTag) {
+          expect(DISABLED_OK).toContain(response.errorTag);
+        } else {
+          expect(typeof response.maxAccountLimitReached).toBe("boolean");
+        }
+      }),
     );
   });
 
   describe("GetDelegatedAdminAccount", () => {
-    test.provider(
-      "answers (or rejects with a typed error outside an organization)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/delegated-admin")) as {
-            accountId?: string;
-            errorTag?: string;
-          };
-          if (response.errorTag) {
-            expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(
-              response.errorTag,
-            );
-          } else {
-            expect(response.accountId === undefined || true).toBe(true);
-          }
-        }),
+    test.provider("answers (or rejects with a typed error outside an organization)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/delegated-admin")) as {
+          accountId?: string;
+          errorTag?: string;
+        };
+        if (response.errorTag) {
+          expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(response.errorTag);
+        } else {
+          expect(response.accountId === undefined || true).toBe(true);
+        }
+      }),
     );
   });
 
   describe("GetFindingsReportStatus", () => {
-    test.provider(
-      "a nonexistent report id comes back as a typed error",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/report-status")) as {
-            status?: string;
-            errorTag?: string;
-          };
-          if (response.errorTag) {
-            expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(
-              response.errorTag,
-            );
-          } else {
-            expect(typeof response.status).toBe("string");
-          }
-        }),
+    test.provider("a nonexistent report id comes back as a typed error", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/report-status")) as {
+          status?: string;
+          errorTag?: string;
+        };
+        if (response.errorTag) {
+          expect([...DISABLED_OK, "ResourceNotFoundException"]).toContain(response.errorTag);
+        } else {
+          expect(typeof response.status).toBe("string");
+        }
+      }),
     );
   });
 });

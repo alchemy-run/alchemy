@@ -12,23 +12,16 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isGoneStatus = (status: string | undefined) => status === "DESTROYED";
 
 const waitUntilGone = (environmentId: string, sandboxId: string) =>
   railway.sandbox({ environmentId, id: sandboxId }, { status: true }).pipe(
     Effect.map((sandbox) =>
-      sandbox === null || isGoneStatus(sandbox.status)
-        ? ("gone" as const)
-        : ("found" as const),
+      sandbox === null || isGoneStatus(sandbox.status) ? ("gone" as const) : ("found" as const),
     ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -68,9 +61,7 @@ test.provider(
       );
 
       if (Result.isSuccess(result)) {
-        yield* Effect.logInfo(
-          "sandboxes are entitled on this token; probe is a no-op",
-        );
+        yield* Effect.logInfo("sandboxes are entitled on this token; probe is a no-op");
         yield* destroyLive(result.success.environmentId, result.success.id);
         yield* stack.destroy();
         return;
@@ -102,9 +93,7 @@ test.provider(
 
       expect(created.box.sandboxId).toEqual(expect.any(String));
       expect(created.box.sandboxId.length).toBeGreaterThan(0);
-      expect(created.box.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.box.environmentId).toEqual(created.environment.environmentId);
       expect(created.box.projectId).toEqual(created.project.projectId);
       expect(created.box.status).toEqual("RUNNING");
       expect(created.box.region).toEqual(expect.any(String));
@@ -126,9 +115,7 @@ test.provider(
         },
       );
       if (fetched === null) {
-        return yield* Effect.fail(
-          new Error("Deployed Railway sandbox was not found"),
-        );
+        return yield* Effect.fail(new Error("Deployed Railway sandbox was not found"));
       }
       expect(fetched.id).toEqual(created.box.sandboxId);
       expect(fetched.environmentId).toEqual(created.box.environmentId);
@@ -147,19 +134,14 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Sandbox);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (sandbox) => sandbox.sandboxId === created.box.sandboxId,
-      );
+      const found = listed.find((sandbox) => sandbox.sandboxId === created.box.sandboxId);
       expect(found).toBeDefined();
       expect(found?.environmentId).toEqual(created.box.environmentId);
       expect(found?.status).toEqual("RUNNING");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.box.environmentId,
-        created.box.sandboxId,
-      );
+      const gone = yield* waitUntilGone(created.box.environmentId, created.box.sandboxId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -230,13 +212,9 @@ test.provider(
         timeoutSec: 10,
       });
       expect(env.stdout).toBe("unset");
-      expect(yield* waitUntilGone(box.environmentId, box.sandboxId)).toBe(
-        "gone",
-      );
+      expect(yield* waitUntilGone(box.environmentId, box.sandboxId)).toBe("gone");
       yield* stack.destroy();
-      expect(
-        yield* waitUntilGone(cleared.box.environmentId, cleared.box.sandboxId),
-      ).toBe("gone");
+      expect(yield* waitUntilGone(cleared.box.environmentId, cleared.box.sandboxId)).toBe("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -278,8 +256,7 @@ test.provider(
       expect(copy!.sandboxId).not.toBe(source.sandboxId);
       const read = yield* Railway.execSandbox({
         ...copy!,
-        command:
-          'cat /tmp/alchemy-fork; printf \'\\n%s:%s\' "${SOURCE_ONLY-unset}" "$FORK_ONLY"',
+        command: 'cat /tmp/alchemy-fork; printf \'\\n%s:%s\' "${SOURCE_ONLY-unset}" "$FORK_ONLY"',
         timeoutSec: 10,
       });
       expect(read.exitCode).toBe(0);
@@ -300,12 +277,8 @@ test.provider(
         })).stdout,
       ).toBe("disk-content");
       yield* stack.destroy();
-      expect(yield* waitUntilGone(source.environmentId, source.sandboxId)).toBe(
-        "gone",
-      );
-      expect(yield* waitUntilGone(copy!.environmentId, copy!.sandboxId)).toBe(
-        "gone",
-      );
+      expect(yield* waitUntilGone(source.environmentId, source.sandboxId)).toBe("gone");
+      expect(yield* waitUntilGone(copy!.environmentId, copy!.sandboxId)).toBe("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

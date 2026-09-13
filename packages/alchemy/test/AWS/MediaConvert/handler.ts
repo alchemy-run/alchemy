@@ -35,14 +35,10 @@ export default MediaConvertTestFunction.make(
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.mediaconvert) targeting this Function. The test verifies the rule
     // deploys; runtime firing would require a billable transcode.
-    yield* MediaConvert.consumeJobEvents(
-      { statuses: ["COMPLETE", "ERROR"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `mediaconvert job event: ${event.detail.jobId} -> ${event.detail.status}`,
-          ),
-        ),
+    yield* MediaConvert.consumeJobEvents({ statuses: ["COMPLETE", "ERROR"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`mediaconvert job event: ${event.detail.jobId} -> ${event.detail.status}`),
+      ),
     );
 
     return {
@@ -72,9 +68,7 @@ export default MediaConvertTestFunction.make(
           const id = url.searchParams.get("id")!;
           const result = yield* getJob({ Id: id }).pipe(
             Effect.map((r) => ({ status: r.Job?.Status, error: undefined })),
-            Effect.catch((e) =>
-              Effect.succeed({ status: undefined, error: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed({ status: undefined, error: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -83,9 +77,7 @@ export default MediaConvertTestFunction.make(
           const body = (yield* request.json) as unknown as { id: string };
           const result = yield* cancelJob({ Id: body.id }).pipe(
             Effect.map(() => ({ cancelled: true, error: undefined })),
-            Effect.catch((e) =>
-              Effect.succeed({ cancelled: false, error: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed({ cancelled: false, error: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -99,9 +91,7 @@ export default MediaConvertTestFunction.make(
               probed: (r.ProbeResults?.length ?? 0) > 0,
               error: undefined,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ probed: false, error: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed({ probed: false, error: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -140,9 +130,7 @@ export default MediaConvertTestFunction.make(
             },
           }).pipe(
             Effect.map((r) => ({ jobId: r.Job?.Id, error: undefined })),
-            Effect.catch((e) =>
-              Effect.succeed({ jobId: undefined, error: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed({ jobId: undefined, error: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -150,9 +138,7 @@ export default MediaConvertTestFunction.make(
         if (request.method === "POST" && pathname === "/jobsQuery") {
           const result = yield* startJobsQuery({ MaxResults: 5 }).pipe(
             Effect.map((r) => ({ queryId: r.Id, error: undefined })),
-            Effect.catch((e) =>
-              Effect.succeed({ queryId: undefined, error: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed({ queryId: undefined, error: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -165,9 +151,7 @@ export default MediaConvertTestFunction.make(
               count: r.Jobs?.length ?? 0,
               error: undefined,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ status: undefined, count: 0, error: e._tag }),
-            ),
+            Effect.catch((e) => Effect.succeed({ status: undefined, count: 0, error: e._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }

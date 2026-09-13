@@ -17,8 +17,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
     compressResponse: (response) => Effect.succeed(response),
   },
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () =>
-    Effect.die("HttpPlatform.fileWebResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
 });
 
 const corsLayer = HttpRouter.cors({
@@ -71,22 +70,16 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
             title: payload.title,
             completed: false,
           });
-          return tasks
-            .put(task.id, JSON.stringify(task))
-            .pipe(Effect.orDie, Effect.as(task));
+          return tasks.put(task.id, JSON.stringify(task)).pipe(Effect.orDie, Effect.as(task));
         })
         .handle("getTaskDO", ({ params }) =>
           getTaskDO().pipe(
-            Effect.flatMap((client) =>
-              client.TasksDO.getTask({ params }).pipe(Effect.orDie),
-            ),
+            Effect.flatMap((client) => client.TasksDO.getTask({ params }).pipe(Effect.orDie)),
           ),
         )
         .handle("createTaskDO", ({ payload }) =>
           getTaskDO().pipe(
-            Effect.flatMap((client) =>
-              client.TasksDO.createTask({ payload }).pipe(Effect.orDie),
-            ),
+            Effect.flatMap((client) => client.TasksDO.createTask({ payload }).pipe(Effect.orDie)),
           ),
         ),
     );

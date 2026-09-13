@@ -132,8 +132,7 @@ export const ProxyEndpointProvider = () =>
         return { action: "replace" } as const;
       }
       // The endpoint kind is immutable on Cloudflare's side.
-      const oldKind =
-        output?.kind ?? (olds as ProxyEndpointProps).kind ?? undefined;
+      const oldKind = output?.kind ?? (olds as ProxyEndpointProps).kind ?? undefined;
       if (oldKind !== undefined && oldKind !== (news.kind ?? "ip")) {
         return { action: "replace" } as const;
       }
@@ -192,9 +191,7 @@ export const ProxyEndpointProvider = () =>
       const observedIps = observedIpsOf(observed);
       const dirty =
         observed.name !== name ||
-        (kind === "ip" &&
-          news.ips !== undefined &&
-          !arrayEqualsUnordered(observedIps, news.ips));
+        (kind === "ip" && news.ips !== undefined && !arrayEqualsUnordered(observedIps, news.ips));
       if (dirty) {
         observed = yield* zeroTrust.patchGatewayProxyEndpoint({
           accountId,
@@ -224,13 +221,11 @@ export const ProxyEndpointProvider = () =>
     // the `read` Attributes shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listGatewayProxyEndpoints
-        .items({ accountId })
-        .pipe(
-          Stream.map((e) => toAttributes(e as ObservedEndpoint, accountId)),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+      return yield* zeroTrust.listGatewayProxyEndpoints.items({ accountId }).pipe(
+        Stream.map((e) => toAttributes(e as ObservedEndpoint, accountId)),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
     }),
   });
 
@@ -275,10 +270,7 @@ const resolveName = (id: string, name: string | undefined) =>
 const observedIpsOf = (endpoint: ObservedEndpoint): string[] =>
   "ips" in endpoint && Array.isArray(endpoint.ips) ? [...endpoint.ips] : [];
 
-const toAttributes = (
-  endpoint: ObservedEndpoint,
-  accountId: string,
-): ProxyEndpointAttributes => ({
+const toAttributes = (endpoint: ObservedEndpoint, accountId: string): ProxyEndpointAttributes => ({
   proxyEndpointId: endpoint.id ?? "",
   accountId,
   name: endpoint.name,

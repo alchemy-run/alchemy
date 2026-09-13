@@ -14,16 +14,9 @@ import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "nextjs-isr-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-isr-app");
 const stampOf = (body: string, prefix: string): string | undefined =>
   body.match(new RegExp(`${prefix}:(?:<!-- -->)?(\\d+)`))?.[1];
 
@@ -43,9 +36,7 @@ const pollStamp = (
           return stamp !== undefined && predicate(stamp)
             ? Effect.succeed(stamp)
             : Effect.fail(
-                new Error(
-                  `stamp not ready (${res.status}): ${stamp ?? body.slice(0, 200)}`,
-                ),
+                new Error(`stamp not ready (${res.status}): ${stamp ?? body.slice(0, 200)}`),
               );
         }),
       ),
@@ -111,12 +102,9 @@ describe.concurrent("Nextjs ISR", () => {
                 env: {
                   NEXT_INC_CACHE_KV: incCache,
                   NEXT_TAG_CACHE_KV: tagCache,
-                  NEXT_CACHE_DO_QUEUE: Cloudflare.DurableObject(
-                    "NEXT_CACHE_DO_QUEUE",
-                    {
-                      className: "DOQueueHandler",
-                    },
-                  ),
+                  NEXT_CACHE_DO_QUEUE: Cloudflare.DurableObject("NEXT_CACHE_DO_QUEUE", {
+                    className: "DOQueueHandler",
+                  }),
                 },
               });
               return { site };
@@ -130,25 +118,13 @@ describe.concurrent("Nextjs ISR", () => {
         // (The very first hits may race the initial cache write, so anchor
         // on two consecutive equal reads.)
         const client = yield* HttpClient.HttpClient;
-        const primed = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          () => true,
-        );
-        const settled = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          () => true,
-        );
+        const primed = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
+        const settled = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
         if (primed === settled) {
           // Cached: consecutive reads agree.
           expect(settled).toBe(primed);
         }
-        const cached = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          () => true,
-        );
+        const cached = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
         expect(cached).toBe(settled);
 
         // 2. On-demand revalidation: revalidatePath purges the KV entry; a
@@ -165,31 +141,21 @@ describe.concurrent("Nextjs ISR", () => {
                 ? Effect.succeed(res)
                 : Effect.flatMap(res.text, (body) =>
                     Effect.fail(
-                      new Error(
-                        `revalidate not ready (${res.status}): ${body.slice(0, 200)}`,
-                      ),
+                      new Error(`revalidate not ready (${res.status}): ${body.slice(0, 200)}`),
                     ),
                   ),
             ),
             Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
           );
         expect(revalidateRes.status).toBe(200);
-        const fresh = yield* pollStamp(
-          `${site.url!}/isr`,
-          "isr-stamp",
-          (s) => s !== cached,
-        );
+        const fresh = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", (s) => s !== cached);
         expect(fresh).not.toBe(cached);
 
         // 3. Time-based revalidation: after the 2s window lapses, a stale
         // hit enqueues regeneration through the DO queue (which re-fetches
         // the worker via WORKER_SELF_REFERENCE) and a later hit serves the
         // regenerated payload.
-        const fastPrimed = yield* pollStamp(
-          `${site.url!}/fast-isr`,
-          "fast-isr-stamp",
-          () => true,
-        );
+        const fastPrimed = yield* pollStamp(`${site.url!}/fast-isr`, "fast-isr-stamp", () => true);
         yield* Effect.sleep("3 seconds");
         const fastFresh = yield* pollStamp(
           `${site.url!}/fast-isr`,

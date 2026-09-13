@@ -7,9 +7,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 
-const FIXTURE = fileURLToPath(
-  new URL("./fixtures/shutdown-feedback-fixture.ts", import.meta.url),
-);
+const FIXTURE = fileURLToPath(new URL("./fixtures/shutdown-feedback-fixture.ts", import.meta.url));
 
 /**
  * Spawn the fixture (piped stdio, so the feedback takes the non-TTY log-line
@@ -62,11 +60,7 @@ const waitForStderr = (read: () => string, text: string) =>
     Effect.flatMap((output) =>
       output.includes(text)
         ? Effect.void
-        : Effect.fail(
-            new Error(
-              `stderr never contained ${JSON.stringify(text)}: ${output}`,
-            ),
-          ),
+        : Effect.fail(new Error(`stderr never contained ${JSON.stringify(text)}: ${output}`)),
     ),
   );
 

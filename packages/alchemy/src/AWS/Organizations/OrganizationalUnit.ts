@@ -111,13 +111,9 @@ export const OrganizationalUnitProvider = () =>
               .map((root) => root.Id)
               .filter((rootId): rootId is string => rootId !== undefined);
             const ouIds = yield* collectDescendantOUIds(rootIds);
-            const hydrated = yield* Effect.forEach(
-              ouIds,
-              (ouId) => readOUById(ouId),
-              {
-                concurrency: 10,
-              },
-            );
+            const hydrated = yield* Effect.forEach(ouIds, (ouId) => readOUById(ouId), {
+              concurrency: 10,
+            });
             const result: OrganizationalUnit["Attributes"][] = hydrated.filter(
               (ou): ou is NonNullable<typeof ou> => ou !== undefined,
             );
@@ -126,8 +122,7 @@ export const OrganizationalUnitProvider = () =>
             Effect.catchTags({
               AWSOrganizationsNotInUseException: () =>
                 Effect.succeed([] as OrganizationalUnit["Attributes"][]),
-              AccessDeniedException: () =>
-                Effect.succeed([] as OrganizationalUnit["Attributes"][]),
+              AccessDeniedException: () => Effect.succeed([] as OrganizationalUnit["Attributes"][]),
             }),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -140,9 +135,7 @@ export const OrganizationalUnitProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -168,12 +161,7 @@ export const OrganizationalUnitProvider = () =>
                   ParentId: news.parentId,
                   Name: name,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "DuplicateOrganizationalUnitException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("DuplicateOrganizationalUnitException", () => Effect.void)),
             );
             state = yield* readOUByParentAndName({
               parentId: news.parentId,
@@ -181,9 +169,7 @@ export const OrganizationalUnitProvider = () =>
             });
             if (!state) {
               return yield* Effect.fail(
-                new Error(
-                  `organizational unit '${name}' not found after create`,
-                ),
+                new Error(`organizational unit '${name}' not found after create`),
               );
             }
           }
@@ -211,9 +197,7 @@ export const OrganizationalUnitProvider = () =>
           const updated = yield* readOUById(state.ouId);
           if (!updated) {
             return yield* Effect.fail(
-              new Error(
-                `organizational unit '${state.ouId}' not found after reconcile`,
-              ),
+              new Error(`organizational unit '${state.ouId}' not found after reconcile`),
             );
           }
 
@@ -229,20 +213,14 @@ export const OrganizationalUnitProvider = () =>
               .deleteOrganizationalUnit({
                 OrganizationalUnitId: output.ouId,
               })
-              .pipe(
-                Effect.catchTag(
-                  "OrganizationalUnitNotFoundException",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.void)),
           );
         }),
       };
     }),
   );
 
-const toName = (id: string, props: { name?: string } = {}) =>
-  createName(id, props.name, 128);
+const toName = (id: string, props: { name?: string } = {}) => createName(id, props.name, 128);
 
 const listOUsForParent = (parentId: string) =>
   collectPages(
@@ -271,13 +249,9 @@ const collectDescendantOUIds = (
 > =>
   Effect.gen(function* () {
     if (parentIds.length === 0) return [];
-    const childLists = yield* Effect.forEach(
-      parentIds,
-      (parentId) => listOUsForParent(parentId),
-      {
-        concurrency: 10,
-      },
-    );
+    const childLists = yield* Effect.forEach(parentIds, (parentId) => listOUsForParent(parentId), {
+      concurrency: 10,
+    });
     const childIds = childLists
       .flat()
       .map((ou) => ou.Id)
@@ -303,9 +277,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
       })
       .pipe(
         Effect.map((response) => response.OrganizationalUnit),
-        Effect.catchTag("OrganizationalUnitNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.succeed(undefined)),
       ),
   );
 
@@ -315,9 +287,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
 
   const [parentId, tags] = yield* Effect.all([
     readParentId(described.Id).pipe(
-      Effect.catchTag("ChildNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ChildNotFoundException", () => Effect.succeed(undefined)),
     ),
     readResourceTags(described.Id).pipe(
       Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
@@ -340,8 +310,6 @@ const readOUByParentAndName = Effect.fn(function* ({
   parentId: string;
   name: string;
 }) {
-  const match = (yield* listOUsForParent(parentId)).find(
-    (ou) => ou.Name === name,
-  );
+  const match = (yield* listOUsForParent(parentId)).find((ou) => ou.Name === name);
   return match?.Id ? yield* readOUById(match.Id) : undefined;
 });

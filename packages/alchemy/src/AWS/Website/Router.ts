@@ -8,10 +8,7 @@ import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
-import {
-  Distribution,
-  type DistributionBehavior,
-} from "../CloudFront/Distribution.ts";
+import { Distribution, type DistributionBehavior } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
 import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
@@ -81,9 +78,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     const domain = normalizeWebsiteDomain(props.domain);
 
     if (domain && domain.dns === false && !domain.cert) {
-      return yield* Effect.die(
-        "Router domain configuration with `dns: false` requires `cert`.",
-      );
+      return yield* Effect.die("Router domain configuration with `dns: false` requires `cert`.");
     }
     if (props.cloudfrontUrl === false && !domain) {
       return yield* Effect.die(
@@ -103,17 +98,13 @@ export const Router = Effect.fn("AWS.Website.Router")(
       domain && !domain.cert
         ? yield* Certificate("Certificate", {
             domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
+            subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             hostedZoneId: domain.hostedZoneId,
             tags: props.tags,
           })
         : undefined;
     const certificate =
-      managedCertificate ??
-      (domain?.cert ? { certificateArn: domain.cert } : undefined);
+      managedCertificate ?? (domain?.cert ? { certificateArn: domain.cert } : undefined);
 
     const stack = yield* Stack;
     const stage = yield* Stage;
@@ -145,9 +136,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     const viewerResponse = props.edge?.viewerResponse
       ? yield* CloudFrontFunction("ViewerResponse", {
           comment: `${id} viewer response`,
-          code: buildRouterResponseFunctionCode(
-            props.edge.viewerResponse.injection,
-          ),
+          code: buildRouterResponseFunctionCode(props.edge.viewerResponse.injection),
           keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
             ? [props.edge.viewerResponse.keyValueStoreArn as any]
             : undefined,
@@ -277,15 +266,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
       defaultCacheBehavior: {
         targetOriginId: "default",
         viewerProtocolPolicy: "redirect-to-https",
-        allowedMethods: [
-          "DELETE",
-          "GET",
-          "HEAD",
-          "OPTIONS",
-          "PATCH",
-          "POST",
-          "PUT",
-        ],
+        allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
         cachedMethods: ["GET", "HEAD"],
         compress: true,
         cachePolicyId: cachePolicy.cachePolicyId,
@@ -327,11 +308,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
     const records =
       domain && domain.dns !== false
         ? yield* Effect.forEach(
-            [
-              domain.name,
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
+            [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
                 // Optional — the Record provider infers the most specific
@@ -371,9 +348,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
         ? undefined
         : yield* Invalidation("Invalidation", {
             distributionId: distribution.distributionId,
-            version: createHash("sha256")
-              .update(JSON.stringify(inlineRouteEntries))
-              .digest("hex"),
+            version: createHash("sha256").update(JSON.stringify(inlineRouteEntries)).digest("hex"),
             wait: props.invalidation.wait,
             paths:
               props.invalidation.paths === "all" || !props.invalidation.paths

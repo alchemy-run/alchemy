@@ -37,9 +37,7 @@ export const startOtlpCollector = (options: { responseDelay?: number } = {}) =>
         server.off("error", onError);
         const address = server.address();
         if (address === null || typeof address === "string") {
-          resume(
-            Effect.fail(new Error("OTLP test collector address unavailable")),
-          );
+          resume(Effect.fail(new Error("OTLP test collector address unavailable")));
           return;
         }
         resume(
@@ -54,8 +52,6 @@ export const startOtlpCollector = (options: { responseDelay?: number } = {}) =>
     }),
     ({ server }) =>
       Effect.callback<void, Error>((resume) => {
-        server.close((error) =>
-          resume(error === undefined ? Effect.void : Effect.fail(error)),
-        );
+        server.close((error) => resume(error === undefined ? Effect.void : Effect.fail(error)));
       }).pipe(Effect.orDie),
   );

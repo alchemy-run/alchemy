@@ -29,9 +29,7 @@ export type PostgresOrigin = {
  * Returns `undefined` for non-Postgres URIs (e.g. `prisma://` Accelerate
  * connection strings) and malformed values.
  */
-export const parsePostgresOrigin = (
-  uri: string,
-): PostgresOrigin | undefined => {
+export const parsePostgresOrigin = (uri: string): PostgresOrigin | undefined => {
   let url: URL;
   try {
     url = new URL(uri);

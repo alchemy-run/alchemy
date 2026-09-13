@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type {
-  IdentityProviderAttributes,
-  IdentityProviderType,
-} from "./IdentityProvider.ts";
+import type { IdentityProviderAttributes, IdentityProviderType } from "./IdentityProvider.ts";
 
 /**
  * Filters for looking up an existing Access identity provider. At least
@@ -88,8 +85,7 @@ export interface GetIdentityProvider extends Binding.Service<
   ) => Effect.Effect<
     () => Effect.Effect<
       IdentityProviderAttributes | undefined,
-      | zeroTrust.ListIdentityProvidersForAccountError
-      | zeroTrust.ListIdentityProvidersForZoneError,
+      zeroTrust.ListIdentityProvidersForAccountError | zeroTrust.ListIdentityProvidersForZoneError,
       RuntimeContext
     >,
     never,

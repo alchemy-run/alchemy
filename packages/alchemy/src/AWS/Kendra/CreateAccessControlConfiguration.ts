@@ -53,7 +53,6 @@ export interface CreateAccessControlConfiguration extends Binding.Service<
     >
   >
 > {}
-export const CreateAccessControlConfiguration =
-  Binding.Service<CreateAccessControlConfiguration>(
-    "AWS.Kendra.CreateAccessControlConfiguration",
-  );
+export const CreateAccessControlConfiguration = Binding.Service<CreateAccessControlConfiguration>(
+  "AWS.Kendra.CreateAccessControlConfiguration",
+);

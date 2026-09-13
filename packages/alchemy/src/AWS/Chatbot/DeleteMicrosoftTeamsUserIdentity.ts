@@ -34,7 +34,6 @@ export interface DeleteMicrosoftTeamsUserIdentity extends Binding.Service<
   >
 > {}
 
-export const DeleteMicrosoftTeamsUserIdentity =
-  Binding.Service<DeleteMicrosoftTeamsUserIdentity>(
-    "AWS.Chatbot.DeleteMicrosoftTeamsUserIdentity",
-  );
+export const DeleteMicrosoftTeamsUserIdentity = Binding.Service<DeleteMicrosoftTeamsUserIdentity>(
+  "AWS.Chatbot.DeleteMicrosoftTeamsUserIdentity",
+);

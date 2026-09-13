@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -37,10 +34,7 @@ const expectGone = (accountId: string, appId: string) =>
     Effect.catchTag("CallsAppNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "AppNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -171,9 +165,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     expect(healed.appId).not.toEqual(app.appId);
     expect(Redacted.value(healed.secret)).toBeTruthy();
-    expect(Redacted.value(healed.secret)).not.toEqual(
-      Redacted.value(app.secret),
-    );
+    expect(Redacted.value(healed.secret)).not.toEqual(Redacted.value(app.secret));
     const live = yield* getApp(accountId, healed.appId);
     expect(live.name).toEqual("alchemy-calls-app-heal-v2");
 

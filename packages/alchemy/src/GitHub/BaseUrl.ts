@@ -21,15 +21,9 @@ export const normalizeGitHubBaseUrl = (
   Effect.try({
     try: () => {
       const trimmed = input.trim();
-      const url = new URL(
-        trimmed.includes("://") ? trimmed : `https://${trimmed}`,
-      );
+      const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
       const host = url.hostname.toLowerCase();
-      if (
-        host === "github.com" ||
-        host === "www.github.com" ||
-        host === "api.github.com"
-      ) {
+      if (host === "github.com" || host === "www.github.com" || host === "api.github.com") {
         return undefined;
       }
       if (host.endsWith(".ghe.com")) {
@@ -51,9 +45,7 @@ export const normalizeGitHubBaseUrl = (
  */
 export const githubHostname = (baseUrl: string): string => {
   const host = new URL(baseUrl).hostname;
-  return host.startsWith("api.") && host.endsWith(".ghe.com")
-    ? host.slice("api.".length)
-    : host;
+  return host.startsWith("api.") && host.endsWith(".ghe.com") ? host.slice("api.".length) : host;
 };
 
 /**
@@ -63,15 +55,14 @@ export const githubHostname = (baseUrl: string): string => {
  * hostname). Returns `undefined` when unset or when the value points at
  * github.com.
  */
-export const resolveGitHubBaseUrlFromEnv: Effect.Effect<
-  string | undefined,
-  AuthError
-> = Effect.gen(function* () {
-  for (const key of ["GITHUB_BASE_URL", "GITHUB_API_URL", "GH_HOST"]) {
-    const value = yield* getEnv(key);
-    if (value !== undefined && value.trim() !== "") {
-      return yield* normalizeGitHubBaseUrl(value);
+export const resolveGitHubBaseUrlFromEnv: Effect.Effect<string | undefined, AuthError> = Effect.gen(
+  function* () {
+    for (const key of ["GITHUB_BASE_URL", "GITHUB_API_URL", "GH_HOST"]) {
+      const value = yield* getEnv(key);
+      if (value !== undefined && value.trim() !== "") {
+        return yield* normalizeGitHubBaseUrl(value);
+      }
     }
-  }
-  return undefined;
-});
+    return undefined;
+  },
+);

@@ -149,9 +149,8 @@ export const DispatchNamespace = Resource<DispatchNamespace>(TypeId);
 /**
  * Returns true if the given value is a DispatchNamespace resource.
  */
-export const isDispatchNamespace = (
-  value: unknown,
-): value is DispatchNamespace => isResourceOfType(value, TypeId);
+export const isDispatchNamespace = (value: unknown): value is DispatchNamespace =>
+  isResourceOfType(value, TypeId);
 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {
@@ -178,9 +177,7 @@ export const DispatchNamespaceProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((ns) =>
-              toAttributes(ns, accountId, ns.namespaceName ?? ""),
-            ),
+            (page.result ?? []).map((ns) => toAttributes(ns, accountId, ns.namespaceName ?? "")),
           ),
         ),
       );
@@ -191,24 +188,18 @@ export const DispatchNamespaceProvider = () =>
       // The name is the identity — a cold read (lost state) lands on the
       // same deterministic name as reconcile would.
       const name =
-        output?.name ??
-        olds?.name ??
-        (yield* createPhysicalName({ id, lowercase: true }));
+        output?.name ?? olds?.name ?? (yield* createPhysicalName({ id, lowercase: true }));
       const observed = yield* getNamespace(acct, name);
       return observed ? toAttributes(observed, acct, name) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name =
-        news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
+      const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
       // Observe — namespaces are looked up by name; `output` is only a
       // cache of the same identity. A missing namespace falls through to
       // the ensure step.
-      const observed = yield* getNamespace(
-        output?.accountId ?? accountId,
-        name,
-      );
+      const observed = yield* getNamespace(output?.accountId ?? accountId, name);
       if (observed) {
         // Existence-only resource — nothing mutable to sync.
         return toAttributes(observed, output?.accountId ?? accountId, name);
@@ -242,11 +233,7 @@ export const DispatchNamespaceProvider = () =>
 const getNamespace = (accountId: string, name: string) =>
   wfp
     .getDispatchNamespace({ accountId, dispatchNamespace: name })
-    .pipe(
-      Effect.catchTag("DispatchNamespaceNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)));
 
 const toAttributes = (
   ns: wfp.GetDispatchNamespaceResponse | wfp.CreateDispatchNamespaceResponse,

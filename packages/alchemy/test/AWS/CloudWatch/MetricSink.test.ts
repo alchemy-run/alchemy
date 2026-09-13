@@ -27,16 +27,11 @@ class MetricsNotVisible extends Data.TaggedError("MetricsNotVisible")<{
 const waitForFunctionReady = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((response) =>
-      response.status === 200
-        ? Effect.void
-        : Effect.fail(new FunctionNotReady()),
+      response.status === 200 ? Effect.void : Effect.fail(new FunctionNotReady()),
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(75),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
     }),
   );
 
@@ -46,11 +41,7 @@ const waitForFunctionReady = (url: string) =>
  * published total. Standard-resolution data is typically queryable within
  * seconds to ~2 minutes of PutMetricData; the poll is bounded at ~3 min.
  */
-const waitForMetricSum = Effect.fn(function* (
-  runId: string,
-  expected: number,
-  startTime: Date,
-) {
+const waitForMetricSum = Effect.fn(function* (runId: string, expected: number, startTime: Date) {
   return yield* Effect.gen(function* () {
     const stats = yield* cloudwatch.getMetricStatistics({
       Namespace: SINK_NAMESPACE,
@@ -61,10 +52,7 @@ const waitForMetricSum = Effect.fn(function* (
       Period: 60,
       Statistics: ["Sum", "SampleCount"],
     });
-    const observed = (stats.Datapoints ?? []).reduce(
-      (total, point) => total + (point.Sum ?? 0),
-      0,
-    );
+    const observed = (stats.Datapoints ?? []).reduce((total, point) => total + (point.Sum ?? 0), 0);
     if (observed < expected) {
       return yield* Effect.fail(new MetricsNotVisible({ observed, expected }));
     }
@@ -72,10 +60,7 @@ const waitForMetricSum = Effect.fn(function* (
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "MetricsNotVisible",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(36),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
     }),
   );
 });
@@ -106,18 +91,13 @@ test.provider(
         body: yield* HttpBody.json({ runId, count }),
       }).pipe(
         Effect.flatMap((result) =>
-          result.status === 200
-            ? Effect.succeed(result)
-            : Effect.fail("not ready"),
+          result.status === 200 ? Effect.succeed(result) : Effect.fail("not ready"),
         ),
         // Fresh function URLs can serve transient non-200s while IAM and
         // DNS propagate — retry only that window.
         Effect.retry({
           while: (error) => error === "not ready",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(30),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
         }),
         Effect.flatMap((result) => result.json),
       );
@@ -133,14 +113,10 @@ test.provider(
       // Out-of-band assert-gone: the deployed Lambda no longer exists after
       // the final destroy (custom metrics themselves are not deletable and
       // age out on their own).
-      const gone = yield* lambda
-        .getFunction({ FunctionName: fn.functionName })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-        );
+      const gone = yield* lambda.getFunction({ FunctionName: fn.functionName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }),
   // Deploy (~60-120s) + readiness poll (bounded ~150s) + metric visibility

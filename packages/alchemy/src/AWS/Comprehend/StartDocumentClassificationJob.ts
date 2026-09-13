@@ -62,7 +62,6 @@ export interface StartDocumentClassificationJob extends Binding.Service<
     >
   >
 > {}
-export const StartDocumentClassificationJob =
-  Binding.Service<StartDocumentClassificationJob>(
-    "AWS.Comprehend.StartDocumentClassificationJob",
-  );
+export const StartDocumentClassificationJob = Binding.Service<StartDocumentClassificationJob>(
+  "AWS.Comprehend.StartDocumentClassificationJob",
+);

@@ -67,9 +67,7 @@ export interface TelemetryConfig extends Resource<
  *
  * @resource
  */
-export const TelemetryConfig = Resource<TelemetryConfig>(
-  "AWS.ObservabilityAdmin.TelemetryConfig",
-);
+export const TelemetryConfig = Resource<TelemetryConfig>("AWS.ObservabilityAdmin.TelemetryConfig");
 
 /**
  * Raised when the telemetry config feature reports `FAILED_START` /
@@ -81,13 +79,8 @@ export class TelemetryConfigTransitionFailed extends Data.TaggedError(
 
 type ObsRequirements = Credentials | Region | HttpClient.HttpClient;
 
-const readStatus: Effect.Effect<
-  string,
-  obs.GetTelemetryEvaluationStatusError,
-  ObsRequirements
-> = obs
-  .getTelemetryEvaluationStatus({})
-  .pipe(Effect.map((r) => r.Status ?? "NOT_STARTED"));
+const readStatus: Effect.Effect<string, obs.GetTelemetryEvaluationStatusError, ObsRequirements> =
+  obs.getTelemetryEvaluationStatus({}).pipe(Effect.map((r) => r.Status ?? "NOT_STARTED"));
 
 const ON_STATES = ["RUNNING", "STARTING"];
 

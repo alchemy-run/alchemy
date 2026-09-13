@@ -480,22 +480,16 @@ export const GatewayResourceProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const next = yield* desired(id, news);
-      const oldGatewayId =
-        output?.gatewayId ?? (yield* createGatewayId(id, olds.id));
+      const oldGatewayId = output?.gatewayId ?? (yield* createGatewayId(id, olds.id));
       // Auto-generated ids are engine-owned: the deployed id stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided id can force a replace.
       const newGatewayId = news.id ?? oldGatewayId;
-      if (
-        (output?.accountId ?? accountId) !== accountId ||
-        oldGatewayId !== newGatewayId
-      ) {
+      if ((output?.accountId ?? accountId) !== accountId || oldGatewayId !== newGatewayId) {
         return { action: "replace" } as const;
       }
 
-      const oldMutable = mutable(
-        output ?? ((yield* desired(id, olds)) as Gateway["Attributes"]),
-      );
+      const oldMutable = mutable(output ?? ((yield* desired(id, olds)) as Gateway["Attributes"]));
       const nextMutable = mutable(next as Gateway["Attributes"]);
       if (!deepEqual(oldMutable, nextMutable)) {
         return { action: "update" } as const;
@@ -505,8 +499,7 @@ export const GatewayResourceProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const acct = output?.accountId ?? accountId;
-      const gatewayId =
-        output?.gatewayId ?? (yield* createGatewayId(id, news.id));
+      const gatewayId = output?.gatewayId ?? (yield* createGatewayId(id, news.id));
 
       // Observe — fetch the gateway's current state. The Cloudflare API
       // returns 404 when the gateway is missing, which we tolerate so the
@@ -516,9 +509,7 @@ export const GatewayResourceProvider = () =>
           accountId: acct,
           id: gatewayId,
         })
-        .pipe(
-          Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)));
 
       // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
       // idempotency: a peer reconciler may have created it concurrently,
@@ -559,8 +550,7 @@ export const GatewayResourceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const gatewayId =
-        output?.gatewayId ?? (yield* createGatewayId(id, olds?.id));
+      const gatewayId = output?.gatewayId ?? (yield* createGatewayId(id, olds?.id));
       const acct = output?.accountId ?? accountId;
       return yield* aiGateway
         .getAiGateway({
@@ -582,9 +572,7 @@ export const GatewayResourceProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((gateway) =>
-              mapGateway(gateway, accountId),
-            ),
+            (page.result ?? []).map((gateway) => mapGateway(gateway, accountId)),
           ),
         ),
       );
@@ -633,9 +621,7 @@ const desired = (id: string, props: GatewayProps | undefined) =>
 // whole seconds. Done once here so both the create/update request body and the
 // diff baseline carry seconds (matching what the API echoes back), keeping the
 // reconciler's diff stable.
-const resolveSpendLimits = (
-  spendLimits: GatewaySpendLimits | null | undefined,
-) => {
+const resolveSpendLimits = (spendLimits: GatewaySpendLimits | null | undefined) => {
   if (spendLimits == null) return undefined;
   return {
     enabled: spendLimits.enabled,
@@ -679,9 +665,7 @@ const mapGateway = (
     url: o.url,
     headers: o.headers,
     ...(o.authorization != null ? { authorization: o.authorization } : {}),
-    ...(o.contentType != null
-      ? { contentType: o.contentType as "json" | "protobuf" }
-      : {}),
+    ...(o.contentType != null ? { contentType: o.contentType as "json" | "protobuf" } : {}),
   })),
   storeId: gateway.storeId ?? "",
   stripe: gateway.stripe ?? undefined,
@@ -779,10 +763,7 @@ const spendLimitsForDiff = (spendLimits: GatewaySpendLimits | undefined) => {
     })),
   };
 };
-const createRequest = Effect.fn(function* (
-  id: string,
-  props: GatewayProps | undefined,
-) {
+const createRequest = Effect.fn(function* (id: string, props: GatewayProps | undefined) {
   const next = yield* desired(id, props);
   const { accountId } = yield* yield* CloudflareEnvironment;
 

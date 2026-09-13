@@ -75,10 +75,7 @@ export const NotificationChannel = Resource<NotificationChannel>(
   "AWS.DevOpsGuru.NotificationChannel",
 );
 
-const sameSet = (
-  left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
-) => {
+const sameSet = (left: readonly string[] | undefined, right: readonly string[] | undefined) => {
   const l = [...(left ?? [])].sort();
   const r = [...(right ?? [])].sort();
   return l.length === r.length && l.every((value, i) => value === r[i]);
@@ -92,19 +89,13 @@ const matchesDesired = (
   sameSet(config?.Filters?.Severities, news.severities) &&
   sameSet(config?.Filters?.MessageTypes, news.messageTypes);
 
-const desiredConfig = (
-  news: NotificationChannelProps,
-): devopsguru.NotificationChannelConfig => ({
+const desiredConfig = (news: NotificationChannelProps): devopsguru.NotificationChannelConfig => ({
   Sns: { TopicArn: news.topicArn },
   ...(news.severities !== undefined || news.messageTypes !== undefined
     ? {
         Filters: {
-          ...(news.severities !== undefined
-            ? { Severities: news.severities }
-            : {}),
-          ...(news.messageTypes !== undefined
-            ? { MessageTypes: news.messageTypes }
-            : {}),
+          ...(news.severities !== undefined ? { Severities: news.severities } : {}),
+          ...(news.messageTypes !== undefined ? { MessageTypes: news.messageTypes } : {}),
         },
       }
     : {}),
@@ -121,10 +112,8 @@ export const NotificationChannelProvider = () =>
         Effect.map((chunk) => Array.from(chunk)),
       );
 
-      const findByTopic = (
-        channels: readonly devopsguru.NotificationChannel[],
-        topicArn: string,
-      ) => channels.find((c) => c.Config?.Sns?.TopicArn === topicArn);
+      const findByTopic = (channels: readonly devopsguru.NotificationChannel[], topicArn: string) =>
+        channels.find((c) => c.Config?.Sns?.TopicArn === topicArn);
 
       return {
         stables: ["topicArn"],
@@ -171,21 +160,15 @@ export const NotificationChannelProvider = () =>
           // 1. OBSERVE — cloud state is authoritative; output.id is a cache.
           const channels = yield* listChannels;
           let observed =
-            (output?.id !== undefined
-              ? channels.find((c) => c.Id === output.id)
-              : undefined) ?? findByTopic(channels, news.topicArn);
+            (output?.id !== undefined ? channels.find((c) => c.Id === output.id) : undefined) ??
+            findByTopic(channels, news.topicArn);
 
           // 2. SYNC — the config is immutable; converge drifted filters by
           //    removing and re-adding the channel.
-          if (
-            observed?.Id !== undefined &&
-            !matchesDesired(observed.Config, news)
-          ) {
+          if (observed?.Id !== undefined && !matchesDesired(observed.Config, news)) {
             yield* devopsguru
               .removeNotificationChannel({ Id: observed.Id })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             observed = undefined;
           }
 
@@ -220,9 +203,7 @@ export const NotificationChannelProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* devopsguru
             .removeNotificationChannel({ Id: output.id })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

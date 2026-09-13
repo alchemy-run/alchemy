@@ -55,11 +55,7 @@ export const AccountPasswordPolicyProvider = () =>
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       return response?.PasswordPolicy;
     }),
     // Account-level singleton: IAM exposes no enumeration API, only

@@ -51,9 +51,7 @@ describe("retryWorkerScriptNotFound", () => {
     Effect.gen(function* () {
       const target = flaky(99, new SomethingElse());
 
-      const outcome = yield* Effect.result(
-        retryWorkerScriptNotFound(target.effect),
-      );
+      const outcome = yield* Effect.result(retryWorkerScriptNotFound(target.effect));
 
       expect(outcome._tag).toBe("Failure");
       // Attempted once and given up — no backoff burned on a permanent error.
@@ -70,9 +68,7 @@ describe("retryWorkerScriptNotFound", () => {
         // rather than hanging.
         const target = flaky(Number.MAX_SAFE_INTEGER, error);
 
-        const outcome = yield* Effect.result(
-          retryWorkerScriptNotFound(target.effect),
-        );
+        const outcome = yield* Effect.result(retryWorkerScriptNotFound(target.effect));
 
         expect(outcome._tag).toBe("Failure");
         // The error surfaces unchanged, not wrapped in a retry-exhausted error.

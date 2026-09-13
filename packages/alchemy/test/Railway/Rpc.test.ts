@@ -15,10 +15,7 @@ import Query from "./fixtures/rpc-query.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
@@ -40,9 +37,7 @@ const getText = (url: string) =>
         res.status === 200
           ? res.text
           : res.text.pipe(
-              Effect.flatMap((body) =>
-                Effect.fail(new NotReady({ status: res.status, body })),
-              ),
+              Effect.flatMap((body) => Effect.fail(new NotReady({ status: res.status, body }))),
             ),
       ),
       Effect.retry({
@@ -66,12 +61,8 @@ test.provider.skip(
         }),
       );
 
-      expect(created.greeter.dnsName).toEqual(
-        `${created.greeter.name}.railway.internal`,
-      );
-      expect(created.greeter.dnsName.endsWith(".railway.internal")).toEqual(
-        true,
-      );
+      expect(created.greeter.dnsName).toEqual(`${created.greeter.name}.railway.internal`);
+      expect(created.greeter.dnsName.endsWith(".railway.internal")).toEqual(true);
       expect(created.greeter.rpcToken.length).toBeGreaterThanOrEqual(32);
       expect(created.greeter.url).toEqual(expect.any(String));
       expect(created.caller.url).toEqual(expect.any(String));
@@ -81,17 +72,9 @@ test.provider.skip(
 
       const client = yield* HttpClient.HttpClient;
       const publicRpc = yield* client.execute(
-        HttpClientRequest.post(
-          `${created.greeter.url}${RPC_PATH_PREFIX}greet`,
-        ).pipe(
-          HttpClientRequest.bodyText(
-            JSON.stringify(["sam"]),
-            "application/json",
-          ),
-          HttpClientRequest.setHeader(
-            RPC_TOKEN_HEADER,
-            created.greeter.rpcToken,
-          ),
+        HttpClientRequest.post(`${created.greeter.url}${RPC_PATH_PREFIX}greet`).pipe(
+          HttpClientRequest.bodyText(JSON.stringify(["sam"]), "application/json"),
+          HttpClientRequest.setHeader(RPC_TOKEN_HEADER, created.greeter.rpcToken),
         ),
       );
       expect(publicRpc.status).toEqual(401);
@@ -121,9 +104,7 @@ test.provider.skip(
       expect(created.query.url).toEqual(expect.any(String));
       expect(created.api.url).toEqual(expect.any(String));
 
-      yield* Effect.log(
-        `tagged rpc urls query=${created.query.url} api=${created.api.url}`,
-      );
+      yield* Effect.log(`tagged rpc urls query=${created.query.url} api=${created.api.url}`);
 
       // Probe the Service origin first (Docker). The Function canvas
       // used to hang GET `/` while this side was already serving.
@@ -141,13 +122,8 @@ test.provider.skip(
 
       const client = yield* HttpClient.HttpClient;
       const functionRpc = yield* client.execute(
-        HttpClientRequest.post(
-          `${created.query.url}${RPC_PATH_PREFIX}greet`,
-        ).pipe(
-          HttpClientRequest.bodyText(
-            JSON.stringify(["sam"]),
-            "application/json",
-          ),
+        HttpClientRequest.post(`${created.query.url}${RPC_PATH_PREFIX}greet`).pipe(
+          HttpClientRequest.bodyText(JSON.stringify(["sam"]), "application/json"),
           HttpClientRequest.setHeader(RPC_TOKEN_HEADER, created.query.rpcToken),
         ),
       );

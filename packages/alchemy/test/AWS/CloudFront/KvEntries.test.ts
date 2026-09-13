@@ -87,9 +87,7 @@ describe("AWS.CloudFront.KvEntries", () => {
           }),
         );
 
-        expect(updated.store.keyValueStoreArn).toBe(
-          deployed.store.keyValueStoreArn,
-        );
+        expect(updated.store.keyValueStoreArn).toBe(deployed.store.keyValueStoreArn);
         expect(updated.entries.entries).toEqual(updatedEntries);
 
         yield* assertEntries(updated.store.keyValueStoreArn, "routes", {
@@ -131,10 +129,7 @@ const getNamespacedEntry = (store: string, namespace: string, key: string) =>
     Effect.map((resp) => extractValue(resp.Value)),
   );
 
-const entriesMatch = (
-  got: Record<string, string>,
-  expected: Record<string, string>,
-) => {
+const entriesMatch = (got: Record<string, string>, expected: Record<string, string>) => {
   const gotKeys = Object.keys(got).sort();
   const expectedKeys = Object.keys(expected).sort();
   return (
@@ -143,11 +138,7 @@ const entriesMatch = (
   );
 };
 
-const assertEntries = (
-  store: string,
-  namespace: string,
-  expected: Record<string, string>,
-) =>
+const assertEntries = (store: string, namespace: string, expected: Record<string, string>) =>
   Effect.gen(function* () {
     const listed = yield* listNamespacedEntries(store, namespace).pipe(
       Effect.repeat({
@@ -168,11 +159,7 @@ const assertKeyValueStoreDeleted = (name: string) =>
     Effect.flatMap(() => Effect.fail(new Error("KeyValueStoreStillExists"))),
     Effect.catchTag("EntityNotFound", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "KeyValueStoreStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      while: (error) => error instanceof Error && error.message === "KeyValueStoreStillExists",
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );

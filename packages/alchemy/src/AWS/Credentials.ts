@@ -69,9 +69,7 @@ export const makeAssumeRoleResolver = (options: {
    * selects the regional STS endpoint. @default "us-east-1"
    */
   readonly region?: string;
-}): Effect.Effect<
-  Effect.Effect<ResolvedCredentials, AwsCredentialProviderError>
-> =>
+}): Effect.Effect<Effect.Effect<ResolvedCredentials, AwsCredentialProviderError>> =>
   Effect.gen(function* () {
     const resolve = Effect.gen(function* () {
       const roleArn = yield* options.roleArn;
@@ -115,12 +113,7 @@ export const makeAssumeRoleResolver = (options: {
       // self-contained (`R = never`).
       Effect.provide(
         options.base.pipe(
-          Layer.provideMerge(
-            Layer.succeed(
-              Region,
-              Effect.succeed(options.region ?? "us-east-1"),
-            ),
-          ),
+          Layer.provideMerge(Layer.succeed(Region, Effect.succeed(options.region ?? "us-east-1"))),
           Layer.provideMerge(FetchHttpClient.layer),
         ),
       ),
@@ -143,9 +136,7 @@ export const makeAssumeRoleResolver = (options: {
     const cache = yield* Ref.make<ResolvedCredentials | undefined>(undefined);
     const refreshLock = yield* Semaphore.make(1);
 
-    const isFresh = (
-      creds: ResolvedCredentials | undefined,
-    ): creds is ResolvedCredentials =>
+    const isFresh = (creds: ResolvedCredentials | undefined): creds is ResolvedCredentials =>
       creds !== undefined &&
       (creds.expiration === undefined ||
         creds.expiration - CREDENTIAL_REFRESH_WINDOW_MS > Date.now());

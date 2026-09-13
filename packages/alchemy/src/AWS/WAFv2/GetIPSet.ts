@@ -25,11 +25,7 @@ import type { IPSet } from "./IPSet.ts";
 export interface GetIPSet extends Binding.Service<
   GetIPSet,
   "AWS.WAFv2.GetIPSet",
-  (
-    ipSet: IPSet,
-  ) => Effect.Effect<
-    () => Effect.Effect<WAFV2.GetIPSetResponse, WAFV2.GetIPSetError>
-  >
+  (ipSet: IPSet) => Effect.Effect<() => Effect.Effect<WAFV2.GetIPSetResponse, WAFV2.GetIPSetError>>
 > {}
 
 export const GetIPSet = Binding.Service<GetIPSet>("AWS.WAFv2.GetIPSet");

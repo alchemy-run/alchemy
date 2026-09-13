@@ -12,10 +12,7 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const NetworkConfig = Schema.Struct({
   privateNetworkDisabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
@@ -28,9 +25,7 @@ const NetworkConfig = Schema.Struct({
             networking: Schema.optional(
               Schema.NullOr(
                 Schema.Struct({
-                  privateNetworkEndpoint: Schema.optional(
-                    Schema.NullOr(Schema.String),
-                  ),
+                  privateNetworkEndpoint: Schema.optional(Schema.NullOr(Schema.String)),
                   serviceDomains: Schema.optional(
                     Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
                   ),
@@ -50,9 +45,7 @@ const readConfig = Effect.fn(function* (environmentId: string) {
     { config: { where: { decryptVariables: false } }, configEtag: true },
   );
   return {
-    config: yield* Schema.decodeUnknownEffect(NetworkConfig)(
-      environment.config,
-    ),
+    config: yield* Schema.decodeUnknownEffect(NetworkConfig)(environment.config),
     etag: environment.configEtag,
   };
 });
@@ -94,17 +87,13 @@ const readEndpoint = (input: {
       ),
     );
 
-const waitForEndpoint = (
-  input: Parameters<typeof readEndpoint>[0],
-  dnsName?: string,
-) =>
+const waitForEndpoint = (input: Parameters<typeof readEndpoint>[0], dnsName?: string) =>
   readEndpoint(input).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       times: 8,
       until: (endpoint) =>
-        endpoint != null &&
-        (dnsName === undefined || endpoint.dnsName === dnsName),
+        endpoint != null && (dnsName === undefined || endpoint.dnsName === dnsName),
     }),
     Effect.tap((endpoint) =>
       Effect.sync(() => {
@@ -114,11 +103,7 @@ const waitForEndpoint = (
     ),
   );
 
-const setPrefix = (
-  environmentId: string,
-  serviceId: string,
-  prefix: string | null,
-) =>
+const setPrefix = (environmentId: string, serviceId: string, prefix: string | null) =>
   railway.environmentPatchCommit({
     environmentId,
     patch: {
@@ -217,9 +202,7 @@ test.provider(
       );
       expect(
         networks.find(
-          (network) =>
-            network.publicId === created.network.publicId &&
-            network.deletedAt == null,
+          (network) => network.publicId === created.network.publicId && network.deletedAt == null,
         ),
       ).toMatchObject({ name: "railway", dnsName: created.network.dnsName });
 
@@ -243,9 +226,7 @@ test.provider(
         output: legacy,
       });
       expect((yield* readConfig(environmentId)).etag).toBe(enabled.etag);
-      expect(
-        (yield* readConfig(environmentId)).config.privateNetworkDisabled,
-      ).toBe(false);
+      expect((yield* readConfig(environmentId)).config.privateNetworkDisabled).toBe(false);
 
       const retained = yield* stack.deploy(suitePartition);
       expect(retained.environment.environmentId).toBe(environmentId);
@@ -259,11 +240,7 @@ test.provider(
         });
       }
       expect((yield* readConfig(environmentId)).etag).toBe(restored.etag);
-    }).pipe(
-      Effect.scoped,
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
-      logLevel,
-    ),
+    }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.orDie)), logLevel),
   { timeout: 120_000 },
 );
 
@@ -319,26 +296,20 @@ test.provider(
             yield* waitForEndpoint(input, "original");
             const baseline = yield* readConfig(environmentId);
             const baselineDomains =
-              baseline.config.services?.[service.id]?.networking
-                ?.serviceDomains;
+              baseline.config.services?.[service.id]?.networking?.serviceDomains;
             expect(baselineDomains).toBeDefined();
-            expect(Object.keys(baselineDomains ?? {}).length).toBeGreaterThan(
-              0,
-            );
+            expect(Object.keys(baselineDomains ?? {}).length).toBeGreaterThan(0);
 
             const deployEndpoint = (name?: string) =>
               stack
                 .deploy(
                   Effect.gen(function* () {
                     const partition = yield* networkStack;
-                    const endpoint = yield* Railway.PrivateNetworkEndpoint(
-                      "ApiDns",
-                      {
-                        network: partition.network,
-                        service: serviceRef,
-                        ...(name === undefined ? {} : { name }),
-                      },
-                    );
+                    const endpoint = yield* Railway.PrivateNetworkEndpoint("ApiDns", {
+                      network: partition.network,
+                      service: serviceRef,
+                      ...(name === undefined ? {} : { name }),
+                    });
                     return { ...partition, endpoint };
                   }),
                 )
@@ -349,8 +320,8 @@ test.provider(
                         Effect.logInfo("Endpoint configuration after failure", {
                           requested: name ?? null,
                           observed:
-                            config.services?.[service.id]?.networking
-                              ?.privateNetworkEndpoint ?? null,
+                            config.services?.[service.id]?.networking?.privateNetworkEndpoint ??
+                            null,
                         }),
                       ),
                     ),
@@ -362,20 +333,14 @@ test.provider(
                 const networking = config.services?.[service.id]?.networking;
                 expect(networking?.privateNetworkEndpoint ?? null).toBe(prefix);
                 expect(networking?.serviceDomains).toEqual(baselineDomains);
-                expect(config.privateNetworkDisabled).toBe(
-                  baseline.config.privateNetworkDisabled,
-                );
+                expect(config.privateNetworkDisabled).toBe(baseline.config.privateNetworkDisabled);
               });
-            const provider = yield* Provider.findProvider(
-              Railway.PrivateNetworkEndpoint,
-            );
+            const provider = yield* Provider.findProvider(Railway.PrivateNetworkEndpoint);
             const created = yield* deployEndpoint("api");
             expect(created.endpoint.publicId).toBe(platformEndpoint?.publicId);
             expect(created.endpoint.serviceId).toBe(service.id);
             expect(created.endpoint.environmentId).toBe(environmentId);
-            expect(created.endpoint.privateNetworkId).toBe(
-              base.network.publicId,
-            );
+            expect(created.endpoint.privateNetworkId).toBe(base.network.publicId);
             expect(created.endpoint.previousDnsPrefix).toBe("original");
             expect(created.endpoint.dnsName).toBe("api");
             yield* waitForEndpoint(input, created.endpoint.dnsName);
@@ -412,9 +377,7 @@ test.provider(
                 _tag: "Railway.PrivateNetworkEndpointRestoreUnavailable",
               },
             });
-            expect((yield* readConfig(environmentId)).etag).toBe(
-              beforeLegacyDelete.etag,
-            );
+            expect((yield* readConfig(environmentId)).etag).toBe(beforeLegacyDelete.etag);
             yield* assertConfig("api");
 
             const renamed = yield* deployEndpoint("gateway");
@@ -446,9 +409,7 @@ test.provider(
                 output: reset.endpoint,
               });
             }
-            expect((yield* readConfig(environmentId)).etag).toBe(
-              afterRestore.etag,
-            );
+            expect((yield* readConfig(environmentId)).etag).toBe(afterRestore.etag);
             yield* assertConfig("original");
 
             const managedAgain = yield* deployEndpoint("api");

@@ -7,10 +7,7 @@ import type { Service } from "./Service.ts";
  * `ListInstances` request with `ServiceId` injected from the bound
  * {@link Service}.
  */
-export interface ListInstancesRequest extends Omit<
-  SD.ListInstancesRequest,
-  "ServiceId"
-> {}
+export interface ListInstancesRequest extends Omit<SD.ListInstancesRequest, "ServiceId"> {}
 
 /**
  * Runtime binding for `servicediscovery:ListInstances` — lists summary
@@ -43,6 +40,4 @@ export interface ListInstances extends Binding.Service<
     ) => Effect.Effect<SD.ListInstancesResponse, SD.ListInstancesError>
   >
 > {}
-export const ListInstances = Binding.Service<ListInstances>(
-  "AWS.CloudMap.ListInstances",
-);
+export const ListInstances = Binding.Service<ListInstances>("AWS.CloudMap.ListInstances");

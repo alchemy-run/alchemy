@@ -41,9 +41,7 @@ const logLevelChoices: Record<string, LogLevel.LogLevel> = {
  * segment before a `--` separator is inspected; an unrecognised value falls
  * back to Info and is left for the parser to reject.
  */
-export const consoleLogFloor = (
-  argv: ReadonlyArray<string>,
-): LogLevel.LogLevel => {
+export const consoleLogFloor = (argv: ReadonlyArray<string>): LogLevel.LogLevel => {
   const separator = argv.indexOf("--");
   const flagArgs = separator === -1 ? argv : argv.slice(0, separator);
   let floor: LogLevel.LogLevel = "Info";
@@ -113,10 +111,7 @@ export const GlobalLogLive = Layer.unwrap(
           const file = path.join(dir, entry);
           const info = yield* fs.stat(file);
           const mtime = Option.getOrUndefined(info.mtime)?.getTime();
-          if (
-            mtime !== undefined &&
-            now - mtime > Duration.toMillis(MAX_LOG_AGE)
-          ) {
+          if (mtime !== undefined && now - mtime > Duration.toMillis(MAX_LOG_AGE)) {
             yield* fs.remove(file);
           }
         }).pipe(Effect.ignore),

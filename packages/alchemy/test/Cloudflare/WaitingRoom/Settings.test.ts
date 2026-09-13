@@ -10,13 +10,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Enabling the crawler bypass requires a Waiting Rooms entitlement
 // (Business/Enterprise + Advanced) — on the testing zone the PUT fails with
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -49,41 +43,39 @@ const getSetting = (zoneId: string) =>
 
 // Both cases mutate the same zone-level Waiting Room settings singleton; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
 describe("Settings", () => {
-  test.provider(
-    "pins the settings to the default baseline without touching the API",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("pins the settings to the default baseline without touching the API", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        // The zone's baseline is the Cloudflare default (false). Desired ==
-        // observed, so reconcile skips the plan-gated PUT entirely — this
-        // converges even on unentitled zones.
-        const settings = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.WaitingRoom.Settings("Settings", {
-              zoneId,
-              searchEngineCrawlerBypass: false,
-            });
-          }),
-        );
+      // The zone's baseline is the Cloudflare default (false). Desired ==
+      // observed, so reconcile skips the plan-gated PUT entirely — this
+      // converges even on unentitled zones.
+      const settings = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.WaitingRoom.Settings("Settings", {
+            zoneId,
+            searchEngineCrawlerBypass: false,
+          });
+        }),
+      );
 
-        expect(settings.zoneId).toEqual(zoneId);
-        expect(settings.searchEngineCrawlerBypass).toEqual(false);
-        // The pre-management value was captured for restore-on-destroy.
-        expect(settings.initialSearchEngineCrawlerBypass).toEqual(false);
+      expect(settings.zoneId).toEqual(zoneId);
+      expect(settings.searchEngineCrawlerBypass).toEqual(false);
+      // The pre-management value was captured for restore-on-destroy.
+      expect(settings.initialSearchEngineCrawlerBypass).toEqual(false);
 
-        // Out-of-band verification via the distilled API.
-        const live = yield* getSetting(zoneId);
-        expect(live.searchEngineCrawlerBypass).toEqual(false);
+      // Out-of-band verification via the distilled API.
+      const live = yield* getSetting(zoneId);
+      expect(live.searchEngineCrawlerBypass).toEqual(false);
 
-        // Destroy restores the initial value — also a no-op here.
-        yield* stack.destroy();
+      // Destroy restores the initial value — also a no-op here.
+      yield* stack.destroy();
 
-        const restored = yield* getSetting(zoneId);
-        expect(restored.searchEngineCrawlerBypass).toEqual(false);
-      }).pipe(logLevel),
+      const restored = yield* getSetting(zoneId);
+      expect(restored.searchEngineCrawlerBypass).toEqual(false);
+    }).pipe(logLevel),
   );
 
   test.provider(
@@ -156,9 +148,7 @@ describe("Settings", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.WaitingRoom.Settings,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.WaitingRoom.Settings);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

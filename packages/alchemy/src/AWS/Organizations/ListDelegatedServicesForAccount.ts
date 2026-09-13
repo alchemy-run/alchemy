@@ -35,7 +35,6 @@ export interface ListDelegatedServicesForAccount extends Binding.Service<
     >
   >
 > {}
-export const ListDelegatedServicesForAccount =
-  Binding.Service<ListDelegatedServicesForAccount>(
-    "AWS.Organizations.ListDelegatedServicesForAccount",
-  );
+export const ListDelegatedServicesForAccount = Binding.Service<ListDelegatedServicesForAccount>(
+  "AWS.Organizations.ListDelegatedServicesForAccount",
+);

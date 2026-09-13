@@ -37,9 +37,7 @@ test.provider("list enumerates the deployed launch template", (stack) =>
     const provider = yield* Provider.findProvider(LaunchTemplate);
     const all = yield* provider.list();
 
-    expect(
-      all.some((t) => t.launchTemplateId === template.launchTemplateId),
-    ).toBe(true);
+    expect(all.some((t) => t.launchTemplateId === template.launchTemplateId)).toBe(true);
 
     yield* stack.destroy();
 
@@ -51,9 +49,7 @@ test.provider("list enumerates the deployed launch template", (stack) =>
       } as any)
       .pipe(
         Effect.map((r) => (r.LaunchTemplates ?? []).length),
-        Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () =>
-          Effect.succeed(0),
-        ),
+        Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () => Effect.succeed(0)),
       );
     expect(remaining).toBe(0);
   }),

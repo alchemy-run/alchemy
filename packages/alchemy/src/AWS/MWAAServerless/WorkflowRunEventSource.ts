@@ -135,9 +135,7 @@ export const consumeWorkflowRunEvents = <StreamReq = never, Req = never>(
         ...(props.runStates ?? ALL_RUN_STATES).map(
           (state) => `MWAA Serverless Workflow Run ${state}`,
         ),
-        ...(props.taskStates ?? []).map(
-          (state) => `MWAA Serverless Task ${state}`,
-        ),
+        ...(props.taskStates ?? []).map((state) => `MWAA Serverless Task ${state}`),
       ],
     },
     { description: props.description, state: props.state },

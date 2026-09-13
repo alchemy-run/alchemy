@@ -22,14 +22,12 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     // Fresh function URLs take a few seconds to start serving 200s.
-    const res = yield* client
-      .get(`${out.url}?prompt=${encodeURIComponent("Say pong.")}`)
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("1 second"),
-          times: 10,
-        }),
-      );
+    const res = yield* client.get(`${out.url}?prompt=${encodeURIComponent("Say pong.")}`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("1 second"),
+        times: 10,
+      }),
+    );
     const body = (yield* res.json) as { text: string; finishReason: string };
     expect(body.text.length).toBeGreaterThan(0);
   }),

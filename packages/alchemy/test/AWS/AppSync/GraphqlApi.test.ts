@@ -10,9 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const authorizerPath = fileURLToPath(
-  new URL("./authorizer-handler.ts", import.meta.url),
-);
+const authorizerPath = fileURLToPath(new URL("./authorizer-handler.ts", import.meta.url));
 
 class ApiStillExists extends Data.TaggedError("ApiStillExists")<{
   readonly apiId: string;
@@ -24,10 +22,7 @@ const assertApiDeleted = (apiId: string) =>
     Effect.flatMap(() => Effect.fail(new ApiStillExists({ apiId }))),
     Effect.retry({
       while: (e) => e._tag === "ApiStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );
@@ -60,9 +55,7 @@ test.provider(
               schema,
               xrayEnabled: xray,
               queryDepthLimit: xray ? 5 : undefined,
-              environmentVariables: xray
-                ? { STAGE: "updated", EXTRA: "1" }
-                : { STAGE: "initial" },
+              environmentVariables: xray ? { STAGE: "updated", EXTRA: "1" } : { STAGE: "initial" },
             });
             const key = yield* AWS.AppSync.ApiKey("Key", {
               api,
@@ -90,9 +83,7 @@ test.provider(
       const remote = yield* appsync.getGraphqlApi({ apiId: out.apiId });
       expect(remote.graphqlApi?.name).toBe(out.name);
       // Internal Alchemy tags brand the API.
-      expect(Object.keys(remote.graphqlApi?.tags ?? {}).length).toBeGreaterThan(
-        0,
-      );
+      expect(Object.keys(remote.graphqlApi?.tags ?? {}).length).toBeGreaterThan(0);
 
       // Schema applied and settled.
       const schemaStatus = yield* appsync.getSchemaCreationStatus({
@@ -110,9 +101,7 @@ test.provider(
       const keyId = Redacted.value(out.keyId);
       const keys = yield* appsync.listApiKeys({ apiId: out.apiId });
       expect(keys.apiKeys?.map((k) => k.id)).toContain(keyId);
-      expect(keys.apiKeys?.find((k) => k.id === keyId)?.description).toBe(
-        "test key",
-      );
+      expect(keys.apiKeys?.find((k) => k.id === keyId)?.description).toBe("test key");
 
       // Update in place: schema v2 + xray + query depth limit.
       const updated = yield* deployApi(SCHEMA_V2, true);
@@ -187,12 +176,8 @@ test.provider(
 
       const remote = yield* appsync.getGraphqlApi({ apiId: out.apiId });
       expect(remote.graphqlApi?.authenticationType).toBe("AWS_LAMBDA");
-      expect(remote.graphqlApi?.lambdaAuthorizerConfig?.authorizerUri).toBe(
-        out.authorizerArn,
-      );
-      expect(
-        remote.graphqlApi?.lambdaAuthorizerConfig?.authorizerResultTtlInSeconds,
-      ).toBe(600);
+      expect(remote.graphqlApi?.lambdaAuthorizerConfig?.authorizerUri).toBe(out.authorizerArn);
+      expect(remote.graphqlApi?.lambdaAuthorizerConfig?.authorizerResultTtlInSeconds).toBe(600);
       expect(
         remote.graphqlApi?.additionalAuthenticationProviders
           ?.map((p) => p.authenticationType)

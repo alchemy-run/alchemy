@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class AppStillExists extends Data.TaggedError("AppStillExists") {}
 
@@ -27,10 +24,7 @@ const expectAppGone = (accountId: string, appId: string) =>
     Effect.flatMap(() => Effect.fail(new AppStillExists())),
     Effect.retry({
       while: (e): e is AppStillExists => e instanceof AppStillExists,
-      schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("FlagshipAppNotFound", () => Effect.void),
   );
@@ -166,10 +160,7 @@ test.provider("list enumerates the deployed Flagship app", (stack) =>
       ),
       Effect.retry({
         while: (e): e is AppNotListedYet => e instanceof AppNotListedYet,
-        schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
-          Schedule.recurs(8),
-        ]),
+        schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
       }),
     );
 

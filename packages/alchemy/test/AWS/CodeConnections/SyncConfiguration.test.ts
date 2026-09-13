@@ -26,9 +26,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "Found" as const),
-          Effect.catchTag("ResourceNotFoundException", (e) =>
-            Effect.succeed(e._tag),
-          ),
+          Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
         );
       expect(tag).toBe("ResourceNotFoundException");
     }),
@@ -74,9 +72,7 @@ test.provider.skipIf(!REPOSITORY_LINK_ID || !GIT_SYNC_ROLE_ARN)(
         SyncType: "CFN_STACK_SYNC",
         ResourceName: "alchemy-test-sync-stack",
       });
-      expect(observed.SyncConfiguration.TriggerResourceUpdateOn).toBe(
-        "FILE_CHANGE",
-      );
+      expect(observed.SyncConfiguration.TriggerResourceUpdateOn).toBe("FILE_CHANGE");
 
       // Destroy — configuration is deleted; verify out-of-band.
       yield* stack.destroy();
@@ -87,9 +83,7 @@ test.provider.skipIf(!REPOSITORY_LINK_ID || !GIT_SYNC_ROLE_ARN)(
         })
         .pipe(
           Effect.map((res) => res.SyncConfiguration),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       expect(after).toBeUndefined();
     }),

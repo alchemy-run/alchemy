@@ -41,7 +41,6 @@ export interface DetectProtectiveEquipment extends Binding.Service<
     >
   >
 > {}
-export const DetectProtectiveEquipment =
-  Binding.Service<DetectProtectiveEquipment>(
-    "AWS.Rekognition.DetectProtectiveEquipment",
-  );
+export const DetectProtectiveEquipment = Binding.Service<DetectProtectiveEquipment>(
+  "AWS.Rekognition.DetectProtectiveEquipment",
+);

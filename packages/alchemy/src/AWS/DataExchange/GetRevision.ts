@@ -29,12 +29,7 @@ export interface GetRevision extends Binding.Service<
   (
     revision: Revision,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      dataexchange.GetRevisionResponse,
-      dataexchange.GetRevisionError
-    >
+    () => Effect.Effect<dataexchange.GetRevisionResponse, dataexchange.GetRevisionError>
   >
 > {}
-export const GetRevision = Binding.Service<GetRevision>(
-  "AWS.DataExchange.GetRevision",
-);
+export const GetRevision = Binding.Service<GetRevision>("AWS.DataExchange.GetRevision");

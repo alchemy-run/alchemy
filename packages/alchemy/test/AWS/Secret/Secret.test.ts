@@ -29,10 +29,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AlchemySecretLambdaStack",
@@ -59,10 +56,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 180_000 });
 // well over a minute on a fresh deploy under parallel load. Budget a
 // generous retry window for the very first request, then reuse the
 // warm URL for subsequent calls.
-const readinessSchedule = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(20),
-]);
+const readinessSchedule = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]);
 
 const getJson = (url: string) =>
   HttpClient.get(url).pipe(

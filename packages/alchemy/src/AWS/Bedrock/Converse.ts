@@ -7,10 +7,7 @@ import * as Binding from "../../Binding.ts";
  * it defaults to the first bound model id and may be overridden per call
  * with any of the bound model ids.
  */
-export interface ConverseRequest extends Omit<
-  bedrock.ConverseRequest,
-  "modelId"
-> {
+export interface ConverseRequest extends Omit<bedrock.ConverseRequest, "modelId"> {
   /**
    * The model to run inference on for this call. Must be one of the model
    * ids the binding was created with (IAM is scoped to exactly those).
@@ -80,9 +77,7 @@ export interface Converse extends Binding.Service<
     model: string,
     ...additionalModels: string[]
   ) => Effect.Effect<
-    (
-      request: ConverseRequest,
-    ) => Effect.Effect<bedrock.ConverseResponse, bedrock.ConverseError>
+    (request: ConverseRequest) => Effect.Effect<bedrock.ConverseResponse, bedrock.ConverseError>
   >
 > {}
 export const Converse = Binding.Service<Converse>("AWS.Bedrock.Converse");

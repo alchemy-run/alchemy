@@ -5,10 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import {
-  expectDirectStatus,
-  expectUrlContains,
-} from "../../Cloudflare/Utils/Http.ts";
+import { expectDirectStatus, expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,9 +21,7 @@ const runLive = !process.env.FAST;
 // in both modes; only the URL-shape assertions differ.
 const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
-const fixtureDir = fileURLToPath(
-  new URL("./fixtures/static-site", import.meta.url),
-);
+const fixtureDir = fileURLToPath(new URL("./fixtures/static-site", import.meta.url));
 
 const INDEX_MARKER = "alchemy-aws-staticsite-index-marker";
 const ABOUT_MARKER = "alchemy-aws-staticsite-about-marker";
@@ -55,9 +50,7 @@ describe.skipIf(!runLive)("AWS.Website.StaticSite", () => {
         const url = spa.site.url! as string;
         // `https://{id}.cloudfront.net` live; the emulator serves the
         // distribution's edge on a local plain-HTTP port.
-        expect(url).toMatch(
-          runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
-        );
+        expect(url).toMatch(runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//);
 
         // urls contract (cloudfront-default arm): a domain-less site
         // serves only at the distribution's own URL, and `url` is
@@ -124,9 +117,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

@@ -57,9 +57,7 @@ describe("AWS.Website.Octane local", () => {
         // The site is the framework's own dev server: a localhost URL and
         // no cloud rows at all (proof no AWS call ran).
         const url = deployed.site.url! as string;
-        expect(url).toMatch(
-          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-        );
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
         expect(deployed.site.distribution).toBeUndefined();
         expect(deployed.site.server).toBeUndefined();
         expect(deployed.site.bucket).toBeUndefined();
@@ -72,13 +70,9 @@ describe("AWS.Website.Octane local", () => {
           label: "dev SSR home page",
         });
         // Server API route through the dev server.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "OCTANE_AWS_API_MARKER",
-          {
-            label: "API route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "OCTANE_AWS_API_MARKER", {
+          label: "API route (dev)",
+        });
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
         });
@@ -98,13 +92,9 @@ describe("AWS.Website.Octane local", () => {
         });
         // The API route (octane.config.ts server route) survived the
         // client-module hot update.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=post-hmr`,
-          "OCTANE_AWS_API_MARKER",
-          {
-            label: "API route after HMR edit",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "OCTANE_AWS_API_MARKER", {
+          label: "API route after HMR edit",
+        });
 
         yield* stack.destroy();
       }),

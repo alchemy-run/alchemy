@@ -95,9 +95,7 @@ export interface DevContext extends SourceContext {
   readonly worker: {
     readonly name: string;
     readonly bindings: Array<BindingHook<BindingServices>>;
-    readonly durableObjectNamespaces: Array<
-      RuntimeDurableObject & { uniqueKey: string }
-    >;
+    readonly durableObjectNamespaces: Array<RuntimeDurableObject & { uniqueKey: string }>;
     readonly hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     readonly queueConsumers: Effect.Effect<Array<RuntimeQueueConsumer>>;
     readonly assets: RuntimeAssets | undefined;
@@ -140,11 +138,7 @@ export interface SourceProvider {
   ) => Effect.Effect<Partial<SourceHash>, WakuSourceError, SourceRequirements>;
   readonly dev: (
     ctx: DevContext,
-  ) => Effect.Effect<
-    ServerDevHandle,
-    WakuSourceError,
-    SourceRequirements | Scope.Scope
-  >;
+  ) => Effect.Effect<ServerDevHandle, WakuSourceError, SourceRequirements | Scope.Scope>;
 }
 
 /**
@@ -182,9 +176,7 @@ export interface WakuSourceOptions {
 const wakuConfigFor = (options: WakuSourceOptions) => ({
   ...(options.srcDir !== undefined ? { srcDir: options.srcDir } : undefined),
   ...(options.distDir !== undefined ? { distDir: options.distDir } : undefined),
-  ...(options.basePath !== undefined
-    ? { basePath: options.basePath }
-    : undefined),
+  ...(options.basePath !== undefined ? { basePath: options.basePath } : undefined),
 });
 
 /**
@@ -220,11 +212,7 @@ const stableValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(stableValue);
   }
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    value.constructor === Object
-  ) {
+  if (value !== null && typeof value === "object" && value.constructor === Object) {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .sort(([a], [b]) => a.localeCompare(b))
@@ -234,8 +222,7 @@ const stableValue = (value: unknown): unknown => {
   return value;
 };
 
-const sha256Object = (value: unknown): string =>
-  sha256(JSON.stringify(stableValue(value)));
+const sha256Object = (value: unknown): string => sha256(JSON.stringify(stableValue(value)));
 
 /** The integration's own version — included in the input hash so upgrading the
  * adapter busts the build memo even when project sources are unchanged. */
@@ -308,9 +295,7 @@ const compileIgnoreRule = (raw: string): RegExp | undefined => {
 };
 
 const compileIgnoreRules = (rules: ReadonlyArray<string>): Array<RegExp> =>
-  rules
-    .map(compileIgnoreRule)
-    .filter((regex): regex is RegExp => regex !== undefined);
+  rules.map(compileIgnoreRule).filter((regex): regex is RegExp => regex !== undefined);
 
 const compileIncludeGlobs = (globs: ReadonlyArray<string>): Array<RegExp> =>
   globs.map((glob) => new RegExp(`^${globBodyToRegExpSource(glob)}$`));
@@ -331,10 +316,7 @@ const LOCKFILE_NAMES = [
   "yarn.lock",
 ];
 
-const findUp = Effect.fn(function* (
-  startDir: string,
-  filenames: ReadonlyArray<string>,
-) {
+const findUp = Effect.fn(function* (startDir: string, filenames: ReadonlyArray<string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let dir = startDir;
@@ -395,10 +377,7 @@ const resolveMemo = Effect.fn(function* (
       ? compileIgnoreRules(memo.exclude)
       : compileIgnoreRules(yield* readGitIgnoreRules(rootDir));
   return {
-    include:
-      memo?.include !== undefined
-        ? compileIncludeGlobs(memo.include)
-        : undefined,
+    include: memo?.include !== undefined ? compileIncludeGlobs(memo.include) : undefined,
     exclude: [
       // Always excluded regardless of gitignore: dependency trees, VCS
       // metadata, and the build output waku itself writes (hashing `distDir`
@@ -412,16 +391,13 @@ const resolveMemo = Effect.fn(function* (
 
 /** Deterministic, machine-independent content hash of one directory tree:
  * sorted `[relativePosixPath, sha256(content)]` pairs (never absolute paths). */
-const hashDirectory = Effect.fn(function* (
-  rootDir: string,
-  memo: ResolvedMemo,
-) {
+const hashDirectory = Effect.fn(function* (rootDir: string, memo: ResolvedMemo) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
   const files: Array<string> = [];
-  const walk: (dir: string, rel: string) => Effect.Effect<void, PlatformError> =
-    Effect.fn(function* (dir: string, rel: string) {
+  const walk: (dir: string, rel: string) => Effect.Effect<void, PlatformError> = Effect.fn(
+    function* (dir: string, rel: string) {
       const entries = (yield* fs.readDirectory(dir)).sort();
       for (const entry of entries) {
         const relPath = rel === "" ? entry : `${rel}/${entry}`;
@@ -433,16 +409,14 @@ const hashDirectory = Effect.fn(function* (
         if (stat.type === "Directory") {
           yield* walk(absPath, relPath);
         } else if (stat.type === "File") {
-          if (
-            memo.include !== undefined &&
-            !matchesAny(memo.include, relPath)
-          ) {
+          if (memo.include !== undefined && !matchesAny(memo.include, relPath)) {
             continue;
           }
           files.push(relPath);
         }
       }
-    });
+    },
+  );
   yield* walk(rootDir, "");
 
   if (memo.lockfile) {
@@ -481,11 +455,7 @@ const hashWakuInput = Effect.fn(function* (params: {
 }) {
   const path = yield* Path.Path;
   const memo = yield* resolveMemo(params.rootDir, params.distDir, params.memo);
-  const workspaceMemo = yield* resolveMemo(
-    params.rootDir,
-    params.distDir,
-    undefined,
-  );
+  const workspaceMemo = yield* resolveMemo(params.rootDir, params.distDir, undefined);
   const [root, ...workspaceHashes] = yield* Effect.all(
     [
       hashDirectory(params.rootDir, memo),
@@ -516,9 +486,7 @@ const hashWakuInput = Effect.fn(function* (params: {
     },
   });
   const workspaces = Array.from(params.workspaces).map((workspace) =>
-    path
-      .relative(params.rootDir, path.resolve(params.rootDir, workspace))
-      .replaceAll("\\", "/"),
+    path.relative(params.rootDir, path.resolve(params.rootDir, workspace)).replaceAll("\\", "/"),
   );
   return { hash, workspaces };
 });
@@ -533,8 +501,7 @@ const maybeReadString = Effect.fn(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
-      (error) =>
-        error._tag === "PlatformError" && error.reason._tag === "NotFound",
+      (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -559,10 +526,7 @@ const readClientAssets = Effect.fn(function* (
     maybeReadString(path.join(directory, "_headers")),
     maybeReadString(path.join(directory, "_redirects")),
   ]);
-  const ignores = compileIgnoreRules([
-    ...SPECIAL_ASSET_FILES,
-    ...(ignoreFile?.split("\n") ?? []),
-  ]);
+  const ignores = compileIgnoreRules([...SPECIAL_ASSET_FILES, ...(ignoreFile?.split("\n") ?? [])]);
   const manifest = new Map<string, { hash: string; size: number }>();
   yield* Effect.forEach(
     entries,
@@ -690,17 +654,11 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
 
 /** Routing config from the raw `props.assets` (directory/hash keys are
  * path-level concerns owned by alchemy; only the routing config passes through). */
-const assetsConfigOf = (
-  assets: unknown,
-): Record<string, unknown> | undefined => {
+const assetsConfigOf = (assets: unknown): Record<string, unknown> | undefined => {
   if (assets === undefined || assets === null || typeof assets !== "object") {
     return undefined;
   }
-  const {
-    directory: _directory,
-    hash: _hash,
-    ...config
-  } = assets as Record<string, unknown>;
+  const { directory: _directory, hash: _hash, ...config } = assets as Record<string, unknown>;
   return Object.keys(config).length > 0 ? config : undefined;
 };
 
@@ -711,14 +669,11 @@ export const makeWakuSourceProvider = (
     framework: "waku",
     displayName: "Waku",
     buildModule: import.meta.url,
-    layer: ({ root, target }) =>
-      wakuFrameworkLayer({ root, waku: wakuConfigFor(options), target }),
+    layer: ({ root, target }) => wakuFrameworkLayer({ root, waku: wakuConfigFor(options), target }),
   },
 ): SourceProvider => {
   const rootDirOf = (path: Path.Path): string =>
-    options.rootDir !== undefined
-      ? path.resolve(options.rootDir)
-      : process.cwd();
+    options.rootDir !== undefined ? path.resolve(options.rootDir) : process.cwd();
   const distDir = options.distDir ?? "dist";
   const wakuConfig = wakuConfigFor(options);
 
@@ -758,10 +713,7 @@ export const makeWakuSourceProvider = (
         ),
       );
 
-      if (
-        output.serverModules === undefined ||
-        output.serverModules.length === 0
-      ) {
+      if (output.serverModules === undefined || output.serverModules.length === 0) {
         return yield* Effect.fail(
           new SourceProviderError({
             provider: integration.provider,
@@ -770,13 +722,11 @@ export const makeWakuSourceProvider = (
         );
       }
       const [entry, ...rest] = output.serverModules;
-      const files: [BundleFile, ...Array<BundleFile>] = [
-        ...[entry!, ...rest].map((file) => ({
-          path: file.name.replaceAll("\\", "/"),
-          content: file.content,
-          hash: file.hash,
-        })),
-      ] as [BundleFile, ...Array<BundleFile>];
+      const files: [BundleFile, ...Array<BundleFile>] = [entry!, ...rest].map((file) => ({
+        path: file.name.replaceAll("\\", "/"),
+        content: file.content,
+        hash: file.hash,
+      })) as [BundleFile, ...Array<BundleFile>];
       const bundle: BundleOutput = {
         files,
         hash: sha256Object(files.map((file) => [file.path, file.hash])),
@@ -785,10 +735,7 @@ export const makeWakuSourceProvider = (
       const [assets, input] = yield* Effect.all(
         [
           output.clientDirectory !== undefined
-            ? readClientAssets(
-                output.clientDirectory,
-                assetsConfigOf(ctx.assets),
-              )
+            ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx.assets))
             : Effect.succeed(undefined),
           hashWakuInput({
             rootDir,
@@ -891,13 +838,8 @@ export const makeWakuSourceProvider = (
  * JSON-serializable options.
  */
 const sourceModule = {
-  make: (
-    options: unknown,
-  ): Effect.Effect<SourceProvider, SourceProviderError> => {
-    if (
-      options !== undefined &&
-      (typeof options !== "object" || options === null)
-    ) {
+  make: (options: unknown): Effect.Effect<SourceProvider, SourceProviderError> => {
+    if (options !== undefined && (typeof options !== "object" || options === null)) {
       return Effect.fail(
         new SourceProviderError({
           provider: PROVIDER,
@@ -905,9 +847,7 @@ const sourceModule = {
         }),
       );
     }
-    return Effect.succeed(
-      makeWakuSourceProvider((options ?? {}) as WakuSourceOptions),
-    );
+    return Effect.succeed(makeWakuSourceProvider((options ?? {}) as WakuSourceOptions));
   },
 };
 

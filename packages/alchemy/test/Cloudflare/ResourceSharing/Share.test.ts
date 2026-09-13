@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Resource Sharing writes are permission-gated: on the standard testing
 // account every POST/PUT/DELETE under /accounts/{id}/shares fails with the
@@ -24,8 +21,7 @@ const logLevel = Effect.provideService(
 // organization as recipient. The full lifecycle test below is gated behind
 // an explicit opt-in env var pointing at a recipient account; the probe
 // test always runs and pins the typed tags.
-const recipientAccountId =
-  process.env.CLOUDFLARE_TEST_SHARE_RECIPIENT_ACCOUNT_ID;
+const recipientAccountId = process.env.CLOUDFLARE_TEST_SHARE_RECIPIENT_ACCOUNT_ID;
 
 const getShare = (accountId: string, shareId: string) =>
   resourceSharing.getResourceSharing({ accountId, shareId }).pipe(
@@ -49,10 +45,7 @@ const expectGone = (accountId: string, shareId: string) =>
     Effect.catchTag("ShareNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ShareNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -139,9 +132,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ResourceSharing.Share,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ResourceSharing.Share);
 
       // Reads (list) succeed without the Resource Sharing Edit permission,
       // so the read-only assertion always runs: list() returns the full,
@@ -174,9 +165,7 @@ test.provider(
           Cloudflare.ResourceSharing.Share("ListShare", {
             name: "alchemy-list-share",
             recipients: [{ accountId: recipientAccountId }],
-            resources: [
-              { resourceType: "gateway-policy", resourceId: policy.ruleId },
-            ],
+            resources: [{ resourceType: "gateway-policy", resourceId: policy.ruleId }],
           }),
         );
 
@@ -224,9 +213,7 @@ test.provider.skipIf(!recipientAccountId)(
         Cloudflare.ResourceSharing.Share("Share", {
           name: "alchemy-resource-share",
           recipients: [{ accountId: recipient }],
-          resources: [
-            { resourceType: "gateway-policy", resourceId: policyA.ruleId },
-          ],
+          resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
         }),
       );
       expect(share.shareId).toBeTruthy();
@@ -269,9 +256,7 @@ test.provider.skipIf(!recipientAccountId)(
         Cloudflare.ResourceSharing.Share("Share", {
           name: "alchemy-resource-share-v2",
           recipients: [{ accountId: recipient }],
-          resources: [
-            { resourceType: "gateway-policy", resourceId: policyA.ruleId },
-          ],
+          resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
         }),
       );
       expect(reduced.shareId).toEqual(share.shareId);
@@ -313,9 +298,7 @@ test.provider.skipIf(!recipientAccountId)(
         Cloudflare.ResourceSharing.Share("ChildShare", {
           name: "alchemy-child-share",
           recipients: [{ accountId: recipient }],
-          resources: [
-            { resourceType: "gateway-policy", resourceId: policyA.ruleId },
-          ],
+          resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
         }),
       );
 

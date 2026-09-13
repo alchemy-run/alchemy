@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const VALUE_A = Redacted.make("alchemy-secret-a");
 const VALUE_B = Redacted.make("alchemy-secret-b");
@@ -105,10 +102,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const secretGone = yield* waitUntilGone(
-        created.secret.appName,
-        created.secret.name,
-      );
+      const secretGone = yield* waitUntilGone(created.secret.appName, created.secret.name);
       expect(secretGone).toEqual("gone");
       const appGone = yield* waitAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
@@ -134,8 +128,7 @@ test.provider(
       );
 
       const nextName =
-        created.secret.name.slice(0, -1) +
-        (created.secret.name.endsWith("z") ? "y" : "z");
+        created.secret.name.slice(0, -1) + (created.secret.name.endsWith("z") ? "y" : "z");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -161,18 +154,12 @@ test.provider(
       expect(fetched.name).toEqual(replaced.secret.name);
       expect(fetched.value).toBeUndefined();
 
-      const oldGone = yield* waitUntilGone(
-        created.secret.appName,
-        created.secret.name,
-      );
+      const oldGone = yield* waitUntilGone(created.secret.appName, created.secret.name);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        replaced.secret.appName,
-        replaced.secret.name,
-      );
+      const gone = yield* waitUntilGone(replaced.secret.appName, replaced.secret.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -199,18 +186,14 @@ test.provider(
       const all = yield* provider.list();
       const found = all.find(
         (secret) =>
-          secret.appName === deployed.secret.appName &&
-          secret.name === deployed.secret.name,
+          secret.appName === deployed.secret.appName && secret.name === deployed.secret.name,
       );
       expect(found).toBeDefined();
       expect(found?.digest).toEqual(deployed.secret.digest);
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.secret.appName,
-        deployed.secret.name,
-      );
+      const gone = yield* waitUntilGone(deployed.secret.appName, deployed.secret.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },

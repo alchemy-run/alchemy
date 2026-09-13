@@ -30,12 +30,7 @@ export interface DeleteUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.DeleteUserRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.DeleteUserResponse,
-      identitystore.DeleteUserError
-    >
+    ) => Effect.Effect<identitystore.DeleteUserResponse, identitystore.DeleteUserError>
   >
 > {}
-export const DeleteUser = Binding.Service<DeleteUser>(
-  "AWS.IdentityCenter.DeleteUser",
-);
+export const DeleteUser = Binding.Service<DeleteUser>("AWS.IdentityCenter.DeleteUser");

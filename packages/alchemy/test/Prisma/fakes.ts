@@ -21,14 +21,8 @@ export const makeFakeProfileStore = (
   ...overrides,
 });
 
-export const makeFakeCredentialsStore = (
-  stored?: unknown,
-): CredentialsStore["Service"] => ({
-  read: <A, E>(
-    _profile: string,
-    _provider: string,
-    schema: Schema.Codec<A, E>,
-  ) =>
+export const makeFakeCredentialsStore = (stored?: unknown): CredentialsStore["Service"] => ({
+  read: <A, E>(_profile: string, _provider: string, schema: Schema.Codec<A, E>) =>
     stored === undefined
       ? Effect.succeed(undefined)
       : Schema.decodeUnknownEffect(schema)(stored).pipe(

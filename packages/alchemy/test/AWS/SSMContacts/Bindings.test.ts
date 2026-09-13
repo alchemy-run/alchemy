@@ -8,9 +8,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Alchemy";
-import ContactsBindingsFunctionLive, {
-  ContactsBindingsFunction,
-} from "./bindings-handler.ts";
+import ContactsBindingsFunctionLive, { ContactsBindingsFunction } from "./bindings-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,60 +19,48 @@ const { test } = Test.make({ providers: AWS.providers() });
 // ValidationException "Account not found for the request"); once onboarded,
 // a missing engagement/rotation/channel is a plain
 // `ResourceNotFoundException`.
-test.provider(
-  "describeEngagement on a nonexistent engagement fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const { accountId, region } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        contacts.describeEngagement({
-          EngagementId: `arn:aws:ssm-contacts:${region}:${accountId}:engagement/alchemy-nonexistent-probe/00000000-0000-0000-0000-000000000000`,
-        }),
-      );
-      expect([
-        "ResourceNotFoundException",
-        "IncidentManagerNotOnboarded",
-      ]).toContain(error._tag);
-    }),
+test.provider("describeEngagement on a nonexistent engagement fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const { accountId, region } = yield* AWSEnvironment.current;
+    const error = yield* Effect.flip(
+      contacts.describeEngagement({
+        EngagementId: `arn:aws:ssm-contacts:${region}:${accountId}:engagement/alchemy-nonexistent-probe/00000000-0000-0000-0000-000000000000`,
+      }),
+    );
+    expect(["ResourceNotFoundException", "IncidentManagerNotOnboarded"]).toContain(error._tag);
+  }),
 );
 
-test.provider(
-  "listRotationShifts on a nonexistent rotation fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const { accountId, region } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        contacts.listRotationShifts({
-          RotationId: `arn:aws:ssm-contacts:${region}:${accountId}:rotation/alchemy-nonexistent-probe`,
-          EndTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        }),
-      );
-      // AWS reports an unresolvable rotation ARN as a ValidationException
-      // ("Invalid value provided - Invalid resource Arn ...") rather than a
-      // ResourceNotFoundException — typed as InvalidRotationArn.
-      expect([
-        "ResourceNotFoundException",
-        "IncidentManagerNotOnboarded",
-        "InvalidRotationArn",
-      ]).toContain(error._tag);
-    }),
+test.provider("listRotationShifts on a nonexistent rotation fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const { accountId, region } = yield* AWSEnvironment.current;
+    const error = yield* Effect.flip(
+      contacts.listRotationShifts({
+        RotationId: `arn:aws:ssm-contacts:${region}:${accountId}:rotation/alchemy-nonexistent-probe`,
+        EndTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }),
+    );
+    // AWS reports an unresolvable rotation ARN as a ValidationException
+    // ("Invalid value provided - Invalid resource Arn ...") rather than a
+    // ResourceNotFoundException — typed as InvalidRotationArn.
+    expect([
+      "ResourceNotFoundException",
+      "IncidentManagerNotOnboarded",
+      "InvalidRotationArn",
+    ]).toContain(error._tag);
+  }),
 );
 
-test.provider(
-  "sendActivationCode on a nonexistent channel fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const { accountId, region } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        contacts.sendActivationCode({
-          ContactChannelId: `arn:aws:ssm-contacts:${region}:${accountId}:contact-channel/alchemy-nonexistent-probe/11111111-1111-1111-1111-111111111111`,
-        }),
-      );
-      expect([
-        "ResourceNotFoundException",
-        "IncidentManagerNotOnboarded",
-      ]).toContain(error._tag);
-    }),
+test.provider("sendActivationCode on a nonexistent channel fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const { accountId, region } = yield* AWSEnvironment.current;
+    const error = yield* Effect.flip(
+      contacts.sendActivationCode({
+        ContactChannelId: `arn:aws:ssm-contacts:${region}:${accountId}:contact-channel/alchemy-nonexistent-probe/11111111-1111-1111-1111-111111111111`,
+      }),
+    );
+    expect(["ResourceNotFoundException", "IncidentManagerNotOnboarded"]).toContain(error._tag);
+  }),
 );
 
 // The bindings fixture needs the account-wide Incident Manager replication
@@ -98,12 +84,8 @@ const ensureReplicationSet = Effect.gen(function* () {
   const status = yield* incidents.getReplicationSet({ arn }).pipe(
     Effect.map((r) => r.replicationSet.status),
     Effect.repeat({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(60),
-      ]),
-      until: (status): boolean =>
-        status !== "CREATING" && status !== "UPDATING",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
+      until: (status): boolean => status !== "CREATING" && status !== "UPDATING",
     }),
   );
   expect(status).toBe("ACTIVE");
@@ -144,9 +126,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
               response.status === 200
                 ? response.json
                 : Effect.flatMap(response.text, (body) =>
-                    Effect.fail(
-                      new Error(`GET ${path} -> ${response.status}: ${body}`),
-                    ),
+                    Effect.fail(new Error(`GET ${path} -> ${response.status}: ${body}`)),
                   ),
             ),
           );
@@ -154,10 +134,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // Lambda URL cold-start + IAM propagation on the fresh policy.
       const bindings = (yield* getJson("/bindings").pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential("2 seconds"),
-            Schedule.recurs(30),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(30)]),
         }),
       )) as { bound: string[] };
       expect(bindings.bound).toHaveLength(19);

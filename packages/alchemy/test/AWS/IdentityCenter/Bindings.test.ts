@@ -7,9 +7,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import IdentityCenterBindingsFunctionLive, {
-  IdentityCenterBindingsFunction,
-} from "./handler";
+import IdentityCenterBindingsFunctionLive, { IdentityCenterBindingsFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -24,68 +22,53 @@ const RUN_LIVE = !!process.env.ALCHEMY_TEST_IDENTITY_CENTER;
 
 // Ungated typed-error probes: prove the distilled error unions the bindings
 // depend on are typed on every account, entitled or not, at near-zero cost.
-test.provider(
-  "describeUser on a nonexistent identity store fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        identitystore.describeUser({
-          IdentityStoreId: "d-9067000000",
-          UserId: "00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect([
-        "ResourceNotFoundException",
-        "ValidationException",
-        "AccessDeniedException",
-      ]).toContain(error._tag);
-    }),
+test.provider("describeUser on a nonexistent identity store fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      identitystore.describeUser({
+        IdentityStoreId: "d-9067000000",
+        UserId: "00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(["ResourceNotFoundException", "ValidationException", "AccessDeniedException"]).toContain(
+      error._tag,
+    );
+  }),
 );
 
-test.provider(
-  "isMemberInGroups on a nonexistent identity store fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        identitystore.isMemberInGroups({
-          IdentityStoreId: "d-9067000000",
-          MemberId: { UserId: "00000000-0000-0000-0000-000000000000" },
-          GroupIds: ["00000000-0000-0000-0000-000000000000"],
-        }),
-      );
-      expect([
-        "ResourceNotFoundException",
-        "ValidationException",
-        "AccessDeniedException",
-      ]).toContain(error._tag);
-    }),
+test.provider("isMemberInGroups on a nonexistent identity store fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      identitystore.isMemberInGroups({
+        IdentityStoreId: "d-9067000000",
+        MemberId: { UserId: "00000000-0000-0000-0000-000000000000" },
+        GroupIds: ["00000000-0000-0000-0000-000000000000"],
+      }),
+    );
+    expect(["ResourceNotFoundException", "ValidationException", "AccessDeniedException"]).toContain(
+      error._tag,
+    );
+  }),
 );
 
-test.provider(
-  "listPermissionSets on a nonexistent instance fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        ssoAdmin.listPermissionSets({
-          InstanceArn: "arn:aws:sso:::instance/ssoins-0000000000000000",
-        }),
-      );
-      expect([
-        "ResourceNotFoundException",
-        "ValidationException",
-        "AccessDeniedException",
-      ]).toContain(error._tag);
-    }),
+test.provider("listPermissionSets on a nonexistent instance fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      ssoAdmin.listPermissionSets({
+        InstanceArn: "arn:aws:sso:::instance/ssoins-0000000000000000",
+      }),
+    );
+    expect(["ResourceNotFoundException", "ValidationException", "AccessDeniedException"]).toContain(
+      error._tag,
+    );
+  }),
 );
 
 const sharedStack = Core.scratchStack(testOptions, "IdentityCenterBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -98,9 +81,7 @@ describe.sequential("IdentityCenter Bindings (E2E)", () => {
   beforeAll(
     Effect.gen(function* () {
       if (!RUN_LIVE) return;
-      yield* Effect.logInfo(
-        "IdentityCenter E2E setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("IdentityCenter E2E setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("IdentityCenter E2E setup: deploying fixture");
@@ -134,15 +115,13 @@ describe.sequential("IdentityCenter Bindings (E2E)", () => {
   );
 
   describe("binding registration", () => {
-    test.provider.skipIf(!RUN_LIVE)(
-      "all twenty capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/bindings")) as {
-            bound: string[];
-          };
-          expect(response.bound).toHaveLength(20);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("all twenty capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/bindings")) as {
+          bound: string[];
+        };
+        expect(response.bound).toHaveLength(20);
+      }),
     );
   });
 
@@ -191,9 +170,7 @@ describe.sequential("IdentityCenter Bindings (E2E)", () => {
           expect(result.userId).toBeTruthy();
           expect(result.resolvedMatches).toBe(true);
           expect(result.userName).toBe("alchemy-idc-bindings-user");
-          expect(result.displayNameAfter).toBe(
-            "Alchemy Bindings Test User (updated)",
-          );
+          expect(result.displayNameAfter).toBe("Alchemy Bindings Test User (updated)");
         }),
       { timeout: 120_000 },
     );
@@ -248,9 +225,7 @@ describe.sequential("IdentityCenter Bindings (E2E)", () => {
       () =>
         Effect.gen(function* () {
           const result = (yield* getJson("/assignments")) as {
-            forPrincipal:
-              | { ok: true; count: number }
-              | { ok: false; errorTag: string };
+            forPrincipal: { ok: true; count: number } | { ok: false; errorTag: string };
           };
           // Organization instances answer with a count; account instances
           // reject ListAccountAssignmentsForPrincipal with a typed tag.

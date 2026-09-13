@@ -37,10 +37,7 @@ export interface DescribeImageTags extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeImageTagsRequest,
-    ) => Effect.Effect<
-      ecrpublic.DescribeImageTagsResponse,
-      ecrpublic.DescribeImageTagsError
-    >
+    ) => Effect.Effect<ecrpublic.DescribeImageTagsResponse, ecrpublic.DescribeImageTagsError>
   >
 > {}
 

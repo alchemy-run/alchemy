@@ -47,31 +47,23 @@ const looksLikeCloudflarePlaceholder = (body: string) =>
 
 const postImage = (url: string) =>
   HttpClient.execute(
-    HttpClientRequest.post(url).pipe(
-      HttpClientRequest.bodyUint8Array(TINY_PNG),
-    ),
+    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyUint8Array(TINY_PNG)),
   ).pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? res.json
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
       while: (e): e is WorkerNotReady =>
         e instanceof WorkerNotReady &&
-        ((e.status >= 400 && e.status < 500) ||
-          looksLikeCloudflarePlaceholder(e.body)),
+        ((e.status >= 400 && e.status < 500) || looksLikeCloudflarePlaceholder(e.body)),
       // Cap each backoff at 5s (otherwise the exponential blows past a minute
       // per sleep and looks like a hang) and stop after 30 attempts.
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("5 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
         Schedule.recurs(30),
       ]),
     }),

@@ -1,7 +1,4 @@
-import {
-  withRequestOptions,
-  type StripeOpError,
-} from "@distilled.cloud/stripe";
+import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetBillingCreditGrants,
   GetBillingCreditGrant,
@@ -258,9 +255,7 @@ export type CreditGrant = Resource<
  */
 export const CreditGrant = Resource<CreditGrant>("Stripe.CreditGrant");
 
-export class CreditGrantNotResolved extends Data.TaggedError(
-  "Stripe.CreditGrantNotResolved",
-)<{
+export class CreditGrantNotResolved extends Data.TaggedError("Stripe.CreditGrantNotResolved")<{
   customer: string | undefined;
 }> {}
 
@@ -285,9 +280,7 @@ const idOf = (value: unknown): string | undefined => {
 
 const isVoided = (grant: StripeCreditGrant): boolean => grant.voided_at != null;
 
-const fromWireAmount = (
-  amount: StripeCreditGrant["amount"],
-): CreditGrantAmount => ({
+const fromWireAmount = (amount: StripeCreditGrant["amount"]): CreditGrantAmount => ({
   type: amount.type,
   ...(amount.monetary != null
     ? {
@@ -299,9 +292,7 @@ const fromWireAmount = (
     : {}),
 });
 
-const toWireAmount = (
-  amount: CreditGrantAmount,
-): CreateBillingCreditGrantRequestAmount => ({
+const toWireAmount = (amount: CreditGrantAmount): CreateBillingCreditGrantRequestAmount => ({
   type: amount.type,
   ...(amount.monetary !== undefined
     ? {
@@ -318,14 +309,10 @@ const fromWireApplicability = (
 ): CreditGrantApplicabilityConfig => {
   const prices = config.scope.prices
     ?.map((price) => (price.id != null ? { id: price.id } : undefined))
-    .filter(
-      (price): price is CreditGrantApplicablePrice => price !== undefined,
-    );
+    .filter((price): price is CreditGrantApplicablePrice => price !== undefined);
   return {
     scope: {
-      ...(config.scope.price_type !== undefined
-        ? { priceType: config.scope.price_type }
-        : {}),
+      ...(config.scope.price_type !== undefined ? { priceType: config.scope.price_type } : {}),
       ...(prices !== undefined && prices.length > 0 ? { prices } : {}),
     },
   };
@@ -335,9 +322,7 @@ const toWireApplicability = (
   config: CreditGrantApplicabilityConfig,
 ): CreateBillingCreditGrantRequestApplicabilityConfig => ({
   scope: {
-    ...(config.scope.priceType !== undefined
-      ? { price_type: config.scope.priceType }
-      : {}),
+    ...(config.scope.priceType !== undefined ? { price_type: config.scope.priceType } : {}),
     ...(config.scope.prices !== undefined
       ? { prices: config.scope.prices.map((price) => ({ id: price.id })) }
       : {}),
@@ -364,18 +349,13 @@ const toAttrs = (grant: StripeCreditGrant): CreditGrantAttributes => ({
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
 const isMissingGrant = isMissingStripeResource;
 
 const alreadyVoided = (error: StripeOpError): boolean =>
-  error._tag === "InvalidRequestError" &&
-  (error.message?.toLowerCase().includes("void") ?? false);
+  error._tag === "InvalidRequestError" && (error.message?.toLowerCase().includes("void") ?? false);
 
 const getById = (id: string) =>
   GetBillingCreditGrant({ id }).pipe(
@@ -415,10 +395,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined && !isVoided(byId)) return byId;
@@ -449,10 +426,8 @@ const replaceOnCreateOnlyChange = (
   ) {
     return true;
   }
-  const desiredApplicability =
-    news.applicabilityConfig ?? DEFAULT_APPLICABILITY;
-  const previousApplicability =
-    output?.applicabilityConfig ?? olds?.applicabilityConfig;
+  const desiredApplicability = news.applicabilityConfig ?? DEFAULT_APPLICABILITY;
+  const previousApplicability = output?.applicabilityConfig ?? olds?.applicabilityConfig;
   if (
     previousApplicability !== undefined &&
     !deepEqual(desiredApplicability, previousApplicability, {
@@ -487,10 +462,7 @@ const replaceOnCreateOnlyChange = (
   ) {
     return true;
   }
-  if (
-    news.priority !== undefined &&
-    news.priority !== (output?.priority ?? olds?.priority)
-  ) {
+  if (news.priority !== undefined && news.priority !== (output?.priority ?? olds?.priority)) {
     return true;
   }
   return false;
@@ -526,9 +498,7 @@ export const CreditGrantProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -545,17 +515,13 @@ export const CreditGrantProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
       const metadata = yield* desiredMetadata(id, news.metadata);
       const name = yield* toName(id, news.name, output?.name);
-      const applicabilityConfig =
-        news.applicabilityConfig ?? DEFAULT_APPLICABILITY;
+      const applicabilityConfig = news.applicabilityConfig ?? DEFAULT_APPLICABILITY;
 
       let current: StripeCreditGrant | undefined = yield* observe({
         id: output?.id,
         logicalId: id,
       });
-      if (
-        current !== undefined &&
-        replaceOnCreateOnlyChange(undefined, news, toAttrs(current))
-      ) {
+      if (current !== undefined && replaceOnCreateOnlyChange(undefined, news, toAttrs(current))) {
         current = undefined;
       }
 
@@ -566,16 +532,10 @@ export const CreditGrantProvider = () =>
           name,
           metadata,
           ...(news.customer !== undefined ? { customer: news.customer } : {}),
-          ...(news.customerAccount !== undefined
-            ? { customer_account: news.customerAccount }
-            : {}),
+          ...(news.customerAccount !== undefined ? { customer_account: news.customerAccount } : {}),
           ...(news.category !== undefined ? { category: news.category } : {}),
-          ...(news.effectiveAt !== undefined
-            ? { effective_at: news.effectiveAt }
-            : {}),
-          ...(news.expiresAt !== undefined
-            ? { expires_at: news.expiresAt }
-            : {}),
+          ...(news.effectiveAt !== undefined ? { effective_at: news.effectiveAt } : {}),
+          ...(news.expiresAt !== undefined ? { expires_at: news.expiresAt } : {}),
           ...(news.priority !== undefined ? { priority: news.priority } : {}),
         }).pipe(
           withRequestOptions({
@@ -592,8 +552,7 @@ export const CreditGrantProvider = () =>
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const expiresAtChanged =
-        news.expiresAt !== undefined &&
-        (current.expires_at ?? undefined) !== news.expiresAt;
+        news.expiresAt !== undefined && (current.expires_at ?? undefined) !== news.expiresAt;
 
       if (!metadataChanged && !expiresAtChanged) {
         return toAttrs(current);
@@ -605,9 +564,7 @@ export const CreditGrantProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

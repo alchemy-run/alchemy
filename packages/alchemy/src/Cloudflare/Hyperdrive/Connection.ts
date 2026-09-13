@@ -233,9 +233,7 @@ export const ProviderLive = () =>
               } as Mtls,
               dev: output?.dev,
             })),
-            Effect.catchTag("HyperdriveConfigNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(undefined)),
           );
       }
       const name = yield* createConfigName(id, olds?.name);
@@ -388,8 +386,7 @@ const findByName = (name: string) =>
     );
   });
 
-export const defaultPort = (scheme: Scheme): number =>
-  scheme === "mysql" ? 3306 : 5432;
+export const defaultPort = (scheme: Scheme): number => (scheme === "mysql" ? 3306 : 5432);
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;

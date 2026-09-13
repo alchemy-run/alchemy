@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getJob = (name: string) =>
   databrew
     .describeJob({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const brewRole = () =>
   Role("DataBrewJobRole", {
@@ -117,9 +113,7 @@ test.provider(
       // stage 2: the job definitions
       const created = yield* stack.deploy(withJobs(2));
 
-      expect(created.profileJob.jobArn).toContain(
-        `:job/${created.profileJob.jobName}`,
-      );
+      expect(created.profileJob.jobArn).toContain(`:job/${created.profileJob.jobName}`);
       expect(created.profileJob.type).toEqual("PROFILE");
       expect(created.recipeJob.type).toEqual("RECIPE");
 
@@ -135,12 +129,8 @@ test.provider(
 
       const recipeJob = yield* getJob(created.recipeJob.jobName);
       expect(recipeJob?.Type).toEqual("RECIPE");
-      expect(recipeJob?.RecipeReference?.Name).toEqual(
-        created.recipe.recipeName,
-      );
-      expect(recipeJob?.Outputs?.[0]?.Location.Bucket).toEqual(
-        created.bucket.bucketName,
-      );
+      expect(recipeJob?.RecipeReference?.Name).toEqual(created.recipe.recipeName);
+      expect(recipeJob?.Outputs?.[0]?.Location.Bucket).toEqual(created.bucket.bucketName);
       expect(recipeJob?.Outputs?.[0]?.Overwrite).toEqual(true);
 
       // update: bump capacity on both jobs
@@ -194,19 +184,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         Name: created.job.jobName,
       });
 
-      const run = yield* databrew
-        .describeJobRun({ Name: created.job.jobName, RunId })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("10 seconds"),
-            until: (r) =>
-              r.State === "SUCCEEDED" ||
-              r.State === "FAILED" ||
-              r.State === "TIMEOUT" ||
-              r.State === "STOPPED",
-            times: 60,
-          }),
-        );
+      const run = yield* databrew.describeJobRun({ Name: created.job.jobName, RunId }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (r) =>
+            r.State === "SUCCEEDED" ||
+            r.State === "FAILED" ||
+            r.State === "TIMEOUT" ||
+            r.State === "STOPPED",
+          times: 60,
+        }),
+      );
       expect(run.State).toEqual("SUCCEEDED");
 
       // the transformed output landed in S3

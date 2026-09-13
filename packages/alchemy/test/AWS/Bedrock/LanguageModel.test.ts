@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "BedrockLanguageModel");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,19 +36,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -77,9 +69,7 @@ const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
 describe("Bedrock LanguageModel", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Bedrock LanguageModel setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Bedrock LanguageModel setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Bedrock LanguageModel setup: deploying fixture");
@@ -93,9 +83,7 @@ describe("Bedrock LanguageModel", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `Bedrock LanguageModel setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Bedrock LanguageModel setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -122,9 +110,7 @@ describe("Bedrock LanguageModel", () => {
     (_stack) =>
       Effect.gen(function* () {
         const response = (yield* send(
-          HttpClientRequest.get(
-            `${baseUrl}/generate?prompt=${encodeURIComponent("Say pong.")}`,
-          ),
+          HttpClientRequest.get(`${baseUrl}/generate?prompt=${encodeURIComponent("Say pong.")}`),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           text: string;
           finishReason: string;
@@ -288,9 +274,7 @@ describe("Bedrock LanguageModel", () => {
         expect(starts[0]?.name).toBe("get_weather");
         // Adapter invariant: every contentBlockStart-opened tool block is
         // closed by contentBlockStop (or finalize), matched by id.
-        expect(new Set(ends.map((p) => p.id))).toEqual(
-          new Set(starts.map((p) => p.id)),
-        );
+        expect(new Set(ends.map((p) => p.id))).toEqual(new Set(starts.map((p) => p.id)));
 
         const firstId = starts[0]!.id!;
         const joined = parts
@@ -300,9 +284,7 @@ describe("Bedrock LanguageModel", () => {
         const args = yield* Effect.try({
           try: () => JSON.parse(joined) as { city?: string },
           catch: (cause) =>
-            new Error(
-              `Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`,
-            ),
+            new Error(`Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`),
         });
         expect(typeof args.city).toBe("string");
         expect(args.city!.toLowerCase()).toContain("portland");

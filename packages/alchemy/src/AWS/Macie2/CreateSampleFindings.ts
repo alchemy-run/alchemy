@@ -27,10 +27,7 @@ export interface CreateSampleFindings extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.CreateSampleFindingsRequest,
-    ) => Effect.Effect<
-      macie2.CreateSampleFindingsResponse,
-      macie2.CreateSampleFindingsError
-    >
+    ) => Effect.Effect<macie2.CreateSampleFindingsResponse, macie2.CreateSampleFindingsError>
   >
 > {}
 export const CreateSampleFindings = Binding.Service<CreateSampleFindings>(

@@ -18,26 +18,18 @@ const { test } = Test.make({ providers: AWS.providers() });
 // ("Cluster id 'j-…' is not valid.") → synthetic ClusterNotFound, and
 // TerminateJobFlows as ValidationException ("Specified job flow ID not
 // valid.") → synthetic JobFlowNotFound.
-test.provider(
-  "describeCluster on a nonexistent id fails with ClusterNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        emr.describeCluster({ ClusterId: "j-1K48XAOQ4XHCB" }),
-      );
-      expect(error._tag).toBe("ClusterNotFound");
-    }),
+test.provider("describeCluster on a nonexistent id fails with ClusterNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(emr.describeCluster({ ClusterId: "j-1K48XAOQ4XHCB" }));
+    expect(error._tag).toBe("ClusterNotFound");
+  }),
 );
 
-test.provider(
-  "terminateJobFlows on a nonexistent id fails with JobFlowNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        emr.terminateJobFlows({ JobFlowIds: ["j-1K48XAOQ4XHCB"] }),
-      );
-      expect(error._tag).toBe("JobFlowNotFound");
-    }),
+test.provider("terminateJobFlows on a nonexistent id fails with JobFlowNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(emr.terminateJobFlows({ JobFlowIds: ["j-1K48XAOQ4XHCB"] }));
+    expect(error._tag).toBe("JobFlowNotFound");
+  }),
 );
 
 // Resolve a subnet of the account's default VPC (public subnet — EMR
@@ -50,9 +42,7 @@ const resolveSubnet = Effect.gen(function* () {
       { Name: "default-for-az", Values: ["true"] },
     ],
   });
-  const subnetId = (subnets.Subnets ?? []).flatMap((s) =>
-    s.SubnetId ? [s.SubnetId] : [],
-  )[0];
+  const subnetId = (subnets.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))[0];
   return { subnetId };
 });
 
@@ -69,10 +59,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const { subnetId } = yield* resolveSubnet;
       expect(subnetId).toBeDefined();
 
-      const deploy = (props: {
-        stepConcurrencyLevel?: number;
-        idleTimeoutSeconds?: number;
-      }) =>
+      const deploy = (props: { stepConcurrencyLevel?: number; idleTimeoutSeconds?: number }) =>
         stack.deploy(
           Effect.gen(function* () {
             const logs = yield* AWS.S3.Bucket("EmrLogs", {
@@ -111,12 +98,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role",
               ],
             });
-            const instanceProfile = yield* AWS.IAM.InstanceProfile(
-              "EmrEc2Profile",
-              {
-                roleName: ec2Role.roleName,
-              },
-            );
+            const instanceProfile = yield* AWS.IAM.InstanceProfile("EmrEc2Profile", {
+              roleName: ec2Role.roleName,
+            });
             const cluster = yield* Cluster("Spark", {
               releaseLabel: "emr-7.5.0",
               applications: ["Spark", "Hadoop"],
@@ -153,12 +137,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         ClusterId: cluster.clusterId,
       });
       expect(created.Cluster?.ReleaseLabel).toBe("emr-7.5.0");
-      expect(
-        (created.Cluster?.Applications ?? []).map((a) => a.Name).sort(),
-      ).toEqual(["Hadoop", "Spark"]);
-      const tags = Object.fromEntries(
-        (created.Cluster?.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      expect((created.Cluster?.Applications ?? []).map((a) => a.Name).sort()).toEqual([
+        "Hadoop",
+        "Spark",
+      ]);
+      const tags = Object.fromEntries((created.Cluster?.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.fixture).toBe("emr-cluster");
       const policy = yield* emr.getAutoTerminationPolicy({
         ClusterId: cluster.clusterId,
@@ -210,9 +193,6 @@ const assertClusterTerminating = (clusterId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(20)]),
     }),
   );

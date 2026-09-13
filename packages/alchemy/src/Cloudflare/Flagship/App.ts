@@ -149,8 +149,7 @@ export const App = Resource<App>(TypeId);
 /**
  * Returns true if the given value is a Flagship App resource.
  */
-export const isApp = (value: unknown): value is App =>
-  isResourceOfType(value, TypeId);
+export const isApp = (value: unknown): value is App => isResourceOfType(value, TypeId);
 
 export const AppProvider = () =>
   Provider.succeed(App, {
@@ -221,17 +220,13 @@ export const AppProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const listed = yield* flagship.listApps.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
       );
       const rows = yield* Effect.forEach(
         listed,
         (app) =>
           getApp(accountId, app.id).pipe(
-            Effect.map((observed) =>
-              observed ? toAttributes(observed, accountId) : undefined,
-            ),
+            Effect.map((observed) => (observed ? toAttributes(observed, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
@@ -245,9 +240,7 @@ export const AppProvider = () =>
 const getApp = (accountId: string, appId: string) =>
   flagship
     .getApp({ accountId, appId })
-    .pipe(
-      Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find an app by exact name. If several apps carry the same name, pick the
@@ -270,10 +263,7 @@ const createAppName = (id: string, name: string | undefined) =>
   });
 
 const toAttributes = (
-  app:
-    | flagship.GetAppResponse
-    | flagship.CreateAppResponse
-    | flagship.UpdateAppResponse,
+  app: flagship.GetAppResponse | flagship.CreateAppResponse | flagship.UpdateAppResponse,
   accountId: string,
 ): AppAttributes => ({
   appId: app.id,

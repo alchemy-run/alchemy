@@ -44,7 +44,6 @@ export interface CreateWhatIfForecastExport extends Binding.Service<
     >
   >
 > {}
-export const CreateWhatIfForecastExport =
-  Binding.Service<CreateWhatIfForecastExport>(
-    "AWS.Forecast.CreateWhatIfForecastExport",
-  );
+export const CreateWhatIfForecastExport = Binding.Service<CreateWhatIfForecastExport>(
+  "AWS.Forecast.CreateWhatIfForecastExport",
+);

@@ -46,9 +46,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
         expect(initial.stream.compressionFormat).toEqual("UNCOMPRESSED");
         // No SSE configured — a never-encrypted stream reports DISABLED (or
         // no encryption configuration at all).
-        expect(initial.stream.encryptionStatus ?? "DISABLED").toEqual(
-          "DISABLED",
-        );
+        expect(initial.stream.encryptionStatus ?? "DISABLED").toEqual("DISABLED");
 
         // Out-of-band verification via distilled.
         const described = yield* Firehose.describeDeliveryStream({
@@ -57,10 +55,9 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
         const description = described.DeliveryStreamDescription;
         expect(description.DeliveryStreamStatus).toEqual("ACTIVE");
         expect(description.DeliveryStreamType).toEqual("DirectPut");
-        expect(
-          description.Destinations[0]?.ExtendedS3DestinationDescription
-            ?.BucketARN,
-        ).toEqual(initial.bucket.bucketArn);
+        expect(description.Destinations[0]?.ExtendedS3DestinationDescription?.BucketARN).toEqual(
+          initial.bucket.bucketArn,
+        );
 
         // Ownership + user tags.
         const tags = yield* Firehose.listTagsForDeliveryStream({
@@ -99,9 +96,7 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
         );
 
         // Same physical stream — updated in place, not replaced.
-        expect(updated.stream.deliveryStreamName).toEqual(
-          initial.stream.deliveryStreamName,
-        );
+        expect(updated.stream.deliveryStreamName).toEqual(initial.stream.deliveryStreamName);
         expect(updated.stream.prefix).toEqual("events/");
         expect(updated.stream.errorOutputPrefix).toEqual("errors/");
         expect(updated.stream.bufferingIntervalInSeconds).toEqual(60);
@@ -137,8 +132,8 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
 
         // Out-of-band SSE verification via distilled.
         expect(
-          updatedDescription.DeliveryStreamDescription
-            .DeliveryStreamEncryptionConfiguration?.Status,
+          updatedDescription.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration
+            ?.Status,
         ).toEqual("ENABLED");
 
         // Remove encryption — the StopDeliveryStreamEncryption path.
@@ -162,12 +157,8 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
           }),
         );
         // Same physical stream — SSE disabled in place.
-        expect(decrypted.stream.deliveryStreamName).toEqual(
-          initial.stream.deliveryStreamName,
-        );
-        expect(decrypted.stream.encryptionStatus ?? "DISABLED").toEqual(
-          "DISABLED",
-        );
+        expect(decrypted.stream.deliveryStreamName).toEqual(initial.stream.deliveryStreamName);
+        expect(decrypted.stream.encryptionStatus ?? "DISABLED").toEqual("DISABLED");
         expect(decrypted.stream.encryptionKeyType).toBeUndefined();
 
         yield* stack.destroy();
@@ -223,22 +214,16 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
         );
 
         // Source change is a replacement — new physical stream.
-        expect(replaced.stream.deliveryStreamName).not.toEqual(
-          initial.stream.deliveryStreamName,
-        );
-        expect(replaced.stream.deliveryStreamType).toEqual(
-          "KinesisStreamAsSource",
-        );
-        expect(replaced.stream.kinesisStreamArn).toEqual(
-          replaced.source.streamArn,
-        );
+        expect(replaced.stream.deliveryStreamName).not.toEqual(initial.stream.deliveryStreamName);
+        expect(replaced.stream.deliveryStreamType).toEqual("KinesisStreamAsSource");
+        expect(replaced.stream.kinesisStreamArn).toEqual(replaced.source.streamArn);
 
         const described = yield* Firehose.describeDeliveryStream({
           DeliveryStreamName: replaced.stream.deliveryStreamName,
         });
         expect(
-          described.DeliveryStreamDescription.Source
-            ?.KinesisStreamSourceDescription?.KinesisStreamARN,
+          described.DeliveryStreamDescription.Source?.KinesisStreamSourceDescription
+            ?.KinesisStreamARN,
         ).toEqual(replaced.source.streamArn);
 
         // The replaced (old) stream is deleted by the engine.
@@ -251,23 +236,16 @@ describe.skipIf(!!process.env.FAST)("AWS.Firehose.DeliveryStream", () => {
     { timeout: 420_000 },
   );
 
-  class DeliveryStreamStillExists extends Data.TaggedError(
-    "DeliveryStreamStillExists",
-  ) {}
+  class DeliveryStreamStillExists extends Data.TaggedError("DeliveryStreamStillExists") {}
 
-  const assertDeliveryStreamDeleted = Effect.fn(function* (
-    deliveryStreamName: string,
-  ) {
+  const assertDeliveryStreamDeleted = Effect.fn(function* (deliveryStreamName: string) {
     yield* Firehose.describeDeliveryStream({
       DeliveryStreamName: deliveryStreamName,
     }).pipe(
       Effect.flatMap(() => Effect.fail(new DeliveryStreamStillExists())),
       Effect.retry({
         while: (e: { _tag: string }) => e._tag === "DeliveryStreamStillExists",
-        schedule: Schedule.max([
-          Schedule.fixed("3 seconds"),
-          Schedule.recurs(40),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
       }),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     );

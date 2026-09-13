@@ -30,9 +30,7 @@ test.provider(
       );
 
       expect(created.location.resourceArn).toEqual(created.bucket.bucketArn);
-      expect(created.location.roleArn).toContain(
-        "AWSServiceRoleForLakeFormationDataAccess",
-      );
+      expect(created.location.roleArn).toContain("AWSServiceRoleForLakeFormationDataAccess");
 
       // out-of-band verification
       const observed = yield* describeResource(created.location.resourceArn);
@@ -52,9 +50,7 @@ test.provider(
         }),
       );
 
-      expect(updated.location.resourceArn).toEqual(
-        created.location.resourceArn,
-      );
+      expect(updated.location.resourceArn).toEqual(created.location.resourceArn);
       expect(updated.location.hybridAccessEnabled).toEqual(true);
       const reobserved = yield* describeResource(created.location.resourceArn);
       expect(reobserved?.HybridAccessEnabled).toEqual(true);

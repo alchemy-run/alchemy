@@ -100,13 +100,7 @@ export interface Connect extends Binding.Service<
     workgroup: Workgroup,
     options?: ConnectOptions,
   ) => Effect.Effect<
-    Effect.Effect<
-      WorkgroupConnectionInfo,
-      serverless.GetCredentialsError,
-      RuntimeContext
-    >
+    Effect.Effect<WorkgroupConnectionInfo, serverless.GetCredentialsError, RuntimeContext>
   >
 > {}
-export const Connect = Binding.Service<Connect>(
-  "AWS.RedshiftServerless.Connect",
-);
+export const Connect = Binding.Service<Connect>("AWS.RedshiftServerless.Connect");

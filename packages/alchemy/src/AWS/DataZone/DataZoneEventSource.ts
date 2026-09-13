@@ -112,9 +112,7 @@ export const consumeDataZoneEvents = <StreamReq = never, Req = never>(
     props.id ?? "DataZoneEvents",
     {
       source: ["aws.datazone"],
-      ...(props.detailTypes !== undefined
-        ? { "detail-type": [...props.detailTypes] }
-        : {}),
+      ...(props.detailTypes !== undefined ? { "detail-type": [...props.detailTypes] } : {}),
     },
     { description: props.description, state: props.state },
     process,

@@ -27,10 +27,7 @@ export interface ListTargetResourceTypes extends Binding.Service<
   () => Effect.Effect<
     (
       request?: fis.ListTargetResourceTypesRequest,
-    ) => Effect.Effect<
-      fis.ListTargetResourceTypesResponse,
-      fis.ListTargetResourceTypesError
-    >
+    ) => Effect.Effect<fis.ListTargetResourceTypesResponse, fis.ListTargetResourceTypesError>
   >
 > {}
 export const ListTargetResourceTypes = Binding.Service<ListTargetResourceTypes>(

@@ -28,14 +28,9 @@ const testLayer = (
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
     Layer.provideMerge(
-      Layer.succeed(
-        ProfileStore,
-        makeProfile(options.storedToken ?? "test-token"),
-      ),
+      Layer.succeed(ProfileStore, makeProfile(options.storedToken ?? "test-token")),
     ),
-    Layer.provideMerge(
-      ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
-    ),
+    Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown(config))),
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(CliKit.layer({ input: false })),
   );
@@ -104,10 +99,7 @@ describe("PrismaEnvironment", () => {
       expect(env.baseUrl).toBe("http://127.0.0.1:8787");
     }).pipe(
       Effect.provide(
-        testLayer(
-          { PRISMA_API_URL: "http://127.0.0.1:8787/" },
-          { storedToken: "test-token" },
-        ),
+        testLayer({ PRISMA_API_URL: "http://127.0.0.1:8787/" }, { storedToken: "test-token" }),
       ),
     ),
   );
@@ -143,9 +135,7 @@ describe("PrismaEnvironment", () => {
       );
       expect(credentialExit._tag).toBe("Failure");
       if (credentialExit._tag === "Failure") {
-        expect(String(credentialExit.cause)).toContain(
-          "must not contain credentials",
-        );
+        expect(String(credentialExit.cause)).toContain("must not contain credentials");
       }
 
       const pathExit = yield* PrismaEnvironment.pipe(

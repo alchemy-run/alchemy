@@ -32,9 +32,7 @@ export interface PutObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: PutObjectRequest,
-    ) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError>
+    (request: PutObjectRequest) => Effect.Effect<S3.PutObjectOutput, S3.PutObjectError>
   >
 > {}
 export const PutObject = Binding.Service<PutObject>("AWS.S3.PutObject");

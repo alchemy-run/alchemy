@@ -25,12 +25,7 @@ export interface ListLanguages extends Binding.Service<
   () => Effect.Effect<
     (
       request?: translate.ListLanguagesRequest,
-    ) => Effect.Effect<
-      translate.ListLanguagesResponse,
-      translate.ListLanguagesError
-    >
+    ) => Effect.Effect<translate.ListLanguagesResponse, translate.ListLanguagesError>
   >
 > {}
-export const ListLanguages = Binding.Service<ListLanguages>(
-  "AWS.Translate.ListLanguages",
-);
+export const ListLanguages = Binding.Service<ListLanguages>("AWS.Translate.ListLanguages");

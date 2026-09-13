@@ -34,10 +34,7 @@ export interface GetReferenceMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetReferenceMetadataRequest,
-    ) => Effect.Effect<
-      omics.GetReferenceMetadataResponse,
-      omics.GetReferenceMetadataError
-    >
+    ) => Effect.Effect<omics.GetReferenceMetadataResponse, omics.GetReferenceMetadataError>
   >
 > {}
 

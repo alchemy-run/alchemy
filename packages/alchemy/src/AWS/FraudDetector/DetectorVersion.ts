@@ -117,26 +117,17 @@ export interface DetectorVersion extends Resource<
  *
  * @resource
  */
-export const DetectorVersion = Resource<DetectorVersion>(
-  "AWS.FraudDetector.DetectorVersion",
-);
+export const DetectorVersion = Resource<DetectorVersion>("AWS.FraudDetector.DetectorVersion");
 
 export const DetectorVersionProvider = () =>
   Provider.effect(
     DetectorVersion,
     Effect.gen(function* () {
       /** Read a detector version by id; typed not-found → undefined. */
-      const getVersion = Effect.fn(function* (
-        detectorId: string,
-        detectorVersionId: string,
-      ) {
+      const getVersion = Effect.fn(function* (detectorId: string, detectorVersionId: string) {
         return yield* frauddetector
           .getDetectorVersion({ detectorId, detectorVersionId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       /**
@@ -144,19 +135,12 @@ export const DetectorVersionProvider = () =>
        * references (create-once by `ruleId`; existing rules reuse their latest
        * version — rule-expression edits are expressed by changing `ruleId`).
        */
-      const ensureRules = Effect.fn(function* (
-        detectorId: string,
-        rules: RuleDefinition[],
-      ) {
+      const ensureRules = Effect.fn(function* (detectorId: string, rules: RuleDefinition[]) {
         const refs: frauddetector.Rule[] = [];
         for (const rule of rules) {
           const existing = yield* frauddetector
             .getRules({ detectorId, ruleId: rule.ruleId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           const details = existing?.ruleDetails ?? [];
           if (details.length === 0) {
             const created = yield* frauddetector.createRule({
@@ -171,9 +155,7 @@ export const DetectorVersionProvider = () =>
           } else {
             // Reuse the latest existing version of the rule.
             const latest = details.reduce((a, b) =>
-              Number(b.ruleVersion ?? "0") > Number(a.ruleVersion ?? "0")
-                ? b
-                : a,
+              Number(b.ruleVersion ?? "0") > Number(a.ruleVersion ?? "0") ? b : a,
             );
             refs.push({
               detectorId,
@@ -195,10 +177,8 @@ export const DetectorVersionProvider = () =>
           // replaces the version. Status transitions happen in place.
           if (
             (olds.detectorId ?? undefined) !== (news.detectorId ?? undefined) ||
-            (olds.ruleExecutionMode ?? undefined) !==
-              (news.ruleExecutionMode ?? undefined) ||
-            (olds.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (olds.ruleExecutionMode ?? undefined) !== (news.ruleExecutionMode ?? undefined) ||
+            (olds.description ?? undefined) !== (news.description ?? undefined) ||
             !deepEqual(olds.rules, news.rules)
           ) {
             return { action: "replace" } as const;
@@ -207,10 +187,7 @@ export const DetectorVersionProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (output?.detectorVersionId === undefined) return undefined;
-          const version = yield* getVersion(
-            output.detectorId,
-            output.detectorVersionId,
-          );
+          const version = yield* getVersion(output.detectorId, output.detectorVersionId);
           if (version === undefined) return undefined;
           return {
             detectorId: version.detectorId!,
@@ -291,11 +268,7 @@ export const DetectorVersionProvider = () =>
             })
             .pipe(
               Effect.catchTag(
-                [
-                  "ValidationException",
-                  "ConflictException",
-                  "ResourceNotFoundException",
-                ],
+                ["ValidationException", "ConflictException", "ResourceNotFoundException"],
                 () => Effect.void,
               ),
             );
@@ -304,11 +277,7 @@ export const DetectorVersionProvider = () =>
             .deleteDetectorVersion({ detectorId, detectorVersionId })
             .pipe(
               Effect.catchTag(
-                [
-                  "ValidationException",
-                  "ConflictException",
-                  "ResourceNotFoundException",
-                ],
+                ["ValidationException", "ConflictException", "ResourceNotFoundException"],
                 () => Effect.void,
               ),
             );
@@ -318,10 +287,7 @@ export const DetectorVersionProvider = () =>
             yield* frauddetector
               .deleteRule({ rule })
               .pipe(
-                Effect.catchTag(
-                  ["ValidationException", "ConflictException"],
-                  () => Effect.void,
-                ),
+                Effect.catchTag(["ValidationException", "ConflictException"], () => Effect.void),
               );
           }
         }),

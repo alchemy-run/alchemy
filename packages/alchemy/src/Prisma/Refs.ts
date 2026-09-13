@@ -13,10 +13,7 @@ export type InputObject<T extends object> = {
 export const isInputObject = <T extends object>(
   value: Input<T>,
 ): value is InputObject<T> & Input<T> =>
-  typeof value === "object" &&
-  value !== null &&
-  !Output.isOutput(value) &&
-  !Effect.isEffect(value);
+  typeof value === "object" && value !== null && !Output.isOutput(value) && !Effect.isEffect(value);
 
 export const isPrismaDevId = (value: unknown): value is string =>
   typeof value === "string" && value.startsWith("dev:");
@@ -24,10 +21,8 @@ export const isPrismaDevId = (value: unknown): value is string =>
 export const concreteIdOf = (value: unknown): string | undefined =>
   typeof value === "string" && !isPrismaDevId(value) ? value : undefined;
 
-export const concreteIdsChanged = (
-  oldId: string | undefined,
-  newId: string | undefined,
-) => oldId !== undefined && newId !== undefined && newId !== oldId;
+export const concreteIdsChanged = (oldId: string | undefined, newId: string | undefined) =>
+  oldId !== undefined && newId !== undefined && newId !== oldId;
 
 const resolveId = (label: string, value: unknown) =>
   Effect.gen(function* () {
@@ -40,22 +35,13 @@ const resolveId = (label: string, value: unknown) =>
   });
 
 export const unresolvedProjectIdOf = (project: string | Project | undefined) =>
-  concreteIdOf(
-    typeof project === "string" ? project : (project?.projectId as unknown),
-  );
+  concreteIdOf(typeof project === "string" ? project : (project?.projectId as unknown));
 
 export const resolveProjectId = (project: string | Project) =>
-  resolveId(
-    "project id",
-    typeof project === "string" ? project : (project.projectId as unknown),
-  );
+  resolveId("project id", typeof project === "string" ? project : (project.projectId as unknown));
 
-export const unresolvedDatabaseIdOf = (
-  database: string | Database | undefined,
-) =>
-  concreteIdOf(
-    typeof database === "string" ? database : (database?.databaseId as unknown),
-  );
+export const unresolvedDatabaseIdOf = (database: string | Database | undefined) =>
+  concreteIdOf(typeof database === "string" ? database : (database?.databaseId as unknown));
 
 export const resolveDatabaseId = (database: string | Database) =>
   resolveId(
@@ -64,15 +50,10 @@ export const resolveDatabaseId = (database: string | Database) =>
   );
 
 export const unresolvedBucketIdOf = (bucket: string | Bucket | undefined) =>
-  concreteIdOf(
-    typeof bucket === "string" ? bucket : (bucket?.bucketId as unknown),
-  );
+  concreteIdOf(typeof bucket === "string" ? bucket : (bucket?.bucketId as unknown));
 
 export const resolveBucketId = (bucket: string | Bucket) =>
-  resolveId(
-    "bucket id",
-    typeof bucket === "string" ? bucket : (bucket.bucketId as unknown),
-  );
+  resolveId("bucket id", typeof bucket === "string" ? bucket : (bucket.bucketId as unknown));
 
 export const unresolvedAppIdOf = (app: string | App | undefined) =>
   concreteIdOf(typeof app === "string" ? app : (app?.appId as unknown));

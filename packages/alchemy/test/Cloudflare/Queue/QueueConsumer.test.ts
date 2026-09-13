@@ -15,10 +15,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "consumer-worker.ts");
 
@@ -61,9 +58,7 @@ test.provider("create, update settings, replace script, delete", (stack) =>
       queueId: initial.queue.queueId,
       consumerId: initial.consumer.consumerId,
     });
-    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-      initial.workerA.workerName,
-    );
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(initial.workerA.workerName);
 
     // Settings-only change is an update, not a replace — consumerId
     // must remain stable.
@@ -120,9 +115,7 @@ test.provider("create, update settings, replace script, delete", (stack) =>
       }),
     );
 
-    expect(replaced.consumer.consumerId).not.toEqual(
-      initial.consumer.consumerId,
-    );
+    expect(replaced.consumer.consumerId).not.toEqual(initial.consumer.consumerId);
     expect(replaced.consumer.scriptName).toEqual(replaced.workerB.workerName);
 
     const liveReplaced = yield* queues.getConsumer({
@@ -130,9 +123,9 @@ test.provider("create, update settings, replace script, delete", (stack) =>
       queueId: replaced.queue.queueId,
       consumerId: replaced.consumer.consumerId,
     });
-    expect(
-      "scriptName" in liveReplaced ? liveReplaced.scriptName : undefined,
-    ).toEqual(replaced.workerB.workerName);
+    expect("scriptName" in liveReplaced ? liveReplaced.scriptName : undefined).toEqual(
+      replaced.workerB.workerName,
+    );
 
     // The original consumer must be gone after the replace.
     const oldExit = yield* Effect.exit(
@@ -235,9 +228,7 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
           times: 8,
         }),
       );
-    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-      recovered.worker.workerName,
-    );
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(recovered.worker.workerName);
 
     yield* stack.destroy();
   }).pipe(logLevel),
@@ -306,9 +297,7 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
       queueId: adopted.queue.queueId,
       consumerId: adopted.consumer.consumerId,
     });
-    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-      adopted.worker.workerName,
-    );
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(adopted.worker.workerName);
 
     yield* stack.destroy();
   }).pipe(logLevel),
@@ -326,85 +315,83 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
  * a clear, actionable error naming both the existing script and the
  * desired one.
  */
-test.provider(
-  "fails clearly when queue has consumer for different script",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("fails clearly when queue has consumer for different script", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      // Phase 1: deploy worker A as the queue's consumer, then wipe just
-      // the Consumer state so the next deploy thinks it's a
-      // greenfield create.
-      const initial = yield* stack.deploy(
+    // Phase 1: deploy worker A as the queue's consumer, then wipe just
+    // the Consumer state so the next deploy thinks it's a
+    // greenfield create.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        const queue = yield* Cloudflare.Queues.Queue("Q");
+        const workerA = yield* Cloudflare.Worker("WorkerA", {
+          main,
+          compatibility: { date: "2024-01-01" },
+        });
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
+          queueId: queue.queueId,
+          scriptName: workerA.workerName,
+        });
+        return { queue, workerA, consumer };
+      }),
+    );
+
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "Consumer",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    // Phase 2: redeploy with a different scriptName under the same
+    // logical id. Cloudflare's queue still has worker A as consumer.
+    const exit = yield* Effect.exit(
+      stack.deploy(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue("Q");
-          const workerA = yield* Cloudflare.Worker("WorkerA", {
+          const workerB = yield* Cloudflare.Worker("WorkerB", {
             main,
             compatibility: { date: "2024-01-01" },
           });
           const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
             queueId: queue.queueId,
-            scriptName: workerA.workerName,
+            scriptName: workerB.workerName,
           });
-          return { queue, workerA, consumer };
+          return { queue, workerB, consumer };
         }),
-      );
+      ),
+    );
 
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Consumer",
+    expect(Exit.isFailure(exit)).toBe(true);
+    const message = JSON.stringify(exit);
+    // The error must name both the colliding existing script and the
+    // requested one — that is the difference between "user can fix
+    // this" and "what does this mean".
+    expect(message).toContain(initial.workerA.workerName);
+    expect(message).toContain("only one worker consumer");
+
+    // Cleanup: re-introduce the Consumer entry pointing at workerA so
+    // destroy can remove the cloud consumer.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        const queue = yield* Cloudflare.Queues.Queue("Q");
+        const workerA = yield* Cloudflare.Worker("WorkerA", {
+          main,
+          compatibility: { date: "2024-01-01" },
         });
-      }).pipe(Effect.provide(stack.state));
+        yield* Cloudflare.Queues.Consumer("Consumer", {
+          queueId: queue.queueId,
+          scriptName: workerA.workerName,
+        });
+        return queue;
+      }),
+    );
 
-      // Phase 2: redeploy with a different scriptName under the same
-      // logical id. Cloudflare's queue still has worker A as consumer.
-      const exit = yield* Effect.exit(
-        stack.deploy(
-          Effect.gen(function* () {
-            const queue = yield* Cloudflare.Queues.Queue("Q");
-            const workerB = yield* Cloudflare.Worker("WorkerB", {
-              main,
-              compatibility: { date: "2024-01-01" },
-            });
-            const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
-              queueId: queue.queueId,
-              scriptName: workerB.workerName,
-            });
-            return { queue, workerB, consumer };
-          }),
-        ),
-      );
-
-      expect(Exit.isFailure(exit)).toBe(true);
-      const message = JSON.stringify(exit);
-      // The error must name both the colliding existing script and the
-      // requested one — that is the difference between "user can fix
-      // this" and "what does this mean".
-      expect(message).toContain(initial.workerA.workerName);
-      expect(message).toContain("only one worker consumer");
-
-      // Cleanup: re-introduce the Consumer entry pointing at workerA so
-      // destroy can remove the cloud consumer.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queues.Queue("Q");
-          const workerA = yield* Cloudflare.Worker("WorkerA", {
-            main,
-            compatibility: { date: "2024-01-01" },
-          });
-          yield* Cloudflare.Queues.Consumer("Consumer", {
-            queueId: queue.queueId,
-            scriptName: workerA.workerName,
-          });
-          return queue;
-        }),
-      );
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 /**
@@ -419,84 +406,80 @@ test.provider(
  * foreign-consumer error (which stays reserved for scripts of a
  * *different* logical worker — see the previous test).
  */
-test.provider(
-  "adopts stranded consumer from a replaced generation of the same worker",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("adopts stranded consumer from a replaced generation of the same worker", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queues.Queue("Q");
-          const worker = yield* Cloudflare.Worker("Worker", {
-            main,
-            compatibility: { date: "2024-01-01" },
-          });
-          const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
-            queueId: queue.queueId,
-            scriptName: worker.workerName,
-          });
-          return { queue, worker, consumer };
-        }),
-      );
-
-      // Lose the consumer's state entry — the live consumer stays
-      // attached to the queue, pointing at the current script.
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Consumer",
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        const queue = yield* Cloudflare.Queues.Queue("Q");
+        const worker = yield* Cloudflare.Worker("Worker", {
+          main,
+          compatibility: { date: "2024-01-01" },
         });
-      }).pipe(Effect.provide(stack.state));
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
+          queueId: queue.queueId,
+          scriptName: worker.workerName,
+        });
+        return { queue, worker, consumer };
+      }),
+    );
 
-      // Replace the worker's physical script (explicit `name` forces a
-      // replacement) in the same deploy that recreates the consumer.
-      // Reconcile observes the stranded consumer on the old script —
-      // same stack/stage/id tags — and must rebuild instead of dying.
-      // Previews cap script names at 54 chars — trim before suffixing.
-      const replacedName = `${initial.worker.workerName.slice(0, 48)}-v2`;
-      const recovered = yield* stack.deploy(
-        Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queues.Queue("Q");
-          const worker = yield* Cloudflare.Worker("Worker", {
-            main,
-            name: replacedName,
-            compatibility: { date: "2024-01-01" },
-          });
-          const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
-            queueId: queue.queueId,
-            scriptName: worker.workerName,
-          });
-          return { queue, worker, consumer };
+    // Lose the consumer's state entry — the live consumer stays
+    // attached to the queue, pointing at the current script.
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "Consumer",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    // Replace the worker's physical script (explicit `name` forces a
+    // replacement) in the same deploy that recreates the consumer.
+    // Reconcile observes the stranded consumer on the old script —
+    // same stack/stage/id tags — and must rebuild instead of dying.
+    // Previews cap script names at 54 chars — trim before suffixing.
+    const replacedName = `${initial.worker.workerName.slice(0, 48)}-v2`;
+    const recovered = yield* stack.deploy(
+      Effect.gen(function* () {
+        const queue = yield* Cloudflare.Queues.Queue("Q");
+        const worker = yield* Cloudflare.Worker("Worker", {
+          main,
+          name: replacedName,
+          compatibility: { date: "2024-01-01" },
+        });
+        const consumer = yield* Cloudflare.Queues.Consumer("Consumer", {
+          queueId: queue.queueId,
+          scriptName: worker.workerName,
+        });
+        return { queue, worker, consumer };
+      }),
+    );
+
+    expect(recovered.worker.workerName).toEqual(replacedName);
+    expect(recovered.consumer.scriptName).toEqual(replacedName);
+
+    const live = yield* queues
+      .getConsumer({
+        accountId,
+        queueId: recovered.queue.queueId,
+        consumerId: recovered.consumer.consumerId,
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ConsumerNotFound",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
         }),
       );
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(replacedName);
 
-      expect(recovered.worker.workerName).toEqual(replacedName);
-      expect(recovered.consumer.scriptName).toEqual(replacedName);
-
-      const live = yield* queues
-        .getConsumer({
-          accountId,
-          queueId: recovered.queue.queueId,
-          consumerId: recovered.consumer.consumerId,
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "ConsumerNotFound",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
-          }),
-        );
-      expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-        replacedName,
-      );
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 /**
@@ -640,9 +623,7 @@ test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
       queueId: promoted.queue.queueId,
       consumerId: promoted.consumer.consumerId,
     });
-    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
-      promoted.worker.workerName,
-    );
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(promoted.worker.workerName);
 
     yield* stack.destroy();
   }).pipe(logLevel),
@@ -678,9 +659,7 @@ test.provider("list enumerates the deployed consumer", (stack) =>
     const provider = yield* Provider.findProvider(Cloudflare.Queues.Consumer);
     const all = yield* provider.list();
 
-    const found = all.find(
-      (c) => c.consumerId === deployed.consumer.consumerId,
-    );
+    const found = all.find((c) => c.consumerId === deployed.consumer.consumerId);
     expect(found).toBeDefined();
     expect(found?.queueId).toEqual(deployed.queue.queueId);
     expect(found?.scriptName).toEqual(deployed.worker.workerName);

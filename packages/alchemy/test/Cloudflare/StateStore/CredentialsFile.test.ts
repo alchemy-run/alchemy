@@ -32,10 +32,7 @@ describe("isStateStoreCredentialsStale", () => {
 
   it("is stale for a legacy cache with no accountId", () => {
     expect(
-      isStateStoreCredentialsStale(
-        { url: "https://s.workers.dev", authToken: "t" },
-        ACCOUNT_A,
-      ),
+      isStateStoreCredentialsStale({ url: "https://s.workers.dev", authToken: "t" }, ACCOUNT_A),
     ).toBe(true);
   });
 });

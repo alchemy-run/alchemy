@@ -29,13 +29,8 @@ export interface DescribeLimits extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeLimitsRequest,
-    ) => Effect.Effect<
-      Kinesis.DescribeLimitsOutput,
-      Kinesis.DescribeLimitsError
-    >
+    ) => Effect.Effect<Kinesis.DescribeLimitsOutput, Kinesis.DescribeLimitsError>
   >
 > {}
 
-export const DescribeLimits = Binding.Service<DescribeLimits>(
-  "AWS.Kinesis.DescribeLimits",
-);
+export const DescribeLimits = Binding.Service<DescribeLimits>("AWS.Kinesis.DescribeLimits");

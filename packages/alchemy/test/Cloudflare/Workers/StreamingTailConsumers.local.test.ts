@@ -21,10 +21,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -43,10 +40,7 @@ const getTextReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -82,17 +76,11 @@ test.provider(
         Effect.gen(function* () {
           const events = yield* Cloudflare.KV.Namespace("StreamTailEvents");
           const consumer = yield* Cloudflare.Worker("StreamingTailConsumer", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/tail/streaming-tail-consumer.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail/streaming-tail-consumer.ts"),
             env: { EVENTS: events },
           });
           const producer = yield* Cloudflare.Worker("StreamingTailProducer", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/tail/streaming-tail-producer.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail/streaming-tail-producer.ts"),
             streamingTailConsumers: [consumer],
           });
           return { events, consumer, producer };
@@ -113,12 +101,8 @@ test.provider(
       expect(deployed.producer.tailConsumers).toBeUndefined();
 
       // Readiness probes for both freshly started workerds.
-      expect(yield* getTextReady(deployed.consumer.url!)).toBe(
-        "streaming-tail-consumer-ok",
-      );
-      expect(yield* getTextReady(deployed.producer.url!)).toBe(
-        "streaming-producer-ok",
-      );
+      expect(yield* getTextReady(deployed.consumer.url!)).toBe("streaming-tail-consumer-ok");
+      expect(yield* getTextReady(deployed.producer.url!)).toBe("streaming-producer-ok");
 
       // Drive the producer and poll the consumer's read route until a full
       // session carrying the producer's log marker arrives. The producer's
@@ -131,9 +115,7 @@ test.provider(
           Effect.flatMap((res) => res.text),
           Effect.orDie,
         );
-        const res = yield* client
-          .get(`${deployed.consumer.url}/events`)
-          .pipe(Effect.orDie);
+        const res = yield* client.get(`${deployed.consumer.url}/events`).pipe(Effect.orDie);
         const body = (yield* res.json.pipe(Effect.orDie)) as {
           sessions?: unknown;
         };
@@ -159,16 +141,12 @@ test.provider(
       const log = events.find((tailEvent) => tailEvent.event?.type === "log");
       expect(log).toBeDefined();
       expect(log?.event?.message).toEqual([STREAM_TAIL_MARKER]);
-      const onset = events.find(
-        (tailEvent) => tailEvent.event?.type === "onset",
-      );
+      const onset = events.find((tailEvent) => tailEvent.event?.type === "onset");
       // Every streamed event belongs to the onset's invocation.
       for (const tailEvent of events) {
         expect(tailEvent.invocationId).toBe(onset?.invocationId);
       }
-      const outcome = events.find(
-        (tailEvent) => tailEvent.event?.type === "outcome",
-      );
+      const outcome = events.find((tailEvent) => tailEvent.event?.type === "outcome");
       expect(outcome?.event?.outcome).toBe("ok");
 
       yield* stack.destroy();

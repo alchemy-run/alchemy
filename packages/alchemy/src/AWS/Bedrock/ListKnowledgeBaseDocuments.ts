@@ -47,7 +47,6 @@ export interface ListKnowledgeBaseDocuments extends Binding.Service<
     >
   >
 > {}
-export const ListKnowledgeBaseDocuments =
-  Binding.Service<ListKnowledgeBaseDocuments>(
-    "AWS.Bedrock.ListKnowledgeBaseDocuments",
-  );
+export const ListKnowledgeBaseDocuments = Binding.Service<ListKnowledgeBaseDocuments>(
+  "AWS.Bedrock.ListKnowledgeBaseDocuments",
+);

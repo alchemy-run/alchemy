@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface DescribeTasksRequest extends Omit<
-  ECS.DescribeTasksRequest,
-  "cluster"
-> {}
+export interface DescribeTasksRequest extends Omit<ECS.DescribeTasksRequest, "cluster"> {}
 
 /**
  * Runtime binding for `ecs:DescribeTasks`.
@@ -38,6 +35,4 @@ export interface DescribeTasks extends Binding.Service<
     ) => Effect.Effect<ECS.DescribeTasksResponse, ECS.DescribeTasksError>
   >
 > {}
-export const DescribeTasks = Binding.Service<DescribeTasks>(
-  "AWS.ECS.DescribeTasks",
-);
+export const DescribeTasks = Binding.Service<DescribeTasks>("AWS.ECS.DescribeTasks");

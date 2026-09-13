@@ -26,9 +26,7 @@ import * as RuntimeServices from "../../RuntimeServices.ts";
 import type { BindingHooks, RuntimeWorker } from "../../RuntimeWorker.ts";
 import * as Workerd from "../../workerd/Workerd.ts";
 
-export const configProvider = (
-  input: { fileSystemSupportsWatcher?: boolean } = {},
-) =>
+export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = {}) =>
   ConfigProvider.layer(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -36,8 +34,7 @@ export const configProvider = (
         CLOUDFLARE_RUNTIME_HOME: yield* fs.makeTempDirectoryScoped({
           prefix: "cloudflare-runtime-test",
         }),
-        CLOUDFLARE_RUNTIME_FILE_SYSTEM_SUPPORTS_WATCHER:
-          input.fileSystemSupportsWatcher,
+        CLOUDFLARE_RUNTIME_FILE_SYSTEM_SUPPORTS_WATCHER: input.fileSystemSupportsWatcher,
       });
     }),
   );
@@ -85,18 +82,14 @@ export interface TestWorker {
  * The returned `fetch` accepts a path or full URL; relative paths are
  * resolved against the worker's base URL.
  */
-export const startTestWorker = <B extends BindingHooks>(
-  worker: RuntimeWorker<B>,
-) =>
+export const startTestWorker = <B extends BindingHooks>(worker: RuntimeWorker<B>) =>
   Effect.gen(function* () {
     const runtime = yield* Runtime.Runtime;
     const baseUrl = yield* runtime.start(worker);
     const fetch = (path: string, init?: RequestInit) =>
       Effect.promise(() => globalThis.fetch(new URL(path, baseUrl), init));
     const fetchText = (path: string, init?: RequestInit) =>
-      fetch(path, init).pipe(
-        Effect.flatMap((res) => Effect.promise(() => res.text())),
-      );
+      fetch(path, init).pipe(Effect.flatMap((res) => Effect.promise(() => res.text())));
     const fetchJson = <T>(path: string, init?: RequestInit) =>
       fetch(path, init).pipe(
         Effect.flatMap((res) => Effect.promise(() => res.json() as Promise<T>)),
@@ -110,9 +103,7 @@ export const waitForRegistryEntry = Effect.fn(function* (
 ) {
   const registry = yield* Registry.Registry;
   const queue = yield* Queue.unbounded<ResolvedTargetMap, Done<void>>();
-  yield* registry
-    .subscribe([subscriber])
-    .pipe(Stream.runIntoQueue(queue), Effect.forkScoped);
+  yield* registry.subscribe([subscriber]).pipe(Stream.runIntoQueue(queue), Effect.forkScoped);
   while (true) {
     const value = yield* Queue.take(queue);
     const isDefined = resolvedTargetKey(subscriber) in value;
@@ -134,9 +125,7 @@ export const poll = <T>(
 ) =>
   worker.fetchJson<T>(path).pipe(
     Effect.flatMap((value) =>
-      predicate(value)
-        ? Effect.succeed(value)
-        : Effect.fail(new PredicateFailed({ value: value })),
+      predicate(value) ? Effect.succeed(value) : Effect.fail(new PredicateFailed({ value: value })),
     ),
     Effect.retry({
       while: (error) => error._tag === "PredicateFailed",

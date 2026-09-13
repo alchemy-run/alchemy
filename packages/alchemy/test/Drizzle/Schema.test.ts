@@ -79,9 +79,7 @@ const stageWorkspace = (initialSource: string) =>
 const readMigrationDirs = (out: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    return (yield* fs.readDirectory(out))
-      .filter((name) => /^\d+_/.test(name))
-      .sort();
+    return (yield* fs.readDirectory(out)).filter((name) => /^\d+_/.test(name)).sort();
   });
 
 // Returns snapshots in chain order (each entry's prevIds points at the one
@@ -95,9 +93,7 @@ const readSnapshots = (out: string) =>
     const dirs = yield* readMigrationDirs(out);
     const snapshots: Array<{ id: string; prevIds: string[] }> = [];
     for (const dir of dirs) {
-      const text = yield* fs.readFileString(
-        path.join(out, dir, "snapshot.json"),
-      );
+      const text = yield* fs.readFileString(path.join(out, dir, "snapshot.json"));
       snapshots.push(
         yield* Effect.try({
           try: () => JSON.parse(text) as { id: string; prevIds: string[] },
@@ -168,41 +164,39 @@ test.provider(
     }),
 );
 
-test.provider(
-  "deploy after a real schema change updates the resource",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+test.provider("deploy after a real schema change updates the resource", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const ws = yield* stageWorkspace(SCHEMA_SOURCE);
 
-      const initial = yield* stack.deploy(
-        Drizzle.Schema("app-schema", {
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
-      );
-      const [initialSnapshot] = yield* readSnapshots(ws.out);
+    const initial = yield* stack.deploy(
+      Drizzle.Schema("app-schema", {
+        schema: ws.schemaPath,
+        out: ws.out,
+      }),
+    );
+    const [initialSnapshot] = yield* readSnapshots(ws.out);
 
-      // Write the drifted schema as a *new* file so the dynamic import
-      // cache doesn't hand us the original module.
-      const driftedSchemaPath = path.join(ws.root, "schema-drifted.ts");
-      yield* fs.writeFileString(driftedSchemaPath, DRIFTED_SCHEMA_SOURCE);
-      yield* Effect.sleep("1 second");
+    // Write the drifted schema as a *new* file so the dynamic import
+    // cache doesn't hand us the original module.
+    const driftedSchemaPath = path.join(ws.root, "schema-drifted.ts");
+    yield* fs.writeFileString(driftedSchemaPath, DRIFTED_SCHEMA_SOURCE);
+    yield* Effect.sleep("1 second");
 
-      const drifted = yield* stack.deploy(
-        Drizzle.Schema("app-schema", {
-          schema: driftedSchemaPath,
-          out: ws.out,
-        }),
-      );
+    const drifted = yield* stack.deploy(
+      Drizzle.Schema("app-schema", {
+        schema: driftedSchemaPath,
+        out: ws.out,
+      }),
+    );
 
-      expect(yield* getStatus("app-schema")).toEqual("updated");
-      expect(drifted.snapshotHash).not.toEqual(initial.snapshotHash);
-      const snapshots = yield* readSnapshots(ws.out);
-      expect(snapshots).toHaveLength(2);
-      expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
-    }),
+    expect(yield* getStatus("app-schema")).toEqual("updated");
+    expect(drifted.snapshotHash).not.toEqual(initial.snapshotHash);
+    const snapshots = yield* readSnapshots(ws.out);
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
+  }),
 );
 
 test.provider("list returns [] (non-listable local build artifact)", (stack) =>
@@ -217,60 +211,56 @@ test.provider("list returns [] (non-listable local build artifact)", (stack) =>
   }),
 );
 
-test.provider(
-  "sqlite schemas generate migrations through the CLI fallback",
-  (stack) =>
-    Effect.gen(function* () {
-      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+test.provider("sqlite schemas generate migrations through the CLI fallback", (stack) =>
+  Effect.gen(function* () {
+    const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
-      yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
-      );
+    yield* stack.deploy(
+      Drizzle.Schema("sqlite-schema", {
+        dialect: "sqlite",
+        schema: ws.schemaPath,
+        out: ws.out,
+      }),
+    );
 
-      const dirs = yield* readMigrationDirs(ws.out);
-      expect(dirs).toHaveLength(1);
-      // The CLI owns the real write path for sqlite fallback; it should keep
-      // drizzle-kit's generated migration directory names instead of
-      // Alchemy's programmatic `<timestamp>_migration` convention.
-      expect(dirs[0]).not.toMatch(/_migration$/);
+    const dirs = yield* readMigrationDirs(ws.out);
+    expect(dirs).toHaveLength(1);
+    // The CLI owns the real write path for sqlite fallback; it should keep
+    // drizzle-kit's generated migration directory names instead of
+    // Alchemy's programmatic `<timestamp>_migration` convention.
+    expect(dirs[0]).not.toMatch(/_migration$/);
 
-      const snapshots = yield* readSnapshots(ws.out);
-      expect(snapshots).toHaveLength(1);
-      expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
-    }),
+    const snapshots = yield* readSnapshots(ws.out);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
+  }),
 );
 
-test.provider(
-  "sqlite CLI fallback repeated deploys with no drift stay noop",
-  (stack) =>
-    Effect.gen(function* () {
-      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+test.provider("sqlite CLI fallback repeated deploys with no drift stay noop", (stack) =>
+  Effect.gen(function* () {
+    const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
-      yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
-      );
-      const initialDirs = yield* readMigrationDirs(ws.out);
-      expect(yield* getStatus("sqlite-schema")).toEqual("created");
+    yield* stack.deploy(
+      Drizzle.Schema("sqlite-schema", {
+        dialect: "sqlite",
+        schema: ws.schemaPath,
+        out: ws.out,
+      }),
+    );
+    const initialDirs = yield* readMigrationDirs(ws.out);
+    expect(yield* getStatus("sqlite-schema")).toEqual("created");
 
-      yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
-      );
+    yield* stack.deploy(
+      Drizzle.Schema("sqlite-schema", {
+        dialect: "sqlite",
+        schema: ws.schemaPath,
+        out: ws.out,
+      }),
+    );
 
-      expect(yield* getStatus("sqlite-schema")).toEqual("created");
-      expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
-    }),
+    expect(yield* getStatus("sqlite-schema")).toEqual("created");
+    expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
+  }),
 );
 
 test.provider("sqlite CLI fallback updates after schema drift", (stack) =>
@@ -310,50 +300,43 @@ test.provider("sqlite CLI fallback updates after schema drift", (stack) =>
   }),
 );
 
-test.provider(
-  "sqlite CLI fallback refuses ambiguous drift without a TTY",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+test.provider("sqlite CLI fallback refuses ambiguous drift without a TTY", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
-      yield* stack.deploy(
+    yield* stack.deploy(
+      Drizzle.Schema("sqlite-schema", {
+        dialect: "sqlite",
+        schema: ws.schemaPath,
+        out: ws.out,
+      }),
+    );
+    const initialDirs = yield* readMigrationDirs(ws.out);
+
+    const renamedSchemaPath = path.join(ws.root, "schema-sqlite-renamed.ts");
+    yield* fs.writeFileString(renamedSchemaPath, SQLITE_RENAMED_COLUMN_SCHEMA_SOURCE);
+    yield* Effect.sleep("1 second");
+
+    // A column rename is ambiguous (rename vs drop+create) and the chosen
+    // SQL is applied to the real database later in the same deploy, so the
+    // non-interactive CLI must fail with guidance instead of deciding.
+    const result = yield* Effect.result(
+      stack.deploy(
         Drizzle.Schema("sqlite-schema", {
           dialect: "sqlite",
-          schema: ws.schemaPath,
+          schema: renamedSchemaPath,
           out: ws.out,
         }),
-      );
-      const initialDirs = yield* readMigrationDirs(ws.out);
+      ),
+    );
 
-      const renamedSchemaPath = path.join(ws.root, "schema-sqlite-renamed.ts");
-      yield* fs.writeFileString(
-        renamedSchemaPath,
-        SQLITE_RENAMED_COLUMN_SCHEMA_SOURCE,
-      );
-      yield* Effect.sleep("1 second");
-
-      // A column rename is ambiguous (rename vs drop+create) and the chosen
-      // SQL is applied to the real database later in the same deploy, so the
-      // non-interactive CLI must fail with guidance instead of deciding.
-      const result = yield* Effect.result(
-        stack.deploy(
-          Drizzle.Schema("sqlite-schema", {
-            dialect: "sqlite",
-            schema: renamedSchemaPath,
-            out: ws.out,
-          }),
-        ),
-      );
-
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain(
-          "drizzle-kit needs a decision",
-        );
-      }
-      // No migration was written for the undecided drift.
-      expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
-    }),
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain("drizzle-kit needs a decision");
+    }
+    // No migration was written for the undecided drift.
+    expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
+  }),
 );

@@ -21,10 +21,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -43,10 +40,7 @@ const getTextReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -74,17 +68,11 @@ test.provider(
         Effect.gen(function* () {
           const events = yield* Cloudflare.KV.Namespace("TailEvents");
           const consumer = yield* Cloudflare.Worker("TailConsumer", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/tail/tail-consumer.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail/tail-consumer.ts"),
             env: { EVENTS: events },
           });
           const producer = yield* Cloudflare.Worker("TailProducer", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/tail/tail-producer.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail/tail-producer.ts"),
             tailConsumers: [consumer],
           });
           return { events, consumer, producer };
@@ -99,14 +87,10 @@ test.provider(
 
       // Attribute parity with the live provider: the consumer is recorded
       // by script name.
-      expect(deployed.producer.tailConsumers).toEqual([
-        { service: deployed.consumer.workerName },
-      ]);
+      expect(deployed.producer.tailConsumers).toEqual([{ service: deployed.consumer.workerName }]);
 
       // Readiness probes for both freshly started workerds.
-      expect(yield* getTextReady(deployed.consumer.url!)).toBe(
-        "tail-consumer-ok",
-      );
+      expect(yield* getTextReady(deployed.consumer.url!)).toBe("tail-consumer-ok");
       expect(yield* getTextReady(deployed.producer.url!)).toBe("producer-ok");
 
       // Drive the producer and poll the consumer's read route until a trace
@@ -120,9 +104,7 @@ test.provider(
           Effect.flatMap((res) => res.text),
           Effect.orDie,
         );
-        const res = yield* client
-          .get(`${deployed.consumer.url}/events`)
-          .pipe(Effect.orDie);
+        const res = yield* client.get(`${deployed.consumer.url}/events`).pipe(Effect.orDie);
         const body = (yield* res.json.pipe(Effect.orDie)) as {
           batches?: unknown;
         };
@@ -130,8 +112,7 @@ test.provider(
       }).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
-          until: (batches): boolean =>
-            batches.some((batch) => batch.includes(TAIL_MARKER)),
+          until: (batches): boolean => batches.some((batch) => batch.includes(TAIL_MARKER)),
           times: 20,
         }),
       );
@@ -145,9 +126,7 @@ test.provider(
         logs?: { message?: unknown[] }[];
       }[];
       expect(
-        items.some((item) =>
-          item.logs?.some((log) => log.message?.includes(TAIL_MARKER)),
-        ),
+        items.some((item) => item.logs?.some((log) => log.message?.includes(TAIL_MARKER))),
       ).toBe(true);
 
       yield* stack.destroy();

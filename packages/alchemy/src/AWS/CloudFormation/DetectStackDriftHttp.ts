@@ -11,9 +11,6 @@ export const DetectStackDriftHttp = Layer.effect(
     // DetectStackDrift authorizes BOTH actions on the stack — the per-stack
     // call fans out to per-resource drift checks and AWS rejects the call
     // with AccessDenied on cloudformation:DetectStackResourceDrift alone.
-    actions: [
-      "cloudformation:DetectStackDrift",
-      "cloudformation:DetectStackResourceDrift",
-    ],
+    actions: ["cloudformation:DetectStackDrift", "cloudformation:DetectStackResourceDrift"],
   }),
 );

@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // IMPORTANT: the workers.dev subdomain is account-global state — renaming it
 // changes the URL of EVERY deployed Worker on the account. This suite is
@@ -101,9 +98,7 @@ test.provider(
       const liveBefore = yield* getLiveSubdomain;
       expect(liveBefore.length).toBeGreaterThan(0);
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Workers.Subdomain,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Workers.Subdomain);
       const all = yield* provider.list();
 
       expect(all.length).toEqual(1);

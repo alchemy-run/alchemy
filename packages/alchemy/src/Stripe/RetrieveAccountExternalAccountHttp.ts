@@ -33,20 +33,19 @@ export const RetrieveAccountExternalAccountHttp = Layer.effect(
       );
       const id = yield* asStringEffect(externalAccount.id);
       const account = yield* asStringEffect(externalAccount.account);
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
-      return Effect.fn(
-        `Stripe.RetrieveAccountExternalAccount(${externalAccount.LogicalId})`,
-      )(function* (request?: { expand?: string[] }) {
-        return yield* auth(
-          GetAccountExternalAccount({
-            ...(request ?? {}),
-            id: yield* id,
-            account: yield* account,
-          }),
-        );
-      });
+      return Effect.fn(`Stripe.RetrieveAccountExternalAccount(${externalAccount.LogicalId})`)(
+        function* (request?: { expand?: string[] }) {
+          return yield* auth(
+            GetAccountExternalAccount({
+              ...(request ?? {}),
+              id: yield* id,
+              account: yield* account,
+            }),
+          );
+        },
+      );
     });
   }),
 );

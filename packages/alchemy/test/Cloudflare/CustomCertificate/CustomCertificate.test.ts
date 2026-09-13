@@ -14,13 +14,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Custom (BYO) edge certificates are a Business/Enterprise feature. On the
 // testing account's zone every custom_certificates call fails with
@@ -33,9 +29,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -47,9 +41,7 @@ const readFixture = (name: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    return yield* fs.readFileString(
-      path.join(import.meta.dirname, "fixtures", name),
-    );
+    return yield* fs.readFileString(path.join(import.meta.dirname, "fixtures", name));
   });
 
 // A freshly minted scoped token propagates eventually-consistently across
@@ -65,37 +57,35 @@ const getCertificate = (zoneId: string, customCertificateId: string) =>
     }),
   );
 
-test.provider(
-  "surfaces the typed PlanLevelNotAllowed error on unentitled zones",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
-      const certificate = yield* readFixture("cert1.pem");
-      const privateKey = yield* readFixture("key1.pem");
+test.provider("surfaces the typed PlanLevelNotAllowed error on unentitled zones", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+    const certificate = yield* readFixture("cert1.pem");
+    const privateKey = yield* readFixture("key1.pem");
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // The standard testing zone is not on a Business/Enterprise plan —
-      // the distilled call must fail with the typed entitlement tag.
-      const error = yield* customCertificates
-        .createCustomCertificate({
-          zoneId,
-          certificate,
-          privateKey,
-          type: "sni_custom",
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-          Effect.flip,
-        );
-      expect(error._tag).toEqual("PlanLevelNotAllowed");
+    // The standard testing zone is not on a Business/Enterprise plan —
+    // the distilled call must fail with the typed entitlement tag.
+    const error = yield* customCertificates
+      .createCustomCertificate({
+        zoneId,
+        certificate,
+        privateKey,
+        type: "sni_custom",
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+        Effect.flip,
+      );
+    expect(error._tag).toEqual("PlanLevelNotAllowed");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // `list()` fans out over every zone in the account, paginates each zone's
@@ -109,9 +99,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomCertificate.CustomCertificate,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomCertificate.CustomCertificate);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -128,22 +116,17 @@ test.provider(
         const key1 = yield* readFixture("key1.pem");
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.CustomCertificate.CustomCertificate(
-              "ListEdgeCert",
-              {
-                zoneId: entitledZoneId,
-                certificate: cert1,
-                privateKey: Redacted.make(key1),
-                type: "sni_custom",
-                bundleMethod: "force",
-              },
-            );
+            return yield* Cloudflare.CustomCertificate.CustomCertificate("ListEdgeCert", {
+              zoneId: entitledZoneId,
+              certificate: cert1,
+              privateKey: Redacted.make(key1),
+              type: "sni_custom",
+              bundleMethod: "force",
+            });
           }),
         );
         const after = yield* provider.list();
-        expect(
-          after.some((c) => c.certificateId === deployed.certificateId),
-        ).toBe(true);
+        expect(after.some((c) => c.certificateId === deployed.certificateId)).toBe(true);
       }
 
       yield* stack.destroy();
@@ -166,16 +149,13 @@ test.provider.skipIf(!entitledZoneId)(
       // Create — upload the first certificate/key pair.
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomCertificate.CustomCertificate(
-            "EdgeCert",
-            {
-              zoneId,
-              certificate: cert1,
-              privateKey: Redacted.make(key1),
-              type: "sni_custom",
-              bundleMethod: "force",
-            },
-          );
+          return yield* Cloudflare.CustomCertificate.CustomCertificate("EdgeCert", {
+            zoneId,
+            certificate: cert1,
+            privateKey: Redacted.make(key1),
+            type: "sni_custom",
+            bundleMethod: "force",
+          });
         }),
       );
 
@@ -192,16 +172,13 @@ test.provider.skipIf(!entitledZoneId)(
       // Rotate in place — a new cert/key pair PATCHes the same id.
       const rotated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomCertificate.CustomCertificate(
-            "EdgeCert",
-            {
-              zoneId,
-              certificate: cert2,
-              privateKey: Redacted.make(key2),
-              type: "sni_custom",
-              bundleMethod: "force",
-            },
-          );
+          return yield* Cloudflare.CustomCertificate.CustomCertificate("EdgeCert", {
+            zoneId,
+            certificate: cert2,
+            privateKey: Redacted.make(key2),
+            type: "sni_custom",
+            bundleMethod: "force",
+          });
         }),
       );
       expect(rotated.certificateId).toEqual(created.certificateId);
@@ -212,16 +189,13 @@ test.provider.skipIf(!entitledZoneId)(
       // Changing the immutable `type` triggers a replacement.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.CustomCertificate.CustomCertificate(
-            "EdgeCert",
-            {
-              zoneId,
-              certificate: cert2,
-              privateKey: Redacted.make(key2),
-              type: "legacy_custom",
-              bundleMethod: "force",
-            },
-          );
+          return yield* Cloudflare.CustomCertificate.CustomCertificate("EdgeCert", {
+            zoneId,
+            certificate: cert2,
+            privateKey: Redacted.make(key2),
+            type: "legacy_custom",
+            bundleMethod: "force",
+          });
         }),
       );
       expect(replaced.certificateId).not.toEqual(rotated.certificateId);

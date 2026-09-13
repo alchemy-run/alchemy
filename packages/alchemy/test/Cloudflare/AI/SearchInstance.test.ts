@@ -12,10 +12,7 @@ import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -37,16 +34,10 @@ const expectGone = (accountId: string, id: string, namespace = "default") =>
     // A missing instance (`AiSearchInstanceNotFound`, code 7002) or a
     // missing enclosing namespace (`NamespaceNotFound`, code 7063) is the
     // success condition here.
-    Effect.catchTag(
-      ["AiSearchInstanceNotFound", "NamespaceNotFound"],
-      () => Effect.void,
-    ),
+    Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -119,18 +110,13 @@ test.provider(
       );
 
       expect(updated.instance.instanceId).toEqual(initial.instance.instanceId);
-      expect(updated.instance.aiSearchModel).toEqual(
-        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-      );
+      expect(updated.instance.aiSearchModel).toEqual("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
 
       // The update PUT returns the new settings immediately, but the
       // out-of-band read endpoint reflects them eventually-consistently (it
       // briefly serves `aiSearchModel: ""` right after the write). Poll the
       // readback until the mutated props land before asserting, bounded.
-      const liveUpdated = yield* getInstance(
-        accountId,
-        updated.instance.instanceId,
-      ).pipe(
+      const liveUpdated = yield* getInstance(accountId, updated.instance.instanceId).pipe(
         Effect.flatMap((live) =>
           live.aiSearchModel === "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
             ? Effect.succeed(live)
@@ -142,9 +128,7 @@ test.provider(
           times: 20,
         }),
       );
-      expect(liveUpdated.aiSearchModel).toEqual(
-        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-      );
+      expect(liveUpdated.aiSearchModel).toEqual("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
       expect(liveUpdated.maxNumResults).toEqual(20);
       expect(liveUpdated.chunkSize).toEqual(512);
       expect(liveUpdated.chunkOverlap).toEqual(15);
@@ -178,9 +162,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        program({ embeddingModel: "@cf/baai/bge-m3" }),
-      );
+      const initial = yield* stack.deploy(program({ embeddingModel: "@cf/baai/bge-m3" }));
       expect(initial.instance.embeddingModel).toEqual("@cf/baai/bge-m3");
 
       const replaced = yield* stack.deploy(
@@ -189,12 +171,8 @@ test.provider(
 
       // The embedding model defines the vector space and is fixed at
       // creation — a new physical instance exists.
-      expect(replaced.instance.instanceId).not.toEqual(
-        initial.instance.instanceId,
-      );
-      expect(replaced.instance.embeddingModel).toEqual(
-        "@cf/baai/bge-large-en-v1.5",
-      );
+      expect(replaced.instance.instanceId).not.toEqual(initial.instance.instanceId);
+      expect(replaced.instance.embeddingModel).toEqual("@cf/baai/bge-large-en-v1.5");
 
       const live = yield* getInstance(accountId, replaced.instance.instanceId);
       expect(live.embeddingModel).toEqual("@cf/baai/bge-large-en-v1.5");
@@ -263,21 +241,14 @@ test.provider(
 
       const deployed = yield* stack.deploy(program());
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.AI.SearchInstance,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.AI.SearchInstance);
       const all = yield* provider.list();
 
-      expect(
-        all.some((x) => x.instanceId === deployed.instance.instanceId),
-      ).toBe(true);
+      expect(all.some((x) => x.instanceId === deployed.instance.instanceId)).toBe(true);
 
       yield* stack.destroy();
 
-      yield* expectGone(
-        deployed.instance.accountId,
-        deployed.instance.instanceId,
-      );
+      yield* expectGone(deployed.instance.accountId, deployed.instance.instanceId);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
@@ -391,11 +362,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      yield* expectGone(
-        accountId,
-        initial.instance.instanceId,
-        initial.namespace.name,
-      );
+      yield* expectGone(accountId, initial.instance.instanceId, initial.namespace.name);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

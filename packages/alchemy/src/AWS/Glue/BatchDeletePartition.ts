@@ -38,10 +38,7 @@ export interface BatchDeletePartition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchDeletePartitionRequest,
-    ) => Effect.Effect<
-      glue.BatchDeletePartitionResponse,
-      glue.BatchDeletePartitionError
-    >
+    ) => Effect.Effect<glue.BatchDeletePartitionResponse, glue.BatchDeletePartitionError>
   >
 > {}
 

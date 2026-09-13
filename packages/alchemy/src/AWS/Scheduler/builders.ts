@@ -139,10 +139,7 @@ export interface EcsTaskTargetProps {
 
 export const every = (value: string, options: ScheduleOptions = {}) =>
   makeBuilder({
-    expression:
-      value.startsWith("rate(") || value.startsWith("cron(")
-        ? value
-        : `rate(${value})`,
+    expression: value.startsWith("rate(") || value.startsWith("cron(") ? value : `rate(${value})`,
     ...options,
   });
 
@@ -197,11 +194,7 @@ const makeBuilder = (state: ScheduleBuilderState) => ({
       },
     ),
 
-  toQueue: (
-    queue: Queue,
-    payload?: unknown,
-    props: Omit<QueueTargetProps, "input"> = {},
-  ) =>
+  toQueue: (queue: Queue, payload?: unknown, props: Omit<QueueTargetProps, "input"> = {}) =>
     materializeSchedule(
       state,
       queue.LogicalId,
@@ -312,8 +305,4 @@ const materializeSchedule = (
   });
 
 const toInput = (value: unknown) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : JSON.stringify(value);
+  value === undefined ? undefined : typeof value === "string" ? value : JSON.stringify(value);

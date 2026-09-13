@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import CloudControlTestFunctionLive, {
-  CloudControlTestFunction,
-} from "./handler";
+import CloudControlTestFunctionLive, { CloudControlTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "CloudControlBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,28 +34,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 describe.sequential("CloudControl Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "CloudControl test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("CloudControl test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("CloudControl test setup: deploying fixture");
@@ -74,9 +62,7 @@ describe.sequential("CloudControl Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `CloudControl test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`CloudControl test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -84,9 +70,7 @@ describe.sequential("CloudControl Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `CloudControl test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`CloudControl test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -99,9 +83,9 @@ describe.sequential("CloudControl Bindings", () => {
   describe("binding registration", () => {
     test.provider("all 8 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/bindings`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).bound).toHaveLength(8);
       }),
     );
@@ -112,12 +96,10 @@ describe.sequential("CloudControl Bindings", () => {
       "reads the stack-provisioned parameter's live state",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/fixture`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as any).identifier).toBe(
-            "/alchemy-test/cloudcontrol/bindings/fixture",
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/fixture`)).pipe(
+            Effect.flatMap((r) => r.json),
           );
+          expect((response as any).identifier).toBe("/alchemy-test/cloudcontrol/bindings/fixture");
           expect((response as any).value).toBe("fixture");
         }),
       { timeout: 60_000 },
@@ -129,9 +111,9 @@ describe.sequential("CloudControl Bindings", () => {
       "discovers the stack-provisioned parameter",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/list`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/list`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).count).toBeGreaterThanOrEqual(1);
           expect((response as any).found).toBe(true);
         }),
@@ -178,9 +160,9 @@ describe.sequential("CloudControl Bindings", () => {
       "deletes the runtime parameter and observes it gone",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.post(`${baseUrl}/runtime-delete`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.post(`${baseUrl}/runtime-delete`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).status).toBe("SUCCESS");
           expect((response as any).gone).toBe(true);
         }),
@@ -193,9 +175,9 @@ describe.sequential("CloudControl Bindings", () => {
       "lists recent resource operation requests",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/requests`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/requests`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           // The runtime lifecycle above just issued create/update/delete
           // requests, so at least one summary is visible.
           expect((response as any).count).toBeGreaterThanOrEqual(1);
@@ -209,9 +191,9 @@ describe.sequential("CloudControl Bindings", () => {
       "returns the typed not-found error for an unknown token",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/status-not-found`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/status-not-found`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).found).toBe(false);
         }),
       { timeout: 60_000 },
@@ -223,9 +205,9 @@ describe.sequential("CloudControl Bindings", () => {
       "surfaces the typed not-found error for an unknown token (proving the grant)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.post(`${baseUrl}/cancel-not-found`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.post(`${baseUrl}/cancel-not-found`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).tag).toBe("RequestTokenNotFoundException");
         }),
       { timeout: 60_000 },

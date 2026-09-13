@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findSource = (policyStoreId: string, identitySourceId: string) =>
   avp
     .getIdentitySource({ policyStoreId, identitySourceId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "identity source lifecycle: create OIDC source, update client ids, destroy",
@@ -47,48 +43,31 @@ test.provider(
         });
 
       // create
-      const { store, source } = yield* stack.deploy(
-        makeStack(["alchemy-test-client"]),
-      );
+      const { store, source } = yield* stack.deploy(makeStack(["alchemy-test-client"]));
       expect(source.identitySourceId).toBeDefined();
       expect(source.policyStoreId).toBe(store.policyStoreId);
 
       // out-of-band verify
-      const created = yield* findSource(
-        store.policyStoreId,
-        source.identitySourceId,
-      );
+      const created = yield* findSource(store.policyStoreId, source.identitySourceId);
       expect(unwrap(created?.principalEntityType)).toBe("PhotoApp::User");
       expect(created?.configuration?.openIdConnectConfiguration?.issuer).toBe(
         "https://accounts.google.com",
       );
 
       // update client ids in place (identitySourceId is stable)
-      const updated = yield* stack.deploy(
-        makeStack(["alchemy-test-client", "second-client"]),
-      );
+      const updated = yield* stack.deploy(makeStack(["alchemy-test-client", "second-client"]));
       expect(updated.source.identitySourceId).toBe(source.identitySourceId);
 
-      const afterUpdate = yield* findSource(
-        store.policyStoreId,
-        source.identitySourceId,
+      const afterUpdate = yield* findSource(store.policyStoreId, source.identitySourceId);
+      const tokenSelection = afterUpdate?.configuration?.openIdConnectConfiguration?.tokenSelection;
+      const observedClientIds = (tokenSelection?.identityTokenOnly?.clientIds ?? []).map((id) =>
+        unwrap(id)!,
       );
-      const tokenSelection =
-        afterUpdate?.configuration?.openIdConnectConfiguration?.tokenSelection;
-      const observedClientIds = (
-        tokenSelection?.identityTokenOnly?.clientIds ?? []
-      ).map((id) => unwrap(id)!);
-      expect([...observedClientIds].sort()).toEqual([
-        "alchemy-test-client",
-        "second-client",
-      ]);
+      expect([...observedClientIds].sort()).toEqual(["alchemy-test-client", "second-client"]);
 
       // destroy
       yield* stack.destroy();
-      const gone = yield* findSource(
-        store.policyStoreId,
-        source.identitySourceId,
-      );
+      const gone = yield* findSource(store.policyStoreId, source.identitySourceId);
       expect(gone).toBeUndefined();
     }),
   { timeout: 180_000 },

@@ -85,10 +85,7 @@ export default SecurityLakeBindingsFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        SecurityLake.ListDataLakeExceptionsHttp,
-        SecurityLake.GetDataLakeSourcesHttp,
-      ),
+      Layer.mergeAll(SecurityLake.ListDataLakeExceptionsHttp, SecurityLake.GetDataLakeSourcesHttp),
     ),
   ),
 );

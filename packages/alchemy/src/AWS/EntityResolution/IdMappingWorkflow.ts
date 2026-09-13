@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryRolePropagation,
-  syncEntityResolutionTags,
-  toTagRecord,
-} from "./internal.ts";
+import { retryRolePropagation, syncEntityResolutionTags, toTagRecord } from "./internal.ts";
 
 export interface IdMappingWorkflowProps {
   /**
@@ -126,29 +122,21 @@ export const IdMappingWorkflowProvider = () =>
         id: string,
         props: { workflowName?: string | undefined },
       ) {
-        return (
-          props.workflowName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.workflowName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Get an ID mapping workflow by name; typed not-found → undefined. */
       const getByName = Effect.fn(function* (workflowName: string) {
         return yield* entityresolution
           .getIdMappingWorkflow({ workflowName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
         stables: ["workflowName", "workflowArn"],
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.workflowName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.workflowName ?? (yield* createName(id, olds ?? {}));
           const workflow = yield* getByName(name);
           if (workflow === undefined) return undefined;
           const attrs = {
@@ -256,10 +244,7 @@ export const IdMappingWorkflowProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
             );
         }),

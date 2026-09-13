@@ -5,9 +5,7 @@ import { createNode, replaceNode, updateNode } from "./PlanTestNodes.ts";
 describe("NamespaceTree YAML properties", () => {
   test("does not attach details in compact mode", () => {
     const [item] = flattenTree(
-      buildNamespaceTree([
-        updateNode({ config: { retries: 2 } }, { config: { retries: 3 } }),
-      ]),
+      buildNamespaceTree([updateNode({ config: { retries: 2 } }, { config: { retries: 3 } })]),
     );
     expect(item?.propertyYaml).toBeUndefined();
   });
@@ -20,12 +18,16 @@ describe("NamespaceTree YAML properties", () => {
       ]),
       { includePropertyYaml: true },
     );
-    expect(
-      items.find((item) => item.id === "Api")?.propertyYaml?.lines,
-    ).toEqual(["properties:", "  config:", "    region: iad"]);
-    expect(
-      items.find((item) => item.id === "Worker")?.propertyYaml?.lines,
-    ).toEqual(["properties:", "-   retries: 2", "+   retries: 3"]);
+    expect(items.find((item) => item.id === "Api")?.propertyYaml?.lines).toEqual([
+      "properties:",
+      "  config:",
+      "    region: iad",
+    ]);
+    expect(items.find((item) => item.id === "Worker")?.propertyYaml?.lines).toEqual([
+      "properties:",
+      "-   retries: 2",
+      "+   retries: 3",
+    ]);
   });
 
   test("attaches drift details in compact mode", () => {

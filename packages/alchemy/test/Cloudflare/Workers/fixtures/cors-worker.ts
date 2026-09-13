@@ -17,9 +17,7 @@ export default class CorsWorker extends Cloudflare.Worker<CorsWorker>()(
   },
   Effect.gen(function* () {
     return {
-      fetch: HttpMiddleware.cors()(
-        HttpServerResponse.json({ message: "world" }),
-      ),
+      fetch: HttpMiddleware.cors()(HttpServerResponse.json({ message: "world" })),
     };
   }),
 ) {}

@@ -57,7 +57,6 @@ export interface GetDeleteEventsByEventTypeStatus extends Binding.Service<
     >
   >
 > {}
-export const GetDeleteEventsByEventTypeStatus =
-  Binding.Service<GetDeleteEventsByEventTypeStatus>(
-    "AWS.FraudDetector.GetDeleteEventsByEventTypeStatus",
-  );
+export const GetDeleteEventsByEventTypeStatus = Binding.Service<GetDeleteEventsByEventTypeStatus>(
+  "AWS.FraudDetector.GetDeleteEventsByEventTypeStatus",
+);

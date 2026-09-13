@@ -53,9 +53,7 @@ export type AdapterLifecycleServices = InstanceId | Stack | Stage;
  * unreachability: `read`/`delete` treat this as "everything in-cluster is
  * already gone".
  */
-export class ClusterNotFoundError extends Data.TaggedError(
-  "Kubernetes.ClusterNotFoundError",
-)<{
+export class ClusterNotFoundError extends Data.TaggedError("Kubernetes.ClusterNotFoundError")<{
   message: string;
 }> {}
 
@@ -151,8 +149,7 @@ export interface WorkloadBindingContract {
 export interface WorkloadServicesRegistry {}
 
 /** The union of all registered ambient workload services. */
-export type WorkloadServices =
-  WorkloadServicesRegistry[keyof WorkloadServicesRegistry];
+export type WorkloadServices = WorkloadServicesRegistry[keyof WorkloadServicesRegistry];
 
 /**
  * The image-source shape shared by every workload: exactly one of `main`
@@ -313,9 +310,7 @@ export interface ClusterAdapterService {
    * sets `loadBalancerClass: eks.amazonaws.com/nlb` and defaults the
    * scheme to internet-facing). User `serviceAnnotations` always win.
    */
-  readonly loadBalancerDefaults?: (options: {
-    connection: Connection;
-  }) => Effect.Effect<
+  readonly loadBalancerDefaults?: (options: { connection: Connection }) => Effect.Effect<
     {
       loadBalancerClass?: string | undefined;
       annotations?: Record<string, string>;
@@ -325,8 +320,7 @@ export interface ClusterAdapterService {
   >;
 }
 
-const adapterKey = (authKind: string) =>
-  `Kubernetes.ClusterAdapter/${authKind}`;
+const adapterKey = (authKind: string) => `Kubernetes.ClusterAdapter/${authKind}`;
 
 /**
  * The keyed Context tag for an adapter. Same auth kind → same tag, so a
@@ -336,9 +330,7 @@ const adapterKey = (authKind: string) =>
 export const ClusterAdapter = (
   authKind: string,
 ): Context.Service<ClusterAdapterService, ClusterAdapterService> =>
-  Context.Service<ClusterAdapterService, ClusterAdapterService>()(
-    adapterKey(authKind),
-  ) as any;
+  Context.Service<ClusterAdapterService, ClusterAdapterService>()(adapterKey(authKind)) as any;
 
 /**
  * Resolve the {@link ClusterAdapterService} for a connection's auth kind
@@ -347,9 +339,7 @@ export const ClusterAdapter = (
  * provider layer contributing it (e.g. `AWS.providers()` for `aws-eks`)
  * is missing from the stack.
  */
-export const findClusterAdapter = (
-  authKind: string,
-): Effect.Effect<ClusterAdapterService> =>
+export const findClusterAdapter = (authKind: string): Effect.Effect<ClusterAdapterService> =>
   Effect.serviceOption(ClusterAdapter(authKind)).pipe(
     Effect.flatMap(
       Option.match({

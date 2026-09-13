@@ -112,33 +112,20 @@ export const ProjectProvider = () =>
       // reported as AccessDeniedException, NOT ResourceNotFoundException:
       // DataZone evaluates domain-scoped authorization before existence.
       // Both mean "absent".
-      const getProjectOrUndefined = Effect.fn(function* (
-        domainId: string,
-        projectId: string,
-      ) {
+      const getProjectOrUndefined = Effect.fn(function* (domainId: string, projectId: string) {
         return yield* datazone
           .getProject({ domainIdentifier: domainId, identifier: projectId })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
           );
       });
 
       const findByName = Effect.fn(function* (domainId: string, name: string) {
-        const found = yield* datazone
-          .listProjects({ domainIdentifier: domainId, name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const found = yield* datazone.listProjects({ domainIdentifier: domainId, name }).pipe(
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+        );
         const summary = (found?.items ?? []).find(
           (s) => unredact(s.name) === name && s.projectStatus !== "DELETING",
         );
@@ -147,10 +134,7 @@ export const ProjectProvider = () =>
 
       // Poll the project to a settled (non-transient) status — project
       // operations settle within seconds.
-      const waitForSettled = Effect.fn(function* (
-        domainId: string,
-        projectId: string,
-      ) {
+      const waitForSettled = Effect.fn(function* (domainId: string, projectId: string) {
         return yield* getProjectOrUndefined(domainId, projectId).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
@@ -165,10 +149,7 @@ export const ProjectProvider = () =>
 
       // Poll the project until it no longer exists — deletion is async but
       // settles within seconds for empty projects.
-      const waitForGone = Effect.fn(function* (
-        domainId: string,
-        projectId: string,
-      ) {
+      const waitForGone = Effect.fn(function* (domainId: string, projectId: string) {
         yield* getProjectOrUndefined(domainId, projectId).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
@@ -178,9 +159,7 @@ export const ProjectProvider = () =>
         );
       });
 
-      const toAttributes = (
-        project: datazone.GetProjectOutput | datazone.CreateProjectOutput,
-      ) => ({
+      const toAttributes = (project: datazone.GetProjectOutput | datazone.CreateProjectOutput) => ({
         projectId: project.id,
         domainId: project.domainId,
         name: unredact(project.name),
@@ -201,10 +180,7 @@ export const ProjectProvider = () =>
           if (domainId === undefined) return undefined;
           const projectId =
             output?.projectId ??
-            (yield* findByName(
-              domainId,
-              yield* createName(id, olds ?? { domainId }),
-            ));
+            (yield* findByName(domainId, yield* createName(id, olds ?? { domainId })));
           if (projectId === undefined) return undefined;
           const project = yield* getProjectOrUndefined(domainId, projectId);
           if (project === undefined || project.projectStatus === "DELETING") {
@@ -258,9 +234,7 @@ export const ProjectProvider = () =>
             const desiredTerms = news.glossaryTerms ?? [];
             const drifted =
               unredact(project.name) !== name ||
-              (project.description === undefined
-                ? undefined
-                : unredact(project.description)) !==
+              (project.description === undefined ? undefined : unredact(project.description)) !==
                 (news.description ?? undefined) ||
               observedTerms.length !== desiredTerms.length ||
               desiredTerms.some((t) => !observedTerms.includes(t));
@@ -272,8 +246,7 @@ export const ProjectProvider = () =>
                 description: news.description,
                 glossaryTerms: news.glossaryTerms,
               });
-              project =
-                (yield* getProjectOrUndefined(domainId, project.id)) ?? project;
+              project = (yield* getProjectOrUndefined(domainId, project.id)) ?? project;
             }
           }
 

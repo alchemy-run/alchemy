@@ -5,10 +5,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { App } from "./App.ts";
 import { ReadFlags } from "./ReadFlags.ts";
-import {
-  type FlagshipAuth,
-  makeHttpFlagshipClient,
-} from "./ReadFlagsHttpClient.ts";
+import { type FlagshipAuth, makeHttpFlagshipClient } from "./ReadFlagsHttpClient.ts";
 
 /**
  * Local implementation of the {@link ReadFlags} binding — evaluates Flagship
@@ -51,9 +48,7 @@ export const ReadFlagsLocal = Layer.effect(
     // providers layer). Capture the full context so the evaluate op can run
     // with the current credentials — no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     const auth: FlagshipAuth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
       accountId,

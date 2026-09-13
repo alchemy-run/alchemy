@@ -16,49 +16,43 @@ const { test } = Test.make({ providers: AWS.providers() });
 const testOidcWedgedUrl = "https://example.com/alchemy-oidc-wedged";
 
 describe("AWS.IAM.OpenIDConnectProvider", () => {
-  test.provider(
-    "list enumerates the deployed OpenID Connect provider",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+  test.provider("list enumerates the deployed OpenID Connect provider", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-        const deployed = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* OpenIDConnectProvider("ListOidcProvider", {
-              url: testOidcListUrl,
-              clientIDList: ["sts.amazonaws.com"],
-              thumbprintList: [testOidcThumbprintA],
-              tags: {
-                env: "test",
-              },
-            });
-          }),
-        );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* OpenIDConnectProvider("ListOidcProvider", {
+            url: testOidcListUrl,
+            clientIDList: ["sts.amazonaws.com"],
+            thumbprintList: [testOidcThumbprintA],
+            tags: {
+              env: "test",
+            },
+          });
+        }),
+      );
 
-        const provider = yield* Provider.findProvider(OpenIDConnectProvider);
-        const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(OpenIDConnectProvider);
+      const all = yield* provider.list();
 
-        expect(
-          all.some(
-            (p) =>
-              p.openIDConnectProviderArn === deployed.openIDConnectProviderArn,
-          ),
-        ).toBe(true);
+      expect(
+        all.some((p) => p.openIDConnectProviderArn === deployed.openIDConnectProviderArn),
+      ).toBe(true);
 
-        const found = all.find(
-          (p) =>
-            p.openIDConnectProviderArn === deployed.openIDConnectProviderArn,
-        );
-        expect(found?.url).toBe(testOidcListUrl.replace(/^https?:\/\//, ""));
-        expect(found?.clientIDList ?? []).toContain("sts.amazonaws.com");
+      const found = all.find(
+        (p) => p.openIDConnectProviderArn === deployed.openIDConnectProviderArn,
+      );
+      expect(found?.url).toBe(testOidcListUrl.replace(/^https?:\/\//, ""));
+      expect(found?.clientIDList ?? []).toContain("sts.amazonaws.com");
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        const deleted = yield* IAM.getOpenIDConnectProvider({
-          OpenIDConnectProviderArn: deployed.openIDConnectProviderArn,
-        }).pipe(Effect.option);
-        expect(deleted._tag).toBe("None");
-      }),
+      const deleted = yield* IAM.getOpenIDConnectProvider({
+        OpenIDConnectProviderArn: deployed.openIDConnectProviderArn,
+      }).pipe(Effect.option);
+      expect(deleted._tag).toBe("None");
+    }),
   );
 
   test.provider(
@@ -87,20 +81,15 @@ describe("AWS.IAM.OpenIDConnectProvider", () => {
         const stage = stack.stage;
         const fqns = yield* state.list({ stack: stack.name, stage });
         const rows = yield* Effect.forEach(fqns, (fqn) =>
-          state
-            .get({ stack: stack.name, stage, fqn })
-            .pipe(Effect.map((row) => ({ fqn, row }))),
+          state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
         );
         const wedged = rows.find(
           (r): r is { fqn: string; row: ResourceState } =>
-            isResourceState(r.row) &&
-            r.row.resourceType === "AWS.IAM.OpenIDConnectProvider",
+            isResourceState(r.row) && r.row.resourceType === "AWS.IAM.OpenIDConnectProvider",
         );
         if (!wedged) {
           return yield* Effect.die(
-            new Error(
-              "no AWS.IAM.OpenIDConnectProvider state row found after deploy",
-            ),
+            new Error("no AWS.IAM.OpenIDConnectProvider state row found after deploy"),
           );
         }
         yield* state.set({
@@ -121,9 +110,7 @@ describe("AWS.IAM.OpenIDConnectProvider", () => {
         // Before the fix this crashed in `read` with
         // `TypeError: undefined is not an object (evaluating 'url.replace')`.
         const recovered = yield* deployProvider();
-        expect(recovered.openIDConnectProviderArn).toEqual(
-          created.openIDConnectProviderArn,
-        );
+        expect(recovered.openIDConnectProviderArn).toEqual(created.openIDConnectProviderArn);
         expect(recovered.url).toEqual(created.url);
 
         yield* stack.destroy();

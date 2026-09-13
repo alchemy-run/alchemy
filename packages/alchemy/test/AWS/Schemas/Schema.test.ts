@@ -42,21 +42,14 @@ const contentV2 = JSON.stringify({
 });
 
 const assertSchemaGone = (registryName: string, schemaName: string) =>
-  schemas
-    .describeSchema({ RegistryName: registryName, SchemaName: schemaName })
-    .pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new Error(`schema ${schemaName} still exists`)),
-      ),
-      Effect.catchTag("NotFoundException", () => Effect.void),
-      Effect.retry({
-        while: (e) => e instanceof Error,
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(10),
-        ]),
-      }),
-    );
+  schemas.describeSchema({ RegistryName: registryName, SchemaName: schemaName }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error(`schema ${schemaName} still exists`))),
+    Effect.catchTag("NotFoundException", () => Effect.void),
+    Effect.retry({
+      while: (e) => e instanceof Error,
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
+    }),
+  );
 
 describe("AWS.Schemas.Schema", () => {
   test.provider(

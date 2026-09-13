@@ -35,14 +35,8 @@ export interface UpdateTaxSettings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateTaxSettingsRequest,
-    ) => Effect.Effect<
-      StripeTaxSettings,
-      CreateTaxSettingsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeTaxSettings, CreateTaxSettingsError, RuntimeContext>
   >
 > {}
 
-export const UpdateTaxSettings = Binding.Service<UpdateTaxSettings>(
-  "Stripe.UpdateTaxSettings",
-);
+export const UpdateTaxSettings = Binding.Service<UpdateTaxSettings>("Stripe.UpdateTaxSettings");

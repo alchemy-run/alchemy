@@ -31,22 +31,19 @@ export const PLANETSCALE_PG_URL =
 export const PLANETSCALE_MYSQL_URL =
   "mysql://user:secret@aws.connect.psdb.cloud:3306/db?sslaccept=strict";
 
-class HostReachContainer extends Cloudflare.Container<HostReachContainer>()(
-  "HostReachContainer",
-  {
-    // Template string, not `path.join(import.meta.dirname, …)`: this module is
-    // bundled into the Worker and `import.meta.dirname` is undefined there.
-    context: `${import.meta.dirname}/context`,
-    env: {
-      TARGET_URL: `http://localhost:${HOST_PROBE_PORT}/hello`,
-      PPG_URL,
-      NEON_URL,
-      PLANETSCALE_PG_URL,
-      PLANETSCALE_MYSQL_URL,
-    },
-    observability: { logs: { enabled: true } },
+class HostReachContainer extends Cloudflare.Container<HostReachContainer>()("HostReachContainer", {
+  // Template string, not `path.join(import.meta.dirname, …)`: this module is
+  // bundled into the Worker and `import.meta.dirname` is undefined there.
+  context: `${import.meta.dirname}/context`,
+  env: {
+    TARGET_URL: `http://localhost:${HOST_PROBE_PORT}/hello`,
+    PPG_URL,
+    NEON_URL,
+    PLANETSCALE_PG_URL,
+    PLANETSCALE_MYSQL_URL,
   },
-) {}
+  observability: { logs: { enabled: true } },
+}) {}
 
 /**
  * Durable Object that binds the {@link HostReachContainer} and exposes the
@@ -62,9 +59,7 @@ export class HostReachContainerObject extends Cloudflare.DurableObject<HostReach
 
       const get = (path: string) =>
         Effect.gen(function* () {
-          const response = yield* fetch(
-            HttpClientRequest.get(`http://container${path}`),
-          );
+          const response = yield* fetch(HttpClientRequest.get(`http://container${path}`));
           return yield* response.text;
         });
 

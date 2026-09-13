@@ -42,12 +42,7 @@ export interface StopIngestionJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StopIngestionJobRequest,
-    ) => Effect.Effect<
-      bedrock.StopIngestionJobResponse,
-      bedrock.StopIngestionJobError
-    >
+    ) => Effect.Effect<bedrock.StopIngestionJobResponse, bedrock.StopIngestionJobError>
   >
 > {}
-export const StopIngestionJob = Binding.Service<StopIngestionJob>(
-  "AWS.Bedrock.StopIngestionJob",
-);
+export const StopIngestionJob = Binding.Service<StopIngestionJob>("AWS.Bedrock.StopIngestionJob");

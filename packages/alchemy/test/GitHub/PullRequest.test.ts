@@ -40,9 +40,7 @@ const branches = ["alchemy-pr-1569-a", "alchemy-pr-1569-b"];
 const prepareBranches = Effect.gen(function* () {
   const client = yield* Octokit;
   const scope = { owner, repo };
-  const { data: repository } = yield* request(() =>
-    client.rest.repos.get(scope),
-  );
+  const { data: repository } = yield* request(() => client.rest.repos.get(scope));
   const base = repository.default_branch;
   const { data: ref } = yield* request(() =>
     client.rest.git.getRef({ ...scope, ref: `heads/${base}` }),
@@ -81,9 +79,7 @@ const prepareBranches = Effect.gen(function* () {
 const deleteBranches = Effect.gen(function* () {
   const client = yield* Octokit;
   for (const branch of branches) {
-    yield* request(() =>
-      client.rest.git.deleteRef({ owner, repo, ref: `heads/${branch}` }),
-    );
+    yield* request(() => client.rest.git.deleteRef({ owner, repo, ref: `heads/${branch}` }));
   }
 });
 
@@ -95,9 +91,7 @@ test.provider(
       yield* stack.deploy(repository());
       const base = yield* prepareBranches;
       const client = yield* Octokit;
-      const { data: user } = yield* request(() =>
-        client.rest.users.getAuthenticated(),
-      );
+      const { data: user } = yield* request(() => client.rest.users.getAuthenticated());
       const { data: milestone } = yield* request(() =>
         client.rest.issues.createMilestone({
           owner,
@@ -120,9 +114,7 @@ test.provider(
           }),
         );
       const get = (number: number) =>
-        request(() =>
-          client.rest.pulls.get({ owner, repo, pull_number: number }),
-        );
+        request(() => client.rest.pulls.get({ owner, repo, pull_number: number }));
       const created = yield* deploy({
         body: "\n        Initial body\n      ",
         draft: true,
@@ -131,16 +123,12 @@ test.provider(
         milestone: milestone.number,
       });
       expect(created.prNumber).toBeGreaterThan(0);
-      expect(created.htmlUrl).toBe(
-        `https://github.com/${owner}/${repo}/pull/${created.prNumber}`,
-      );
+      expect(created.htmlUrl).toBe(`https://github.com/${owner}/${repo}/pull/${created.prNumber}`);
       expect(created.draft).toBe(true);
       expect(created.merged).toBe(false);
       const initial = (yield* get(created.prNumber)).data;
       expect(initial.body).toBe("Initial body");
-      expect(initial.assignees?.map((assignee) => assignee.login)).toEqual([
-        user.login,
-      ]);
+      expect(initial.assignees?.map((assignee) => assignee.login)).toEqual([user.login]);
       expect(initial.milestone?.number).toBe(milestone.number);
       expect(initial.labels.map((label) => label.name)).toEqual(["bug"]);
 
@@ -163,9 +151,7 @@ test.provider(
       expect(afterUpdate.draft).toBe(false);
       expect(afterUpdate.assignees).toEqual([]);
       expect(afterUpdate.milestone).toBeNull();
-      expect(afterUpdate.labels.map((label) => label.name)).toEqual([
-        "enhancement",
-      ]);
+      expect(afterUpdate.labels.map((label) => label.name)).toEqual(["enhancement"]);
       expect(afterUpdate.requested_reviewers).toEqual([]);
       expect(afterUpdate.requested_teams).toEqual([]);
 
@@ -197,9 +183,7 @@ test.provider(
       // Verify closure before releasing the retained repository fixture.
       yield* stack.deploy(repository());
       expect((yield* get(final.prNumber)).data.state).toBe("closed");
-      const open = yield* request(() =>
-        client.rest.pulls.list({ owner, repo, state: "open" }),
-      );
+      const open = yield* request(() => client.rest.pulls.list({ owner, repo, state: "open" }));
       expect(open.data).toEqual([]);
       yield* deleteBranches;
       yield* request(() =>

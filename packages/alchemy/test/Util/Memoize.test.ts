@@ -46,12 +46,9 @@ describe("cachedInScope", () => {
           return Effect.fail("boom");
         }),
       );
-      const [a, b] = yield* Effect.all(
-        [Effect.result(memo), Effect.result(memo)],
-        {
-          concurrency: "unbounded",
-        },
-      );
+      const [a, b] = yield* Effect.all([Effect.result(memo), Effect.result(memo)], {
+        concurrency: "unbounded",
+      });
       expect(a._tag).toBe("Failure");
       expect(b._tag).toBe("Failure");
       expect(runs).toBe(1);
@@ -67,9 +64,7 @@ describe("cachedInScope", () => {
       yield* Effect.sleep("10 millis");
       yield* Scope.close(scope, Exit.void);
       const exit = yield* Fiber.await(waiter);
-      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(
-        true,
-      );
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
     }),
   );
 });

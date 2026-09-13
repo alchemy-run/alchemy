@@ -9,11 +9,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import CodeArtifactTestFunctionLive, {
-  CodeArtifactTestFunction,
-  DOMAIN,
-  REPO,
-} from "./handler";
+import CodeArtifactTestFunctionLive, { CodeArtifactTestFunction, DOMAIN, REPO } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -84,10 +80,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       // a 31s budget on cold deploys; the runner's whole-body retries
       // (with the /reset pre-clean keeping them idempotent) extend the
       // effective window without violating the bounded-backoff doctrine.
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
@@ -108,9 +101,7 @@ const postJson = <T>(path: string) =>
 describe("CodeArtifact Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "CodeArtifact Bindings setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("CodeArtifact Bindings setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo(
@@ -133,10 +124,7 @@ describe("CodeArtifact Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
     }),
@@ -151,9 +139,7 @@ describe("CodeArtifact Bindings", () => {
       "mints a domain token with a bounded duration from inside the Lambda",
       () =>
         Effect.gen(function* () {
-          const body = yield* getJson<{ redacted: boolean; length: number }>(
-            "/token",
-          );
+          const body = yield* getJson<{ redacted: boolean; length: number }>("/token");
           // A CodeArtifact bearer token is a long opaque credential. (The
           // in-Lambda `redacted` flag flips to true once the distilled `lib/`
           // build catches up with the SensitiveString patch — the bundler
@@ -175,8 +161,7 @@ describe("CodeArtifact Bindings", () => {
           });
           expect(Redacted.isRedacted(res.authorizationToken)).toBe(true);
           expect(
-            Redacted.value(res.authorizationToken as Redacted.Redacted<string>)
-              .length,
+            Redacted.value(res.authorizationToken as Redacted.Redacted<string>).length,
           ).toBeGreaterThan(100);
         }),
       { timeout: 120_000 },
@@ -211,9 +196,7 @@ describe("CodeArtifact Bindings", () => {
           yield* postJson<{ reset: boolean }>("/reset");
 
           // PublishPackageVersion — a generic package version.
-          const published = yield* postJson<{ status: string }>(
-            "/publish?version=1.0.0",
-          );
+          const published = yield* postJson<{ status: string }>("/publish?version=1.0.0");
           expect(published.status).toBe("Published");
 
           // DescribePackage.
@@ -242,15 +225,11 @@ describe("CodeArtifact Bindings", () => {
           expect(versions.versions).toContain("1.0.0");
 
           // ListPackageVersionAssets.
-          const assets = yield* getJson<{ assets: string[] }>(
-            "/assets?version=1.0.0",
-          );
+          const assets = yield* getJson<{ assets: string[] }>("/assets?version=1.0.0");
           expect(assets.assets).toContain("artifact.txt");
 
           // GetPackageVersionAsset — download and decode the asset stream.
-          const asset = yield* getJson<{ content: string }>(
-            "/asset?version=1.0.0",
-          );
+          const asset = yield* getJson<{ content: string }>("/asset?version=1.0.0");
           expect(asset.content).toBe("hello codeartifact 1.0.0");
 
           // GetPackageVersionReadme — generic packages have no readme; the
@@ -259,8 +238,7 @@ describe("CodeArtifact Bindings", () => {
             "/readme?version=1.0.0",
           );
           expect(
-            readme.error === "ResourceNotFoundException" ||
-              typeof readme.readme === "string",
+            readme.error === "ResourceNotFoundException" || typeof readme.readme === "string",
           ).toBe(true);
 
           // ListPackageVersionDependencies — generic packages record no
@@ -284,9 +262,7 @@ describe("CodeArtifact Bindings", () => {
             "/status?version=2.0.0&target=Published",
           );
           expect(updated.successful).toContain("2.0.0");
-          const after = yield* getJson<{ status: string }>(
-            "/version?version=2.0.0",
-          );
+          const after = yield* getJson<{ status: string }>("/version?version=2.0.0");
           expect(after.status).toBe("Published");
 
           // PutPackageOriginConfiguration.
@@ -297,13 +273,9 @@ describe("CodeArtifact Bindings", () => {
           expect(origin.restrictions.upstream).toBe("BLOCK");
 
           // CopyPackageVersions — promote 1.0.0 into the mirror.
-          const copied = yield* postJson<{ successful: string[] }>(
-            "/copy?version=1.0.0",
-          );
+          const copied = yield* postJson<{ successful: string[] }>("/copy?version=1.0.0");
           expect(copied.successful).toContain("1.0.0");
-          const mirror = yield* getJson<{ names: string[] }>(
-            "/mirror/packages",
-          );
+          const mirror = yield* getJson<{ names: string[] }>("/mirror/packages");
           expect(mirror.names).toContain("test-package");
 
           // DisposePackageVersions — in the mirror.
@@ -320,9 +292,7 @@ describe("CodeArtifact Bindings", () => {
 
           // DeletePackage — the whole package record.
           yield* postJson<{ deleted: boolean }>("/mirror/delete-package");
-          const mirrorAfter = yield* getJson<{ names: string[] }>(
-            "/mirror/packages",
-          );
+          const mirrorAfter = yield* getJson<{ names: string[] }>("/mirror/packages");
           expect(mirrorAfter.names).not.toContain("test-package");
         }),
       { timeout: 180_000 },

@@ -29,8 +29,7 @@ export default class AiBindingTestWorker extends Cloudflare.Worker<AiBindingTest
         const ctx = yield* Effect.context<RuntimeContext>();
         const url = new URL(request.url, "http://worker");
         const prompt =
-          url.searchParams.get("prompt") ??
-          "Say the single word 'pong' and nothing else.";
+          url.searchParams.get("prompt") ?? "Say the single word 'pong' and nothing else.";
 
         if (url.pathname === "/run") {
           // Raw `ai.run` against the binding — no gateway involved.
@@ -44,9 +43,7 @@ export default class AiBindingTestWorker extends Cloudflare.Worker<AiBindingTest
         }
 
         if (url.pathname === "/models") {
-          const models = yield* ai
-            .models({ search: "llama-3.3" })
-            .pipe(Effect.orDie);
+          const models = yield* ai.models({ search: "llama-3.3" }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             count: models.length,
             names: models.map((m) => m.name),
@@ -54,9 +51,7 @@ export default class AiBindingTestWorker extends Cloudflare.Worker<AiBindingTest
         }
 
         if (url.pathname === "/generate") {
-          const response = yield* AiLanguageModel.generateText({ prompt }).pipe(
-            Effect.orDie,
-          );
+          const response = yield* AiLanguageModel.generateText({ prompt }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             text: response.text,
             finishReason: response.finishReason,
@@ -70,9 +65,7 @@ export default class AiBindingTestWorker extends Cloudflare.Worker<AiBindingTest
         if (url.pathname === "/stream") {
           const encoder = new TextEncoder();
           const body = AiLanguageModel.streamText({ prompt }).pipe(
-            Stream.map((part) =>
-              encoder.encode(`data: ${JSON.stringify(part)}\n\n`),
-            ),
+            Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
             Stream.provide(languageModel),
             Stream.provideContext(ctx),
           );

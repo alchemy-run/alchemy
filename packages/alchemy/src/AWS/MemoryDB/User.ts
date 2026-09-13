@@ -117,11 +117,7 @@ export const UserProvider = () =>
       const readUser = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeUsers({ UserName: name })
-          .pipe(
-            Effect.catchTag("UserNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("UserNotFoundFault", () => Effect.succeed(undefined)));
         return response?.Users?.[0];
       });
 
@@ -131,26 +127,19 @@ export const UserProvider = () =>
         return yield* readUser(name).pipe(
           Effect.flatMap((user) => {
             if (user !== undefined && user.Status === "modifying") {
-              return Effect.fail(
-                new Error(`User '${name}' still modifying (${user.Status})`),
-              );
+              return Effect.fail(new Error(`User '${name}' still modifying (${user.Status})`));
             }
             return Effect.succeed(user);
           }),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(24),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
           }),
         );
       });
 
       const toAttrs = Effect.fn(function* (user: memorydb.User) {
         if (!user.Name || !user.ARN) {
-          return yield* Effect.fail(
-            new Error(`User '${user.Name}' is missing its ARN`),
-          );
+          return yield* Effect.fail(new Error(`User '${user.Name}' is missing its ARN`));
         }
         return {
           userName: user.Name,
@@ -165,9 +154,7 @@ export const UserProvider = () =>
 
       // Distilled types `Passwords` as sensitive — pass the Redacted values
       // through as-is so they stay redacted in traces and logs.
-      const toWireAuth = (
-        mode: UserAuthenticationMode,
-      ): memorydb.AuthenticationMode => ({
+      const toWireAuth = (mode: UserAuthenticationMode): memorydb.AuthenticationMode => ({
         Type: mode.type,
         ...(mode.passwords ? { Passwords: mode.passwords } : {}),
       });
@@ -177,9 +164,7 @@ export const UserProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -189,9 +174,7 @@ export const UserProvider = () =>
           const user = yield* readUser(name);
           if (!user?.ARN) return undefined;
           const attrs = yield* toAttrs(user);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -222,9 +205,7 @@ export const UserProvider = () =>
             observed = yield* waitUntilActive(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`User '${name}' not found after create`),
-            );
+            return yield* Effect.fail(new Error(`User '${name}' not found after create`));
           }
 
           // 3. Sync — access string is observable; auth passwords are not, so
@@ -273,10 +254,7 @@ export const UserProvider = () =>
             Effect.catchTag("UserNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidUserStateFault",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(12),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
             }),
           );
         }),
@@ -297,9 +275,7 @@ export const UserProvider = () =>
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((user) => toAttrs(user), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((user) => toAttrs(user), { concurrency: 4 })),
           ),
       };
     }),

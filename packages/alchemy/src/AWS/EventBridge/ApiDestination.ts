@@ -105,18 +105,13 @@ export interface ApiDestination extends Resource<
   never,
   Providers
 > {}
-export const ApiDestination = Resource<ApiDestination>(
-  "AWS.EventBridge.ApiDestination",
-);
+export const ApiDestination = Resource<ApiDestination>("AWS.EventBridge.ApiDestination");
 
 export const ApiDestinationProvider = () =>
   Provider.effect(
     ApiDestination,
     Effect.gen(function* () {
-      const createDestinationName = (
-        id: string,
-        props: { name?: string } = {},
-      ) =>
+      const createDestinationName = (id: string, props: { name?: string } = {}) =>
         props.name
           ? Effect.succeed(props.name)
           : createPhysicalName({
@@ -137,16 +132,10 @@ export const ApiDestinationProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           // API destinations don't support tags; the deterministic physical
           // name is the ownership signal (it embeds app/stage/logical id).
-          const name =
-            output?.apiDestinationName ??
-            (yield* createDestinationName(id, olds ?? {}));
+          const name = output?.apiDestinationName ?? (yield* createDestinationName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeApiDestination({ Name: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!described?.Name || !described.ApiDestinationArn) {
             return undefined;
           }
@@ -174,10 +163,8 @@ export const ApiDestinationProvider = () =>
                 }
                 attrs.push({
                   apiDestinationName: destination.Name,
-                  apiDestinationArn:
-                    destination.ApiDestinationArn as ApiDestinationArn,
-                  apiDestinationState:
-                    destination.ApiDestinationState ?? "ACTIVE",
+                  apiDestinationArn: destination.ApiDestinationArn as ApiDestinationArn,
+                  apiDestinationState: destination.ApiDestinationState ?? "ACTIVE",
                 });
               }
               nextToken = page.NextToken;
@@ -185,19 +172,13 @@ export const ApiDestinationProvider = () =>
             return attrs;
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.apiDestinationName ??
-            (yield* createDestinationName(id, news));
+          const name = output?.apiDestinationName ?? (yield* createDestinationName(id, news));
 
           // Observe — live cloud state is authoritative; a vanished
           // destination falls through to create.
           const observed = yield* eventbridge
             .describeApiDestination({ Name: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (!observed?.ApiDestinationArn) {
             // Ensure — create the destination; tolerate an AlreadyExists
@@ -211,12 +192,7 @@ export const ApiDestinationProvider = () =>
                 HttpMethod: news.httpMethod,
                 InvocationRateLimitPerSecond: news.invocationRateLimitPerSecond,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
             // Sync — updateApiDestination overwrites the mutable aspects
             // (description, connection, endpoint, method, rate limit) in one
@@ -234,8 +210,7 @@ export const ApiDestinationProvider = () =>
           const settled = yield* eventbridge.describeApiDestination({
             Name: name,
           });
-          const apiDestinationArn =
-            settled.ApiDestinationArn as ApiDestinationArn;
+          const apiDestinationArn = settled.ApiDestinationArn as ApiDestinationArn;
 
           yield* session.note(apiDestinationArn);
           return {
@@ -247,9 +222,7 @@ export const ApiDestinationProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* eventbridge
             .deleteApiDestination({ Name: output.apiDestinationName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

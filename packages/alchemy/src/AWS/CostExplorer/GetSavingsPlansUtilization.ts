@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetSavingsPlansUtilization}.
  */
-export interface GetSavingsPlansUtilizationRequest
-  extends ce.GetSavingsPlansUtilizationRequest {}
+export interface GetSavingsPlansUtilizationRequest extends ce.GetSavingsPlansUtilizationRequest {}
 
 /**
  * Runtime binding for `ce:GetSavingsPlansUtilization`.
@@ -34,14 +33,10 @@ export interface GetSavingsPlansUtilization extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetSavingsPlansUtilizationRequest,
-    ) => Effect.Effect<
-      ce.GetSavingsPlansUtilizationResponse,
-      ce.GetSavingsPlansUtilizationError
-    >
+    ) => Effect.Effect<ce.GetSavingsPlansUtilizationResponse, ce.GetSavingsPlansUtilizationError>
   >
 > {}
 
-export const GetSavingsPlansUtilization =
-  Binding.Service<GetSavingsPlansUtilization>(
-    "AWS.CostExplorer.GetSavingsPlansUtilization",
-  );
+export const GetSavingsPlansUtilization = Binding.Service<GetSavingsPlansUtilization>(
+  "AWS.CostExplorer.GetSavingsPlansUtilization",
+);

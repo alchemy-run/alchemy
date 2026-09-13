@@ -10,11 +10,7 @@ import { Hyperdrive, NeonDb } from "./src/Db.ts";
 export default Alchemy.Stack(
   "CloudflareNeonDrizzleExample",
   {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      Drizzle.providers(),
-      Neon.providers(),
-    ),
+    providers: Layer.mergeAll(Cloudflare.providers(), Drizzle.providers(), Neon.providers()),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

@@ -42,10 +42,7 @@ test.provider(
 
       expect(ipSet.ipAddressVersion).toBe("IPV4");
       expect(ipSet.scope).toBe("REGIONAL");
-      expect([...ipSet.addresses].sort()).toEqual([
-        "192.0.2.44/32",
-        "203.0.113.0/24",
-      ]);
+      expect([...ipSet.addresses].sort()).toEqual(["192.0.2.44/32", "203.0.113.0/24"]);
 
       // out-of-band verification via distilled (WAF returns addresses in
       // arbitrary order)

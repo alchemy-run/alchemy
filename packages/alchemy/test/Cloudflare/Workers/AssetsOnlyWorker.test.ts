@@ -14,9 +14,7 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
-class NotFoundAssertionFailed extends Data.TaggedError(
-  "NotFoundAssertionFailed",
-)<{
+class NotFoundAssertionFailed extends Data.TaggedError("NotFoundAssertionFailed")<{
   url: string;
   status: number;
   bodyExcerpt: string;
@@ -109,13 +107,9 @@ describe.concurrent("Cloudflare.Worker assets-only", () => {
           assets: dir,
           script: `export default { fetch: () => new Response("alchemy-assets-only-script") };`,
         });
-        yield* expectUrlContains(
-          `${url}/does-not-exist`,
-          "alchemy-assets-only-script",
-          {
-            label: "script fallback after conversion",
-          },
-        );
+        yield* expectUrlContains(`${url}/does-not-exist`, "alchemy-assets-only-script", {
+          label: "script fallback after conversion",
+        });
 
         // 4. Convert back to assets-only: the stored bundle hash must not
         //    mask the change, and the asset layer owns 404s again.

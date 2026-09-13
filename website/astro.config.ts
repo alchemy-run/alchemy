@@ -56,9 +56,7 @@ function providerResourcesEntry(...providers: string[]) {
   const entryItems = (provider: string) => {
     const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
-    return [
-      { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
-    ];
+    return [{ autogenerate: { directory: `providers/${provider}`, collapsed: true } }];
   };
   // A single provider's tree is inlined; a multi-namespace hub nests each
   // provider under its own subgroup so same-named resources (SQL.D1 vs
@@ -127,12 +125,9 @@ function copyMarkdownSources(): AstroIntegration {
 
         // Docs (Starlight content collection) — preserves nested layout under
         // /content/docs/ → /<path>.md, lowercased to match Starlight's URLs.
-        await walk(
-          fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
-          {
-            lowercase: true,
-          },
-        );
+        await walk(fileURLToPath(new URL("./src/content/docs/", import.meta.url)), {
+          lowercase: true,
+        });
         // Marketing pages (top-level Astro pages) — exposes /<page>.md so
         // agents can fetch raw MDX via the worker's content negotiation. Astro
         // page routing preserves case, so don't lowercase these.
@@ -726,9 +721,7 @@ export default defineConfig({
             },
             {
               label: "AI",
-              items: [
-                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
-              ],
+              items: [{ label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" }],
             },
             {
               label: "Messaging & events",
@@ -762,15 +755,11 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [
-                { label: "Secrets & env", link: "/aws/security/secrets-env" },
-              ],
+              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
             },
             {
               label: "Observability",
-              items: [
-                { label: "CloudWatch", link: "/aws/observability/cloudwatch" },
-              ],
+              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
             },
             {
               label: "Networking",
@@ -1171,9 +1160,7 @@ export default defineConfig({
             { label: "Setup", link: "/axiom/setup" },
             {
               label: "Data",
-              items: [
-                { label: "Datasets & ingest", link: "/axiom/data/ingest" },
-              ],
+              items: [{ label: "Datasets & ingest", link: "/axiom/data/ingest" }],
             },
             {
               label: "Guides",

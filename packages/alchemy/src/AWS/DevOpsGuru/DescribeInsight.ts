@@ -27,12 +27,7 @@ export interface DescribeInsight extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.DescribeInsightRequest,
-    ) => Effect.Effect<
-      devopsguru.DescribeInsightResponse,
-      devopsguru.DescribeInsightError
-    >
+    ) => Effect.Effect<devopsguru.DescribeInsightResponse, devopsguru.DescribeInsightError>
   >
 > {}
-export const DescribeInsight = Binding.Service<DescribeInsight>(
-  "AWS.DevOpsGuru.DescribeInsight",
-);
+export const DescribeInsight = Binding.Service<DescribeInsight>("AWS.DevOpsGuru.DescribeInsight");

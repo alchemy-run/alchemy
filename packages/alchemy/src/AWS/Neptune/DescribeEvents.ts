@@ -33,6 +33,4 @@ export interface DescribeEvents extends Binding.Service<
     ) => Effect.Effect<neptune.EventsMessage, neptune.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.Neptune.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.Neptune.DescribeEvents");

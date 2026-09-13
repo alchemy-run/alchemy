@@ -28,10 +28,7 @@ export interface ListArchiveSearches extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.ListArchiveSearchesRequest, "ArchiveId">,
-    ) => Effect.Effect<
-      mm.ListArchiveSearchesResponse,
-      mm.ListArchiveSearchesError
-    >
+    ) => Effect.Effect<mm.ListArchiveSearchesResponse, mm.ListArchiveSearchesError>
   >
 > {}
 export const ListArchiveSearches = Binding.Service<ListArchiveSearches>(

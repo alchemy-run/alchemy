@@ -11,10 +11,7 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -23,13 +20,7 @@ const fixtureDir = pathe.resolve(
   "../../../../../examples/cloudflare-website-vocs",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "package.json",
-  "public",
-  "src",
-  "tsconfig.json",
-  "vocs.config.ts",
-];
+const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
 const waitUntilGone = (id: number) =>
   Services.servers.getServer({ id }).pipe(
@@ -59,13 +50,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           const site = yield* Hetzner.Website.Vocs("Web", {
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "tsconfig.json",
-                "vocs.config.ts",
-              ],
+              include: ["src/**", "public/**", "package.json", "tsconfig.json", "vocs.config.ts"],
             },
           });
           return { site };

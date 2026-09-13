@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface PutObjectRetentionRequest extends Omit<
-  S3.PutObjectRetentionRequest,
-  "Bucket"
-> {}
+export interface PutObjectRetentionRequest extends Omit<S3.PutObjectRetentionRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:PutObjectRetention`.
@@ -45,6 +42,4 @@ export interface PutObjectRetention extends Binding.Service<
     ) => Effect.Effect<S3.PutObjectRetentionOutput, S3.PutObjectRetentionError>
   >
 > {}
-export const PutObjectRetention = Binding.Service<PutObjectRetention>(
-  "AWS.S3.PutObjectRetention",
-);
+export const PutObjectRetention = Binding.Service<PutObjectRetention>("AWS.S3.PutObjectRetention");

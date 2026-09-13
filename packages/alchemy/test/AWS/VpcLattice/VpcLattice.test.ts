@@ -28,11 +28,7 @@ const stubSession = {
 const findServiceNetwork = (id: string) =>
   vpclattice
     .getServiceNetwork({ serviceNetworkIdentifier: id })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 class StillExists extends Data.TaggedError("StillExists")<{
   readonly id: string;
@@ -45,15 +41,10 @@ class AssociationNotReady extends Data.TaggedError("AssociationNotReady")<{
 
 const assertServiceNetworkDeleted = (id: string) =>
   findServiceNetwork(id).pipe(
-    Effect.flatMap((sn) =>
-      sn === undefined ? Effect.void : Effect.fail(new StillExists({ id })),
-    ),
+    Effect.flatMap((sn) => (sn === undefined ? Effect.void : Effect.fail(new StillExists({ id })))),
     Effect.retry({
       while: (e) => e._tag === "StillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -64,17 +55,12 @@ const assertAssociationDeleted = (id: string) =>
     })
     .pipe(
       Effect.flatMap((assoc) =>
-        assoc.status === "DELETE_IN_PROGRESS"
-          ? Effect.fail(new StillExists({ id }))
-          : Effect.void,
+        assoc.status === "DELETE_IN_PROGRESS" ? Effect.fail(new StillExists({ id })) : Effect.void,
       ),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       Effect.retry({
         while: (e) => e._tag === "StillExists",
-        schedule: Schedule.max([
-          Schedule.spaced("3 seconds"),
-          Schedule.recurs(20),
-        ]),
+        schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
       }),
     );
 
@@ -142,11 +128,7 @@ test.provider(
 
       const live = yield* vpclattice
         .getService({ serviceIdentifier: service.serviceId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       expect(live?.idleTimeoutSeconds).toBe(60);
 
       const updated = yield* stack.deploy(
@@ -159,11 +141,7 @@ test.provider(
       expect(updated.serviceId).toBe(service.serviceId);
       const live2 = yield* vpclattice
         .getService({ serviceIdentifier: service.serviceId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       expect(live2?.idleTimeoutSeconds).toBe(120);
 
       yield* stack.destroy();
@@ -231,13 +209,9 @@ test.provider(
 
       const first = yield* stack.deploy(program);
 
-      expect(first.authPolicy.resourceIdentifier).toBe(
-        first.network.serviceNetworkId,
-      );
+      expect(first.authPolicy.resourceIdentifier).toBe(first.network.serviceNetworkId);
       expect(first.authPolicy.policy).toContain("vpc-lattice-svcs:Invoke");
-      expect(first.resourcePolicy.resourceArn).toBe(
-        first.network.serviceNetworkArn,
-      );
+      expect(first.resourcePolicy.resourceArn).toBe(first.network.serviceNetworkArn);
 
       // The live documents match the PolicyDocument we deployed (canonicalized).
       const liveAuth = yield* vpclattice.getAuthPolicy({
@@ -262,9 +236,7 @@ test.provider(
       const liveAuth2 = yield* vpclattice.getAuthPolicy({
         resourceIdentifier: first.network.serviceNetworkId,
       });
-      expect(liveAuth2.lastUpdatedAt?.toISOString()).toBe(
-        liveAuth.lastUpdatedAt?.toISOString(),
-      );
+      expect(liveAuth2.lastUpdatedAt?.toISOString()).toBe(liveAuth.lastUpdatedAt?.toISOString());
 
       yield* stack.destroy();
       yield* assertServiceNetworkDeleted(first.network.serviceNetworkId);
@@ -282,21 +254,16 @@ test.provider(
         Effect.gen(function* () {
           const vpc = yield* Vpc("LatticeVpc", { cidrBlock: "10.30.0.0/16" });
           const network = yield* ServiceNetwork("AssocServiceNetwork", {});
-          const association = yield* ServiceNetworkVpcAssociation(
-            "VpcAssociation",
-            {
-              serviceNetworkIdentifier: network.serviceNetworkId,
-              vpcIdentifier: vpc.vpcId,
-            },
-          );
+          const association = yield* ServiceNetworkVpcAssociation("VpcAssociation", {
+            serviceNetworkIdentifier: network.serviceNetworkId,
+            vpcIdentifier: vpc.vpcId,
+          });
           return { association, network };
         }),
       );
 
       expect(association.associationId).toMatch(/^snva-/);
-      expect(association.associationArn).toContain(
-        ":servicenetworkvpcassociation/",
-      );
+      expect(association.associationArn).toContain(":servicenetworkvpcassociation/");
 
       const live = yield* vpclattice.getServiceNetworkVpcAssociation({
         serviceNetworkVpcAssociationIdentifier: association.associationId,
@@ -317,18 +284,14 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const network = yield* stack.deploy(
-        ServiceNetwork("ForceDeleteServiceNetwork", {}),
-      );
+      const network = yield* stack.deploy(ServiceNetwork("ForceDeleteServiceNetwork", {}));
       const defaultVpc = yield* getDefaultVpc;
       const association = yield* Effect.gen(function* () {
         const listed = yield* vpclattice.listServiceNetworkVpcAssociations({
           serviceNetworkIdentifier: network.serviceNetworkId,
           vpcIdentifier: defaultVpc.vpcId,
         });
-        const existing = listed.items.find(
-          (item) => item.status !== "DELETE_IN_PROGRESS",
-        );
+        const existing = listed.items.find((item) => item.status !== "DELETE_IN_PROGRESS");
         if (existing?.id) return existing;
 
         // A prior interrupted run or a simultaneous observation/create race
@@ -344,20 +307,14 @@ test.provider(
             serviceNetworkIdentifier: network.serviceNetworkId,
             vpcIdentifier: defaultVpc.vpcId,
           })
-          .pipe(
-            Effect.catchTag("ConflictException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
         if (created?.id) return created;
 
         const raced = yield* vpclattice.listServiceNetworkVpcAssociations({
           serviceNetworkIdentifier: network.serviceNetworkId,
           vpcIdentifier: defaultVpc.vpcId,
         });
-        const observed = raced.items.find(
-          (item) => item.status !== "DELETE_IN_PROGRESS",
-        );
+        const observed = raced.items.find((item) => item.status !== "DELETE_IN_PROGRESS");
         if (observed?.id) return observed;
         return yield* Effect.fail(
           new AssociationNotReady({
@@ -368,17 +325,12 @@ test.provider(
       }).pipe(
         Effect.retry({
           while: (error) => error._tag === "AssociationNotReady",
-          schedule: Schedule.max([
-            Schedule.spaced("3 seconds"),
-            Schedule.recurs(20),
-          ]),
+          schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
         }),
       );
       const associationId = association.id;
       if (!associationId) {
-        return yield* Effect.die(
-          new Error("VPC Lattice did not return an association id"),
-        );
+        return yield* Effect.die(new Error("VPC Lattice did not return an association id"));
       }
 
       // Converge any association recovered from an interrupted run to the

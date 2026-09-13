@@ -35,7 +35,6 @@ export interface GetSecurityControlDefinition extends Binding.Service<
     >
   >
 > {}
-export const GetSecurityControlDefinition =
-  Binding.Service<GetSecurityControlDefinition>(
-    "AWS.SecurityHub.GetSecurityControlDefinition",
-  );
+export const GetSecurityControlDefinition = Binding.Service<GetSecurityControlDefinition>(
+  "AWS.SecurityHub.GetSecurityControlDefinition",
+);

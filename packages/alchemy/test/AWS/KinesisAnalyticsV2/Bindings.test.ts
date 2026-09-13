@@ -8,10 +8,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import {
-  deleteCodeBucketIdempotent,
-  provisionCodeBucket,
-} from "./code-bucket.ts";
+import { deleteCodeBucketIdempotent, provisionCodeBucket } from "./code-bucket.ts";
 import KinesisAnalyticsV2TestFunctionLive, {
   FIXTURE_CODE_BUCKET,
   KinesisAnalyticsV2TestFunction,
@@ -19,17 +16,11 @@ import KinesisAnalyticsV2TestFunctionLive, {
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "KinesisAnalyticsV2Bindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "KinesisAnalyticsV2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 // Physical name of the Application the fixture creates — captured in
@@ -50,38 +41,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("KinesisAnalyticsV2 Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "KinesisAnalyticsV2 test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("KinesisAnalyticsV2 test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       // Stage the code object BEFORE the Application resource deploys — the
@@ -105,9 +85,7 @@ describe.sequential("KinesisAnalyticsV2 Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `KinesisAnalyticsV2 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`KinesisAnalyticsV2 test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -132,9 +110,7 @@ describe.sequential("KinesisAnalyticsV2 Bindings", () => {
           return typeof name === "string" && name.length > 0
             ? Effect.succeed(body as { name: string })
             : Effect.fail(
-                new Error(
-                  `KinesisAnalyticsV2 describe not ready yet (${JSON.stringify(body)})`,
-                ),
+                new Error(`KinesisAnalyticsV2 describe not ready yet (${JSON.stringify(body)})`),
               );
         }),
         Effect.retry({ schedule: readinessPolicy }),
@@ -152,9 +128,7 @@ describe.sequential("KinesisAnalyticsV2 Bindings", () => {
       // destroy must leave zero orphaned cloud resources.
       if (applicationName !== undefined) {
         const gone = yield* Core.withProviders(
-          analytics
-            .describeApplication({ ApplicationName: applicationName })
-            .pipe(Effect.flip),
+          analytics.describeApplication({ ApplicationName: applicationName }).pipe(Effect.flip),
           testOptions,
           "KinesisAnalyticsV2Bindings",
         );
@@ -264,72 +238,64 @@ describe.sequential("KinesisAnalyticsV2 Bindings", () => {
   });
 
   describe("DescribeApplicationSnapshot", () => {
-    test.provider(
-      "surfaces the typed not-found tag for a nonexistent snapshot",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/snapshot")) as {
-            errorTag: string;
-          };
-          expect(response.errorTag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/snapshot")) as {
+          errorTag: string;
+        };
+        expect(response.errorTag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 
   describe("CreateApplicationSnapshot", () => {
-    test.provider(
-      "reaches the typed not-running rejection (proving the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/snapshot/create")) as {
-            errorTag: string;
-          };
-          expect([
-            "InvalidApplicationConfigurationException",
-            "InvalidRequestException",
-            "ResourceInUseException",
-            "UnsupportedOperationException",
-          ]).toContain(response.errorTag);
-        }),
+    test.provider("reaches the typed not-running rejection (proving the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/snapshot/create")) as {
+          errorTag: string;
+        };
+        expect([
+          "InvalidApplicationConfigurationException",
+          "InvalidRequestException",
+          "ResourceInUseException",
+          "UnsupportedOperationException",
+        ]).toContain(response.errorTag);
+      }),
     );
   });
 
   describe("DeleteApplicationSnapshot", () => {
-    test.provider(
-      "surfaces a typed tag for a nonexistent snapshot (proving the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/snapshot/delete")) as {
-            errorTag: string;
-          };
-          expect([
-            "ResourceNotFoundException",
-            "InvalidArgumentException",
-            "InvalidRequestException",
-          ]).toContain(response.errorTag);
-        }),
+    test.provider("surfaces a typed tag for a nonexistent snapshot (proving the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/snapshot/delete")) as {
+          errorTag: string;
+        };
+        expect([
+          "ResourceNotFoundException",
+          "InvalidArgumentException",
+          "InvalidRequestException",
+        ]).toContain(response.errorTag);
+      }),
     );
   });
 
   describe("CreateApplicationPresignedUrl", () => {
-    test.provider(
-      "mints a URL or reaches a typed rejection (proving the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/presigned-url")) as {
-            hasUrl?: boolean;
-            errorTag?: string;
-          };
-          if (response.errorTag !== undefined) {
-            expect([
-              "ResourceNotFoundException",
-              "ResourceInUseException",
-              "InvalidArgumentException",
-            ]).toContain(response.errorTag);
-          } else {
-            expect(response.hasUrl).toBe(true);
-          }
-        }),
+    test.provider("mints a URL or reaches a typed rejection (proving the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/presigned-url")) as {
+          hasUrl?: boolean;
+          errorTag?: string;
+        };
+        if (response.errorTag !== undefined) {
+          expect([
+            "ResourceNotFoundException",
+            "ResourceInUseException",
+            "InvalidArgumentException",
+          ]).toContain(response.errorTag);
+        } else {
+          expect(response.hasUrl).toBe(true);
+        }
+      }),
     );
   });
 
@@ -353,25 +319,23 @@ describe.sequential("KinesisAnalyticsV2 Bindings", () => {
   });
 
   describe("StopApplication", () => {
-    test.provider(
-      "reaches the typed not-running rejection (proving the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* postJson("/stop")) as {
-            errorTag?: string;
-            ok?: boolean;
-          };
-          if (response.errorTag !== undefined) {
-            expect([
-              "InvalidApplicationConfigurationException",
-              "InvalidRequestException",
-              "ResourceInUseException",
-              "ConcurrentModificationException",
-            ]).toContain(response.errorTag);
-          } else {
-            expect(response.ok).toBe(true);
-          }
-        }),
+    test.provider("reaches the typed not-running rejection (proving the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* postJson("/stop")) as {
+          errorTag?: string;
+          ok?: boolean;
+        };
+        if (response.errorTag !== undefined) {
+          expect([
+            "InvalidApplicationConfigurationException",
+            "InvalidRequestException",
+            "ResourceInUseException",
+            "ConcurrentModificationException",
+          ]).toContain(response.errorTag);
+        } else {
+          expect(response.ok).toBe(true);
+        }
+      }),
     );
   });
 

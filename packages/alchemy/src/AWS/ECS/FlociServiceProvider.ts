@@ -36,21 +36,15 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual } from "../../Diff.ts";
 import type { ImageSourceLike } from "../ECR/ImageSource.ts";
-import {
-  flociProvidersUrl,
-  makeDevWatchProvider,
-} from "../Local/DevWatchProvider.ts";
+import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
 import { imageSourceTrigger, restartFamilyTasks } from "./EcsDevWatch.ts";
 import { Service, ServiceProvider, type ServiceProps } from "./Service.ts";
 
 /** Cluster ARN from either form of the `cluster` prop (see ServiceProvider). */
-const clusterArnOfProps = (
-  cluster: ServiceProps["cluster"] | undefined,
-): string | undefined =>
+const clusterArnOfProps = (cluster: ServiceProps["cluster"] | undefined): string | undefined =>
   typeof cluster === "string"
     ? cluster
-    : typeof (cluster as { clusterArn?: unknown } | undefined)?.clusterArn ===
-        "string"
+    : typeof (cluster as { clusterArn?: unknown } | undefined)?.clusterArn === "string"
       ? (cluster as { clusterArn: string }).clusterArn
       : undefined;
 
@@ -64,116 +58,100 @@ const immutableFieldsOf = (props: ServiceProps) => ({
 });
 
 /** The BYO task reference, when the props use the `task:` form. */
-const taskRefOf = (props: ServiceProps) =>
-  "task" in props ? props.task : undefined;
+const taskRefOf = (props: ServiceProps) => ("task" in props ? props.task : undefined);
 
 export const FlociServiceProvider = () =>
-  makeDevWatchProvider<Service, ServiceProps, Service["Attributes"]>(
-    Service,
-    flociProvidersUrl(),
-    {
-      liveProvider: () => ServiceProvider(),
-      watchConfigOf: (news, attrs) => {
-        const source = news as ImageSourceLike;
-        return {
-          serviceName: attrs.serviceName,
-          clusterArn: attrs.clusterArn,
-          taskFamily: attrs.taskFamily,
-          byoTaskDefinitionArn: taskRefOf(news)?.taskDefinitionArn,
-          main: source.main,
-          handler: source.handler,
-          build: source.build,
-          isExternal: news.isExternal,
-          context: source.context,
-          dockerfile: source.dockerfile,
-          image: source.image,
-          port: (news as { port?: number }).port,
-          runtimePlatform: (news as { runtimePlatform?: unknown })
-            .runtimePlatform,
-        };
-      },
-      // Mirrors the live diff's cheap replacement rules (never building):
-      // serviceName is the identity, a service can't move clusters, and the
-      // immutable post-create flags replace delete-first.
-      replaceOn: ({ olds, news }) =>
-        Effect.sync(() => {
-          if ((olds.serviceName ?? null) !== (news.serviceName ?? null)) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
-          const oldCluster = clusterArnOfProps(olds.cluster);
-          const newCluster = clusterArnOfProps(news.cluster);
-          if (
-            oldCluster !== undefined &&
-            newCluster !== undefined &&
-            oldCluster !== newCluster
-          ) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
-          if (!deepEqual(immutableFieldsOf(olds), immutableFieldsOf(news))) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
-          return undefined;
-        }),
-      // Fires on every reconcile — watcher-triggered AND engine-driven
-      // (prop changes never produce a file event, so rolling only from the
-      // watch loop left the service's containers on the old revision).
-      onReconciled: ({ id, previous, attrs }) =>
-        Effect.gen(function* () {
-          if (
-            attrs.taskFamily === undefined ||
-            attrs.taskDefinitionArn === undefined ||
-            previous?.taskDefinitionArn === attrs.taskDefinitionArn
-          ) {
-            return;
-          }
-          const startedAt = Date.now();
-          // `updateService` (inside the reconcile) pointed the service at
-          // the new revision, but floci's in-place swap keeps the old
-          // containers running — stop them so the scheduler relaunches on
-          // the new revision.
-          const restarted = yield* restartFamilyTasks({
-            family: attrs.taskFamily,
-            nextTaskDefinitionArn: attrs.taskDefinitionArn,
-            serviceManaged: true,
-          });
-          yield* Effect.logInfo(
-            `[alchemy dev] ${attrs.serviceName}: task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
-          );
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning(
-              `[alchemy dev] ${id}: service roll failed`,
-              cause,
-            ),
-          ),
+  makeDevWatchProvider<Service, ServiceProps, Service["Attributes"]>(Service, flociProvidersUrl(), {
+    liveProvider: () => ServiceProvider(),
+    watchConfigOf: (news, attrs) => {
+      const source = news as ImageSourceLike;
+      return {
+        serviceName: attrs.serviceName,
+        clusterArn: attrs.clusterArn,
+        taskFamily: attrs.taskFamily,
+        byoTaskDefinitionArn: taskRefOf(news)?.taskDefinitionArn,
+        main: source.main,
+        handler: source.handler,
+        build: source.build,
+        isExternal: news.isExternal,
+        context: source.context,
+        dockerfile: source.dockerfile,
+        image: source.image,
+        port: (news as { port?: number }).port,
+        runtimePlatform: (news as { runtimePlatform?: unknown }).runtimePlatform,
+      };
+    },
+    // Mirrors the live diff's cheap replacement rules (never building):
+    // serviceName is the identity, a service can't move clusters, and the
+    // immutable post-create flags replace delete-first.
+    replaceOn: ({ olds, news }) =>
+      Effect.sync(() => {
+        if ((olds.serviceName ?? null) !== (news.serviceName ?? null)) {
+          return { action: "replace" as const, deleteFirst: true };
+        }
+        const oldCluster = clusterArnOfProps(olds.cluster);
+        const newCluster = clusterArnOfProps(news.cluster);
+        if (oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) {
+          return { action: "replace" as const, deleteFirst: true };
+        }
+        if (!deepEqual(immutableFieldsOf(olds), immutableFieldsOf(news))) {
+          return { action: "replace" as const, deleteFirst: true };
+        }
+        return undefined;
+      }),
+    // Fires on every reconcile — watcher-triggered AND engine-driven
+    // (prop changes never produce a file event, so rolling only from the
+    // watch loop left the service's containers on the old revision).
+    onReconciled: ({ id, previous, attrs }) =>
+      Effect.gen(function* () {
+        if (
+          attrs.taskFamily === undefined ||
+          attrs.taskDefinitionArn === undefined ||
+          previous?.taskDefinitionArn === attrs.taskDefinitionArn
+        ) {
+          return;
+        }
+        const startedAt = Date.now();
+        // `updateService` (inside the reconcile) pointed the service at
+        // the new revision, but floci's in-place swap keeps the old
+        // containers running — stop them so the scheduler relaunches on
+        // the new revision.
+        const restarted = yield* restartFamilyTasks({
+          family: attrs.taskFamily,
+          nextTaskDefinitionArn: attrs.taskDefinitionArn,
+          serviceManaged: true,
+        });
+        yield* Effect.logInfo(
+          `[alchemy dev] ${attrs.serviceName}: task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
+        );
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(`[alchemy dev] ${id}: service roll failed`, cause),
         ),
-      startWatch: (ctx) =>
-        Effect.gen(function* () {
-          if (taskRefOf(ctx.news) !== undefined) {
-            // BYO task reference: the image (and its hot reload) belongs to
-            // the referenced `AWS.ECS.Task` resource.
-            return;
-          }
-          const trigger = yield* imageSourceTrigger({
-            id: ctx.id,
-            source: ctx.news as ImageSourceLike,
-            isExternal: ctx.news.isExternal,
-          });
-          yield* trigger.pipe(
-            // The reconcile registers the new revision and `updateService`s
-            // onto it; the `onReconciled` hook (shared with engine-driven
-            // updates) rolls the running tasks.
-            Stream.runForEach(() =>
-              ctx.rerunReconcile.pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(
-                    `[alchemy dev] ${ctx.id}: image swap failed`,
-                    cause,
-                  ),
-                ),
+      ),
+    startWatch: (ctx) =>
+      Effect.gen(function* () {
+        if (taskRefOf(ctx.news) !== undefined) {
+          // BYO task reference: the image (and its hot reload) belongs to
+          // the referenced `AWS.ECS.Task` resource.
+          return;
+        }
+        const trigger = yield* imageSourceTrigger({
+          id: ctx.id,
+          source: ctx.news as ImageSourceLike,
+          isExternal: ctx.news.isExternal,
+        });
+        yield* trigger.pipe(
+          // The reconcile registers the new revision and `updateService`s
+          // onto it; the `onReconciled` hook (shared with engine-driven
+          // updates) rolls the running tasks.
+          Stream.runForEach(() =>
+            ctx.rerunReconcile.pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
               ),
             ),
-          );
-        }),
-    },
-  );
+          ),
+        );
+      }),
+  });

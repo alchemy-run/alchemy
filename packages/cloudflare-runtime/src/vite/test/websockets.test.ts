@@ -109,9 +109,7 @@ const makeFakeRequest = (overrides: {
       connection: "Upgrade",
       "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
       "sec-websocket-version": "13",
-      ...(overrides.protocol
-        ? { "sec-websocket-protocol": overrides.protocol }
-        : {}),
+      ...(overrides.protocol ? { "sec-websocket-protocol": overrides.protocol } : {}),
     },
   }) as unknown as NodeHttp.IncomingMessage;
 };
@@ -146,19 +144,13 @@ describe("handleWebSocket", () => {
       ws.send("hello");
     });
 
-    const client = new WebSocket(
-      `ws://127.0.0.1:${harness.clientPort}/path?x=1`,
-    );
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/path?x=1`);
     const received: Array<string> = [];
-    client.on("upgrade", (res) =>
-      dbg("client received upgrade response", res.statusCode),
-    );
+    client.on("upgrade", (res) => dbg("client received upgrade response", res.statusCode));
     client.on("unexpected-response", (_req, res) =>
       dbg("client unexpected-response", res.statusCode),
     );
-    client.on("close", (code, reason) =>
-      dbg("client close", code, reason.toString()),
-    );
+    client.on("close", (code, reason) => dbg("client close", code, reason.toString()));
     await new Promise<void>((resolve, reject) => {
       client.on("open", () => {
         dbg("client open, sending ping");
@@ -213,23 +205,15 @@ describe("handleWebSocket", () => {
     });
 
     const sandboxHost = `4567-my-sandbox-sup3rs3cr3t.localhost:${harness.clientPort}`;
-    const client = new WebSocket(
-      `ws://127.0.0.1:${harness.clientPort}/`,
-      "vite-hmr",
-      {
-        headers: { host: sandboxHost },
-      },
-    );
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/`, "vite-hmr", {
+      headers: { host: sandboxHost },
+    });
     client.on("open", () => dbg("sandbox client open"));
-    client.on("upgrade", (res) =>
-      dbg("sandbox client received upgrade response", res.statusCode),
-    );
+    client.on("upgrade", (res) => dbg("sandbox client received upgrade response", res.statusCode));
     client.on("unexpected-response", (_req, res) =>
       dbg("sandbox client unexpected-response", res.statusCode),
     );
-    client.on("close", (code, reason) =>
-      dbg("sandbox client close", code, reason.toString()),
-    );
+    client.on("close", (code, reason) => dbg("sandbox client close", code, reason.toString()));
     const message = await new Promise<string>((resolve, reject) => {
       client.on("message", (data) => {
         dbg("sandbox client message", data.toString());
@@ -245,9 +229,7 @@ describe("handleWebSocket", () => {
     expect(message).toBe("ack");
     expect(harness.upstreamCalls).toHaveLength(1);
     expect(harness.upstreamCalls[0]!.headers.host).toBe(sandboxHost);
-    expect(harness.upstreamCalls[0]!.headers["sec-websocket-protocol"]).toBe(
-      "vite-hmr",
-    );
+    expect(harness.upstreamCalls[0]!.headers["sec-websocket-protocol"]).toBe("vite-hmr");
   });
 
   test("prefers X-Forwarded-Host over Host when set by a tunnel", async () => {

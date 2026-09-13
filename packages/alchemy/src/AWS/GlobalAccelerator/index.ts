@@ -19,9 +19,4 @@ export {
   type EndpointGroupProps,
   type PortOverride,
 } from "./EndpointGroup.ts";
-export {
-  Listener,
-  ListenerProvider,
-  type ListenerProps,
-  type PortRange,
-} from "./Listener.ts";
+export { Listener, ListenerProvider, type ListenerProps, type PortRange } from "./Listener.ts";

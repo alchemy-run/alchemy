@@ -38,9 +38,7 @@ export default DsqlDrizzleFunction.make(
     // `proxyChain` defers the connect to the first query, so the pool (and
     // the IAM token backing it) is built inside the invocation, per
     // execution — a fresh token can never outlive its pool.
-    const db = yield* Drizzle.Postgres(
-      conn.pipe(Effect.map((info) => info.url)),
-    );
+    const db = yield* Drizzle.Postgres(conn.pipe(Effect.map((info) => info.url)));
 
     return {
       fetch: Effect.gen(function* () {

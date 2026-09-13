@@ -114,9 +114,7 @@ export interface VectorBucket extends Resource<
  *
  * @resource
  */
-export const VectorBucket = Resource<VectorBucket>(
-  "AWS.S3Vectors.VectorBucket",
-);
+export const VectorBucket = Resource<VectorBucket>("AWS.S3Vectors.VectorBucket");
 
 const encryptionKey = (e: VectorBucketEncryption | undefined) =>
   JSON.stringify({ sseType: e?.sseType, kmsKeyArn: e?.kmsKeyArn });
@@ -154,9 +152,7 @@ export const VectorBucketProvider = () =>
                 Object.entries(r.tags ?? {}).filter(([, v]) => v !== undefined),
               ) as Record<string, string>,
           ),
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed({} as Record<string, string>),
-          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed({} as Record<string, string>)),
         );
 
       const observedPolicy = (vectorBucketName: string) =>
@@ -179,17 +175,14 @@ export const VectorBucketProvider = () =>
         stables: ["vectorBucketName", "vectorBucketArn"],
         list: () =>
           Effect.gen(function* () {
-            const buckets = yield* s3vectors.listVectorBuckets
-              .items({})
-              .pipe(Stream.runCollect);
+            const buckets = yield* s3vectors.listVectorBuckets.items({}).pipe(Stream.runCollect);
             return Array.from(buckets).map((b) => ({
               vectorBucketName: b.vectorBucketName,
               vectorBucketArn: b.vectorBucketArn,
             }));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.vectorBucketName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.vectorBucketName ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(name);
           if (!found) return undefined;
           const attrs = {
@@ -205,16 +198,13 @@ export const VectorBucketProvider = () =>
           const newName = yield* createName(id, news ?? {});
           if (oldName !== newName) return { action: "replace" } as const;
           // Encryption is fixed at create time — any change replaces.
-          if (
-            encryptionKey(olds?.encryption) !== encryptionKey(news?.encryption)
-          ) {
+          if (encryptionKey(olds?.encryption) !== encryptionKey(news?.encryption)) {
             return { action: "replace" } as const;
           }
           // fall through: engine default update (tags only)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.vectorBucketName ?? (yield* createName(id, news));
+          const name = output?.vectorBucketName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -234,8 +224,7 @@ export const VectorBucketProvider = () =>
             live = yield* observe(name);
           }
 
-          const vectorBucketArn =
-            live?.vectorBucketArn ?? output?.vectorBucketArn;
+          const vectorBucketArn = live?.vectorBucketArn ?? output?.vectorBucketArn;
 
           // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption and
           //    drift converge (create-time tags only apply on first create).
@@ -296,13 +285,11 @@ export const VectorBucketProvider = () =>
           const purgeAndDelete = Effect.gen(function* () {
             // Indexes are scoped to their bucket and invisible to a global
             // nuke scan. Only the explicit force path may purge them.
-            const indexes = yield* s3vectors.listIndexes
-              .items({ vectorBucketName })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag("NotFoundException", () => Effect.succeed([])),
-              );
+            const indexes = yield* s3vectors.listIndexes.items({ vectorBucketName }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+            );
             yield* Effect.forEach(
               indexes,
               (index) =>
@@ -311,9 +298,7 @@ export const VectorBucketProvider = () =>
                     vectorBucketName,
                     indexName: index.indexName,
                   })
-                  .pipe(
-                    Effect.catchTag("NotFoundException", () => Effect.void),
-                  ),
+                  .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
               { concurrency: 4, discard: true },
             );
             yield* s3vectors.deleteVectorBucket({ vectorBucketName });
@@ -324,12 +309,8 @@ export const VectorBucketProvider = () =>
             // report Conflict until all indexes disappear. Re-list on retry.
             Effect.retry({
               while: (e) =>
-                e._tag === "ConflictException" ||
-                e._tag === "ServiceUnavailableException",
-              schedule: Schedule.max([
-                Schedule.exponential(500),
-                Schedule.recurs(8),
-              ]),
+                e._tag === "ConflictException" || e._tag === "ServiceUnavailableException",
+              schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
             }),
             Effect.catchTag("NotFoundException", () => Effect.void),
           );

@@ -76,8 +76,5 @@ export const retryWhileThrottled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
   });

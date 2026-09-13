@@ -33,13 +33,10 @@ export default MediaTailorTestFunction.make(
       videoContentSourceUrl: "https://origin.example.com/live",
     });
 
-    const createPrefetchSchedule =
-      yield* MediaTailor.CreatePrefetchSchedule(config);
+    const createPrefetchSchedule = yield* MediaTailor.CreatePrefetchSchedule(config);
     const getPrefetchSchedule = yield* MediaTailor.GetPrefetchSchedule(config);
-    const deletePrefetchSchedule =
-      yield* MediaTailor.DeletePrefetchSchedule(config);
-    const listPrefetchSchedules =
-      yield* MediaTailor.ListPrefetchSchedules(config);
+    const deletePrefetchSchedule = yield* MediaTailor.DeletePrefetchSchedule(config);
+    const listPrefetchSchedules = yield* MediaTailor.ListPrefetchSchedules(config);
     const listAlerts = yield* MediaTailor.ListAlerts();
     const getChannelSchedule = yield* MediaTailor.GetChannelSchedule();
     const startChannel = yield* MediaTailor.StartChannel();
@@ -149,9 +146,7 @@ export default MediaTailorTestFunction.make(
               error: undefined,
               detail: undefined,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ count: 0, error: e._tag, detail: String(e) }),
-            ),
+            Effect.catch((e) => Effect.succeed({ count: 0, error: e._tag, detail: String(e) })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -164,9 +159,7 @@ export default MediaTailorTestFunction.make(
               error: undefined,
               detail: undefined,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ count: 0, error: e._tag, detail: String(e) }),
-            ),
+            Effect.catch((e) => Effect.succeed({ count: 0, error: e._tag, detail: String(e) })),
           );
           return yield* HttpServerResponse.json(result);
         }

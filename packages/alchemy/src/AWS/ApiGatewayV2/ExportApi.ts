@@ -8,9 +8,7 @@ import type { Api } from "./Api.ts";
  * bound {@link Api}; `Specification` defaults to `OAS30` (the only
  * supported value — exports are OpenAPI 3.0, HTTP APIs only).
  */
-export interface ExportApiRequest extends Partial<
-  Omit<agw2.ExportApiRequest, "ApiId">
-> {}
+export interface ExportApiRequest extends Partial<Omit<agw2.ExportApiRequest, "ApiId">> {}
 
 /**
  * Runtime binding for exporting an HTTP API's OpenAPI 3.0 definition
@@ -42,11 +40,7 @@ export interface ExportApi extends Binding.Service<
   <A extends Api>(
     api: A,
   ) => Effect.Effect<
-    (
-      request?: ExportApiRequest,
-    ) => Effect.Effect<agw2.ExportApiResponse, agw2.ExportApiError>
+    (request?: ExportApiRequest) => Effect.Effect<agw2.ExportApiResponse, agw2.ExportApiError>
   >
 > {}
-export const ExportApi = Binding.Service<ExportApi>(
-  "AWS.ApiGatewayV2.ExportApi",
-);
+export const ExportApi = Binding.Service<ExportApi>("AWS.ApiGatewayV2.ExportApi");

@@ -22,7 +22,4 @@ export * from "./SendAlexaOfferToMaster.ts";
 export * from "./SendAlexaOfferToMasterHttp.ts";
 export * from "./SignalingChannel.ts";
 export * from "./Stream.ts";
-export {
-  KinesisVideoNotConverged,
-  SignalingEndpointUnavailable,
-} from "./internal.ts";
+export { KinesisVideoNotConverged, SignalingEndpointUnavailable } from "./internal.ts";

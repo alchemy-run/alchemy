@@ -8,9 +8,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import ServiceQuotasTestFunctionLive, {
-  ServiceQuotasTestFunction,
-} from "./handler";
+import ServiceQuotasTestFunctionLive, { ServiceQuotasTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "ServiceQuotasBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,28 +33,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe("ServiceQuotas Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "ServiceQuotas test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ServiceQuotas test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("ServiceQuotas test setup: deploying fixture");
@@ -73,9 +61,7 @@ describe("ServiceQuotas Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `ServiceQuotas test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ServiceQuotas test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -83,9 +69,7 @@ describe("ServiceQuotas Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `ServiceQuotas test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`ServiceQuotas test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -101,9 +85,7 @@ describe("ServiceQuotas Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/quota?service=vpc&quota=L-00000000`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/quota?service=vpc&quota=L-00000000`),
           );
           expect(response.status).toBe(404);
           const body = (yield* response.json) as { tag: string };
@@ -126,15 +108,11 @@ describe("ServiceQuotas Bindings", () => {
             })
             .pipe(
               Effect.map((r) => r.Quota?.Value),
-              Effect.catchTag("NoSuchResourceException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NoSuchResourceException", () => Effect.succeed(undefined)),
             );
 
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/quota?service=lambda&quota=L-B99A9384`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/quota?service=lambda&quota=L-B99A9384`),
           );
           if (expected === undefined) {
             expect(response.status).toBe(404);
@@ -168,9 +146,7 @@ describe("ServiceQuotas Bindings", () => {
             .pipe(Effect.map((r) => r.Quota?.Value));
 
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/default-quota?service=vpc&quota=L-F678F1CE`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/default-quota?service=vpc&quota=L-F678F1CE`),
           );
           expect(response.status).toBe(200);
           const body = (yield* response.json) as {
@@ -189,9 +165,7 @@ describe("ServiceQuotas Bindings", () => {
       "lists Service Quotas service codes through the deployed Lambda",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/services`),
-          );
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/services`));
           expect(response.status).toBe(200);
           const body = (yield* response.json) as { serviceCodes: string[] };
           expect(body.serviceCodes.length).toBeGreaterThan(0);
@@ -205,9 +179,7 @@ describe("ServiceQuotas Bindings", () => {
       "lists a service's applied quotas through the deployed Lambda",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/quotas?service=vpc`),
-          );
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/quotas?service=vpc`));
           expect(response.status).toBe(200);
           const body = (yield* response.json) as { quotaCodes: string[] };
           expect(body.quotaCodes.length).toBeGreaterThan(0);
@@ -222,9 +194,7 @@ describe("ServiceQuotas Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/history?service=vpc&quota=L-F678F1CE`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/history?service=vpc&quota=L-F678F1CE`),
           );
           expect(response.status).toBe(200);
           const body = (yield* response.json) as { count: number };
@@ -240,9 +210,7 @@ describe("ServiceQuotas Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           const response = yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/request-increase?service=vpc&quota=L-00000000`,
-            ),
+            HttpClientRequest.post(`${baseUrl}/request-increase?service=vpc&quota=L-00000000`),
           );
           expect(response.status).toBe(404);
           const body = (yield* response.json) as { tag: string };
