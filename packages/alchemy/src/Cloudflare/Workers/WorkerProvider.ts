@@ -1357,7 +1357,13 @@ export const LiveWorkerProvider = () =>
             desiredSorted.length !== liveSorted.length ||
             desiredSorted.some((cron, index) => cron !== liveSorted[index]);
 
-          if (!changed) return live;
+          // This runs after the Worker upload. Reapply managed triggers even
+          // when their expressions match: GET /schedules describes configured
+          // triggers, not whether the scheduler is delivering them after a
+          // redeploy. Use a single PUT so refreshing never creates a deliberate
+          // gap by clearing and recreating the triggers. Empty, already-cleared
+          // schedules still need no write.
+          if (!changed && desired.length === 0) return live;
 
           if (desired.length > 0 || previous.length > 0 || live.length > 0) {
             yield* session.note(
