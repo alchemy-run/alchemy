@@ -47,9 +47,7 @@ test(
     };
     expect(Array.isArray(initialBody.users)).toBe(true);
 
-    const createResponse = yield* HttpClient.execute(
-      HttpClientRequest.post(baseUrl),
-    );
+    const createResponse = yield* HttpClient.execute(HttpClientRequest.post(baseUrl));
     expect(createResponse.status).toBe(200);
 
     const createBody = (yield* createResponse.json) as unknown as {
@@ -81,9 +79,7 @@ test(
       error: "Invalid user ID",
     });
 
-    const methodResponse = yield* HttpClient.execute(
-      HttpClientRequest.patch(baseUrl),
-    );
+    const methodResponse = yield* HttpClient.execute(HttpClientRequest.patch(baseUrl));
     expect(methodResponse.status).toBe(405);
     expect(yield* methodResponse.json).toEqual({
       error: "Method not allowed",
@@ -108,9 +104,7 @@ test(
     const finalBody = (yield* finalResponse.json) as unknown as {
       users: User[];
     };
-    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(
-      false,
-    );
+    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(false);
   }),
   { timeout: 120_000 },
 );

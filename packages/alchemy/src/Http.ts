@@ -7,10 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
-import {
-  causeResponse,
-  type HttpServerError,
-} from "effect/unstable/http/HttpServerError";
+import { causeResponse, type HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ManagedHttpShutdown } from "./Runtime/Bootstrap/ManagedHttpShutdown.ts";
@@ -67,11 +64,7 @@ export class HttpServer extends Context.Service<
       options?: {
         port?: number;
       },
-    ) => Effect.Effect<
-      void,
-      never,
-      Exclude<Req, HttpServerRequest> | Scope.Scope
-    >;
+    ) => Effect.Effect<void, never, Exclude<Req, HttpServerRequest> | Scope.Scope>;
   }
 >()("HttpServer") {}
 
@@ -86,9 +79,7 @@ export const safeHttpEffect = <Req = never>(
     handler.pipe(
       // @ts-expect-error
       Effect.flatMap((response) =>
-        HttpServerResponse.isHttpServerResponse(response)
-          ? Effect.succeed(response)
-          : response,
+        HttpServerResponse.isHttpServerResponse(response) ? Effect.succeed(response) : response,
       ),
     ) as any as HttpEffect<Req>,
     (cause) =>
@@ -122,9 +113,7 @@ const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
   const failures = cause.reasons.filter(
     (reason) =>
       reason._tag !== "Interrupt" &&
-      !ErrorReporter.isIgnored(
-        reason._tag === "Fail" ? reason.error : reason.defect,
-      ),
+      !ErrorReporter.isIgnored(reason._tag === "Fail" ? reason.error : reason.defect),
   );
   return failures.length === 0
     ? Effect.void

@@ -13,13 +13,7 @@ const fixtureDir = pathe.resolve(
   "../../AWS/Website/fixtures/tanstack-start-app",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 describe("Fly.Website.TanStackStart local", () => {
   test.provider(
@@ -54,13 +48,9 @@ describe("Fly.Website.TanStackStart local", () => {
           timeout: "90 seconds",
           label: "dev home page",
         });
-        yield* expectUrlContains(
-          `${origin}/api/hello?echo=roundtrip`,
-          "TANSTACK_AWS_API_MARKER",
-          {
-            label: "api route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${origin}/api/hello?echo=roundtrip`, "TANSTACK_AWS_API_MARKER", {
+          label: "api route (dev)",
+        });
 
         yield* stack.destroy();
       }),

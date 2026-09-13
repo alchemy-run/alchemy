@@ -10,16 +10,8 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, diffTags, hasTags, tagRecord } from "../Tags.ts";
-import {
-  resolveBranchScope,
-  type BranchScope,
-  type ResolvedBranchScope,
-} from "./BranchScope.ts";
-import {
-  Credential,
-  validateCredential,
-  type CredentialAttributes,
-} from "./Credential.ts";
+import { resolveBranchScope, type BranchScope, type ResolvedBranchScope } from "./BranchScope.ts";
+import { Credential, validateCredential, type CredentialAttributes } from "./Credential.ts";
 import type { Providers } from "./Providers.ts";
 import { emptyStorageBucket, makeStorageClient } from "./Storage.ts";
 
@@ -87,9 +79,7 @@ const BucketResource = Resource<Bucket>("Neon.Bucket");
 export const Bucket: typeof BucketResource = Object.assign(
   (
     id: string,
-    props:
-      | PropsInput<BucketProps>
-      | Effect.Effect<PropsInput<BucketProps>, never, Providers>,
+    props: PropsInput<BucketProps> | Effect.Effect<PropsInput<BucketProps>, never, Providers>,
   ) =>
     BucketResource(
       id,
@@ -125,9 +115,9 @@ export class UnsupportedBucketAccessUpdate extends Data.TaggedError(
 export class BucketNotEmpty extends Data.TaggedError("BucketNotEmpty")<{
   message: string;
 }> {}
-export class BucketConfigurationError extends Data.TaggedError(
-  "BucketConfigurationError",
-)<{ message: string }> {}
+export class BucketConfigurationError extends Data.TaggedError("BucketConfigurationError")<{
+  message: string;
+}> {}
 
 const apiScope = (scope: ResolvedBranchScope) => ({
   project_id: scope.projectId,
@@ -180,9 +170,7 @@ const hydrate = Effect.fn(function* (
         times: 8,
       }),
     )).TagSet?.flatMap((tag) =>
-      tag.Key !== undefined && tag.Value !== undefined
-        ? [{ Key: tag.Key, Value: tag.Value }]
-        : [],
+      tag.Key !== undefined && tag.Value !== undefined ? [{ Key: tag.Key, Value: tag.Value }] : [],
     ),
   );
   const cors =
@@ -196,10 +184,7 @@ const hydrate = Effect.fn(function* (
   return { ...attrs, tags, cors };
 });
 
-const credentialOf = Effect.fn(function* (
-  props: BucketProps,
-  output?: BucketAttributes,
-) {
+const credentialOf = Effect.fn(function* (props: BucketProps, output?: BucketAttributes) {
   const credential = props.credential ?? output?.credential;
   if (!credential)
     return yield* new BucketConfigurationError({
@@ -327,8 +312,7 @@ export const BucketProvider = () =>
             const uploads = yield* client.listMultipartUploads();
             if (objects.Contents?.length || uploads.Uploads?.length) {
               return yield* new BucketNotEmpty({
-                message:
-                  "Bucket changed while being emptied; refusing deletion",
+                message: "Bucket changed while being emptied; refusing deletion",
               });
             }
             yield* client.deleteBucket();

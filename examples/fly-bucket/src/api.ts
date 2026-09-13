@@ -38,9 +38,7 @@ export default class Api extends Fly.Service<Api>()(
         const text =
           obj.Body === undefined
             ? ""
-            : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(
-                Effect.orDie,
-              );
+            : yield* Stream.mkString(Stream.decodeText(obj.Body)).pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           ok: text === "hello-from-tigris",
           text,

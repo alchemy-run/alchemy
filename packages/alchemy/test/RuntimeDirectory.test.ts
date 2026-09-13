@@ -22,41 +22,19 @@ import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256 } from "@/Util/sha256";
 
 layer(PlatformServices)("runtime directory", (it) => {
-  it.effect(
-    "compares paths against the supplied base without using the process cwd",
-    () =>
-      Effect.sync(() => {
-        expect(
-          isPathWithin(
-            ".alchemy",
-            "/workspace/app/.alchemy/bundles/worker.js",
-            "/workspace/app",
-          ),
-        ).toBe(true);
-        expect(
-          isPathWithin(
-            ".alchemy",
-            "/workspace/app/.alchemy/bundles/worker.js",
-            "/workspace/other",
-          ),
-        ).toBe(false);
-        expect(isPathWithin(".alchemy", ".alchemy", "/workspace/app")).toBe(
-          true,
-        );
-        expect(
-          isPathWithin(
-            ".alchemy",
-            ".alchemy-backup/worker.js",
-            "/workspace/app",
-          ),
-        ).toBe(false);
-        expect(
-          isPathWithin(".alchemy", ".alchemy/../source.js", "/workspace/app"),
-        ).toBe(false);
-        expect(
-          isPathWithin("/runtime", "/runtime/worker.js", "/workspace/app"),
-        ).toBe(true);
-      }),
+  it.effect("compares paths against the supplied base without using the process cwd", () =>
+    Effect.sync(() => {
+      expect(
+        isPathWithin(".alchemy", "/workspace/app/.alchemy/bundles/worker.js", "/workspace/app"),
+      ).toBe(true);
+      expect(
+        isPathWithin(".alchemy", "/workspace/app/.alchemy/bundles/worker.js", "/workspace/other"),
+      ).toBe(false);
+      expect(isPathWithin(".alchemy", ".alchemy", "/workspace/app")).toBe(true);
+      expect(isPathWithin(".alchemy", ".alchemy-backup/worker.js", "/workspace/app")).toBe(false);
+      expect(isPathWithin(".alchemy", ".alchemy/../source.js", "/workspace/app")).toBe(false);
+      expect(isPathWithin("/runtime", "/runtime/worker.js", "/workspace/app")).toBe(true);
+    }),
   );
 
   it.effect("preserves the relative fallback and configured roots", () =>
@@ -71,16 +49,8 @@ layer(PlatformServices)("runtime directory", (it) => {
           }),
         ),
       ).toBe("node_modules/.cache/runtime");
-      expect(
-        isPathWithin(
-          "/tmp/runtime",
-          "/tmp/runtime-sibling/file",
-          process.cwd(),
-        ),
-      ).toBe(false);
-      expect(
-        isPathWithin("/tmp/runtime", "/tmp/runtime/file", process.cwd()),
-      ).toBe(true);
+      expect(isPathWithin("/tmp/runtime", "/tmp/runtime-sibling/file", process.cwd())).toBe(false);
+      expect(isPathWithin("/tmp/runtime", "/tmp/runtime/file", process.cwd())).toBe(true);
     }),
   );
 
@@ -114,8 +84,7 @@ layer(PlatformServices)("runtime directory", (it) => {
             Stream.runCollect,
             Effect.provideService(FileSystem.FileSystem, {
               ...fs,
-              watch: () =>
-                Stream.make({ _tag: "Update" as const, path: eventPath }),
+              watch: () => Stream.make({ _tag: "Update" as const, path: eventPath }),
             }),
             Effect.provideService(AlchemyContext, {
               dotAlchemy: path.relative(process.cwd(), runtime),
@@ -128,44 +97,37 @@ layer(PlatformServices)("runtime directory", (it) => {
       }),
   );
 
-  it.effect(
-    "writes Worker bundles under the context and honors an explicit output directory",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped();
-        const runtime = path.join(root, "node_modules/.cache/runtime");
-        const main = path.join(root, "worker.mjs");
-        yield* fs.writeFileString(path.join(root, "package.json"), "{}");
-        yield* fs.writeFileString(
+  it.effect("writes Worker bundles under the context and honors an explicit output directory", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const runtime = path.join(root, "node_modules/.cache/runtime");
+      const main = path.join(root, "worker.mjs");
+      yield* fs.writeFileString(path.join(root, "package.json"), "{}");
+      yield* fs.writeFileString(main, 'export default { fetch: () => new Response("ok") };');
+      const bundler = yield* WorkerBundle.pipe(
+        Effect.provideService(AlchemyContext, {
+          dotAlchemy: runtime,
+          dev: false,
+          adopt: false,
+        }),
+      );
+      for (const override of [undefined, path.join(root, "explicit")]) {
+        const bundle = yield* bundler.build({
+          id: "test",
           main,
-          'export default { fetch: () => new Response("ok") };',
-        );
-        const bundler = yield* WorkerBundle.pipe(
-          Effect.provideService(AlchemyContext, {
-            dotAlchemy: runtime,
-            dev: false,
-            adopt: false,
-          }),
-        );
-        for (const override of [undefined, path.join(root, "explicit")]) {
-          const bundle = yield* bundler.build({
-            id: "test",
-            main,
-            compatibility: { date: "2026-03-17", flags: [] },
-            entry: { kind: "external" },
-            stack: { name: "test", stage: "test" },
-            extraOptions: override ? { output: { dir: override } } : undefined,
-          });
-          const directory = override ?? path.join(runtime, "bundles/test");
-          expect(bundle.files.length).toBeGreaterThan(0);
-          expect((yield* fs.readDirectory(directory)).length).toBeGreaterThan(
-            0,
-          );
-        }
-        expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
-      }),
+          compatibility: { date: "2026-03-17", flags: [] },
+          entry: { kind: "external" },
+          stack: { name: "test", stage: "test" },
+          extraOptions: override ? { output: { dir: override } } : undefined,
+        });
+        const directory = override ?? path.join(runtime, "bundles/test");
+        expect(bundle.files.length).toBeGreaterThan(0);
+        expect((yield* fs.readDirectory(directory)).length).toBeGreaterThan(0);
+      }
+      expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
+    }),
   );
 
   it.effect(
@@ -177,10 +139,7 @@ layer(PlatformServices)("runtime directory", (it) => {
         const root = yield* fs.makeTempDirectoryScoped();
         const main = path.join(root, "worker.mjs");
         yield* fs.writeFileString(path.join(root, "package.json"), "{}");
-        yield* fs.writeFileString(
-          main,
-          'export default { fetch: () => new Response("ok") };',
-        );
+        yield* fs.writeFileString(main, 'export default { fetch: () => new Response("ok") };');
         for (const configured of [undefined, "custom/runtime"]) {
           const bundler = yield* configured === undefined
             ? WorkerBundle
@@ -200,142 +159,108 @@ layer(PlatformServices)("runtime directory", (it) => {
             extraOptions: undefined,
           });
           expect(
-            (yield* fs.readDirectory(
-              path.join(root, configured ?? ".alchemy", "bundles/relative"),
-            )).length,
+            (yield* fs.readDirectory(path.join(root, configured ?? ".alchemy", "bundles/relative")))
+              .length,
           ).toBeGreaterThan(0);
         }
       }),
   );
 
-  it.effect(
-    "keeps temporary and stable container contexts under the full configured path",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped();
-        const runtime = path.join(root, "node_modules/.cache/runtime");
-        yield* Effect.gen(function* () {
-          const stable = yield* getStableContextDir(
-            path.join(root, "entry.ts"),
-            runtime,
-            "image",
-          );
-          const temporary = yield* createTempBundleDir(
-            path.join(root, "entry.ts"),
-            runtime,
-            "image",
-          );
-          expect(stable).toBe(path.join(runtime, "tmp/test-dev-image"));
-          const relative = path.relative(process.cwd(), runtime);
-          expect(
-            yield* getStableContextDir(
-              path.join(root, "entry.ts"),
-              relative,
-              "image",
-            ),
-          ).toBe(path.join(relative, "tmp/test-dev-image"));
-          expect(isPathWithin(runtime, temporary, process.cwd())).toBe(true);
-          expect(yield* fs.exists(temporary)).toBe(true);
-        }).pipe(
-          Effect.provideService(Stack, {
-            name: "test",
-            stage: "dev",
-            resources: {},
-            bindings: {},
-            actions: {},
-          }),
-          Effect.provideService(Stage, "dev"),
+  it.effect("keeps temporary and stable container contexts under the full configured path", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const runtime = path.join(root, "node_modules/.cache/runtime");
+      yield* Effect.gen(function* () {
+        const stable = yield* getStableContextDir(path.join(root, "entry.ts"), runtime, "image");
+        const temporary = yield* createTempBundleDir(path.join(root, "entry.ts"), runtime, "image");
+        expect(stable).toBe(path.join(runtime, "tmp/test-dev-image"));
+        const relative = path.relative(process.cwd(), runtime);
+        expect(yield* getStableContextDir(path.join(root, "entry.ts"), relative, "image")).toBe(
+          path.join(relative, "tmp/test-dev-image"),
         );
-      }),
+        expect(isPathWithin(runtime, temporary, process.cwd())).toBe(true);
+        expect(yield* fs.exists(temporary)).toBe(true);
+      }).pipe(
+        Effect.provideService(Stack, {
+          name: "test",
+          stage: "dev",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "dev"),
+      );
+    }),
   );
 
-  it.effect(
-    "captures the configured root for a lazily initialized local state store",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped();
-        const getStore = yield* State.pipe(
-          Effect.provide(localState()),
-          Effect.provideService(AlchemyContext, {
-            dotAlchemy: root,
-            dev: false,
-            adopt: false,
-          }),
-        );
-        const store = yield* getStore;
-        yield* store.setOutput({
-          stack: "runtime-directory",
-          stage: "test",
-          value: { value: 42 },
+  it.effect("captures the configured root for a lazily initialized local state store", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const getStore = yield* State.pipe(
+        Effect.provide(localState()),
+        Effect.provideService(AlchemyContext, {
+          dotAlchemy: root,
+          dev: false,
+          adopt: false,
+        }),
+      );
+      const store = yield* getStore;
+      yield* store.setOutput({
+        stack: "runtime-directory",
+        stage: "test",
+        value: { value: 42 },
+      });
+      expect(yield* store.getOutput({ stack: "runtime-directory", stage: "test" })).toEqual({
+        value: 42,
+      });
+      expect(yield* fs.exists(path.join(root, "state"))).toBe(true);
+    }),
+  );
+
+  it.effect("excludes relocated runtime data from copies, hashes, and compute archives", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const runtime = path.join(root, "cache[private]");
+      yield* fs.makeDirectory(runtime);
+      yield* fs.writeFileString(path.join(root, "index.js"), "export default 42;");
+      yield* fs.writeFileString(path.join(runtime, "secret.txt"), "PRIVATE_RUNTIME_DATA");
+      yield* Effect.gen(function* () {
+        const artifactBefore = yield* hashDirectory({
+          cwd: runtime,
+          memo: { exclude: [], lockfile: false },
         });
+        const before = yield* hashExtraFiles([{ source: root, dest: "." }]);
+        yield* fs.writeFileString(path.join(runtime, "secret.txt"), "CHANGED_PRIVATE_RUNTIME_DATA");
         expect(
-          yield* store.getOutput({ stack: "runtime-directory", stage: "test" }),
-        ).toEqual({ value: 42 });
-        expect(yield* fs.exists(path.join(root, "state"))).toBe(true);
-      }),
-  );
-
-  it.effect(
-    "excludes relocated runtime data from copies, hashes, and compute archives",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped();
-        const runtime = path.join(root, "cache[private]");
-        yield* fs.makeDirectory(runtime);
-        yield* fs.writeFileString(
-          path.join(root, "index.js"),
-          "export default 42;",
-        );
-        yield* fs.writeFileString(
-          path.join(runtime, "secret.txt"),
-          "PRIVATE_RUNTIME_DATA",
-        );
-        yield* Effect.gen(function* () {
-          const artifactBefore = yield* hashDirectory({
+          yield* hashDirectory({
             cwd: runtime,
             memo: { exclude: [], lockfile: false },
-          });
-          const before = yield* hashExtraFiles([{ source: root, dest: "." }]);
-          yield* fs.writeFileString(
-            path.join(runtime, "secret.txt"),
-            "CHANGED_PRIVATE_RUNTIME_DATA",
-          );
-          expect(
-            yield* hashDirectory({
-              cwd: runtime,
-              memo: { exclude: [], lockfile: false },
-            }),
-          ).not.toBe(artifactBefore);
-          expect(yield* hashExtraFiles([{ source: root, dest: "." }])).toEqual(
-            before,
-          );
-          const target = yield* fs.makeTempDirectoryScoped();
-          yield* copyTree(root, target);
-          expect(yield* fs.exists(path.join(target, "cache[private]"))).toBe(
-            false,
-          );
-          expect(yield* fs.exists(path.join(target, "index.js"))).toBe(true);
-          const archive = yield* createComputeArchive({
-            directory: root,
-            entrypoint: "index.js",
-          });
-          expect(gunzipSync(archive).toString()).not.toContain(
-            "PRIVATE_RUNTIME_DATA",
-          );
-        }).pipe(
-          Effect.provideService(AlchemyContext, {
-            dotAlchemy: path.relative(process.cwd(), runtime),
-            dev: false,
-            adopt: false,
           }),
-        );
-      }),
+        ).not.toBe(artifactBefore);
+        expect(yield* hashExtraFiles([{ source: root, dest: "." }])).toEqual(before);
+        const target = yield* fs.makeTempDirectoryScoped();
+        yield* copyTree(root, target);
+        expect(yield* fs.exists(path.join(target, "cache[private]"))).toBe(false);
+        expect(yield* fs.exists(path.join(target, "index.js"))).toBe(true);
+        const archive = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "index.js",
+        });
+        expect(gunzipSync(archive).toString()).not.toContain("PRIVATE_RUNTIME_DATA");
+      }).pipe(
+        Effect.provideService(AlchemyContext, {
+          dotAlchemy: path.relative(process.cwd(), runtime),
+          dev: false,
+          adopt: false,
+        }),
+      );
+    }),
   );
   it.effect(
     "reads Python dependency caches from the configured root without including them as source",
@@ -349,18 +274,12 @@ layer(PlatformServices)("runtime directory", (it) => {
         yield* fs.makeDirectory(path.join(staging, "python_modules"), {
           recursive: true,
         });
-        yield* fs.writeFileString(
-          path.join(root, "worker.py"),
-          "class Default: pass",
-        );
+        yield* fs.writeFileString(path.join(root, "worker.py"), "class Default: pass");
         yield* fs.writeFileString(
           path.join(staging, "python_modules/cached.py"),
           "CACHED_DEPENDENCY = True",
         );
-        yield* fs.writeFileString(
-          path.join(runtime, "private.py"),
-          "PRIVATE_RUNTIME_DATA = True",
-        );
+        yield* fs.writeFileString(path.join(runtime, "private.py"), "PRIVATE_RUNTIME_DATA = True");
         yield* fs.writeFileString(
           path.join(staging, ".synced"),
           yield* sha256("3.13\0https://index.pyodide.org/0.28.3\0"),
@@ -377,44 +296,32 @@ layer(PlatformServices)("runtime directory", (it) => {
             adopt: false,
           }),
         );
-        expect(
-          bundle.files.some((file) => file.path.includes("cached.py")),
-        ).toBe(true);
-        expect(
-          bundle.files.some((file) => file.path.includes("private.py")),
-        ).toBe(false);
+        expect(bundle.files.some((file) => file.path.includes("cached.py"))).toBe(true);
+        expect(bundle.files.some((file) => file.path.includes("private.py"))).toBe(false);
         expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
       }),
   );
 
-  it.effect(
-    "excludes the supplied runtime directory from Next.js source hashes",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped();
-        const runtime = path.join(root, "runtime");
-        yield* fs.makeDirectory(runtime);
-        yield* fs.writeFileString(
-          path.join(root, "app.js"),
-          "export default 42;",
-        );
-        const provider = yield* nextjsSource.make({ root });
-        const context = {
-          id: "test",
-          workerName: "test",
-          compatibility: { date: "2026-03-17", flags: [] },
-          dotAlchemy: runtime,
-        };
-        const before = yield* provider.hash(context, undefined);
-        yield* fs.writeFileString(path.join(runtime, "state.json"), "{}");
-        expect(yield* provider.hash(context, undefined)).toEqual(before);
-        yield* fs.writeFileString(
-          path.join(root, "app.js"),
-          "export default 43;",
-        );
-        expect(yield* provider.hash(context, undefined)).not.toEqual(before);
-      }),
+  it.effect("excludes the supplied runtime directory from Next.js source hashes", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const runtime = path.join(root, "runtime");
+      yield* fs.makeDirectory(runtime);
+      yield* fs.writeFileString(path.join(root, "app.js"), "export default 42;");
+      const provider = yield* nextjsSource.make({ root });
+      const context = {
+        id: "test",
+        workerName: "test",
+        compatibility: { date: "2026-03-17", flags: [] },
+        dotAlchemy: runtime,
+      };
+      const before = yield* provider.hash(context, undefined);
+      yield* fs.writeFileString(path.join(runtime, "state.json"), "{}");
+      expect(yield* provider.hash(context, undefined)).toEqual(before);
+      yield* fs.writeFileString(path.join(root, "app.js"), "export default 43;");
+      expect(yield* provider.hash(context, undefined)).not.toEqual(before);
+    }),
   );
 });

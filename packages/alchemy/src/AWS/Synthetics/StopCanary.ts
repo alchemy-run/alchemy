@@ -29,14 +29,7 @@ export interface StopCanary extends Binding.Service<
   "AWS.Synthetics.StopCanary",
   (
     canary: Canary,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      synthetics.StopCanaryResponse,
-      synthetics.StopCanaryError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<synthetics.StopCanaryResponse, synthetics.StopCanaryError>>
 > {}
 
-export const StopCanary = Binding.Service<StopCanary>(
-  "AWS.Synthetics.StopCanary",
-);
+export const StopCanary = Binding.Service<StopCanary>("AWS.Synthetics.StopCanary");

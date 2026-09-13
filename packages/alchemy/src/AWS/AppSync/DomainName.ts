@@ -7,11 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryConcurrentModification,
-  syncAppSyncTags,
-  tagRecord,
-} from "./common.ts";
+import { retryConcurrentModification, syncAppSyncTags, tagRecord } from "./common.ts";
 
 export interface DomainNameProps {
   /**
@@ -84,9 +80,7 @@ export const DomainNameProvider = () =>
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
         );
 
-      const toAttributes = (
-        config: appsync.DomainNameConfig,
-      ): AppSyncDomainName["Attributes"] => ({
+      const toAttributes = (config: appsync.DomainNameConfig): AppSyncDomainName["Attributes"] => ({
         domainName: config.domainName!,
         domainNameArn: config.domainNameArn,
         certificateArn: config.certificateArn!,
@@ -95,18 +89,11 @@ export const DomainNameProvider = () =>
       });
 
       return DomainName.Provider.of({
-        stables: [
-          "domainName",
-          "domainNameArn",
-          "appsyncDomainName",
-          "hostedZoneId",
-        ],
+        stables: ["domainName", "domainNameArn", "appsyncDomainName", "hostedZoneId"],
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* appsync.listDomainNames
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* appsync.listDomainNames.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.domainNameConfigs ?? [])
               .filter((config) => config.domainName != null)
@@ -119,17 +106,12 @@ export const DomainNameProvider = () =>
           const config = yield* getDomainSafe(domainName);
           if (config?.domainName == null) return undefined;
           const attrs = toAttributes(config);
-          return (yield* hasAlchemyTags(id, tagRecord(config.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(config.tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            news.domainName !== olds.domainName ||
-            news.certificateArn !== olds.certificateArn
-          ) {
+          if (news.domainName !== olds.domainName || news.certificateArn !== olds.certificateArn) {
             return { action: "replace" } as const;
           }
           // description/tags converge via update
@@ -154,10 +136,7 @@ export const DomainNameProvider = () =>
             );
             observed = created.domainNameConfig!;
             yield* session.note(`Created domain ${news.domainName}`);
-          } else if (
-            news.description !== undefined &&
-            observed.description !== news.description
-          ) {
+          } else if (news.description !== undefined && observed.description !== news.description) {
             // 3. SYNC
             const updated = yield* retryConcurrentModification(
               appsync.updateDomainName({

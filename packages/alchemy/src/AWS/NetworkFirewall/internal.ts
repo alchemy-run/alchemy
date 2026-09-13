@@ -3,9 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 /** Convert a Network Firewall `Tag[]` list into a plain record. */
-export const nfwTagsToRecord = (
-  tags: readonly NFW.Tag[] | undefined,
-): Record<string, string> =>
+export const nfwTagsToRecord = (tags: readonly NFW.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value]));
 
 /** Convert a plain record into a Network Firewall `Tag[]` list. */
@@ -37,11 +35,7 @@ export const retryWhileNfwInUse = <A, E extends { readonly _tag: string }, R>(
  * `ResourceNotFoundException` from a follow-up describe. Bounded retry
  * through the eventual-consistency window.
  */
-export const retryWhileNfwNotFound = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+export const retryWhileNfwNotFound = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {

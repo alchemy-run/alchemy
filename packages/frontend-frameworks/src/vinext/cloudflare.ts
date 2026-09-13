@@ -10,8 +10,7 @@ import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtim
 export type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 
 /** Set on the process that injects Alchemy's Cloudflare Vite plugin. */
-export const ALCHEMY_CLOUDFLARE_VITE_INJECTED =
-  "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
+export const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
 
 /** vinext App Router: RSC worker + SSR child environment. */
 export const VINEXT_VITE_ENVIRONMENTS = {
@@ -40,15 +39,10 @@ export const makeVinextPluginOptions = (
 ): CloudflareVitePluginOptions => {
   const main = inputs.main ?? DEFAULT_WORKER_ENTRY;
   return {
-    main: NodePath.isAbsolute(main)
-      ? main
-      : NodePath.resolve(inputs.root, main),
+    main: NodePath.isAbsolute(main) ? main : NodePath.resolve(inputs.root, main),
     viteEnvironments: {
       entry: inputs.viteEnvironments?.entry ?? VINEXT_VITE_ENVIRONMENTS.entry,
-      children: [
-        ...(inputs.viteEnvironments?.children ??
-          VINEXT_VITE_ENVIRONMENTS.children),
-      ],
+      children: [...(inputs.viteEnvironments?.children ?? VINEXT_VITE_ENVIRONMENTS.children)],
     },
     compatibilityDate: inputs.compatibilityDate,
     compatibilityFlags: [...inputs.compatibilityFlags],

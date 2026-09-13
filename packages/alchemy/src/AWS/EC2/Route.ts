@@ -455,8 +455,7 @@ export const RouteProvider = () =>
                         transitGatewayId: r.TransitGatewayId,
                         localGatewayId: r.LocalGatewayId,
                         carrierGatewayId: r.CarrierGatewayId,
-                        egressOnlyInternetGatewayId:
-                          r.EgressOnlyInternetGatewayId,
+                        egressOnlyInternetGatewayId: r.EgressOnlyInternetGatewayId,
                         coreNetworkArn: r.CoreNetworkArn,
                       }));
                   }),
@@ -486,10 +485,7 @@ export const RouteProvider = () =>
             .pipe(
               Effect.tapError(Effect.logDebug),
               Effect.catchTag("InvalidRoute.NotFound", () => Effect.void),
-              Effect.catchTag(
-                "InvalidRouteTableID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.void),
             );
 
           yield* session.note(`Route ${dest} deleted successfully`);
@@ -506,9 +502,7 @@ const describeRoute = (routeTableId: string, props: RouteProps) =>
     const result = yield* ec2
       .describeRouteTables({ RouteTableIds: [routeTableId] })
       .pipe(
-        Effect.catchTag("InvalidRouteTableID.NotFound", () =>
-          Effect.succeed({ RouteTables: [] }),
-        ),
+        Effect.catchTag("InvalidRouteTableID.NotFound", () => Effect.succeed({ RouteTables: [] })),
       );
 
     const routeTable = result.RouteTables?.[0];

@@ -17,11 +17,7 @@ import type { Providers } from "../Providers.ts";
 const unwrapSensitive = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 export interface SpaceSupportedEmailDomains {
   /**
@@ -235,9 +231,7 @@ export const SpaceProvider = () =>
     Space,
     Effect.gen(function* () {
       const toName = (id: string, props: Partial<SpaceProps>) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 30 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 30 });
 
       const toSubdomain = (id: string, props: Partial<SpaceProps>) =>
         props.subdomain
@@ -247,24 +241,16 @@ export const SpaceProvider = () =>
       const getSpaceOrUndefined = Effect.fn(function* (spaceId: string) {
         return yield* repostspace
           .getSpace({ spaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Locate a live (not deleting/deleted) space by display name. Space
       // IDs are auto-assigned, so this is the fallback when the state
       // output cache is absent (e.g. after a past persistence failure).
       const findByName = Effect.fn(function* (name: string) {
-        const chunk = yield* repostspace.listSpaces
-          .items({})
-          .pipe(Stream.runCollect);
+        const chunk = yield* repostspace.listSpaces.items({}).pipe(Stream.runCollect);
         return Array.from(chunk).find(
-          (space) =>
-            unwrapSensitive(space.name) === name &&
-            !space.status.startsWith("DELETE"),
+          (space) => unwrapSensitive(space.name) === name && !space.status.startsWith("DELETE"),
         );
       });
 
@@ -283,19 +269,12 @@ export const SpaceProvider = () =>
       // provider lifecycle op leaks `Retry.Return`'s conditional into
       // declaration emit and widens the provider layer to `unknown` R for
       // every consumer of `AWS.providers()`.
-      const retryWhileSpaceNotReady = <
-        A,
-        E extends { readonly _tag: string },
-        R,
-      >(
+      const retryWhileSpaceNotReady = <A, E extends { readonly _tag: string }, R>(
         self: Effect.Effect<A, E, R>,
       ): Effect.Effect<A, E, R> =>
         Effect.retry(self, {
           while: (e) => e._tag === "RePostSpaceNotReady",
-          schedule: Schedule.max([
-            Schedule.fixed("30 seconds"),
-            Schedule.recurs(80),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(80)]),
         });
 
       // Bounded readiness wait. Space provisioning is asynchronous and can
@@ -305,10 +284,7 @@ export const SpaceProvider = () =>
         return yield* retryWhileSpaceNotReady(
           Effect.gen(function* () {
             const space = yield* repostspace.getSpace({ spaceId });
-            if (
-              space.status === "CREATE_FAILED" ||
-              space.status.startsWith("DELETE")
-            ) {
+            if (space.status === "CREATE_FAILED" || space.status.startsWith("DELETE")) {
               return yield* Effect.fail(
                 new RePostSpaceProvisioningFailed({
                   spaceId,
@@ -317,9 +293,7 @@ export const SpaceProvider = () =>
               );
             }
             if (space.status !== "CREATE_COMPLETED") {
-              return yield* Effect.fail(
-                new RePostSpaceNotReady({ spaceId, status: space.status }),
-              );
+              return yield* Effect.fail(new RePostSpaceNotReady({ spaceId, status: space.status }));
             }
             return space;
           }),
@@ -353,18 +327,14 @@ export const SpaceProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const chunk = yield* repostspace.listSpaces
-              .items({})
-              .pipe(Stream.runCollect);
+            const chunk = yield* repostspace.listSpaces.items({}).pipe(Stream.runCollect);
             const items = yield* Effect.forEach(
               Array.from(chunk),
               (space) =>
                 repostspace.getSpace({ spaceId: space.spaceId }).pipe(
                   Effect.flatMap((full) => toAttrs(full)),
                   // A space can vanish between enumeration and hydration.
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 4 },
             );
@@ -384,9 +354,7 @@ export const SpaceProvider = () =>
             return undefined;
           }
           const attrs = yield* toAttrs(space);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, olds, news }) {
@@ -483,27 +451,17 @@ export const SpaceProvider = () =>
             update.tier = props.tier;
             mutated = true;
           }
-          if (
-            props.roleArn !== undefined &&
-            props.roleArn !== observed.customerRoleArn
-          ) {
+          if (props.roleArn !== undefined && props.roleArn !== observed.customerRoleArn) {
             update.roleArn = props.roleArn;
             mutated = true;
           }
           if (props.supportedEmailDomains !== undefined) {
-            const observedDomains = (
-              observed.supportedEmailDomains?.allowedDomains ?? []
-            ).map(
-              (domain: string | Redacted.Redacted<string>) =>
-                unwrapSensitive(domain) ?? "",
+            const observedDomains = (observed.supportedEmailDomains?.allowedDomains ?? []).map(
+              (domain: string | Redacted.Redacted<string>) => unwrapSensitive(domain) ?? "",
             );
             if (
-              props.supportedEmailDomains.enabled !==
-                observed.supportedEmailDomains?.enabled ||
-              !sameStringSet(
-                props.supportedEmailDomains.allowedDomains,
-                observedDomains,
-              )
+              props.supportedEmailDomains.enabled !== observed.supportedEmailDomains?.enabled ||
+              !sameStringSet(props.supportedEmailDomains.allowedDomains, observedDomains)
             ) {
               update.supportedEmailDomains = props.supportedEmailDomains;
               mutated = true;
@@ -539,9 +497,7 @@ export const SpaceProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* repostspace
             .deleteSpace({ spaceId: output.spaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

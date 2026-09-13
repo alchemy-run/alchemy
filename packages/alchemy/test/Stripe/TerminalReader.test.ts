@@ -16,10 +16,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const SIMULATED_REGISTRATION_CODE = "simulated-wpe";
 
@@ -33,17 +30,12 @@ const usAddress = {
 
 const isDeletedReader = (
   value: StripeTerminalReader | DeletedTerminalReader,
-): value is DeletedTerminalReader =>
-  "deleted" in value && value.deleted === true;
+): value is DeletedTerminalReader => "deleted" in value && value.deleted === true;
 
 const waitUntilGone = (id: string) =>
   GetTerminalReader({ reader: id }).pipe(
-    Effect.map((reader) =>
-      isDeletedReader(reader) ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((reader) => (isDeletedReader(reader) ? ("gone" as const) : ("found" as const))),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -57,17 +49,13 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* GetTerminalReaders({ limit: 1 }).pipe(
-        Effect.result,
-      );
+      const result = yield* GetTerminalReaders({ limit: 1 }).pipe(Effect.result);
 
       if (Result.isSuccess(result)) {
         expect(Array.isArray(result.success.data)).toBe(true);
       } else {
         expect(result.failure._tag).not.toEqual("UnknownStripeError");
-        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(
-          result.failure._tag,
-        );
+        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(result.failure._tag);
       }
 
       yield* stack.destroy();
@@ -83,13 +71,10 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const location = yield* Stripe.TerminalLocation(
-            "ReaderLifecycleLocation",
-            {
-              displayName: "Alchemy Terminal Reader Lifecycle",
-              address: { ...usAddress },
-            },
-          );
+          const location = yield* Stripe.TerminalLocation("ReaderLifecycleLocation", {
+            displayName: "Alchemy Terminal Reader Lifecycle",
+            address: { ...usAddress },
+          });
           const reader = yield* Stripe.TerminalReader("FrontCounter", {
             registrationCode: SIMULATED_REGISTRATION_CODE,
             label: "Alchemy Front Counter",
@@ -117,23 +102,16 @@ test.provider(
       expect(fetched.label).toEqual("Alchemy Front Counter");
       expect(fetched.device_type).toEqual("simulated_wisepos_e");
       expect(fetched.metadata?.station).toEqual("1");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const location = yield* Stripe.TerminalLocation(
-            "ReaderLifecycleLocation",
-            {
-              displayName: "Alchemy Terminal Reader Lifecycle",
-              address: { ...usAddress },
-            },
-          );
+          const location = yield* Stripe.TerminalLocation("ReaderLifecycleLocation", {
+            displayName: "Alchemy Terminal Reader Lifecycle",
+            address: { ...usAddress },
+          });
           const reader = yield* Stripe.TerminalReader("FrontCounter", {
             registrationCode: SIMULATED_REGISTRATION_CODE,
             label: "Alchemy Front Counter Updated",
@@ -178,13 +156,10 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const location = yield* Stripe.TerminalLocation(
-            "ReaderListLocation",
-            {
-              displayName: "Alchemy Terminal Reader List",
-              address: { ...usAddress },
-            },
-          );
+          const location = yield* Stripe.TerminalLocation("ReaderListLocation", {
+            displayName: "Alchemy Terminal Reader List",
+            address: { ...usAddress },
+          });
           const reader = yield* Stripe.TerminalReader("ListReader", {
             registrationCode: SIMULATED_REGISTRATION_CODE,
             label: "Alchemy List Reader",

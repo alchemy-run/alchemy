@@ -43,13 +43,8 @@ export interface UpdateThingShadow extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateThingShadowRequest,
-    ) => Effect.Effect<
-      iotdata.UpdateThingShadowResponse,
-      iotdata.UpdateThingShadowError
-    >
+    ) => Effect.Effect<iotdata.UpdateThingShadowResponse, iotdata.UpdateThingShadowError>
   >
 > {}
 
-export const UpdateThingShadow = Binding.Service<UpdateThingShadow>(
-  "AWS.IoT.UpdateThingShadow",
-);
+export const UpdateThingShadow = Binding.Service<UpdateThingShadow>("AWS.IoT.UpdateThingShadow");

@@ -8,8 +8,7 @@ describe("WorkflowBridge", () => {
   it.effect("preserves native Workflow control-flow rejections", () =>
     Effect.gen(function* () {
       const controlError = new Error("Aborting engine: User called pause");
-      const rejectWithControlError = () =>
-        Effect.runPromise(Effect.die(controlError));
+      const rejectWithControlError = () => Effect.runPromise(Effect.die(controlError));
       const step = wrapWorkflowStep({
         do: rejectWithControlError,
         sleep: rejectWithControlError,

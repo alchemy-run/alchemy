@@ -9,9 +9,7 @@ import { AWSEnvironment } from "@/AWS/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-import DocDBElasticTestFunctionLive, {
-  DocDBElasticTestFunction,
-} from "./handler";
+import DocDBElasticTestFunctionLive, { DocDBElasticTestFunction } from "./handler";
 import DocDBElasticSlowTestFunctionLive, {
   DocDBElasticSlowTestFunction,
   SECURITY_GROUPS_ENV,
@@ -26,10 +24,7 @@ const NONEXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -51,10 +46,7 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
@@ -62,9 +54,7 @@ const getJson = (path: string) =>
 describe.sequential("DocDBElastic Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "DocDBElastic test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("DocDBElastic test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("DocDBElastic test setup: deploying fixture");
@@ -123,9 +113,7 @@ describe.sequential("DocDBElastic Bindings", () => {
     test.provider("surfaces the typed not-found tag", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/snapshot-probe?arn=${encodeURIComponent(arns.snapshot)}`,
-        );
+        const response = yield* getJson(`/snapshot-probe?arn=${encodeURIComponent(arns.snapshot)}`);
         expect((response as any).tag).toBe("ResourceNotFoundException");
       }),
     );
@@ -135,53 +123,43 @@ describe.sequential("DocDBElastic Bindings", () => {
     test.provider("surfaces the typed not-found tag", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/delete-probe?arn=${encodeURIComponent(arns.snapshot)}`,
-        );
+        const response = yield* getJson(`/delete-probe?arn=${encodeURIComponent(arns.snapshot)}`);
         expect((response as any).tag).toBe("ResourceNotFoundException");
       }),
     );
   });
 
   describe("CopyClusterSnapshot", () => {
-    test.provider(
-      "rejects a nonexistent source snapshot with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const arns = yield* probeArns;
-          const response = yield* getJson(
-            `/copy-probe?arn=${encodeURIComponent(arns.snapshot)}`,
-          );
-          // Copy authorizes against the source-snapshot resource; a
-          // nonexistent snapshot is reported as AccessDeniedException
-          // (existence non-disclosure) rather than not-found.
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-            "AccessDeniedException",
-          ]).toContain((response as any).tag);
-        }),
+    test.provider("rejects a nonexistent source snapshot with a typed tag", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const response = yield* getJson(`/copy-probe?arn=${encodeURIComponent(arns.snapshot)}`);
+        // Copy authorizes against the source-snapshot resource; a
+        // nonexistent snapshot is reported as AccessDeniedException
+        // (existence non-disclosure) rather than not-found.
+        expect([
+          "ResourceNotFoundException",
+          "ValidationException",
+          "AccessDeniedException",
+        ]).toContain((response as any).tag);
+      }),
     );
   });
 
   describe("RestoreClusterFromSnapshot", () => {
-    test.provider(
-      "rejects a nonexistent source snapshot with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const arns = yield* probeArns;
-          const response = yield* getJson(
-            `/restore-probe?arn=${encodeURIComponent(arns.snapshot)}`,
-          );
-          // Restore authorizes against the source-snapshot resource; a
-          // nonexistent snapshot is reported as AccessDeniedException
-          // (existence non-disclosure) rather than not-found.
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-            "AccessDeniedException",
-          ]).toContain((response as any).tag);
-        }),
+    test.provider("rejects a nonexistent source snapshot with a typed tag", () =>
+      Effect.gen(function* () {
+        const arns = yield* probeArns;
+        const response = yield* getJson(`/restore-probe?arn=${encodeURIComponent(arns.snapshot)}`);
+        // Restore authorizes against the source-snapshot resource; a
+        // nonexistent snapshot is reported as AccessDeniedException
+        // (existence non-disclosure) rather than not-found.
+        expect([
+          "ResourceNotFoundException",
+          "ValidationException",
+          "AccessDeniedException",
+        ]).toContain((response as any).tag);
+      }),
     );
   });
 
@@ -189,9 +167,7 @@ describe.sequential("DocDBElastic Bindings", () => {
     test.provider("surfaces a typed tag for a nonexistent cluster", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/pending-probe?arn=${encodeURIComponent(arns.cluster)}`,
-        );
+        const response = yield* getJson(`/pending-probe?arn=${encodeURIComponent(arns.cluster)}`);
         expect(["ResourceNotFoundException", "ValidationException"]).toContain(
           (response as any).tag,
         );
@@ -203,9 +179,7 @@ describe.sequential("DocDBElastic Bindings", () => {
     test.provider("surfaces a typed tag for a nonexistent cluster", () =>
       Effect.gen(function* () {
         const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/apply-probe?arn=${encodeURIComponent(arns.cluster)}`,
-        );
+        const response = yield* getJson(`/apply-probe?arn=${encodeURIComponent(arns.cluster)}`);
         expect(["ResourceNotFoundException", "ValidationException"]).toContain(
           (response as any).tag,
         );
@@ -238,9 +212,7 @@ const defaultNetwork = Effect.gen(function* () {
   });
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -267,10 +239,7 @@ const deleteSnapshot = (snapshotArn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e): boolean => e._tag === "ConflictException",
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(40),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
     }),
   );
 
@@ -282,9 +251,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const network = yield* defaultNetwork;
       yield* Effect.sync(() => {
         process.env[SUBNETS_ENV] = JSON.stringify(network.subnetIds);
-        process.env[SECURITY_GROUPS_ENV] = JSON.stringify(
-          network.securityGroupIds,
-        );
+        process.env[SECURITY_GROUPS_ENV] = JSON.stringify(network.securityGroupIds);
       });
 
       let snapshotArn: string | undefined;
@@ -301,18 +268,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
 
         // Take an on-demand snapshot of the live cluster.
-        const snapshot = (yield* get(
-          `/snapshot?name=${SLOW_SNAPSHOT_NAME}`,
-        )) as {
+        const snapshot = (yield* get(`/snapshot?name=${SLOW_SNAPSHOT_NAME}`)) as {
           snapshotArn: string;
           status: string;
         };
@@ -321,16 +283,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
         // Wait (bounded) for the snapshot to become AVAILABLE so the stop
         // call below does not conflict with the in-flight snapshot.
-        yield* docdbelastic
-          .getClusterSnapshot({ snapshotArn: snapshot.snapshotArn })
-          .pipe(
-            Effect.map((r) => r.snapshot.status),
-            Effect.repeat({
-              schedule: Schedule.spaced("10 seconds"),
-              until: (status): boolean => status === "AVAILABLE",
-              times: 60,
-            }),
-          );
+        yield* docdbelastic.getClusterSnapshot({ snapshotArn: snapshot.snapshotArn }).pipe(
+          Effect.map((r) => r.snapshot.status),
+          Effect.repeat({
+            schedule: Schedule.spaced("10 seconds"),
+            until: (status): boolean => status === "AVAILABLE",
+            times: 60,
+          }),
+        );
 
         // Stop the cluster (compute billing pauses).
         const stop = (yield* get("/stop")) as { status: string };

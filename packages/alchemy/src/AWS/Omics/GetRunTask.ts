@@ -24,9 +24,7 @@ export interface GetRunTask extends Binding.Service<
   GetRunTask,
   "AWS.Omics.GetRunTask",
   () => Effect.Effect<
-    (
-      request?: GetRunTaskRequest,
-    ) => Effect.Effect<omics.GetRunTaskResponse, omics.GetRunTaskError>
+    (request?: GetRunTaskRequest) => Effect.Effect<omics.GetRunTaskResponse, omics.GetRunTaskError>
   >
 > {}
 

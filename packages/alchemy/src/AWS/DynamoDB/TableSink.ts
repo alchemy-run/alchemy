@@ -68,9 +68,7 @@ export interface TableSink extends Binding.Service<
   "AWS.DynamoDB.TableSink",
   (
     table: Table,
-  ) => Effect.Effect<
-    Sink.Sink<void, TableSinkEntry, readonly TableSinkEntry[], TableSinkError>
-  >
+  ) => Effect.Effect<Sink.Sink<void, TableSinkEntry, readonly TableSinkEntry[], TableSinkError>>
 > {}
 
 export const TableSink = Binding.Service<TableSink>("AWS.DynamoDB.TableSink");

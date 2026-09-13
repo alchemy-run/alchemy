@@ -5,10 +5,7 @@ import * as AWS from "@/AWS";
 import { BackupPlan } from "@/AWS/Backup/BackupPlan.ts";
 import { BackupSelection } from "@/AWS/Backup/BackupSelection.ts";
 import { BackupVault } from "@/AWS/Backup/BackupVault.ts";
-import {
-  normalizePolicyDocument,
-  type PolicyDocument,
-} from "@/AWS/IAM/Policy.ts";
+import { normalizePolicyDocument, type PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
@@ -28,10 +25,7 @@ const vaultAccessPolicy: PolicyDocument = {
       Sid: "DenyRecoveryPointDeletion",
       Effect: "Deny",
       Principal: { AWS: "*" },
-      Action: [
-        "backup:DeleteRecoveryPoint",
-        "backup:UpdateRecoveryPointLifecycle",
-      ],
+      Action: ["backup:DeleteRecoveryPoint", "backup:UpdateRecoveryPointLifecycle"],
       Resource: "*",
     },
   ],
@@ -42,9 +36,8 @@ const vaultAccessPolicy: PolicyDocument = {
 const getVault = backup
   .describeBackupVault({ BackupVaultName: vaultName })
   .pipe(
-    Effect.catchTag(
-      ["ResourceNotFoundException", "AccessDeniedException"],
-      () => Effect.succeed(undefined),
+    Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], () =>
+      Effect.succeed(undefined),
     ),
   );
 
@@ -165,10 +158,7 @@ test.provider(
               Statement: [
                 {
                   Resource: "*",
-                  Action: [
-                    "backup:DeleteRecoveryPoint",
-                    "backup:UpdateRecoveryPointLifecycle",
-                  ],
+                  Action: ["backup:DeleteRecoveryPoint", "backup:UpdateRecoveryPointLifecycle"],
                   Principal: { AWS: "*" },
                   Effect: "Deny",
                   Sid: "DenyRecoveryPointDeletion",
@@ -224,12 +214,8 @@ test.provider(
       const updatedPlan = yield* backup.getBackupPlan({
         BackupPlanId: deployed.planId,
       });
-      expect(
-        updatedPlan.BackupPlan?.Rules?.[0]?.Lifecycle?.DeleteAfterDays,
-      ).toBe(60);
-      expect(updatedPlan.BackupPlan?.Rules?.[0]?.CompletionWindowMinutes).toBe(
-        360,
-      );
+      expect(updatedPlan.BackupPlan?.Rules?.[0]?.Lifecycle?.DeleteAfterDays).toBe(60);
+      expect(updatedPlan.BackupPlan?.Rules?.[0]?.CompletionWindowMinutes).toBe(360);
 
       // Re-deploy was clean: the stored access policy is still canonically
       // equal to the original document, and the tag update landed.
@@ -252,9 +238,7 @@ test.provider(
       // The plan no longer appears in the account listing.
       const planProvider = yield* Provider.findProvider(BackupPlan);
       const remainingPlans = yield* planProvider.list();
-      expect(
-        remainingPlans.some((p) => p.backupPlanId === deployed.planId),
-      ).toBe(false);
+      expect(remainingPlans.some((p) => p.backupPlanId === deployed.planId)).toBe(false);
     }),
   { timeout: 240_000 },
 );

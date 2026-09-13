@@ -200,9 +200,7 @@ export type Plan = Resource<
  */
 export const Plan = Resource<Plan>("Stripe.Plan");
 
-export class PlanNotResolved extends Data.TaggedError(
-  "Stripe.PlanNotResolved",
-)<{
+export class PlanNotResolved extends Data.TaggedError("Stripe.PlanNotResolved")<{
   product: string;
   currency: string;
 }> {}
@@ -241,9 +239,7 @@ const toAttrs = (plan: StripePlan): PlanAttributes => ({
 const isMissingPlan = isMissingStripeResource;
 
 const getById = (plan: string) =>
-  GetPlan({ plan }).pipe(
-    Effect.catchIf(isMissingPlan, () => Effect.succeed(undefined)),
-  );
+  GetPlan({ plan }).pipe(Effect.catchIf(isMissingPlan, () => Effect.succeed(undefined)));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const plans: StripePlan[] = [];
@@ -267,10 +263,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllPlans = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const plans: StripePlan[] = [];
   for (const plan of [...active, ...inactive]) {
@@ -293,10 +288,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -322,10 +314,7 @@ const shouldReplace = (news: PlanProps, output: PlanAttributes | undefined) => {
   if (news.amount !== undefined && news.amount !== output.amount) {
     return true;
   }
-  if (
-    news.amountDecimal !== undefined &&
-    news.amountDecimal !== output.amountDecimal
-  ) {
+  if (news.amountDecimal !== undefined && news.amountDecimal !== output.amountDecimal) {
     return true;
   }
   if ((news.usageType ?? "licensed") !== output.usageType) return true;
@@ -363,9 +352,7 @@ export const PlanProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -402,19 +389,11 @@ export const PlanProvider = () =>
           interval: news.interval,
           active: desiredActive,
           metadata,
-          ...(news.intervalCount !== undefined
-            ? { interval_count: news.intervalCount }
-            : {}),
+          ...(news.intervalCount !== undefined ? { interval_count: news.intervalCount } : {}),
           ...(news.amount !== undefined ? { amount: news.amount } : {}),
-          ...(news.amountDecimal !== undefined
-            ? { amount_decimal: news.amountDecimal }
-            : {}),
-          ...(news.usageType !== undefined
-            ? { usage_type: news.usageType }
-            : {}),
-          ...(news.billingScheme !== undefined
-            ? { billing_scheme: news.billingScheme }
-            : {}),
+          ...(news.amountDecimal !== undefined ? { amount_decimal: news.amountDecimal } : {}),
+          ...(news.usageType !== undefined ? { usage_type: news.usageType } : {}),
+          ...(news.billingScheme !== undefined ? { billing_scheme: news.billingScheme } : {}),
           ...(news.meter !== undefined ? { meter: news.meter } : {}),
           ...(desiredNickname.length > 0 ? { nickname: desiredNickname } : {}),
           ...(desiredTrialPeriodDays !== undefined
@@ -463,9 +442,7 @@ export const PlanProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }
@@ -475,8 +452,6 @@ export const PlanProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* DeletePlan({ plan: output.id }).pipe(
-        Effect.catchIf(isMissingPlan, () => Effect.void),
-      );
+      yield* DeletePlan({ plan: output.id }).pipe(Effect.catchIf(isMissingPlan, () => Effect.void));
     }),
   });

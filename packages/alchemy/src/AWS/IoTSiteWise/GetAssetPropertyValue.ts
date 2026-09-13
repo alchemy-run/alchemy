@@ -46,10 +46,7 @@ export interface GetAssetPropertyValue extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAssetPropertyValueRequest,
-    ) => Effect.Effect<
-      sitewise.GetAssetPropertyValueResponse,
-      sitewise.GetAssetPropertyValueError
-    >
+    ) => Effect.Effect<sitewise.GetAssetPropertyValueResponse, sitewise.GetAssetPropertyValueError>
   >
 > {}
 export const GetAssetPropertyValue = Binding.Service<GetAssetPropertyValue>(

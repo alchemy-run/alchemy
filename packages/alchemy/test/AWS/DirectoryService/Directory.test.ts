@@ -5,11 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import {
-  ConditionalForwarder,
-  Directory,
-  EventTopic,
-} from "@/AWS/DirectoryService";
+import { ConditionalForwarder, Directory, EventTopic } from "@/AWS/DirectoryService";
 import { Topic } from "@/AWS/SNS";
 import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
@@ -23,9 +19,7 @@ test.provider(
   "describeDirectories on a nonexistent directory fails with EntityDoesNotExistException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        ds.describeDirectories({ DirectoryIds: ["d-1234567890"] }),
-      );
+      const error = yield* Effect.flip(ds.describeDirectories({ DirectoryIds: ["d-1234567890"] }));
       expect(error._tag).toBe("EntityDoesNotExistException");
     }),
 );
@@ -48,9 +42,7 @@ test.provider(
   "describeEventTopics on a nonexistent directory fails with EntityDoesNotExistException",
   () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        ds.describeEventTopics({ DirectoryId: "d-1234567890" }),
-      );
+      const error = yield* Effect.flip(ds.describeEventTopics({ DirectoryId: "d-1234567890" }));
       expect(error._tag).toBe("EntityDoesNotExistException");
     }),
 );
@@ -98,9 +90,7 @@ const defaultNetwork = Effect.gen(function* () {
     .map(([, id]) => id)
     .slice(0, 2);
   if (subnetIds.length < 2) {
-    return yield* Effect.die(
-      new Error("default VPC is missing subnets in two distinct AZs"),
-    );
+    return yield* Effect.die(new Error("default VPC is missing subnets in two distinct AZs"));
   }
   return { vpcId: vpc.vpcId, subnetIds };
 });
@@ -109,16 +99,10 @@ const defaultNetwork = Effect.gen(function* () {
 // fully gone. Full disappearance takes several more minutes server-side.
 const assertDirectoryDeleting = (directoryId: string) =>
   Effect.gen(function* () {
-    const stage = yield* ds
-      .describeDirectories({ DirectoryIds: [directoryId] })
-      .pipe(
-        Effect.map(
-          (r) => r.DirectoryDescriptions?.[0]?.Stage ?? ("gone" as const),
-        ),
-        Effect.catchTag("EntityDoesNotExistException", () =>
-          Effect.succeed("gone" as const),
-        ),
-      );
+    const stage = yield* ds.describeDirectories({ DirectoryIds: [directoryId] }).pipe(
+      Effect.map((r) => r.DirectoryDescriptions?.[0]?.Stage ?? ("gone" as const)),
+      Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed("gone" as const)),
+    );
     if (stage !== "gone" && stage !== "Deleting" && stage !== "Deleted") {
       return yield* Effect.fail(
         new Error(`directory '${directoryId}' still exists (stage: ${stage})`),
@@ -126,10 +110,7 @@ const assertDirectoryDeleting = (directoryId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -176,9 +157,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY)(
       expect(directory.size).toBe("Small");
       expect(directory.dnsIpAddrs.length).toBe(2);
       expect(directory.vpcId).toBe(network.vpcId);
-      expect([...directory.subnetIds].sort()).toEqual(
-        [...network.subnetIds].sort(),
-      );
+      expect([...directory.subnetIds].sort()).toEqual([...network.subnetIds].sort());
       expect(directory.tags.fixture).toBe("directory-service");
       expect(directory.tags["alchemy::id"]).toBeDefined();
 
@@ -199,9 +178,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY)(
       const topics = yield* ds.describeEventTopics({
         DirectoryId: directory.directoryId,
       });
-      expect(topics.EventTopics?.map((topic) => topic.TopicName)).toContain(
-        eventTopic.topicName,
-      );
+      expect(topics.EventTopics?.map((topic) => topic.TopicName)).toContain(eventTopic.topicName);
 
       // Tags mutate in place — a second deploy must keep the SAME directory
       // id (no replacement) and converge the tag set.
@@ -249,9 +226,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY_MSAD)(
           return { directory, forwarder };
         });
 
-      const { directory, forwarder } = yield* stack.deploy(
-        build(["10.200.0.2"]),
-      );
+      const { directory, forwarder } = yield* stack.deploy(build(["10.200.0.2"]));
       expect(directory.type).toBe("MicrosoftAD");
       expect(directory.stage).toBe("Active");
       expect(forwarder.remoteDomainName).toBe("partner.alchemy-test.internal");
@@ -262,18 +237,11 @@ test.provider.skipIf(!process.env.AWS_TEST_DIRECTORY_MSAD)(
         DirectoryId: directory.directoryId,
         RemoteDomainNames: ["partner.alchemy-test.internal"],
       });
-      expect(observed.ConditionalForwarders?.[0]?.DnsIpAddrs).toEqual([
-        "10.200.0.2",
-      ]);
+      expect(observed.ConditionalForwarders?.[0]?.DnsIpAddrs).toEqual(["10.200.0.2"]);
 
       // DNS addresses mutate in place — same directory, same forwarder.
-      const { forwarder: updated } = yield* stack.deploy(
-        build(["10.200.0.2", "10.200.1.2"]),
-      );
-      expect([...updated.dnsIpAddrs].sort()).toEqual([
-        "10.200.0.2",
-        "10.200.1.2",
-      ]);
+      const { forwarder: updated } = yield* stack.deploy(build(["10.200.0.2", "10.200.1.2"]));
+      expect([...updated.dnsIpAddrs].sort()).toEqual(["10.200.0.2", "10.200.1.2"]);
 
       yield* stack.destroy();
       yield* assertDirectoryDeleting(directory.directoryId);

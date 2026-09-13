@@ -1,16 +1,10 @@
-import {
-  frameworkSite,
-  staticConfigFromAssets,
-  type FrameworkSiteProps,
-} from "./FrameworkSite.ts";
+import { frameworkSite, staticConfigFromAssets, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Astro build. */
-export const ASTRO_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/astro";
+export const ASTRO_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/astro";
 
 /** The Node container deploy target for the Astro build. */
-export const ASTRO_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/astro/node";
+export const ASTRO_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astro/node";
 
 export interface AstroProps extends FrameworkSiteProps {
   /**
@@ -88,7 +82,6 @@ export const Astro = (id: string, props: AstroProps = {}) => {
     framework: ASTRO_FRAMEWORK_SPECIFIER,
     target: ASTRO_NODE_TARGET_SPECIFIER,
     options: { astro: { ...props.astro, output } },
-    static:
-      output === "static" ? staticConfigFromAssets(props.assets) : undefined,
+    static: output === "static" ? staticConfigFromAssets(props.assets) : undefined,
   });
 };

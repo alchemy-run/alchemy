@@ -44,9 +44,7 @@ class LockerStillExists extends Data.TaggedError("LockerStillExists")<{
 
 const assertLockerGone = (credentialLockerId: string) =>
   mi.getCredentialLocker({ Identifier: credentialLockerId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new LockerStillExists({ credentialLockerId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new LockerStillExists({ credentialLockerId }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LockerStillExists",
@@ -109,9 +107,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
         }),
       );
       expect(replaced.credentialLockerId).not.toBe(locker.credentialLockerId);
-      expect(replaced.credentialLockerName).toBe(
-        "alchemy-iot-mi-locker-replacement",
-      );
+      expect(replaced.credentialLockerName).toBe("alchemy-iot-mi-locker-replacement");
       yield* assertLockerGone(locker.credentialLockerId);
 
       yield* stack.destroy();

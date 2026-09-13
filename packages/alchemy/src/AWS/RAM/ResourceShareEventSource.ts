@@ -100,12 +100,8 @@ export const consumeResourceShareEvents = <StreamReq = never, Req = never>(
       ...(props.events !== undefined || props.statuses !== undefined
         ? {
             detail: {
-              ...(props.events !== undefined
-                ? { event: [...props.events] }
-                : {}),
-              ...(props.statuses !== undefined
-                ? { status: [...props.statuses] }
-                : {}),
+              ...(props.events !== undefined ? { event: [...props.events] } : {}),
+              ...(props.statuses !== undefined ? { status: [...props.statuses] } : {}),
             },
           }
         : {}),

@@ -1,9 +1,6 @@
 import * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
 import * as Layer from "effect/Layer";
-import {
-  BatchGetRecord,
-  type BatchGetRecordRequest,
-} from "./BatchGetRecord.ts";
+import { BatchGetRecord, type BatchGetRecordRequest } from "./BatchGetRecord.ts";
 import { makeFeatureGroupHttpBinding } from "./BindingHttp.ts";
 
 export const BatchGetRecordHttp = Layer.effect(
@@ -18,8 +15,7 @@ export const BatchGetRecordHttp = Layer.effect(
       Identifiers: [
         {
           FeatureGroupName: featureGroupName,
-          RecordIdentifiersValueAsString:
-            request.RecordIdentifiersValueAsString,
+          RecordIdentifiersValueAsString: request.RecordIdentifiersValueAsString,
           FeatureNames: request.FeatureNames,
         },
       ],

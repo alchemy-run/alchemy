@@ -32,10 +32,7 @@ export interface CreateGroupMembership extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        identitystore.CreateGroupMembershipRequest,
-        "IdentityStoreId"
-      >,
+      request: Omit<identitystore.CreateGroupMembershipRequest, "IdentityStoreId">,
     ) => Effect.Effect<
       identitystore.CreateGroupMembershipResponse,
       identitystore.CreateGroupMembershipError

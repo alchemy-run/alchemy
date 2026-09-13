@@ -26,10 +26,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("3 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
       times: 10,
     }),
   );

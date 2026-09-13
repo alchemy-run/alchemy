@@ -31,10 +31,7 @@ export interface DeleteCollection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DeleteCollectionRequest,
-    ) => Effect.Effect<
-      rekognition.DeleteCollectionResponse,
-      rekognition.DeleteCollectionError
-    >
+    ) => Effect.Effect<rekognition.DeleteCollectionResponse, rekognition.DeleteCollectionError>
   >
 > {}
 export const DeleteCollection = Binding.Service<DeleteCollection>(

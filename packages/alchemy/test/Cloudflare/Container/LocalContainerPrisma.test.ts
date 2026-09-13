@@ -14,10 +14,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 240_000;

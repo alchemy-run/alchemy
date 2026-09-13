@@ -6,17 +6,11 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type RegistrationStatus = socialmessaging.RegistrationStatus;
-export type WhatsAppPhoneNumberSummary =
-  socialmessaging.WhatsAppPhoneNumberSummary;
+export type WhatsAppPhoneNumberSummary = socialmessaging.WhatsAppPhoneNumberSummary;
 
 /**
  * An event destination (Amazon SNS topic) that AWS End User Messaging Social
@@ -161,10 +155,9 @@ export interface LinkedWhatsAppBusinessAccount extends Resource<
  *
  * @resource
  */
-export const LinkedWhatsAppBusinessAccount =
-  Resource<LinkedWhatsAppBusinessAccount>(
-    "AWS.SocialMessaging.LinkedWhatsAppBusinessAccount",
-  );
+export const LinkedWhatsAppBusinessAccount = Resource<LinkedWhatsAppBusinessAccount>(
+  "AWS.SocialMessaging.LinkedWhatsAppBusinessAccount",
+);
 
 /**
  * The referenced WhatsApp Business Account is not linked to this AWS
@@ -196,11 +189,7 @@ interface LinkedAccountState {
 const readLinkedAccount = Effect.fn(function* (accountId: string) {
   const response = yield* socialmessaging
     .getLinkedWhatsAppBusinessAccount({ id: accountId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const account = response?.account;
   if (account === undefined) return undefined;
   const state: LinkedAccountState = {
@@ -223,9 +212,7 @@ const readLinkedAccount = Effect.fn(function* (accountId: string) {
   return state;
 });
 
-const sortDestinations = (
-  destinations: LinkedWhatsAppBusinessAccountEventDestination[],
-) =>
+const sortDestinations = (destinations: LinkedWhatsAppBusinessAccountEventDestination[]) =>
   destinations
     .map((destination) => ({
       eventDestinationArn: destination.eventDestinationArn,
@@ -257,25 +244,20 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
         stables: ["arn", "id", "wabaId"],
         list: () =>
           Effect.gen(function* () {
-            const summaries =
-              yield* socialmessaging.listLinkedWhatsAppBusinessAccounts
-                .pages({})
-                .pipe(
-                  EffectStream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap(
-                      (page) => page.linkedAccounts ?? [],
-                    ),
-                  ),
-                );
+            const summaries = yield* socialmessaging.listLinkedWhatsAppBusinessAccounts
+              .pages({})
+              .pipe(
+                EffectStream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.linkedAccounts ?? []),
+                ),
+              );
             const hydrated = yield* Effect.forEach(
               summaries,
               (summary) => readLinkedAccount(summary.id),
               { concurrency: 5 },
             );
-            return hydrated.flatMap((state) =>
-              state === undefined ? [] : [state.attrs],
-            );
+            return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const accountId = output?.id ?? olds?.accountId;
@@ -310,18 +292,13 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
           // be linked; there is no create path to fall through to.
           const state = yield* readLinkedAccount(accountId);
           if (state === undefined) {
-            return yield* Effect.fail(
-              new WhatsAppBusinessAccountNotLinked({ accountId }),
-            );
+            return yield* Effect.fail(new WhatsAppBusinessAccountNotLinked({ accountId }));
           }
 
           // Sync event destinations — the API replaces the full list.
           if (
             news.eventDestinations !== undefined &&
-            destinationsDrifted(
-              state.attrs.eventDestinations,
-              news.eventDestinations,
-            )
+            destinationsDrifted(state.attrs.eventDestinations, news.eventDestinations)
           ) {
             yield* socialmessaging.putWhatsAppBusinessAccountEventDestinations({
               id: state.attrs.id,
@@ -330,9 +307,7 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
                 roleArn: destination.roleArn,
               })),
             });
-            yield* session.note(
-              `Updated event destinations for ${state.attrs.id}`,
-            );
+            yield* session.note(`Updated event destinations for ${state.attrs.id}`);
           }
 
           // Sync tags — diff against observed cloud tags.
@@ -357,18 +332,14 @@ export const LinkedWhatsAppBusinessAccountProvider = () =>
 
           const final = yield* readLinkedAccount(accountId);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new WhatsAppBusinessAccountNotLinked({ accountId }),
-            );
+            return yield* Effect.fail(new WhatsAppBusinessAccountNotLinked({ accountId }));
           }
           return final.attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* socialmessaging
             .disassociateWhatsAppBusinessAccount({ id: output.id })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

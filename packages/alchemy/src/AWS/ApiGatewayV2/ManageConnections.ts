@@ -78,9 +78,7 @@ export interface ManageConnectionsClient {
 export interface ManageConnections extends Binding.Service<
   ManageConnections,
   "AWS.ApiGatewayV2.ManageConnections",
-  <S extends ApiGatewayV2Stage>(
-    stage: S,
-  ) => Effect.Effect<ManageConnectionsClient>
+  <S extends ApiGatewayV2Stage>(stage: S) => Effect.Effect<ManageConnectionsClient>
 > {}
 export const ManageConnections = Binding.Service<ManageConnections>(
   "AWS.ApiGatewayV2.ManageConnections",

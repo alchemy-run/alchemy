@@ -35,9 +35,7 @@ test.provider(
     Effect.gen(function* () {
       const preexisting = yield* getSession;
       if (preexisting) {
-        yield* Effect.logInfo(
-          "Macie already enabled — skipping Macie2 resources lifecycle test",
-        );
+        yield* Effect.logInfo("Macie already enabled — skipping Macie2 resources lifecycle test");
         return;
       }
 
@@ -98,9 +96,7 @@ test.provider(
         id: created.filterId,
       });
       expect(liveFilter.action).toBe("ARCHIVE");
-      expect(
-        liveFilter.findingCriteria?.criterion?.["severity.description"]?.eq,
-      ).toEqual(["Low"]);
+      expect(liveFilter.findingCriteria?.criterion?.["severity.description"]?.eq).toEqual(["Low"]);
 
       // Phase 2 — in-place updates (allow list criteria + filter action/tags)
       // and a replacement (custom data identifiers are immutable, so a regex

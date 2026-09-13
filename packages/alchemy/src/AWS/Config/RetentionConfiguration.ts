@@ -68,9 +68,7 @@ export const RetentionConfigurationProvider = () =>
       // filter returns it (or nothing).
       const observeRetention = config.describeRetentionConfigurations({}).pipe(
         Effect.map((r) => (r.RetentionConfigurations ?? []).at(0)),
-        Effect.catchTag("NoSuchRetentionConfigurationException", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.succeed(undefined)),
       );
 
       const toAttrs = (retention: config.RetentionConfiguration) => ({
@@ -101,10 +99,7 @@ export const RetentionConfigurationProvider = () =>
 
           // 2+3. ENSURE + SYNC — PutRetentionConfiguration is a full upsert
           //    of the account-region singleton; skip the API on no-op.
-          if (
-            observed === undefined ||
-            observed.RetentionPeriodInDays !== desiredDays
-          ) {
+          if (observed === undefined || observed.RetentionPeriodInDays !== desiredDays) {
             yield* config.putRetentionConfiguration({
               RetentionPeriodInDays: desiredDays,
             });
@@ -122,12 +117,7 @@ export const RetentionConfigurationProvider = () =>
             .deleteRetentionConfiguration({
               RetentionConfigurationName: output.retentionConfigurationName,
             })
-            .pipe(
-              Effect.catchTag(
-                "NoSuchRetentionConfigurationException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.void));
         }),
       });
     }),

@@ -51,9 +51,7 @@ export default KeyspacesRestoreTestFunction.make(
             Effect.map((response) => ({
               restoredTableARN: response.restoredTableARN,
             })),
-            Effect.catch((error) =>
-              Effect.succeed({ error: error._tag } as const),
-            ),
+            Effect.catch((error) => Effect.succeed({ error: error._tag } as const)),
           );
           return yield* HttpServerResponse.json(result);
         }

@@ -41,10 +41,7 @@ export interface CreateSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateSubscriptionRequest,
-    ) => Effect.Effect<
-      qbusiness.CreateSubscriptionResponse,
-      qbusiness.CreateSubscriptionError
-    >
+    ) => Effect.Effect<qbusiness.CreateSubscriptionResponse, qbusiness.CreateSubscriptionError>
   >
 > {}
 export const CreateSubscription = Binding.Service<CreateSubscription>(

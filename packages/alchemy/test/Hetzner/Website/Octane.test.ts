@@ -13,17 +13,11 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/octane-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
@@ -95,14 +89,10 @@ test.provider.skipIf(!hasHetznerCreds)(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "OCTANE_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "OCTANE_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
 
       const serverId = deployed.site.server!.serverId;
       yield* stack.destroy();

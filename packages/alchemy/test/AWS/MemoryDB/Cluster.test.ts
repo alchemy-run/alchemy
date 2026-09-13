@@ -13,17 +13,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "describeClusters on a nonexistent cluster fails with ClusterNotFoundFault",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        memorydb.describeClusters({
-          ClusterName: "alchemy-nonexistent-memorydb-probe",
-        }),
-      );
-      expect(error._tag).toBe("ClusterNotFoundFault");
-    }),
+test.provider("describeClusters on a nonexistent cluster fails with ClusterNotFoundFault", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      memorydb.describeClusters({
+        ClusterName: "alchemy-nonexistent-memorydb-probe",
+      }),
+    );
+    expect(error._tag).toBe("ClusterNotFoundFault");
+  }),
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -62,21 +60,14 @@ const assertClusterDeleting = (name: string) =>
   Effect.gen(function* () {
     const status = yield* memorydb.describeClusters({ ClusterName: name }).pipe(
       Effect.map((r) => r.Clusters?.[0]?.Status ?? "gone"),
-      Effect.catchTag("ClusterNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
-      return yield* Effect.fail(
-        new Error(`cluster '${name}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`cluster '${name}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 

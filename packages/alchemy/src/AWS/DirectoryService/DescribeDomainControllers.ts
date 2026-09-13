@@ -38,13 +38,9 @@ export interface DescribeDomainControllers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<ds.DescribeDomainControllersRequest, "DirectoryId">,
-    ) => Effect.Effect<
-      ds.DescribeDomainControllersResult,
-      ds.DescribeDomainControllersError
-    >
+    ) => Effect.Effect<ds.DescribeDomainControllersResult, ds.DescribeDomainControllersError>
   >
 > {}
-export const DescribeDomainControllers =
-  Binding.Service<DescribeDomainControllers>(
-    "AWS.DirectoryService.DescribeDomainControllers",
-  );
+export const DescribeDomainControllers = Binding.Service<DescribeDomainControllers>(
+  "AWS.DirectoryService.DescribeDomainControllers",
+);

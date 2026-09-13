@@ -34,10 +34,7 @@ export interface CancelSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CancelSubscriptionRequest,
-    ) => Effect.Effect<
-      datazone.CancelSubscriptionOutput,
-      datazone.CancelSubscriptionError
-    >
+    ) => Effect.Effect<datazone.CancelSubscriptionOutput, datazone.CancelSubscriptionError>
   >
 > {}
 export const CancelSubscription = Binding.Service<CancelSubscription>(

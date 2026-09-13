@@ -90,12 +90,8 @@ export const consumeCrawlerEvents = <StreamReq = never, Req = never>(
       ...(props.crawlerNames !== undefined || props.states !== undefined
         ? {
             detail: {
-              ...(props.crawlerNames !== undefined
-                ? { crawlerName: [...props.crawlerNames] }
-                : {}),
-              ...(props.states !== undefined
-                ? { state: [...props.states] }
-                : {}),
+              ...(props.crawlerNames !== undefined ? { crawlerName: [...props.crawlerNames] } : {}),
+              ...(props.states !== undefined ? { state: [...props.states] } : {}),
             },
           }
         : {}),

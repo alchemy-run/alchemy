@@ -38,20 +38,14 @@ export class AppNotInstalled extends Data.TaggedError("AppNotInstalled")<{
 export const importPrivateKey = (pem: string) =>
   Effect.try({
     try: () => crypto.createPrivateKey({ key: pem }),
-    catch: (cause) =>
-      new CryptoError({ message: `invalid private key: ${cause}` }),
+    catch: (cause) => new CryptoError({ message: `invalid private key: ${cause}` }),
   });
 
 /** Sign a compact RS256 JWT, used to authenticate as the GitHub App. */
-export const signJwt = (
-  claims: Record<string, unknown>,
-  key: crypto.KeyObject,
-) =>
+export const signJwt = (claims: Record<string, unknown>, key: crypto.KeyObject) =>
   Effect.try({
     try: () => {
-      const header = Encoding.encodeBase64Url(
-        JSON.stringify({ alg: "RS256", typ: "JWT" }),
-      );
+      const header = Encoding.encodeBase64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
       const payload = Encoding.encodeBase64Url(JSON.stringify(claims));
       const input = `${header}.${payload}`;
       const signature = crypto.sign("sha256", Buffer.from(input), key);
@@ -69,21 +63,14 @@ export const renderInstalls = (
   packages: ReadonlyArray<{ name: string; group: string; url: string }>,
   groups: ReadonlyArray<{ name: string; collapsed: boolean }>,
 ) => {
-  const collapsed = new Set(
-    groups.filter((g) => g.collapsed).map((g) => g.name),
-  );
+  const collapsed = new Set(groups.filter((g) => g.collapsed).map((g) => g.name));
   // One code block per package so each command has its own copy button, in
   // the order the manifest lists them, which is the order they were given
   // to `pkg pack`. Blank lines around the markdown inside `<details>` are
   // what make GitHub render it.
   return Object.entries(Arr.groupBy(packages, (pkg) => pkg.group))
     .flatMap(([group, members]) => {
-      const installs = members.flatMap(({ url }) => [
-        "```sh",
-        `pnpm install ${url}`,
-        "```",
-        "",
-      ]);
+      const installs = members.flatMap(({ url }) => ["```sh", `pnpm install ${url}`, "```", ""]);
       return collapsed.has(group)
         ? [
             "<details>",
@@ -177,10 +164,7 @@ const make = Effect.gen(function* () {
     const pem = yield* config.github.privateKey;
     const key = yield* importPrivateKey(Redacted.value(pem));
     const now = Math.floor((yield* Clock.currentTimeMillis) / 1000);
-    return yield* signJwt(
-      { iat: now - 60, exp: now + 540, iss: yield* config.github.appId },
-      key,
-    );
+    return yield* signJwt({ iat: now - 60, exp: now + 540, iss: yield* config.github.appId }, key);
   });
 
   // Failures are not kept: the next call retries the mint.
@@ -190,10 +174,7 @@ const make = Effect.gen(function* () {
     (repo) =>
       Effect.gen(function* () {
         const jwt = yield* appJwt;
-        const installation = yield* as(
-          jwt,
-          Apps.getRepoInstallation(split(repo)),
-        ).pipe(
+        const installation = yield* as(jwt, Apps.getRepoInstallation(split(repo))).pipe(
           Effect.catchTag("NotFound", () => new AppNotInstalled({ repo })),
         );
         const access = yield* as(
@@ -214,17 +195,12 @@ const make = Effect.gen(function* () {
   );
 
   /** A GitHub operation run as the App's installation on `repo`. */
-  const asInstallation = <A, E, R>(
-    repo: string,
-    operation: Effect.Effect<A, E, R>,
-  ) => Effect.flatMap(tokens(repo), (token) => as(token, operation));
+  const asInstallation = <A, E, R>(repo: string, operation: Effect.Effect<A, E, R>) =>
+    Effect.flatMap(tokens(repo), (token) => as(token, operation));
 
   return {
     getRun: (repo: string, runId: number) =>
-      asInstallation(
-        repo,
-        Actions.getWorkflowRun({ ...split(repo), run_id: runId }),
-      ),
+      asInstallation(repo, Actions.getWorkflowRun({ ...split(repo), run_id: runId })),
 
     /**
      * Artifacts named `name` uploaded to a run so far, including by jobs
@@ -246,12 +222,7 @@ const make = Effect.gen(function* () {
      * repository the commit was pushed to. Commit-associated PR lookups can
      * return no results for forks, so discover candidates by owner and branch.
      */
-    pullRequestsForCommit: (
-      repo: string,
-      headRepo: string,
-      headBranch: string,
-      sha: string,
-    ) =>
+    pullRequestsForCommit: (repo: string, headRepo: string, headBranch: string, sha: string) =>
       asInstallation(
         repo,
         Pulls.list({
@@ -309,12 +280,7 @@ const make = Effect.gen(function* () {
      * Create or update the comment on `issue` whose body starts with
      * `marker`, looking through the first five pages of comments.
      */
-    upsertComment: (
-      repo: string,
-      issue: number,
-      marker: string,
-      body: string,
-    ) =>
+    upsertComment: (repo: string, issue: number, marker: string, body: string) =>
       Effect.gen(function* () {
         const comments = Stream.paginate(1, (page) =>
           asInstallation(
@@ -328,9 +294,7 @@ const make = Effect.gen(function* () {
           ).pipe(
             Effect.map((comments) => [
               comments,
-              comments.length < 100 || page >= 5
-                ? Option.none()
-                : Option.some(page + 1),
+              comments.length < 100 || page >= 5 ? Option.none() : Option.some(page + 1),
             ]),
           ),
         );
@@ -364,9 +328,8 @@ const make = Effect.gen(function* () {
   };
 });
 
-export class GitHubApp extends Context.Service<
-  GitHubApp,
-  Effect.Success<typeof make>
->()("@alchemy.run/pkg/GitHubApp") {}
+export class GitHubApp extends Context.Service<GitHubApp, Effect.Success<typeof make>>()(
+  "@alchemy.run/pkg/GitHubApp",
+) {}
 
 export const GitHubAppLive = Layer.effect(GitHubApp, make);

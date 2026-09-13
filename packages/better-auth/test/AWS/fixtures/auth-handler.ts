@@ -21,9 +21,7 @@ const AuthDatabase = Layer.unwrap(
   Effect.map(AuthDb, (project) => NeonDatabase(project.connectionUri)),
 );
 
-export class AuthFunction extends Lambda.Function<Lambda.Function>()(
-  "BetterAuthFunction",
-) {}
+export class AuthFunction extends Lambda.Function<Lambda.Function>()("BetterAuthFunction") {}
 
 export default AuthFunction.make(
   {
@@ -52,9 +50,7 @@ export default AuthFunction.make(
         if (pathname.startsWith("/me")) {
           const session = yield* auth
             .getSession()
-            .pipe(
-              Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
-            );
+            .pipe(Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)));
           return yield* HttpServerResponse.json({
             email: session?.user.email ?? null,
           });

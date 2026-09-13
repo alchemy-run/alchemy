@@ -84,13 +84,7 @@ export interface Attributes {
   updatedAt: string | undefined;
 }
 
-export type HostnameTlsSetting = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type HostnameTlsSetting = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A per-hostname TLS setting override
@@ -156,9 +150,7 @@ export const HostnameTlsSetting = Resource<HostnameTlsSetting>(TypeId, {
 /**
  * Returns true if the given value is a HostnameTlsSetting resource.
  */
-export const isHostnameTlsSetting = (
-  value: unknown,
-): value is HostnameTlsSetting =>
+export const isHostnameTlsSetting = (value: unknown): value is HostnameTlsSetting =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameTlsSettingProvider = () =>
@@ -184,14 +176,7 @@ export const HostnameTlsSettingProvider = () =>
                     settings.flatMap((setting) =>
                       setting.hostname == null
                         ? []
-                        : [
-                            toAttributes(
-                              zone.id,
-                              settingId,
-                              setting.hostname,
-                              setting,
-                            ),
-                          ],
+                        : [toAttributes(zone.id, settingId, setting.hostname, setting)],
                     ),
                   ),
                 ),
@@ -217,22 +202,15 @@ export const HostnameTlsSettingProvider = () =>
       }
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const settingId = output?.settingId ?? olds?.settingId;
       const hostname = output?.hostname ?? olds?.hostname;
       if (!zoneId || !settingId || !hostname) return undefined;
@@ -293,11 +271,7 @@ type ObservedSetting = hostnames.ListSettingsTlsResponse[number];
 const findSetting = (zoneId: string, settingId: string, hostname: string) =>
   hostnames
     .listSettingsTls({ zoneId, settingId })
-    .pipe(
-      Effect.map((settings) =>
-        settings.find((setting) => setting.hostname === hostname),
-      ),
-    );
+    .pipe(Effect.map((settings) => settings.find((setting) => setting.hostname === hostname)));
 
 /**
  * Structural equality for setting values — scalar versions/toggles compare
@@ -334,8 +308,4 @@ const toAttributes = (
  * the type.
  */
 const normalizeValue = (value: ObservedSetting["value"]): Value =>
-  value === null || value === undefined
-    ? "off"
-    : Array.isArray(value)
-      ? [...value]
-      : value;
+  value === null || value === undefined ? "off" : Array.isArray(value) ? [...value] : value;

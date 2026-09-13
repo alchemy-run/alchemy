@@ -75,11 +75,7 @@ const provideClassLayer =
             Effect.provideContext(self, context),
           ),
         )
-      : Effect.provide(self, layer)) as Effect.Effect<
-      A,
-      E | E2,
-      RIn | Scope | Exclude<R, ROut>
-    >;
+      : Effect.provide(self, layer)) as Effect.Effect<A, E | E2, RIn | Scope | Exclude<R, ROut>>;
 
 export type Main<InitServices = never> = void | {
   fetch?:
@@ -93,29 +89,13 @@ export type Main<InitServices = never> = void | {
 
 export interface MainRpc<Req = never> {
   [key: string]:
-    | Effect.Effect<
-        any,
-        any,
-        PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req
-      >
-    | Stream.Stream<
-        any,
-        any,
-        PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req
-      >
+    | Effect.Effect<any, any, PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req>
+    | Stream.Stream<any, any, PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req>
     | ((
         ...args: any[]
       ) =>
-        | Effect.Effect<
-            any,
-            any,
-            PlatformServices | RuntimeContext | Scope | Req
-          >
-        | Stream.Stream<
-            any,
-            any,
-            PlatformServices | RuntimeContext | Scope | Req
-          >);
+        | Effect.Effect<any, any, PlatformServices | RuntimeContext | Scope | Req>
+        | Stream.Stream<any, any, PlatformServices | RuntimeContext | Scope | Req>);
 }
 
 // Strip `void`/`undefined`/`never` from `Shape` before intersecting it with
@@ -129,9 +109,7 @@ export interface MainRpc<Req = never> {
 // the real assignability error on the `impl` argument. Excluding `void` here
 // keeps the construct-sig return a single object type, so only the actionable
 // error remains.
-export type MakeShape<Shape, BaseShape> = [
-  Exclude<Shape, void | undefined>,
-] extends [never]
+export type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] extends [never]
   ? Exclude<BaseShape, void | undefined>
   : Exclude<Shape, void | undefined> & Exclude<BaseShape, void | undefined>;
 
@@ -169,21 +147,13 @@ export interface Platform<
   <Self, Shape, Deps = never>(): {
     <const Id extends string>(
       id: Id,
-    ): Effect.Effect<
-      Resource & Rpc<Self> & Dependencies<Deps>,
-      never,
-      Resource["Providers"]
-    > &
+    ): Effect.Effect<Resource & Rpc<Self> & Dependencies<Deps>, never, Resource["Providers"]> &
       Named<Id> &
       PlatformIdentity<Id> & {
         make<PropsReq = never, InitReq = never>(
           props:
             | InputProps<InlineProps>
-            | Effect.Effect<
-                InputProps<InlineProps>,
-                ConfigError.ConfigError,
-                PropsReq
-              >,
+            | Effect.Effect<InputProps<InlineProps>, ConfigError.ConfigError, PropsReq>,
           impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
         ): Layer.Layer<
           Self,
@@ -191,9 +161,7 @@ export interface Platform<
           | Resource["Providers"]
           | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
         >;
-        new (
-          _: never,
-        ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
         of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
       };
   };
@@ -207,11 +175,7 @@ export interface Platform<
       id: Id,
       props:
         | InputProps<InlineProps>
-        | Effect.Effect<
-            InputProps<InlineProps>,
-            ConfigError.ConfigError,
-            PropsReq
-          >,
+        | Effect.Effect<InputProps<InlineProps>, ConfigError.ConfigError, PropsReq>,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
@@ -222,9 +186,7 @@ export interface Platform<
     > &
       Named<Id> &
       PlatformIdentity<Id> & {
-        new (
-          _: never,
-        ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
       };
 
     <const Id extends string>(
@@ -232,17 +194,10 @@ export interface Platform<
     ): Effect.Effect<Resource & Rpc<Self>, never, Resource["Providers"]> &
       Named<Id> &
       PlatformIdentity<Id> & {
-        make<
-          PropsReq = never,
-          InitReq extends Services | PlatformServices | Resource = never,
-        >(
+        make<PropsReq = never, InitReq extends Services | PlatformServices | Resource = never>(
           props:
             | InputProps<InlineProps>
-            | Effect.Effect<
-                InputProps<InlineProps>,
-                ConfigError.ConfigError,
-                PropsReq
-              >,
+            | Effect.Effect<InputProps<InlineProps>, ConfigError.ConfigError, PropsReq>,
           impl: Effect.Effect<MainShape, ConfigError.ConfigError, InitReq>,
         ): Layer.Layer<
           Self,
@@ -265,9 +220,7 @@ export interface Platform<
   ): Effect.Effect<
     Resource,
     never,
-    | Resource["Providers"]
-    | PropsReq
-    | Exclude<InitReq, Services | PlatformServices>
+    Resource["Providers"] | PropsReq | Exclude<InitReq, Services | PlatformServices>
   > &
     PlatformIdentity<Id>;
   <
@@ -277,16 +230,12 @@ export interface Platform<
     InitReq extends Services | PlatformServices = never,
   >(
     id: Id,
-    props:
-      | InputProps<InlineProps>
-      | Effect.Effect<InputProps<InlineProps>, never, PropsReq>,
+    props: InputProps<InlineProps> | Effect.Effect<InputProps<InlineProps>, never, PropsReq>,
     impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
   ): Effect.Effect<
     Resource & Rpc<Shape> & Named<Id>,
     never,
-    | Resource["Providers"]
-    | PropsReq
-    | Exclude<InitReq, Services | PlatformServices>
+    Resource["Providers"] | PropsReq | Exclude<InitReq, Services | PlatformServices>
   > &
     Named<Id> &
     PlatformIdentity<Id>;
@@ -353,26 +302,18 @@ export const Platform = <
     hooks.transformProps === undefined
       ? props
       : Effect.flatMap(
-          Effect.isEffect(props)
-            ? (props as Effect.Effect<any>)
-            : Effect.succeed(props ?? {}),
+          Effect.isEffect(props) ? (props as Effect.Effect<any>) : Effect.succeed(props ?? {}),
           (resolved) => hooks.transformProps!(id, resolved),
         );
 
-  const constructor = (
-    id?: string,
-    props?: any,
-    impl?: Impl,
-    isTag = false,
-  ): any => {
+  const constructor = (id?: string, props?: any, impl?: Impl, isTag = false): any => {
     if (!id) {
       // impl was not provided inline, this is a tagged instance
       // e.g.
       // export class Sandbox extends Cloudflare.Container<Sandbox>()(..) {}
       //
       // export const SandboxLive = Sandbox.make(..)
-      return (id: string, props?: any, impl?: Impl) =>
-        constructor(id, props, impl, true);
+      return (id: string, props?: any, impl?: Impl) => constructor(id, props, impl, true);
     } else if (!impl) {
       const cls = makeClass(id);
       // A resource declared without an inline impl is "external": there is
@@ -426,9 +367,7 @@ export const Platform = <
                   // `requiresImplementation` above).
                   resource(
                     id,
-                    props === undefined
-                      ? applyTransformProps(id, props)
-                      : externalProps(),
+                    props === undefined ? applyTransformProps(id, props) : externalProps(),
                   ),
                 onSome: Effect.succeed,
               }),
@@ -490,9 +429,7 @@ export const Platform = <
        */
       static readonly LogicalId = id;
       static readonly Self = Self(`${type}<${id}>`);
-      static readonly Platform = Context.Service<Platform, Platform>(
-        `Platform<${type}<${id}>>`,
-      );
+      static readonly Platform = Context.Service<Platform, Platform>(`Platform<${type}<${id}>>`);
       static of = (shape: any) => shape;
       static make = (props: Props, impl: Impl) => {
         // build the Layer once for the root Self
@@ -526,9 +463,7 @@ export const Platform = <
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
                     (resource) =>
-                      hooks
-                        .onCreate?.(resource, props)
-                        .pipe(Effect.map(() => resource)) ??
+                      hooks.onCreate?.(resource, props).pipe(Effect.map(() => resource)) ??
                       Effect.succeed(resource),
                   ),
                 ),
@@ -547,9 +482,7 @@ export const Platform = <
                   // May be an `HttpEffect` or an Effect resolving to one (the
                   // `Main.fetch` shape); `serve` accepts both.
                   const fetch = shape.fetch as any;
-                  const hasRpcMethods = Object.keys(shape).some(
-                    (key) => key !== "fetch",
-                  );
+                  const hasRpcMethods = Object.keys(shape).some((key) => key !== "fetch");
                   if (!fetch && !hasRpcMethods) return Effect.void;
                   // Hand the full impl to `serve` so the runtime can expose any
                   // non-handler methods on the impl shape (RPC methods)
@@ -557,9 +490,7 @@ export const Platform = <
                   return (
                     runtimeContext.serve?.(
                       fetch ??
-                        Effect.succeed(
-                          HttpServerResponse.text("Not Found", { status: 404 }),
-                        ),
+                        Effect.succeed(HttpServerResponse.text("Not Found", { status: 404 })),
                       { shape },
                     ) ?? Effect.die("No serve handler")
                   );
@@ -569,8 +500,7 @@ export const Platform = <
                     ConfigProvider.ConfigProvider,
                     Effect.gen(function* () {
                       // a Config Provider that we use to intercept config lookups and bind them to the RuntimeContext
-                      const configProvider =
-                        yield* ConfigProvider.ConfigProvider;
+                      const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
                       return ConfigProvider.make(
@@ -579,26 +509,19 @@ export const Platform = <
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before
                           // handing it to the RuntimeContext.
-                          const key = sanitizeKey(
-                            path.map((p) => p.toString()).join("_"),
-                          );
+                          const key = sanitizeKey(path.map((p) => p.toString()).join("_"));
                           const node = yield* configProvider.load(path);
                           if (phase === "plan" && node) {
                             // bind it to the RuntimeContext if running in plan phase
-                            const output = Output.literal(
-                              Redacted.make(node.value),
-                            );
+                            const output = Output.literal(Redacted.make(node.value));
                             yield* ctx?.set(key, output) ?? Effect.void;
                             return node;
                           } else if (phase === "runtime" && ctx) {
                             // retrieve from the RuntimeContext if running in runtime phase
-                            const value =
-                              yield* ctx.get<Redacted.Redacted<string>>(key);
+                            const value = yield* ctx.get<Redacted.Redacted<string>>(key);
                             if (value) {
                               return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value)
-                                  ? Redacted.value(value)
-                                  : value,
+                                Redacted.isRedacted(value) ? Redacted.value(value) : value,
                               );
                             }
                           }
@@ -631,8 +554,7 @@ export const Platform = <
                         // `yield* ServerHost` during plan/deploy without the
                         // caller providing the layer itself.
                         "run" in runtimeContext &&
-                          typeof (runtimeContext as { run?: unknown }).run ===
-                            "function"
+                          typeof (runtimeContext as { run?: unknown }).run === "function"
                           ? Layer.succeed(ServerHost, {
                               run: (runtimeContext as ProcessContext).run,
                             })
@@ -644,9 +566,7 @@ export const Platform = <
                           ? Layer.unwrap(
                               ALCHEMY_PHASE.pipe(
                                 Effect.map((phase) =>
-                                  phase === "plan"
-                                    ? runtimeContext.planServices!
-                                    : Layer.empty,
+                                  phase === "plan" ? runtimeContext.planServices! : Layer.empty,
                                 ),
                               ),
                             )
@@ -664,9 +584,7 @@ export const Platform = <
                   ...props?.env,
                   ...runtimeContext.env,
                 },
-                exports: runtimeContext.exports
-                  ? yield* runtimeContext.exports
-                  : undefined,
+                exports: runtimeContext.exports ? yield* runtimeContext.exports : undefined,
               };
 
               return Object.assign(instance, {

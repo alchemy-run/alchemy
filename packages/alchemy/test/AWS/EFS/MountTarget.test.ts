@@ -59,9 +59,7 @@ const infra = (securityGroups?: () => string[]) =>
     const target = yield* AWS.EFS.MountTarget("MtTarget", {
       fileSystemId: files.fileSystemId,
       subnetId,
-      ...(securityGroups !== undefined
-        ? { securityGroups: securityGroups() }
-        : {}),
+      ...(securityGroups !== undefined ? { securityGroups: securityGroups() } : {}),
     });
     return { files, target, extraSg };
   });
@@ -119,9 +117,7 @@ describe.sequential("EFS MountTarget", () => {
             MountTargetId: mountTargetId,
           })
           .pipe(Effect.map((r) => [...r.SecurityGroups].sort()));
-        expect(observed).toEqual(
-          [defaultSecurityGroupId, extraSecurityGroupId].sort(),
-        );
+        expect(observed).toEqual([defaultSecurityGroupId, extraSecurityGroupId].sort());
       }),
     { timeout: 120_000 },
   );
@@ -162,9 +158,7 @@ test.provider.skipIf(!process.env.AWS_TEST_EFS_MULTI_AZ)(
         }),
       );
 
-      expect(deployed.targetA.availabilityZoneName).not.toBe(
-        deployed.targetB.availabilityZoneName,
-      );
+      expect(deployed.targetA.availabilityZoneName).not.toBe(deployed.targetB.availabilityZoneName);
 
       const observed = yield* efs.describeMountTargets({
         FileSystemId: deployed.files.fileSystemId,

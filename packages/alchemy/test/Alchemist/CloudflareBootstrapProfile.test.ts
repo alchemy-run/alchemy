@@ -34,9 +34,7 @@ const CLOUDFLARE_ENV_KEYS = [
  * An empty `--env-file` in the temp home is passed through so
  * `loadConfigProvider` never falls back to the checkout's cwd `.env`.
  */
-const withIsolatedHome = <A, E, R>(
-  effect: (envFile: string) => Effect.Effect<A, E, R>,
-) =>
+const withIsolatedHome = <A, E, R>(effect: (envFile: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -158,9 +156,7 @@ it.live(
         });
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
 
-        const missing = yield* resolveStateStoreScope({ envFile }).pipe(
-          Effect.flip,
-        );
+        const missing = yield* resolveStateStoreScope({ envFile }).pipe(Effect.flip);
         expect(missing).toBeInstanceOf(AuthError);
         expect((missing as AuthError).message).toContain("profile 'default'");
       }),

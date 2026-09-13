@@ -51,12 +51,8 @@ export interface PutRumEvents extends Binding.Service<
   (
     monitor: AppMonitor,
   ) => Effect.Effect<
-    (
-      request: PutRumEventsRequest,
-    ) => Effect.Effect<rum.PutRumEventsResponse, rum.PutRumEventsError>
+    (request: PutRumEventsRequest) => Effect.Effect<rum.PutRumEventsResponse, rum.PutRumEventsError>
   >
 > {}
 
-export const PutRumEvents = Binding.Service<PutRumEvents>(
-  "AWS.RUM.PutRumEvents",
-);
+export const PutRumEvents = Binding.Service<PutRumEvents>("AWS.RUM.PutRumEvents");

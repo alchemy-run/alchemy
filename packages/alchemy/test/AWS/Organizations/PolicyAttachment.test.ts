@@ -3,12 +3,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import {
-  Policy,
-  PolicyAttachment,
-  Root,
-  RootPolicyType,
-} from "@/AWS/Organizations";
+import { Policy, PolicyAttachment, Root, RootPolicyType } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
@@ -74,9 +69,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
           const targets = yield* organizations
             .listTargetsForPolicy({ PolicyId: leftover.Id })
             .pipe(
-              Effect.catchTag("PolicyNotFoundException", () =>
-                Effect.succeed({ Targets: [] }),
-              ),
+              Effect.catchTag("PolicyNotFoundException", () => Effect.succeed({ Targets: [] })),
             );
           for (const target of targets.Targets ?? []) {
             if (target.TargetId == null) continue;
@@ -109,9 +102,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
         }
       });
       yield* cleanLeftoverPolicies;
-      yield* Effect.addFinalizer(() =>
-        cleanLeftoverPolicies.pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => cleanLeftoverPolicies.pipe(Effect.ignore));
 
       yield* stack.destroy();
 
@@ -158,8 +149,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
           (page.Roots ?? []).some((root) =>
             (root.PolicyTypes ?? []).some(
               (summary) =>
-                summary.Type === "SERVICE_CONTROL_POLICY" &&
-                summary.Status === "ENABLED",
+                summary.Type === "SERVICE_CONTROL_POLICY" && summary.Status === "ENABLED",
             ),
           ),
         ),
@@ -173,9 +163,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       // Stage 2: deploy the attachment itself.
       const created = yield* deployStack(true);
       if (created === undefined) {
-        return yield* Effect.die(
-          new Error("stage-2 deploy returned no attachment"),
-        );
+        return yield* Effect.die(new Error("stage-2 deploy returned no attachment"));
       }
 
       // Rewrite the attachment's persisted row into the wedged shape an
@@ -185,20 +173,15 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.Organizations.PolicyAttachment",
+          isResourceState(r.row) && r.row.resourceType === "AWS.Organizations.PolicyAttachment",
       );
       if (!wedged) {
         return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.PolicyAttachment state row found after deploy",
-          ),
+          new Error("no AWS.Organizations.PolicyAttachment state row found after deploy"),
         );
       }
       yield* state.set({

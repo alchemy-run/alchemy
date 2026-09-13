@@ -31,8 +31,6 @@ export interface Search extends Binding.Service<
   "AWS.ResourceExplorer.Search",
   <V extends View>(
     view: V,
-  ) => Effect.Effect<
-    (request: SearchRequest) => Effect.Effect<RE2.SearchOutput, RE2.SearchError>
-  >
+  ) => Effect.Effect<(request: SearchRequest) => Effect.Effect<RE2.SearchOutput, RE2.SearchError>>
 > {}
 export const Search = Binding.Service<Search>("AWS.ResourceExplorer.Search");

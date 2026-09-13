@@ -25,5 +25,4 @@ const httpHandler = HttpRouter.toWebHandler(FrontendLive, {
   disableLogger: true,
 });
 
-export const handleApiRequest = (request: Request) =>
-  httpHandler.handler(request);
+export const handleApiRequest = (request: Request) => httpHandler.handler(request);

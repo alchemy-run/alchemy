@@ -99,10 +99,7 @@ export interface CompactJobOptions {
   readonly maxBytes?: number | undefined;
 }
 
-interface LooseRow extends Record<
-  string,
-  string | number | ArrayBuffer | null
-> {
+interface LooseRow extends Record<string, string | number | ArrayBuffer | null> {
   readonly oid: string;
   readonly type: number;
   readonly size: number;
@@ -112,13 +109,9 @@ interface LooseRow extends Record<
 
 const runR2 =
   (what: string) =>
-  <A>(
-    effect: Effect.Effect<A, BlobStoreError, RuntimeContext>,
-  ): Effect.Effect<A, StoreError> =>
+  <A>(effect: Effect.Effect<A, BlobStoreError, RuntimeContext>): Effect.Effect<A, StoreError> =>
     effect.pipe(
-      Effect.mapError(
-        (error) => new StoreError({ reason: `${what}: ${error.reason}` }),
-      ),
+      Effect.mapError((error) => new StoreError({ reason: `${what}: ${error.reason}` })),
       Effect.provide(RuntimeContext.phantom),
     );
 
@@ -162,8 +155,7 @@ export const runCompactJob = (
 
     // Assemble the pack, recording each object's zdata offset as we go.
     const chunks: Array<Uint8Array> = [];
-    const placements: Array<{ oid: string; offset: number; zsize: number }> =
-      [];
+    const placements: Array<{ oid: string; offset: number; zsize: number }> = [];
     let offset = 0;
     let budget = 0;
     const push = (bytes: Uint8Array) => {
@@ -203,8 +195,7 @@ export const runCompactJob = (
     });
     const trailerHex = yield* Effect.sync(() => bytesToHex(trailer));
 
-    const total =
-      body.reduce((sum, chunk) => sum + chunk.length, 0) + trailer.length;
+    const total = body.reduce((sum, chunk) => sum + chunk.length, 0) + trailer.length;
     const pack = yield* Effect.sync(() => {
       const out = new Uint8Array(total);
       let at = 0;
@@ -220,9 +211,7 @@ export const runCompactJob = (
     // shift them past the 12-byte header to get absolute file offsets.
     const packId = trailerHex;
     const key = packKey(options.repoId, packId);
-    yield* runR2(`blob put ${key}`)(
-      options.blobs.put(key, pack, { contentLength: pack.length }),
-    );
+    yield* runR2(`blob put ${key}`)(options.blobs.put(key, pack, { contentLength: pack.length }));
 
     yield* options.sql
       .transactionSync((raw) => {
@@ -421,10 +410,7 @@ export const runGeometricMergeJob = (options: {
             });
           }
           const head = encodeTypeSize(row.type as PackEntryType, row.size);
-          pieces.push(
-            head,
-            bytes.subarray(row.pack_offset, row.pack_offset + row.zsize),
-          );
+          pieces.push(head, bytes.subarray(row.pack_offset, row.pack_offset + row.zsize));
           rewrites.push({ oid: row.oid, offset: 12 + at + head.length });
           at += head.length + row.zsize;
         }
@@ -509,9 +495,7 @@ export const runGeometricMergeJob = (options: {
       moved,
       bytes: merged.length,
       packId,
-      pendingDelete: sources.map((source) =>
-        packKeyOf(options.repoId, source.id),
-      ),
+      pendingDelete: sources.map((source) => packKeyOf(options.repoId, source.id)),
       more,
     };
   });

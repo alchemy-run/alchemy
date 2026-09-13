@@ -115,9 +115,7 @@ export interface VolumeAttachment extends Resource<
  *
  * @resource
  */
-export const VolumeAttachment = Resource<VolumeAttachment>(
-  "AWS.EC2.VolumeAttachment",
-);
+export const VolumeAttachment = Resource<VolumeAttachment>("AWS.EC2.VolumeAttachment");
 
 export const VolumeAttachmentProvider = () =>
   Provider.effect(
@@ -142,17 +140,11 @@ export const VolumeAttachmentProvider = () =>
           //    this instance.
           const lookup = yield* ec2
             .describeVolumes({ VolumeIds: [news.volumeId] })
-            .pipe(
-              Effect.catchTag("InvalidVolume.NotFound", () =>
-                Effect.succeed({ Volumes: [] }),
-              ),
-            );
+            .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
           const volume = lookup.Volumes?.[0];
           let attachment = volume?.Attachments?.find(
             (a) =>
-              a.InstanceId === news.instanceId &&
-              a.State !== "detaching" &&
-              a.State !== "detached",
+              a.InstanceId === news.instanceId && a.State !== "detaching" && a.State !== "detached",
           );
 
           // 2. ENSURE — attach the volume when it is not already attached to
@@ -204,18 +196,12 @@ export const VolumeAttachmentProvider = () =>
         delete: Effect.fn(function* ({ output, olds, session }) {
           const { volumeId, instanceId, device } = output;
           const force = olds?.forceDetach ?? true;
-          yield* session.note(
-            `Detaching volume ${volumeId} from ${instanceId}`,
-          );
+          yield* session.note(`Detaching volume ${volumeId} from ${instanceId}`);
 
           // If the volume is already gone, nothing to detach.
           const lookup = yield* ec2
             .describeVolumes({ VolumeIds: [volumeId] })
-            .pipe(
-              Effect.catchTag("InvalidVolume.NotFound", () =>
-                Effect.succeed({ Volumes: [] }),
-              ),
-            );
+            .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
           const volume = lookup.Volumes?.[0];
           if (!volume) {
             return;
@@ -262,10 +248,7 @@ export const VolumeAttachmentProvider = () =>
                           DryRun: false,
                         })
                         .pipe(
-                          Effect.catchTag(
-                            "InvalidVolume.NotFound",
-                            () => Effect.void,
-                          ),
+                          Effect.catchTag("InvalidVolume.NotFound", () => Effect.void),
                           Effect.catchTag("IncorrectState", () => Effect.void),
                         )
                     : Effect.fail(e),
@@ -306,9 +289,7 @@ const waitForAttachmentState = (
 > =>
   Effect.gen(function* () {
     const result = yield* ec2.describeVolumes({ VolumeIds: [volumeId] });
-    const attachment = result.Volumes?.[0]?.Attachments?.find(
-      (a) => a.InstanceId === instanceId,
-    );
+    const attachment = result.Volumes?.[0]?.Attachments?.find((a) => a.InstanceId === instanceId);
     const state = attachment?.State;
     if (state === target) {
       return state;
@@ -326,9 +307,7 @@ const waitForAttachmentState = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for volume attachment... (${(attempt + 1) * 2}s)`,
-              )
+            ? session.note(`Waiting for volume attachment... (${(attempt + 1) * 2}s)`)
             : Effect.void,
         ),
       ),
@@ -338,18 +317,11 @@ const waitForAttachmentState = (
 /**
  * Wait for the volume to return to `available` after a detach.
  */
-const waitForVolumeDetached = (
-  volumeId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForVolumeDetached = (volumeId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeVolumes({ VolumeIds: [volumeId] })
-      .pipe(
-        Effect.catchTag("InvalidVolume.NotFound", () =>
-          Effect.succeed({ Volumes: [] }),
-        ),
-      );
+      .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
     const volume = result.Volumes?.[0];
     if (!volume || volume.State === "available") {
       return;
@@ -367,9 +339,7 @@ const waitForVolumeDetached = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for volume to detach... (${(attempt + 1) * 2}s)`,
-              )
+            ? session.note(`Waiting for volume to detach... (${(attempt + 1) * 2}s)`)
             : Effect.void,
         ),
       ),

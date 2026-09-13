@@ -27,12 +27,7 @@ export interface ListAccessPolicies extends Binding.Service<
   () => Effect.Effect<
     (
       request?: eks.ListAccessPoliciesRequest,
-    ) => Effect.Effect<
-      eks.ListAccessPoliciesResponse,
-      eks.ListAccessPoliciesError
-    >
+    ) => Effect.Effect<eks.ListAccessPoliciesResponse, eks.ListAccessPoliciesError>
   >
 > {}
-export const ListAccessPolicies = Binding.Service<ListAccessPolicies>(
-  "AWS.EKS.ListAccessPolicies",
-);
+export const ListAccessPolicies = Binding.Service<ListAccessPolicies>("AWS.EKS.ListAccessPolicies");

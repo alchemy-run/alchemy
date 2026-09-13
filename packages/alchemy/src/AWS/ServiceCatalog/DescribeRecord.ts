@@ -31,12 +31,7 @@ export interface DescribeRecord extends Binding.Service<
   () => Effect.Effect<
     (
       request: servicecatalog.DescribeRecordInput,
-    ) => Effect.Effect<
-      servicecatalog.DescribeRecordOutput,
-      servicecatalog.DescribeRecordError
-    >
+    ) => Effect.Effect<servicecatalog.DescribeRecordOutput, servicecatalog.DescribeRecordError>
   >
 > {}
-export const DescribeRecord = Binding.Service<DescribeRecord>(
-  "AWS.ServiceCatalog.DescribeRecord",
-);
+export const DescribeRecord = Binding.Service<DescribeRecord>("AWS.ServiceCatalog.DescribeRecord");

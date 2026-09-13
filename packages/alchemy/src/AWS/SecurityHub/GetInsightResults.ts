@@ -29,10 +29,7 @@ export interface GetInsightResults extends Binding.Service<
   () => Effect.Effect<
     (
       request: securityhub.GetInsightResultsRequest,
-    ) => Effect.Effect<
-      securityhub.GetInsightResultsResponse,
-      securityhub.GetInsightResultsError
-    >
+    ) => Effect.Effect<securityhub.GetInsightResultsResponse, securityhub.GetInsightResultsError>
   >
 > {}
 export const GetInsightResults = Binding.Service<GetInsightResults>(

@@ -23,10 +23,7 @@ const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
     Effect.flatMap(() => Effect.fail(new TableStillExists())),
     Effect.retry({
       while: (e) => e._tag === "TableStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -54,10 +51,7 @@ const waitForFunctionReady = (url: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(75),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
     }),
   );
 
@@ -66,11 +60,7 @@ const waitForFunctionReady = (url: string) =>
  * Retries briefly in case a cold re-init served the POST a moment before
  * the last batch call settled.
  */
-const waitForSortKeys = Effect.fn(function* (
-  tableName: string,
-  pk: string,
-  expected: number,
-) {
+const waitForSortKeys = Effect.fn(function* (tableName: string, pk: string, expected: number) {
   return yield* Effect.gen(function* () {
     const result = yield* DynamoDB.query({
       TableName: tableName,
@@ -82,18 +72,13 @@ const waitForSortKeys = Effect.fn(function* (
       item.sk?.S !== undefined ? [item.sk.S] : [],
     );
     if (sortKeys.length !== expected) {
-      return yield* Effect.fail(
-        new ItemCountMismatch({ expected, actual: sortKeys.length }),
-      );
+      return yield* Effect.fail(new ItemCountMismatch({ expected, actual: sortKeys.length }));
     }
     return sortKeys;
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "ItemCountMismatch",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 });
@@ -111,11 +96,7 @@ test.provider(
 
       const { tableName } = yield* waitForFunctionReady(`${baseUrl}/ready`);
 
-      const postSink = (body: {
-        pk: string;
-        puts?: string[];
-        deletes?: string[];
-      }) =>
+      const postSink = (body: { pk: string; puts?: string[]; deletes?: string[] }) =>
         Effect.gen(function* () {
           const response = yield* HttpClient.post(`${baseUrl}/sink`, {
             body: yield* HttpBody.json(body),
@@ -127,20 +108,14 @@ test.provider(
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "FunctionNotReady",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
           }),
         );
 
       const pk = `sink#${crypto.randomUUID()}`;
       // 60 put requests > the BatchWriteItem limit of 25, so the batched sink
       // must split the chunk into 3 sequential API calls (25 + 25 + 10).
-      const items = Array.from(
-        { length: 60 },
-        (_, i) => `item-${String(i).padStart(3, "0")}`,
-      );
+      const items = Array.from({ length: 60 }, (_, i) => `item-${String(i).padStart(3, "0")}`);
 
       const putResponse = yield* postSink({ pk, puts: items });
       expect(putResponse.ok).toBe(true);
@@ -156,11 +131,7 @@ test.provider(
       expect(deleteResponse.ok).toBe(true);
       expect(deleteResponse.count).toBe(toDelete.length);
 
-      const remaining = yield* waitForSortKeys(
-        tableName,
-        pk,
-        items.length - toDelete.length,
-      );
+      const remaining = yield* waitForSortKeys(tableName, pk, items.length - toDelete.length);
       expect([...remaining].sort()).toEqual(items.slice(30));
 
       yield* stack.destroy();

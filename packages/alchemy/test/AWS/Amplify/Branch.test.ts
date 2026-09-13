@@ -31,16 +31,11 @@ class BranchStillExists extends Data.TaggedError("BranchStillExists")<{
 const assertBranchDeleted = (appId: string, branchName: string) =>
   findBranch(appId, branchName).pipe(
     Effect.flatMap((branch) =>
-      branch === undefined
-        ? Effect.void
-        : Effect.fail(new BranchStillExists({ branchName })),
+      branch === undefined ? Effect.void : Effect.fail(new BranchStillExists({ branchName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "BranchStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 

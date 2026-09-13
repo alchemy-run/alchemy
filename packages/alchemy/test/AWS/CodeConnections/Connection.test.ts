@@ -43,9 +43,7 @@ test.provider(
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(Connection);
       const all = yield* provider.list();
-      expect(all.some((c) => c.connectionArn === deployed.connectionArn)).toBe(
-        true,
-      );
+      expect(all.some((c) => c.connectionArn === deployed.connectionArn)).toBe(true);
 
       // Destroy — connection is deleted; verify it is gone out-of-band.
       yield* stack.destroy();
@@ -53,9 +51,7 @@ test.provider(
         .getConnection({ ConnectionArn: deployed.connectionArn })
         .pipe(
           Effect.map((res) => res.Connection),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       expect(after).toBeUndefined();
     }),

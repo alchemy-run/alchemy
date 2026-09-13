@@ -20,17 +20,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probes: prove the distilled error union carries the
 // not-found tag every MailManager provider's read/delete path depends on.
 // Runs in every CI pass at near-zero cost.
-test.provider(
-  "getRuleSet on a bogus id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        // Well-formed (rs- + 26 alphanumerics) but nonexistent — a malformed
-        // id fails ValidationException before the existence check.
-        mm.getRuleSet({ RuleSetId: "rs-00000000000000000000000000" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getRuleSet on a bogus id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      // Well-formed (rs- + 26 alphanumerics) but nonexistent — a malformed
+      // id fails ValidationException before the existence check.
+      mm.getRuleSet({ RuleSetId: "rs-00000000000000000000000000" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Mail Manager deletes are natively idempotent — deleting a nonexistent
@@ -123,16 +121,12 @@ test.provider(
       const ruleSetTags = yield* mm.listTagsForResource({
         ResourceArn: deployed.ruleSet.ruleSetArn,
       });
-      expect(
-        ruleSetTags.Tags?.some(
-          (t) => t.Key === "alchemy::id" && t.Value === "Inbound",
-        ),
-      ).toBe(true);
-      expect(
-        ruleSetTags.Tags?.some(
-          (t) => t.Key === "fixture" && t.Value === "mailmanager",
-        ),
-      ).toBe(true);
+      expect(ruleSetTags.Tags?.some((t) => t.Key === "alchemy::id" && t.Value === "Inbound")).toBe(
+        true,
+      );
+      expect(ruleSetTags.Tags?.some((t) => t.Key === "fixture" && t.Value === "mailmanager")).toBe(
+        true,
+      );
 
       // Update — rules, statements, relay port, and tags all change in
       // place; identities are stable.
@@ -187,9 +181,7 @@ test.provider(
       );
 
       expect(updated.ruleSet.ruleSetId).toBe(deployed.ruleSet.ruleSetId);
-      expect(updated.trafficPolicy.trafficPolicyId).toBe(
-        deployed.trafficPolicy.trafficPolicyId,
-      );
+      expect(updated.trafficPolicy.trafficPolicyId).toBe(deployed.trafficPolicy.trafficPolicyId);
       expect(updated.relay.relayId).toBe(deployed.relay.relayId);
 
       const updatedRuleSet = yield* mm.getRuleSet({
@@ -208,11 +200,9 @@ test.provider(
       const updatedRuleSetTags = yield* mm.listTagsForResource({
         ResourceArn: updated.ruleSet.ruleSetArn,
       });
-      expect(
-        updatedRuleSetTags.Tags?.some(
-          (t) => t.Key === "env" && t.Value === "test",
-        ),
-      ).toBe(true);
+      expect(updatedRuleSetTags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(
+        true,
+      );
 
       // Destroy — everything gone, typed.
       yield* stack.destroy();
@@ -226,9 +216,7 @@ test.provider(
         }),
       );
       expect(policyError._tag).toBe("ResourceNotFoundException");
-      const relayError = yield* Effect.flip(
-        mm.getRelay({ RelayId: updated.relay.relayId }),
-      );
+      const relayError = yield* Effect.flip(mm.getRelay({ RelayId: updated.relay.relayId }));
       expect(relayError._tag).toBe("ResourceNotFoundException");
     }),
   { timeout: 240_000 },
@@ -268,9 +256,7 @@ test.provider(
       const liveList = yield* mm.getAddressList({
         AddressListId: deployed.addressList.addressListId,
       });
-      expect(liveList.AddressListName).toBe(
-        deployed.addressList.addressListName,
-      );
+      expect(liveList.AddressListName).toBe(deployed.addressList.addressListName);
       const liveArchive = yield* mm.getArchive({
         ArchiveId: deployed.archive.archiveId,
       });
@@ -279,11 +265,9 @@ test.provider(
       const listTags = yield* mm.listTagsForResource({
         ResourceArn: deployed.addressList.addressListArn,
       });
-      expect(
-        listTags.Tags?.some(
-          (t) => t.Key === "alchemy::id" && t.Value === "Members",
-        ),
-      ).toBe(true);
+      expect(listTags.Tags?.some((t) => t.Key === "alchemy::id" && t.Value === "Members")).toBe(
+        true,
+      );
 
       // Update — archive retention changes in place; address list tags
       // sync; identities are stable.
@@ -300,9 +284,7 @@ test.provider(
         }),
       );
 
-      expect(updated.addressList.addressListId).toBe(
-        deployed.addressList.addressListId,
-      );
+      expect(updated.addressList.addressListId).toBe(deployed.addressList.addressListId);
       expect(updated.archive.archiveId).toBe(deployed.archive.archiveId);
       const updatedArchive = yield* mm.getArchive({
         ArchiveId: updated.archive.archiveId,
@@ -311,11 +293,7 @@ test.provider(
       const updatedListTags = yield* mm.listTagsForResource({
         ResourceArn: updated.addressList.addressListArn,
       });
-      expect(
-        updatedListTags.Tags?.some(
-          (t) => t.Key === "env" && t.Value === "test",
-        ),
-      ).toBe(true);
+      expect(updatedListTags.Tags?.some((t) => t.Key === "env" && t.Value === "test")).toBe(true);
 
       // Destroy — the list is gone (typed); the archive tombstones in
       // PENDING_DELETION (or is already invisible).
@@ -326,14 +304,12 @@ test.provider(
         }),
       );
       expect(listError._tag).toBe("ResourceNotFoundException");
-      const archiveState = yield* mm
-        .getArchive({ ArchiveId: updated.archive.archiveId })
-        .pipe(
-          Effect.map((a) => a.ArchiveState),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("PENDING_DELETION" as const),
-          ),
-        );
+      const archiveState = yield* mm.getArchive({ ArchiveId: updated.archive.archiveId }).pipe(
+        Effect.map((a) => a.ArchiveState),
+        Effect.catchTag("ResourceNotFoundException", () =>
+          Effect.succeed("PENDING_DELETION" as const),
+        ),
+      );
       expect(archiveState).toBe("PENDING_DELETION");
 
       // Re-create — proves a rerun does not collide with the
@@ -358,25 +334,16 @@ test.provider(
 // way) — the full lifecycle is gated behind AWS_TEST_MAILMANAGER=1.
 const assertIngressPointGone = (ingressPointId: string) =>
   Effect.gen(function* () {
-    const status = yield* mm
-      .getIngressPoint({ IngressPointId: ingressPointId })
-      .pipe(
-        Effect.map((r) => r.Status ?? "unknown"),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("gone" as const),
-        ),
-      );
+    const status = yield* mm.getIngressPoint({ IngressPointId: ingressPointId }).pipe(
+      Effect.map((r) => r.Status ?? "unknown"),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
+    );
     if (status !== "gone" && status !== "DEPROVISIONING") {
-      return yield* Effect.fail(
-        new Error(`ingress point still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`ingress point still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -441,9 +408,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MAILMANAGER)(
         }),
       );
 
-      expect(updated.ingress.ingressPointId).toBe(
-        deployed.ingress.ingressPointId,
-      );
+      expect(updated.ingress.ingressPointId).toBe(deployed.ingress.ingressPointId);
       const updatedLive = yield* mm.getIngressPoint({
         IngressPointId: updated.ingress.ingressPointId,
       });
@@ -482,9 +447,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MAILMANAGER_ADDONS)(
       expect(deployed.subscription.addonSubscriptionId).toBeDefined();
       expect(deployed.subscription.addonName).toBe("SPAMHAUS_DBL");
       expect(deployed.instance.addonInstanceId).toBeDefined();
-      expect(deployed.instance.addonSubscriptionId).toBe(
-        deployed.subscription.addonSubscriptionId,
-      );
+      expect(deployed.instance.addonSubscriptionId).toBe(deployed.subscription.addonSubscriptionId);
 
       // Out-of-band verification via distilled.
       const liveSubscription = yield* mm.getAddonSubscription({
@@ -494,9 +457,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MAILMANAGER_ADDONS)(
       const liveInstance = yield* mm.getAddonInstance({
         AddonInstanceId: deployed.instance.addonInstanceId,
       });
-      expect(liveInstance.AddonSubscriptionId).toBe(
-        deployed.subscription.addonSubscriptionId,
-      );
+      expect(liveInstance.AddonSubscriptionId).toBe(deployed.subscription.addonSubscriptionId);
 
       // Destroy — both gone, typed.
       yield* stack.destroy();

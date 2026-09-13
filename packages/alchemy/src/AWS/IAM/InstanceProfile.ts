@@ -6,12 +6,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./common.ts";
 
@@ -82,9 +77,7 @@ export interface InstanceProfile extends Resource<
  *
  * @resource
  */
-export const InstanceProfile = Resource<InstanceProfile>(
-  "AWS.IAM.InstanceProfile",
-);
+export const InstanceProfile = Resource<InstanceProfile>("AWS.IAM.InstanceProfile");
 
 export const InstanceProfileProvider = () =>
   Provider.effect(
@@ -100,11 +93,7 @@ export const InstanceProfileProvider = () =>
           .getInstanceProfile({
             InstanceProfileName: name,
           })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         return response?.InstanceProfile;
       });
 
@@ -134,16 +123,11 @@ export const InstanceProfileProvider = () =>
       });
 
       return {
-        stables: [
-          "instanceProfileArn",
-          "instanceProfileName",
-          "instanceProfileId",
-        ],
+        stables: ["instanceProfileArn", "instanceProfileName", "instanceProfileId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
-            (yield* toName(id, olds ?? ({} as InstanceProfileProps))) !==
-            (yield* toName(id, news))
+            (yield* toName(id, olds ?? ({} as InstanceProfileProps))) !== (yield* toName(id, news))
           ) {
             return { action: "replace" } as const;
           }
@@ -162,9 +146,7 @@ export const InstanceProfileProvider = () =>
                 (page.InstanceProfiles ?? []).map((profile) => ({
                   instanceProfileArn: profile.Arn,
                   instanceProfileName: profile.InstanceProfileName,
-                  instanceProfileId: profile.InstanceProfileId as
-                    | string
-                    | undefined,
+                  instanceProfileId: profile.InstanceProfileId as string | undefined,
                   path: profile.Path as string | undefined,
                   roleName: profile.Roles?.[0]?.RoleName,
                   tags: toTagRecord(profile.Tags),
@@ -233,9 +215,7 @@ export const InstanceProfileProvider = () =>
             profile = yield* readInstanceProfile(name);
             if (!profile?.Arn || !profile.InstanceProfileName) {
               return yield* Effect.fail(
-                new Error(
-                  `Instance profile '${name}' was not readable after create`,
-                ),
+                new Error(`Instance profile '${name}' was not readable after create`),
               );
             }
           }
@@ -272,9 +252,7 @@ export const InstanceProfileProvider = () =>
           const fresh = yield* readInstanceProfile(name);
           if (!fresh?.Arn || !fresh.InstanceProfileName) {
             return yield* Effect.fail(
-              new Error(
-                `Instance profile '${name}' was not readable after sync`,
-              ),
+              new Error(`Instance profile '${name}' was not readable after sync`),
             );
           }
 
@@ -289,9 +267,7 @@ export const InstanceProfileProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          const profile = yield* readInstanceProfile(
-            output.instanceProfileName,
-          );
+          const profile = yield* readInstanceProfile(output.instanceProfileName);
           for (const role of profile?.Roles ?? []) {
             if (role.RoleName) {
               yield* iam
@@ -299,9 +275,7 @@ export const InstanceProfileProvider = () =>
                   InstanceProfileName: output.instanceProfileName,
                   RoleName: role.RoleName,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                );
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             }
           }
           yield* iam

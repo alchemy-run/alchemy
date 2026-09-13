@@ -85,13 +85,9 @@ export function yantraSvg({
 }: YantraOptions = {}): string {
   const colors = YANTRA_THEMES[theme === "auto" ? "light" : theme];
 
-  const stroke =
-    theme === "auto"
-      ? `var(--alc-accent-deep, ${colors.stroke})`
-      : colors.stroke;
+  const stroke = theme === "auto" ? `var(--alc-accent-deep, ${colors.stroke})` : colors.stroke;
 
-  const dot =
-    theme === "auto" ? `var(--alc-yantra-dot, ${colors.dot})` : colors.dot;
+  const dot = theme === "auto" ? `var(--alc-yantra-dot, ${colors.dot})` : colors.dot;
 
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${YANTRA.viewBox.join(" ")}" fill="none" stroke="${stroke}" stroke-width="${YANTRA.strokeWidth}" stroke-linecap="round" stroke-linejoin="round">`,

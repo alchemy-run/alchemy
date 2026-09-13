@@ -36,13 +36,9 @@ export interface ListPreviewRotationShifts extends Binding.Service<
   () => Effect.Effect<
     (
       request: ssm.ListPreviewRotationShiftsRequest,
-    ) => Effect.Effect<
-      ssm.ListPreviewRotationShiftsResult,
-      ssm.ListPreviewRotationShiftsError
-    >
+    ) => Effect.Effect<ssm.ListPreviewRotationShiftsResult, ssm.ListPreviewRotationShiftsError>
   >
 > {}
-export const ListPreviewRotationShifts =
-  Binding.Service<ListPreviewRotationShifts>(
-    "AWS.SSMContacts.ListPreviewRotationShifts",
-  );
+export const ListPreviewRotationShifts = Binding.Service<ListPreviewRotationShifts>(
+  "AWS.SSMContacts.ListPreviewRotationShifts",
+);

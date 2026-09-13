@@ -30,12 +30,7 @@ export interface ListCoverage extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.ListCoverageRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.ListCoverageResponse,
-      guardduty.ListCoverageError
-    >
+    ) => Effect.Effect<guardduty.ListCoverageResponse, guardduty.ListCoverageError>
   >
 > {}
-export const ListCoverage = Binding.Service<ListCoverage>(
-  "AWS.GuardDuty.ListCoverage",
-);
+export const ListCoverage = Binding.Service<ListCoverage>("AWS.GuardDuty.ListCoverage");

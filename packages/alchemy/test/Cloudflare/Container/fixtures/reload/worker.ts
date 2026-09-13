@@ -18,11 +18,7 @@ export default class ReloadContainerWorker extends Cloudflare.Worker<ReloadConta
         const text = yield* objects
           .getByName("default")
           .read(url.pathname)
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.succeed(`CONTAINER_UNREACHABLE: ${cause}`),
-            ),
-          );
+          .pipe(Effect.catchCause((cause) => Effect.succeed(`CONTAINER_UNREACHABLE: ${cause}`)));
         return HttpServerResponse.text(text);
       }),
     };

@@ -11,25 +11,13 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/waku-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/waku-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "tsconfig.json",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "src", "public"];
 
 const waitUntilGone = (id: number) =>
   Services.servers.getServer({ id }).pipe(
@@ -76,14 +64,10 @@ test.provider.skipIf(!hasHetznerCreds)(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/echo?echo=roundtrip`,
-        "WAKU_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/echo?echo=roundtrip`, "WAKU_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
       yield* expectUrlContains(`${url!}/about`, "WAKU_AWS_STATIC_MARKER", {
         timeout: "30 seconds",
         label: "extra route",

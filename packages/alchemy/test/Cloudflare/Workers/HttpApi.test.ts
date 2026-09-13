@@ -15,10 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const testTimeout = 60_000;
 const burstTimeout = 90_000;
@@ -38,25 +35,20 @@ const readinessRetry = {
   times: 40,
 } as const;
 
-const makeClient = (url: string) =>
-  HttpApiClient.make(TaskApi, { baseUrl: url });
+const makeClient = (url: string) => HttpApiClient.make(TaskApi, { baseUrl: url });
 
 // The raw `HttpClient` (used for transport-level CORS checks) does not fail on
 // a non-2xx status, so `Effect.retry` won't fire on the freshly-deployed edge
 // 404/500 window. Explicitly `Effect.fail` non-2xx responses to force the
 // retry (unlike the typed `HttpApiClient`, which already fails on them).
-const requestUntilReady = (
-  effect: Effect.Effect<HttpClientResponse, unknown, never>,
-) =>
+const requestUntilReady = (effect: Effect.Effect<HttpClientResponse, unknown, never>) =>
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
       Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
-          : yield* Effect.fail(
-              new Error(`Worker not ready: ${res.status} ${yield* res.text}`),
-            );
+          : yield* Effect.fail(new Error(`Worker not ready: ${res.status} ${yield* res.text}`));
       }),
     ),
     Effect.retry(readinessRetry),
@@ -192,9 +184,7 @@ test(
             payload: { title: `task-${i}` },
           }).pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
           if (created.title !== `task-${i}`) {
-            return yield* Effect.fail(
-              new Error(`create ${i} title mismatch: ${created.title}`),
-            );
+            return yield* Effect.fail(new Error(`create ${i} title mismatch: ${created.title}`));
           }
           return created.id;
         }),

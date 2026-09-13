@@ -32,10 +32,7 @@ export interface GetJobQueueSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetJobQueueSnapshotRequest,
-    ) => Effect.Effect<
-      batch.GetJobQueueSnapshotResponse,
-      batch.GetJobQueueSnapshotError
-    >
+    ) => Effect.Effect<batch.GetJobQueueSnapshotResponse, batch.GetJobQueueSnapshotError>
   >
 > {}
 export const GetJobQueueSnapshot = Binding.Service<GetJobQueueSnapshot>(

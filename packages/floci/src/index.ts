@@ -66,10 +66,7 @@ export const DEFAULT_ELB_LISTENER_PORTS = [80, 443];
  * passed in as `FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS`. Taken host ports are
  * skipped, exactly like the ELB listener ports above.
  */
-export const DEFAULT_CLOUDFRONT_EDGE_PORTS = Array.from(
-  { length: 20 },
-  (_, index) => 9500 + index,
-);
+export const DEFAULT_CLOUDFRONT_EDGE_PORTS = Array.from({ length: 20 }, (_, index) => 9500 + index);
 
 /** Default name of the managed container. */
 export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
@@ -238,9 +235,7 @@ export const isServing = (endpoint: string): Effect.Effect<boolean> =>
   }).pipe(Effect.orElseSucceed(() => false));
 
 /** Fail unless `GET /_floci/health` answers 200. */
-export const checkHealth = (
-  endpoint: string,
-): Effect.Effect<void, FlociError> =>
+export const checkHealth = (endpoint: string): Effect.Effect<void, FlociError> =>
   Effect.tryPromise({
     try: async (signal) => {
       const res = await fetch(`${endpoint}/_floci/health`, { signal });
@@ -261,9 +256,7 @@ export const resolveImage = (config?: FlociConfig): Effect.Effect<string> =>
     () =>
       // `|| undefined`: an empty env var (`ALCHEMY_FLOCI_IMAGE= cmd`) means
       // "no override", not "run the image named ''" (an unrunnable docker ref).
-      (process.env.ALCHEMY_FLOCI_IMAGE || undefined) ??
-      config?.image ??
-      DEFAULT_FLOCI_IMAGE,
+      (process.env.ALCHEMY_FLOCI_IMAGE || undefined) ?? config?.image ?? DEFAULT_FLOCI_IMAGE,
   );
 
 /** Whether a host TCP port is free (nothing is listening on it). */
@@ -285,9 +278,7 @@ const isHostPortFree = (port: number): Effect.Effect<boolean> =>
       }
       resume(Effect.succeed(false));
     });
-    server.once("listening", () =>
-      server.close(() => resume(Effect.succeed(true))),
-    );
+    server.once("listening", () => server.close(() => resume(Effect.succeed(true))));
     server.listen(port, "127.0.0.1");
     return Effect.sync(() => server.close());
   });
@@ -296,15 +287,8 @@ const isHostPortFree = (port: number): Effect.Effect<boolean> =>
  * The host ports the named container publishes, or `undefined` when the
  * container does not exist.
  */
-const publishedPorts = (
-  containerName: string,
-): Effect.Effect<Set<number> | undefined> =>
-  docker([
-    "inspect",
-    "--format",
-    "{{json .HostConfig.PortBindings}}",
-    containerName,
-  ]).pipe(
+const publishedPorts = (containerName: string): Effect.Effect<Set<number> | undefined> =>
+  docker(["inspect", "--format", "{{json .HostConfig.PortBindings}}", containerName]).pipe(
     Effect.map(({ stdout }) => {
       let bindings: Record<string, Array<{ HostPort?: string }> | null> | null;
       try {
@@ -364,9 +348,7 @@ const resolvePublishablePorts = Effect.fn(function* (
  */
 const ensureMutex = Semaphore.makeUnsafe(1);
 
-export const ensureFloci = (
-  config?: FlociConfig,
-): Effect.Effect<FlociInstance, FlociError> =>
+export const ensureFloci = (config?: FlociConfig): Effect.Effect<FlociInstance, FlociError> =>
   ensureMutex.withPermits(1)(
     // The mutex serializes ensures within THIS process; across processes
     // (a test runner and a dev CLI booting together) the recreate path can
@@ -426,19 +408,12 @@ const ensureFlociUnsynchronized = (
     const publishPorts = [...elbPorts, ...edgePorts];
     const requiredPorts = [
       ...(config?.elbListenerPorts ?? []).filter((p) => elbPorts.includes(p)),
-      ...(config?.cloudfrontEdgePorts ?? []).filter((p) =>
-        edgePorts.includes(p),
-      ),
+      ...(config?.cloudfrontEdgePorts ?? []).filter((p) => edgePorts.includes(p)),
     ];
     const image = yield* resolveImage(config);
     const runningImage =
       published !== undefined
-        ? yield* docker([
-            "inspect",
-            "--format",
-            "{{.Config.Image}}",
-            containerName,
-          ]).pipe(
+        ? yield* docker(["inspect", "--format", "{{.Config.Image}}", containerName]).pipe(
             Effect.map(({ stdout }) => stdout.trim() || undefined),
             Effect.orElseSucceed(() => undefined),
           )
@@ -452,9 +427,7 @@ const ensureFlociUnsynchronized = (
       if (!needsRecreate) {
         // Something may be serving but still starting — the readiness
         // poll tolerates transient unhealthiness.
-        yield* checkHealth(endpoint).pipe(
-          Effect.catch(() => waitForHealth(endpoint, config)),
-        );
+        yield* checkHealth(endpoint).pipe(Effect.catch(() => waitForHealth(endpoint, config)));
         yield* syncCaBundle(endpoint);
         return { endpoint, managed: false };
       }
@@ -512,20 +485,12 @@ const ensureFlociUnsynchronized = (
         ? []
         : ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-u", "root"]),
       ...(config?.storageDir !== undefined
-        ? [
-            "-v",
-            `${config.storageDir}:/app/data`,
-            "-e",
-            "FLOCI_STORAGE_MODE=hybrid",
-          ]
+        ? ["-v", `${config.storageDir}:/app/data`, "-e", "FLOCI_STORAGE_MODE=hybrid"]
         : // No full storage mount: still persist the TLS dir so the
           // self-signed CA is stable across container recreations (floci
           // reuses existing cert files).
           ["-v", `${FLOCI_TLS_DIR}:/app/data/tls`]),
-      ...Object.entries(config?.env ?? {}).flatMap(([key, value]) => [
-        "-e",
-        `${key}=${value}`,
-      ]),
+      ...Object.entries(config?.env ?? {}).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
       image,
     ];
     yield* docker(args).pipe(
@@ -539,9 +504,7 @@ const ensureFlociUnsynchronized = (
       // reuse it if so; only a run that left nothing behind is a failure.
       Effect.catch((error) =>
         docker(["inspect", "--format", "{{.Id}}", containerName]).pipe(
-          Effect.flatMap(({ stdout }) =>
-            stdout.trim() ? Effect.void : Effect.fail(error),
-          ),
+          Effect.flatMap(({ stdout }) => (stdout.trim() ? Effect.void : Effect.fail(error))),
           Effect.catch(() => Effect.fail(error)),
         ),
       ),
@@ -585,14 +548,12 @@ const waitForHealth = (endpoint: string, config?: FlociConfig) =>
 /** Stop (not remove) the managed container. */
 export const stopFloci = (
   containerName: string = DEFAULT_CONTAINER_NAME,
-): Effect.Effect<void, FlociError> =>
-  Effect.asVoid(docker(["stop", containerName]));
+): Effect.Effect<void, FlociError> => Effect.asVoid(docker(["stop", containerName]));
 
 /** Remove the managed container (and its in-memory state). */
 export const destroyFloci = (
   containerName: string = DEFAULT_CONTAINER_NAME,
-): Effect.Effect<void, FlociError> =>
-  Effect.asVoid(docker(["rm", "-f", containerName]));
+): Effect.Effect<void, FlociError> => Effect.asVoid(docker(["rm", "-f", containerName]));
 
 /** Tail of the managed container's logs. */
 export const flociLogs = (

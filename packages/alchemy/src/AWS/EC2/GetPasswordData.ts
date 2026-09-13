@@ -46,6 +46,4 @@ export interface GetPasswordData extends Binding.Service<
   >
 > {}
 
-export const GetPasswordData = Binding.Service<GetPasswordData>(
-  "AWS.EC2.GetPasswordData",
-);
+export const GetPasswordData = Binding.Service<GetPasswordData>("AWS.EC2.GetPasswordData");

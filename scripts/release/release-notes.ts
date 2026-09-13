@@ -31,8 +31,7 @@ if (existing.includes(`## ${tag}\n`)) {
 }
 
 const tagExists =
-  (await $`git rev-parse --verify ${`refs/tags/${tag}`}`.nothrow().quiet())
-    .exitCode === 0;
+  (await $`git rev-parse --verify ${`refs/tags/${tag}`}`.nothrow().quiet()).exitCode === 0;
 const toRev = tagExists ? tag : "HEAD";
 
 console.log(`Generating release notes for ${tag} (using ${toRev})`);

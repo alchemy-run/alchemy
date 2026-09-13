@@ -34,6 +34,4 @@ export interface DescribeSchemas extends Binding.Service<
   >
 > {}
 
-export const DescribeSchemas = Binding.Service<DescribeSchemas>(
-  "AWS.DMS.DescribeSchemas",
-);
+export const DescribeSchemas = Binding.Service<DescribeSchemas>("AWS.DMS.DescribeSchemas");

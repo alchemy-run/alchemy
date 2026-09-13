@@ -11,10 +11,9 @@ import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
-export class SinkTable extends Context.Service<
-  SinkTable,
-  { table: AWS.DynamoDB.Table }
->()("SinkTable") {}
+export class SinkTable extends Context.Service<SinkTable, { table: AWS.DynamoDB.Table }>()(
+  "SinkTable",
+) {}
 
 export const SinkTableLive = Layer.effect(
   SinkTable,
@@ -100,9 +99,7 @@ export const TableSinkFunctionLive = TableSinkFunction.make(
       }).pipe(
         Effect.tapError(Console.log),
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Internal server error", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Internal server error", { status: 500 })),
         ),
       ),
     };

@@ -4,17 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import {
-  JobNotifications,
-  JobNotificationsSNS,
-  NotifyJobError,
-} from "./JobNotifications.ts";
-import {
-  GetJobError,
-  JobStorage,
-  JobStorageDynamoDB,
-  PutJobError,
-} from "./JobStorage.ts";
+import { JobNotifications, JobNotificationsSNS, NotifyJobError } from "./JobNotifications.ts";
+import { GetJobError, JobStorage, JobStorageDynamoDB, PutJobError } from "./JobStorage.ts";
 
 export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
@@ -82,14 +73,12 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
             return HttpServerResponse.text(job.message, { status: 500 });
           }
 
-          const notificationResult = yield* notifications
-            .notifyJobCreated(job)
-            .pipe(
-              Effect.match({
-                onFailure: (error) => error,
-                onSuccess: () => undefined,
-              }),
-            );
+          const notificationResult = yield* notifications.notifyJobCreated(job).pipe(
+            Effect.match({
+              onFailure: (error) => error,
+              onSuccess: () => undefined,
+            }),
+          );
 
           if (notificationResult instanceof NotifyJobError) {
             return HttpServerResponse.text(notificationResult.message, {
@@ -97,10 +86,7 @@ export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
             });
           }
 
-          return yield* HttpServerResponse.json(
-            { jobId: job.id },
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json({ jobId: job.id }, { status: 201 });
         }
 
         return HttpServerResponse.text("Not found", { status: 404 });

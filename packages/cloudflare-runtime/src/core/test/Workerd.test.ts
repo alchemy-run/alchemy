@@ -31,8 +31,7 @@ layer(services)((it) => {
               modules: [
                 {
                   name: "main.js",
-                  esModule:
-                    "export default { fetch: () => new Response('Hello, world!') };",
+                  esModule: "export default { fetch: () => new Response('Hello, world!') };",
                 },
               ],
             },
@@ -64,8 +63,7 @@ layer(services)((it) => {
                 modules: [
                   {
                     name: "main.js",
-                    esModule:
-                      "export default { fetch: () => new Response('Hello, world!') };",
+                    esModule: "export default { fetch: () => new Response('Hello, world!') };",
                   },
                 ],
               },
@@ -90,88 +88,81 @@ layer(services)((it) => {
   // instead of failing with "Address already in use". This behavior is
   // specific to workerd on Windows and outside our control.
   for (const mode of ["single", "multiple", "override"] as const) {
-    it.effect.skipIf(process.platform === "win32")(
-      `fails on port conflict (${mode})`,
-      () =>
-        Effect.gen(function* () {
-          const workerd = yield* Workerd.Workerd;
-          const result = yield* workerd.serve({
-            sockets: [
-              {
-                name: "test",
-                address: "localhost:0",
-                service: { name: "test" },
+    it.effect.skipIf(process.platform === "win32")(`fails on port conflict (${mode})`, () =>
+      Effect.gen(function* () {
+        const workerd = yield* Workerd.Workerd;
+        const result = yield* workerd.serve({
+          sockets: [
+            {
+              name: "test",
+              address: "localhost:0",
+              service: { name: "test" },
+            },
+          ],
+          services: [
+            {
+              name: "test",
+              worker: {
+                compatibilityDate: "2026-03-10",
+                modules: [
+                  {
+                    name: "main.js",
+                    esModule: "export default { fetch: () => new Response('Hello, world!') };",
+                  },
+                ],
               },
-            ],
-            services: [
-              {
-                name: "test",
-                worker: {
-                  compatibilityDate: "2026-03-10",
-                  modules: [
-                    {
-                      name: "main.js",
-                      esModule:
-                        "export default { fetch: () => new Response('Hello, world!') };",
-                    },
-                  ],
+            },
+          ],
+        });
+        const port = result.test;
+        const error = yield* workerd
+          .serve(
+            {
+              sockets: [
+                {
+                  name: "test",
+                  address: mode === "override" ? "localhost:0" : `localhost:${port}`,
+                  service: { name: "test" },
                 },
-              },
-            ],
-          });
-          const port = result.test;
-          const error = yield* workerd
-            .serve(
-              {
-                sockets: [
-                  {
-                    name: "test",
-                    address:
-                      mode === "override" ? "localhost:0" : `localhost:${port}`,
-                    service: { name: "test" },
+                ...(mode === "multiple"
+                  ? [
+                      {
+                        name: "other",
+                        address: "localhost:0",
+                        service: { name: "test" },
+                      },
+                    ]
+                  : []),
+              ],
+              services: [
+                {
+                  name: "test",
+                  worker: {
+                    compatibilityDate: "2026-03-10",
+                    modules: [
+                      {
+                        name: "main.js",
+                        esModule: "export default { fetch: () => new Response('Hello, world!') };",
+                      },
+                    ],
                   },
-                  ...(mode === "multiple"
-                    ? [
-                        {
-                          name: "other",
-                          address: "localhost:0",
-                          service: { name: "test" },
-                        },
-                      ]
-                    : []),
-                ],
-                services: [
-                  {
-                    name: "test",
-                    worker: {
-                      compatibilityDate: "2026-03-10",
-                      modules: [
-                        {
-                          name: "main.js",
-                          esModule:
-                            "export default { fetch: () => new Response('Hello, world!') };",
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
-              mode === "override"
-                ? { "socket-addr": `test=localhost:${port}` }
-                : undefined,
-            )
-            .pipe(Effect.flip);
-          assert.equal(error._tag, "ConfigError");
-          expect(error.subtag).toBe("AddressInUse");
-          assert(Predicate.hasProperty(error.detail, "stderr"));
-          expect(error.detail.stderr).toMatch(/Address already in use/);
-          assert(Predicate.hasProperty(error.detail, "configuredAddresses"));
-          expect(error.detail.configuredAddresses).toEqual([
-            `localhost:${port}`,
-            ...(mode === "multiple" ? ["localhost:0"] : []),
-          ]);
-          expect(error.message).toContain(`${port}`);
-        }),
+                },
+              ],
+            },
+            mode === "override" ? { "socket-addr": `test=localhost:${port}` } : undefined,
+          )
+          .pipe(Effect.flip);
+        assert.equal(error._tag, "ConfigError");
+        expect(error.subtag).toBe("AddressInUse");
+        assert(Predicate.hasProperty(error.detail, "stderr"));
+        expect(error.detail.stderr).toMatch(/Address already in use/);
+        assert(Predicate.hasProperty(error.detail, "configuredAddresses"));
+        expect(error.detail.configuredAddresses).toEqual([
+          `localhost:${port}`,
+          ...(mode === "multiple" ? ["localhost:0"] : []),
+        ]);
+        expect(error.message).toContain(`${port}`);
+      }),
     );
   }
 
@@ -201,8 +192,7 @@ layer(services)((it) => {
                 modules: [
                   {
                     name: "main.js",
-                    esModule:
-                      "export default { fetch: () => new Response('ok') };",
+                    esModule: "export default { fetch: () => new Response('ok') };",
                   },
                 ],
               },
@@ -304,9 +294,7 @@ layer(services)((it) => {
       Effect.gen(function* () {
         wedgeAttempts += 1;
         if (wedgeAttempts === 1) {
-          return yield* Effect.fail(
-            new Error("simulated transient wedge (attempt 1)"),
-          );
+          return yield* Effect.fail(new Error("simulated transient wedge (attempt 1)"));
         }
         const workerd = yield* Workerd.Workerd;
         const ports = yield* workerd
@@ -326,8 +314,7 @@ layer(services)((it) => {
                   modules: [
                     {
                       name: "main.js",
-                      esModule:
-                        "export default { fetch: () => new Response('retried') };",
+                      esModule: "export default { fetch: () => new Response('retried') };",
                     },
                   ],
                 },
@@ -434,9 +421,7 @@ layer(services)((it) => {
                 ],
               })
               .pipe(
-                Effect.map(
-                  (ports) => new URL(`http://127.0.0.1:${ports.http}`),
-                ),
+                Effect.map((ports) => new URL(`http://127.0.0.1:${ports.http}`)),
                 Effect.flatMap((url) =>
                   Effect.promise(() =>
                     fetch(new URL("/", url)).then(async (res) => ({

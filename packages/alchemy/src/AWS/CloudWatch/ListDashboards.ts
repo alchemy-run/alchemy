@@ -29,13 +29,8 @@ export interface ListDashboards extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListDashboardsRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListDashboardsOutput,
-      cloudwatch.ListDashboardsError
-    >
+    ) => Effect.Effect<cloudwatch.ListDashboardsOutput, cloudwatch.ListDashboardsError>
   >
 > {}
 
-export const ListDashboards = Binding.Service<ListDashboards>(
-  "AWS.CloudWatch.ListDashboards",
-);
+export const ListDashboards = Binding.Service<ListDashboards>("AWS.CloudWatch.ListDashboards");

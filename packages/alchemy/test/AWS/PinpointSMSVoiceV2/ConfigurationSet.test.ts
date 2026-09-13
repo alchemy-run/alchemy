@@ -27,18 +27,14 @@ test.provider(
 const getConfigSet = (name: string) =>
   smsvoice.describeConfigurationSets({ ConfigurationSetNames: [name] }).pipe(
     Effect.map((r) => r.ConfigurationSets?.[0]),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const assertConfigSetGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* getConfigSet(name);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`configuration set '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`configuration set '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -61,9 +57,7 @@ test.provider(
 
       // Create.
       const created = yield* stack.deploy(ConfigurationSet("Config", props));
-      expect(created.configurationSetName).toBe(
-        "alchemy-test-smsvoice-config-set",
-      );
+      expect(created.configurationSetName).toBe("alchemy-test-smsvoice-config-set");
       expect(created.configurationSetArn).toContain(":configuration-set/");
 
       // Out-of-band verification via distilled.
@@ -73,9 +67,7 @@ test.provider(
       const tags = yield* smsvoice.listTagsForResource({
         ResourceArn: created.configurationSetArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagRecord = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.fixture).toBe("smsvoice-config-set");
       expect(tagRecord["alchemy::id"]).toBe("Config");
 
@@ -98,10 +90,9 @@ test.provider(
       const retags = yield* smsvoice.listTagsForResource({
         ResourceArn: created.configurationSetArn,
       });
-      expect(
-        Object.fromEntries((retags.Tags ?? []).map((t) => [t.Key, t.Value]))
-          .fixture,
-      ).toBe("smsvoice-config-set-v2");
+      expect(Object.fromEntries((retags.Tags ?? []).map((t) => [t.Key, t.Value])).fixture).toBe(
+        "smsvoice-config-set-v2",
+      );
 
       // Removing the prop clears the default message type.
       yield* stack.deploy(ConfigurationSet("Config", props));

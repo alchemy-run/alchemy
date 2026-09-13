@@ -21,10 +21,7 @@ import {
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 for (const bluegreen of [true, false]) {
   test.provider(
@@ -37,10 +34,7 @@ for (const bluegreen of [true, false]) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const rootDir = yield* cloneFixture(
-          path.resolve(
-            import.meta.dirname,
-            "../../Cloudflare/Website/vite-spa-fixture",
-          ),
+          path.resolve(import.meta.dirname, "../../Cloudflare/Website/vite-spa-fixture"),
           {
             prefix: "alchemy-vite-fly-",
             tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),
@@ -52,10 +46,7 @@ for (const bluegreen of [true, false]) {
         const writeVersion = (version: string) =>
           fs.writeFileString(
             index,
-            original.replaceAll(
-              "Vite SPA fixture",
-              `Vite SPA fixture ${version}`,
-            ),
+            original.replaceAll("Vite SPA fixture", `Vite SPA fixture ${version}`),
           );
         const deploy = () =>
           stack.deploy(
@@ -95,9 +86,7 @@ for (const bluegreen of [true, false]) {
             app_name: appName,
             machine_id: oldId,
           });
-          expect(
-            observed.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS,
-          ).toBeUndefined();
+          expect(observed.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS).toBeUndefined();
           if (bluegreen) {
             expect(observed.config?.metadata?.["alchemy.phase"]).toBe("active");
             expect(observed.config?.stop_config?.signal).toBe("SIGTERM");
@@ -108,21 +97,12 @@ for (const bluegreen of [true, false]) {
               }),
             ).toBe(true);
             expect(observed.config?.checks?.website?.path).toBe("/index.html");
-            expect(observed.config?.services?.[0]?.checks?.[0]?.path).toBe(
-              "/index.html",
-            );
+            expect(observed.config?.services?.[0]?.checks?.[0]?.path).toBe("/index.html");
           } else {
-            expect(
-              observed.config?.metadata?.["alchemy.generation"],
-            ).toBeUndefined();
+            expect(observed.config?.metadata?.["alchemy.generation"]).toBeUndefined();
           }
-          const traffic = bluegreen
-            ? yield* startTraffic(`${url}/`)
-            : undefined;
-          if (traffic)
-            yield* traffic.waitFor((body) =>
-              body.includes("Vite SPA fixture v1"),
-            );
+          const traffic = bluegreen ? yield* startTraffic(`${url}/`) : undefined;
+          if (traffic) yield* traffic.waitFor((body) => body.includes("Vite SPA fixture v1"));
           yield* writeVersion("v2");
           const second = yield* deploy();
           const newId = second.site.service!.machineId;
@@ -130,12 +110,9 @@ for (const bluegreen of [true, false]) {
           const secondBody = yield* getText(`${url}/`);
           expect(secondBody).toContain("Vite SPA fixture v2");
           if (traffic) {
-            yield* traffic.waitFor((body) =>
-              body.includes("Vite SPA fixture v2"),
-            );
+            yield* traffic.waitFor((body) => body.includes("Vite SPA fixture v2"));
             const samples = yield* traffic.finish;
-            for (const body of samples)
-              expect([firstBody, secondBody]).toContain(body);
+            for (const body of samples) expect([firstBody, secondBody]).toContain(body);
             expect(newId).not.toBe(oldId);
             yield* assertMachineGone(appName, oldId);
           } else {

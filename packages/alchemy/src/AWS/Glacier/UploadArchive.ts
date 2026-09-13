@@ -44,12 +44,7 @@ export interface UploadArchive extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UploadArchiveRequest,
-    ) => Effect.Effect<
-      glacier.ArchiveCreationOutput,
-      glacier.UploadArchiveError
-    >
+    ) => Effect.Effect<glacier.ArchiveCreationOutput, glacier.UploadArchiveError>
   >
 > {}
-export const UploadArchive = Binding.Service<UploadArchive>(
-  "AWS.Glacier.UploadArchive",
-);
+export const UploadArchive = Binding.Service<UploadArchive>("AWS.Glacier.UploadArchive");

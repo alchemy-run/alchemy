@@ -33,7 +33,6 @@ export interface ListAutomatedDiscoveryAccounts extends Binding.Service<
     >
   >
 > {}
-export const ListAutomatedDiscoveryAccounts =
-  Binding.Service<ListAutomatedDiscoveryAccounts>(
-    "AWS.Macie2.ListAutomatedDiscoveryAccounts",
-  );
+export const ListAutomatedDiscoveryAccounts = Binding.Service<ListAutomatedDiscoveryAccounts>(
+  "AWS.Macie2.ListAutomatedDiscoveryAccounts",
+);

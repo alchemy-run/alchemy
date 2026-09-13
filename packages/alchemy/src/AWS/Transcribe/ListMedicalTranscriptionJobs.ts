@@ -32,7 +32,6 @@ export interface ListMedicalTranscriptionJobs extends Binding.Service<
     >
   >
 > {}
-export const ListMedicalTranscriptionJobs =
-  Binding.Service<ListMedicalTranscriptionJobs>(
-    "AWS.Transcribe.ListMedicalTranscriptionJobs",
-  );
+export const ListMedicalTranscriptionJobs = Binding.Service<ListMedicalTranscriptionJobs>(
+  "AWS.Transcribe.ListMedicalTranscriptionJobs",
+);

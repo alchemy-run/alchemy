@@ -36,9 +36,9 @@ const unifiedDriftLines = (
     typeof actual === "object"
   ) {
     const lines: string[] = [];
-    for (const key of [
-      ...new Set([...Object.keys(expected), ...Object.keys(actual)]),
-    ].sort((a, b) => a.localeCompare(b))) {
+    for (const key of [...new Set([...Object.keys(expected), ...Object.keys(actual)])].sort(
+      (a, b) => a.localeCompare(b),
+    )) {
       const hasExpected = Object.hasOwn(expected, key);
       const hasActual = Object.hasOwn(actual, key);
       const expectedValue = hasExpected ? expected[key]! : UNDEFINED;
@@ -56,24 +56,14 @@ const unifiedDriftLines = (
       ) {
         lines.push(`${padding}${key}:`);
         lines.push(...unifiedDriftLines(expectedValue, actualValue, depth + 2));
-      } else if (
-        JSON.stringify(expectedValue) === JSON.stringify(actualValue)
-      ) {
+      } else if (JSON.stringify(expectedValue) === JSON.stringify(actualValue)) {
         lines.push(...indent(formatYamlLines({ [key]: expectedValue }), depth));
       } else {
         if (hasExpected) {
-          lines.push(
-            ...indent(formatYamlLines({ [key]: expectedValue }), depth).map(
-              mark("-"),
-            ),
-          );
+          lines.push(...indent(formatYamlLines({ [key]: expectedValue }), depth).map(mark("-")));
         }
         if (hasActual) {
-          lines.push(
-            ...indent(formatYamlLines({ [key]: actualValue }), depth).map(
-              mark("+"),
-            ),
-          );
+          lines.push(...indent(formatYamlLines({ [key]: actualValue }), depth).map(mark("+")));
         }
       }
     }
@@ -97,9 +87,7 @@ export interface YamlChangeMatch {
 /** Match a `- `/`+ ` change marker emitted by {@link unifiedDriftLines}. */
 export const matchYamlChange = (line: string): YamlChangeMatch | undefined => {
   const match = line.match(/^([+-]) (.*)$/);
-  return match === null
-    ? undefined
-    : { marker: match[1] as "-" | "+", content: match[2]! };
+  return match === null ? undefined : { marker: match[1] as "-" | "+", content: match[2]! };
 };
 
 export interface YamlKeyMatch {
@@ -112,9 +100,7 @@ export interface YamlKeyMatch {
 /** Match an `indent` + `key:` + rest display-YAML line for colorizing. */
 export const matchYamlKey = (line: string): YamlKeyMatch | undefined => {
   const match = line.match(/^(\s*)([A-Za-z_][\w .-]*:)(.*)$/);
-  return match === null
-    ? undefined
-    : { indent: match[1]!, key: match[2]!, value: match[3]! };
+  return match === null ? undefined : { indent: match[1]!, key: match[2]!, value: match[3]! };
 };
 
 /** Format the changed cloud attributes carried by a drift-repair plan. */
@@ -168,10 +154,7 @@ export const toYamlDisplayValue = (
         .sort((a, b) => a.localeCompare(b))
         .map((key) => [
           key,
-          toYamlDisplayValue(
-            (value as Record<string, unknown>)[key],
-            ancestors,
-          ),
+          toYamlDisplayValue((value as Record<string, unknown>)[key], ancestors),
         ]),
     );
   } finally {
@@ -216,11 +199,7 @@ export const formatDeclaredPropertyYaml = (
     kind: "change",
     lines: [
       "properties:",
-      ...unifiedDriftLines(
-        toYamlDisplayValue(oldProps ?? {}),
-        toYamlDisplayValue(desired),
-        2,
-      ),
+      ...unifiedDriftLines(toYamlDisplayValue(oldProps ?? {}), toYamlDisplayValue(desired), 2),
     ],
   };
 };

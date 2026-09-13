@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import AppRegistryTestFunctionLive, {
-  AppRegistryTestFunction,
-} from "./handler";
+import AppRegistryTestFunctionLive, { AppRegistryTestFunction } from "./handler";
 import { makeAppRegistryTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -29,10 +27,7 @@ const gated = !process.env.AWS_TEST_APPREGISTRY;
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -51,28 +46,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "AppRegistry test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("AppRegistry test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("AppRegistry test setup: deploying fixture");
@@ -86,9 +74,7 @@ describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `AppRegistry test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`AppRegistry test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -96,9 +82,7 @@ describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `AppRegistry test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`AppRegistry test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -111,9 +95,9 @@ describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
   describe("binding registration", () => {
     test.provider("all 9 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/bindings`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).bound).toHaveLength(9);
       }),
     );
@@ -122,9 +106,9 @@ describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
   describe("GetApplication", () => {
     test.provider("reads the fixture application's metadata", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/application`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/application`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect(typeof (response as any).name).toBe("string");
         expect((response as any).name.length).toBeGreaterThan(0);
         expect(typeof (response as any).associatedResourceCount).toBe("number");
@@ -135,9 +119,9 @@ describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
   describe("GetAttributeGroup", () => {
     test.provider("reads the fixture group's JSON attributes", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/attribute-group`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/attribute-group`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).attributes.owner).toBe("alchemy-test");
         expect((response as any).attributes.tier).toBe("bindings");
       }),
@@ -169,72 +153,63 @@ describe.skipIf(gated).sequential("AppRegistry Bindings", () => {
   describe("ListAssociatedResources", () => {
     test.provider("lists the application's associated resources", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/associated-resources`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/associated-resources`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect(typeof (response as any).count).toBe("number");
       }),
     );
   });
 
   describe("GetAssociatedResource", () => {
-    test.provider(
-      "returns the typed not-found error for an unknown resource",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/associated-resource-not-found`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as any).found).toBe(false);
-        }),
+    test.provider("returns the typed not-found error for an unknown resource", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${baseUrl}/associated-resource-not-found`),
+        ).pipe(Effect.flatMap((r) => r.json));
+        expect((response as any).found).toBe(false);
+      }),
     );
   });
 
   describe("ListApplications", () => {
-    test.provider(
-      "account listing includes the fixture application",
-      (_stack) =>
-        Effect.gen(function* () {
-          const app = yield* send(
-            HttpClientRequest.get(`${baseUrl}/application`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/applications`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as any).names).toContain((app as any).name);
-        }),
+    test.provider("account listing includes the fixture application", (_stack) =>
+      Effect.gen(function* () {
+        const app = yield* send(HttpClientRequest.get(`${baseUrl}/application`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/applications`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        expect((response as any).names).toContain((app as any).name);
+      }),
     );
   });
 
   describe("ListAttributeGroups", () => {
-    test.provider(
-      "account listing includes the fixture attribute group",
-      (_stack) =>
-        Effect.gen(function* () {
-          const group = yield* send(
-            HttpClientRequest.get(`${baseUrl}/attribute-group`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/attribute-groups`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as any).names).toContain((group as any).name);
-        }),
+    test.provider("account listing includes the fixture attribute group", (_stack) =>
+      Effect.gen(function* () {
+        const group = yield* send(HttpClientRequest.get(`${baseUrl}/attribute-group`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/attribute-groups`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        expect((response as any).names).toContain((group as any).name);
+      }),
     );
   });
 
   describe("SyncResource", () => {
-    test.provider(
-      "surfaces a typed error for a nonexistent stack (proving the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.post(`${baseUrl}/sync-resource`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain((response as any).tag);
-        }),
+    test.provider("surfaces a typed error for a nonexistent stack (proving the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(HttpClientRequest.post(`${baseUrl}/sync-resource`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
+          (response as any).tag,
+        );
+      }),
     );
   });
 });

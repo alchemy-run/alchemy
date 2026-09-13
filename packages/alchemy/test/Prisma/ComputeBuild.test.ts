@@ -9,11 +9,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { createComputeArchive } from "@/Prisma/ComputeArchive";
-import {
-  runBuildCommand,
-  runComputeAutoBuild,
-  runComputeStaticBuild,
-} from "@/Prisma/ComputeBuild";
+import { runBuildCommand, runComputeAutoBuild, runComputeStaticBuild } from "@/Prisma/ComputeBuild";
 import { findAvailablePort } from "@/Util/Node";
 import { PlatformServices } from "@/Util/PlatformServices";
 
@@ -46,10 +42,7 @@ describe("Prisma Compute auto-build", () => {
         path.join(root, "package.json"),
         JSON.stringify({ main: "src/server.ts" }),
       );
-      yield* fs.writeFileString(
-        path.join(root, "src", "server.ts"),
-        "console.log('auto bun');",
-      );
+      yield* fs.writeFileString(path.join(root, "src", "server.ts"), "console.log('auto bun');");
 
       const artifact = yield* runComputeAutoBuild({
         appPath: root,
@@ -84,10 +77,7 @@ describe("Prisma Compute auto-build", () => {
       yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nexit 0\n");
       yield* fs.chmod(nestBin, 0o755);
       yield* fs.makeDirectory(path.join(root, "dist"), { recursive: true });
-      yield* fs.writeFileString(
-        path.join(root, "dist", "main.js"),
-        "console.log('nest server');",
-      );
+      yield* fs.writeFileString(path.join(root, "dist", "main.js"), "console.log('nest server');");
 
       const artifact = yield* runComputeAutoBuild({
         appPath: root,
@@ -96,9 +86,9 @@ describe("Prisma Compute auto-build", () => {
 
       expect(artifact.entrypoint).toBe("dist/main.js");
       expect(artifact.defaultPort).toBe(3000);
-      expect(
-        yield* fs.readFileString(path.join(artifact.directory, "dist/main.js")),
-      ).toContain("nest server");
+      expect(yield* fs.readFileString(path.join(artifact.directory, "dist/main.js"))).toContain(
+        "nest server",
+      );
 
       yield* artifact.cleanup;
       expect(yield* fs.exists(artifact.directory)).toBe(false);
@@ -152,10 +142,7 @@ describe("Prisma Compute auto-build", () => {
         path.join(root, "package.json"),
         JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
       );
-      yield* fs.writeFileString(
-        nestBin,
-        "#!/usr/bin/env sh\nprintf '123456789'\n",
-      );
+      yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nprintf '123456789'\n");
       yield* fs.chmod(nestBin, 0o755);
 
       const error = yield* runComputeAutoBuild({
@@ -193,155 +180,130 @@ describe("Prisma Compute auto-build", () => {
         timeoutSeconds: 0.05,
       }).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain(
-        "Build command timed out after 0.05 seconds",
-      );
+      expect((error as Error).message).toContain("Build command timed out after 0.05 seconds");
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "resolves NestJS config output and stages traced dependencies",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-auto-nest-trace-",
-        });
-        const binDir = path.join(root, "node_modules", ".bin");
-        const nestBin = path.join(binDir, "nest");
-        yield* fs.makeDirectory(binDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
-        );
-        yield* fs.writeFileString(
-          path.join(root, "nest-cli.json"),
-          JSON.stringify({ sourceRoot: "app", entryFile: "bootstrap" }),
-        );
-        yield* fs.writeFileString(
-          path.join(root, "tsconfig.json"),
-          [
-            "{",
-            "  // Keep URLs with // intact while reading compiler options.",
-            '  "compilerOptions": {',
-            '    "outDir": "build",',
-            '    "sourceMappingURL": "https://example.com//maps"',
-            "  }",
-            "}",
-          ].join("\n"),
-        );
-        yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nexit 0\n");
-        yield* fs.chmod(nestBin, 0o755);
+  it.effect("resolves NestJS config output and stages traced dependencies", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-nest-trace-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nestBin = path.join(binDir, "nest");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        path.join(root, "nest-cli.json"),
+        JSON.stringify({ sourceRoot: "app", entryFile: "bootstrap" }),
+      );
+      yield* fs.writeFileString(
+        path.join(root, "tsconfig.json"),
+        [
+          "{",
+          "  // Keep URLs with // intact while reading compiler options.",
+          '  "compilerOptions": {',
+          '    "outDir": "build",',
+          '    "sourceMappingURL": "https://example.com//maps"',
+          "  }",
+          "}",
+        ].join("\n"),
+      );
+      yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nexit 0\n");
+      yield* fs.chmod(nestBin, 0o755);
 
-        const usedDep = path.join(root, "node_modules", "used-dep");
-        const unusedDep = path.join(root, "node_modules", "unused-dep");
-        yield* fs.makeDirectory(usedDep, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(usedDep, "package.json"),
-          JSON.stringify({ name: "used-dep", main: "index.js" }),
-        );
-        yield* fs.writeFileString(
-          path.join(usedDep, "index.js"),
-          "module.exports = 'used';",
-        );
-        yield* fs.makeDirectory(unusedDep, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(unusedDep, "package.json"),
-          JSON.stringify({ name: "unused-dep", main: "index.js" }),
-        );
-        yield* fs.writeFileString(
-          path.join(unusedDep, "index.js"),
-          "module.exports = 'unused';",
-        );
-        yield* fs.makeDirectory(path.join(root, "build", "app"), {
-          recursive: true,
-        });
-        yield* fs.writeFileString(
-          path.join(root, "build", "app", "bootstrap.js"),
-          "const used = require('used-dep'); console.log(used);",
-        );
+      const usedDep = path.join(root, "node_modules", "used-dep");
+      const unusedDep = path.join(root, "node_modules", "unused-dep");
+      yield* fs.makeDirectory(usedDep, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(usedDep, "package.json"),
+        JSON.stringify({ name: "used-dep", main: "index.js" }),
+      );
+      yield* fs.writeFileString(path.join(usedDep, "index.js"), "module.exports = 'used';");
+      yield* fs.makeDirectory(unusedDep, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(unusedDep, "package.json"),
+        JSON.stringify({ name: "unused-dep", main: "index.js" }),
+      );
+      yield* fs.writeFileString(path.join(unusedDep, "index.js"), "module.exports = 'unused';");
+      yield* fs.makeDirectory(path.join(root, "build", "app"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(root, "build", "app", "bootstrap.js"),
+        "const used = require('used-dep'); console.log(used);",
+      );
 
-        const artifact = yield* runComputeAutoBuild({
-          appPath: root,
-          framework: "nestjs",
-        });
+      const artifact = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nestjs",
+      });
 
-        expect(artifact.entrypoint).toBe("build/app/bootstrap.js");
-        expect(
-          yield* fs.exists(
-            path.join(
-              artifact.directory,
-              "node_modules",
-              "used-dep",
-              "index.js",
-            ),
-          ),
-        ).toBe(true);
-        expect(
-          yield* fs.exists(
-            path.join(artifact.directory, "node_modules", "unused-dep"),
-          ),
-        ).toBe(false);
+      expect(artifact.entrypoint).toBe("build/app/bootstrap.js");
+      expect(
+        yield* fs.exists(path.join(artifact.directory, "node_modules", "used-dep", "index.js")),
+      ).toBe(true);
+      expect(yield* fs.exists(path.join(artifact.directory, "node_modules", "unused-dep"))).toBe(
+        false,
+      );
 
-        yield* artifact.cleanup;
-        expect(yield* fs.exists(artifact.directory)).toBe(false);
-      }).pipe(Effect.provide(PlatformServices)),
+      yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "uses a project-local framework CLI and copies Next.js extras",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-auto-next-",
-        });
-        const binDir = path.join(root, "node_modules", ".bin");
-        const nextBin = path.join(binDir, "next");
-        yield* fs.makeDirectory(binDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
-        );
-        yield* fs.writeFileString(
-          nextBin,
-          [
-            "#!/bin/sh",
-            "mkdir -p .next/standalone .next/static public",
-            "printf 'next server' > .next/standalone/server.js",
-            "printf 'next static' > .next/static/app.js",
-            "printf 'next public' > public/asset.txt",
-            "",
-          ].join("\n"),
-        );
-        yield* fs.chmod(nextBin, 0o755);
+  it.effect("uses a project-local framework CLI and copies Next.js extras", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-next-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        nextBin,
+        [
+          "#!/bin/sh",
+          "mkdir -p .next/standalone .next/static public",
+          "printf 'next server' > .next/standalone/server.js",
+          "printf 'next static' > .next/static/app.js",
+          "printf 'next public' > public/asset.txt",
+          "",
+        ].join("\n"),
+      );
+      yield* fs.chmod(nextBin, 0o755);
 
-        const artifact = yield* runComputeAutoBuild({
-          appPath: root,
-          framework: "nextjs",
-        });
+      const artifact = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+      });
 
-        expect(artifact.entrypoint).toBe("server.js");
-        expect(artifact.defaultPort).toBe(3000);
-        expect(
-          yield* fs.readFileString(path.join(artifact.directory, "server.js")),
-        ).toBe("next server");
-        expect(
-          yield* fs.readFileString(
-            path.join(artifact.directory, ".next", "static", "app.js"),
-          ),
-        ).toBe("next static");
-        expect(
-          yield* fs.readFileString(
-            path.join(artifact.directory, "public", "asset.txt"),
-          ),
-        ).toBe("next public");
+      expect(artifact.entrypoint).toBe("server.js");
+      expect(artifact.defaultPort).toBe(3000);
+      expect(yield* fs.readFileString(path.join(artifact.directory, "server.js"))).toBe(
+        "next server",
+      );
+      expect(
+        yield* fs.readFileString(path.join(artifact.directory, ".next", "static", "app.js")),
+      ).toBe("next static");
+      expect(yield* fs.readFileString(path.join(artifact.directory, "public", "asset.txt"))).toBe(
+        "next public",
+      );
 
-        yield* artifact.cleanup;
-        expect(yield* fs.exists(artifact.directory)).toBe(false);
-      }).pipe(Effect.provide(PlatformServices)),
+      yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect("uses an installed workspace framework CLI", () =>
@@ -380,9 +342,9 @@ describe("Prisma Compute auto-build", () => {
         framework: "nextjs",
       });
 
-      expect(
-        yield* fs.readFileString(path.join(artifact.directory, "server.js")),
-      ).toBe("workspace next server");
+      expect(yield* fs.readFileString(path.join(artifact.directory, "server.js"))).toBe(
+        "workspace next server",
+      );
       yield* artifact.cleanup;
     }).pipe(Effect.provide(PlatformServices)),
   );
@@ -417,9 +379,7 @@ describe("Prisma Compute auto-build", () => {
       }).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
-        "Could not find an installed Next.js CLI",
-      );
+      expect((error as Error).message).toContain("Could not find an installed Next.js CLI");
       expect(yield* fs.exists(fallbackMarker)).toBe(false);
     }).pipe(Effect.provide(PlatformServices)),
   );
@@ -442,15 +402,9 @@ describe("Prisma Compute auto-build", () => {
       );
       yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
       yield* fs.chmod(nextBin, 0o755);
-      yield* fs.writeFileString(
-        path.join(standalone, "server.js"),
-        "console.log('server');",
-      );
+      yield* fs.writeFileString(path.join(standalone, "server.js"), "console.log('server');");
       yield* fs.writeFileString(path.join(root, "outside.txt"), "secret");
-      yield* fs.symlink(
-        "../../outside.txt",
-        path.join(standalone, "outside.txt"),
-      );
+      yield* fs.symlink("../../outside.txt", path.join(standalone, "outside.txt"));
 
       const error = yield* runComputeAutoBuild({
         appPath: root,
@@ -458,86 +412,73 @@ describe("Prisma Compute auto-build", () => {
       }).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
-        "Compute artifact path escapes its staging root",
-      );
+      expect((error as Error).message).toContain("Compute artifact path escapes its staging root");
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "rejects a framework output directory outside the application",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-auto-output-root-escape-",
-        });
-        const outside = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-auto-external-output-",
-        });
-        const binDir = path.join(root, "node_modules", ".bin");
-        const nextBin = path.join(binDir, "next");
-        yield* fs.makeDirectory(binDir, { recursive: true });
-        yield* fs.makeDirectory(path.join(root, ".next"), { recursive: true });
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
-        );
-        yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
-        yield* fs.chmod(nextBin, 0o755);
-        yield* fs.writeFileString(
-          path.join(outside, "server.js"),
-          "console.log('server');",
-        );
-        yield* fs.symlink(outside, path.join(root, ".next", "standalone"));
+  it.effect("rejects a framework output directory outside the application", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-output-root-escape-",
+      });
+      const outside = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-external-output-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.makeDirectory(path.join(root, ".next"), { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
+      yield* fs.chmod(nextBin, 0o755);
+      yield* fs.writeFileString(path.join(outside, "server.js"), "console.log('server');");
+      yield* fs.symlink(outside, path.join(root, ".next", "standalone"));
 
-        const error = yield* runComputeAutoBuild({
-          appPath: root,
-          framework: "nextjs",
-        }).pipe(Effect.flip);
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+      }).pipe(Effect.flip);
 
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "Compute artifact path escapes its staging root",
-        );
-      }).pipe(Effect.provide(PlatformServices)),
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("Compute artifact path escapes its staging root");
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "rejects an oversized framework output file before copying it",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-auto-oversized-file-",
-        });
-        const binDir = path.join(root, "node_modules", ".bin");
-        const nextBin = path.join(binDir, "next");
-        const standalone = path.join(root, ".next", "standalone");
-        const server = path.join(standalone, "server.js");
-        yield* fs.makeDirectory(binDir, { recursive: true });
-        yield* fs.makeDirectory(standalone, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
-        );
-        yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
-        yield* fs.chmod(nextBin, 0o755);
-        yield* fs.writeFileString(server, "");
-        yield* fs.truncate(server, 128 * 1024 * 1024 + 1);
+  it.effect("rejects an oversized framework output file before copying it", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-oversized-file-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      const standalone = path.join(root, ".next", "standalone");
+      const server = path.join(standalone, "server.js");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.makeDirectory(standalone, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(nextBin, "#!/bin/sh\nexit 0\n");
+      yield* fs.chmod(nextBin, 0o755);
+      yield* fs.writeFileString(server, "");
+      yield* fs.truncate(server, 128 * 1024 * 1024 + 1);
 
-        const error = yield* runComputeAutoBuild({
-          appPath: root,
-          framework: "nextjs",
-        }).pipe(Effect.flip);
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+      }).pipe(Effect.flip);
 
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "134217728 byte per-file safety limit",
-        );
-      }).pipe(Effect.provide(PlatformServices)),
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("134217728 byte per-file safety limit");
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect("detects nested Next.js standalone entrypoints in monorepos", () =>
@@ -574,32 +515,17 @@ describe("Prisma Compute auto-build", () => {
       });
 
       expect(artifact.entrypoint).toBe("examples/prisma-nextjs/server.js");
+      expect(yield* fs.readFileString(path.join(artifact.directory, artifact.entrypoint))).toBe(
+        "nested next server",
+      );
       expect(
         yield* fs.readFileString(
-          path.join(artifact.directory, artifact.entrypoint),
-        ),
-      ).toBe("nested next server");
-      expect(
-        yield* fs.readFileString(
-          path.join(
-            artifact.directory,
-            "examples",
-            "prisma-nextjs",
-            ".next",
-            "static",
-            "app.js",
-          ),
+          path.join(artifact.directory, "examples", "prisma-nextjs", ".next", "static", "app.js"),
         ),
       ).toBe("next static");
       expect(
         yield* fs.readFileString(
-          path.join(
-            artifact.directory,
-            "examples",
-            "prisma-nextjs",
-            "public",
-            "asset.txt",
-          ),
+          path.join(artifact.directory, "examples", "prisma-nextjs", "public", "asset.txt"),
         ),
       ).toBe("next public");
 
@@ -644,59 +570,51 @@ describe("Prisma Compute auto-build", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "materializes Bun package aliases for Next.js standalone output",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-auto-next-bun-aliases-",
-        });
-        const binDir = path.join(root, "node_modules", ".bin");
-        const nextBin = path.join(binDir, "next");
-        yield* fs.makeDirectory(binDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
-        );
-        yield* fs.writeFileString(
-          nextBin,
-          [
-            "#!/bin/sh",
-            "set -eu",
-            "mkdir -p .next/standalone/examples/prisma-nextjs",
-            "mkdir -p .next/standalone/node_modules/.bun/@swc+helpers@0.5.15/node_modules/@swc/helpers",
-            "mkdir -p .next/standalone/node_modules/.bun/node_modules/@swc",
-            "printf 'nested next server' > .next/standalone/examples/prisma-nextjs/server.js",
-            'printf \'{"name":"@swc/helpers"}\' > .next/standalone/node_modules/.bun/@swc+helpers@0.5.15/node_modules/@swc/helpers/package.json',
-            "ln -s ../../@swc+helpers@0.5.15/node_modules/@swc/helpers .next/standalone/node_modules/.bun/node_modules/@swc/helpers",
-            "",
-          ].join("\n"),
-        );
-        yield* fs.chmod(nextBin, 0o755);
+  it.effect("materializes Bun package aliases for Next.js standalone output", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-next-bun-aliases-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        nextBin,
+        [
+          "#!/bin/sh",
+          "set -eu",
+          "mkdir -p .next/standalone/examples/prisma-nextjs",
+          "mkdir -p .next/standalone/node_modules/.bun/@swc+helpers@0.5.15/node_modules/@swc/helpers",
+          "mkdir -p .next/standalone/node_modules/.bun/node_modules/@swc",
+          "printf 'nested next server' > .next/standalone/examples/prisma-nextjs/server.js",
+          'printf \'{"name":"@swc/helpers"}\' > .next/standalone/node_modules/.bun/@swc+helpers@0.5.15/node_modules/@swc/helpers/package.json',
+          "ln -s ../../@swc+helpers@0.5.15/node_modules/@swc/helpers .next/standalone/node_modules/.bun/node_modules/@swc/helpers",
+          "",
+        ].join("\n"),
+      );
+      yield* fs.chmod(nextBin, 0o755);
 
-        const artifact = yield* runComputeAutoBuild({
-          appPath: root,
-          framework: "nextjs",
-        });
+      const artifact = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+      });
 
-        expect(artifact.entrypoint).toBe("examples/prisma-nextjs/server.js");
-        expect(
-          yield* fs.readFileString(
-            path.join(
-              artifact.directory,
-              "node_modules",
-              "@swc",
-              "helpers",
-              "package.json",
-            ),
-          ),
-        ).toBe('{"name":"@swc/helpers"}');
+      expect(artifact.entrypoint).toBe("examples/prisma-nextjs/server.js");
+      expect(
+        yield* fs.readFileString(
+          path.join(artifact.directory, "node_modules", "@swc", "helpers", "package.json"),
+        ),
+      ).toBe('{"name":"@swc/helpers"}');
 
-        yield* artifact.cleanup;
-        expect(yield* fs.exists(artifact.directory)).toBe(false);
-      }).pipe(Effect.provide(PlatformServices)),
+      yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.live("auto-detects a Vite static SPA", () =>
@@ -706,9 +624,7 @@ describe("Prisma Compute auto-build", () => {
       const { root } = yield* copyStaticBuildFixture;
       const artifact = yield* runComputeAutoBuild({ appPath: root });
       yield* Effect.addFinalizer(() => artifact.cleanup);
-      const index = yield* fs.readFileString(
-        path.join(root, "dist/index.html"),
-      );
+      const index = yield* fs.readFileString(path.join(root, "dist/index.html"));
 
       expect(artifact.entrypoint).toBe("server.mjs");
       expect(artifact.defaultPort).toBe(8080);
@@ -716,11 +632,9 @@ describe("Prisma Compute auto-build", () => {
       expect(artifact.requiredFiles).toEqual(["public/index.html"]);
       expect(index).toContain("<h1>app shell</h1>");
       expect(index).toContain("/assets/app.js");
-      expect(
-        yield* fs.readFileString(
-          path.join(artifact.directory, "public", "index.html"),
-        ),
-      ).toBe(index);
+      expect(yield* fs.readFileString(path.join(artifact.directory, "public", "index.html"))).toBe(
+        index,
+      );
 
       yield* withStaticSiteServer(artifact.directory, (origin) =>
         Effect.gen(function* () {
@@ -750,19 +664,15 @@ describe("Prisma Compute auto-build", () => {
         }),
       );
 
-      const error = yield* runComputeAutoBuild({ appPath: root }).pipe(
-        Effect.flip,
-      );
+      const error = yield* runComputeAutoBuild({ appPath: root }).pipe(Effect.flip);
 
       expect((error as Error).message).toContain(
         "TanStack Start build did not produce a Nitro node server entrypoint at .output/server/index.mjs",
       );
-      expect(
-        yield* fs.readFileString(path.join(root, "dist/index.html")),
-      ).toContain("/assets/app.js");
-      expect(
-        yield* fs.exists(path.join(root, ".output/server/index.mjs")),
-      ).toBe(false);
+      expect(yield* fs.readFileString(path.join(root, "dist/index.html"))).toContain(
+        "/assets/app.js",
+      );
+      expect(yield* fs.exists(path.join(root, ".output/server/index.mjs"))).toBe(false);
     }).pipe(Effect.provide(PlatformServices)),
   );
 
@@ -829,10 +739,7 @@ describe("Prisma Compute auto-build", () => {
       } finally {
         restoreProcessEnv("PRISMA_SERVICE_TOKEN", previousServiceToken);
         restoreProcessEnv("PRISMA_API_TOKEN", previousApiToken);
-        restoreProcessEnv(
-          "ALCHEMY_BUILD_INHERITED_SENTINEL",
-          previousInherited,
-        );
+        restoreProcessEnv("ALCHEMY_BUILD_INHERITED_SENTINEL", previousInherited);
       }
     }).pipe(Effect.provide(PlatformServices)),
   );
@@ -863,9 +770,7 @@ describe("Prisma Compute auto-build", () => {
       }).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
-        "Build command timed out after 0.05 seconds",
-      );
+      expect((error as Error).message).toContain("Build command timed out after 0.05 seconds");
     }).pipe(Effect.provide(PlatformServices)),
   );
 
@@ -949,30 +854,20 @@ describe("Prisma Compute static-site build", () => {
         spa: true,
       });
       yield* Effect.addFinalizer(() => artifact.cleanup);
-      const index = yield* fs.readFileString(
-        path.join(root, "dist/index.html"),
-      );
-      const script = yield* fs.readFileString(
-        path.join(root, "dist/assets/app.js"),
-      );
+      const index = yield* fs.readFileString(path.join(root, "dist/index.html"));
+      const script = yield* fs.readFileString(path.join(root, "dist/assets/app.js"));
       const scriptStat = yield* fs.stat(path.join(root, "dist/assets/app.js"));
-      const stylesheet = yield* fs.readFileString(
-        path.join(root, "dist/assets/index.css"),
-      );
-      const docs = yield* fs.readFileString(
-        path.join(root, "dist/docs/index.html"),
-      );
+      const stylesheet = yield* fs.readFileString(path.join(root, "dist/assets/index.css"));
+      const docs = yield* fs.readFileString(path.join(root, "dist/docs/index.html"));
 
       expect(artifact.requiredFiles).toEqual(["public/index.html"]);
       expect(artifact.entrypoint).toBe("server.mjs");
       expect(artifact.defaultPort).toBe(8080);
       expect(index).toContain("<h1>app shell</h1>");
       expect(script).toMatch(/console\.log\(["'`]asset["'`]\)/);
-      expect(
-        yield* fs.readFileString(
-          path.join(artifact.directory, "public", "index.html"),
-        ),
-      ).toBe(index);
+      expect(yield* fs.readFileString(path.join(artifact.directory, "public", "index.html"))).toBe(
+        index,
+      );
       expect(yield* fs.exists(path.join(root, "server.mjs"))).toBe(false);
 
       const archive = yield* createComputeArchive({
@@ -994,12 +889,8 @@ describe("Prisma Compute static-site build", () => {
       );
       const extracted = yield* extractStaticArchive(archive);
       expect(yield* fs.exists(path.join(extracted, "server.mjs"))).toBe(true);
-      expect(
-        yield* fs.exists(path.join(extracted, "public/assets/app.mjs")),
-      ).toBe(true);
-      expect(
-        yield* fs.exists(path.join(extracted, "public/assets/app.js.map")),
-      ).toBe(false);
+      expect(yield* fs.exists(path.join(extracted, "public/assets/app.mjs"))).toBe(true);
+      expect(yield* fs.exists(path.join(extracted, "public/assets/app.js.map"))).toBe(false);
 
       for (const directory of [artifact.directory, extracted]) {
         yield* withStaticSiteServer(directory, (origin) =>
@@ -1009,18 +900,12 @@ describe("Prisma Compute static-site build", () => {
             expect(rootResponse.headers["content-type"]).toContain("text/html");
             expect(yield* rootResponse.text).toBe(index);
 
-            const assetResponse = yield* HttpClient.get(
-              `${origin}/assets/app.js`,
-            );
+            const assetResponse = yield* HttpClient.get(`${origin}/assets/app.js`);
             expect(assetResponse.status).toBe(200);
-            expect(assetResponse.headers["content-type"]).toContain(
-              "javascript",
-            );
+            expect(assetResponse.headers["content-type"]).toContain("javascript");
             expect(yield* assetResponse.text).toBe(script);
 
-            const cssResponse = yield* HttpClient.get(
-              `${origin}/assets/index.css`,
-            );
+            const cssResponse = yield* HttpClient.get(`${origin}/assets/index.css`);
             expect(cssResponse.status).toBe(200);
             expect(cssResponse.headers["content-type"]).toContain("text/css");
             expect(yield* cssResponse.text).toBe(stylesheet);
@@ -1032,36 +917,24 @@ describe("Prisma Compute static-site build", () => {
 
             const directoryHead = yield* HttpClient.head(`${origin}/docs/`);
             expect(directoryHead.status).toBe(200);
-            expect(directoryHead.headers["content-type"]).toContain(
-              "text/html",
-            );
+            expect(directoryHead.headers["content-type"]).toContain("text/html");
             expect(yield* directoryHead.text).toBe("");
 
-            const encodedResponse = yield* HttpClient.get(
-              `${origin}/docs%20%231.html`,
-            );
+            const encodedResponse = yield* HttpClient.get(`${origin}/docs%20%231.html`);
             expect(encodedResponse.status).toBe(200);
             expect(yield* encodedResponse.text).toBe("encoded asset\n");
 
-            const fallbackResponse = yield* HttpClient.get(
-              `${origin}/dashboard/settings`,
-            );
+            const fallbackResponse = yield* HttpClient.get(`${origin}/dashboard/settings`);
             expect(fallbackResponse.status).toBe(200);
             expect(yield* fallbackResponse.text).toBe(index);
 
-            const fallbackHead = yield* HttpClient.head(
-              `${origin}/dashboard/settings`,
-            );
+            const fallbackHead = yield* HttpClient.head(`${origin}/dashboard/settings`);
             expect(fallbackHead.status).toBe(200);
             expect(yield* fallbackHead.text).toBe("");
 
-            const headResponse = yield* HttpClient.head(
-              `${origin}/assets/app.js`,
-            );
+            const headResponse = yield* HttpClient.head(`${origin}/assets/app.js`);
             expect(headResponse.status).toBe(200);
-            expect(headResponse.headers["content-length"]).toBe(
-              String(scriptStat.size),
-            );
+            expect(headResponse.headers["content-length"]).toBe(String(scriptStat.size));
             expect(headResponse.headers["content-type"]).toBe(
               assetResponse.headers["content-type"],
             );
@@ -1079,9 +952,7 @@ describe("Prisma Compute static-site build", () => {
               "/%E0%A4%A",
               "/%ZZ",
             ]) {
-              const invalidResponse = yield* HttpClient.get(
-                `${origin}${invalidPath}`,
-              );
+              const invalidResponse = yield* HttpClient.get(`${origin}${invalidPath}`);
               expect(invalidResponse.status).toBe(400);
               expect(yield* invalidResponse.text).toBe("Bad Request");
             }
@@ -1106,9 +977,7 @@ describe("Prisma Compute static-site build", () => {
         indexPage: "home.html",
       });
       yield* Effect.addFinalizer(() => artifact.cleanup);
-      const docs = yield* fs.readFileString(
-        path.join(root, "dist/docs/index.html"),
-      );
+      const docs = yield* fs.readFileString(path.join(root, "dist/docs/index.html"));
       expect(artifact.requiredFiles).toEqual(["public/home.html"]);
       const archive = yield* createComputeArchive({
         directory: artifact.directory,
@@ -1169,18 +1038,9 @@ describe("Prisma Compute static-site build", () => {
       yield* fs.makeDirectory(path.join(root, "dist", "assets"), {
         recursive: true,
       });
-      yield* fs.writeFileString(
-        path.join(root, "dist", "index.html"),
-        "static home",
-      );
-      yield* fs.writeFileString(
-        path.join(root, "dist", "assets", "app.mjs"),
-        "app",
-      );
-      yield* fs.writeFileString(
-        path.join(root, "dist", "assets", "app.js.map"),
-        "source map",
-      );
+      yield* fs.writeFileString(path.join(root, "dist", "index.html"), "static home");
+      yield* fs.writeFileString(path.join(root, "dist", "assets", "app.mjs"), "app");
+      yield* fs.writeFileString(path.join(root, "dist", "assets", "app.js.map"), "source map");
 
       const artifact = yield* runComputeStaticBuild({
         appPath: root,
@@ -1194,9 +1054,7 @@ describe("Prisma Compute static-site build", () => {
         ignorePrefix: artifact.archiveIgnorePrefix,
         requiredFiles: artifact.requiredFiles,
       }).pipe(Effect.ensuring(artifact.cleanup));
-      const tarText = yield* Effect.sync(() =>
-        new TextDecoder().decode(gunzipSync(archive)),
-      );
+      const tarText = yield* Effect.sync(() => new TextDecoder().decode(gunzipSync(archive)));
 
       expect(tarText).toContain("bundle/server.mjs");
       expect(tarText).toContain("bundle/public/index.html");
@@ -1217,9 +1075,7 @@ describe("Prisma Compute static-site build", () => {
         command: "true",
         outdir: "../dist",
       }).pipe(Effect.flip);
-      expect((outdirError as Error).message).toContain(
-        "outdir must be a relative path",
-      );
+      expect((outdirError as Error).message).toContain("outdir must be a relative path");
 
       const indexError = yield* runComputeStaticBuild({
         appPath: root,
@@ -1227,9 +1083,7 @@ describe("Prisma Compute static-site build", () => {
         outdir: "dist",
         indexPage: "../index.html",
       }).pipe(Effect.flip);
-      expect((indexError as Error).message).toContain(
-        "indexPage must be a relative file path",
-      );
+      expect((indexError as Error).message).toContain("indexPage must be a relative file path");
     }).pipe(Effect.provide(PlatformServices)),
   );
 
@@ -1246,9 +1100,7 @@ describe("Prisma Compute static-site build", () => {
         command: "true",
         outdir: "dist",
       }).pipe(Effect.flip);
-      expect((outputError as Error).message).toContain(
-        "did not produce an output directory",
-      );
+      expect((outputError as Error).message).toContain("did not produce an output directory");
 
       yield* fs.makeDirectory(path.join(root, "dist"));
       const indexError = yield* runComputeStaticBuild({
@@ -1256,9 +1108,7 @@ describe("Prisma Compute static-site build", () => {
         command: "true",
         outdir: "dist",
       }).pipe(Effect.flip);
-      expect((indexError as Error).message).toContain(
-        "did not produce index.html",
-      );
+      expect((indexError as Error).message).toContain("did not produce index.html");
     }).pipe(Effect.provide(PlatformServices)),
   );
 });
@@ -1268,29 +1118,21 @@ const assertDirectoryRedirects = Effect.fn(function* (origin: string) {
   for (const pathname of ["/docs", "//docs", "/%2Fdocs"]) {
     for (const method of ["GET", "HEAD"] as const) {
       const url = `${origin}${pathname}${query}`;
-      const response = yield* (
-        method === "GET" ? HttpClient.get(url) : HttpClient.head(url)
-      ).pipe(
+      const response = yield* (method === "GET" ? HttpClient.get(url) : HttpClient.head(url)).pipe(
         Effect.provideService(FetchHttpClient.RequestInit, {
           redirect: "manual",
         }),
       );
       expect(response.status).toBe(301);
       const location = response.headers["location"];
-      expect(location).toBe(
-        pathname === "/%2Fdocs" ? `/%2Fdocs/${query}` : `/docs/${query}`,
-      );
+      expect(location).toBe(pathname === "/%2Fdocs" ? `/%2Fdocs/${query}` : `/docs/${query}`);
       const target = yield* Effect.sync(() => new URL(location!, origin));
       expect(target.origin).toBe(origin);
       expect(target.search).toBe(query);
-      expect(decodeURIComponent(target.pathname).replace(/^\/+/, "/")).toBe(
-        "/docs/",
-      );
+      expect(decodeURIComponent(target.pathname).replace(/^\/+/, "/")).toBe("/docs/");
       expect(yield* response.text).toBe("");
 
-      const assetUrl = yield* Effect.sync(
-        () => new URL("./style.css", target).href,
-      );
+      const assetUrl = yield* Effect.sync(() => new URL("./style.css", target).href);
       const asset = yield* HttpClient.get(assetUrl);
       expect(asset.status).toBe(200);
       expect(asset.headers["content-type"]).toContain("text/css");
@@ -1305,9 +1147,7 @@ const copyStaticBuildFixture = Effect.gen(function* () {
   const fixture = yield* path.fromFileUrl(
     new URL("./fixtures/compute-static-build/", import.meta.url),
   );
-  const nodeModules = yield* path.fromFileUrl(
-    new URL("../../node_modules/", import.meta.url),
-  );
+  const nodeModules = yield* path.fromFileUrl(new URL("../../node_modules/", import.meta.url));
   const root = yield* fs.makeTempDirectoryScoped({
     prefix: "alchemy-prisma-static-build-",
   });
@@ -1364,11 +1204,7 @@ const withStaticSiteServer = <A, E, R>(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.void
-            : Effect.fail(
-                new Error(
-                  `Static server readiness returned ${response.status}`,
-                ),
-              ),
+            : Effect.fail(new Error(`Static server readiness returned ${response.status}`)),
         ),
         Effect.timeout("1 second"),
         Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 10 }),

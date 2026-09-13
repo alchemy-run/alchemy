@@ -26,16 +26,11 @@ export const layer = Layer.effect(
       // to "domain does not use Access" so we don't pop a login prompt for
       // every transient hiccup. This mirrors workers-sdk's behavior.
       lookup: (domain: string) =>
-        Effect.promise((signal) =>
-          fetch(`https://${domain}`, { redirect: "manual", signal }),
-        ).pipe(
+        Effect.promise((signal) => fetch(`https://${domain}`, { redirect: "manual", signal })).pipe(
           Effect.map(
             (response) =>
               response.status === 302 &&
-              (response.headers
-                .get("location")
-                ?.includes("cloudflareaccess.com") ??
-                false),
+              (response.headers.get("location")?.includes("cloudflareaccess.com") ?? false),
           ),
           Effect.timeout(1000),
           Effect.orElseSucceed(() => false),
@@ -56,16 +51,13 @@ export const layer = Layer.effect(
             }),
         ),
         Effect.flatMap((stdout) => {
-          const matches = stdout
-            .toString()
-            .match(/fetched your token:\n\n(.*)/m);
+          const matches = stdout.toString().match(/fetched your token:\n\n(.*)/m);
           return matches && matches.length >= 2
             ? Effect.succeed({ Cookie: `CF_Authorization=${matches[1]}` })
             : Effect.fail(
                 new SystemError({
                   subtag: "CloudflaredAuth",
-                  message:
-                    "Failed to extract a token from `cloudflared access login`.",
+                  message: "Failed to extract a token from `cloudflared access login`.",
                   hint: "Try running `cloudflared access login <domain>` manually to debug.",
                   detail: { stdout: stdout.toString() },
                 }),
@@ -75,9 +67,7 @@ export const layer = Layer.effect(
       );
 
     const getEnv = (name: string) =>
-      Config.String(name).pipe(
-        Effect.catchTag("ConfigError", () => Effect.succeed(undefined)),
-      );
+      Config.String(name).pipe(Effect.catchTag("ConfigError", () => Effect.succeed(undefined)));
 
     return Access.of({
       getAccessHeaders: Effect.fn(function* (domain) {

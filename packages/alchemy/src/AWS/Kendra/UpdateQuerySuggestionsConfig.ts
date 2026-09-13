@@ -58,7 +58,6 @@ export interface UpdateQuerySuggestionsConfig extends Binding.Service<
     >
   >
 > {}
-export const UpdateQuerySuggestionsConfig =
-  Binding.Service<UpdateQuerySuggestionsConfig>(
-    "AWS.Kendra.UpdateQuerySuggestionsConfig",
-  );
+export const UpdateQuerySuggestionsConfig = Binding.Service<UpdateQuerySuggestionsConfig>(
+  "AWS.Kendra.UpdateQuerySuggestionsConfig",
+);

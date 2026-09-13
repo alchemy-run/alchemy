@@ -256,14 +256,11 @@ export const WebhookProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const hooks = await octokit.paginate(
-                  octokit.rest.repos.listWebhooks,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const hooks = await octokit.paginate(octokit.rest.repos.listWebhooks, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return hooks.map(toAttrs);
               } catch (error: any) {
                 // Repos where the token lacks admin access reject the webhooks

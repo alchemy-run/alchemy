@@ -34,10 +34,7 @@ export interface CreateAssetRevision extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateAssetRevisionRequest,
-    ) => Effect.Effect<
-      datazone.CreateAssetRevisionOutput,
-      datazone.CreateAssetRevisionError
-    >
+    ) => Effect.Effect<datazone.CreateAssetRevisionOutput, datazone.CreateAssetRevisionError>
   >
 > {}
 export const CreateAssetRevision = Binding.Service<CreateAssetRevision>(

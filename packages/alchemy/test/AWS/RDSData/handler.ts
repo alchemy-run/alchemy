@@ -44,10 +44,7 @@ export default RDSDataTestFunction.make(
     const options = { secret, database: "app" };
 
     const executeStatement = yield* RDSData.ExecuteStatement(cluster, options);
-    const batchExecuteStatement = yield* RDSData.BatchExecuteStatement(
-      cluster,
-      options,
-    );
+    const batchExecuteStatement = yield* RDSData.BatchExecuteStatement(cluster, options);
     const beginTransaction = yield* RDSData.BeginTransaction(cluster, options);
     const commitTransaction = yield* RDSData.CommitTransaction(cluster, {
       secret,
@@ -90,8 +87,7 @@ export default RDSDataTestFunction.make(
             port: info.port,
             database: info.database,
             username: info.username,
-            hasPassword:
-              typeof info.password === "string" && info.password.length > 0,
+            hasPassword: typeof info.password === "string" && info.password.length > 0,
             ssl: info.ssl,
           });
         }

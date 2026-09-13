@@ -45,10 +45,7 @@ export interface DescribeTargetHealth extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeTargetHealthRequest,
-    ) => Effect.Effect<
-      elbv2.DescribeTargetHealthOutput,
-      elbv2.DescribeTargetHealthError
-    >
+    ) => Effect.Effect<elbv2.DescribeTargetHealthOutput, elbv2.DescribeTargetHealthError>
   >
 > {}
 

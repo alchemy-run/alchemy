@@ -30,12 +30,7 @@ export interface DescribeDRTAccess extends Binding.Service<
   () => Effect.Effect<
     (
       request?: shield.DescribeDRTAccessRequest,
-    ) => Effect.Effect<
-      shield.DescribeDRTAccessResponse,
-      shield.DescribeDRTAccessError
-    >
+    ) => Effect.Effect<shield.DescribeDRTAccessResponse, shield.DescribeDRTAccessError>
   >
 > {}
-export const DescribeDRTAccess = Binding.Service<DescribeDRTAccess>(
-  "AWS.Shield.DescribeDRTAccess",
-);
+export const DescribeDRTAccess = Binding.Service<DescribeDRTAccess>("AWS.Shield.DescribeDRTAccess");

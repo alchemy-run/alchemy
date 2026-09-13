@@ -16,12 +16,7 @@ import type { Workflow } from "./Workflow.ts";
  * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
  * a `Layer.effect(Cap, makeMwaaServerlessHttpBinding({ … }))`.
  */
-export const makeMwaaServerlessHttpBinding = <
-  I extends { WorkflowArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeMwaaServerlessHttpBinding = <I extends { WorkflowArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.MWAAServerless.StartWorkflowRun`. */
   tag: string;
   /** The distilled operation. */

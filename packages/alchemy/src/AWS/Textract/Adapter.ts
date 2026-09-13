@@ -124,14 +124,11 @@ const toAttributes = (
 // Textract's adapter management APIs have very low default rates (~1 TPS);
 // bounded backoff absorbs the short bursts the engine's read/diff/reconcile
 // sequence emits.
-const throttleRetry = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const throttleRetry = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e): boolean =>
-        e._tag === "ProvisionedThroughputExceededException" ||
-        e._tag === "ThrottlingException",
+        e._tag === "ProvisionedThroughputExceededException" || e._tag === "ThrottlingException",
       schedule: Schedule.exponential("1 second"),
       times: 5,
     }),
@@ -141,9 +138,7 @@ const normalizeTags = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 export const AdapterProvider = () =>
@@ -168,9 +163,7 @@ export const AdapterProvider = () =>
       const getOne = (adapterId: string) =>
         throttleRetry(textract.getAdapter({ AdapterId: adapterId })).pipe(
           Effect.map((adapter) => ({ ...adapter, AdapterId: adapterId })),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       // Adapter ids are server-assigned, so recovery without persisted
@@ -179,12 +172,8 @@ export const AdapterProvider = () =>
         Effect.gen(function* () {
           let nextToken: string | undefined;
           for (let page = 0; page < 25; page++) {
-            const res = yield* throttleRetry(
-              textract.listAdapters({ NextToken: nextToken }),
-            );
-            const match = (res.Adapters ?? []).find(
-              (a) => a.AdapterName === name,
-            );
+            const res = yield* throttleRetry(textract.listAdapters({ NextToken: nextToken }));
+            const match = (res.Adapters ?? []).find((a) => a.AdapterName === name);
             if (match?.AdapterId) return match.AdapterId;
             nextToken = res.NextToken;
             if (!nextToken) break;
@@ -208,9 +197,7 @@ export const AdapterProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const adapterId =
             output?.adapterId ??
-            (yield* findByName(
-              yield* toName(id, olds ?? { featureTypes: [] }),
-            ));
+            (yield* findByName(yield* toName(id, olds ?? { featureTypes: [] })));
           if (!adapterId) return undefined;
           const found = yield* getOne(adapterId);
           if (!found) return undefined;
@@ -221,19 +208,12 @@ export const AdapterProvider = () =>
             const attrs: ReturnType<typeof toAttributes>[] = [];
             let nextToken: string | undefined;
             for (let page = 0; page < 25; page++) {
-              const res = yield* throttleRetry(
-                textract.listAdapters({ NextToken: nextToken }),
-              );
+              const res = yield* throttleRetry(textract.listAdapters({ NextToken: nextToken }));
               for (const overview of res.Adapters ?? []) {
                 if (overview.AdapterId) {
                   const found = yield* getOne(overview.AdapterId);
                   if (found) {
-                    attrs.push(
-                      toAttributes(
-                        yield* adapterArn(overview.AdapterId),
-                        found,
-                      ),
-                    );
+                    attrs.push(toAttributes(yield* adapterArn(overview.AdapterId), found));
                   }
                 }
               }
@@ -263,17 +243,11 @@ export const AdapterProvider = () =>
                 AutoUpdate: news.autoUpdate,
                 Tags: desiredTags,
               }),
-            ).pipe(
-              Effect.catchTag("ConflictException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            ).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             adapterId = created?.AdapterId ?? (yield* findByName(name));
             if (!adapterId) {
               return yield* Effect.die(
-                new Error(
-                  `Textract adapter ${name} was neither created nor found`,
-                ),
+                new Error(`Textract adapter ${name} was neither created nor found`),
               );
             }
             observed = yield* getOne(adapterId);
@@ -292,17 +266,11 @@ export const AdapterProvider = () =>
             update.AdapterName = name;
             dirty = true;
           }
-          if (
-            news.description !== undefined &&
-            observed?.Description !== news.description
-          ) {
+          if (news.description !== undefined && observed?.Description !== news.description) {
             update.Description = news.description;
             dirty = true;
           }
-          if (
-            news.autoUpdate !== undefined &&
-            observed?.AutoUpdate !== news.autoUpdate
-          ) {
+          if (news.autoUpdate !== undefined && observed?.AutoUpdate !== news.autoUpdate) {
             update.AutoUpdate = news.autoUpdate;
             dirty = true;
           }
@@ -312,10 +280,7 @@ export const AdapterProvider = () =>
 
           // Sync tags — diff against the OBSERVED cloud tags (adoption may
           // hand us foreign tags), not olds/output.
-          const { removed, upsert } = diffTags(
-            normalizeTags(observed?.Tags),
-            desiredTags,
-          );
+          const { removed, upsert } = diffTags(normalizeTags(observed?.Tags), desiredTags);
           if (upsert.length > 0) {
             yield* throttleRetry(
               textract.tagResource({
@@ -334,16 +299,11 @@ export const AdapterProvider = () =>
           }
 
           const final = yield* getOne(adapterId!);
-          return toAttributes(
-            arn,
-            final ?? { AdapterId: adapterId!, AdapterName: name },
-          );
+          return toAttributes(arn, final ?? { AdapterId: adapterId!, AdapterName: name });
         }),
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the adapter may already be gone.
-          yield* throttleRetry(
-            textract.deleteAdapter({ AdapterId: output.adapterId }),
-          ).pipe(
+          yield* throttleRetry(textract.deleteAdapter({ AdapterId: output.adapterId })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),

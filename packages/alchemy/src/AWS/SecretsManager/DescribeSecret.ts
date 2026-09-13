@@ -30,13 +30,8 @@ export interface DescribeSecret extends Binding.Service<
   (
     secret: Secret,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      secretsmanager.DescribeSecretResponse,
-      secretsmanager.DescribeSecretError
-    >
+    () => Effect.Effect<secretsmanager.DescribeSecretResponse, secretsmanager.DescribeSecretError>
   >
 > {}
 
-export const DescribeSecret = Binding.Service<DescribeSecret>(
-  "AWS.SecretsManager.DescribeSecret",
-);
+export const DescribeSecret = Binding.Service<DescribeSecret>("AWS.SecretsManager.DescribeSecret");

@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Page Shield CSP policies are an Enterprise add-on. On the testing
 // account's zone every create fails with "exceeded the maximum number of
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -52,9 +46,7 @@ const getPolicy = (zoneId: string, policyId: string) =>
 
 const findPolicyByDescription = (zoneId: string, description: string) =>
   pageShield.listPolicies({ zoneId }).pipe(
-    Effect.map((list) =>
-      list.result.find((p) => p.description === description),
-    ),
+    Effect.map((list) => list.result.find((p) => p.description === description)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,
@@ -102,9 +94,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.PageShield.Policy,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.PageShield.Policy);
 
       // Page Shield CSP policies are an Enterprise add-on; the testing
       // account has a zero rule quota, so we cannot deploy a policy to

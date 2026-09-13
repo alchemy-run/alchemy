@@ -29,10 +29,7 @@ export interface DescribeDBInstances extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.DescribeDBInstancesMessage,
-    ) => Effect.Effect<
-      neptune.DBInstanceMessage,
-      neptune.DescribeDBInstancesError
-    >
+    ) => Effect.Effect<neptune.DBInstanceMessage, neptune.DescribeDBInstancesError>
   >
 > {}
 export const DescribeDBInstances = Binding.Service<DescribeDBInstances>(

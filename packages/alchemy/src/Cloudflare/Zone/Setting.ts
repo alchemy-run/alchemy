@@ -202,13 +202,7 @@ export type SettingAttributes = {
   initialValue: unknown;
 };
 
-export type Setting = Resource<
-  TypeId,
-  SettingProps,
-  SettingAttributes,
-  never,
-  Providers
->;
+export type Setting = Resource<TypeId, SettingProps, SettingAttributes, never, Providers>;
 
 /**
  * A single Cloudflare zone setting (`/zones/{zone_id}/settings/{settingId}`)
@@ -290,13 +284,8 @@ export const SettingProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -308,17 +297,14 @@ export const SettingProvider = () =>
       if (!zoneId || !settingId) return undefined;
       const observed = yield* zones.getSetting({ zoneId, settingId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return undefined;
       // Settings are singletons that always exist with a Cloudflare
       // default — there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : settingValue(observed);
+      const initialValue = output !== undefined ? output.initialValue : settingValue(observed);
       return toAttributes(zoneId, settingId, observed, initialValue);
     }),
 
@@ -334,8 +320,7 @@ export const SettingProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : settingValue(observed);
+      const initialValue = output !== undefined ? output.initialValue : settingValue(observed);
 
       // 3. Sync — patch only when the observed value differs.
       if (deepValueEquals(settingValue(observed), news.value)) {
@@ -354,11 +339,7 @@ export const SettingProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* zones
         .getSetting({ zoneId, settingId })
-        .pipe(
-          Effect.catchTag("InvalidZoneIdentifier", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
@@ -410,9 +391,7 @@ export const SettingProvider = () =>
             // here — skip the undecodable setting rather than failing the
             // whole listing. See the agent report's neededPatch (widen the
             // `GetSettingResponse` member to accept the scalar form).
-            Effect.catch(() =>
-              Effect.succeed<SettingAttributes | undefined>(undefined),
-            ),
+            Effect.catch(() => Effect.succeed<SettingAttributes | undefined>(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -425,9 +404,8 @@ export const SettingProvider = () =>
  * response union carries `value` (a couple type it optional), so widen
  * rather than switch on all sixty setting ids.
  */
-const settingValue = (
-  setting: zones.GetSettingResponse | zones.PatchSettingResponse,
-): unknown => (setting as { value?: unknown }).value;
+const settingValue = (setting: zones.GetSettingResponse | zones.PatchSettingResponse): unknown =>
+  (setting as { value?: unknown }).value;
 
 const toAttributes = (
   zoneId: string,
@@ -469,10 +447,7 @@ const deepValueEquals = (a: unknown, b: unknown): boolean => {
     const bk = Object.keys(b as Record<string, unknown>);
     if (ak.length !== bk.length) return false;
     return ak.every((k) =>
-      deepValueEquals(
-        (a as Record<string, unknown>)[k],
-        (b as Record<string, unknown>)[k],
-      ),
+      deepValueEquals((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
     );
   }
   return false;

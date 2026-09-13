@@ -33,6 +33,4 @@ export interface ListNodegroups extends Binding.Service<
     ) => Effect.Effect<eks.ListNodegroupsResponse, eks.ListNodegroupsError>
   >
 > {}
-export const ListNodegroups = Binding.Service<ListNodegroups>(
-  "AWS.EKS.ListNodegroups",
-);
+export const ListNodegroups = Binding.Service<ListNodegroups>("AWS.EKS.ListNodegroups");

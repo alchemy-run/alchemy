@@ -32,13 +32,8 @@ export interface PutResourceConfig extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.PutResourceConfigRequest,
-    ) => Effect.Effect<
-      config.PutResourceConfigResponse,
-      config.PutResourceConfigError
-    >
+    ) => Effect.Effect<config.PutResourceConfigResponse, config.PutResourceConfigError>
   >
 > {}
 
-export const PutResourceConfig = Binding.Service<PutResourceConfig>(
-  "AWS.Config.PutResourceConfig",
-);
+export const PutResourceConfig = Binding.Service<PutResourceConfig>("AWS.Config.PutResourceConfig");

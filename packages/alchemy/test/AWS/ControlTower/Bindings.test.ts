@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import ControlTowerTestFunctionLive, {
-  ControlTowerTestFunction,
-} from "./handler";
+import ControlTowerTestFunctionLive, { ControlTowerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "ControlTowerBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -64,8 +54,7 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (response): boolean =>
-        (response as { tag?: string }).tag !== "AccessDeniedException",
+      until: (response): boolean => (response as { tag?: string }).tag !== "AccessDeniedException",
       times: 10,
     }),
   );
@@ -78,9 +67,7 @@ const getJson = (path: string) =>
 describe.sequential("ControlTower Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "ControlTower test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ControlTower test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("ControlTower test setup: deploying fixture");
@@ -94,9 +81,7 @@ describe.sequential("ControlTower Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `ControlTower test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ControlTower test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -104,9 +89,7 @@ describe.sequential("ControlTower Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `ControlTower test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`ControlTower test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -136,9 +119,7 @@ describe.sequential("ControlTower Bindings", () => {
         if (response.ok) {
           expect(response.names).toContain("AWSControlTowerBaseline");
         } else {
-          expect(["AccessDeniedException", "UnauthorizedException"]).toContain(
-            response.tag,
-          );
+          expect(["AccessDeniedException", "UnauthorizedException"]).toContain(response.tag);
         }
       }),
     );
@@ -153,74 +134,64 @@ describe.sequential("ControlTower Bindings", () => {
         if (response.ok) {
           expect(response.name).toBe("AWSControlTowerBaseline");
         } else {
-          expect([
-            "AccessDeniedException",
-            "UnauthorizedException",
-            "NoCatalog",
-          ]).toContain(response.tag);
+          expect(["AccessDeniedException", "UnauthorizedException", "NoCatalog"]).toContain(
+            response.tag,
+          );
         }
       }),
     );
   });
 
   describe("ListEnabledBaselines", () => {
-    test.provider(
-      "yields a count or the landing-zone-gated typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/enabled-baselines")) as
-            | { ok: true; count: number }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            expect([
-              "AccessDeniedException",
-              "UnauthorizedException",
-              "ValidationException",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("yields a count or the landing-zone-gated typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/enabled-baselines")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          expect([
+            "AccessDeniedException",
+            "UnauthorizedException",
+            "ValidationException",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
   describe("ListEnabledControls", () => {
-    test.provider(
-      "yields a count or the landing-zone-gated typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/enabled-controls")) as
-            | { ok: true; count: number }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            expect([
-              "AccessDeniedException",
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("yields a count or the landing-zone-gated typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/enabled-controls")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          expect([
+            "AccessDeniedException",
+            "ResourceNotFoundException",
+            "ValidationException",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
   describe("ListControlOperations", () => {
-    test.provider(
-      "yields a count or the landing-zone-gated typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/control-operations")) as
-            | { ok: true; count: number }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            expect(["AccessDeniedException", "ValidationException"]).toContain(
-              response.tag,
-            );
-          }
-        }),
+    test.provider("yields a count or the landing-zone-gated typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/control-operations")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          expect(["AccessDeniedException", "ValidationException"]).toContain(response.tag);
+        }
+      }),
     );
   });
 
@@ -235,32 +206,28 @@ describe.sequential("ControlTower Bindings", () => {
           // singleton) list, never a crash.
           expect(response.count).toBeLessThanOrEqual(1);
         } else {
-          expect(["AccessDeniedException", "UnauthorizedException"]).toContain(
-            response.tag,
-          );
+          expect(["AccessDeniedException", "UnauthorizedException"]).toContain(response.tag);
         }
       }),
     );
   });
 
   describe("ListLandingZoneOperations", () => {
-    test.provider(
-      "yields a count or the landing-zone-gated typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/landing-zone-operations")) as
-            | { ok: true; count: number }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          } else {
-            expect([
-              "AccessDeniedException",
-              "UnauthorizedException",
-              "ValidationException",
-            ]).toContain(response.tag);
-          }
-        }),
+    test.provider("yields a count or the landing-zone-gated typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/landing-zone-operations")) as
+          | { ok: true; count: number }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        } else {
+          expect([
+            "AccessDeniedException",
+            "UnauthorizedException",
+            "ValidationException",
+          ]).toContain(response.tag);
+        }
+      }),
     );
   });
 
@@ -289,10 +256,7 @@ describe.sequential("ControlTower Bindings", () => {
           const response = (yield* getJson("/control-operation-not-found")) as {
             tag: string;
           };
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
         }),
     );
   });
@@ -302,9 +266,7 @@ describe.sequential("ControlTower Bindings", () => {
       "surfaces a typed error for a nonexistent operation (proving the grant)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/baseline-operation-not-found",
-          )) as {
+          const response = (yield* getJson("/baseline-operation-not-found")) as {
             tag: string;
             message?: string;
           };
@@ -322,9 +284,7 @@ describe.sequential("ControlTower Bindings", () => {
       "surfaces a typed error for a nonexistent operation (proving the grant)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson(
-            "/landing-zone-operation-not-found",
-          )) as {
+          const response = (yield* getJson("/landing-zone-operation-not-found")) as {
             tag: string;
             message?: string;
           };

@@ -27,10 +27,7 @@ export interface CancelSbomExport extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.CancelSbomExportRequest,
-    ) => Effect.Effect<
-      inspector2.CancelSbomExportResponse,
-      inspector2.CancelSbomExportError
-    >
+    ) => Effect.Effect<inspector2.CancelSbomExportResponse, inspector2.CancelSbomExportError>
   >
 > {}
 export const CancelSbomExport = Binding.Service<CancelSbomExport>(

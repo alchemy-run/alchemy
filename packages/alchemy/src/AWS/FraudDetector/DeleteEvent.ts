@@ -50,12 +50,7 @@ export interface DeleteEvent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteEventRequest,
-    ) => Effect.Effect<
-      frauddetector.DeleteEventResult,
-      frauddetector.DeleteEventError
-    >
+    ) => Effect.Effect<frauddetector.DeleteEventResult, frauddetector.DeleteEventError>
   >
 > {}
-export const DeleteEvent = Binding.Service<DeleteEvent>(
-  "AWS.FraudDetector.DeleteEvent",
-);
+export const DeleteEvent = Binding.Service<DeleteEvent>("AWS.FraudDetector.DeleteEvent");

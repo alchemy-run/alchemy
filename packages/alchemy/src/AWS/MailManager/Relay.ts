@@ -5,17 +5,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readMailManagerTags,
-  sameShape,
-  syncMailManagerTags,
-} from "./internal.ts";
+import { readMailManagerTags, sameShape, syncMailManagerTags } from "./internal.ts";
 
 export interface RelayProps {
   /**
@@ -109,23 +101,14 @@ export const RelayProvider = () =>
   Provider.effect(
     Relay,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { relayName?: string },
-      ) {
-        return (
-          props.relayName ?? (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { relayName?: string }) {
+        return props.relayName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       const getById = (relayId: string) =>
         mm
           .getRelay({ RelayId: relayId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (name: string) =>
         mm.listRelays.pages({}).pipe(
@@ -137,10 +120,7 @@ export const RelayProvider = () =>
           ),
         );
 
-      const observe = Effect.fn(function* (
-        output: Relay["Attributes"] | undefined,
-        name: string,
-      ) {
+      const observe = Effect.fn(function* (output: Relay["Attributes"] | undefined, name: string) {
         if (output?.relayId !== undefined) {
           const found = yield* getById(output.relayId);
           if (found !== undefined) return found;
@@ -153,9 +133,7 @@ export const RelayProvider = () =>
       const toAttrs = Effect.fn(function* (relay: mm.GetRelayResponse) {
         if (relay.RelayArn === undefined || relay.RelayName === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `Mail Manager relay '${relay.RelayId}' returned without ARN/name`,
-            ),
+            new Error(`Mail Manager relay '${relay.RelayId}' returned without ARN/name`),
           );
         }
         return {
@@ -218,11 +196,7 @@ export const RelayProvider = () =>
                 Authentication: news.authentication,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             relay =
               created !== undefined
                 ? yield* getById(created.RelayId)

@@ -73,10 +73,7 @@ const observeDefaultKeyspace = Effect.fn(function* (
     page: 1,
     per_page: 100,
   });
-  return (
-    keyspaces.data.find((x) => x.default) ??
-    keyspaces.data.find((x) => x.name === database)
-  );
+  return keyspaces.data.find((x) => x.default) ?? keyspaces.data.find((x) => x.name === database);
 });
 
 /**
@@ -125,19 +122,14 @@ export const ensureMySQLProductionBranchClusterSize = Effect.fn(function* (
     yield* waitForKeyspaceReady(organization, database, branch, keyspace.name);
     // Re-observe so the replica sync below diffs against the post-resize
     // keyspace state.
-    keyspace =
-      (yield* observeDefaultKeyspace(organization, database, branch)) ??
-      keyspace;
+    keyspace = (yield* observeDefaultKeyspace(organization, database, branch)) ?? keyspace;
   }
 
   // Sync replicas — MySQL databases cannot configure replicas at
   // creation time (the API rejects the `replicas` param for mysql), so
   // the desired total replica count is converged in place via a keyspace
   // resize request.
-  if (
-    expectedReplicas !== undefined &&
-    keyspace.replicas !== expectedReplicas
-  ) {
+  if (expectedReplicas !== undefined && keyspace.replicas !== expectedReplicas) {
     // Each cluster size includes a fixed number of replicas (2 for
     // production PS_* sizes); the resize API only accepts the count of
     // additional replicas beyond that.
@@ -168,12 +160,8 @@ export const ensureMySQLProductionBranchClusterSize = Effect.fn(function* (
         // PlanetScale rejects new resize requests during that window.
         Effect.retry({
           while: (e): boolean =>
-            e._tag === "UnprocessableEntity" &&
-            e.message.includes("resize in progress"),
-          schedule: Schedule.max([
-            Schedule.spaced("5 seconds"),
-            Schedule.recurs(120),
-          ]),
+            e._tag === "UnprocessableEntity" && e.message.includes("resize in progress"),
+          schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),
         }),
       );
 
@@ -192,9 +180,7 @@ export const ensureMySQLProductionBranchClusterSize = Effect.fn(function* (
       },
     );
 
-    keyspace =
-      (yield* observeDefaultKeyspace(organization, database, branch)) ??
-      keyspace;
+    keyspace = (yield* observeDefaultKeyspace(organization, database, branch)) ?? keyspace;
   }
 
   return keyspace;

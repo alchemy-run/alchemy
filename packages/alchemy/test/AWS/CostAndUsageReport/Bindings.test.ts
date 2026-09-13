@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "CurBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,26 +34,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("CostAndUsageReport Bindings", () => {
   beforeAll(
@@ -75,9 +65,7 @@ describe.sequential("CostAndUsageReport Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `CUR test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`CUR test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -85,9 +73,7 @@ describe.sequential("CostAndUsageReport Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `CUR test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`CUR test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -101,10 +87,7 @@ describe.sequential("CostAndUsageReport Bindings", () => {
     test.provider("both capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
         const response = yield* getJson("/bindings");
-        expect((response as any).bound).toEqual([
-          "describeReportDefinitions",
-          "listReportTags",
-        ]);
+        expect((response as any).bound).toEqual(["describeReportDefinitions", "listReportTags"]);
       }),
     );
   });
@@ -130,9 +113,7 @@ describe.sequential("CostAndUsageReport Bindings", () => {
           const response = (yield* getJson("/report-tags")) as any;
           expect(response.tags.fixture).toBe("cur-bindings");
           // The provider brands the report with internal alchemy tags.
-          expect(
-            Object.keys(response.tags).some((k) => k.startsWith("alchemy:")),
-          ).toBe(true);
+          expect(Object.keys(response.tags).some((k) => k.startsWith("alchemy:"))).toBe(true);
         }),
       { timeout: 60_000 },
     );

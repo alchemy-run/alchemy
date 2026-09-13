@@ -24,9 +24,7 @@ const SIMULATOR = "success@simulator.amazonses.com";
 // both locally at deploy and inside the Lambda, so it is forwarded as env.
 const CVE_RECIPIENT = process.env.AWS_TEST_SES_CVE_RECIPIENT;
 
-export class SESTestFunction extends Lambda.Function<Lambda.Function>()(
-  "SESTestFunction",
-) {}
+export class SESTestFunction extends Lambda.Function<Lambda.Function>()("SESTestFunction") {}
 
 export default SESTestFunction.make(
   {
@@ -37,9 +35,7 @@ export default SESTestFunction.make(
     // (where the binding is declared) and inside the Lambda (where the client
     // is constructed). Forward it so the deployed function sees the same
     // value the deploy did.
-    ...(CVE_RECIPIENT
-      ? { env: { AWS_TEST_SES_CVE_RECIPIENT: CVE_RECIPIENT } }
-      : {}),
+    ...(CVE_RECIPIENT ? { env: { AWS_TEST_SES_CVE_RECIPIENT: CVE_RECIPIENT } } : {}),
   },
   Effect.gen(function* () {
     // Domain identity — deterministic, never verified. In the SES sandbox a
@@ -78,9 +74,7 @@ export default SESTestFunction.make(
       { kinds: ["send", "delivery", "bounce", "complaint"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `ses email event: ${event["detail-type"]} (${event.detail.mail?.messageId})`,
-          ),
+          Effect.log(`ses email event: ${event["detail-type"]} (${event.detail.mail?.messageId})`),
         ),
     );
 
@@ -100,10 +94,7 @@ export default SESTestFunction.make(
     const listSuppressed = yield* SES.ListSuppressedDestinations();
     const unsuppress = yield* SES.DeleteSuppressedDestination();
     const sendBounce = yield* SES.SendBounce();
-    const sendCustomVerification = yield* SES.SendCustomVerificationEmail(
-      identity,
-      configSet,
-    );
+    const sendCustomVerification = yield* SES.SendCustomVerificationEmail(identity, configSet);
     // Scoped by REFERENCE to the address the gated test verifies. The binding
     // above is scoped to the fixture's own (unverifiable) domain, so it can
     // only ever authorize verification of addresses AT that domain — which is
@@ -139,10 +130,7 @@ export default SESTestFunction.make(
             Effect.catch((e) =>
               HttpServerResponse.json({
                 error: e._tag,
-                message:
-                  "message" in e
-                    ? (e as { message?: string }).message
-                    : undefined,
+                message: "message" in e ? (e as { message?: string }).message : undefined,
               }),
             ),
           );
@@ -246,22 +234,16 @@ export default SESTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/suppress") {
-          return yield* respond(
-            suppress({ EmailAddress: email!, Reason: "BOUNCE" }),
-            () => ({
-              suppressed: email,
-            }),
-          );
+          return yield* respond(suppress({ EmailAddress: email!, Reason: "BOUNCE" }), () => ({
+            suppressed: email,
+          }));
         }
 
         if (request.method === "GET" && pathname === "/suppressed") {
-          return yield* respond(
-            getSuppressed({ EmailAddress: email! }),
-            (result) => ({
-              email: result.SuppressedDestination.EmailAddress,
-              reason: result.SuppressedDestination.Reason,
-            }),
-          );
+          return yield* respond(getSuppressed({ EmailAddress: email! }), (result) => ({
+            email: result.SuppressedDestination.EmailAddress,
+            reason: result.SuppressedDestination.Reason,
+          }));
         }
 
         if (request.method === "GET" && pathname === "/suppressed-list") {
@@ -293,26 +275,19 @@ export default SESTestFunction.make(
           return yield* respond(
             sendBounce({
               OriginalMessageId: messageId,
-              BounceSender:
-                from ?? "mailer-daemon@ses-bindings.alchemy-test.example.com",
-              BouncedRecipientInfoList: [
-                { Recipient: to, BounceType: "DoesNotExist" },
-              ],
+              BounceSender: from ?? "mailer-daemon@ses-bindings.alchemy-test.example.com",
+              BouncedRecipientInfoList: [{ Recipient: to, BounceType: "DoesNotExist" }],
             }),
             (result) => ({ messageId: result.MessageId }),
           );
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/send-custom-verification"
-        ) {
+        if (request.method === "POST" && pathname === "/send-custom-verification") {
           // The template name comes from the request: on a bare account no
           // verified sender exists to create one with, so the ungated test
           // passes a name that does not resolve and asserts the typed
           // rejection. AWS_TEST_SES_CVE_TEMPLATE names a real one.
-          const templateName =
-            url.searchParams.get("template") ?? "alchemy-test-missing-template";
+          const templateName = url.searchParams.get("template") ?? "alchemy-test-missing-template";
           return yield* respond(
             sendCustomVerification({
               EmailAddress: email ?? "verify-target@simulator.amazonses.com",
@@ -322,18 +297,14 @@ export default SESTestFunction.make(
           );
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/send-custom-verification-verified"
-        ) {
+        if (request.method === "POST" && pathname === "/send-custom-verification-verified") {
           if (sendCustomVerificationVerified === undefined) {
             return yield* HttpServerResponse.json(
               { error: "AWS_TEST_SES_CVE_RECIPIENT not set at deploy time" },
               { status: 412 },
             );
           }
-          const templateName =
-            url.searchParams.get("template") ?? "alchemy-test-missing-template";
+          const templateName = url.searchParams.get("template") ?? "alchemy-test-missing-template";
           return yield* respond(
             sendCustomVerificationVerified({
               EmailAddress: email ?? SIMULATOR,
@@ -351,13 +322,10 @@ export default SESTestFunction.make(
           const messageId =
             url.searchParams.get("messageId") ??
             "0000000000000000-00000000-0000-0000-0000-000000000000-000000";
-          return yield* respond(
-            getMessageInsights({ MessageId: messageId }),
-            (result) => ({
-              messageId: result.MessageId,
-              insights: result.Insights?.length ?? 0,
-            }),
-          );
+          return yield* respond(getMessageInsights({ MessageId: messageId }), (result) => ({
+            messageId: result.MessageId,
+            insights: result.Insights?.length ?? 0,
+          }));
         }
 
         if (request.method === "POST" && pathname === "/metric-data") {
@@ -388,9 +356,7 @@ export default SESTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/domain-statistics") {
-          const domain =
-            url.searchParams.get("domain") ??
-            "ses-bindings.alchemy-test.example.com";
+          const domain = url.searchParams.get("domain") ?? "ses-bindings.alchemy-test.example.com";
           const end = new Date();
           const start = new Date(end.getTime() - 7 * 24 * 3600 * 1000);
           return yield* respond(
@@ -405,12 +371,9 @@ export default SESTestFunction.make(
 
         if (request.method === "GET" && pathname === "/blacklist-reports") {
           const ip = url.searchParams.get("ip") ?? "192.0.2.1";
-          return yield* respond(
-            getBlacklistReports({ BlacklistItemNames: [ip] }),
-            (result) => ({
-              ips: Object.keys(result.BlacklistReport),
-            }),
-          );
+          return yield* respond(getBlacklistReports({ BlacklistItemNames: [ip] }), (result) => ({
+            ips: Object.keys(result.BlacklistReport),
+          }));
         }
 
         if (request.method === "GET" && pathname === "/health") {

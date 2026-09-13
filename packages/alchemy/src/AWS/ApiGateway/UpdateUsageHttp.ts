@@ -25,14 +25,14 @@ export const UpdateUsageHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/usageplans/${usagePlan.id}/keys/*/usage`,
         ],
       });
-      return Effect.fn(`AWS.ApiGateway.UpdateUsage(${usagePlan.LogicalId})`)(
-        function* (request: UpdateUsageRequest) {
-          return yield* updateUsage({
-            ...request,
-            usagePlanId: yield* UsagePlanId,
-          });
-        },
-      );
+      return Effect.fn(`AWS.ApiGateway.UpdateUsage(${usagePlan.LogicalId})`)(function* (
+        request: UpdateUsageRequest,
+      ) {
+        return yield* updateUsage({
+          ...request,
+          usagePlanId: yield* UsagePlanId,
+        });
+      });
     });
   }),
 );

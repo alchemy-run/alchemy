@@ -14,15 +14,9 @@ export * from "./ModifyCapacityReservation.ts";
 export * from "./ModifyCapacityReservationHttp.ts";
 export * from "./RegisterTargets.ts";
 export * from "./RegisterTargetsHttp.ts";
-export {
-  ListenerCertificate,
-  ListenerCertificateProvider,
-} from "./ListenerCertificate.ts";
+export { ListenerCertificate, ListenerCertificateProvider } from "./ListenerCertificate.ts";
 export { ListenerRule, ListenerRuleProvider } from "./ListenerRule.ts";
 export { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 export { TargetGroup, TargetGroupProvider } from "./TargetGroup.ts";
-export {
-  TargetGroupAttachment,
-  TargetGroupAttachmentProvider,
-} from "./TargetGroupAttachment.ts";
+export { TargetGroupAttachment, TargetGroupAttachmentProvider } from "./TargetGroupAttachment.ts";
 export { TrustStore, TrustStoreProvider } from "./TrustStore.ts";

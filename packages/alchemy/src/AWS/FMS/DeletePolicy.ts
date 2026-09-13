@@ -28,12 +28,8 @@ export interface DeletePolicy extends Binding.Service<
   DeletePolicy,
   "AWS.FMS.DeletePolicy",
   () => Effect.Effect<
-    (
-      request: DeletePolicyRequest,
-    ) => Effect.Effect<fms.DeletePolicyResponse, fms.DeletePolicyError>
+    (request: DeletePolicyRequest) => Effect.Effect<fms.DeletePolicyResponse, fms.DeletePolicyError>
   >
 > {}
 
-export const DeletePolicy = Binding.Service<DeletePolicy>(
-  "AWS.FMS.DeletePolicy",
-);
+export const DeletePolicy = Binding.Service<DeletePolicy>("AWS.FMS.DeletePolicy");

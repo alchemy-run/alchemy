@@ -71,9 +71,7 @@ export interface DurableExecutionInvocationEvent {
  * `isSQSEvent`. A durable function's invocations always arrive in this
  * envelope (the durable execution wraps even the first invocation).
  */
-export const isDurableExecutionEvent = (
-  event: any,
-): event is DurableExecutionInvocationEvent =>
+export const isDurableExecutionEvent = (event: any): event is DurableExecutionInvocationEvent =>
   typeof event === "object" &&
   event !== null &&
   typeof event.DurableExecutionArn === "string" &&
@@ -96,10 +94,7 @@ export interface DurableEnvelope {
   params: unknown;
 }
 
-export const encodeDurableEnvelope = (
-  workflow: string,
-  params: unknown,
-): string =>
+export const encodeDurableEnvelope = (workflow: string, params: unknown): string =>
   JSON.stringify({ $alchemy: { workflow }, params } satisfies DurableEnvelope);
 
 const asDurableEnvelope = (payload: unknown): DurableEnvelope | undefined =>
@@ -117,9 +112,7 @@ const asDurableEnvelope = (payload: unknown): DurableEnvelope | undefined =>
  * operation (first page — the EXECUTION operation is always the log's first
  * entry, so pagination never hides it).
  */
-export const readDurableInputPayload = (
-  event: DurableExecutionInvocationEvent,
-): unknown => {
+export const readDurableInputPayload = (event: DurableExecutionInvocationEvent): unknown => {
   const operations = event.InitialExecutionState?.Operations ?? [];
   const execution = operations.find((op) => op?.Type === "EXECUTION");
   const raw = execution?.ExecutionDetails?.InputPayload;
@@ -218,14 +211,10 @@ const toNativeRetryStrategy = (
   };
 };
 
-const toNativeStepConfig = (
-  options: DurableStepOptions<any>,
-): NativeStepConfig | undefined => {
+const toNativeStepConfig = (options: DurableStepOptions<any>): NativeStepConfig | undefined => {
   if (!options.retry && !options.semantics) return undefined;
   return {
-    ...(options.retry
-      ? { retryStrategy: toNativeRetryStrategy(options.retry) }
-      : {}),
+    ...(options.retry ? { retryStrategy: toNativeRetryStrategy(options.retry) } : {}),
     ...(options.semantics
       ? {
           semantics:
@@ -237,9 +226,7 @@ const toNativeStepConfig = (
   };
 };
 
-const wrapDurableContext = (
-  dctx: NativeDurableContext,
-): DurableStep["Service"] => ({
+const wrapDurableContext = (dctx: NativeDurableContext): DurableStep["Service"] => ({
   step: <T>(options: DurableStepOptions<T>) =>
     Effect.tryPromise(() =>
       dctx.step<T>(
@@ -287,10 +274,7 @@ const wrapDurableContext = (
  * log and calls back into the Effect body with a fresh per-invocation `Scope`
  * and the `DurableStep`/`DurableExecutionContext` services.
  */
-type WrappedDurableHandler = (
-  event: any,
-  context: lambda.Context,
-) => Promise<any>;
+type WrappedDurableHandler = (event: any, context: lambda.Context) => Promise<any>;
 
 export const makeDurableListener = (options: {
   name: string;
@@ -306,54 +290,51 @@ export const makeDurableListener = (options: {
   Effect.sync(() => {
     // Bind the SDK-wrapped handler once, on first invocation, and reuse it.
     let wrapped: WrappedDurableHandler | undefined;
-    const ensureWrapped: Effect.Effect<WrappedDurableHandler> = Effect.suspend(
-      () =>
-        wrapped !== undefined
-          ? Effect.succeed(wrapped)
-          : loadDurableSdk.pipe(
-              Effect.map((sdk) => {
-                wrapped = sdk.withDurableExecution(async (event, dctx) => {
-                  // The SDK extracts the customer payload from the EXECUTION
-                  // operation and hands it to us on every (re-)invocation.
-                  const envelope = asDurableEnvelope(event);
-                  const params =
-                    envelope !== undefined ? envelope.params : event;
+    const ensureWrapped: Effect.Effect<WrappedDurableHandler> = Effect.suspend(() =>
+      wrapped !== undefined
+        ? Effect.succeed(wrapped)
+        : loadDurableSdk.pipe(
+            Effect.map((sdk) => {
+              wrapped = sdk.withDurableExecution(async (event, dctx) => {
+                // The SDK extracts the customer payload from the EXECUTION
+                // operation and hands it to us on every (re-)invocation.
+                const envelope = asDurableEnvelope(event);
+                const params = envelope !== undefined ? envelope.params : event;
 
-                  // Fresh request scope per durable invocation, matching the
-                  // Lambda dispatcher / Worker / Workflow bridges.
-                  const scope = Scope.makeUnsafe();
-                  const exit = await Effect.runPromiseExit(
-                    options.run(params).pipe(
-                      Effect.provide(
-                        Layer.mergeAll(
-                          Layer.succeed(DurableStep, wrapDurableContext(dctx)),
-                          Layer.succeed(DurableExecutionContext, {
-                            executionArn:
-                              dctx.executionContext.durableExecutionArn,
-                          }),
-                          Layer.succeed(HandlerContext, dctx.lambdaContext),
-                          Layer.succeed(Scope.Scope, scope),
-                        ),
+                // Fresh request scope per durable invocation, matching the
+                // Lambda dispatcher / Worker / Workflow bridges.
+                const scope = Scope.makeUnsafe();
+                const exit = await Effect.runPromiseExit(
+                  options.run(params).pipe(
+                    Effect.provide(
+                      Layer.mergeAll(
+                        Layer.succeed(DurableStep, wrapDurableContext(dctx)),
+                        Layer.succeed(DurableExecutionContext, {
+                          executionArn: dctx.executionContext.durableExecutionArn,
+                        }),
+                        Layer.succeed(HandlerContext, dctx.lambdaContext),
+                        Layer.succeed(Scope.Scope, scope),
                       ),
                     ),
+                  ),
+                );
+                if (!isScopeEjected(scope)) {
+                  await Scope.close(scope, exit).pipe(
+                    Effect.ignoreCause({
+                      log: "Warn",
+                      message: "Durable invocation scope close failed",
+                    }),
+                    Effect.runPromise,
                   );
-                  if (!isScopeEjected(scope)) {
-                    await Scope.close(scope, exit).pipe(
-                      Effect.ignoreCause({
-                        log: "Warn",
-                        message: "Durable invocation scope close failed",
-                      }),
-                      Effect.runPromise,
-                    );
-                  }
-                  if (Exit.isSuccess(exit)) {
-                    return exit.value;
-                  }
-                  throw Cause.squash(exit.cause);
-                });
-                return wrapped;
-              }),
-            ),
+                }
+                if (Exit.isSuccess(exit)) {
+                  return exit.value;
+                }
+                throw Cause.squash(exit.cause);
+              });
+              return wrapped;
+            }),
+          ),
     );
 
     // `HandlerContext` is a runtime-only requirement satisfied unconditionally
@@ -365,10 +346,7 @@ export const makeDurableListener = (options: {
       if (!isDurableExecutionEvent(event)) return;
       const payload = readDurableInputPayload(event);
       const envelope = asDurableEnvelope(payload);
-      if (
-        envelope !== undefined &&
-        envelope.$alchemy.workflow !== options.name
-      ) {
+      if (envelope !== undefined && envelope.$alchemy.workflow !== options.name) {
         // Addressed to another DurableFunction on this host — decline so its
         // listener picks it up.
         return;

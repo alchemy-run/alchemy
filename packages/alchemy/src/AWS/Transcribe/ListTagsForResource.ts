@@ -28,10 +28,7 @@ export interface ListTagsForResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.ListTagsForResourceRequest,
-    ) => Effect.Effect<
-      transcribe.ListTagsForResourceResponse,
-      transcribe.ListTagsForResourceError
-    >
+    ) => Effect.Effect<transcribe.ListTagsForResourceResponse, transcribe.ListTagsForResourceError>
   >
 > {}
 export const ListTagsForResource = Binding.Service<ListTagsForResource>(

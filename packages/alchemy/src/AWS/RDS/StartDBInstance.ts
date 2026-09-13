@@ -28,10 +28,6 @@ export interface StartDBInstance extends Binding.Service<
   "AWS.RDS.StartDBInstance",
   (
     instance: DBInstance,
-  ) => Effect.Effect<
-    () => Effect.Effect<rds.StartDBInstanceResult, rds.StartDBInstanceError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<rds.StartDBInstanceResult, rds.StartDBInstanceError>>
 > {}
-export const StartDBInstance = Binding.Service<StartDBInstance>(
-  "AWS.RDS.StartDBInstance",
-);
+export const StartDBInstance = Binding.Service<StartDBInstance>("AWS.RDS.StartDBInstance");

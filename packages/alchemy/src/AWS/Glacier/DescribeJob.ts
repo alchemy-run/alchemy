@@ -44,6 +44,4 @@ export interface DescribeJob extends Binding.Service<
     ) => Effect.Effect<glacier.GlacierJobDescription, glacier.DescribeJobError>
   >
 > {}
-export const DescribeJob = Binding.Service<DescribeJob>(
-  "AWS.Glacier.DescribeJob",
-);
+export const DescribeJob = Binding.Service<DescribeJob>("AWS.Glacier.DescribeJob");

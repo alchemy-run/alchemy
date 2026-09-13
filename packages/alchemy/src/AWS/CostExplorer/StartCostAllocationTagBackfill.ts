@@ -41,7 +41,6 @@ export interface StartCostAllocationTagBackfill extends Binding.Service<
   >
 > {}
 
-export const StartCostAllocationTagBackfill =
-  Binding.Service<StartCostAllocationTagBackfill>(
-    "AWS.CostExplorer.StartCostAllocationTagBackfill",
-  );
+export const StartCostAllocationTagBackfill = Binding.Service<StartCostAllocationTagBackfill>(
+  "AWS.CostExplorer.StartCostAllocationTagBackfill",
+);

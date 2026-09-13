@@ -34,9 +34,7 @@ const connect = Effect.fn(
     const socket = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const socket = new WebSocket(url.replace(/^http/, "ws"));
-        socket.addEventListener("open", () =>
-          Deferred.doneUnsafe(opened, Exit.void),
-        );
+        socket.addEventListener("open", () => Deferred.doneUnsafe(opened, Exit.void));
         socket.addEventListener("error", (event) =>
           Deferred.doneUnsafe(
             opened,
@@ -51,10 +49,7 @@ const connect = Effect.fn(
           Queue.offerUnsafe(messages, String(event.data)),
         );
         socket.addEventListener("close", (event) =>
-          Deferred.doneUnsafe(
-            closed,
-            Exit.succeed({ code: event.code, reason: event.reason }),
-          ),
+          Deferred.doneUnsafe(closed, Exit.succeed({ code: event.code, reason: event.reason })),
         );
         return socket;
       }),
@@ -68,9 +63,7 @@ const connect = Effect.fn(
       socket,
       send: (message: string) => Effect.sync(() => socket.send(message)),
       receive: Queue.take(messages).pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown)),
-        ),
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
         Effect.timeout("10 seconds"),
       ),
       closed: Deferred.await(closed).pipe(Effect.timeout("10 seconds")),
@@ -107,9 +100,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      const response = yield* requestWorker(
-        HttpClientRequest.get(`${output.url}/ready`),
-      );
+      const response = yield* requestWorker(HttpClientRequest.get(`${output.url}/ready`));
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("ready");
       yield* connect(`${output.url}/socket/ready`).pipe(Effect.scoped);
@@ -172,9 +163,7 @@ describe.concurrent.each([
     "reports native absence even for Schema.Unknown",
     Effect.gen(function* () {
       const response = yield* request("missing");
-      yield* Effect.sync(() =>
-        console.log("Native attachment absence", { dev, response }),
-      );
+      yield* Effect.sync(() => console.log("Native attachment absence", { dev, response }));
       expect(response).toMatchObject({
         _tag: "WebSocketAttachmentError",
         reason: "missing",
@@ -210,9 +199,7 @@ describe.concurrent.each([
     "native oversize serialization is a recoverable write failure",
     Effect.gen(function* () {
       const response = yield* request("oversize");
-      yield* Effect.sync(() =>
-        console.log("Native attachment size limit", { dev, response }),
-      );
+      yield* Effect.sync(() => console.log("Native attachment size limit", { dev, response }));
       expect(response).toMatchObject({
         _tag: "WebSocketAttachmentError",
         reason: "write",
@@ -255,9 +242,7 @@ describe.concurrent.each([
       yield* valid.send("codec");
       yield* valid.receive;
       yield* valid.send("stats");
-      const before = yield* valid.receive.pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(Stats)),
-      );
+      const before = yield* valid.receive.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Stats)));
       const obsolete = yield* connect(`${url}/socket/idle`);
       yield* obsolete.send("obsolete");
       expect(yield* obsolete.receive).toEqual({
@@ -268,9 +253,7 @@ describe.concurrent.each([
       const after = yield* Effect.gen(function* () {
         yield* Effect.sleep("15 seconds");
         yield* valid.send("stats");
-        return yield* valid.receive.pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(Stats)),
-        );
+        return yield* valid.receive.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Stats)));
       }).pipe(
         Effect.repeat({
           times: 2,

@@ -53,9 +53,7 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
       const provider = yield* Provider.findProvider(PermissionSet);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (p) => p.permissionSetArn === permissionSet.permissionSetArn,
-      );
+      const found = all.find((p) => p.permissionSetArn === permissionSet.permissionSetArn);
       expect(found).toBeDefined();
       expect(found?.name).toBe(permissionSet.name);
       expect(found?.instanceArn).toBe(permissionSet.instanceArn);

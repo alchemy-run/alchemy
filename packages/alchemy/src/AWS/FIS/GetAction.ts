@@ -26,9 +26,7 @@ export interface GetAction extends Binding.Service<
   GetAction,
   "AWS.FIS.GetAction",
   () => Effect.Effect<
-    (
-      request: fis.GetActionRequest,
-    ) => Effect.Effect<fis.GetActionResponse, fis.GetActionError>
+    (request: fis.GetActionRequest) => Effect.Effect<fis.GetActionResponse, fis.GetActionError>
   >
 > {}
 export const GetAction = Binding.Service<GetAction>("AWS.FIS.GetAction");

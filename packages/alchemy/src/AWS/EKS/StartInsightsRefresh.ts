@@ -30,10 +30,7 @@ export interface StartInsightsRefresh extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<eks.StartInsightsRefreshRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.StartInsightsRefreshResponse,
-      eks.StartInsightsRefreshError
-    >
+    ) => Effect.Effect<eks.StartInsightsRefreshResponse, eks.StartInsightsRefreshError>
   >
 > {}
 export const StartInsightsRefresh = Binding.Service<StartInsightsRefresh>(

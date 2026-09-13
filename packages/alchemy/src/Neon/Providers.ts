@@ -6,15 +6,9 @@ import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
 import { Server, ServerProvider } from "../Website/Server.ts";
 import { Auth, AuthProvider } from "./Auth.ts";
-import {
-  AuthOAuthProvider,
-  AuthOAuthProviderProvider,
-} from "./AuthOAuthProvider.ts";
+import { AuthOAuthProvider, AuthOAuthProviderProvider } from "./AuthOAuthProvider.ts";
 import { NeonAuth } from "./AuthProvider.ts";
-import {
-  AuthTrustedDomain,
-  AuthTrustedDomainProvider,
-} from "./AuthTrustedDomain.ts";
+import { AuthTrustedDomain, AuthTrustedDomainProvider } from "./AuthTrustedDomain.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { Credential, CredentialProvider } from "./Credential.ts";
@@ -25,10 +19,7 @@ import { Function } from "./Function.ts";
 import { FunctionProvider } from "./FunctionProvider.ts";
 import { FunctionTrigger, FunctionTriggerProvider } from "./FunctionTrigger.ts";
 import { Object, ObjectProvider } from "./Object.ts";
-import {
-  OrganizationApiKey,
-  OrganizationApiKeyProvider,
-} from "./OrganizationApiKey.ts";
+import { OrganizationApiKey, OrganizationApiKeyProvider } from "./OrganizationApiKey.ts";
 import {
   OrganizationMemberRole,
   OrganizationMemberRoleProvider,
@@ -42,22 +33,11 @@ import {
   OrganizationVPCEndpointProvider,
 } from "./OrganizationVPCEndpoint.ts";
 import { Project, ProjectProvider } from "./Project.ts";
-import {
-  ProjectMemberRole,
-  ProjectMemberRoleProvider,
-} from "./ProjectMemberRole.ts";
-import {
-  ProjectVPCEndpoint,
-  ProjectVPCEndpointProvider,
-} from "./ProjectVPCEndpoint.ts";
-import {
-  WebsiteArtifact,
-  WebsiteArtifactProvider,
-} from "./Website/Artifact.ts";
+import { ProjectMemberRole, ProjectMemberRoleProvider } from "./ProjectMemberRole.ts";
+import { ProjectVPCEndpoint, ProjectVPCEndpointProvider } from "./ProjectVPCEndpoint.ts";
+import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Neon",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Neon") {}
 
 /**
  * Build a layer that registers all Neon resource providers, the Neon

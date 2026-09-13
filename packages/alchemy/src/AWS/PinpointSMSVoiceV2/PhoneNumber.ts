@@ -141,17 +141,13 @@ export interface PhoneNumber extends Resource<
  *
  * @resource
  */
-export const PhoneNumber = Resource<PhoneNumber>(
-  "AWS.PinpointSMSVoiceV2.PhoneNumber",
-);
+export const PhoneNumber = Resource<PhoneNumber>("AWS.PinpointSMSVoiceV2.PhoneNumber");
 
 /**
  * Raised when a phone number cannot be observed after `RequestPhoneNumber`
  * succeeded, or the API returned a number without its ID.
  */
-export class SmsVoicePhoneNumberMissing extends Data.TaggedError(
-  "SmsVoicePhoneNumberMissing",
-)<{
+export class SmsVoicePhoneNumberMissing extends Data.TaggedError("SmsVoicePhoneNumberMissing")<{
   message: string;
 }> {}
 
@@ -190,10 +186,7 @@ const toAttrs = (info: smsvoice.PhoneNumberInformation) =>
     };
   });
 
-const sameCapabilities = (
-  left: readonly string[],
-  right: readonly string[],
-) => {
+const sameCapabilities = (left: readonly string[], right: readonly string[]) => {
   const l = [...left].sort();
   const r = [...right].sort();
   return l.length === r.length && l.every((v, i) => v === r[i]);
@@ -208,23 +201,13 @@ export const PhoneNumberProvider = () =>
           .describePhoneNumbers({ PhoneNumberIds: [phoneNumberId] })
           .pipe(
             retrySmsVoiceThrottled,
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
-        return result?.PhoneNumbers?.find(
-          (p) => p.PhoneNumberId === phoneNumberId,
-        );
+        return result?.PhoneNumbers?.find((p) => p.PhoneNumberId === phoneNumberId);
       });
 
       return {
-        stables: [
-          "phoneNumberId",
-          "phoneNumberArn",
-          "phoneNumber",
-          "isoCountryCode",
-          "numberType",
-        ],
+        stables: ["phoneNumberId", "phoneNumberArn", "phoneNumber", "isoCountryCode", "numberType"],
 
         read: Effect.fn(function* ({ id, output }) {
           // Phone number IDs are assigned by AWS — without a cached output
@@ -244,10 +227,7 @@ export const PhoneNumberProvider = () =>
             olds.isoCountryCode !== news.isoCountryCode ||
             olds.messageType !== news.messageType ||
             olds.numberType !== news.numberType ||
-            !sameCapabilities(
-              olds.numberCapabilities ?? [],
-              news.numberCapabilities,
-            )
+            !sameCapabilities(olds.numberCapabilities ?? [], news.numberCapabilities)
           ) {
             return { action: "replace" } as const;
           }
@@ -259,9 +239,7 @@ export const PhoneNumberProvider = () =>
 
           // 1. Observe — the ID cache in `output` is the only identity.
           let observed =
-            output?.phoneNumberId === undefined
-              ? undefined
-              : yield* getById(output.phoneNumberId);
+            output?.phoneNumberId === undefined ? undefined : yield* getById(output.phoneNumberId);
 
           // 2. Ensure — request a number if missing, then wait out PENDING.
           if (observed === undefined) {
@@ -283,9 +261,7 @@ export const PhoneNumberProvider = () =>
                 }),
               );
             }
-            observed = yield* getById(requested.PhoneNumberId).pipe(
-              untilNotPending,
-            );
+            observed = yield* getById(requested.PhoneNumberId).pipe(untilNotPending);
           }
           if (observed === undefined || observed.PhoneNumberId === undefined) {
             return yield* Effect.fail(
@@ -302,18 +278,14 @@ export const PhoneNumberProvider = () =>
           // require a two-way channel) are never sent.
           const desiredProtection = news.deletionProtectionEnabled ?? false;
           const optOutDrift =
-            news.optOutListName !== undefined &&
-            observed.OptOutListName !== news.optOutListName;
-          const protectionDrift =
-            observed.DeletionProtectionEnabled !== desiredProtection;
+            news.optOutListName !== undefined && observed.OptOutListName !== news.optOutListName;
+          const protectionDrift = observed.DeletionProtectionEnabled !== desiredProtection;
           if (optOutDrift || protectionDrift) {
             yield* smsvoice
               .updatePhoneNumber({
                 PhoneNumberId: phoneNumberId,
                 OptOutListName: optOutDrift ? news.optOutListName : undefined,
-                DeletionProtectionEnabled: protectionDrift
-                  ? desiredProtection
-                  : undefined,
+                DeletionProtectionEnabled: protectionDrift ? desiredProtection : undefined,
               })
               .pipe(retrySmsVoiceThrottled);
           }
@@ -335,13 +307,11 @@ export const PhoneNumberProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* smsvoice
-            .releasePhoneNumber({ PhoneNumberId: output.phoneNumberId })
-            .pipe(
-              retrySmsVoiceThrottled,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.asVoid,
-            );
+          yield* smsvoice.releasePhoneNumber({ PhoneNumberId: output.phoneNumberId }).pipe(
+            retrySmsVoiceThrottled,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.asVoid,
+          );
         }),
 
         list: () =>
@@ -352,9 +322,7 @@ export const PhoneNumberProvider = () =>
                 (info) =>
                   toAttrs(info).pipe(
                     // Tolerate a number missing its ID — drop it.
-                    Effect.catchTag("SmsVoicePhoneNumberMissing", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("SmsVoicePhoneNumberMissing", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 5 },
               ),

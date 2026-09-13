@@ -55,10 +55,7 @@ test.provider("diff: changing databaseName forces replacement", () =>
 
 test.provider("diff: changing kmsKeyId forces replacement", () =>
   Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, kmsKeyId: "key-a" },
-      { ...base, kmsKeyId: "key-b" },
-    );
+    const result = yield* callDiff({ ...base, kmsKeyId: "key-a" }, { ...base, kmsKeyId: "key-b" });
     expect(result).toEqual({ action: "replace" });
   }),
 );
@@ -210,9 +207,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
       const provider = yield* Provider.findProvider(DBCluster);
       const all = yield* provider.list();
 
-      expect(
-        all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier),
-      ).toBe(true);
+      expect(all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier)).toBe(true);
 
       yield* stack.destroy();
     }),

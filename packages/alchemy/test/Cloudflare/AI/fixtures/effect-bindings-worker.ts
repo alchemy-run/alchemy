@@ -27,15 +27,10 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
     const bucket = yield* Cloudflare.R2.Bucket("AiSearchEffectBindingBucket", {
       forceDestroy: true,
     });
-    const namespace = yield* Cloudflare.AI.SearchNamespace(
-      "AiSearchEffectBindingNs",
-    );
-    const aiSearch = yield* Cloudflare.AI.Search(
-      "AiSearchEffectBindingInstance",
-      {
-        source: bucket,
-      },
-    );
+    const namespace = yield* Cloudflare.AI.SearchNamespace("AiSearchEffectBindingNs");
+    const aiSearch = yield* Cloudflare.AI.Search("AiSearchEffectBindingInstance", {
+      source: bucket,
+    });
     const search = yield* Cloudflare.AI.QuerySearch(aiSearch);
     const ns = yield* Cloudflare.AI.QuerySearchNamespace(namespace);
 
@@ -59,10 +54,7 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.AI.QuerySearchBinding,
-        Cloudflare.AI.QuerySearchNamespaceBinding,
-      ),
+      Layer.mergeAll(Cloudflare.AI.QuerySearchBinding, Cloudflare.AI.QuerySearchNamespaceBinding),
     ),
   ),
 ) {}

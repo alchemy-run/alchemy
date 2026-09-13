@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Advanced TCP Protection is a Magic Transit (Enterprise add-on)
 // entitlement that the testing account does not have — every API call fails
@@ -36,13 +33,10 @@ test.provider.skipIf(!magicTransit)(
       // Create.
       const filter = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.SynProtectionFilter(
-            "Filter",
-            {
-              expression: "tcp.dstport in {443}",
-              mode: "monitoring",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.SynProtectionFilter("Filter", {
+            expression: "tcp.dstport in {443}",
+            mode: "monitoring",
+          });
         }),
       );
       expect(filter.expression).toEqual("tcp.dstport in {443}");
@@ -58,13 +52,10 @@ test.provider.skipIf(!magicTransit)(
       // In-place update — expression and mode are patched, id is stable.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.SynProtectionFilter(
-            "Filter",
-            {
-              expression: "tcp.dstport in {443 8443}",
-              mode: "enabled",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.SynProtectionFilter("Filter", {
+            expression: "tcp.dstport in {443 8443}",
+            mode: "enabled",
+          });
         }),
       );
       expect(updated.filterId).toEqual(filter.filterId);
@@ -94,9 +85,7 @@ test.provider(
   "list returns a well-typed array of SYN protection filters",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.SynProtectionFilter,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.SynProtectionFilter);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
       for (const f of all) {
@@ -117,19 +106,14 @@ test.provider.skipIf(!magicTransit)(
 
       const filter = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.SynProtectionFilter(
-            "ListFilter",
-            {
-              expression: "tcp.dstport in {8443}",
-              mode: "monitoring",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.SynProtectionFilter("ListFilter", {
+            expression: "tcp.dstport in {8443}",
+            mode: "monitoring",
+          });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.SynProtectionFilter,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.SynProtectionFilter);
       const all = yield* provider.list();
       expect(all.some((f) => f.filterId === filter.filterId)).toBe(true);
 

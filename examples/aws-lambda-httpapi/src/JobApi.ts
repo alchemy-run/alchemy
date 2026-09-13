@@ -24,9 +24,7 @@ export const createJob = HttpApiEndpoint.post("createJob", "/", {
   }),
 });
 
-export const JobApi = HttpApi.make("JobApi").add(
-  HttpApiGroup.make("Jobs").add(getJob, createJob),
-);
+export const JobApi = HttpApi.make("JobApi").add(HttpApiGroup.make("Jobs").add(getJob, createJob));
 
 export const JobApiLive = HttpApiBuilder.layer(JobApi).pipe(
   Layer.provide(
@@ -75,11 +73,7 @@ export const JobApiLive = HttpApiBuilder.layer(JobApi).pipe(
                   id: jobId,
                   content: req.payload.content,
                 })
-                .pipe(
-                  Effect.catchTag("PutJobError", (error) =>
-                    Effect.succeed(error),
-                  ),
-                );
+                .pipe(Effect.catchTag("PutJobError", (error) => Effect.succeed(error)));
               if (job instanceof PutJobError) {
                 return HttpServerResponse.text(job.message, {
                   status: 500,
@@ -87,11 +81,7 @@ export const JobApiLive = HttpApiBuilder.layer(JobApi).pipe(
               }
               const notificationResult = yield* notifications
                 .notifyJobCreated(job)
-                .pipe(
-                  Effect.catchTag("NotifyJobError", (error) =>
-                    Effect.succeed(error),
-                  ),
-                );
+                .pipe(Effect.catchTag("NotifyJobError", (error) => Effect.succeed(error)));
               if (notificationResult instanceof NotifyJobError) {
                 return HttpServerResponse.text(notificationResult.message, {
                   status: 500,

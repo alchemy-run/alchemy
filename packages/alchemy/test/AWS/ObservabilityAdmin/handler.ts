@@ -38,10 +38,8 @@ export default ObservabilityAdminBindingsFunction.make(
 
     const bound = {
       listResourceTelemetry: yield* ObservabilityAdmin.ListResourceTelemetry(),
-      getTelemetryEvaluationStatus:
-        yield* ObservabilityAdmin.GetTelemetryEvaluationStatus(),
-      getTelemetryEnrichmentStatus:
-        yield* ObservabilityAdmin.GetTelemetryEnrichmentStatus(),
+      getTelemetryEvaluationStatus: yield* ObservabilityAdmin.GetTelemetryEvaluationStatus(),
+      getTelemetryEnrichmentStatus: yield* ObservabilityAdmin.GetTelemetryEnrichmentStatus(),
       listTelemetryRules: yield* ObservabilityAdmin.ListTelemetryRules(),
       getTelemetryRule: yield* ObservabilityAdmin.GetTelemetryRule(rule),
     };
@@ -93,9 +91,7 @@ export default ObservabilityAdminBindingsFunction.make(
         if (request.method === "GET" && pathname === "/enrichment-status") {
           const status = yield* bound.getTelemetryEnrichmentStatus().pipe(
             Effect.map((r) => r.Status ?? "Stopped"),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("NotOnboarded"),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("NotOnboarded")),
           );
           return yield* HttpServerResponse.json({ status });
         }
@@ -116,8 +112,7 @@ export default ObservabilityAdminBindingsFunction.make(
           return yield* HttpServerResponse.json({
             ruleName: got.RuleName,
             telemetryType: got.TelemetryRule?.TelemetryType,
-            retentionInDays:
-              got.TelemetryRule?.DestinationConfiguration?.RetentionInDays,
+            retentionInDays: got.TelemetryRule?.DestinationConfiguration?.RetentionInDays,
           });
         }
 

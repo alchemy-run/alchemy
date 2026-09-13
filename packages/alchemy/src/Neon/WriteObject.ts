@@ -38,10 +38,7 @@ export interface WriteObjectClient<T> {
 export interface WriteObject extends Binding.Service<
   WriteObject,
   "Neon.WriteObject",
-  <T>(
-    object: Object<T>,
-    options?: StorageBindingOptions,
-  ) => Effect.Effect<WriteObjectClient<T>>
+  <T>(object: Object<T>, options?: StorageBindingOptions) => Effect.Effect<WriteObjectClient<T>>
 > {
   <T>(
     object: Object<T>,

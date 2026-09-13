@@ -30,12 +30,7 @@ export interface GetMicrovmImage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMicrovmImageRequest,
-    ) => Effect.Effect<
-      microvms.GetMicrovmImageOutput,
-      microvms.GetMicrovmImageError
-    >
+    ) => Effect.Effect<microvms.GetMicrovmImageOutput, microvms.GetMicrovmImageError>
   >
 > {}
-export const GetMicrovmImage = Binding.Service<GetMicrovmImage>(
-  "AWS.Lambda.GetMicrovmImage",
-);
+export const GetMicrovmImage = Binding.Service<GetMicrovmImage>("AWS.Lambda.GetMicrovmImage");

@@ -15,17 +15,11 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "octane-app");
 
@@ -64,19 +58,12 @@ const octaneProps = (rootDir: string) => ({
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
-const waitForNamespaceToBeDeleted = Effect.fn(function* (
-  namespaceId: string,
-  accountId: string,
-) {
+const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
   yield* kv.getNamespace({ accountId, namespaceId }).pipe(
     Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
     Effect.retry({
-      while: (e): e is NamespaceStillExists =>
-        e instanceof NamespaceStillExists,
-      schedule: Schedule.min([
-        Schedule.exponential(250),
-        Schedule.spaced("2 seconds"),
-      ]),
+      while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
+      schedule: Schedule.min([Schedule.exponential(250), Schedule.spaced("2 seconds")]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -96,10 +83,7 @@ const readNamespaceValue = Effect.fn(function* (options: {
   const res = yield* kv.getNamespaceValue(options).pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "KeyNotFound",
-      schedule: Schedule.min([
-        Schedule.exponential("1 second"),
-        Schedule.spaced("3 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("3 seconds")]),
       times: 8,
     }),
   );
@@ -258,10 +242,7 @@ const fetchJsonReady = <T>(url: string) =>
       ),
       Effect.retry({
         // Capped interval, ~90s total budget (workers.dev / DO propagation).
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
@@ -282,10 +263,7 @@ const putJsonReady = <T>(url: string) =>
     ),
     Effect.retry({
       // Capped interval, ~90s total budget (workers.dev / DO propagation).
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("2 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
       times: 45,
     }),
   );

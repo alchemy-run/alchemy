@@ -26,13 +26,10 @@ describe("AWS.IAM.SigningCertificate", () => {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const user = yield* User("SigningCertListOwner", {});
-            const certificate = yield* SigningCertificate(
-              "SigningCertListCert",
-              {
-                userName: user.userName,
-                certificateBody: testCertificateBody,
-              },
-            );
+            const certificate = yield* SigningCertificate("SigningCertListCert", {
+              userName: user.userName,
+              certificateBody: testCertificateBody,
+            });
             return { user, certificate };
           }),
         );

@@ -17,8 +17,7 @@ import {
   unicodeEnabled,
 } from "./CliKit/index.ts";
 
-const NPM_DIST_TAGS_URL =
-  "https://registry.npmjs.org/-/package/alchemy/dist-tags";
+const NPM_DIST_TAGS_URL = "https://registry.npmjs.org/-/package/alchemy/dist-tags";
 
 const CACHE_FILE = "version-check.json";
 const CACHE_TTL_MILLIS = Duration.toMillis(Duration.days(1));
@@ -36,10 +35,7 @@ const parseVersion = (v: string) => {
   const [core = "", pre] = v.split("-", 2);
   return {
     core: core.split(".").map(Number),
-    pre:
-      pre === undefined
-        ? []
-        : pre.split(".").map((id) => (/^\d+$/.test(id) ? Number(id) : id)),
+    pre: pre === undefined ? [] : pre.split(".").map((id) => (/^\d+$/.test(id) ? Number(id) : id)),
   };
 };
 
@@ -81,10 +77,7 @@ const compareVersions = (a: string, b: string): number => {
  * force prereleases onto `latest`, it may run ahead of the channel tag —
  * in that case offer `latest` instead of the channel pick.
  */
-const pickDistTag = (
-  current: string,
-  distTags: Record<string, string>,
-): string | undefined => {
+const pickDistTag = (current: string, distTags: Record<string, string>): string | undefined => {
   const pre = current.split("-", 2)[1];
   if (!pre) return distTags.latest;
   const id = pre.split(".")[0];
@@ -99,9 +92,7 @@ const readCache = Effect.fn(
   function* (cachePath: string) {
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(cachePath);
-    const parsed = yield* Effect.try(
-      () => JSON.parse(raw) as VersionCheckCache | null | undefined,
-    );
+    const parsed = yield* Effect.try(() => JSON.parse(raw) as VersionCheckCache | null | undefined);
     return typeof parsed?.checkedAt === "number" ? parsed : undefined;
   },
   Effect.catch(() => Effect.succeed(undefined)),
@@ -189,12 +180,9 @@ export const checkLatestVersion = Effect.gen(function* () {
   const useColor = colorsEnabled();
   const glyphs = glyphsFor(unicodeEnabled());
   const message =
-    `alchemy ${latest} is available (you're on ${current}). ` +
-    `Run \`${installCmd}\` to upgrade.`;
+    `alchemy ${latest} is available (you're on ${current}). ` + `Run \`${installCmd}\` to upgrade.`;
   yield* Console.warn(
-    useColor
-      ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}`
-      : message,
+    useColor ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}` : message,
   );
 }).pipe(Effect.catch(() => Effect.void));
 

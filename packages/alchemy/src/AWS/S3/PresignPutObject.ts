@@ -53,11 +53,7 @@ export interface PresignPutObject extends Binding.Service<
   "AWS.S3.PresignPutObject",
   (
     bucket: Bucket,
-  ) => Effect.Effect<
-    (request: PresignPutObjectRequest) => Effect.Effect<string, PresignError>
-  >
+  ) => Effect.Effect<(request: PresignPutObjectRequest) => Effect.Effect<string, PresignError>>
 > {}
 
-export const PresignPutObject = Binding.Service<PresignPutObject>(
-  "AWS.S3.PresignPutObject",
-);
+export const PresignPutObject = Binding.Service<PresignPutObject>("AWS.S3.PresignPutObject");

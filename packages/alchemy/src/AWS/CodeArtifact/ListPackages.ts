@@ -36,13 +36,8 @@ export interface ListPackages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListPackagesRequest,
-    ) => Effect.Effect<
-      codeartifact.ListPackagesResult,
-      codeartifact.ListPackagesError
-    >
+    ) => Effect.Effect<codeartifact.ListPackagesResult, codeartifact.ListPackagesError>
   >
 > {}
 
-export const ListPackages = Binding.Service<ListPackages>(
-  "AWS.CodeArtifact.ListPackages",
-);
+export const ListPackages = Binding.Service<ListPackages>("AWS.CodeArtifact.ListPackages");

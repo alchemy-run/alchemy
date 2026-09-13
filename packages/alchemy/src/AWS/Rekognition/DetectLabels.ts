@@ -37,12 +37,7 @@ export interface DetectLabels extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DetectLabelsRequest,
-    ) => Effect.Effect<
-      rekognition.DetectLabelsResponse,
-      rekognition.DetectLabelsError
-    >
+    ) => Effect.Effect<rekognition.DetectLabelsResponse, rekognition.DetectLabelsError>
   >
 > {}
-export const DetectLabels = Binding.Service<DetectLabels>(
-  "AWS.Rekognition.DetectLabels",
-);
+export const DetectLabels = Binding.Service<DetectLabels>("AWS.Rekognition.DetectLabels");

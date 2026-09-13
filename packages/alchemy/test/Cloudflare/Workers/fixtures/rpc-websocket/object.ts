@@ -5,10 +5,9 @@ import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Greeting, Rejected, SocketRpcs } from "./rpcs.ts";
 
-export class SocketObject extends Cloudflare.RpcDurableObject<SocketObject>()(
-  "SocketObject",
-  { schema: SocketRpcs },
-) {}
+export class SocketObject extends Cloudflare.RpcDurableObject<SocketObject>()("SocketObject", {
+  schema: SocketRpcs,
+}) {}
 
 export const SocketObjectLive = SocketObject.make(
   Effect.gen(function* () {
@@ -21,21 +20,18 @@ export const SocketObjectLive = SocketObject.make(
       const cleanupStarted: string[] = [];
       const cleanups = new Map<string, Deferred.Deferred<void>>();
       return SocketRpcs.toLayer({
-        greet: ({ name }) =>
-          Effect.succeed(new Greeting({ message: `Hello, ${name}!` })),
+        greet: ({ name }) => Effect.succeed(new Greeting({ message: `Hello, ${name}!` })),
         increment: () =>
           state.storage
             .transaction(
               Effect.gen(function* () {
-                const count =
-                  ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+                const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
                 yield* state.storage.put("count", count);
                 return count;
               }),
             )
             .pipe(Effect.orDie),
-        reject: () =>
-          Effect.fail(new Rejected({ message: "rejected by handler" })),
+        reject: () => Effect.fail(new Rejected({ message: "rejected by handler" })),
         numbers: ({ count }) => Stream.range(1, count),
         watch: ({ key }) =>
           Stream.unwrap(
@@ -44,9 +40,7 @@ export const SocketObjectLive = SocketObject.make(
                 .transaction(
                   Effect.gen(function* () {
                     const invocations =
-                      (yield* state.storage.get<Record<string, number>>(
-                        "invocations",
-                      )) ?? {};
+                      (yield* state.storage.get<Record<string, number>>("invocations")) ?? {};
                     yield* state.storage.put("invocations", {
                       ...invocations,
                       [key]: (invocations[key] ?? 0) + 1,
@@ -55,13 +49,8 @@ export const SocketObjectLive = SocketObject.make(
                 )
                 .pipe(Effect.orDie);
               yield* Effect.sync(() => opened.push(key));
-              yield* Effect.addFinalizer(() =>
-                Effect.sync(() => closed.push(key)),
-              );
-              return Stream.concat(
-                Stream.make(1),
-                Stream.fromEffect(Effect.never),
-              );
+              yield* Effect.addFinalizer(() => Effect.sync(() => closed.push(key)));
+              return Stream.concat(Stream.make(1), Stream.fromEffect(Effect.never));
             }),
           ),
         cleanup: ({ key, waitForDisconnect }) =>
@@ -76,9 +65,8 @@ export const SocketObjectLive = SocketObject.make(
                   .transaction(
                     Effect.gen(function* () {
                       const completed =
-                        (yield* state.storage.get<Record<string, number>>(
-                          "cleanupCompleted",
-                        )) ?? {};
+                        (yield* state.storage.get<Record<string, number>>("cleanupCompleted")) ??
+                        {};
                       yield* state.storage.put("cleanupCompleted", {
                         ...completed,
                         [key]: boots,
@@ -93,9 +81,7 @@ export const SocketObjectLive = SocketObject.make(
               cleanups.set(key, release);
               opened.push(key);
             });
-            return yield* waitForDisconnect
-              ? Effect.never
-              : Effect.succeed(boots);
+            return yield* waitForDisconnect ? Effect.never : Effect.succeed(boots);
           }),
         releaseCleanup: ({ key }) =>
           Effect.suspend(() => {
@@ -145,15 +131,10 @@ export const SocketObjectLive = SocketObject.make(
             count: (yield* state.storage.get<number>("count")) ?? 0,
             opened: [...opened],
             closed: [...closed],
-            invocations:
-              (yield* state.storage.get<Record<string, number>>(
-                "invocations",
-              )) ?? {},
+            invocations: (yield* state.storage.get<Record<string, number>>("invocations")) ?? {},
             cleanupStarted: [...cleanupStarted],
             cleanupCompleted:
-              (yield* state.storage.get<Record<string, number>>(
-                "cleanupCompleted",
-              )) ?? {},
+              (yield* state.storage.get<Record<string, number>>("cleanupCompleted")) ?? {},
           };
         }),
       });

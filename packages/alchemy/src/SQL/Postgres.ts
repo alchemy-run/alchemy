@@ -14,9 +14,7 @@ import { resolveConnectionOptions } from "./PostgresTls.ts";
  * string, which resolves from the Worker environment at runtime).
  */
 export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
-  readonly url:
-    | Redacted.Redacted<string>
-    | Effect.Effect<Redacted.Redacted<string>, E, R>;
+  readonly url: Redacted.Redacted<string> | Effect.Effect<Redacted.Redacted<string>, E, R>;
 };
 
 /**
@@ -83,9 +81,7 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
  * The layer itself builds synchronously at init; the underlying pool is
  * created lazily per execution (see {@link Postgres}).
  */
-export const PostgresLayer = <E = never, R = never>(
-  config: PostgresConfig<E, R>,
-) =>
+export const PostgresLayer = <E = never, R = never>(config: PostgresConfig<E, R>) =>
   // Derive SqlClient from the single PgClient build so both tags share one
   // per-execution pool.
   Layer.effect(

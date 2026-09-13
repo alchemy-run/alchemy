@@ -42,7 +42,6 @@ export interface RegisterApplicationRevision extends Binding.Service<
     >
   >
 > {}
-export const RegisterApplicationRevision =
-  Binding.Service<RegisterApplicationRevision>(
-    "AWS.CodeDeploy.RegisterApplicationRevision",
-  );
+export const RegisterApplicationRevision = Binding.Service<RegisterApplicationRevision>(
+  "AWS.CodeDeploy.RegisterApplicationRevision",
+);

@@ -116,9 +116,7 @@ export const CustomNameservers = Resource<CustomNameservers>(TypeId);
 /**
  * Returns true if the given value is a CustomNameservers resource.
  */
-export const isCustomNameservers = (
-  value: unknown,
-): value is CustomNameservers =>
+export const isCustomNameservers = (value: unknown): value is CustomNameservers =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const CustomNameserversProvider = () =>
@@ -155,9 +153,7 @@ export const CustomNameserversProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is CustomNameserversAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is CustomNameserversAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -165,8 +161,7 @@ export const CustomNameserversProvider = () =>
       // are concrete (resolved) values.
       if (!isResolved(news)) return undefined;
       const oldZoneId =
-        output?.zoneId ??
-        (olds !== undefined && isResolved(olds) ? olds.zoneId : undefined);
+        output?.zoneId ?? (olds !== undefined && isResolved(olds) ? olds.zoneId : undefined);
       if (oldZoneId !== undefined && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
@@ -178,9 +173,7 @@ export const CustomNameserversProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* zones.getCustomNameserver({ zoneId }).pipe(
         // Zone deleted out-of-band — the configuration is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
       );
       if (observed === undefined) return undefined;
       // The custom-NS toggle is a singleton that always exists (disabled
@@ -188,13 +181,9 @@ export const CustomNameserversProvider = () =>
       // freely (never `Unowned`). The observed state at adoption time
       // becomes the baseline restored on destroy.
       const initialEnabled =
-        output !== undefined
-          ? output.initialEnabled
-          : (observed.enabled ?? false);
+        output !== undefined ? output.initialEnabled : (observed.enabled ?? false);
       const initialNsSet =
-        output !== undefined
-          ? output.initialNsSet
-          : (observed.nsSet ?? undefined);
+        output !== undefined ? output.initialNsSet : (observed.nsSet ?? undefined);
       return toAttributes(zoneId, observed, initialEnabled, initialNsSet);
     }),
 
@@ -210,13 +199,9 @@ export const CustomNameserversProvider = () =>
       //    otherwise this is our first touch and the observed state is
       //    the zone's original.
       const initialEnabled =
-        output !== undefined
-          ? output.initialEnabled
-          : (observed.enabled ?? false);
+        output !== undefined ? output.initialEnabled : (observed.enabled ?? false);
       const initialNsSet =
-        output !== undefined
-          ? output.initialNsSet
-          : (observed.nsSet ?? undefined);
+        output !== undefined ? output.initialNsSet : (observed.nsSet ?? undefined);
 
       // 3. Sync — apply only when the observed state differs.
       const observedEnabled = observed.enabled ?? false;
@@ -243,11 +228,7 @@ export const CustomNameserversProvider = () =>
       // Observe — if the zone itself is gone, so is the configuration.
       const observed = yield* zones
         .getCustomNameserver({ zoneId })
-        .pipe(
-          Effect.catchTag("InvalidZoneIdentifier", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)));
       if (observed === undefined) return;
       // Restore the pre-management state; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

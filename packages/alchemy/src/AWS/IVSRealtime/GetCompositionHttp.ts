@@ -1,9 +1,6 @@
 import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Layer from "effect/Layer";
-import {
-  COMPOSITION_ARN_WILDCARD,
-  makeIvsRealtimeAccountHttpBinding,
-} from "./BindingHttp.ts";
+import { COMPOSITION_ARN_WILDCARD, makeIvsRealtimeAccountHttpBinding } from "./BindingHttp.ts";
 import { GetComposition } from "./GetComposition.ts";
 
 export const GetCompositionHttp = Layer.effect(

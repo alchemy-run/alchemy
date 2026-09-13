@@ -5,10 +5,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { Browser } from "./Browser.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
-import {
-  type BrowserAuth,
-  makeHttpBrowserClient,
-} from "./BrowserHttpClient.ts";
+import { type BrowserAuth, makeHttpBrowserClient } from "./BrowserHttpClient.ts";
 
 /**
  * Local implementation of the {@link Browser} binding — drives Cloudflare
@@ -47,9 +44,7 @@ export const BrowserLocal = Layer.effect(
     // providers layer). Capture the full context so the REST ops run with the
     // current credentials — no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     const auth: BrowserAuth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
       accountId,

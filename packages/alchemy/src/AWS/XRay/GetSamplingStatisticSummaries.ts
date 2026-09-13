@@ -41,7 +41,6 @@ export interface GetSamplingStatisticSummaries extends Binding.Service<
     >
   >
 > {}
-export const GetSamplingStatisticSummaries =
-  Binding.Service<GetSamplingStatisticSummaries>(
-    "AWS.XRay.GetSamplingStatisticSummaries",
-  );
+export const GetSamplingStatisticSummaries = Binding.Service<GetSamplingStatisticSummaries>(
+  "AWS.XRay.GetSamplingStatisticSummaries",
+);

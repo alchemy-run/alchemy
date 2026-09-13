@@ -6,10 +6,7 @@ import type { Index } from "./SearchIndex.ts";
 /**
  * `Retrieve` request with `IndexId` injected from the bound index.
  */
-export interface RetrieveRequest extends Omit<
-  kendra.RetrieveRequest,
-  "IndexId"
-> {}
+export interface RetrieveRequest extends Omit<kendra.RetrieveRequest, "IndexId"> {}
 
 /**
  * Runtime binding for the `Retrieve` operation (IAM action
@@ -40,9 +37,7 @@ export interface Retrieve extends Binding.Service<
   (
     index: Index,
   ) => Effect.Effect<
-    (
-      request: RetrieveRequest,
-    ) => Effect.Effect<kendra.RetrieveResult, kendra.RetrieveError>
+    (request: RetrieveRequest) => Effect.Effect<kendra.RetrieveResult, kendra.RetrieveError>
   >
 > {}
 export const Retrieve = Binding.Service<Retrieve>("AWS.Kendra.Retrieve");

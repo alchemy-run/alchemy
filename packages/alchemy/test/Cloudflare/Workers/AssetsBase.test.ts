@@ -21,10 +21,7 @@ import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const marker = "assets-base-rekey-marker";
 
@@ -93,9 +90,7 @@ test.provider(
           Effect.gen(function* () {
             yield* stack.destroy().pipe(Effect.ignore);
             if (workerName) {
-              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(
-                Effect.ignore,
-              );
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
             }
           }),
         ),

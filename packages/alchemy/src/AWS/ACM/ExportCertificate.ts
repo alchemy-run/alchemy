@@ -52,13 +52,8 @@ export interface ExportCertificate extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExportCertificateRequest,
-    ) => Effect.Effect<
-      acm.ExportCertificateResponse,
-      acm.ExportCertificateError
-    >
+    ) => Effect.Effect<acm.ExportCertificateResponse, acm.ExportCertificateError>
   >
 > {}
 
-export const ExportCertificate = Binding.Service<ExportCertificate>(
-  "AWS.ACM.ExportCertificate",
-);
+export const ExportCertificate = Binding.Service<ExportCertificate>("AWS.ACM.ExportCertificate");

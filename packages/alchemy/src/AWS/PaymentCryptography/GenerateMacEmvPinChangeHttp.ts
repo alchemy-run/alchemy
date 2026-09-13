@@ -19,8 +19,7 @@ import type { Key } from "./Key.ts";
 export const GenerateMacEmvPinChangeHttp = Layer.effect(
   GenerateMacEmvPinChange,
   Effect.gen(function* () {
-    const generateMacEmvPinChange =
-      yield* paymentcryptographydata.generateMacEmvPinChange;
+    const generateMacEmvPinChange = yield* paymentcryptographydata.generateMacEmvPinChange;
 
     return Effect.fn(function* <P extends Key, I extends Key, C extends Key>(
       newPinPek: P,
@@ -29,8 +28,7 @@ export const GenerateMacEmvPinChangeHttp = Layer.effect(
     ) {
       const NewPinPekArn = yield* newPinPek.keyArn;
       const IntegrityKeyArn = yield* secureMessagingIntegrityKey.keyArn;
-      const ConfidentialityKeyArn =
-        yield* secureMessagingConfidentialityKey.keyArn;
+      const ConfidentialityKeyArn = yield* secureMessagingConfidentialityKey.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -53,17 +51,16 @@ export const GenerateMacEmvPinChangeHttp = Layer.effect(
           }
         }
       }
-      return Effect.fn(
-        `AWS.PaymentCryptography.GenerateMacEmvPinChange(${newPinPek.LogicalId})`,
-      )(function* (request: GenerateMacEmvPinChangeRequest) {
-        return yield* generateMacEmvPinChange({
-          ...request,
-          NewPinPekIdentifier: yield* NewPinPekArn,
-          SecureMessagingIntegrityKeyIdentifier: yield* IntegrityKeyArn,
-          SecureMessagingConfidentialityKeyIdentifier:
-            yield* ConfidentialityKeyArn,
-        });
-      });
+      return Effect.fn(`AWS.PaymentCryptography.GenerateMacEmvPinChange(${newPinPek.LogicalId})`)(
+        function* (request: GenerateMacEmvPinChangeRequest) {
+          return yield* generateMacEmvPinChange({
+            ...request,
+            NewPinPekIdentifier: yield* NewPinPekArn,
+            SecureMessagingIntegrityKeyIdentifier: yield* IntegrityKeyArn,
+            SecureMessagingConfidentialityKeyIdentifier: yield* ConfidentialityKeyArn,
+          });
+        },
+      );
     });
   }),
 );

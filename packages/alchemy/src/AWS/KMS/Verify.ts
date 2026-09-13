@@ -48,11 +48,7 @@ export interface Verify extends Binding.Service<
   "AWS.KMS.Verify",
   (
     key: Key | AliasName,
-  ) => Effect.Effect<
-    (
-      request: VerifyRequest,
-    ) => Effect.Effect<kms.VerifyResponse, kms.VerifyError>
-  >
+  ) => Effect.Effect<(request: VerifyRequest) => Effect.Effect<kms.VerifyResponse, kms.VerifyError>>
 > {}
 
 export const Verify = Binding.Service<Verify>("AWS.KMS.Verify");

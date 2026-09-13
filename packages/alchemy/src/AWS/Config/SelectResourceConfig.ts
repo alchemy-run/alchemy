@@ -31,10 +31,7 @@ export interface SelectResourceConfig extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.SelectResourceConfigRequest,
-    ) => Effect.Effect<
-      config.SelectResourceConfigResponse,
-      config.SelectResourceConfigError
-    >
+    ) => Effect.Effect<config.SelectResourceConfigResponse, config.SelectResourceConfigError>
   >
 > {}
 

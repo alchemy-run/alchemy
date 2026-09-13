@@ -29,10 +29,7 @@ export interface GetManagedThingMetaData extends Binding.Service<
   (
     thing: ManagedThing,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mi.GetManagedThingMetaDataResponse,
-      mi.GetManagedThingMetaDataError
-    >
+    () => Effect.Effect<mi.GetManagedThingMetaDataResponse, mi.GetManagedThingMetaDataError>
   >
 > {}
 export const GetManagedThingMetaData = Binding.Service<GetManagedThingMetaData>(

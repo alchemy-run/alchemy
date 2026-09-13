@@ -17,9 +17,7 @@ export const NET_POLICY = "alchemy-aossb-net";
 
 const INDEX_NAME = "alchemy-roundtrip";
 
-export class AossIndexFunction extends Lambda.Function<Lambda.Function>()(
-  "AossIndexFunction",
-) {}
+export class AossIndexFunction extends Lambda.Function<Lambda.Function>()("AossIndexFunction") {}
 
 export default AossIndexFunction.make(
   {
@@ -116,16 +114,10 @@ export default AossIndexFunction.make(
 
           // Index visibility is eventually consistent — retry the read
           // through the typed not-found window (bounded, ~30s).
-          const read = yield* Effect.retry(
-            getIndex({ indexName: INDEX_NAME }),
-            {
-              while: (e): boolean => e._tag === "ResourceNotFoundException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(10),
-              ]),
-            },
-          );
+          const read = yield* Effect.retry(getIndex({ indexName: INDEX_NAME }), {
+            while: (e): boolean => e._tag === "ResourceNotFoundException",
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+          });
 
           yield* updateIndex({
             indexName: INDEX_NAME,

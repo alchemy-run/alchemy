@@ -23,9 +23,7 @@ const RESERVED_EXPORT_NAMES = new Set(["default", "ModuleRunnerDO"]);
  * module has ever been evaluated. Named entrypoints have no such declaration
  * and can only be discovered by classifying the entry's exports.
  */
-export function configuredExportTypes(
-  options: CloudflareVitePluginOptions,
-): ExportTypes {
+export function configuredExportTypes(options: CloudflareVitePluginOptions): ExportTypes {
   const exportTypes: ExportTypes = {};
   for (const namespace of options.worker?.durableObjectNamespaces ?? []) {
     exportTypes[namespace.className] = "DurableObject";
@@ -41,10 +39,7 @@ export function configuredExportTypes(
  * a class declared as a Durable Object namespace must be wrapped as one even if
  * it is momentarily broken and classifies as something else.
  */
-export function mergeExportTypes(
-  configured: ExportTypes,
-  detected: ExportTypes,
-): ExportTypes {
+export function mergeExportTypes(configured: ExportTypes, detected: ExportTypes): ExportTypes {
   return { ...detected, ...configured };
 }
 
@@ -57,12 +52,6 @@ export function mergeExportTypes(
  */
 export function renderExportWrappers(exportTypes: ExportTypes): Array<string> {
   return Object.entries(exportTypes)
-    .filter(
-      ([name]) =>
-        IDENTIFIER_REGEX.test(name) && !RESERVED_EXPORT_NAMES.has(name),
-    )
-    .map(
-      ([name, type]) =>
-        `export const ${name} = ${WRAPPER_FACTORIES[type]}("${name}");`,
-    );
+    .filter(([name]) => IDENTIFIER_REGEX.test(name) && !RESERVED_EXPORT_NAMES.has(name))
+    .map(([name, type]) => `export const ${name} = ${WRAPPER_FACTORIES[type]}("${name}");`);
 }

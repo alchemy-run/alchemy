@@ -29,15 +29,12 @@ export const ConnectBinding = Layer.effect(
       }
 
       const hd = Effect.sync(
-        () =>
-          (env as Record<string, runtime.Hyperdrive>)[connection.LogicalId]!,
+        () => (env as Record<string, runtime.Hyperdrive>)[connection.LogicalId]!,
       );
 
       return {
         raw: hd,
-        connectionString: hd.pipe(
-          Effect.map((hd) => Redacted.make(hd.connectionString)),
-        ),
+        connectionString: hd.pipe(Effect.map((hd) => Redacted.make(hd.connectionString))),
         host: hd.pipe(Effect.map((hd) => hd.host)),
         port: hd.pipe(Effect.map((hd) => hd.port)),
         user: hd.pipe(Effect.map((hd) => hd.user)),

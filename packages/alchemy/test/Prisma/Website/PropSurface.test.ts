@@ -75,7 +75,6 @@ const contracts = [
 ];
 
 it("exports every framework with the established Website prop vocabulary", () => {
-  for (const name of constructors)
-    expect(typeof Prisma.Website[name]).toBe("function");
+  for (const name of constructors) expect(typeof Prisma.Website[name]).toBe("function");
   expect(contracts.length).toBeGreaterThan(constructors.length);
 });

@@ -13,13 +13,9 @@ import { JWKS_KEY_1, JWKS_KEY_2 } from "./fixtures/jwks.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // JWT validation (API Shield) is entitlement-gated — on the standard testing
 // account every token_validation call fails with "You are not entitled for
@@ -32,9 +28,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -85,16 +79,14 @@ test.provider(
       const listError = yield* listConfigurations(zoneId).pipe(Effect.flip);
       expect(listError._tag).toEqual("TokenValidationNotEntitled");
 
-      const getError = yield* getConfiguration(
-        zoneId,
-        "00000000-0000-0000-0000-000000000000",
-      ).pipe(Effect.flip);
+      const getError = yield* getConfiguration(zoneId, "00000000-0000-0000-0000-000000000000").pipe(
+        Effect.flip,
+      );
       expect(getError._tag).toEqual("TokenValidationNotEntitled");
 
-      const ruleError = yield* getRule(
-        zoneId,
-        "00000000-0000-0000-0000-000000000000",
-      ).pipe(Effect.flip);
+      const ruleError = yield* getRule(zoneId, "00000000-0000-0000-0000-000000000000").pipe(
+        Effect.flip,
+      );
       expect(ruleError._tag).toEqual("TokenValidationNotEntitled");
 
       yield* stack.destroy();
@@ -114,9 +106,7 @@ test.provider(
   "list enumerates configurations across all zones",
   (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.TokenValidation.TokenConfiguration,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.TokenValidation.TokenConfiguration);
 
       if (!entitledZoneId) {
         const all = yield* provider.list();
@@ -130,14 +120,11 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.TokenValidation.TokenConfiguration(
-            "JwtConfigList",
-            {
-              zoneId,
-              tokenSources: ['http.request.headers["authorization"][0]'],
-              keys: [JWKS_KEY_1],
-            },
-          );
+          return yield* Cloudflare.TokenValidation.TokenConfiguration("JwtConfigList", {
+            zoneId,
+            tokenSources: ['http.request.headers["authorization"][0]'],
+            keys: [JWKS_KEY_1],
+          });
         }),
       );
 
@@ -160,15 +147,12 @@ test.provider.skipIf(!entitledZoneId)(
       // -- Create: configuration with one key, rule that logs ------------
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.TokenValidation.TokenConfiguration(
-            "JwtConfig",
-            {
-              zoneId,
-              description: "v1",
-              tokenSources: ['http.request.headers["authorization"][0]'],
-              keys: [JWKS_KEY_1],
-            },
-          );
+          const config = yield* Cloudflare.TokenValidation.TokenConfiguration("JwtConfig", {
+            zoneId,
+            description: "v1",
+            tokenSources: ['http.request.headers["authorization"][0]'],
+            keys: [JWKS_KEY_1],
+          });
           const rule = yield* Cloudflare.TokenValidation.Rule("JwtRule", {
             zoneId,
             description: "v1",
@@ -190,31 +174,23 @@ test.provider.skipIf(!entitledZoneId)(
       expect(created.rule.expression).toContain(created.config.configId);
 
       // Out-of-band verification via the distilled API.
-      const liveConfig = yield* getConfiguration(
-        zoneId,
-        created.config.configId,
-      );
-      expect(liveConfig.credentials.keys.map((k) => k.kid)).toEqual([
-        JWKS_KEY_1.kid,
-      ]);
+      const liveConfig = yield* getConfiguration(zoneId, created.config.configId);
+      expect(liveConfig.credentials.keys.map((k) => k.kid)).toEqual([JWKS_KEY_1.kid]);
       const liveRule = yield* getRule(zoneId, created.rule.ruleId);
       expect(liveRule.action).toEqual("log");
 
       // -- Update in place: patch metadata, rotate keys, flip the rule ---
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const config = yield* Cloudflare.TokenValidation.TokenConfiguration(
-            "JwtConfig",
-            {
-              zoneId,
-              description: "v2",
-              tokenSources: [
-                'http.request.headers["authorization"][0]',
-                'http.request.uri.args["token"][0]',
-              ],
-              keys: [JWKS_KEY_1, JWKS_KEY_2],
-            },
-          );
+          const config = yield* Cloudflare.TokenValidation.TokenConfiguration("JwtConfig", {
+            zoneId,
+            description: "v2",
+            tokenSources: [
+              'http.request.headers["authorization"][0]',
+              'http.request.uri.args["token"][0]',
+            ],
+            keys: [JWKS_KEY_1, JWKS_KEY_2],
+          });
           const rule = yield* Cloudflare.TokenValidation.Rule("JwtRule", {
             zoneId,
             description: "v2",
@@ -245,14 +221,9 @@ test.provider.skipIf(!entitledZoneId)(
       // -- Destroy: rule first (it references the config), then config ---
       yield* stack.destroy();
 
-      const configGone = yield* getConfiguration(
-        zoneId,
-        updated.config.configId,
-      ).pipe(Effect.flip);
+      const configGone = yield* getConfiguration(zoneId, updated.config.configId).pipe(Effect.flip);
       expect(configGone._tag).toEqual("TokenConfigurationNotFound");
-      const ruleGone = yield* getRule(zoneId, updated.rule.ruleId).pipe(
-        Effect.flip,
-      );
+      const ruleGone = yield* getRule(zoneId, updated.rule.ruleId).pipe(Effect.flip);
       expect(ruleGone._tag).toEqual("TokenValidationRuleNotFound");
 
       // Destroy is idempotent.

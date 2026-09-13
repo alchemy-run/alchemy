@@ -96,9 +96,7 @@ export const makeSnsTopicHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
           ...request,
           [options.key]: yield* TopicArn,
@@ -249,9 +247,7 @@ export const makeSnsEndpointHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

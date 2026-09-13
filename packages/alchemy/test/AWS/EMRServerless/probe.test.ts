@@ -17,17 +17,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 // operation has launched publicly and the Bindings test's expectation for
 // the GetResourceDashboard runtime probe should be upgraded to a
 // success/not-found assertion.
-test.provider(
-  "getResourceDashboard is service-gated (typed AccessDenied)",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        emr.getResourceDashboard({
-          applicationId: "00abcdefabcdef01",
-          resourceId: "00abcdefabcdef01",
-          resourceType: "SPARK_DRIVER",
-        }),
-      );
-      expect(error._tag).toBe("AccessDeniedException");
-    }),
+test.provider("getResourceDashboard is service-gated (typed AccessDenied)", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      emr.getResourceDashboard({
+        applicationId: "00abcdefabcdef01",
+        resourceId: "00abcdefabcdef01",
+        resourceType: "SPARK_DRIVER",
+      }),
+    );
+    expect(error._tag).toBe("AccessDeniedException");
+  }),
 );

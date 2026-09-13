@@ -31,13 +31,9 @@ export interface FlushStageAuthorizersCache extends Binding.Service<
   <S extends ApiGatewayStage>(
     stage: S,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      ag.FlushStageAuthorizersCacheResponse,
-      ag.FlushStageAuthorizersCacheError
-    >
+    () => Effect.Effect<ag.FlushStageAuthorizersCacheResponse, ag.FlushStageAuthorizersCacheError>
   >
 > {}
-export const FlushStageAuthorizersCache =
-  Binding.Service<FlushStageAuthorizersCache>(
-    "AWS.ApiGateway.FlushStageAuthorizersCache",
-  );
+export const FlushStageAuthorizersCache = Binding.Service<FlushStageAuthorizersCache>(
+  "AWS.ApiGateway.FlushStageAuthorizersCache",
+);

@@ -13,10 +13,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "GeoRoutesBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -31,28 +28,21 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe("GeoRoutes Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "GeoRoutes test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("GeoRoutes test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("GeoRoutes test setup: deploying fixture");
@@ -66,9 +56,7 @@ describe("GeoRoutes Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `GeoRoutes test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`GeoRoutes test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -76,9 +64,7 @@ describe("GeoRoutes Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `GeoRoutes test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`GeoRoutes test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -93,9 +79,9 @@ describe("GeoRoutes Bindings", () => {
       "computes a route between two points",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/calculate-routes`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/calculate-routes`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             distance?: number;
             duration?: number;
@@ -187,9 +173,9 @@ describe("GeoRoutes Bindings", () => {
       "snaps a GPS trace onto the road network",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/snap-to-roads`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/snap-to-roads`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             snappedCount: number;
             firstConfidence?: number;
             pricingBucket?: string;

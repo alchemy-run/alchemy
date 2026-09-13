@@ -30,12 +30,7 @@ export interface ArchiveFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.ArchiveFindingsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.ArchiveFindingsResponse,
-      guardduty.ArchiveFindingsError
-    >
+    ) => Effect.Effect<guardduty.ArchiveFindingsResponse, guardduty.ArchiveFindingsError>
   >
 > {}
-export const ArchiveFindings = Binding.Service<ArchiveFindings>(
-  "AWS.GuardDuty.ArchiveFindings",
-);
+export const ArchiveFindings = Binding.Service<ArchiveFindings>("AWS.GuardDuty.ArchiveFindings");

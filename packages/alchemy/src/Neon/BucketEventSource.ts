@@ -40,12 +40,6 @@ export interface BucketEventSource extends Binding.Service<
     bucket: Bucket,
     props: BucketEventSourceProps,
     handler: (event: BucketEvent) => Effect.Effect<void, unknown, R>,
-  ): Effect.Effect<
-    void,
-    never,
-    BucketEventSource | Exclude<R, RuntimeContext | Scope>
-  >;
+  ): Effect.Effect<void, never, BucketEventSource | Exclude<R, RuntimeContext | Scope>>;
 }
-export const BucketEventSource = Binding.Service<BucketEventSource>(
-  "Neon.BucketEventSource",
-);
+export const BucketEventSource = Binding.Service<BucketEventSource>("Neon.BucketEventSource");

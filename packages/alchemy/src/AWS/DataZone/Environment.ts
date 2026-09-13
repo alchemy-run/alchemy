@@ -149,20 +149,13 @@ export class EnvironmentDeploymentFailed extends Data.TaggedError(
 const ENVIRONMENT_TRANSIENT = new Set(["CREATING", "UPDATING", "DELETING"]);
 
 /** Environment status values indicating a failed deployment. */
-const ENVIRONMENT_FAILED = new Set([
-  "CREATE_FAILED",
-  "UPDATE_FAILED",
-  "VALIDATION_FAILED",
-]);
+const ENVIRONMENT_FAILED = new Set(["CREATE_FAILED", "UPDATE_FAILED", "VALIDATION_FAILED"]);
 
 export const EnvironmentProvider = () =>
   Provider.effect(
     Environment,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<EnvironmentProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<EnvironmentProps, "name">) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
@@ -180,20 +173,12 @@ export const EnvironmentProvider = () =>
             identifier: environmentId,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
           );
       });
 
-      const findByName = Effect.fn(function* (
-        domainId: string,
-        projectId: string,
-        name: string,
-      ) {
+      const findByName = Effect.fn(function* (domainId: string, projectId: string, name: string) {
         const found = yield* datazone
           .listEnvironments({
             domainIdentifier: domainId,
@@ -201,12 +186,8 @@ export const EnvironmentProvider = () =>
             name,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
           );
         const summary = (found?.items ?? []).find(
           (s) => unredact(s.name) === name && s.status !== "DELETING",
@@ -216,10 +197,7 @@ export const EnvironmentProvider = () =>
 
       // Poll the environment to a settled (non-transient) status. Deployment
       // drives a CloudFormation stack — bounded at ~5 minutes.
-      const waitForSettled = Effect.fn(function* (
-        domainId: string,
-        environmentId: string,
-      ) {
+      const waitForSettled = Effect.fn(function* (domainId: string, environmentId: string) {
         return yield* getEnvironmentOrUndefined(domainId, environmentId).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("5 seconds"),
@@ -234,10 +212,7 @@ export const EnvironmentProvider = () =>
 
       // Poll the environment until it no longer exists — teardown drives a
       // CloudFormation stack delete, bounded at ~5 minutes.
-      const waitForGone = Effect.fn(function* (
-        domainId: string,
-        environmentId: string,
-      ) {
+      const waitForGone = Effect.fn(function* (domainId: string, environmentId: string) {
         yield* getEnvironmentOrUndefined(domainId, environmentId).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("5 seconds"),
@@ -261,10 +236,7 @@ export const EnvironmentProvider = () =>
         return env;
       });
 
-      const toAttributes = (
-        env: datazone.GetEnvironmentOutput,
-        environmentId: string,
-      ) => ({
+      const toAttributes = (env: datazone.GetEnvironmentOutput, environmentId: string) => ({
         environmentId,
         domainId: env.domainId,
         projectId: env.projectId,
@@ -278,13 +250,7 @@ export const EnvironmentProvider = () =>
       });
 
       return Environment.Provider.of({
-        stables: [
-          "environmentId",
-          "domainId",
-          "projectId",
-          "awsAccountId",
-          "awsAccountRegion",
-        ],
+        stables: ["environmentId", "domainId", "projectId", "awsAccountId", "awsAccountRegion"],
 
         // Environments are keyed by their parent domain + project — there is
         // no account-level enumeration without those identifiers.
@@ -298,18 +264,10 @@ export const EnvironmentProvider = () =>
           }
           const environmentId =
             output?.environmentId ??
-            (yield* findByName(
-              domainId,
-              projectId,
-              yield* createName(id, olds ?? {}),
-            ));
+            (yield* findByName(domainId, projectId, yield* createName(id, olds ?? {})));
           if (environmentId === undefined) return undefined;
           const env = yield* getEnvironmentOrUndefined(domainId, environmentId);
-          if (
-            env === undefined ||
-            env.status === "DELETING" ||
-            env.status === "DELETED"
-          ) {
+          if (env === undefined || env.status === "DELETING" || env.status === "DELETED") {
             return undefined;
           }
           // Environments have no tags — ownership is tracked purely by
@@ -366,8 +324,7 @@ export const EnvironmentProvider = () =>
               userParameters: news.userParameters,
               glossaryTerms: news.glossaryTerms,
             });
-            environmentId =
-              created.id ?? (yield* findByName(domainId, projectId, name));
+            environmentId = created.id ?? (yield* findByName(domainId, projectId, name));
             if (environmentId === undefined) {
               return yield* new EnvironmentDeploymentFailed({
                 environmentId: "",
@@ -390,9 +347,7 @@ export const EnvironmentProvider = () =>
             env = (yield* waitForSettled(domainId, environmentId!)) ?? env;
             const drifted =
               unredact(env.name) !== name ||
-              (env.description === undefined
-                ? undefined
-                : unredact(env.description)) !==
+              (env.description === undefined ? undefined : unredact(env.description)) !==
                 (news.description ?? undefined);
             if (drifted) {
               yield* datazone.updateEnvironment({

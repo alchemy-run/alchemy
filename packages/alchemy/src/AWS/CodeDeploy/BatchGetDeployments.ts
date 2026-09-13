@@ -27,10 +27,7 @@ export interface BatchGetDeployments extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.BatchGetDeploymentsInput,
-    ) => Effect.Effect<
-      SVC.BatchGetDeploymentsOutput,
-      SVC.BatchGetDeploymentsError
-    >
+    ) => Effect.Effect<SVC.BatchGetDeploymentsOutput, SVC.BatchGetDeploymentsError>
   >
 > {}
 export const BatchGetDeployments = Binding.Service<BatchGetDeployments>(

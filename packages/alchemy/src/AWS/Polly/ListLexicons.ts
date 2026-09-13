@@ -33,6 +33,4 @@ export interface ListLexicons extends Binding.Service<
     ) => Effect.Effect<polly.ListLexiconsOutput, polly.ListLexiconsError>
   >
 > {}
-export const ListLexicons = Binding.Service<ListLexicons>(
-  "AWS.Polly.ListLexicons",
-);
+export const ListLexicons = Binding.Service<ListLexicons>("AWS.Polly.ListLexicons");

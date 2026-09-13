@@ -30,10 +30,7 @@ export interface CreateCollection extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.CreateCollectionRequest,
-    ) => Effect.Effect<
-      rekognition.CreateCollectionResponse,
-      rekognition.CreateCollectionError
-    >
+    ) => Effect.Effect<rekognition.CreateCollectionResponse, rekognition.CreateCollectionError>
   >
 > {}
 export const CreateCollection = Binding.Service<CreateCollection>(

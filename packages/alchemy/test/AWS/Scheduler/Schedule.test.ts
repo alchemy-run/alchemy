@@ -68,14 +68,10 @@ test.provider("list enumerates the deployed schedule", (stack) =>
     const provider = yield* Provider.findProvider(Schedule);
     const all = yield* provider.list();
 
-    expect(all.some((s) => s.scheduleName === deployed.scheduleName)).toBe(
-      true,
-    );
+    expect(all.some((s) => s.scheduleName === deployed.scheduleName)).toBe(true);
     expect(
       all.some(
-        (s) =>
-          s.scheduleName === deployed.scheduleName &&
-          s.scheduleArn === deployed.scheduleArn,
+        (s) => s.scheduleName === deployed.scheduleName && s.scheduleArn === deployed.scheduleArn,
       ),
     ).toBe(true);
 

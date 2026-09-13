@@ -60,14 +60,14 @@ export const makeManagedThingHttpBinding = <
           );
         }
       }
-      return Effect.fn(
-        `AWS.IoTManagedIntegrations.${options.capability}(${thing.LogicalId})`,
-      )(function* (request?: Omit<I, K>) {
-        return yield* op({
-          ...request,
-          [options.key]: yield* ManagedThingId,
-        } as I);
-      });
+      return Effect.fn(`AWS.IoTManagedIntegrations.${options.capability}(${thing.LogicalId})`)(
+        function* (request?: Omit<I, K>) {
+          return yield* op({
+            ...request,
+            [options.key]: yield* ManagedThingId,
+          } as I);
+        },
+      );
     });
   });
 
@@ -78,12 +78,7 @@ export const makeManagedThingHttpBinding = <
  * reference these authorize account-wide, so the grant is on
  * `Resource: ["*"]`).
  */
-export const makeManagedIntegrationsHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeManagedIntegrationsHttpBinding = <I extends object, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"StartDeviceDiscovery"`.
@@ -101,23 +96,19 @@ export const makeManagedIntegrationsHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTManagedIntegrations.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.IoTManagedIntegrations.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.IoTManagedIntegrations.${options.capability}`)(
-        function* (request?: I) {
-          return yield* op((request ?? {}) as I);
-        },
-      );
+      return Effect.fn(`AWS.IoTManagedIntegrations.${options.capability}`)(function* (request?: I) {
+        return yield* op((request ?? {}) as I);
+      });
     });
   });

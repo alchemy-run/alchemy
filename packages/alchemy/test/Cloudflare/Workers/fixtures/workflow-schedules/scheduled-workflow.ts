@@ -18,10 +18,7 @@ export default class ScheduledWorkflow extends Cloudflare.Workflow<ScheduledWork
   { schedules: [YEARLY_CRON] },
   Effect.gen(function* () {
     return Effect.fn(function* () {
-      return yield* Cloudflare.Workflows.task(
-        "noop",
-        Effect.succeed({ ok: true }),
-      );
+      return yield* Cloudflare.Workflows.task("noop", Effect.succeed({ ok: true }));
     });
   }),
 ) {}

@@ -66,71 +66,69 @@ test.provider("dev mode supports the same stack shape with Project", (stack) =>
   }),
 );
 
-test.provider(
-  "dev mode records effect-native Connection.bind env on Compute",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("dev mode records effect-native Connection.bind env on Compute", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const output = yield* stack.deploy(
-        Effect.gen(function* () {
-          const project = yield* Prisma.Project("Project", {
-            name: "local-project",
-          });
-          const database = yield* Prisma.Database("Database", {
+    const output = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", {
+          name: "local-project",
+        });
+        const database = yield* Prisma.Database("Database", {
+          project,
+          name: "main",
+          dev: {
+            name: "alchemy-compute-dev-bind-env",
+          },
+        });
+        const connection = yield* Prisma.Connection("Connection", {
+          database,
+          name: "api",
+        });
+        const keys = Prisma.connectEnvKeys(connection);
+        const app = yield* Prisma.Compute(
+          "App",
+          {
             project,
-            name: "main",
+            appName: "api",
+            main: import.meta.filename,
             dev: {
-              name: "alchemy-compute-dev-bind-env",
+              url: "http://localhost:8787",
             },
-          });
-          const connection = yield* Prisma.Connection("Connection", {
-            database,
-            name: "api",
-          });
-          const keys = Prisma.connectEnvKeys(connection);
-          const app = yield* Prisma.Compute(
-            "App",
-            {
-              project,
-              appName: "api",
-              main: import.meta.filename,
-              dev: {
-                url: "http://localhost:8787",
-              },
-            },
-            Effect.gen(function* () {
-              const db = yield* Prisma.Connect(connection);
+          },
+          Effect.gen(function* () {
+            const db = yield* Prisma.Connect(connection);
 
-              return {
-                fetch: Effect.gen(function* () {
-                  const connectionId = yield* db.connectionId;
-                  return HttpServerResponse.text(connectionId);
-                }),
-              };
-            }).pipe(Effect.provide(Prisma.ConnectBinding)),
-          );
+            return {
+              fetch: Effect.gen(function* () {
+                const connectionId = yield* db.connectionId;
+                return HttpServerResponse.text(connectionId);
+              }),
+            };
+          }).pipe(Effect.provide(Prisma.ConnectBinding)),
+        );
 
-          return { app, keys };
-        }),
-      );
+        return { app, keys };
+      }),
+    );
 
-      expect(output.app.local).toBe(true);
-      expect(output.app.environmentKeys).toEqual(
-        expect.arrayContaining([
-          output.keys.connectionId,
-          output.keys.databaseId,
-          output.keys.directConnectionString,
-          output.keys.pooledConnectionString,
-          output.keys.accelerateConnectionString,
-          output.keys.host,
-          output.keys.user,
-          output.keys.password,
-        ]),
-      );
+    expect(output.app.local).toBe(true);
+    expect(output.app.environmentKeys).toEqual(
+      expect.arrayContaining([
+        output.keys.connectionId,
+        output.keys.databaseId,
+        output.keys.directConnectionString,
+        output.keys.pooledConnectionString,
+        output.keys.accelerateConnectionString,
+        output.keys.host,
+        output.keys.user,
+        output.keys.password,
+      ]),
+    );
 
-      yield* stack.destroy();
-    }),
+    yield* stack.destroy();
+  }),
 );
 
 test.provider(
@@ -262,10 +260,7 @@ test.provider(
 
       const output = yield* fs.readFileString(outputPath).pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("50 millis"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("50 millis"), Schedule.recurs(40)]),
         }),
       );
 
@@ -279,10 +274,7 @@ test.provider(
 
       const stopped = yield* fs.readFileString(stoppedPath).pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("50 millis"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("50 millis"), Schedule.recurs(40)]),
         }),
       );
 

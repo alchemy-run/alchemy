@@ -75,9 +75,5 @@ export interface QuerySearchNamespaceClient {
    */
   search(
     params: runtime.AiSearchMultiSearchRequest,
-  ): Effect.Effect<
-    runtime.AiSearchMultiSearchResponse,
-    SearchError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<runtime.AiSearchMultiSearchResponse, SearchError, RuntimeContext>;
 }

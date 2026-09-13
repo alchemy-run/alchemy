@@ -112,11 +112,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 export class Api3 extends Cloudflare.Worker<
   Api3,
   {
-    getUser: () => Effect.Effect<
-      { id: string; name: string },
-      never,
-      RuntimeContext
-    >;
+    getUser: () => Effect.Effect<{ id: string; name: string }, never, RuntimeContext>;
   }
 >()("Api3") {}
 

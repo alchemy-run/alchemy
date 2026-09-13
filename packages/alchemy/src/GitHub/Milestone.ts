@@ -255,9 +255,7 @@ export const MilestoneProvider = () =>
       const dueOn =
         requestedDueOn === undefined
           ? null
-          : yield* Effect.try(() =>
-              new Date(requestedDueOn).toISOString().replace(".000Z", "Z"),
-            );
+          : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
 
       // Observe — probe for an existing milestone by title. GitHub's list
       // endpoint supports filtering by state, but we need to check both open
@@ -305,11 +303,7 @@ export const MilestoneProvider = () =>
       // Octokit's endpoint type omits the API's nullable due_on field.
       const { data } = yield* Effect.tryPromise({
         try: () =>
-          octokit.request<
-            Awaited<
-              ReturnType<typeof octokit.rest.issues.updateMilestone>
-            >["data"]
-          >({
+          octokit.request<Awaited<ReturnType<typeof octokit.rest.issues.updateMilestone>>["data"]>({
             method: "PATCH",
             url: "/repos/{owner}/{repo}/milestones/{milestone_number}",
             owner: news.owner,
@@ -346,15 +340,12 @@ export const MilestoneProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const milestones = await octokit.paginate(
-                  octokit.rest.issues.listMilestones,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    state: "all",
-                    per_page: 100,
-                  },
-                );
+                const milestones = await octokit.paginate(octokit.rest.issues.listMilestones, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  state: "all",
+                  per_page: 100,
+                });
                 return milestones.map(attrsOf);
               } catch (error: any) {
                 // Repos where the token lacks milestone access reject with

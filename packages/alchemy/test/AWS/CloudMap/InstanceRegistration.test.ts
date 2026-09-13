@@ -12,9 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findInstance = (serviceId: string, instanceId: string) =>
   sd.getInstance({ ServiceId: serviceId, InstanceId: instanceId }).pipe(
     Effect.map((r) => r.Instance),
-    Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () => Effect.succeed(undefined)),
   );
 
 class InstanceStillExists extends Data.TaggedError("InstanceStillExists")<{
@@ -24,16 +22,11 @@ class InstanceStillExists extends Data.TaggedError("InstanceStillExists")<{
 const assertInstanceDeleted = (serviceId: string, instanceId: string) =>
   findInstance(serviceId, instanceId).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ instanceId })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ instanceId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "InstanceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -75,14 +68,10 @@ test.provider(
 
       // out-of-band verification via distilled
       const alphaInstance = yield* findInstance(service.serviceId, "alpha");
-      expect(alphaInstance?.Attributes?.endpoint).toBe(
-        "http://alpha.internal:8080",
-      );
+      expect(alphaInstance?.Attributes?.endpoint).toBe("http://alpha.internal:8080");
       expect(alphaInstance?.Attributes?.zone).toBe("us-west-2a");
       const betaInstance = yield* findInstance(service.serviceId, "beta");
-      expect(betaInstance?.Attributes?.endpoint).toBe(
-        "http://beta.internal:8080",
-      );
+      expect(betaInstance?.Attributes?.endpoint).toBe("http://beta.internal:8080");
 
       // both instances are discoverable via the data-plane API
       const discovered = yield* sd.discoverInstances({
@@ -90,22 +79,16 @@ test.provider(
         ServiceName: "workers",
         HealthStatus: "ALL",
       });
-      const discoveredIds = (discovered.Instances ?? [])
-        .map((i) => i.InstanceId)
-        .sort();
+      const discoveredIds = (discovered.Instances ?? []).map((i) => i.InstanceId).sort();
       expect(discoveredIds).toEqual(["alpha", "beta"]);
 
       // attribute update re-registers (upsert) with the same identity
-      const updated = yield* stack.deploy(
-        makeStack("http://alpha.internal:9090"),
-      );
+      const updated = yield* stack.deploy(makeStack("http://alpha.internal:9090"));
       expect(updated.alpha.serviceId).toBe(service.serviceId);
       expect(updated.alpha.instanceId).toBe("alpha");
 
       const afterUpdate = yield* findInstance(service.serviceId, "alpha");
-      expect(afterUpdate?.Attributes?.endpoint).toBe(
-        "http://alpha.internal:9090",
-      );
+      expect(afterUpdate?.Attributes?.endpoint).toBe("http://alpha.internal:9090");
 
       // destroy tears down instances -> service -> namespace in order
       yield* stack.destroy();
@@ -116,12 +99,10 @@ test.provider(
         Effect.catchTag("ServiceNotFound", () => Effect.succeed(true)),
       );
       expect(serviceGone).toBe(true);
-      const namespaceGone = yield* sd
-        .getNamespace({ Id: namespace.namespaceId })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
-        );
+      const namespaceGone = yield* sd.getNamespace({ Id: namespace.namespaceId }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
+      );
       expect(namespaceGone).toBe(true);
     }),
   { timeout: 240_000 },

@@ -11,9 +11,7 @@ import {
   WriteNamespace,
 } from "./ReadWriteNamespace.ts";
 
-const tryPromise = <T>(
-  fn: () => Promise<T>,
-): Effect.Effect<T, ArtifactsError> =>
+const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, ArtifactsError> =>
   Effect.tryPromise({
     try: fn,
     catch: (error: any) =>
@@ -41,9 +39,7 @@ const makeArtifactsClient = (
   namespace: ArtifactsLike,
 ): ReadWriteNamespaceClient => {
   const raw = Effect.sync(() => env[namespace.name]!);
-  const use = <T>(
-    fn: (raw: Artifacts) => Promise<T>,
-  ): Effect.Effect<T, ArtifactsError> =>
+  const use = <T>(fn: (raw: Artifacts) => Promise<T>): Effect.Effect<T, ArtifactsError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
   return {
     raw,

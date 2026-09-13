@@ -29,23 +29,17 @@ const readParameterValue = (groupName: string, parameterName: string) =>
     .pipe(
       Effect.map(
         (response) =>
-          (response.Parameters ?? []).find(
-            (p) => p.ParameterName === parameterName,
-          )?.ParameterValue,
+          (response.Parameters ?? []).find((p) => p.ParameterName === parameterName)
+            ?.ParameterValue,
       ),
     );
 
 const assertGone = (name: string) =>
   dax.describeParameterGroups({ ParameterGroupNames: [name] }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`parameter group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`parameter group '${name}' still exists`))),
     Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -69,10 +63,7 @@ test.provider(
       expect(group.parameters["query-ttl-millis"]).toBe("60000");
 
       // Out-of-band verification via distilled.
-      const observedValue = yield* readParameterValue(
-        group.parameterGroupName,
-        "query-ttl-millis",
-      );
+      const observedValue = yield* readParameterValue(group.parameterGroupName, "query-ttl-millis");
       expect(observedValue).toBe("60000");
 
       // Update a parameter value and add a second override in place.
@@ -92,10 +83,7 @@ test.provider(
       expect(updated.parameters["query-ttl-millis"]).toBe("120000");
       expect(updated.parameters["record-ttl-millis"]).toBe("300000");
 
-      const requeried = yield* readParameterValue(
-        group.parameterGroupName,
-        "query-ttl-millis",
-      );
+      const requeried = yield* readParameterValue(group.parameterGroupName, "query-ttl-millis");
       expect(requeried).toBe("120000");
 
       yield* stack.destroy();

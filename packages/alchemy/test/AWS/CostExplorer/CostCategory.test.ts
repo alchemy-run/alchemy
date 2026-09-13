@@ -17,13 +17,9 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const categoryName = "alchemy-test-cost-category";
 
 const getCategory = (costCategoryArn: string) =>
-  pin(
-    ce.describeCostCategoryDefinition({ CostCategoryArn: costCategoryArn }),
-  ).pipe(
+  pin(ce.describeCostCategoryDefinition({ CostCategoryArn: costCategoryArn })).pipe(
     Effect.map((r) => r.CostCategory),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 // Typed wait-until-gone on delete.
@@ -31,9 +27,7 @@ const assertCategoryGone = (costCategoryArn: string) =>
   Effect.gen(function* () {
     const found = yield* getCategory(costCategoryArn);
     if (found !== undefined && found.EffectiveEnd === undefined) {
-      return yield* Effect.fail(
-        new Error(`cost category '${costCategoryArn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`cost category '${costCategoryArn}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -93,9 +87,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        makeStack(categoryName, "alchemy-test", "other"),
-      );
+      const deployed = yield* stack.deploy(makeStack(categoryName, "alchemy-test", "other"));
       expect(deployed.name).toBe(categoryName);
       expect(deployed.effectiveStart).toBeDefined();
 
@@ -113,9 +105,7 @@ test.provider(
       expect(updated.costCategoryArn).toBe(deployed.costCategoryArn);
       const afterUpdate = yield* getCategory(deployed.costCategoryArn);
       expect(afterUpdate?.DefaultValue).toBe("uncategorized");
-      expect(afterUpdate?.Rules[0]?.Rule?.Tags?.Values).toEqual([
-        "alchemy-test-updated",
-      ]);
+      expect(afterUpdate?.Rules[0]?.Rule?.Tags?.Values).toEqual(["alchemy-test-updated"]);
 
       // Rename — the name is create-only, must replace (new ARN).
       const replaced = yield* stack.deploy(

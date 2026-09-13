@@ -29,10 +29,7 @@ import { AsyncWorkflowWorker } from "./fixtures/workflow-async/stack.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const retry = Effect.retry({
   schedule: Schedule.spaced("3 seconds"),
@@ -51,9 +48,7 @@ const WorkflowStatus = Schema.Struct({
       }),
     ),
   ),
-  error: Schema.optional(
-    Schema.NullOr(Schema.Struct({ message: Schema.optional(Schema.String) })),
-  ),
+  error: Schema.optional(Schema.NullOr(Schema.Struct({ message: Schema.optional(Schema.String) }))),
 });
 
 const WorkflowEvents = Schema.Array(
@@ -122,18 +117,11 @@ const runWorkflowToCompletion = (url: string, expectedWorkflowName?: string) =>
       )
       .pipe(
         Effect.flatMap((res) => res.json),
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(
-            Schema.Struct({ instanceId: Schema.String }),
-          ),
-        ),
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ instanceId: Schema.String }))),
         retry,
       );
 
-    const status = yield* getJson(
-      `${url}/workflow/status/${instanceId}`,
-      WorkflowStatus,
-    ).pipe(
+    const status = yield* getJson(`${url}/workflow/status/${instanceId}`, WorkflowStatus).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("3 seconds"),
         until: (s) => s.status === "complete" || s.status === "errored",
@@ -158,9 +146,7 @@ const readWorkflowBinding = (scriptName: string) =>
       accountId,
       scriptName,
     });
-    const bindings = (settings.bindings ?? []).filter(
-      (binding) => binding.type === "workflow",
-    );
+    const bindings = (settings.bindings ?? []).filter((binding) => binding.type === "workflow");
     expect(bindings).toHaveLength(1);
     return bindings[0]!;
   });
@@ -209,14 +195,11 @@ test.provider(
       const program = Effect.gen(function* () {
         const worker = yield* AsyncWorkflowWorker;
         const queue = yield* Cloudflare.Queues.Queue("WorkflowEventsQueue");
-        const subscription = yield* Cloudflare.Queues.Subscription(
-          "WorkflowEvents",
-          {
-            source: worker.env.MY_WORKFLOW,
-            events: ["instance.completed", "instance.errored"],
-            queueId: queue.queueId,
-          },
-        );
+        const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+          source: worker.env.MY_WORKFLOW,
+          events: ["instance.completed", "instance.errored"],
+          queueId: queue.queueId,
+        });
         expect(subscription.Props.source).toEqual({
           type: "workflows.workflow",
           workflowName: worker.env.MY_WORKFLOW.workflowName,
@@ -281,10 +264,7 @@ test.provider(
         workflowName: binding.workflowName,
       };
       expect(subscription.source).toEqual(source);
-      expect(plan.resources.WorkflowEvents.state).toHaveProperty(
-        "props.source",
-        source,
-      );
+      expect(plan.resources.WorkflowEvents.state).toHaveProperty("props.source", source);
       const liveSubscription = yield* queues.getSubscription({
         accountId,
         subscriptionId: subscription.subscriptionId,
@@ -300,14 +280,10 @@ test.provider(
         asset: "workflow asset\n",
       });
       const { instanceId } = yield* runWorkflowToCompletion(worker.url!);
-      const events = yield* getJson(
-        `${worker.url}/events`,
-        WorkflowEvents,
-      ).pipe(
+      const events = yield* getJson(`${worker.url}/events`, WorkflowEvents).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
-          until: (events) =>
-            events.some((event) => event.payload.instanceId === instanceId),
+          until: (events) => events.some((event) => event.payload.instanceId === instanceId),
           times: 10,
         }),
         Effect.timeout("60 seconds"),
@@ -319,19 +295,15 @@ test.provider(
           payload: expect.objectContaining({ instanceId }),
         }),
       );
-      yield* Effect.logInfo(
-        `Workflow queue lifecycle delivery: ${JSON.stringify(events)}`,
-      );
+      yield* Effect.logInfo(`Workflow queue lifecycle delivery: ${JSON.stringify(events)}`);
 
       yield* stack.destroy();
       yield* expectWorkerGone(accountId, worker.workerName);
       yield* expectWorkflowGone(accountId, binding.workflowName);
-      const queueGone = yield* queues
-        .getQueue({ accountId, queueId: queue.queueId })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
-        );
+      const queueGone = yield* queues.getQueue({ accountId, queueId: queue.queueId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+      );
       expect(queueGone).toBe(true);
       const subscriptionGone = yield* queues
         .getSubscription({
@@ -347,16 +319,11 @@ test.provider(
   { timeout: 120_000 },
 );
 
-const expectWorkflowEvent = (
-  url: string,
-  instanceId: string,
-  workflowName: string,
-) =>
+const expectWorkflowEvent = (url: string, instanceId: string, workflowName: string) =>
   getJson(`${url}/events`, WorkflowEvents).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (events) =>
-        events.some((event) => event.payload.instanceId === instanceId),
+      until: (events) => events.some((event) => event.payload.instanceId === instanceId),
       times: 10,
     }),
     Effect.timeout("60 seconds"),
@@ -415,14 +382,11 @@ test.provider(
             expect(Output.isOutput(workflow)).toBe(true);
           }
           const queue = yield* Cloudflare.Queues.Queue("RefEventsQueue");
-          const subscription = yield* Cloudflare.Queues.Subscription(
-            "RefEvents",
-            {
-              source: workflow,
-              events: ["instance.completed"],
-              queueId: queue.queueId,
-            },
-          );
+          const subscription = yield* Cloudflare.Queues.Subscription("RefEvents", {
+            source: workflow,
+            events: ["instance.completed"],
+            queueId: queue.queueId,
+          });
           expect(subscription.Props.source).toEqual({
             type: "workflows.workflow",
             workflowName: expect.anything(),
@@ -455,40 +419,28 @@ test.provider(
         ),
       ).toHaveLength(1);
       expect(deployed.workflowName).toBe(first.workflowName);
-      expect(deployed.subscription.subscriptionId).toBe(
-        first.subscription.subscriptionId,
-      );
+      expect(deployed.subscription.subscriptionId).toBe(first.subscription.subscriptionId);
       const source = {
         type: "workflows.workflow",
         workflowName: first.workflowName,
       };
-      expect(plan.resources.RefEvents.state).toHaveProperty(
-        "props.source",
-        source,
-      );
+      expect(plan.resources.RefEvents.state).toHaveProperty("props.source", source);
       const observed = yield* queues.getSubscription({
         accountId,
         subscriptionId: deployed.subscription.subscriptionId,
       });
       expect(observed.source).toEqual(expect.objectContaining(source));
       expect(observed.destination.queueId).toBe(deployed.queue.queueId);
-      const { instanceId } = yield* runWorkflowToCompletion(
-        deployed.worker.url!,
-      ).pipe(
+      const { instanceId } = yield* runWorkflowToCompletion(deployed.worker.url!).pipe(
         Effect.retry({
           schedule: Schedule.spaced("3 seconds"),
           times: 2,
           while: (error) =>
             error instanceof Error &&
-            error.message ===
-              'workflow errored: {"message":"Worker not found."}',
+            error.message === 'workflow errored: {"message":"Worker not found."}',
         }),
       );
-      yield* expectWorkflowEvent(
-        deployed.worker.url!,
-        instanceId,
-        first.workflowName,
-      );
+      yield* expectWorkflowEvent(deployed.worker.url!, instanceId, first.workflowName);
 
       yield* stack.deploy(AsyncWorkflowWorker);
       yield* expectWorkflowSubscriptionGone(
@@ -502,9 +454,7 @@ test.provider(
           workflowName: first.workflowName,
         })).id,
       ).toBe(original.id);
-      expect(yield* readWorkflowName(deployed.worker.workerName)).toBe(
-        first.workflowName,
-      );
+      expect(yield* readWorkflowName(deployed.worker.workerName)).toBe(first.workflowName);
       yield* stack.destroy();
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
       yield* expectWorkflowGone(accountId, first.workflowName);
@@ -572,10 +522,7 @@ test.provider(
         type: "workflows.workflow",
         workflowName: hosted.workflowName,
       };
-      expect(plan.resources.RefEvents.state).toHaveProperty(
-        "props.source",
-        source,
-      );
+      expect(plan.resources.RefEvents.state).toHaveProperty("props.source", source);
       expect(deployed.subscription.source).toEqual(source);
       const observed = yield* queues.getSubscription({
         accountId,
@@ -584,11 +531,7 @@ test.provider(
       expect(observed.source).toEqual(expect.objectContaining(source));
       expect(observed.destination.queueId).toBe(deployed.queue.queueId);
       const { instanceId } = yield* runWorkflowToCompletion(hosted.worker.url!);
-      yield* expectWorkflowEvent(
-        deployed.worker.url!,
-        instanceId,
-        hosted.workflowName,
-      );
+      yield* expectWorkflowEvent(deployed.worker.url!, instanceId, hosted.workflowName);
 
       yield* stack.destroy();
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
@@ -603,17 +546,13 @@ test.provider(
           workflowName: hosted.workflowName,
         })).id,
       ).toBe(original.id);
-      expect(yield* readWorkflowName(hosted.worker.workerName)).toBe(
-        hosted.workflowName,
-      );
+      expect(yield* readWorkflowName(hosted.worker.workerName)).toBe(hosted.workflowName);
       yield* host.destroy();
       yield* expectWorkerGone(accountId, hosted.worker.workerName);
       yield* expectWorkflowGone(accountId, hosted.workflowName);
     }).pipe(
       logLevel,
-      Effect.ensuring(
-        stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.ignore),
-      ),
+      Effect.ensuring(stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.ignore)),
     );
   },
   { timeout: 120_000 },
@@ -635,13 +574,10 @@ test.provider(
                   Effect.succeed({
                     main: consumerMain,
                     env: {
-                      MY_WORKFLOW: Cloudflare.Workflow<{ value: string }>(
-                        "RemoteGreeting",
-                        {
-                          className: "MyWorkflow",
-                          scriptName: host.workerName,
-                        },
-                      ),
+                      MY_WORKFLOW: Cloudflare.Workflow<{ value: string }>("RemoteGreeting", {
+                        className: "MyWorkflow",
+                        scriptName: host.workerName,
+                      }),
                     },
                   }),
                 )
@@ -650,9 +586,7 @@ test.provider(
               host,
               consumer,
               hostBinding: bindingSnapshot(host.env.MY_WORKFLOW),
-              consumerBinding: consumer
-                ? bindingSnapshot(consumer.env.MY_WORKFLOW)
-                : undefined,
+              consumerBinding: consumer ? bindingSnapshot(consumer.env.MY_WORKFLOW) : undefined,
             };
           }),
         );
@@ -668,16 +602,13 @@ test.provider(
       expect(consumerBinding?.workflowName).toBe(hostBinding.workflowName);
       expect(consumerBinding?.scriptName).toBe(host.workerName);
       expect(consumerBinding?.name).toBe("RemoteGreeting");
-      expect(
-        (yield* readWorkflowBinding(consumer!.workerName)).workflowName,
-      ).toBe(hostBinding.workflowName);
-      const all = yield* workflows.listWorkflows
-        .items({ accountId })
-        .pipe(Stream.runCollect);
+      expect((yield* readWorkflowBinding(consumer!.workerName)).workflowName).toBe(
+        hostBinding.workflowName,
+      );
+      const all = yield* workflows.listWorkflows.items({ accountId }).pipe(Stream.runCollect);
       const owned = Array.from(all).filter(
         (workflow) =>
-          workflow.scriptName === host.workerName ||
-          workflow.scriptName === consumer!.workerName,
+          workflow.scriptName === host.workerName || workflow.scriptName === consumer!.workerName,
       );
       expect(owned).toHaveLength(1);
       expect(owned[0]?.id).toBe(hostWorkflow.id);
@@ -698,9 +629,7 @@ const waitForAppliedStepLimit = (workflowName: string, expected: number) =>
     const versions = yield* workflows.listVersions
       .items({ accountId, workflowName })
       .pipe(Stream.runCollect);
-    return Array.from(versions).some(
-      (version) => version.limits?.steps === expected,
-    );
+    return Array.from(versions).some((version) => version.limits?.steps === expected);
   }).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
@@ -746,12 +675,9 @@ const waitForAppliedSchedules = (workflowName: string, expected: string[]) =>
     return crons;
   }).pipe(
     Effect.flatMap((crons) =>
-      crons.length === expected.length &&
-      crons.every((cron, index) => cron === expected[index])
+      crons.length === expected.length && crons.every((cron, index) => cron === expected[index])
         ? Effect.succeed(crons)
-        : Effect.fail(
-            new Error(`schedules not applied yet: ${JSON.stringify(crons)}`),
-          ),
+        : Effect.fail(new Error(`schedules not applied yet: ${JSON.stringify(crons)}`)),
     ),
     retry,
   );
@@ -767,33 +693,24 @@ test.provider(
       const deployWith = (schedules: string[]) =>
         stack.deploy(
           Effect.gen(function* () {
-            const worker = yield* Cloudflare.Worker(
-              "scheduled-workflow-worker",
-              {
-                main: scheduledWorkflowMain,
-                env: {
-                  HOURLY: Cloudflare.Workflow("HourlyWorkflow", {
-                    className: "HourlyWorkflow",
-                    schedules,
-                  }),
-                },
+            const worker = yield* Cloudflare.Worker("scheduled-workflow-worker", {
+              main: scheduledWorkflowMain,
+              env: {
+                HOURLY: Cloudflare.Workflow("HourlyWorkflow", {
+                  className: "HourlyWorkflow",
+                  schedules,
+                }),
               },
-            );
+            });
             return { worker, workflowName: worker.env.HOURLY.workflowName };
           }),
         );
       const created = yield* deployWith([yearly]);
-      expect(
-        yield* waitForAppliedSchedules(created.workflowName, [yearly]),
-      ).toEqual([yearly]);
+      expect(yield* waitForAppliedSchedules(created.workflowName, [yearly])).toEqual([yearly]);
       yield* deployWith([other]);
-      expect(
-        yield* waitForAppliedSchedules(created.workflowName, [other]),
-      ).toEqual([other]);
+      expect(yield* waitForAppliedSchedules(created.workflowName, [other])).toEqual([other]);
       yield* deployWith([]);
-      expect(yield* waitForAppliedSchedules(created.workflowName, [])).toEqual(
-        [],
-      );
+      expect(yield* waitForAppliedSchedules(created.workflowName, [])).toEqual([]);
       yield* stack.destroy();
       yield* expectWorkerGone(accountId, created.worker.workerName);
       yield* expectWorkflowGone(accountId, created.workflowName);
@@ -807,9 +724,7 @@ const physicalName = (scratch: Test.ScratchStack) =>
     Effect.map((hash) => `alchemy-workflow-${hash.slice(0, 16)}`),
   );
 const readWorkflowName = (scriptName: string) =>
-  readWorkflowBinding(scriptName).pipe(
-    Effect.map((binding) => binding.workflowName),
-  );
+  readWorkflowBinding(scriptName).pipe(Effect.map((binding) => binding.workflowName));
 
 const namedHost = (workflowName?: string, schedules?: string[]) =>
   Cloudflare.Worker("NamedHost", {
@@ -831,19 +746,16 @@ test.provider(
       const explicit = yield* physicalName(scratch);
       const original = yield* scratch.deploy(namedHost());
       const generated = yield* readWorkflowName(original.workerName);
-      expect(generated).toBe(
-        yield* generateWorkflowName(original.workerName, "MyWorkflow"),
-      );
+      expect(generated).toBe(yield* generateWorkflowName(original.workerName, "MyWorkflow"));
       const first = yield* workflows.getWorkflow({
         accountId,
         workflowName: generated,
       });
 
       yield* scratch.deploy(namedHost(generated));
-      expect(
-        (yield* workflows.getWorkflow({ accountId, workflowName: generated }))
-          .id,
-      ).toBe(first.id);
+      expect((yield* workflows.getWorkflow({ accountId, workflowName: generated })).id).toBe(
+        first.id,
+      );
 
       const renamed = yield* scratch.deploy(namedHost(explicit, ["0 0 1 1 *"]));
       const replacement = yield* workflows.getWorkflow({
@@ -853,9 +765,7 @@ test.provider(
       expect(replacement.id).not.toBe(first.id);
       expect(yield* readWorkflowName(renamed.workerName)).toBe(explicit);
       yield* expectWorkflowGone(accountId, generated);
-      expect(yield* waitForAppliedSchedules(explicit, ["0 0 1 1 *"])).toEqual([
-        "0 0 1 1 *",
-      ]);
+      expect(yield* waitForAppliedSchedules(explicit, ["0 0 1 1 *"])).toEqual(["0 0 1 1 *"]);
 
       const preserved = yield* scratch.deploy(namedHost());
       expect(yield* readWorkflowName(preserved.workerName)).toBe(explicit);
@@ -864,9 +774,7 @@ test.provider(
         workflowName: explicit,
       });
       expect(observed.id).toBe(replacement.id);
-      expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual([
-        "0 0 1 1 *",
-      ]);
+      expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual(["0 0 1 1 *"]);
       const terminal = yield* runWorkflowToCompletion(preserved.url!).pipe(
         Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 2 }),
       );
@@ -955,38 +863,24 @@ test.provider(
               accountId,
               subscriptionId: subscription.subscriptionId,
             });
-            expect(liveSubscription.source).toEqual(
-              expect.objectContaining(source),
-            );
-            expect(liveSubscription.destination.queueId).toBe(
-              deployed.queue.queueId,
-            );
+            expect(liveSubscription.source).toEqual(expect.objectContaining(source));
+            expect(liveSubscription.destination.queueId).toBe(deployed.queue.queueId);
             const plan = yield* stack.plan(program(name));
-            expect(plan.resources.IdentityWorkflow.downstream).toContain(
-              "IdentityEvents",
-            );
-            expect(plan.resources.IdentityEvents.state).toHaveProperty(
-              "props.source",
-              source,
-            );
+            expect(plan.resources.IdentityWorkflow.downstream).toContain("IdentityEvents");
+            expect(plan.resources.IdentityEvents.state).toHaveProperty("props.source", source);
             yield* Effect.logInfo("Workflow delivery phase", {
               phase: name ?? "omitted",
               workflow: observed,
               subscription: liveSubscription,
             });
-            const terminal = yield* runWorkflowToCompletion(
-              worker.url!,
-              expected,
-            );
+            const terminal = yield* runWorkflowToCompletion(worker.url!, expected);
             expect(terminal.output?.workflowName).toBe(expected);
             const terminalObservedAt = yield* Clock.currentTimeMillis;
             yield* Effect.logInfo("Workflow terminal", {
               ...terminal,
               observedAt: terminalObservedAt,
             });
-            const client = HttpClient.filterStatusOk(
-              yield* HttpClient.HttpClient,
-            );
+            const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
             const events = yield* client.get(`${worker.url}/events`).pipe(
               Effect.flatMap((response) =>
                 Effect.gen(function* () {
@@ -1007,9 +901,7 @@ test.provider(
               Effect.repeat({
                 schedule: Schedule.spaced("5800 millis"),
                 until: (events) =>
-                  events.some(
-                    (event) => event.payload.instanceId === terminal.instanceId,
-                  ),
+                  events.some((event) => event.payload.instanceId === terminal.instanceId),
                 times: 10,
               }),
               Effect.timeoutOrElse({
@@ -1017,11 +909,7 @@ test.provider(
                 orElse: () => Effect.succeed([]),
               }),
             );
-            if (
-              !events.some(
-                (event) => event.payload.instanceId === terminal.instanceId,
-              )
-            ) {
+            if (!events.some((event) => event.payload.instanceId === terminal.instanceId)) {
               const diagnostics = yield* Effect.gen(function* () {
                 yield* Effect.logInfo(
                   "Workflow event diagnostics",
@@ -1107,8 +995,7 @@ test.provider(
                     ),
                     Effect.repeat({
                       schedule: Schedule.spaced("3 seconds"),
-                      until: (snapshot) =>
-                        hasOriginal(snapshot) && hasProbe(snapshot),
+                      until: (snapshot) => hasOriginal(snapshot) && hasProbe(snapshot),
                       times: 9,
                     }),
                   );
@@ -1156,12 +1043,10 @@ test.provider(
       yield* expectWorkerGone(accountId, final.worker.workerName);
       yield* expectWorkflowGone(accountId, `${explicit}-renamed`);
       expect(
-        yield* queues
-          .getQueue({ accountId, queueId: final.queue.queueId })
-          .pipe(
-            Effect.as(false),
-            Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
-          ),
+        yield* queues.getQueue({ accountId, queueId: final.queue.queueId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+        ),
       ).toBe(true);
       for (const subscriptionId of new Set(subscriptions)) {
         expect(
@@ -1214,9 +1099,7 @@ test.provider(
       expect(Exit.isFailure(denied)).toBe(true);
       if (Exit.isFailure(denied))
         expect(Cause.pretty(denied.cause)).toContain("OwnedBySomeoneElse");
-      expect(
-        (yield* workflows.getWorkflow({ accountId, workflowName })).id,
-      ).toBe(foreign.id);
+      expect((yield* workflows.getWorkflow({ accountId, workflowName })).id).toBe(foreign.id);
 
       const adopted = yield* scratch.deploy(definition(true));
       expect(adopted.workflowName).toBe(workflowName);
@@ -1353,9 +1236,7 @@ test.provider(
       );
       expect(deployed.hostBinding.workflowName).toBe(workflowName);
       expect(deployed.consumerBinding.workflowName).toBe(workflowName);
-      expect(deployed.consumerBinding.scriptName).toBe(
-        deployed.worker.workerName,
-      );
+      expect(deployed.consumerBinding.scriptName).toBe(deployed.worker.workerName);
       expect(deployed.consumerBinding.workflowIsOutput).toBe(true);
       expect(deployed.consumerBinding.scriptIsOutput).toBe(true);
       const source = { type: "workflows.workflow", workflowName };
@@ -1378,12 +1259,8 @@ test.provider(
       );
       expect(owned).toHaveLength(1);
       expect(owned[0]?.id).toBe(original.id);
-      expect(yield* readWorkflowName(deployed.consumer.workerName)).toBe(
-        workflowName,
-      );
-      const terminal = yield* runWorkflowToCompletion(
-        deployed.consumer.url!,
-      ).pipe(
+      expect(yield* readWorkflowName(deployed.consumer.workerName)).toBe(workflowName);
+      const terminal = yield* runWorkflowToCompletion(deployed.consumer.url!).pipe(
         Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 2 }),
       );
       expect(terminal.output?.workflowName).toBe(workflowName);
@@ -1401,16 +1278,12 @@ test.provider(
           ),
       ).toBe(true);
       expect(
-        yield* queues
-          .getQueue({ accountId, queueId: deployed.queue.queueId })
-          .pipe(
-            Effect.as(false),
-            Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
-          ),
+        yield* queues.getQueue({ accountId, queueId: deployed.queue.queueId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+        ),
       ).toBe(true);
-      expect(
-        (yield* workflows.getWorkflow({ accountId, workflowName })).id,
-      ).toBe(original.id);
+      expect((yield* workflows.getWorkflow({ accountId, workflowName })).id).toBe(original.id);
       yield* scratch.destroy();
       yield* expectWorkerGone(accountId, deployed.worker.workerName);
       yield* expectWorkflowGone(accountId, workflowName);
@@ -1464,9 +1337,7 @@ for (const dev of [false, true]) {
                   response.status === 200
                     ? Effect.succeed(body)
                     : Effect.fail(
-                        new Error(
-                          `GET ${url}/workflow/script-name: ${response.status}: ${body}`,
-                        ),
+                        new Error(`GET ${url}/workflow/script-name: ${response.status}: ${body}`),
                       ),
                 ),
               ),
@@ -1476,9 +1347,7 @@ for (const dev of [false, true]) {
               until: (name) => name === scriptName,
               times: 10,
             }),
-            Effect.tap((name) =>
-              Effect.sync(() => expect(name).toBe(scriptName)),
-            ),
+            Effect.tap((name) => Effect.sync(() => expect(name).toBe(scriptName))),
             Effect.timeout("45 seconds"),
           );
         const original = yield* scratch.deploy(definition("A"));
@@ -1500,9 +1369,7 @@ for (const dev of [false, true]) {
           });
           expect(observed.id).toBe(original.workflow.workflowId);
           expect(observed.scriptName).toBe(moved.host.workerName);
-          expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual([
-            "0 0 1 1 *",
-          ]);
+          expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual(["0 0 1 1 *"]);
         }
         yield* scratch.destroy();
         if (!dev) {
@@ -1521,9 +1388,7 @@ for (const api of ["async", "Effect"]) {
         yield* scratch.destroy();
         const { accountId } = yield* yield* CloudflareEnvironment;
         const workflowName =
-          api === "async"
-            ? yield* physicalName(scratch)
-            : COLD_EFFECT_WORKFLOW_NAME;
+          api === "async" ? yield* physicalName(scratch) : COLD_EFFECT_WORKFLOW_NAME;
         const source = Cloudflare.Worker("ColdAdoptionSource", {
           main: namedWorkflowMain,
         });
@@ -1547,9 +1412,7 @@ for (const api of ["async", "Effect"]) {
           if (api === "async") return yield* namedHost(workflowName);
           return yield* ColdEffectWorker;
         });
-        const denied = yield* scratch
-          .plan(definition.pipe(adopt(false)))
-          .pipe(Effect.exit);
+        const denied = yield* scratch.plan(definition.pipe(adopt(false))).pipe(Effect.exit);
         expect(Exit.isFailure(denied)).toBe(true);
         if (Exit.isFailure(denied))
           expect(Cause.pretty(denied.cause)).toContain("OwnedBySomeoneElse");
@@ -1559,9 +1422,7 @@ for (const api of ["async", "Effect"]) {
         });
         expect(untouched.id).toBe(existing.id);
         expect(untouched.scriptName).toBe(seededHost.workerName);
-        expect(untouched.schedules?.map((schedule) => schedule.cron)).toEqual([
-          "0 0 1 1 *",
-        ]);
+        expect(untouched.schedules?.map((schedule) => schedule.cron)).toEqual(["0 0 1 1 *"]);
         const destination = yield* scratch.deploy(definition.pipe(adopt(true)));
         const adopted = yield* workflows.getWorkflow({
           accountId,
@@ -1569,9 +1430,7 @@ for (const api of ["async", "Effect"]) {
         });
         expect(adopted.id).toBe(existing.id);
         expect(adopted.scriptName).toBe(destination.workerName);
-        expect(adopted.schedules?.map((schedule) => schedule.cron)).toEqual([
-          "0 0 1 1 *",
-        ]);
+        expect(adopted.schedules?.map((schedule) => schedule.cron)).toEqual(["0 0 1 1 *"]);
         const terminal = yield* runWorkflowToCompletion(destination.url!).pipe(
           Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 2 }),
         );

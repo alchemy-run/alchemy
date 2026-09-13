@@ -19,21 +19,14 @@ const assertDeletingOrGone = (name: string) =>
   Effect.gen(function* () {
     const status = yield* memorydb.describeUsers({ UserName: name }).pipe(
       Effect.map((r) => r.Users?.[0]?.Status ?? "gone"),
-      Effect.catchTag("UserNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("UserNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
-      return yield* Effect.fail(
-        new Error(`user '${name}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`user '${name}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 

@@ -9,11 +9,7 @@ import * as Result from "effect/Result";
  * determinism (the `normalizeDefinition` drift obligation).
  */
 import { Sfn } from "@/AWS/StepFunctions";
-import {
-  makeOrderProgram,
-  OrderRejected,
-  type OrderInput,
-} from "./fixtures/order-program.ts";
+import { makeOrderProgram, OrderRejected, type OrderInput } from "./fixtures/order-program.ts";
 
 const doubler: Sfn.InvokableFunction = {
   LogicalId: "SfnDoubler",
@@ -62,10 +58,7 @@ describe("Sfn.simulate", () => {
         Sfn.simulate(Sfn.fail(new OrderRejected({ reason: "nope" })), {}),
       );
       expect(Result.isFailure(result)).toBe(true);
-      if (
-        Result.isFailure(result) &&
-        !(result.failure instanceof Sfn.SimulateError)
-      ) {
+      if (Result.isFailure(result) && !(result.failure instanceof Sfn.SimulateError)) {
         expect(result.failure._tag).toBe("OrderRejected");
         expect(result.failure.reason).toBe("nope");
       }
@@ -94,9 +87,7 @@ describe("Sfn.simulate", () => {
           SfnDoubler: () =>
             Effect.suspend(() => {
               calls++;
-              return calls < 3
-                ? Effect.fail(new Transient())
-                : Effect.succeed({ ok: true });
+              return calls < 3 ? Effect.fail(new Transient()) : Effect.succeed({ ok: true });
             }),
         },
       });
@@ -108,9 +99,7 @@ describe("Sfn.simulate", () => {
   it.effect("retry does not retry non-matching tags", () =>
     Effect.gen(function* () {
       let calls = 0;
-      const program = Sfn.invoke(doubler).pipe(
-        Sfn.retry({ while: "Transient", maxAttempts: 5 }),
-      );
+      const program = Sfn.invoke(doubler).pipe(Sfn.retry({ while: "Transient", maxAttempts: 5 }));
       const result = yield* Effect.result(
         Sfn.simulate(program, null, {
           handlers: {
@@ -166,8 +155,7 @@ describe("Sfn.simulate", () => {
           "arn:aws:states:::sqs:sendMessage.waitForTaskToken": (payload) =>
             Effect.succeed({
               approved:
-                (payload as { MessageBody: { token: string } }).MessageBody
-                  .token === "tok-123",
+                (payload as { MessageBody: { token: string } }).MessageBody.token === "tok-123",
             }),
         },
       });
@@ -177,9 +165,7 @@ describe("Sfn.simulate", () => {
 
   it.effect("missing handler fails with SimulateError", () =>
     Effect.gen(function* () {
-      const result = yield* Effect.result(
-        Sfn.simulate(Sfn.invoke(doubler), null),
-      );
+      const result = yield* Effect.result(Sfn.simulate(Sfn.invoke(doubler), null));
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
         expect(result.failure._tag).toBe("SimulateError");
@@ -192,9 +178,7 @@ describe("Sfn.compileProgram", () => {
   it("compiles deterministically (drift-stable definitions)", () => {
     const first = Sfn.compileProgram(makeOrderProgram(doubler));
     const second = Sfn.compileProgram(makeOrderProgram(doubler));
-    expect(JSON.stringify(first.definition)).toBe(
-      JSON.stringify(second.definition),
-    );
+    expect(JSON.stringify(first.definition)).toBe(JSON.stringify(second.definition));
     expect(first.definition.QueryLanguage).toBe("JSONata");
     expect(typeof first.definition.StartAt).toBe("string");
     // one lambda:InvokeFunction statement per invoked function (deduped)
@@ -217,8 +201,6 @@ describe("Sfn.compileProgram", () => {
       yield* Effect.succeed(1) as unknown as Sfn.SfnEffect<number>;
       return null;
     });
-    expect(() => Sfn.compileProgram(program)).toThrow(
-      /may only yield Sfn effects/,
-    );
+    expect(() => Sfn.compileProgram(program)).toThrow(/may only yield Sfn effects/);
   });
 });

@@ -10,16 +10,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const assertThingGone = (thingName: string) =>
   iot.describeThing({ thingName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`thing ${thingName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`thing ${thingName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 

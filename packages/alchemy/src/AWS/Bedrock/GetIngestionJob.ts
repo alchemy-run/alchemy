@@ -50,12 +50,7 @@ export interface GetIngestionJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetIngestionJobRequest,
-    ) => Effect.Effect<
-      bedrock.GetIngestionJobResponse,
-      bedrock.GetIngestionJobError
-    >
+    ) => Effect.Effect<bedrock.GetIngestionJobResponse, bedrock.GetIngestionJobError>
   >
 > {}
-export const GetIngestionJob = Binding.Service<GetIngestionJob>(
-  "AWS.Bedrock.GetIngestionJob",
-);
+export const GetIngestionJob = Binding.Service<GetIngestionJob>("AWS.Bedrock.GetIngestionJob");

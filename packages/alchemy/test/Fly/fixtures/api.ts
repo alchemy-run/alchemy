@@ -31,9 +31,7 @@ export default class Api extends Fly.Service<Api>()(
             path: mount.path,
           });
         }
-        yield* fs
-          .makeDirectory(mount.path, { recursive: true })
-          .pipe(Effect.orDie);
+        yield* fs.makeDirectory(mount.path, { recursive: true }).pipe(Effect.orDie);
         yield* fs.writeFileString(MARKER_FILE, MARKER).pipe(Effect.orDie);
         const text = yield* fs.readFileString(MARKER_FILE).pipe(Effect.orDie);
         return yield* HttpServerResponse.json({

@@ -39,7 +39,4 @@ export const ListSecretsHttp = Layer.effect(
         }),
     }),
   ),
-).pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(CredentialsFromAmbientOrEnv),
-);
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromAmbientOrEnv));

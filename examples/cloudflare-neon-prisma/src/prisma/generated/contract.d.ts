@@ -518,10 +518,7 @@ export type AggregateTypes = {
     };
   };
 };
-type DefaultLiteralValue<
-  CodecId extends string,
-  Encoded,
-> = CodecId extends keyof CodecTypes
+type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyof CodecTypes
   ? Encoded extends CodecTypes[CodecId]["json"]
     ? Encoded
     : CodecTypes[CodecId]["json"]

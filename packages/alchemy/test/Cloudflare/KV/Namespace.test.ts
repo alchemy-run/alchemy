@@ -13,10 +13,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create and delete namespace with default props", (stack) =>
   Effect.gen(function* () {
@@ -102,9 +99,7 @@ test.provider("list enumerates the deployed namespace", (stack) =>
     const provider = yield* Provider.findProvider(KV.Namespace);
     const all = yield* provider.list();
 
-    expect(all.some((ns) => ns.namespaceId === namespace.namespaceId)).toBe(
-      true,
-    );
+    expect(all.some((ns) => ns.namespaceId === namespace.namespaceId)).toBe(true);
 
     yield* stack.destroy();
   }).pipe(logLevel),
@@ -115,74 +110,69 @@ test.provider("list enumerates the deployed namespace", (stack) =>
 // adoption. The test wipes local state mid-run while leaving the namespace
 // on Cloudflare — this simulates a fresh state store seeing an existing
 // resource with the same physical name.
-test.provider(
-  "existing namespace (matching title) is silently adopted without --adopt",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("existing namespace (matching title) is silently adopted without --adopt", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Phase 1: deploy normally so a real KV namespace exists on
-      // Cloudflare. No explicit `title` — the engine generates a
-      // random-suffixed physical name (collision-free across concurrent
-      // runs); the deploy output hands back the real title, which pins the
-      // namespace's identity for the adoption phase below.
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* KV.Namespace("AdoptableNamespace");
-        }),
-      );
-      const title = initial.title;
-      const initialId = initial.namespaceId;
-      expect(initialId).toBeDefined();
+    // Phase 1: deploy normally so a real KV namespace exists on
+    // Cloudflare. No explicit `title` — the engine generates a
+    // random-suffixed physical name (collision-free across concurrent
+    // runs); the deploy output hands back the real title, which pins the
+    // namespace's identity for the adoption phase below.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* KV.Namespace("AdoptableNamespace");
+      }),
+    );
+    const title = initial.title;
+    const initialId = initial.namespaceId;
+    expect(initialId).toBeDefined();
 
-      // Phase 2: wipe local state — the namespace stays on Cloudflare.
-      yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableNamespace",
-        });
-      }).pipe(Effect.provide(stack.state));
-
-      // Phase 3: redeploy without `adopt(true)`. The engine calls
-      // `provider.read`, which lists namespaces, matches by title, and
-      // returns plain attrs — silent adoption.
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* KV.Namespace("AdoptableNamespace", { title });
-        }),
-      );
-
-      // Same physical namespace — adoption, not re-creation.
-      expect(adopted.namespaceId).toEqual(initialId);
-      expect(adopted.title).toEqual(title);
-
-      const persisted = yield* Effect.gen(function* () {
-        const state = yield* yield* State;
-        return yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableNamespace",
-        });
-      }).pipe(Effect.provide(stack.state));
-
-      expect((persisted as any)?.attr).toMatchObject({
-        namespaceId: initialId,
-        title,
+    // Phase 2: wipe local state — the namespace stays on Cloudflare.
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableNamespace",
       });
+    }).pipe(Effect.provide(stack.state));
 
-      yield* stack.destroy();
-      yield* waitForNamespaceToBeDeleted(initialId, accountId);
-    }).pipe(logLevel),
+    // Phase 3: redeploy without `adopt(true)`. The engine calls
+    // `provider.read`, which lists namespaces, matches by title, and
+    // returns plain attrs — silent adoption.
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* KV.Namespace("AdoptableNamespace", { title });
+      }),
+    );
+
+    // Same physical namespace — adoption, not re-creation.
+    expect(adopted.namespaceId).toEqual(initialId);
+    expect(adopted.title).toEqual(title);
+
+    const persisted = yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      return yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "AdoptableNamespace",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    expect((persisted as any)?.attr).toMatchObject({
+      namespaceId: initialId,
+      title,
+    });
+
+    yield* stack.destroy();
+    yield* waitForNamespaceToBeDeleted(initialId, accountId);
+  }).pipe(logLevel),
 );
 
-const waitForNamespaceToBeDeleted = Effect.fn(function* (
-  namespaceId: string,
-  accountId: string,
-) {
+const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
   yield* kv
     .getNamespace({
       accountId,
@@ -191,8 +181,7 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
     .pipe(
       Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
       Effect.retry({
-        while: (e): e is NamespaceStillExists =>
-          e instanceof NamespaceStillExists,
+        while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
         schedule: Schedule.exponential(100),
       }),
       Effect.catchTag("NamespaceNotFound", () => Effect.void),

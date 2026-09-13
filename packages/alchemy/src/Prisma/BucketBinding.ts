@@ -63,13 +63,10 @@ export const makeBucketBinding = <Client>(options: {
     const Key = yield* BucketAccessKey;
 
     return Effect.fn(function* (bucket: Bucket) {
-      const key = yield* Key(
-        bucketAccessKeyLogicalId(bucket, options.capability),
-        {
-          bucket,
-          role: options.role,
-        },
-      );
+      const key = yield* Key(bucketAccessKeyLogicalId(bucket, options.capability), {
+        bucket,
+        role: options.role,
+      });
       return options.makeClient({
         endpoint: yield* key.endpoint,
         bucketName: yield* key.bucketName,

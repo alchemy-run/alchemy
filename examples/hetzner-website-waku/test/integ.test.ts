@@ -58,9 +58,7 @@ if (!hasCreds) {
       // The `GREETING` env value from alchemy.run.ts, read via `getEnv` in the
       // dynamic RSC page — proves the Hetzner Server rendered it at request time.
       expect(html).toContain("Hello from Waku on Hetzner!");
-      expect(html).toContain(
-        "This page is rendered by the server on every request.",
-      );
+      expect(html).toContain("This page is rendered by the server on every request.");
     }),
     { timeout: 180_000 },
   );

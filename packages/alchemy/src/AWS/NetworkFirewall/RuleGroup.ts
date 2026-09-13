@@ -148,19 +148,11 @@ export const RuleGroupProvider = () =>
   Provider.effect(
     RuleGroup,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { ruleGroupName?: string },
-      ) {
-        return (
-          props.ruleGroupName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { ruleGroupName?: string }) {
+        return props.ruleGroupName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const toAttrs = (
-        response: NFW.RuleGroupResponse,
-      ): RuleGroup["Attributes"] => ({
+      const toAttrs = (response: NFW.RuleGroupResponse): RuleGroup["Attributes"] => ({
         ruleGroupName: response.RuleGroupName,
         ruleGroupArn: response.RuleGroupArn,
         ruleGroupId: response.RuleGroupId,
@@ -176,23 +168,17 @@ export const RuleGroupProvider = () =>
             const pages = yield* nfw.listRuleGroups
               .pages({ Scope: "ACCOUNT" })
               .pipe(Stream.runCollect);
-            const metas = Array.from(pages).flatMap(
-              (page) => page.RuleGroups ?? [],
-            );
+            const metas = Array.from(pages).flatMap((page) => page.RuleGroups ?? []);
             const items = yield* Effect.forEach(
               metas,
               (meta) =>
                 nfw.describeRuleGroup({ RuleGroupArn: meta.Arn }).pipe(
                   Effect.map((r) => toAttrs(r.RuleGroupResponse)),
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 5 },
             );
-            return items.filter(
-              (item): item is RuleGroup["Attributes"] => item !== undefined,
-            );
+            return items.filter((item): item is RuleGroup["Attributes"] => item !== undefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -201,9 +187,7 @@ export const RuleGroupProvider = () =>
               ? yield* nfw
                   .describeRuleGroup({ RuleGroupArn: output.ruleGroupArn })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   )
               : yield* nfw
                   .describeRuleGroup({
@@ -211,9 +195,7 @@ export const RuleGroupProvider = () =>
                     Type: olds?.type,
                   })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
           if (found === undefined) return undefined;
           const attrs = toAttrs(found.RuleGroupResponse);
@@ -225,11 +207,7 @@ export const RuleGroupProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          if (
-            oldName !== newName ||
-            olds.type !== news.type ||
-            olds.capacity !== news.capacity
-          ) {
+          if (oldName !== newName || olds.type !== news.type || olds.capacity !== news.capacity) {
             return { action: "replace" } as const;
           }
         }),
@@ -245,11 +223,7 @@ export const RuleGroupProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* nfw
             .describeRuleGroup({ RuleGroupName: name, Type: news.type })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {
@@ -274,8 +248,7 @@ export const RuleGroupProvider = () =>
           const definitionDiffers =
             (news.rules !== undefined &&
               news.rules !== observed.RuleGroup?.RulesSource?.RulesString) ||
-            (news.ruleGroup !== undefined &&
-              !deepEqual(news.ruleGroup, observed.RuleGroup)) ||
+            (news.ruleGroup !== undefined && !deepEqual(news.ruleGroup, observed.RuleGroup)) ||
             (news.summaryConfiguration !== undefined &&
               !deepEqual(
                 news.summaryConfiguration,
@@ -313,12 +286,10 @@ export const RuleGroupProvider = () =>
           // A rule group still referenced by a firewall policy (deleted
           // moments ago by the engine) rejects deletion with
           // InvalidOperationException — retry through the release window.
-          yield* nfw
-            .deleteRuleGroup({ RuleGroupArn: output.ruleGroupArn })
-            .pipe(
-              retryWhileNfwInUse,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* nfw.deleteRuleGroup({ RuleGroupArn: output.ruleGroupArn }).pipe(
+            retryWhileNfwInUse,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

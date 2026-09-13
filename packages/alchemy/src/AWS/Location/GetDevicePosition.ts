@@ -38,10 +38,7 @@ export interface GetDevicePosition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetDevicePositionRequest,
-    ) => Effect.Effect<
-      location.GetDevicePositionResponse,
-      location.GetDevicePositionError
-    >
+    ) => Effect.Effect<location.GetDevicePositionResponse, location.GetDevicePositionError>
   >
 > {}
 export const GetDevicePosition = Binding.Service<GetDevicePosition>(

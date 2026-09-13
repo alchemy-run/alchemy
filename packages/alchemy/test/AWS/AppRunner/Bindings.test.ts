@@ -6,9 +6,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import AppRunnerTestFunctionLive, {
-  AppRunnerTestFunction,
-} from "./fixtures/handler";
+import AppRunnerTestFunctionLive, { AppRunnerTestFunction } from "./fixtures/handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,20 +28,14 @@ const postJson = <T>(url: string) =>
           response.status === 200
             ? Effect.try({
                 try: () => JSON.parse(body) as T,
-                catch: () =>
-                  new Error(`POST ${url} returned unparseable body: ${body}`),
+                catch: () => new Error(`POST ${url} returned unparseable body: ${body}`),
               })
-            : Effect.fail(
-                new Error(`POST ${url} returned ${response.status}: ${body}`),
-              ),
+            : Effect.fail(new Error(`POST ${url} returned ${response.status}: ${body}`)),
         ),
       ),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -53,17 +45,10 @@ const waitForStatus = (serviceArn: string, expected: string) =>
     Effect.flatMap((r) =>
       (r.Service.Status ?? "").toUpperCase() === expected
         ? Effect.void
-        : Effect.fail(
-            new Error(
-              `service is ${r.Service.Status}, waiting for ${expected}`,
-            ),
-          ),
+        : Effect.fail(new Error(`service is ${r.Service.Status}, waiting for ${expected}`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(36),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(36)]),
     }),
   );
 
@@ -95,10 +80,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
         }),
       );
 
@@ -118,24 +100,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           () => new Error("operations not yet listable"),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential("1 second"),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
         }),
       );
-      const createOp = operations.operations.find(
-        (op) => op.type === "CREATE_SERVICE",
-      );
+      const createOp = operations.operations.find((op) => op.type === "CREATE_SERVICE");
       expect(createOp).toBeDefined();
       expect(createOp?.status).toBe("SUCCEEDED");
 
       // DescribeCustomDomains: no domain is associated, so the list is
       // empty but the DNSTarget (the service's default endpoint) resolves —
       // proving the binding's wiring and IAM grant.
-      const customDomains = yield* HttpClient.get(
-        `${baseUrl}/custom-domains`,
-      ).pipe(
+      const customDomains = yield* HttpClient.get(`${baseUrl}/custom-domains`).pipe(
         Effect.flatMap((response) => response.json),
         Effect.map(
           (json) =>
@@ -149,10 +124,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           () => new Error("custom domains not yet describable"),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential("1 second"),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
         }),
       );
       expect(customDomains.customDomains).toEqual([]);
@@ -163,9 +135,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         serviceArn: string;
         operationId?: string;
       }>(`${baseUrl}/pause`);
-      expect(paused.serviceArn).toContain(
-        ":service/alchemy-test-apprunner-bind/",
-      );
+      expect(paused.serviceArn).toContain(":service/alchemy-test-apprunner-bind/");
       yield* waitForStatus(paused.serviceArn, "PAUSED");
 
       // ResumeService: the service settles back to RUNNING.
@@ -179,31 +149,21 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // StartDeployment: returns an operation id; the deployment then shows
       // up in ListOperations. (The provider's delete waits for the service
       // to settle, so the in-flight deployment doesn't block destroy.)
-      const deployed = yield* postJson<{ operationId?: string }>(
-        `${baseUrl}/deploy`,
-      );
+      const deployed = yield* postJson<{ operationId?: string }>(`${baseUrl}/deploy`);
       expect(deployed.operationId).toBeTruthy();
 
       const afterDeploy = yield* HttpClient.get(`${baseUrl}/operations`).pipe(
         Effect.flatMap((response) => response.json),
-        Effect.map(
-          (json) => json as { operations: { id?: string; type?: string }[] },
-        ),
+        Effect.map((json) => json as { operations: { id?: string; type?: string }[] }),
       );
-      expect(
-        afterDeploy.operations.some((op) => op.id === deployed.operationId),
-      ).toBe(true);
+      expect(afterDeploy.operations.some((op) => op.id === deployed.operationId)).toBe(true);
 
       // Destroy immediately — App Runner services bill while running.
       yield* stack.destroy();
-      const after = yield* apprunner
-        .describeService({ ServiceArn: paused.serviceArn })
-        .pipe(
-          Effect.map((r) => (r.Service.Status ?? "UNKNOWN").toUpperCase()),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("GONE" as const),
-          ),
-        );
+      const after = yield* apprunner.describeService({ ServiceArn: paused.serviceArn }).pipe(
+        Effect.map((r) => (r.Service.Status ?? "UNKNOWN").toUpperCase()),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+      );
       expect(["GONE", "DELETED"]).toContain(after);
     }),
   // create (~3-5 min) + pause (~1-2 min) + resume (~1-2 min) + delete

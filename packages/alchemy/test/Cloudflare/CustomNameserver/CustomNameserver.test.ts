@@ -10,13 +10,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Account custom nameservers require a Business/Enterprise plan (or paid
 // add-on). On the testing account every call — even the list — fails with
@@ -47,16 +43,11 @@ const findByName = (accountId: string, nsName: string) =>
 const expectGone = (accountId: string, nsName: string) =>
   findByName(accountId, nsName).pipe(
     Effect.flatMap((found) =>
-      found
-        ? Effect.fail({ _tag: "CustomNameserverNotDeleted" } as const)
-        : Effect.void,
+      found ? Effect.fail({ _tag: "CustomNameserverNotDeleted" } as const) : Effect.void,
     ),
     Effect.retry({
       while: (e) => e._tag === "CustomNameserverNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -87,9 +78,7 @@ test.provider("list enumerates account custom nameservers", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.CustomNameserver.CustomNameserver,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.CustomNameserver.CustomNameserver);
     const all = yield* provider.list();
 
     // Always a well-typed array; `[]` on unentitled accounts.
@@ -114,9 +103,7 @@ test.provider.skipIf(!entitled)(
         Cloudflare.CustomNameserver.CustomNameserver("NsList", { nsName }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomNameserver.CustomNameserver,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomNameserver.CustomNameserver);
       const all = yield* provider.list();
       expect(all.some((x) => x.nsName === ns.nsName)).toBe(true);
 

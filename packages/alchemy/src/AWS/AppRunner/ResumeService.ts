@@ -28,12 +28,7 @@ export interface ResumeService extends Binding.Service<
   (
     service: Service,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      apprunner.ResumeServiceResponse,
-      apprunner.ResumeServiceError
-    >
+    () => Effect.Effect<apprunner.ResumeServiceResponse, apprunner.ResumeServiceError>
   >
 > {}
-export const ResumeService = Binding.Service<ResumeService>(
-  "AWS.AppRunner.ResumeService",
-);
+export const ResumeService = Binding.Service<ResumeService>("AWS.AppRunner.ResumeService");

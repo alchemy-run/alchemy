@@ -30,10 +30,7 @@ export interface SendActivationCode extends Binding.Service<
   (
     contact: EmailContact,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      contacts.SendActivationCodeResponse,
-      contacts.SendActivationCodeError
-    >
+    () => Effect.Effect<contacts.SendActivationCodeResponse, contacts.SendActivationCodeError>
   >
 > {}
 

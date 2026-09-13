@@ -36,7 +36,6 @@ export interface DescribeQuerySuggestionsConfig extends Binding.Service<
     >
   >
 > {}
-export const DescribeQuerySuggestionsConfig =
-  Binding.Service<DescribeQuerySuggestionsConfig>(
-    "AWS.Kendra.DescribeQuerySuggestionsConfig",
-  );
+export const DescribeQuerySuggestionsConfig = Binding.Service<DescribeQuerySuggestionsConfig>(
+  "AWS.Kendra.DescribeQuerySuggestionsConfig",
+);

@@ -46,16 +46,12 @@ export default class RpcHttpTestObject extends Cloudflare.DurableObject<RpcHttpT
             onError: (cause) => cause as never,
           }),
         EchoDO: ({ messages }) =>
-          Stream.fromIterable(
-            messages.map((message, index) => ({ index, message })),
-          ),
+          Stream.fromIterable(messages.map((message, index) => ({ index, message }))),
       });
 
       return {
         fetch: RpcServer.toHttpEffect(DoRpcs).pipe(
-          Effect.provide(
-            Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson),
-          ),
+          Effect.provide(Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson)),
         ),
       };
     }),

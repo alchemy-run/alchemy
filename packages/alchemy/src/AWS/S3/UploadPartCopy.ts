@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface UploadPartCopyRequest extends Omit<
-  S3.UploadPartCopyRequest,
-  "Bucket"
-> {}
+export interface UploadPartCopyRequest extends Omit<S3.UploadPartCopyRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:UploadPartCopy`.
@@ -45,6 +42,4 @@ export interface UploadPartCopy extends Binding.Service<
     ) => Effect.Effect<S3.UploadPartCopyOutput, S3.UploadPartCopyError>
   >
 > {}
-export const UploadPartCopy = Binding.Service<UploadPartCopy>(
-  "AWS.S3.UploadPartCopy",
-);
+export const UploadPartCopy = Binding.Service<UploadPartCopy>("AWS.S3.UploadPartCopy");

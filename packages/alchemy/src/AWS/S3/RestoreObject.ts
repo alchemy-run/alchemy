@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface RestoreObjectRequest extends Omit<
-  S3.RestoreObjectRequest,
-  "Bucket"
-> {}
+export interface RestoreObjectRequest extends Omit<S3.RestoreObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:RestoreObject`.
@@ -38,11 +35,7 @@ export interface RestoreObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: RestoreObjectRequest,
-    ) => Effect.Effect<S3.RestoreObjectOutput, S3.RestoreObjectError>
+    (request: RestoreObjectRequest) => Effect.Effect<S3.RestoreObjectOutput, S3.RestoreObjectError>
   >
 > {}
-export const RestoreObject = Binding.Service<RestoreObject>(
-  "AWS.S3.RestoreObject",
-);
+export const RestoreObject = Binding.Service<RestoreObject>("AWS.S3.RestoreObject");

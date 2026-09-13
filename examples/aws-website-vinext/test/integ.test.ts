@@ -27,10 +27,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("3 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
       times: 10,
     }),
   );
@@ -110,9 +107,7 @@ test.provider(
           until: (result) => (result.Contents?.length ?? 0) > 0,
         }),
       );
-      expect(
-        objects.Contents?.some((object) => object.Key?.includes("isr")),
-      ).toBe(true);
+      expect(objects.Contents?.some((object) => object.Key?.includes("isr"))).toBe(true);
     }),
   { timeout: 60_000 },
 );

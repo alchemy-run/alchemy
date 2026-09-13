@@ -10,16 +10,12 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A domain registered through Cloudflare Registrar on the testing account.
 // Registrations cannot be created via the API, so the test adopts whatever
 // is already there and always restores it on the way out.
-const domainName =
-  process.env.CLOUDFLARE_TEST_REGISTRAR_DOMAIN ?? "alchemy-test-3.us";
+const domainName = process.env.CLOUDFLARE_TEST_REGISTRAR_DOMAIN ?? "alchemy-test-3.us";
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips on the test's
@@ -29,9 +25,7 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 const findDomain = (accountId: string) =>
   registrar.listDomains.items({ accountId }).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).find((domain) => domain.name === domainName),
-    ),
+    Effect.map((chunk) => Array.from(chunk).find((domain) => domain.name === domainName)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,
@@ -135,9 +129,7 @@ describe.sequential("Domain", () => {
           })
           .pipe(
             Effect.as("allowed" as const),
-            Effect.catchTag("RegistrarUpdateNotAllowed", () =>
-              Effect.succeed("blocked" as const),
-            ),
+            Effect.catchTag("RegistrarUpdateNotAllowed", () => Effect.succeed("blocked" as const)),
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
               schedule: forbiddenRetrySchedule,
@@ -166,9 +158,7 @@ describe.sequential("Domain", () => {
           }),
         );
         expect(domain.autoRenew).toEqual(flipped);
-        expect(domain.initialSettings.autoRenew).toEqual(
-          baseline.autoRenew ?? undefined,
-        );
+        expect(domain.initialSettings.autoRenew).toEqual(baseline.autoRenew ?? undefined);
 
         // Flip it back via an in-place update.
         const updated = yield* stack.deploy(
@@ -181,9 +171,7 @@ describe.sequential("Domain", () => {
         );
         expect(updated.autoRenew).toEqual(baseline.autoRenew ?? true);
         // The captured pre-management settings survive updates.
-        expect(updated.initialSettings.autoRenew).toEqual(
-          baseline.autoRenew ?? undefined,
-        );
+        expect(updated.initialSettings.autoRenew).toEqual(baseline.autoRenew ?? undefined);
 
         yield* stack.destroy();
 
@@ -203,9 +191,7 @@ describe.sequential("Domain", () => {
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Registrar.Domain,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Registrar.Domain);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

@@ -3,10 +3,7 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { SecurityGroup, Vpc } from "@/AWS/EC2";
-import {
-  ClientVpnEndpoint,
-  type ClientVpnEndpointProps,
-} from "@/AWS/EC2/ClientVpnEndpoint.ts";
+import { ClientVpnEndpoint, type ClientVpnEndpointProps } from "@/AWS/EC2/ClientVpnEndpoint.ts";
 import { LogGroup, LogStream } from "@/AWS/Logs";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
@@ -25,9 +22,7 @@ import {
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
 });
-const certificate = beforeAll(
-  importClientVpnCertificate("ClientVpnEndpointPrerequisites"),
-);
+const certificate = beforeAll(importClientVpnCertificate("ClientVpnEndpointPrerequisites"));
 const Stack = Alchemy.Stack(
   "ClientVpnEndpointPrerequisites",
   { providers: AWS.providers(), state: Alchemy.localState() },
@@ -54,9 +49,7 @@ const prerequisites = beforeAll(deploy(Stack), {
 });
 afterAll(
   destroy(Stack).pipe(
-    Effect.andThen(
-      certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
-    ),
+    Effect.andThen(certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted))),
   ),
   { timeout: clientVpnTestTimeout },
 );
@@ -130,16 +123,12 @@ describe.sequential("Client VPN endpoints", () => {
           provider.list(),
           (endpoints) =>
             endpoints.some(
-              (endpoint) =>
-                endpoint.clientVpnEndpointId === created.clientVpnEndpointId,
+              (endpoint) => endpoint.clientVpnEndpointId === created.clientVpnEndpointId,
             ),
           "Client VPN endpoint provider list",
         );
         expect(
-          listed.find(
-            (endpoint) =>
-              endpoint.clientVpnEndpointId === created.clientVpnEndpointId,
-          ),
+          listed.find((endpoint) => endpoint.clientVpnEndpointId === created.clientVpnEndpointId),
         ).toMatchObject({ clientCidrBlock: base.clientCidrBlock });
 
         const updated = yield* deployEndpoint({
@@ -183,8 +172,7 @@ describe.sequential("Client VPN endpoints", () => {
           (endpoint) =>
             endpoint?.Description === "Client VPN updated description" &&
             endpoint.SessionTimeoutHours === 10 &&
-            endpoint.SecurityGroupIds?.includes(fixture.secondGroup.groupId) ===
-              true,
+            endpoint.SecurityGroupIds?.includes(fixture.secondGroup.groupId) === true,
           "updated endpoint settings",
         );
         expect(observed).toMatchObject({
@@ -205,9 +193,7 @@ describe.sequential("Client VPN endpoints", () => {
           Key: "Environment",
           Value: "updated",
         });
-        expect(observed?.Tags?.some((tag) => tag.Key === "RemoveMe")).toBe(
-          false,
-        );
+        expect(observed?.Tags?.some((tag) => tag.Key === "RemoveMe")).toBe(false);
         expectClientVpnOwnershipTags(observed?.Tags, stack, "Endpoint");
 
         const defaults = yield* deployEndpoint({});
@@ -239,18 +225,14 @@ describe.sequential("Client VPN endpoints", () => {
         });
         expect(reset?.ClientConnectOptions?.Enabled ?? false).toBe(false);
         expect(reset?.ClientLoginBannerOptions?.Enabled ?? false).toBe(false);
-        expect(reset?.Tags?.some((tag) => tag.Key === "Environment")).toBe(
-          false,
-        );
+        expect(reset?.Tags?.some((tag) => tag.Key === "Environment")).toBe(false);
         const groups = yield* ec2.describeSecurityGroups({
           Filters: [
             { Name: "vpc-id", Values: [fixture.vpc.vpcId] },
             { Name: "group-name", Values: ["default"] },
           ],
         });
-        expect(reset?.SecurityGroupIds).toEqual([
-          groups.SecurityGroups?.[0]?.GroupId,
-        ]);
+        expect(reset?.SecurityGroupIds).toEqual([groups.SecurityGroups?.[0]?.GroupId]);
         expectClientVpnOwnershipTags(reset?.Tags, stack, "Endpoint");
         yield* stack.destroy();
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
@@ -308,9 +290,7 @@ describe.sequential("Client VPN endpoints", () => {
           Key: "Environment",
           Value: "managed",
         });
-        expect(observed?.Tags?.some((tag) => tag.Key === "Unmanaged")).toBe(
-          false,
-        );
+        expect(observed?.Tags?.some((tag) => tag.Key === "Unmanaged")).toBe(false);
         expectClientVpnOwnershipTags(observed?.Tags, stack, "Endpoint");
         yield* stack.destroy();
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
@@ -342,23 +322,15 @@ describe.sequential("Client VPN endpoints", () => {
         expect(plan.resources.Endpoint?.action).toBe("update");
         expect(plan.resources.NewConnectionLogs?.action).toBe("create");
         const updated = yield* stack.deploy(program(true));
-        expect(updated.endpoint.clientVpnEndpointId).toBe(
-          created.endpoint.clientVpnEndpointId,
-        );
-        const observed = yield* readClientVpnEndpoint(
-          updated.endpoint.clientVpnEndpointId,
-        );
+        expect(updated.endpoint.clientVpnEndpointId).toBe(created.endpoint.clientVpnEndpointId);
+        const observed = yield* readClientVpnEndpoint(updated.endpoint.clientVpnEndpointId);
         expect(observed?.ConnectionLogOptions).toMatchObject({
           Enabled: true,
           CloudwatchLogGroup: updated.logs?.logGroupName,
         });
-        expect(
-          (yield* stack.plan(program(true))).resources.Endpoint?.action,
-        ).toBe("noop");
+        expect((yield* stack.plan(program(true))).resources.Endpoint?.action).toBe("noop");
         yield* stack.destroy();
-        yield* assertClientVpnEndpointDeleted(
-          updated.endpoint.clientVpnEndpointId,
-        );
+        yield* assertClientVpnEndpointDeleted(updated.endpoint.clientVpnEndpointId);
       }),
     { timeout: clientVpnTestTimeout },
   );
@@ -369,9 +341,7 @@ describe.sequential("Client VPN endpoints", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
         const { certificateArn } = yield* prerequisites;
-        const vpc = yield* stack.deploy(
-          Vpc("DeletedVpc", { cidrBlock: "10.175.0.0/16" }),
-        );
+        const vpc = yield* stack.deploy(Vpc("DeletedVpc", { cidrBlock: "10.175.0.0/16" }));
         yield* stack.destroy();
         const failure = yield* stack
           .deploy(
@@ -393,10 +363,7 @@ describe.sequential("Client VPN endpoints", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
         const { certificateArn } = yield* prerequisites;
-        const deployEndpoint = (
-          clientCidrBlock: string,
-          transportProtocol: "udp" | "tcp",
-        ) =>
+        const deployEndpoint = (clientCidrBlock: string, transportProtocol: "udp" | "tcp") =>
           stack.deploy(
             ClientVpnEndpoint("Endpoint", {
               ...clientVpnEndpointProps(certificateArn),
@@ -406,31 +373,21 @@ describe.sequential("Client VPN endpoints", () => {
           );
         const created = yield* deployEndpoint("172.20.0.0/22", "udp");
         const changedCidr = yield* deployEndpoint("172.20.4.0/22", "udp");
-        expect(changedCidr.clientVpnEndpointId).not.toBe(
-          created.clientVpnEndpointId,
-        );
-        expect(
-          yield* readClientVpnEndpoint(changedCidr.clientVpnEndpointId),
-        ).toMatchObject({
+        expect(changedCidr.clientVpnEndpointId).not.toBe(created.clientVpnEndpointId);
+        expect(yield* readClientVpnEndpoint(changedCidr.clientVpnEndpointId)).toMatchObject({
           ClientCidrBlock: "172.20.4.0/22",
           TransportProtocol: "udp",
         });
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
         const changedProtocol = yield* deployEndpoint("172.20.4.0/22", "tcp");
-        expect(changedProtocol.clientVpnEndpointId).not.toBe(
-          changedCidr.clientVpnEndpointId,
-        );
-        expect(
-          yield* readClientVpnEndpoint(changedProtocol.clientVpnEndpointId),
-        ).toMatchObject({
+        expect(changedProtocol.clientVpnEndpointId).not.toBe(changedCidr.clientVpnEndpointId);
+        expect(yield* readClientVpnEndpoint(changedProtocol.clientVpnEndpointId)).toMatchObject({
           ClientCidrBlock: "172.20.4.0/22",
           TransportProtocol: "tcp",
         });
         yield* assertClientVpnEndpointDeleted(changedCidr.clientVpnEndpointId);
         yield* stack.destroy();
-        yield* assertClientVpnEndpointDeleted(
-          changedProtocol.clientVpnEndpointId,
-        );
+        yield* assertClientVpnEndpointDeleted(changedProtocol.clientVpnEndpointId);
       }),
     { timeout: clientVpnTestTimeout },
   );

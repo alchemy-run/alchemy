@@ -37,9 +37,7 @@ const NONEXISTENT_JOB = "0123456789abcdef0123456789abcdef";
 // AWS answers image-set routes on a nonexistent datastore with either tag
 // depending on which backend handles the request; both are typed.
 const expectNotFoundOrDenied = (error: { _tag: string }) =>
-  expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-    error._tag,
-  );
+  expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
 
 describe("MedicalImaging data-plane operations (typed-error probes)", () => {
   test.provider(
@@ -186,26 +184,24 @@ describe("MedicalImaging data-plane operations (typed-error probes)", () => {
       }),
   );
 
-  test.provider(
-    "startDICOMImportJob on a nonexistent datastore fails with a typed tag",
-    () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* AWSEnvironment.current;
-        const error = yield* Effect.flip(
-          medicalimaging.startDICOMImportJob({
-            datastoreId: NONEXISTENT_DATASTORE,
-            clientToken: "alchemy-medicalimaging-probe",
-            dataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
-            inputS3Uri: "s3://alchemy-probe-nonexistent/in/",
-            outputS3Uri: "s3://alchemy-probe-nonexistent/out/",
-          }),
-        );
-        expect([
-          "ResourceNotFoundException",
-          "ValidationException",
-          "AccessDeniedException",
-        ]).toContain(error._tag);
-      }),
+  test.provider("startDICOMImportJob on a nonexistent datastore fails with a typed tag", () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* AWSEnvironment.current;
+      const error = yield* Effect.flip(
+        medicalimaging.startDICOMImportJob({
+          datastoreId: NONEXISTENT_DATASTORE,
+          clientToken: "alchemy-medicalimaging-probe",
+          dataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
+          inputS3Uri: "s3://alchemy-probe-nonexistent/in/",
+          outputS3Uri: "s3://alchemy-probe-nonexistent/out/",
+        }),
+      );
+      expect([
+        "ResourceNotFoundException",
+        "ValidationException",
+        "AccessDeniedException",
+      ]).toContain(error._tag);
+    }),
   );
 });
 
@@ -238,16 +234,11 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -279,9 +270,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
         expect(importJob.status).toBe("SUBMITTED");
 
         // GetDICOMImportJob — the job is observable immediately.
-        const described = (yield* getJson(
-          `/describe-import?jobId=${importJob.jobId}`,
-        )) as {
+        const described = (yield* getJson(`/describe-import?jobId=${importJob.jobId}`)) as {
           status?: string;
           errorTag?: string;
         };
@@ -323,8 +312,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
           Effect.map((r) => (r as { status: string }).status),
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
-            until: (status): boolean =>
-              status !== "SUBMITTED" && status !== "IN_PROGRESS",
+            until: (status): boolean => status !== "SUBMITTED" && status !== "IN_PROGRESS",
             times: 30,
           }),
         );

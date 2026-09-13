@@ -168,13 +168,8 @@ export const CustomTrustStoreProvider = () =>
       }
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -210,9 +205,7 @@ export const CustomTrustStoreProvider = () =>
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:
       //    a missing (or async-deleted) certificate falls through to the
       //    PEM scan and then to create.
-      let observed = output?.id
-        ? yield* getTrustStore(zoneId, output.id)
-        : undefined;
+      let observed = output?.id ? yield* getTrustStore(zoneId, output.id) : undefined;
       if (observed && isGoneStatus(observed.status)) observed = undefined;
 
       // 2. Fall back to scanning the zone for the same PEM body. Ownership
@@ -277,9 +270,8 @@ const isGoneStatus = (status: CustomTrustStoreStatus): boolean =>
 const getTrustStore = (zoneId: string, id: string) =>
   acm.getCustomTrustStore({ zoneId, customOriginTrustStoreId: id }).pipe(
     Effect.map((cert): ObservedTrustStore | undefined => cert),
-    Effect.catchTag(
-      ["CustomTrustStoreNotFound", "InvalidObjectIdentifier"],
-      () => Effect.succeed(undefined),
+    Effect.catchTag(["CustomTrustStoreNotFound", "InvalidObjectIdentifier"], () =>
+      Effect.succeed(undefined),
     ),
   );
 
@@ -302,10 +294,7 @@ const findByCertificate = (zoneId: string, certificate: string) =>
 
 const normalizePem = (pem: string): string => pem.replace(/\r\n/g, "\n").trim();
 
-const toAttributes = (
-  zoneId: string,
-  cert: ObservedTrustStore,
-): CustomTrustStoreAttributes => ({
+const toAttributes = (zoneId: string, cert: ObservedTrustStore): CustomTrustStoreAttributes => ({
   id: cert.id,
   zoneId,
   certificate: cert.certificate,

@@ -68,11 +68,7 @@ describe("AWS.Signer.SigningProfile", () => {
         });
         expect(observed.tags?.purpose).toBe("alchemy-test");
         // internal alchemy tags are branded on the profile
-        expect(
-          Object.keys(observed.tags ?? {}).some((k) =>
-            k.startsWith("alchemy::"),
-          ),
-        ).toBe(true);
+        expect(Object.keys(observed.tags ?? {}).some((k) => k.startsWith("alchemy::"))).toBe(true);
 
         // UPDATE — tags are the only mutable aspect; the profile (name,
         // arn, version) must be untouched

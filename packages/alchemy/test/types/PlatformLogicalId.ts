@@ -8,23 +8,13 @@ import type { BaseRuntimeContext } from "@/RuntimeContext.ts";
 interface TestProps extends PlatformProps {
   env?: Record<string, string>;
 }
-interface TestResource extends Resource<
-  "Test.PlatformIdentity",
-  TestProps,
-  {}
-> {}
+interface TestResource extends Resource<"Test.PlatformIdentity", TestProps, {}> {}
 
-declare const TestPlatform: Platform<
-  TestResource,
-  never,
-  { value: number },
-  BaseRuntimeContext
->;
+declare const TestPlatform: Platform<TestResource, never, { value: number }, BaseRuntimeContext>;
 
-class ModularPlatform extends TestPlatform<
-  ModularPlatform,
-  { value: number }
->()("ModularPlatform") {}
+class ModularPlatform extends TestPlatform<ModularPlatform, { value: number }>()(
+  "ModularPlatform",
+) {}
 class BarePlatform extends TestPlatform<BarePlatform>()("BarePlatform") {}
 class InlinePlatform extends TestPlatform<InlinePlatform>()(
   "InlinePlatform",
@@ -37,15 +27,8 @@ class EffectPropsPlatform extends TestPlatform<EffectPropsPlatform>()(
   Effect.succeed({ value: 1 }),
 ) {}
 const ExternalPlatform = TestPlatform("ExternalPlatform", {});
-const ExternalEffectPlatform = TestPlatform(
-  "ExternalEffectPlatform",
-  Effect.succeed({}),
-);
-const FunctionalPlatform = TestPlatform(
-  "FunctionalPlatform",
-  {},
-  Effect.succeed({ value: 1 }),
-);
+const ExternalEffectPlatform = TestPlatform("ExternalEffectPlatform", Effect.succeed({}));
+const FunctionalPlatform = TestPlatform("FunctionalPlatform", {}, Effect.succeed({ value: 1 }));
 const FunctionalEffectPlatform = TestPlatform(
   "FunctionalEffectPlatform",
   Effect.succeed({}),
@@ -53,11 +36,7 @@ const FunctionalEffectPlatform = TestPlatform(
 );
 
 class ModularWorker extends Worker<ModularWorker, {}>()("ModularWorker") {}
-class InlineWorker extends Worker<InlineWorker>()(
-  "InlineWorker",
-  {},
-  Effect.succeed({}),
-) {}
+class InlineWorker extends Worker<InlineWorker>()("InlineWorker", {}, Effect.succeed({})) {}
 class EffectPropsWorker extends Worker<EffectPropsWorker>()(
   "EffectPropsWorker",
   Effect.succeed({}),
@@ -70,14 +49,10 @@ class ExternalEffectWorker extends Worker<ExternalEffectWorker>()(
 ) {}
 const FunctionalWorker = Worker("FunctionalWorker", {}, Effect.succeed({}));
 const ExternalFunctionalWorker = Worker("ExternalFunctionalWorker", {});
-const ExternalFunctionalEffectWorker = Worker(
-  "ExternalFunctionalEffectWorker",
-  Effect.succeed({}),
-);
+const ExternalFunctionalEffectWorker = Worker("ExternalFunctionalEffectWorker", Effect.succeed({}));
 
-const identity = <const Id extends string>(
-  declaration: PlatformIdentity<Id>,
-): Id => declaration.LogicalId;
+const identity = <const Id extends string>(declaration: PlatformIdentity<Id>): Id =>
+  declaration.LogicalId;
 
 const ids = {
   ModularPlatform: identity(ModularPlatform),
@@ -100,9 +75,7 @@ const ids = {
 
 type Assert<T extends true> = T;
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type _LiteralIds = Assert<Equal<typeof ids, { [Id in keyof typeof ids]: Id }>>;
 
 const modularLayer = ModularPlatform.make({}, Effect.succeed({ value: 1 }));
@@ -115,13 +88,9 @@ type _ProvidedPlatform = Assert<
   Effect.Success<typeof providedPlatform> extends TestResource ? true : false
 >;
 type _ProvidedBarePlatform = Assert<
-  Effect.Success<typeof providedBarePlatform> extends TestResource
-    ? true
-    : false
+  Effect.Success<typeof providedBarePlatform> extends TestResource ? true : false
 >;
-type _ProvidedWorker = Assert<
-  Effect.Success<typeof providedWorker> extends Worker ? true : false
->;
+type _ProvidedWorker = Assert<Effect.Success<typeof providedWorker> extends Worker ? true : false>;
 
 // Existing explicit type arguments still describe props requirements and bindings.
 TestPlatform<never>("ExplicitPlatform", {});
@@ -130,15 +99,9 @@ Worker<{ TOKEN: string }>("ExplicitWorker", { env: { TOKEN: "token" } });
 declare const dynamicId: string;
 const DynamicPlatform = TestPlatform(dynamicId, {});
 const DynamicWorker = Worker(dynamicId, {});
-const DynamicInlinePlatform = TestPlatform(
-  dynamicId,
-  {},
-  Effect.succeed({ value: 1 }),
-);
+const DynamicInlinePlatform = TestPlatform(dynamicId, {}, Effect.succeed({ value: 1 }));
 const DynamicInlineWorker = Worker(dynamicId, {}, Effect.succeed({}));
-class DynamicPlatformClass extends TestPlatform<DynamicPlatformClass>()(
-  dynamicId,
-) {}
+class DynamicPlatformClass extends TestPlatform<DynamicPlatformClass>()(dynamicId) {}
 class DynamicWorkerClass extends Worker<DynamicWorkerClass>()(dynamicId, {}) {}
 type _DynamicIds = Assert<
   Equal<

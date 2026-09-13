@@ -151,10 +151,7 @@ describe.sequential("State", () => {
         value: sampleState(fqnB, "inst-b"),
       });
       const fqns = yield* store.list({ stack: STACK, stage: STAGE });
-      expect([...fqns].sort()).toEqual([
-        "stack/scope/resource-a",
-        "stack/scope/resource-b",
-      ]);
+      expect([...fqns].sort()).toEqual(["stack/scope/resource-a", "stack/scope/resource-b"]);
     }),
     { timeout: 60_000 },
   );

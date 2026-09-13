@@ -193,9 +193,7 @@ class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{
   name: string;
 }> {}
 
-const asFormat = (
-  format: string | null | undefined,
-): VolumeFormat | undefined =>
+const asFormat = (format: string | null | undefined): VolumeFormat | undefined =>
   format === "ext4" || format === "xfs" ? format : undefined;
 
 const userLabels = (
@@ -230,17 +228,9 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-const createVolumeName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createVolumeName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: MAX_NAME_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: MAX_NAME_LENGTH }));
   });
 
 const getById = (id: number) =>
@@ -252,9 +242,7 @@ const getById = (id: number) =>
 const getByName = (name: string) =>
   Services.volumes
     .listVolumes({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ volumes }) => volumes.find((item) => item.name === name)),
-    );
+    .pipe(Effect.map(({ volumes }) => volumes.find((item) => item.name === name)));
 
 const getByLabels = (labels: Record<string, string>) =>
   Services.volumes
@@ -313,14 +301,10 @@ const waitUntilAvailable = (volumeId: number) =>
   );
 
 const settleAction = (action: Parameters<typeof waitForAction>[0]) =>
-  waitForAction(action).pipe(
-    Effect.catchTag("ActionTimeout", () => Effect.void),
-  );
+  waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void));
 
 const settleActions = (actions: Parameters<typeof waitForActions>[0]) =>
-  waitForActions(actions).pipe(
-    Effect.catchTag("ActionTimeout", () => Effect.void),
-  );
+  waitForActions(actions).pipe(Effect.catchTag("ActionTimeout", () => Effect.void));
 
 const waitUntilGone = (volumeId: number) =>
   Services.volumes.getVolume({ id: volumeId }).pipe(
@@ -386,14 +370,12 @@ export const VolumeProvider = () =>
       };
       const desiredServerId = serverIdOf(news.server);
       const location =
-        news.location ??
-        (desiredServerId === undefined ? DEFAULT_LOCATION : undefined);
+        news.location ?? (desiredServerId === undefined ? DEFAULT_LOCATION : undefined);
 
       // Observe by id then desired name only. Do not fall back to
       // ownership labels — a create-first replacement still has the old
       // generation live under the same logical id.
-      let current =
-        output?.id !== undefined ? yield* getById(output.id) : undefined;
+      let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {
         current = yield* getByName(name);
       }
@@ -409,8 +391,7 @@ export const VolumeProvider = () =>
             location,
             labels: desiredLabels,
             server: desiredServerId,
-            automount:
-              desiredServerId !== undefined ? news.automount : undefined,
+            automount: desiredServerId !== undefined ? news.automount : undefined,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
@@ -431,8 +412,7 @@ export const VolumeProvider = () =>
       // updateVolume overwrites the full label set.
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const needsMeta =
-        current.name !== name || upsert.length > 0 || removed.length > 0;
+      const needsMeta = current.name !== name || upsert.length > 0 || removed.length > 0;
       if (needsMeta) {
         const updated = yield* Services.volumes.updateVolume({
           id: current.id,
@@ -480,12 +460,10 @@ export const VolumeProvider = () =>
       if (current === undefined) return;
 
       if (current.protection.delete) {
-        const { action } = yield* Services.volumeActions.changeVolumeProtection(
-          {
-            id: current.id,
-            delete: false,
-          },
-        );
+        const { action } = yield* Services.volumeActions.changeVolumeProtection({
+          id: current.id,
+          delete: false,
+        });
         yield* settleAction(action);
       }
 
@@ -495,10 +473,7 @@ export const VolumeProvider = () =>
           Effect.flatMap(({ action }) => settleAction(action)),
           // Server delete detaches the Volume first; treat that race as
           // already-detached.
-          Effect.catchTag(
-            ["NotFound", "UnprocessableEntity"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
         );
       }
 

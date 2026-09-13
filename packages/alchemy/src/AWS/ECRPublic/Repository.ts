@@ -19,8 +19,7 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
 
 export type RepositoryName = string;
-export type RepositoryArn =
-  `arn:aws:ecr-public::${AccountID}:repository/${RepositoryName}`;
+export type RepositoryArn = `arn:aws:ecr-public::${AccountID}:repository/${RepositoryName}`;
 
 /**
  * Catalog display metadata shown on the public.ecr.aws gallery page for a
@@ -126,9 +125,7 @@ export interface PublicRepository extends Resource<
  *
  * @resource
  */
-export const PublicRepository = Resource<PublicRepository>(
-  "AWS.ECRPublic.Repository",
-);
+export const PublicRepository = Resource<PublicRepository>("AWS.ECRPublic.Repository");
 
 const toCatalogInput = (
   catalogData: PublicRepositoryCatalogData | undefined,
@@ -143,9 +140,7 @@ const toCatalogInput = (
       }
     : undefined;
 
-const toTagRecord = (
-  tags: ecrpublic.Tag[] | undefined,
-): Record<string, string> =>
+const toTagRecord = (tags: ecrpublic.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
       .filter(
@@ -159,10 +154,7 @@ export const PublicRepositoryProvider = () =>
   Provider.effect(
     PublicRepository,
     Effect.gen(function* () {
-      const toRepositoryName = (
-        id: string,
-        props: { repositoryName?: string } = {},
-      ) =>
+      const toRepositoryName = (id: string, props: { repositoryName?: string } = {}) =>
         props.repositoryName
           ? Effect.succeed(props.repositoryName)
           : createPhysicalName({ id, maxLength: 205, lowercase: true });
@@ -174,23 +166,16 @@ export const PublicRepositoryProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.repositories?.[0]),
-          Effect.catchTag("RepositoryNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const readPolicy = (repositoryName: string) =>
         pin(ecrpublic.getRepositoryPolicy({ repositoryName })).pipe(
           Effect.map((r) => r.policyText),
-          Effect.catchTag("RepositoryPolicyNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
         );
 
-      const syncPolicy = Effect.fn(function* (
-        repositoryName: string,
-        desired: string | undefined,
-      ) {
+      const syncPolicy = Effect.fn(function* (repositoryName: string, desired: string | undefined) {
         const observed = yield* readPolicy(repositoryName);
         if (desired) {
           if (observed !== desired) {
@@ -203,10 +188,7 @@ export const PublicRepositoryProvider = () =>
           }
         } else if (observed !== undefined) {
           yield* pin(ecrpublic.deleteRepositoryPolicy({ repositoryName })).pipe(
-            Effect.catchTag(
-              "RepositoryPolicyNotFoundException",
-              () => Effect.void,
-            ),
+            Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.void),
           );
         }
       });
@@ -215,15 +197,11 @@ export const PublicRepositoryProvider = () =>
         repositoryArn: string,
         desiredTags: Record<string, string>,
       ) {
-        const listed = yield* pin(
-          ecrpublic.listTagsForResource({ resourceArn: repositoryArn }),
-        );
+        const listed = yield* pin(ecrpublic.listTagsForResource({ resourceArn: repositoryArn }));
         const observedTags = toTagRecord(listed.tags);
         const { removed, upsert } = diffTags(observedTags, desiredTags);
         if (upsert.length > 0) {
-          yield* pin(
-            ecrpublic.tagResource({ resourceArn: repositoryArn, tags: upsert }),
-          );
+          yield* pin(ecrpublic.tagResource({ resourceArn: repositoryArn, tags: upsert }));
         }
         if (removed.length > 0) {
           yield* pin(
@@ -236,17 +214,11 @@ export const PublicRepositoryProvider = () =>
       });
 
       return {
-        stables: [
-          "repositoryArn",
-          "repositoryName",
-          "repositoryUri",
-          "registryId",
-        ],
+        stables: ["repositoryArn", "repositoryName", "repositoryUri", "registryId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
-            (yield* toRepositoryName(id, olds ?? {})) !==
-            (yield* toRepositoryName(id, news ?? {}))
+            (yield* toRepositoryName(id, olds ?? {})) !== (yield* toRepositoryName(id, news ?? {}))
           ) {
             return { action: "replace" } as const;
           }
@@ -271,9 +243,7 @@ export const PublicRepositoryProvider = () =>
             policyText: yield* readPolicy(repositoryName),
             tags: toTagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, toTagRecord(listed.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(listed.tags))) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const repositoryName = yield* toRepositoryName(id, news);
@@ -296,16 +266,12 @@ export const PublicRepositoryProvider = () =>
               }),
             ).pipe(
               Effect.map((r) => r.repository),
-              Effect.catchTag("RepositoryAlreadyExistsException", () =>
-                observe(repositoryName),
-              ),
+              Effect.catchTag("RepositoryAlreadyExistsException", () => observe(repositoryName)),
             );
             repository = created;
             if (!repository?.repositoryArn || !repository.repositoryUri) {
               return yield* Effect.fail(
-                new Error(
-                  `Failed to create or read public repository ${repositoryName}`,
-                ),
+                new Error(`Failed to create or read public repository ${repositoryName}`),
               );
             }
           } else if (news.catalogData) {
@@ -340,9 +306,7 @@ export const PublicRepositoryProvider = () =>
             const repositories = yield* pin(
               ecrpublic.describeRepositories.pages({}).pipe(
                 Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.repositories ?? []),
-                ),
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.repositories ?? [])),
               ),
             );
             return yield* Effect.forEach(
@@ -353,10 +317,7 @@ export const PublicRepositoryProvider = () =>
                   repositoryName: string;
                   repositoryArn: string;
                   repositoryUri: string;
-                } =>
-                  r.repositoryName != null &&
-                  r.repositoryArn != null &&
-                  r.repositoryUri != null,
+                } => r.repositoryName != null && r.repositoryArn != null && r.repositoryUri != null,
               ),
               (repository) =>
                 Effect.gen(function* () {
@@ -383,9 +344,7 @@ export const PublicRepositoryProvider = () =>
               repositoryName: output.repositoryName,
               force: true,
             }),
-          ).pipe(
-            Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
         }),
       };
     }),

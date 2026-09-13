@@ -38,13 +38,8 @@ export interface GetResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: cloudcontrol.GetResourceInput,
-    ) => Effect.Effect<
-      cloudcontrol.GetResourceOutput,
-      cloudcontrol.GetResourceError
-    >
+    ) => Effect.Effect<cloudcontrol.GetResourceOutput, cloudcontrol.GetResourceError>
   >
 > {}
 
-export const GetResource = Binding.Service<GetResource>(
-  "AWS.CloudControl.GetResource",
-);
+export const GetResource = Binding.Service<GetResource>("AWS.CloudControl.GetResource");

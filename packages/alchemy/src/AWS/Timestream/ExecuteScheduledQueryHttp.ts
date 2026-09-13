@@ -20,9 +20,7 @@ export const ExecuteScheduledQueryHttp = Layer.effect(
     // HttpClient) at layer init so the runtime callable is requirement-free.
     const executeScheduledQuery = yield* TSQ.executeScheduledQuery;
     const describeEndpoints = yield* TSQ.describeEndpoints;
-    const withQueryEndpoint = withEndpoint(
-      discover("query", describeEndpoints({})),
-    );
+    const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* (scheduledQuery: ScheduledQuery) {
       const ScheduledQueryArn = yield* scheduledQuery.scheduledQueryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -34,9 +32,7 @@ export const ExecuteScheduledQueryHttp = Layer.effect(
                 {
                   Effect: "Allow",
                   Action: ["timestream:ExecuteScheduledQuery"],
-                  Resource: [
-                    Output.interpolate`${scheduledQuery.scheduledQueryArn}`,
-                  ],
+                  Resource: [Output.interpolate`${scheduledQuery.scheduledQueryArn}`],
                 },
                 // Endpoint discovery is required and is not scoped to a
                 // resource.
@@ -50,16 +46,16 @@ export const ExecuteScheduledQueryHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(
-        `AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery.LogicalId})`,
-      )(function* (request: ExecuteScheduledQueryRequest) {
-        return yield* withQueryEndpoint(
-          executeScheduledQuery({
-            ...request,
-            ScheduledQueryArn: yield* ScheduledQueryArn,
-          }),
-        );
-      });
+      return Effect.fn(`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery.LogicalId})`)(
+        function* (request: ExecuteScheduledQueryRequest) {
+          return yield* withQueryEndpoint(
+            executeScheduledQuery({
+              ...request,
+              ScheduledQueryArn: yield* ScheduledQueryArn,
+            }),
+          );
+        },
+      );
     });
   }),
 );

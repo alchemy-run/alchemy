@@ -43,17 +43,13 @@ import type { DispatchNamespace as DispatchNamespaceResource } from "./DispatchN
 export interface Get extends Binding.Service<
   Get,
   "Cloudflare.WorkersForPlatforms.Get",
-  (
-    namespace: DispatchNamespaceResource,
-  ) => Effect.Effect<DispatchNamespaceClient>
+  (namespace: DispatchNamespaceResource) => Effect.Effect<DispatchNamespaceClient>
 > {}
 
 export const Get = Binding.Service<Get>("Cloudflare.WorkersForPlatforms.Get");
 
 /** Error raised by dynamic-dispatch runtime operations. */
-export class DispatchNamespaceError extends Data.TaggedError(
-  "DispatchNamespaceError",
-)<{
+export class DispatchNamespaceError extends Data.TaggedError("DispatchNamespaceError")<{
   /** Human-readable runtime error message. */
   message: string;
   /** Original error thrown by the Cloudflare runtime binding. */

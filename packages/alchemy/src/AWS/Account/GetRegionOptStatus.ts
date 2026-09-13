@@ -29,10 +29,7 @@ export interface GetRegionOptStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: account.GetRegionOptStatusRequest,
-    ) => Effect.Effect<
-      account.GetRegionOptStatusResponse,
-      account.GetRegionOptStatusError
-    >
+    ) => Effect.Effect<account.GetRegionOptStatusResponse, account.GetRegionOptStatusError>
   >
 > {}
 export const GetRegionOptStatus = Binding.Service<GetRegionOptStatus>(

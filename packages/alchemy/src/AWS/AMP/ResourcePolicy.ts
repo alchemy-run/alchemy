@@ -61,9 +61,7 @@ export interface ResourcePolicy extends Resource<
  *
  * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.AMP.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.AMP.ResourcePolicy");
 
 /** Order-insensitive canonical form of a JSON policy document. */
 const canonicalJson = (document: string): string => {
@@ -92,11 +90,7 @@ export const ResourcePolicyProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         return yield* amp
           .describeResourcePolicy({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (
@@ -138,8 +132,7 @@ export const ResourcePolicyProvider = () =>
           // call it only when the canonical document drifts.
           const policy =
             existing !== undefined &&
-            canonicalJson(existing.policyDocument) ===
-              canonicalJson(news!.policyDocument)
+            canonicalJson(existing.policyDocument) === canonicalJson(news!.policyDocument)
               ? existing
               : yield* amp.putResourcePolicy({
                   workspaceId,
@@ -152,18 +145,13 @@ export const ResourcePolicyProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* amp
-            .deleteResourcePolicy({ workspaceId: output.workspaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* amp.deleteResourcePolicy({ workspaceId: output.workspaceId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent workspace.

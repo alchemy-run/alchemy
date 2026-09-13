@@ -6,8 +6,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
 
 /** The AWS deploy target for the Vite build. */
-export const VITE_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vite/aws";
+export const VITE_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vite/aws";
 
 /**
  * Serializable Vite build overrides merged OVER the project's own

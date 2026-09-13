@@ -41,7 +41,6 @@ export interface ValidateStateMachineDefinition extends Binding.Service<
     >
   >
 > {}
-export const ValidateStateMachineDefinition =
-  Binding.Service<ValidateStateMachineDefinition>(
-    "AWS.StepFunctions.ValidateStateMachineDefinition",
-  );
+export const ValidateStateMachineDefinition = Binding.Service<ValidateStateMachineDefinition>(
+  "AWS.StepFunctions.ValidateStateMachineDefinition",
+);

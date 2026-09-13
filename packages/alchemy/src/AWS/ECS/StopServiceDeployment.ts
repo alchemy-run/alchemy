@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Service } from "./Service.ts";
 
-export interface StopServiceDeploymentRequest
-  extends ECS.StopServiceDeploymentRequest {}
+export interface StopServiceDeploymentRequest extends ECS.StopServiceDeploymentRequest {}
 
 /**
  * Runtime binding for `ecs:StopServiceDeployment`.
@@ -35,10 +34,7 @@ export interface StopServiceDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StopServiceDeploymentRequest,
-    ) => Effect.Effect<
-      ECS.StopServiceDeploymentResponse,
-      ECS.StopServiceDeploymentError
-    >
+    ) => Effect.Effect<ECS.StopServiceDeploymentResponse, ECS.StopServiceDeploymentError>
   >
 > {}
 export const StopServiceDeployment = Binding.Service<StopServiceDeployment>(

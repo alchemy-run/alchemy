@@ -26,13 +26,7 @@ export interface DomainMetadata extends Binding.Service<
   (
     domain: Domain,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      sdb.DomainMetadataResponse,
-      sdb.DomainMetadataError,
-      RuntimeContext
-    >
+    () => Effect.Effect<sdb.DomainMetadataResponse, sdb.DomainMetadataError, RuntimeContext>
   >
 > {}
-export const DomainMetadata = Binding.Service<DomainMetadata>(
-  "AWS.SimpleDB.DomainMetadata",
-);
+export const DomainMetadata = Binding.Service<DomainMetadata>("AWS.SimpleDB.DomainMetadata");

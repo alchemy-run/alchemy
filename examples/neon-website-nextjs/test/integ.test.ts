@@ -79,9 +79,7 @@ test(
   Effect.gen(function* () {
     const url = yield* base;
     for (const name of ["Neon", "Alchemy"]) {
-      const response = yield* Test.getWhenReady(
-        `${url}/api/hello?name=${name}`,
-      );
+      const response = yield* Test.getWhenReady(`${url}/api/hello?name=${name}`);
       expect(response.status).toBe(200);
       expect(yield* response.json).toEqual({
         name,

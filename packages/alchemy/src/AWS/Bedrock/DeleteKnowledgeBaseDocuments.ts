@@ -52,7 +52,6 @@ export interface DeleteKnowledgeBaseDocuments extends Binding.Service<
     >
   >
 > {}
-export const DeleteKnowledgeBaseDocuments =
-  Binding.Service<DeleteKnowledgeBaseDocuments>(
-    "AWS.Bedrock.DeleteKnowledgeBaseDocuments",
-  );
+export const DeleteKnowledgeBaseDocuments = Binding.Service<DeleteKnowledgeBaseDocuments>(
+  "AWS.Bedrock.DeleteKnowledgeBaseDocuments",
+);

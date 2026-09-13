@@ -34,6 +34,4 @@ export interface CreateAppsSecret extends Binding.Service<
   >
 > {}
 
-export const CreateAppsSecret = Binding.Service<CreateAppsSecret>(
-  "Stripe.CreateAppsSecret",
-);
+export const CreateAppsSecret = Binding.Service<CreateAppsSecret>("Stripe.CreateAppsSecret");

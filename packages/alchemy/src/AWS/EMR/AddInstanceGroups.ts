@@ -32,6 +32,4 @@ export interface AddInstanceGroups extends Binding.Service<
     ) => Effect.Effect<SVC.AddInstanceGroupsOutput, SVC.AddInstanceGroupsError>
   >
 > {}
-export const AddInstanceGroups = Binding.Service<AddInstanceGroups>(
-  "AWS.EMR.AddInstanceGroups",
-);
+export const AddInstanceGroups = Binding.Service<AddInstanceGroups>("AWS.EMR.AddInstanceGroups");

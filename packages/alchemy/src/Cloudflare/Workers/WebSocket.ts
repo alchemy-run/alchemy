@@ -13,9 +13,7 @@ export type RawWebSocket = cf.WebSocket;
  * Catch this tag to choose whether to fail, ignore the attachment, or close the
  * connection. Codec failures and native exceptions are preserved in `cause`.
  */
-export class WebSocketAttachmentError extends Data.TaggedError(
-  "WebSocketAttachmentError",
-)<{
+export class WebSocketAttachmentError extends Data.TaggedError("WebSocketAttachmentError")<{
   /** The failed attachment operation, or `missing` for a nullish attachment. */
   readonly reason: "encode" | "decode" | "missing" | "read" | "write";
   /** A description of the failed operation. */

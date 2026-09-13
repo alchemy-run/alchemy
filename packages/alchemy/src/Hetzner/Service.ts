@@ -20,7 +20,7 @@ import {
 import type { ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 import type { Server } from "./Server.ts";
-import { SshError, sshClientForServer } from "./Ssh.ts";
+import { sshClientForServer } from "./Ssh.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -149,25 +149,21 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  *
  * @resource
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Hetzner.Service", {
-  createRuntimeContext: createHetznerHostRuntimeContext("Hetzner.Service"),
-  // `{ server: Box }` at module scope is an Effect. Yield it here so the
-  // Server is registered and `news.server` is resolved attributes at
-  // reconcile (same DX as `yield* Server(...)` inside Effect.gen).
-  transformProps: (_id, props) =>
-    Effect.gen(function* () {
-      if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const server = Effect.isEffect(props.server)
-        ? yield* props.server as Effect.Effect<Server, never, Providers>
-        : props.server;
-      return { ...props, server };
-    }),
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Hetzner.Service", {
+    createRuntimeContext: createHetznerHostRuntimeContext("Hetzner.Service"),
+    // `{ server: Box }` at module scope is an Effect. Yield it here so the
+    // Server is registered and `news.server` is resolved attributes at
+    // reconcile (same DX as `yield* Server(...)` inside Effect.gen).
+    transformProps: (_id, props) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const server = Effect.isEffect(props.server)
+          ? yield* props.server as Effect.Effect<Server, never, Providers>
+          : props.server;
+        return { ...props, server };
+      }),
+  });
 
 export class ServiceError extends Data.TaggedError("Hetzner.ServiceError")<{
   message: string;
@@ -189,18 +185,14 @@ const ipv4Of = (value: unknown): string | undefined => {
   return typeof rec.ipv4 === "string" ? rec.ipv4 : undefined;
 };
 
-const unwrapKey = (
-  value: Redacted.Redacted<string> | string | undefined,
-): string | undefined => {
+const unwrapKey = (value: Redacted.Redacted<string> | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
   return typeof value === "string" ? value : Redacted.value(value);
 };
 
 const privateKeyOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
-  return unwrapKey(
-    (value as { privateKey?: Redacted.Redacted<string> | string }).privateKey,
-  );
+  return unwrapKey((value as { privateKey?: Redacted.Redacted<string> | string }).privateKey);
 };
 
 const createUnitName = (id: string, existing?: string) =>
@@ -242,11 +234,7 @@ export const ServiceProvider = () =>
         diff: Effect.fn(function* ({ id, news, output }) {
           if (!isResolved(news)) return undefined;
           const nextServer = serverIdOf(news.server);
-          if (
-            output !== undefined &&
-            nextServer !== undefined &&
-            output.serverId !== nextServer
-          ) {
+          if (output !== undefined && nextServer !== undefined && output.serverId !== nextServer) {
             return { action: "replace" } as const;
           }
           if (output !== undefined && news.main) {
@@ -260,8 +248,7 @@ export const ServiceProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           if (output === undefined) return undefined;
           const serverId =
-            output.serverId ??
-            (olds !== undefined ? serverIdOf(olds.server) : undefined);
+            output.serverId ?? (olds !== undefined ? serverIdOf(olds.server) : undefined);
           if (serverId === undefined) return undefined;
           const live = yield* Services.servers.getServer({ id: serverId }).pipe(
             Effect.map(({ server }) => server),
@@ -300,10 +287,7 @@ export const ServiceProvider = () =>
             ...news.env,
           };
 
-          const { archive, hash, entryRel } = yield* hosted.bundleProgram(
-            id,
-            news,
-          );
+          const { archive, hash, entryRel } = yield* hosted.bundleProgram(id, news);
 
           const ssh = yield* openSession(news);
           yield* Effect.ensuring(
@@ -339,15 +323,10 @@ export const ServiceProvider = () =>
         }),
         delete: Effect.fn(function* ({ olds, output }) {
           const ssh = yield* openSession(olds).pipe(
-            Effect.catchTag("Hetzner.SshError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Hetzner.SshError", () => Effect.succeed(undefined)),
           );
           if (ssh === undefined) return;
-          yield* Effect.ensuring(
-            hosted.removeUnit({ ssh, unitName: output.unitName }),
-            ssh.close,
-          );
+          yield* Effect.ensuring(hosted.removeUnit({ ssh, unitName: output.unitName }), ssh.close);
         }),
       });
     }),

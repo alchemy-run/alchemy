@@ -33,6 +33,4 @@ export interface ListInputs extends Binding.Service<
     ) => Effect.Effect<medialive.ListInputsResponse, medialive.ListInputsError>
   >
 > {}
-export const ListInputs = Binding.Service<ListInputs>(
-  "AWS.MediaLive.ListInputs",
-);
+export const ListInputs = Binding.Service<ListInputs>("AWS.MediaLive.ListInputs");

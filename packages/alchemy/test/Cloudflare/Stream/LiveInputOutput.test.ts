@@ -10,25 +10,20 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
 // (`Forbidden`, declared in the distilled error union) on the test's
 // own out-of-band verification calls.
 const listOutputs = (accountId: string, liveInputId: string) =>
-  stream
-    .listLiveInputOutputs({ accountId, liveInputIdentifier: liveInputId })
-    .pipe(
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
-        times: 8,
-      }),
-    );
+  stream.listLiveInputOutputs({ accountId, liveInputIdentifier: liveInputId }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: Schedule.exponential("500 millis"),
+      times: 8,
+    }),
+  );
 
 const findOutput = (accountId: string, liveInputId: string, outputId: string) =>
   listOutputs(accountId, liveInputId).pipe(
@@ -38,18 +33,13 @@ const findOutput = (accountId: string, liveInputId: string, outputId: string) =>
 const expectGone = (accountId: string, liveInputId: string, outputId: string) =>
   findOutput(accountId, liveInputId, outputId).pipe(
     Effect.flatMap((found) =>
-      found === undefined
-        ? Effect.void
-        : Effect.fail({ _tag: "OutputNotDeleted" } as const),
+      found === undefined ? Effect.void : Effect.fail({ _tag: "OutputNotDeleted" } as const),
     ),
     // The parent live input being gone counts as the output being gone.
     Effect.catchTag("LiveInputNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "OutputNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -61,11 +51,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deployOutput = (props: {
-        url: string;
-        streamKey: string;
-        enabled?: boolean;
-      }) =>
+      const deployOutput = (props: { url: string; streamKey: string; enabled?: boolean }) =>
         Effect.gen(function* () {
           const input = yield* Cloudflare.Stream.LiveInput("RestreamInput", {
             meta: { name: "alchemy-stream-output-input" },
@@ -136,17 +122,11 @@ test.provider(
         }),
       );
       expect(replaced.output.outputId).not.toEqual(created.output.outputId);
-      expect(replaced.output.url).toEqual(
-        "rtmps://b.rtmps.youtube.com/live2?backup=1",
-      );
+      expect(replaced.output.url).toEqual("rtmps://b.rtmps.youtube.com/live2?backup=1");
       expect(replaced.output.enabled).toBe(true);
 
       // The replaced (old) output is gone; the new one exists.
-      yield* expectGone(
-        accountId,
-        created.input.liveInputId,
-        created.output.outputId,
-      );
+      yield* expectGone(accountId, created.input.liveInputId, created.output.outputId);
       const observedReplaced = yield* findOutput(
         accountId,
         replaced.input.liveInputId,
@@ -156,11 +136,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      yield* expectGone(
-        accountId,
-        replaced.input.liveInputId,
-        replaced.output.outputId,
-      );
+      yield* expectGone(accountId, replaced.input.liveInputId, replaced.output.outputId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -178,15 +154,12 @@ test.provider(
           const input = yield* Cloudflare.Stream.LiveInput("HealOutputInput", {
             meta: { name: "alchemy-stream-output-heal-input" },
           });
-          const output = yield* Cloudflare.Stream.LiveInputOutput(
-            "HealOutput",
-            {
-              liveInputId: input.liveInputId,
-              url: "rtmps://a.rtmps.youtube.com/live2",
-              streamKey: "alchemy-heal-stream-key",
-              enabled,
-            },
-          );
+          const output = yield* Cloudflare.Stream.LiveInputOutput("HealOutput", {
+            liveInputId: input.liveInputId,
+            url: "rtmps://a.rtmps.youtube.com/live2",
+            streamKey: "alchemy-heal-stream-key",
+            enabled,
+          });
           return { input, output };
         });
 
@@ -216,11 +189,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      yield* expectGone(
-        accountId,
-        healed.input.liveInputId,
-        healed.output.outputId,
-      );
+      yield* expectGone(accountId, healed.input.liveInputId, healed.output.outputId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -249,21 +218,16 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
           const input = yield* Cloudflare.Stream.LiveInput("ListOutputInput", {
             meta: { name: "alchemy-stream-output-list-input" },
           });
-          const output = yield* Cloudflare.Stream.LiveInputOutput(
-            "ListOutput",
-            {
-              liveInputId: input.liveInputId,
-              url: "rtmps://a.rtmps.youtube.com/live2",
-              streamKey: "alchemy-list-stream-key",
-            },
-          );
+          const output = yield* Cloudflare.Stream.LiveInputOutput("ListOutput", {
+            liveInputId: input.liveInputId,
+            url: "rtmps://a.rtmps.youtube.com/live2",
+            streamKey: "alchemy-list-stream-key",
+          });
           return { input, output };
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Stream.LiveInputOutput,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Stream.LiveInputOutput);
 
       // Edge propagation: the freshly-created output (and its parent live
       // input enumeration) is eventually consistent — retry until present.
@@ -275,10 +239,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
         ),
         Effect.retry({
           while: (e) => e._tag === "OutputNotListed",
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
         }),
       );
 

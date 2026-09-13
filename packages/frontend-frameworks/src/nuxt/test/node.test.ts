@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
-import {
-  NITRO_HANDLER_SPECIFIER,
-  NITRO_PRESET,
-  makeNodeTarget,
-  target,
-} from "../node.ts";
+import { NITRO_HANDLER_SPECIFIER, NITRO_PRESET, makeNodeTarget, target } from "../node.ts";
 import type { NitroConfigSlice } from "../UserConfig.ts";
 
 describe("makeNodeTarget", () => {
@@ -34,9 +29,7 @@ describe("makeNodeTarget", () => {
   });
 
   it("exports the node-listener handler specifier for user entries", () => {
-    expect(NITRO_HANDLER_SPECIFIER).toBe(
-      "nitropack/presets/node/runtime/node-listener",
-    );
+    expect(NITRO_HANDLER_SPECIFIER).toBe("nitropack/presets/node/runtime/node-listener");
   });
 
   it("exposes the named `target` module export as the factory", () => {

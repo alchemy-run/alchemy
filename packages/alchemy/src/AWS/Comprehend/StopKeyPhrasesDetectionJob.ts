@@ -36,7 +36,6 @@ export interface StopKeyPhrasesDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const StopKeyPhrasesDetectionJob =
-  Binding.Service<StopKeyPhrasesDetectionJob>(
-    "AWS.Comprehend.StopKeyPhrasesDetectionJob",
-  );
+export const StopKeyPhrasesDetectionJob = Binding.Service<StopKeyPhrasesDetectionJob>(
+  "AWS.Comprehend.StopKeyPhrasesDetectionJob",
+);

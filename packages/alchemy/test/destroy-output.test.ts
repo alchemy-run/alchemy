@@ -29,18 +29,14 @@ describe("destroy clears the persisted stack output", () => {
       }).pipe(stack.deploy);
       expect(deployed).toEqual({ url: "test-string" });
 
-      expect(
-        yield* state.getOutput({ stack: stk.name, stage: stk.stage }),
-      ).toEqual({
+      expect(yield* state.getOutput({ stack: stk.name, stage: stk.stage })).toEqual({
         url: "test-string",
       });
 
       yield* stack.destroy();
 
       // The output record must be removed, not overwritten with `{}`.
-      expect(
-        yield* state.getOutput({ stack: stk.name, stage: stk.stage }),
-      ).toBeUndefined();
+      expect(yield* state.getOutput({ stack: stk.name, stage: stk.stage })).toBeUndefined();
       // ... and `listStages` must agree the stage is gone.
       expect(yield* state.listStages(stk.name)).not.toContain(stk.stage);
     }),

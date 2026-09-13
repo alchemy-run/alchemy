@@ -14,20 +14,11 @@ import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/python/worker.py");
-const depsMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/python-deps/worker.py",
-);
-const fastapiMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/python-fastapi/worker.py",
-);
+const depsMain = pathe.resolve(import.meta.dirname, "fixtures/python-deps/worker.py");
+const fastapiMain = pathe.resolve(import.meta.dirname, "fixtures/python-fastapi/worker.py");
 
 describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
   test.provider(
@@ -72,10 +63,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
         // sibling `util.py` module and an env binding, so it only renders
         // if the module graph and bindings survived the upload.
         expect(worker.url).toBeDefined();
-        yield* expectUrlContains(
-          worker.url!,
-          "alchemy-python-worker-7c1f suffix=42",
-        );
+        yield* expectUrlContains(worker.url!, "alchemy-python-worker-7c1f suffix=42");
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
@@ -103,13 +91,9 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
         const paths = bundle.files.map((file) => file.path);
         expect(paths[0]).toEqual("worker.py");
         // The vendored wheel contents ride along under python_modules/.
-        expect(
-          paths.some((p) => p.startsWith("python_modules/humanize/")),
-        ).toBe(true);
+        expect(paths.some((p) => p.startsWith("python_modules/humanize/"))).toBe(true);
         // pywrangler parity: the managed SDK package is always vendored.
-        expect(paths.some((p) => p.startsWith("python_modules/workers/"))).toBe(
-          true,
-        );
+        expect(paths.some((p) => p.startsWith("python_modules/workers/"))).toBe(true);
 
         const worker = yield* stack.deploy(
           Effect.gen(function* () {
@@ -194,10 +178,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
           ),
           Effect.retry({
             while: (e) => e._tag === "HttpAssertionFailed",
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
           }),
         )) as { name: string; total: number };
         expect(body).toEqual({ name: "widget", total: 42 });

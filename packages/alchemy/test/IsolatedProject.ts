@@ -49,19 +49,13 @@ export interface IsolatedProject {
 const ROOT = "/tmp/alchemy-test-isolated-projects";
 
 /** `packages/alchemy` — this helper lives at `packages/alchemy/test/`. */
-const ALCHEMY_PACKAGE_DIR = new URL("..", import.meta.url).pathname.replace(
-  /\/$/,
-  "",
-);
+const ALCHEMY_PACKAGE_DIR = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 
 /**
  * Declare an isolated project for `fixture` (pass `import.meta.filename`).
  * Pure: nothing is written until {@link materializeIsolatedProject}.
  */
-export const isolatedProject = (
-  name: string,
-  fixture: string,
-): IsolatedProject => {
+export const isolatedProject = (name: string, fixture: string): IsolatedProject => {
   const dir = `${ROOT}/${name}`;
   return { name, dir, main: `${dir}/main.ts`, fixture };
 };

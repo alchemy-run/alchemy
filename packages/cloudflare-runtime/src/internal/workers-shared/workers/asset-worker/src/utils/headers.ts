@@ -44,10 +44,7 @@ export function getAssetHeaders(
   if (
     configuration.debug &&
     resolver === "not-found" &&
-    flagIsEnabled(
-      configuration,
-      SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
-    )
+    flagIsEnabled(configuration, SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING)
   ) {
     headers.append(
       "X-Mf-Additional-Response-Log",
@@ -72,9 +69,7 @@ export function attachCustomHeaders(
   return jaeger.enterSpan("add_headers", (span) => {
     // Iterate through rules and find rules that match the path
     const headersMatcher = generateRulesMatcher(
-      configuration.headers?.version === HEADERS_VERSION
-        ? configuration.headers.rules
-        : {},
+      configuration.headers?.version === HEADERS_VERSION ? configuration.headers.rules : {},
       ({ set = {}, unset = [] }, replacements) => {
         const replacedSet: Record<string, string> = {};
         Object.entries(set).forEach(([key, value]) => {

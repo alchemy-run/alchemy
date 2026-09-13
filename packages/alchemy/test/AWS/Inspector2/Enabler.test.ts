@@ -8,28 +8,20 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const accountStatus = inspector2
-  .batchGetAccountStatus({})
-  .pipe(Effect.map((r) => r.accounts?.[0]));
+const accountStatus = inspector2.batchGetAccountStatus({}).pipe(Effect.map((r) => r.accounts?.[0]));
 
-const typeStatus = (
-  account: inspector2.AccountState | undefined,
-  key: "ec2" | "ecr" | "lambda",
-) => account?.resourceState?.[key]?.status;
+const typeStatus = (account: inspector2.AccountState | undefined, key: "ec2" | "ecr" | "lambda") =>
+  account?.resourceState?.[key]?.status;
 
 test.provider("account scan status is observable", () =>
   Effect.gen(function* () {
     const account = yield* accountStatus;
     expect(account?.accountId).toBeTruthy();
     expect(
-      ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
-        typeStatus(account, "ec2") ?? "",
-      ),
+      ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(typeStatus(account, "ec2") ?? ""),
     ).toBe(true);
     expect(
-      ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(
-        typeStatus(account, "ecr") ?? "",
-      ),
+      ["ENABLED", "ENABLING", "DISABLED", "DISABLING"].includes(typeStatus(account, "ecr") ?? ""),
     ).toBe(true);
   }),
 );

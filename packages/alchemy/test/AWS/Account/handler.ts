@@ -13,11 +13,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // distilled returns them as `string | Redacted<string>`. The fixture never
 // echoes the PII itself — only presence/shape — so unwrap locally.
 const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 export class AccountTestFunction extends Lambda.Function<Lambda.Function>()(
   "AccountTestFunction",
@@ -77,14 +73,11 @@ export default AccountTestFunction.make(
           const result = yield* getContactInformation().pipe(
             Effect.map((r) => ({
               ok: true as const,
-              hasFullName:
-                (unwrap(r.ContactInformation?.FullName) ?? "").length > 0,
-              hasCountryCode:
-                (unwrap(r.ContactInformation?.CountryCode) ?? "").length > 0,
+              hasFullName: (unwrap(r.ContactInformation?.FullName) ?? "").length > 0,
+              hasCountryCode: (unwrap(r.ContactInformation?.CountryCode) ?? "").length > 0,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -101,9 +94,8 @@ export default AccountTestFunction.make(
               ok: true as const,
               contactType: r.AlternateContact?.AlternateContactType ?? null,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);

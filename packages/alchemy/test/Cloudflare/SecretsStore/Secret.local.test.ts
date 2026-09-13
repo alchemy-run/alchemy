@@ -20,10 +20,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -43,10 +40,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -71,17 +65,13 @@ test.provider(
 
       const deployAt = (value: string) =>
         Effect.gen(function* () {
-          const store =
-            yield* Cloudflare.SecretsStore.Store("LocalSecretsStore");
+          const store = yield* Cloudflare.SecretsStore.Store("LocalSecretsStore");
           const secret = yield* Cloudflare.SecretsStore.Secret("LocalApiKey", {
             store,
             value: Redacted.make(value),
           });
           const worker = yield* Cloudflare.Worker("secrets-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/secrets-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/secrets-local-worker.ts"),
             env: { SECRET: secret },
           });
           return { store, secret, worker };
@@ -133,21 +123,15 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* Cloudflare.SecretsStore.Store(
-            "RemoteSecretsStore",
-          ).pipe(Alchemy.remote());
-          const secret = yield* Cloudflare.SecretsStore.Secret(
-            "RemoteDevApiKey",
-            {
-              store,
-              value: Redacted.make("sk-remote-dev-value"),
-            },
-          ).pipe(Alchemy.remote());
+          const store = yield* Cloudflare.SecretsStore.Store("RemoteSecretsStore").pipe(
+            Alchemy.remote(),
+          );
+          const secret = yield* Cloudflare.SecretsStore.Secret("RemoteDevApiKey", {
+            store,
+            value: Redacted.make("sk-remote-dev-value"),
+          }).pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("secrets-remote-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/secrets-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/secrets-local-worker.ts"),
             env: { SECRET: secret },
           });
           return { store, secret, worker };

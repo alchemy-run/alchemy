@@ -34,9 +34,7 @@ describe("AWS.IAM.SSHPublicKey", () => {
       const provider = yield* Provider.findProvider(SSHPublicKey);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (entry) => entry.sshPublicKeyId === deployed.key.sshPublicKeyId,
-      );
+      const found = all.find((entry) => entry.sshPublicKeyId === deployed.key.sshPublicKeyId);
       expect(found).toBeDefined();
       expect(found?.userName).toBe(deployed.user.userName);
       expect(found?.sshPublicKeyBody).toBeDefined();

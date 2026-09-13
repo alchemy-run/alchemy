@@ -15,11 +15,7 @@ class WebACLStillExists extends Data.TaggedError("WebACLStillExists")<{
   readonly name: string;
 }> {}
 
-const assertWebAclDeleted = (
-  name: string,
-  id: string,
-  scope: "REGIONAL" | "CLOUDFRONT",
-) =>
+const assertWebAclDeleted = (name: string, id: string, scope: "REGIONAL" | "CLOUDFRONT") =>
   wafv2.getWebACL({ Name: name, Scope: scope, Id: id }).pipe(
     Effect.flatMap(() => Effect.fail(new WebACLStillExists({ name }))),
     Effect.catchTag("WAFNonexistentItemException", () => Effect.void),
@@ -106,9 +102,7 @@ test.provider(
       expect(created.WebACL?.DefaultAction?.Allow).toBeDefined();
       const ruleNames = (created.WebACL?.Rules ?? []).map((r) => r.Name);
       expect(ruleNames).toEqual(["managed-common", "rate-limit", "block-path"]);
-      const managed = created.WebACL?.Rules?.find(
-        (r) => r.Name === "managed-common",
-      );
+      const managed = created.WebACL?.Rules?.find((r) => r.Name === "managed-common");
       expect(managed?.Statement?.ManagedRuleGroupStatement?.Name).toBe(
         "AWSManagedRulesCommonRuleSet",
       );
@@ -151,10 +145,7 @@ test.provider(
         ResourceARN: acl.webAclArn,
       });
       const updatedRecord = Object.fromEntries(
-        (updatedTags.TagInfoForResource?.TagList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (updatedTags.TagInfoForResource?.TagList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(updatedRecord.Extra).toBe("1");
 
@@ -194,11 +185,7 @@ test.provider(
       yield* assertWebAclDeleted(first.webAclName, first.webAclId, "REGIONAL");
 
       yield* stack.destroy();
-      yield* assertWebAclDeleted(
-        second.webAclName,
-        second.webAclId,
-        "REGIONAL",
-      );
+      yield* assertWebAclDeleted(second.webAclName, second.webAclId, "REGIONAL");
     }),
   { timeout: 120_000 },
 );
@@ -233,11 +220,9 @@ test.provider.skipIf(!process.env.AWS_TEST_WAF_CLOUDFRONT)(
       expect(created.WebACL?.ARN).toBe(acl.webAclArn);
 
       yield* stack.destroy();
-      yield* assertWebAclDeleted(
-        acl.webAclName,
-        acl.webAclId,
-        "CLOUDFRONT",
-      ).pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
+      yield* assertWebAclDeleted(acl.webAclName, acl.webAclId, "CLOUDFRONT").pipe(
+        Effect.provideService(AwsRegion, Effect.succeed("us-east-1")),
+      );
     }),
   { timeout: 120_000 },
 );

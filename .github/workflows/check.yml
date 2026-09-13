@@ -81,14 +81,14 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Build
+        run: pnpm tsc -b
+
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
 
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
-
-      - name: Run Typecheck
-        run: pnpm tsc -b
 
       - name: Test CLI launcher
         run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
@@ -105,3 +105,6 @@ jobs:
           github.event.pull_request.head.repo.full_name != github.repository ||
           !contains(github.event.pull_request.labels.*.name, 'deploy-website')
         run: pnpm docs:check
+
+      - name: Run Lint
+        run: pnpm lint

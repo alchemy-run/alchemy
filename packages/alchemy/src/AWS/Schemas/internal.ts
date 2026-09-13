@@ -7,15 +7,13 @@ import { createInternalTags, diffTags, tagRecord } from "../../Tags.ts";
  * missing resource yields `{}` so callers treat it as "no tags observed".
  */
 export const readSchemasTags = Effect.fn(function* (resourceArn: string) {
-  const { Tags } = yield* schemas
-    .listTagsForResource({ ResourceArn: resourceArn })
-    .pipe(
-      Effect.catchTag("NotFoundException", () =>
-        Effect.succeed({
-          Tags: {} as Record<string, string | undefined>,
-        }),
-      ),
-    );
+  const { Tags } = yield* schemas.listTagsForResource({ ResourceArn: resourceArn }).pipe(
+    Effect.catchTag("NotFoundException", () =>
+      Effect.succeed({
+        Tags: {} as Record<string, string | undefined>,
+      }),
+    ),
+  );
   return tagRecord(Tags);
 });
 

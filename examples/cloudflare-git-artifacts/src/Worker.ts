@@ -22,8 +22,7 @@ import { Repos } from "./Repos.ts";
 // is stubbed. The repo API never serves files.
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () =>
-    Effect.die("HttpPlatform.fileWebResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
 });
 
 export default class Worker extends Cloudflare.Worker<Worker>()(
@@ -42,16 +41,10 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     const findRepo = (name: string) =>
       artifacts.list({ limit: 100 }).pipe(
         Effect.flatMap((res) => {
-          const found = res.repos.find(
-            (r: { name: string }) => r.name === name,
-          );
-          return found
-            ? Effect.succeed(found)
-            : Effect.fail(new RepoNotFound({ name }));
+          const found = res.repos.find((r: { name: string }) => r.name === name);
+          return found ? Effect.succeed(found) : Effect.fail(new RepoNotFound({ name }));
         }),
-        Effect.catchTag("ArtifactsError", () =>
-          Effect.fail(new RepoNotFound({ name })),
-        ),
+        Effect.catchTag("ArtifactsError", () => Effect.fail(new RepoNotFound({ name }))),
       );
 
     const handlers = HttpApiBuilder.group(RepoApi, "repos", (h) =>
@@ -135,9 +128,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         )
         .handle("starRepo", ({ params }) =>
           findRepo(params.name).pipe(
-            Effect.flatMap(() =>
-              repos.getByName(params.name).star().pipe(Effect.orDie),
-            ),
+            Effect.flatMap(() => repos.getByName(params.name).star().pipe(Effect.orDie)),
             Effect.map((m) => new Metadata(m)),
           ),
         )

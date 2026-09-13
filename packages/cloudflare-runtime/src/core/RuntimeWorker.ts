@@ -127,11 +127,7 @@ export interface Assets {
   directory?: string;
   headers?: string;
   redirects?: string;
-  htmlHandling?:
-    | "auto-trailing-slash"
-    | "force-trailing-slash"
-    | "drop-trailing-slash"
-    | "none";
+  htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   notFoundHandling?: "none" | "404-page" | "single-page-application";
   runWorkerFirst?: Array<string> | boolean;
   serveDirectly?: boolean;

@@ -47,18 +47,13 @@ export default IoTBindingsFunction.make(
     const listThings = yield* AWS.IoT.ListThings();
     // client-scoped
     const getConnection = yield* AWS.IoT.GetConnection("alchemy-bindings-*");
-    const listSubscriptions =
-      yield* AWS.IoT.ListSubscriptions("alchemy-bindings-*");
-    const deleteConnection =
-      yield* AWS.IoT.DeleteConnection("alchemy-bindings-*");
-    const sendDirectMessage =
-      yield* AWS.IoT.SendDirectMessage("alchemy-bindings-*");
+    const listSubscriptions = yield* AWS.IoT.ListSubscriptions("alchemy-bindings-*");
+    const deleteConnection = yield* AWS.IoT.DeleteConnection("alchemy-bindings-*");
+    const sendDirectMessage = yield* AWS.IoT.SendDirectMessage("alchemy-bindings-*");
 
     const thingName = yield* thing.thingName;
 
-    const decodeShadowPayload = (
-      payload: Stream.Stream<Uint8Array, Error> | undefined,
-    ) =>
+    const decodeShadowPayload = (payload: Stream.Stream<Uint8Array, Error> | undefined) =>
       payload === undefined
         ? Effect.succeed(undefined)
         : Stream.mkString(Stream.decodeText(payload));
@@ -126,9 +121,7 @@ export default IoTBindingsFunction.make(
 
         if (request.method === "DELETE" && pathname === "/shadow") {
           yield* deleteShadow({ shadowName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
           return yield* HttpServerResponse.json({ ok: true });
         }

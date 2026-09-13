@@ -4,10 +4,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Stream } from "./Stream.ts";
 
-export interface GetMediaRequest extends Omit<
-  kvm.GetMediaInput,
-  "StreamName" | "StreamARN"
-> {}
+export interface GetMediaRequest extends Omit<kvm.GetMediaInput, "StreamName" | "StreamARN"> {}
 
 /**
  * Runtime binding for `kinesisvideo:GetMedia` (media data plane).
@@ -56,10 +53,7 @@ export interface GetMedia extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetMediaRequest,
-    ) => Effect.Effect<
-      kvm.GetMediaOutput,
-      kvm.GetMediaError | kv.GetDataEndpointError
-    >
+    ) => Effect.Effect<kvm.GetMediaOutput, kvm.GetMediaError | kv.GetDataEndpointError>
   >
 > {}
 

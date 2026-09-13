@@ -8,10 +8,7 @@ import { errPkt, flushPkt, pktText } from "../Protocol/Pkt.ts";
 import { sidebandFrames } from "../Protocol/Sideband.ts";
 import { StoreError } from "../Protocol/Store.ts";
 import { incomingStates, type PushInput } from "../Push.ts";
-import {
-  parseReceivePackRequest,
-  type CommitPushResult,
-} from "../RepoObject.ts";
+import { parseReceivePackRequest, type CommitPushResult } from "../RepoObject.ts";
 import { feedBody, HEAD_BYTES } from "../Store/IncomingBody.ts";
 import { makeStreamingSource } from "../Store/StreamingSource.ts";
 
@@ -28,29 +25,20 @@ const headers = {
   "cache-control": "no-cache",
   "content-type": "application/x-git-receive-pack-result",
 };
-const reply = (bytes: Uint8Array) =>
-  HttpServerResponse.uint8Array(bytes, { headers });
-export const probeResponse = () =>
-  HttpServerResponse.empty({ status: 200, headers });
+const reply = (bytes: Uint8Array) => HttpServerResponse.uint8Array(bytes, { headers });
+export const probeResponse = () => HttpServerResponse.empty({ status: 200, headers });
 
 /** Decode only the bounded command header. The body remains streaming until preparePush. */
 export const decode = (request: HttpServerRequest.HttpServerRequest) =>
   Effect.gen(function* () {
     const web = yield* HttpServerRequest.toWeb(request).pipe(
-      Effect.mapError(
-        (error) =>
-          new StoreError({ reason: `incoming body: ${error.message}` }),
-      ),
+      Effect.mapError((error) => new StoreError({ reason: `incoming body: ${error.message}` })),
     );
     const feeder = makeStreamingSource();
     const gzip = /\bgzip\b/i.test(request.headers["content-encoding"] ?? "");
     const body =
-      gzip && web.body !== null
-        ? web.body.pipeThrough(new DecompressionStream("gzip"))
-        : web.body;
-    const receiving = yield* Effect.forkScoped(
-      Effect.result(feedBody(body, feeder)),
-    );
+      gzip && web.body !== null ? web.body.pipeThrough(new DecompressionStream("gzip")) : web.body;
+    const receiving = yield* Effect.forkScoped(Effect.result(feedBody(body, feeder)));
     const state = {
       feeder,
       receiving,
@@ -74,9 +62,7 @@ export const decode = (request: HttpServerRequest.HttpServerRequest) =>
     }
     const parsed = yield* parseReceivePackRequest(head);
     if (parsed.probe) return { _tag: "Probe" } as const;
-    const updates = Object.freeze(
-      parsed.commands.map((command) => Object.freeze({ ...command })),
-    );
+    const updates = Object.freeze(parsed.commands.map((command) => Object.freeze({ ...command })));
     const input: PushInput = Object.freeze({
       updates,
       atomic: parsed.capabilities.has("atomic"),
@@ -95,17 +81,12 @@ export const decode = (request: HttpServerRequest.HttpServerRequest) =>
 
 /** Encode the negotiated Git report; policy rejection is a Git result, not JSON. */
 export const response = (push: Push, result: CommitPushResult) => {
-  if (
-    !push.capabilities.has("report-status") &&
-    !push.capabilities.has("report-status-v2")
-  )
+  if (!push.capabilities.has("report-status") && !push.capabilities.has("report-status-v2"))
     return probeResponse();
   const lines = [
     pktText(`unpack ${result.unpack}`),
     ...result.results.map((ref) =>
-      pktText(
-        ref.ok ? `ok ${ref.ref}` : `ng ${ref.ref} ${ref.reason ?? "failed"}`,
-      ),
+      pktText(ref.ok ? `ok ${ref.ref}` : `ng ${ref.ref} ${ref.reason ?? "failed"}`),
     ),
     flushPkt,
   ];
@@ -129,5 +110,4 @@ export const reject = (push: Push, reason: string) =>
   });
 
 /** Encode malformed protocol input or a failed unpack operation. */
-export const failure = (reason: string) =>
-  reply(errPkt(reason.replace(/[\r\n\0]/g, " ")));
+export const failure = (reason: string) => reply(errPkt(reason.replace(/[\r\n\0]/g, " ")));

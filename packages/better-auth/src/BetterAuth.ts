@@ -74,9 +74,7 @@ export type AuthOptions<O extends BetterAuthProps> =
     : BetterAuthOptions;
 
 /** The inferred `{ session, user }` shape for a given options type. */
-export type Session<O extends BetterAuthProps> = Auth<
-  AuthOptions<O>
->["$Infer"]["Session"];
+export type Session<O extends BetterAuthProps> = Auth<AuthOptions<O>>["$Infer"]["Session"];
 
 export interface BetterAuthInstance<O extends BetterAuthProps> {
   /**
@@ -116,9 +114,7 @@ export interface BetterAuthInstance<O extends BetterAuthProps> {
       BetterAuthApiError,
       RuntimeContext | HttpServerRequest.HttpServerRequest
     >;
-    (
-      headers: Headers,
-    ): Effect.Effect<Session<O> | null, BetterAuthApiError, RuntimeContext>;
+    (headers: Headers): Effect.Effect<Session<O> | null, BetterAuthApiError, RuntimeContext>;
   };
   /** Type-level mirror of `auth.$Infer` (phantom — no runtime value). */
   readonly Infer: Auth<AuthOptions<O>>["$Infer"];
@@ -146,12 +142,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
   options: O,
 ): Effect.Effect<BetterAuthInstance<O>, never, Database> =>
   Effect.gen(function* () {
-    const {
-      id = "BetterAuth",
-      migrate,
-      secret,
-      ...userOptions
-    } = options as BetterAuthProps;
+    const { id = "BetterAuth", migrate, secret, ...userOptions } = options as BetterAuthProps;
     const authOptions = userOptions as BetterAuthOptions;
 
     const db = yield* Database;
@@ -176,9 +167,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
     // Migrate module with its better-auth/db + kysely imports — is
     // unreachable at runtime and dead-code-eliminated from bundles.
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const { registerMigration } = yield* Effect.promise(
-        () => import("./Migrate.ts"),
-      );
+      const { registerMigration } = yield* Effect.promise(() => import("./Migrate.ts"));
       yield* registerMigration({ id, options: authOptions, db, migrate });
     }
 
@@ -196,17 +185,11 @@ export const BetterAuth = <const O extends BetterAuthProps>(
         // register it with `ctx.waitUntil` on workerd and settle it
         // inline on Lambda.
         const pending: Promise<unknown>[] = [];
-        yield* Effect.addFinalizer(() =>
-          Effect.promise(() => Promise.allSettled(pending)),
-        );
+        yield* Effect.addFinalizer(() => Effect.promise(() => Promise.allSettled(pending)));
 
         const context = yield* Effect.context<RuntimeContext>();
-        const runPromise = <A, E>(
-          effect: Effect.Effect<A, E, RuntimeContext>,
-        ): Promise<A> =>
-          Effect.runPromise(
-            effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>,
-          );
+        const runPromise = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> =>
+          Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
 
         return betterAuth({
           ...authOptions,
@@ -233,9 +216,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
 
     const fetch: HttpEffect<RuntimeContext> = Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
-      const webRequest = yield* HttpServerRequest.toWeb(request).pipe(
-        Effect.orDie,
-      );
+      const webRequest = yield* HttpServerRequest.toWeb(request).pipe(Effect.orDie);
       const auth = yield* makeAuth;
       // `auth.handler` never rejects for API errors — they come back as
       // error Responses, exactly what a pass-through route wants.
@@ -245,17 +226,13 @@ export const BetterAuth = <const O extends BetterAuthProps>(
 
     const apiAny = api as Record<
       string,
-      (
-        input: unknown,
-      ) => Effect.Effect<unknown, BetterAuthApiError, RuntimeContext>
+      (input: unknown) => Effect.Effect<unknown, BetterAuthApiError, RuntimeContext>
     >;
     const getSession = ((headers?: Headers) =>
       headers === undefined
         ? Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest;
-            const webRequest = yield* HttpServerRequest.toWeb(request).pipe(
-              Effect.orDie,
-            );
+            const webRequest = yield* HttpServerRequest.toWeb(request).pipe(Effect.orDie);
             return yield* apiAny.getSession!({ headers: webRequest.headers });
           })
         : apiAny.getSession!({
@@ -277,9 +254,5 @@ export const BetterAuth = <const O extends BetterAuthProps>(
       // stack evaluation at deploy and by the bridge at runtime. They are
       // erased from the public type (same doctrine as `makeExecutionMemo`
       // erasing `Scope`); the one requirement the CALLER owns is `Database`.
-      effect as unknown as Effect.Effect<
-        BetterAuthInstance<O>,
-        never,
-        Database
-      >,
+      effect as unknown as Effect.Effect<BetterAuthInstance<O>, never, Database>,
   );

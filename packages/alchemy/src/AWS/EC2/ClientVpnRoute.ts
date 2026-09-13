@@ -90,9 +90,7 @@ export interface ClientVpnRoute extends Resource<
  *
  * @resource
  */
-export const ClientVpnRoute = Resource<ClientVpnRoute>(
-  "AWS.EC2.ClientVpnRoute",
-);
+export const ClientVpnRoute = Resource<ClientVpnRoute>("AWS.EC2.ClientVpnRoute");
 
 class ClientVpnRoutePending extends Data.TaggedError("ClientVpnRoutePending")<{
   message: string;
@@ -103,25 +101,20 @@ class ClientVpnRouteFailed extends Data.TaggedError("ClientVpnRouteFailed")<{
 }> {}
 
 const routes = (clientVpnEndpointId: ClientVpnEndpointId) =>
-  ec2.describeClientVpnRoutes
-    .items({ ClientVpnEndpointId: clientVpnEndpointId })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((items) =>
-        items.filter((route) => route.Status?.Code !== "deleted"),
-      ),
-      Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
-        Effect.succeed([] as ec2.ClientVpnRoute[]),
-      ),
-    );
+  ec2.describeClientVpnRoutes.items({ ClientVpnEndpointId: clientVpnEndpointId }).pipe(
+    Stream.runCollect,
+    Effect.map((items) => items.filter((route) => route.Status?.Code !== "deleted")),
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () =>
+      Effect.succeed([] as ec2.ClientVpnRoute[]),
+    ),
+  );
 
 const findRoute = (props: ClientVpnRouteProps) =>
   routes(props.clientVpnEndpointId).pipe(
     Effect.map((items) =>
       items.find(
         (route) =>
-          canonicalCidr(route.DestinationCidr) ===
-            canonicalCidr(props.destinationCidrBlock) &&
+          canonicalCidr(route.DestinationCidr) === canonicalCidr(props.destinationCidrBlock) &&
           route.TargetSubnet === props.targetVpcSubnetId,
       ),
     ),
@@ -164,9 +157,7 @@ const waitForRoute = (props: ClientVpnRouteProps, deleted: boolean) =>
     return yield* new ClientVpnRoutePending({
       message: `Client VPN route ${props.destinationCidrBlock} is ${route?.Status?.Code ?? "not visible"}; waiting for ${deleted ? "deletion" : "active"}`,
     });
-  }).pipe((effect) =>
-    retryClientVpn(effect, (error) => error._tag === "ClientVpnRoutePending"),
-  );
+  }).pipe((effect) => retryClientVpn(effect, (error) => error._tag === "ClientVpnRoutePending"));
 
 const removeRoute = Effect.fn(function* (props: ClientVpnRouteProps) {
   const route = yield* findRoute(props);
@@ -181,14 +172,10 @@ const removeRoute = Effect.fn(function* (props: ClientVpnRouteProps) {
       })
       .pipe(
         Effect.catchTag(
-          [
-            "InvalidClientVpnEndpointId.NotFound",
-            "InvalidClientVpnRouteNotFound",
-          ],
+          ["InvalidClientVpnEndpointId.NotFound", "InvalidClientVpnRouteNotFound"],
           () => Effect.void,
         ),
-        (effect) =>
-          retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
+        (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
       );
   }
   yield* waitForRoute(props, true);
@@ -200,35 +187,22 @@ export const ClientVpnRouteProvider = () =>
     ClientVpnRoute,
     Effect.gen(function* () {
       return {
-        stables: [
-          "clientVpnEndpointId",
-          "destinationCidrBlock",
-          "targetVpcSubnetId",
-        ],
+        stables: ["clientVpnEndpointId", "destinationCidrBlock", "targetVpcSubnetId"],
         nuke: {
-          dependsOn: [
-            "AWS.EC2.ClientVpnTargetNetworkAssociation",
-            "AWS.EC2.ClientVpnEndpoint",
-          ],
+          dependsOn: ["AWS.EC2.ClientVpnTargetNetworkAssociation", "AWS.EC2.ClientVpnEndpoint"],
         },
         list: Effect.fn(function* () {
-          const endpoints = yield* ec2.describeClientVpnEndpoints
-            .items({})
-            .pipe(Stream.runCollect);
+          const endpoints = yield* ec2.describeClientVpnEndpoints.items({}).pipe(Stream.runCollect);
           const items = yield* Effect.forEach(endpoints, (endpoint) =>
             routes(endpoint.ClientVpnEndpointId as ClientVpnEndpointId).pipe(
               Effect.map((items) =>
                 items
                   .filter(
                     (route) =>
-                      route.Origin === "add-route" &&
-                      route.TargetSubnet?.startsWith("subnet-"),
+                      route.Origin === "add-route" && route.TargetSubnet?.startsWith("subnet-"),
                   )
                   .map((route) =>
-                    toAttributes(
-                      endpoint.ClientVpnEndpointId as ClientVpnEndpointId,
-                      route,
-                    ),
+                    toAttributes(endpoint.ClientVpnEndpointId as ClientVpnEndpointId, route),
                   ),
               ),
             ),
@@ -248,8 +222,7 @@ export const ClientVpnRouteProvider = () =>
           }
           const sameKey =
             news.clientVpnEndpointId === olds.clientVpnEndpointId &&
-            canonicalCidr(news.destinationCidrBlock) ===
-              canonicalCidr(olds.destinationCidrBlock) &&
+            canonicalCidr(news.destinationCidrBlock) === canonicalCidr(olds.destinationCidrBlock) &&
             news.targetVpcSubnetId === olds.targetVpcSubnetId;
           if (
             !sameKey ||
@@ -292,15 +265,8 @@ export const ClientVpnRouteProvider = () =>
                 ClientToken: clientToken,
               })
               .pipe(
-                Effect.catchTag(
-                  "InvalidClientVpnDuplicateRoute",
-                  () => Effect.void,
-                ),
-                (effect) =>
-                  retryClientVpn(
-                    effect,
-                    (error) => error._tag === "IncorrectState",
-                  ),
+                Effect.catchTag("InvalidClientVpnDuplicateRoute", () => Effect.void),
+                (effect) => retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
               );
           }
           const active = yield* waitForRoute(news, false);

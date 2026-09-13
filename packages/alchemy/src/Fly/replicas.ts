@@ -17,11 +17,7 @@ import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../Diff.ts";
 import { listOwnedApps } from "./App.ts";
 import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
-import {
-  validateDeployment,
-  type DeploymentPolicy,
-  type MachineCheck,
-} from "./Deployment.ts";
+import { validateDeployment, type DeploymentPolicy, type MachineCheck } from "./Deployment.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import type {
   MachineGuest,
@@ -37,27 +33,18 @@ import {
   type FlyAlchemyType,
 } from "./Metadata.ts";
 import type { DiskSpec, MountedDisk } from "./MountVolume.ts";
-import {
-  deleteVolume,
-  ensureVolumeGroup,
-  getVolumeById,
-  volumeGroupName,
-} from "./Volume.ts";
+import { deleteVolume, ensureVolumeGroup, getVolumeById, volumeGroupName } from "./Volume.ts";
 
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
 
-export class ReplicaNotCreated extends Data.TaggedError(
-  "Fly.ReplicaNotCreated",
-)<{
+export class ReplicaNotCreated extends Data.TaggedError("Fly.ReplicaNotCreated")<{
   name: string;
   appName: string;
 }> {}
 
-export class ReplicaChecksNotPassing extends Data.TaggedError(
-  "Fly.ReplicaChecksNotPassing",
-)<{
+export class ReplicaChecksNotPassing extends Data.TaggedError("Fly.ReplicaChecksNotPassing")<{
   appName: string;
   machineId: string;
   checks: ReadonlyArray<{
@@ -131,14 +118,9 @@ export const listMachinesByApp = (appName: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
-export const resolveCount = (count: number | undefined) =>
-  Math.max(1, Math.floor(count ?? 1));
+export const resolveCount = (count: number | undefined) => Math.max(1, Math.floor(count ?? 1));
 
-export const replicaMachineName = (
-  base: string,
-  index: number,
-  count: number,
-) => {
+export const replicaMachineName = (base: string, index: number, count: number) => {
   if (count <= 1 && index === 0) return base;
   const suffix = `-${index}`;
   const room = 30 - suffix.length;
@@ -147,9 +129,7 @@ export const replicaMachineName = (
 };
 
 export const replicaIndexOf = (machine: FlyMachine): number => {
-  const raw = compactRecord(machine.config?.metadata)[
-    alchemyMetadataKeys.replica
-  ];
+  const raw = compactRecord(machine.config?.metadata)[alchemyMetadataKeys.replica];
   const parsed = raw === undefined ? 0 : Number(raw);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -161,15 +141,10 @@ export const alchemyIdOf = (machine: FlyMachine): string | undefined => {
 
 export const isOwnedType = (machine: FlyMachine, type: FlyAlchemyType) => {
   const metadata = compactRecord(machine.config?.metadata);
-  return (
-    isAlchemyOwnedMetadata(metadata) &&
-    metadata[alchemyMetadataKeys.type] === type
-  );
+  return isAlchemyOwnedMetadata(metadata) && metadata[alchemyMetadataKeys.type] === type;
 };
 
-export const toImageRef = (
-  ref: FlyImageRef | undefined,
-): MachineImageRef | undefined => {
+export const toImageRef = (ref: FlyImageRef | undefined): MachineImageRef | undefined => {
   if (ref === undefined) return undefined;
   const imageRef: MachineImageRef = {
     registry: ref.registry,
@@ -206,9 +181,7 @@ export const toGuestAttrs = (
   };
 };
 
-export const toFlyServiceCheck = (
-  check: MachineServiceCheck,
-): FlyMachineServiceCheck => ({
+export const toFlyServiceCheck = (check: MachineServiceCheck): FlyMachineServiceCheck => ({
   type: check.type,
   port: check.port,
   interval: check.interval,
@@ -230,11 +203,7 @@ export const toFlyService = (service: MachineService): FlyMachineService => ({
   internal_port: service.internalPort,
   autostart: service.autostart,
   autostop:
-    typeof service.autostop === "boolean"
-      ? service.autostop
-        ? "stop"
-        : "off"
-      : service.autostop,
+    typeof service.autostop === "boolean" ? (service.autostop ? "stop" : "off") : service.autostop,
   min_machines_running: service.minMachinesRunning,
   ports: service.ports?.map((port) => ({
     port: port.port,
@@ -247,27 +216,19 @@ export const toFlyService = (service: MachineService): FlyMachineService => ({
     ...toFlyServiceCheck(check),
     // Fly clamps service-check intervals; named Machine checks retain longer intervals.
     interval:
-      (durationNanoseconds(check.interval) ?? 0n) > 60_000_000_000n
-        ? "60s"
-        : check.interval,
+      (durationNanoseconds(check.interval) ?? 0n) > 60_000_000_000n ? "60s" : check.interval,
   })),
 });
 
 export const autostopMode = (value: string | boolean | undefined) =>
-  value === true
-    ? "stop"
-    : value === false || value === undefined
-      ? "off"
-      : value;
+  value === true ? "stop" : value === false || value === undefined ? "off" : value;
 
 const normalizedCheckDuration = (value: string | undefined) => {
   const nanos = durationNanoseconds(value);
   return nanos === undefined ? value : `${nanos}ns`;
 };
 
-const normalizedCheck = (
-  check: machines.FlyMachineCheck | FlyMachineServiceCheck | undefined,
-) =>
+const normalizedCheck = (check: machines.FlyMachineCheck | FlyMachineServiceCheck | undefined) =>
   check === undefined
     ? undefined
     : {
@@ -283,10 +244,7 @@ export const sameChecks = (
 ) => {
   const normalize = (checks: FlyMachineConfig["checks"]) =>
     Object.fromEntries(
-      Object.entries(checks ?? {}).map(([name, check]) => [
-        name,
-        normalizedCheck(check),
-      ]),
+      Object.entries(checks ?? {}).map(([name, check]) => [name, normalizedCheck(check)]),
     );
   return deepEqual(normalize(observed), normalize(desired), {
     stripNullish: true,
@@ -308,13 +266,9 @@ export const sameServices = (
     stripNullish: true,
   });
 
-export const hasPublishedService = (
-  services: FlyMachineService[] | undefined,
-) =>
+export const hasPublishedService = (services: FlyMachineService[] | undefined) =>
   (services ?? []).some((service) =>
-    (service.ports ?? []).some(
-      (port) => port.port !== undefined || port.start_port !== undefined,
-    ),
+    (service.ports ?? []).some((port) => port.port !== undefined || port.start_port !== undefined),
   );
 
 export const waitStarted = (appName: string, machineId: string) =>
@@ -330,8 +284,7 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) =>
-          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
+        while: (e) => e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
       Effect.timeout("50 seconds"),
     );
@@ -346,10 +299,7 @@ export const configuredCheckNames = (config: FlyMachineConfig | undefined) => [
   ),
 ];
 
-export const checksPassing = (
-  machine: FlyMachine,
-  config: FlyMachineConfig | undefined,
-) => {
+export const checksPassing = (machine: FlyMachine, config: FlyMachineConfig | undefined) => {
   const expected = configuredCheckNames(config);
   const checks = machine.checks ?? [];
   // Fly may also report compatibility mirrors; they do not replace service reports.
@@ -364,11 +314,7 @@ export const checksPassing = (
           expected.some(
             (name) =>
               name.startsWith(SERVICE_CHECK_NAME_PREFIX) &&
-              check.name ===
-                name.replace(
-                  SERVICE_CHECK_NAME_PREFIX,
-                  "bg_deployments_compat-",
-                ),
+              check.name === name.replace(SERVICE_CHECK_NAME_PREFIX, "bg_deployments_compat-"),
           )),
     ) &&
     new Set(checks.map((check) => check.name)).size === checks.length &&
@@ -401,11 +347,8 @@ export const waitHealthy = Effect.fn(function* (
 ) {
   const machineId = machine.id;
   const named = Object.keys(config?.checks ?? {});
-  const expected = (config?.services ?? []).flatMap(
-    (service) => service.checks ?? [],
-  ).length;
-  if (machineId === undefined || (expected === 0 && named.length === 0))
-    return machine;
+  const expected = (config?.services ?? []).flatMap((service) => service.checks ?? []).length;
+  if (machineId === undefined || (expected === 0 && named.length === 0)) return machine;
 
   let observed = machine;
   const notPassing = () =>
@@ -431,9 +374,7 @@ export const waitHealthy = Effect.fn(function* (
     }),
     Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
     Effect.catchTag("HttpClientError", (error) =>
-      error.reason._tag === "TransportError"
-        ? Effect.succeed(false)
-        : Effect.fail(error),
+      error.reason._tag === "TransportError" ? Effect.succeed(false) : Effect.fail(error),
     ),
     Effect.repeat({
       schedule: Schedule.spaced(healthTimeoutMs / 10),
@@ -464,8 +405,7 @@ export const waitDestroyed = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) =>
-          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
+        while: (e) => e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
       Effect.timeout("50 seconds"),
     );
@@ -479,14 +419,7 @@ export const ensureStarted = (
   existingLeases?: MachineLeases,
 ) =>
   usingMachineLeases(appName, existingLeases, (leases) =>
-    ensureLeasedStarted(
-      appName,
-      machine,
-      skipLaunch,
-      healthTimeoutMs,
-      expectedConfig,
-      leases,
-    ),
+    ensureLeasedStarted(appName, machine, skipLaunch, healthTimeoutMs, expectedConfig, leases),
   );
 
 const ensureLeasedStarted = Effect.fn(function* (
@@ -554,19 +487,10 @@ const ensureLeasedStarted = Effect.fn(function* (
     }),
     Effect.timeout("180 seconds"),
   );
-  return yield* waitHealthy(
-    appName,
-    started,
-    healthTimeoutMs,
-    expectedConfig ?? machine.config,
-  );
+  return yield* waitHealthy(appName, started, healthTimeoutMs, expectedConfig ?? machine.config);
 });
 
-export const deleteMachine = (
-  appName: string,
-  machineId: string,
-  existingLeases?: MachineLeases,
-) =>
+export const deleteMachine = (appName: string, machineId: string, existingLeases?: MachineLeases) =>
   usingMachineLeases(appName, existingLeases, (leases) =>
     Effect.gen(function* () {
       if (appName.length === 0 || machineId.length === 0) return;
@@ -603,9 +527,7 @@ const durationNanoseconds = (value: string | undefined) => {
   };
   let total = 0n;
   let consumed = 0;
-  for (const part of duration.matchAll(
-    /(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/gy,
-  )) {
+  for (const part of duration.matchAll(/(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/gy)) {
     const [integer = "", fraction = ""] = part[1]!.split(".");
     const whole = integer.replace(/^0+/, "") || "0";
     if (whole.length > 19) return undefined;
@@ -613,8 +535,7 @@ const durationNanoseconds = (value: string | undefined) => {
     let fractionalNanos = 0n;
     // Truncate each component to nanoseconds without unbounded BigInt operands.
     for (let index = fraction.length - 1; index >= 0; index--) {
-      fractionalNanos =
-        (BigInt(fraction[index]!) * unit + fractionalNanos) / 10n;
+      fractionalNanos = (BigInt(fraction[index]!) * unit + fractionalNanos) / 10n;
     }
     total += BigInt(whole) * unit + fractionalNanos;
     if (total > limit) return undefined;
@@ -627,10 +548,7 @@ const durationNanoseconds = (value: string | undefined) => {
 const stopTimeoutMillis = (timeout: string | undefined) => {
   if (timeout === "") return 0;
   // Shutdown policies retain their unsigned millisecond-or-larger syntax.
-  if (
-    timeout === undefined ||
-    !/^(?:\d+(?:\.\d+)?(?:ms|s|m|h))+$/.test(timeout)
-  ) {
+  if (timeout === undefined || !/^(?:\d+(?:\.\d+)?(?:ms|s|m|h))+$/.test(timeout)) {
     return undefined;
   }
   const nanos = durationNanoseconds(timeout);
@@ -644,9 +562,10 @@ export const sameStopConfig = (
   observed?.signal === desired?.signal &&
   stopTimeoutMillis(observed?.timeout) === stopTimeoutMillis(desired?.timeout);
 
-export class ShutdownPolicyMismatch extends Data.TaggedError(
-  "Fly.ShutdownPolicyMismatch",
-)<{ machineId: string; message: string }> {}
+export class ShutdownPolicyMismatch extends Data.TaggedError("Fly.ShutdownPolicyMismatch")<{
+  machineId: string;
+  message: string;
+}> {}
 
 export const predecessorShutdown = Effect.fn(function* (machine: FlyMachine) {
   const persisted = machine.config?.stop_config;
@@ -690,9 +609,7 @@ export const predecessorShutdown = Effect.fn(function* (machine: FlyMachine) {
   };
 });
 
-export class ReplicaOwnershipChanged extends Data.TaggedError(
-  "Fly.ReplicaOwnershipChanged",
-)<{
+export class ReplicaOwnershipChanged extends Data.TaggedError("Fly.ReplicaOwnershipChanged")<{
   appName: string;
   machineId: string;
 }> {}
@@ -728,27 +645,20 @@ const sameOwnership = (observed: FlyMachine, snapshot: FlyMachine) =>
     alchemyMetadataKeys.instance,
     alchemyMetadataKeys.fqn,
     alchemyMetadataKeys.generation,
-  ].every(
-    (key) =>
-      observed.config?.metadata?.[key] === snapshot.config?.metadata?.[key],
-  );
+  ].every((key) => observed.config?.metadata?.[key] === snapshot.config?.metadata?.[key]);
 
 export const leaseSnapshot = Effect.fn(function* (
   appName: string,
   snapshot: FlyMachine[],
   leases: MachineLeases,
 ) {
-  const ordered = [...snapshot].sort((a, b) =>
-    (a.id ?? "").localeCompare(b.id ?? ""),
-  );
+  const ordered = [...snapshot].sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
   yield* Effect.forEach(
     ordered,
     (machine) =>
       Effect.gen(function* () {
         if (!machine.id || machine.host_status === "unreachable") return;
-        yield* leases
-          .acquire([machine.id])
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* leases.acquire([machine.id]).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }),
     { concurrency: 1 },
   ).pipe(Effect.timeout("30 seconds"));
@@ -830,8 +740,7 @@ const retireLeasedMachines = Effect.fn(function* (
                     lease_nonce,
                   })
                   .pipe(Retry.none, Effect.timeout("30 seconds"));
-              if (heldNonce !== undefined)
-                yield* leases.remove(machineId, remove);
+              if (heldNonce !== undefined) yield* leases.remove(machineId, remove);
               else yield* leases.guard(remove());
             }).pipe(
               Effect.catchTag("NotFound", () => Effect.void),
@@ -852,8 +761,7 @@ const retireLeasedMachines = Effect.fn(function* (
     { concurrency: 4 },
   );
   const residuals = results.flat();
-  if (residuals.length)
-    return yield* new ReplicaRetirementIncomplete({ appName, residuals });
+  if (residuals.length) return yield* new ReplicaRetirementIncomplete({ appName, residuals });
 });
 
 export const retireMachine = (
@@ -902,8 +810,7 @@ const retireLeasedMachine = Effect.fn(
           { idempotent: true },
         )
         .pipe(retirementStep(appName, machineId, "cordon"));
-      if (hasPublishedService(current.config?.services))
-        yield* Effect.sleep("10 seconds");
+      if (hasPublishedService(current.config?.services)) yield* Effect.sleep("10 seconds");
       yield* leases
         .mutate(
           machineId,
@@ -934,8 +841,7 @@ const retireLeasedMachine = Effect.fn(
             times: 10,
             schedule: Schedule.spaced(Math.max(500, stop.timeoutMs / 10)),
             while: (error) =>
-              error._tag === "MachineWaitTimeout" ||
-              error._tag === "GatewayTimeout",
+              error._tag === "MachineWaitTimeout" || error._tag === "GatewayTimeout",
           }),
           Effect.timeout(stop.timeoutMs + 15_000),
           retirementStep(appName, machineId, "wait-stopped"),
@@ -963,10 +869,7 @@ const retireLeasedMachine = Effect.fn(
   Effect.catchTag("NotFound", () => Effect.void),
 );
 
-const mountedDisksOf = (
-  machine: FlyMachine,
-  volumesById: Map<string, FlyVolume>,
-): MountedDisk[] =>
+const mountedDisksOf = (machine: FlyMachine, volumesById: Map<string, FlyVolume>): MountedDisk[] =>
   (machine.config?.mounts ?? []).flatMap((mount) => {
     const volumeId = mount.volume;
     const path = mount.path;
@@ -982,10 +885,7 @@ const mountedDisksOf = (
     ];
   });
 
-export const toReplica = (
-  machine: FlyMachine,
-  volumesById: Map<string, FlyVolume>,
-): Replica => ({
+export const toReplica = (machine: FlyMachine, volumesById: Map<string, FlyVolume>): Replica => ({
   machineId: machine.id ?? "",
   name: machine.name ?? "",
   region: machine.region ?? "",
@@ -1016,9 +916,7 @@ export const toReplicaSet = (
     privateIp: primary?.privateIp,
     imageRef: primary?.imageRef,
     guest: primary?.guest,
-    url: hasPublishedService(services)
-      ? `https://${appName}.fly.dev`
-      : undefined,
+    url: hasPublishedService(services) ? `https://${appName}.fly.dev` : undefined,
     count: replicas.length,
     mounts: primary?.mounts ?? [],
     replicas,
@@ -1037,11 +935,7 @@ export const ownedReplicas = (
 ) =>
   listed.filter((machine) => {
     const metadata = machine.config?.metadata ?? {};
-    if (
-      !Object.entries(input.metadata).every(
-        ([key, value]) => metadata[key] === value,
-      )
-    )
+    if (!Object.entries(input.metadata).every(([key, value]) => metadata[key] === value))
       return false;
     if (metadata[alchemyMetadataKeys.instance] !== undefined) {
       return (
@@ -1053,8 +947,7 @@ export const ownedReplicas = (
       (machine.id !== undefined && input.machineIds?.includes(machine.id)) ||
       (input.baseName !== undefined &&
         (machine.name === input.baseName ||
-          machine.name ===
-            replicaMachineName(input.baseName, replicaIndexOf(machine), 2)))
+          machine.name === replicaMachineName(input.baseName, replicaIndexOf(machine), 2)))
     );
   });
 
@@ -1065,10 +958,7 @@ export const listReplicas = Effect.fn(function* (input: {
 }) {
   const machines = yield* listMachinesByApp(input.appName);
   return machines
-    .filter(
-      (machine) =>
-        isOwnedType(machine, input.type) && alchemyIdOf(machine) === input.id,
-    )
+    .filter((machine) => isOwnedType(machine, input.type) && alchemyIdOf(machine) === input.id)
     .sort((left, right) => replicaIndexOf(left) - replicaIndexOf(right));
 });
 
@@ -1079,9 +969,7 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
     (app) =>
       listMachinesByApp(app.appName).pipe(
         Effect.map((machines) => {
-          const owned = machines.filter((machine) =>
-            isOwnedType(machine, type),
-          );
+          const owned = machines.filter((machine) => isOwnedType(machine, type));
           const byId = new Map<string, FlyMachine[]>();
           for (const machine of owned) {
             const id = alchemyIdOf(machine);
@@ -1102,9 +990,7 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
             const sorted = [...group].sort(
               (left, right) => replicaIndexOf(left) - replicaIndexOf(right),
             );
-            const replicas = sorted.map((machine) =>
-              toReplica(machine, new Map()),
-            );
+            const replicas = sorted.map((machine) => toReplica(machine, new Map()));
             return toReplicaSet(
               replicas,
               app.appName,
@@ -1128,9 +1014,7 @@ const pickVolume = (
     const preferred = group.find((volume) => volume.id === preferId);
     if (preferred !== undefined) return preferred;
   }
-  return group.find(
-    (volume) => volume.id !== undefined && !used.has(volume.id),
-  );
+  return group.find((volume) => volume.id !== undefined && !used.has(volume.id));
 };
 
 export interface ReconcileReplicasInput {
@@ -1164,9 +1048,7 @@ export interface ReconcileReplicasInput {
 }
 
 export const reconcileReplicas = (input: ReconcileReplicasInput) =>
-  usingMachineLeases(input.appName, undefined, (leases) =>
-    reconcileLeasedReplicas(input, leases),
-  );
+  usingMachineLeases(input.appName, undefined, (leases) => reconcileLeasedReplicas(input, leases));
 
 const reconcileLeasedReplicas = Effect.fn(function* (
   input: ReconcileReplicasInput,
@@ -1185,10 +1067,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
       input.checks === undefined
         ? undefined
         : Object.fromEntries(
-            Object.entries(input.checks).map(([name, check]) => [
-              name,
-              toFlyServiceCheck(check),
-            ]),
+            Object.entries(input.checks).map(([name, check]) => [name, toFlyServiceCheck(check)]),
           ),
     stop_config:
       input.policy.shutdown === undefined
@@ -1199,19 +1078,9 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           },
   });
   const config = buildConfig({ index: 0, mounts: [], metadata: alchemy });
-  yield* validateDeployment(
-    input.policy,
-    config,
-    input.disks.length > 0,
-    input.skipLaunch,
-  );
+  yield* validateDeployment(input.policy, config, input.disks.length > 0, input.skipLaunch);
   if (input.policy.bluegreen)
-    return yield* reconcileBlueGreen(
-      { ...input, buildConfig },
-      ownership,
-      alchemy,
-      leases,
-    );
+    return yield* reconcileBlueGreen({ ...input, buildConfig }, ownership, alchemy, leases);
   const desiredNames = new Set(
     Array.from({ length: input.count }, (_, index) =>
       replicaMachineName(input.baseName, index, input.count),
@@ -1228,9 +1097,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     leases,
   );
   const byIndex = new Map<number, FlyMachine>();
-  const preferIds = new Set(
-    (input.outputMachineIds ?? []).filter((id) => id.length > 0),
-  );
+  const preferIds = new Set((input.outputMachineIds ?? []).filter((id) => id.length > 0));
   for (const machine of owned) {
     const id = machine.id;
     if (id !== undefined && preferIds.has(id)) {
@@ -1242,8 +1109,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     if (
       name === undefined ||
       (!desiredNames.has(name) &&
-        machine.config?.metadata?.[alchemyMetadataKeys.instance] !==
-          input.resourceInstanceId)
+        machine.config?.metadata?.[alchemyMetadataKeys.instance] !== input.resourceInstanceId)
     )
       continue;
     const index = replicaIndexOf(machine);
@@ -1291,19 +1157,13 @@ const reconcileLeasedReplicas = Effect.fn(function* (
       ...(input.minSecretsVersion === undefined
         ? {}
         : {
-            [alchemyMetadataKeys.secretsVersion]: String(
-              input.minSecretsVersion,
-            ),
+            [alchemyMetadataKeys.secretsVersion]: String(input.minSecretsVersion),
           }),
     };
     const prefer = input.preferVolumeIds?.[index] ?? [];
     const mounts: FlyMachineMount[] = [];
     for (const [diskIndex, group] of groups.entries()) {
-      const volume = pickVolume(
-        group.volumes,
-        usedVolumeIds,
-        prefer[diskIndex],
-      );
+      const volume = pickVolume(group.volumes, usedVolumeIds, prefer[diskIndex]);
       const volumeId = volume?.id;
       if (volumeId === undefined) {
         return yield* new ReplicaNotCreated({
@@ -1344,11 +1204,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           appName: input.appName,
         });
       }
-      const observed = (yield* leaseSnapshot(
-        input.appName,
-        [current],
-        leases,
-      ))[0];
+      const observed = (yield* leaseSnapshot(input.appName, [current], leases))[0];
       if (!observed || input.configDrifted(observed, { mounts, metadata })) {
         return yield* new ReplicaNotCreated({ name, appName: input.appName });
       }
@@ -1387,10 +1243,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
               machine_id: machineId,
             })
             .pipe(Retry.none);
-          if (
-            !sameOwnership(observed, expected) &&
-            !sameOwnership(observed, previous)
-          )
+          if (!sameOwnership(observed, expected) && !sameOwnership(observed, previous))
             return yield* new ReplicaOwnershipChanged({
               appName: input.appName,
               machineId,
@@ -1429,14 +1282,8 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     );
     if (current.cordoned === true && !input.skipLaunch) {
       yield* setRouting(input.appName, current.id!, false, leases);
-      if (hasPublishedService(config.services))
-        yield* Effect.sleep("10 seconds");
-      current = yield* waitHealthy(
-        input.appName,
-        current,
-        input.policy.healthTimeoutMs,
-        config,
-      );
+      if (hasPublishedService(config.services)) yield* Effect.sleep("10 seconds");
+      current = yield* waitHealthy(input.appName, current, input.policy.healthTimeoutMs, config);
     }
     live.push(current);
   }
@@ -1468,18 +1315,11 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     (machine) =>
       machine.id === undefined
         ? Effect.succeed(machine)
-        : getMachineById(input.appName, machine.id).pipe(
-            Effect.map((next) => next ?? machine),
-          ),
+        : getMachineById(input.appName, machine.id).pipe(Effect.map((next) => next ?? machine)),
     { concurrency: 4 },
   );
   const replicas = fresh.map((machine) => toReplica(machine, volumesById));
-  return toReplicaSet(
-    replicas,
-    input.appName,
-    input.baseName,
-    fresh[0]?.config?.services,
-  );
+  return toReplicaSet(replicas, input.appName, input.baseName, fresh[0]?.config?.services);
 });
 
 export const deleteReplicaSet = Effect.fn(function* (input: {
@@ -1544,8 +1384,7 @@ export const volumeIdsOf = (set: {
 export const groupGenerations = (machines: FlyMachine[]) => {
   const groups = new Map<string | undefined, FlyMachine[]>();
   for (const machine of machines) {
-    const generation =
-      machine.config?.metadata?.[alchemyMetadataKeys.generation];
+    const generation = machine.config?.metadata?.[alchemyMetadataKeys.generation];
     const group = groups.get(generation) ?? [];
     group.push(machine);
     groups.set(generation, group);
@@ -1571,9 +1410,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
   const committed = [...groups.entries()]
     .filter(([generation, group]) => {
       if (generation === undefined) return false;
-      const count = Number(
-        group[0]?.config?.metadata?.[alchemyMetadataKeys.count],
-      );
+      const count = Number(group[0]?.config?.metadata?.[alchemyMetadataKeys.count]);
       return (
         Number.isSafeInteger(count) &&
         count > 0 &&
@@ -1593,8 +1430,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
                 metadata[alchemyMetadataKeys.restored] === "true" &&
                 (metadata[alchemyMetadataKeys.role] === "idle" ||
                   (machine.instance_id !== undefined &&
-                    metadata[alchemyMetadataKeys.checkedInstance] ===
-                      machine.instance_id))))
+                    metadata[alchemyMetadataKeys.checkedInstance] === machine.instance_id))))
           );
         })
       );

@@ -3,12 +3,7 @@
 // Alchemy modifications: uses Array<T> syntax for non-tuple array types to match the repository convention.
 import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
-import type {
-  DatabaseInstance,
-  DatabaseVersion,
-  DatabaseWorkflow,
-  Engine,
-} from "../engine.ts";
+import type { DatabaseInstance, DatabaseVersion, DatabaseWorkflow, Engine } from "../engine.ts";
 import { setTestWorkflowCallback } from "./test-entry.ts";
 
 // Track fire-and-forget init() RPC promises so they can be settled

@@ -11,9 +11,7 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class GeoTestFunction extends Lambda.Function<Lambda.Function>()(
-  "GeoTestFunction",
-) {}
+export class GeoTestFunction extends Lambda.Function<Lambda.Function>()("GeoTestFunction") {}
 
 export default GeoTestFunction.make(
   {

@@ -8,10 +8,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const AUTH_DOMAIN = process.env.CLOUDFLARE_TEST_AUTH_DOMAIN;
 const skip = !AUTH_DOMAIN;
@@ -24,98 +21,94 @@ const skip = !AUTH_DOMAIN;
 // them serially so they don't corrupt each other under the global concurrent
 // test config.
 describe.sequential("Organization", () => {
-  test.provider.skipIf(skip)(
-    "adopts the existing Access organization",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(skip)("adopts the existing Access organization", (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const org = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Access.Organization("Org", {
-              authDomain: AUTH_DOMAIN!,
-              name: AUTH_DOMAIN!,
-            });
-          }),
-        );
+      const org = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Access.Organization("Org", {
+            authDomain: AUTH_DOMAIN!,
+            name: AUTH_DOMAIN!,
+          });
+        }),
+      );
 
-        expect(org.accountId).toEqual(accountId);
-        expect(org.authDomain).toEqual(AUTH_DOMAIN);
+      expect(org.accountId).toEqual(accountId);
+      expect(org.authDomain).toEqual(AUTH_DOMAIN);
 
-        const live = yield* zeroTrust.listOrganizationsForAccount({
-          accountId,
-        });
-        expect(live.authDomain).toEqual(AUTH_DOMAIN);
+      const live = yield* zeroTrust.listOrganizationsForAccount({
+        accountId,
+      });
+      expect(live.authDomain).toEqual(AUTH_DOMAIN);
 
-        // Singleton: delete is a no-op, so destroy must NOT remove the org.
-        yield* stack.destroy();
-        const stillThere = yield* zeroTrust.listOrganizationsForAccount({
-          accountId,
-        });
-        expect(stillThere.authDomain).toEqual(AUTH_DOMAIN);
-      }).pipe(logLevel),
+      // Singleton: delete is a no-op, so destroy must NOT remove the org.
+      yield* stack.destroy();
+      const stillThere = yield* zeroTrust.listOrganizationsForAccount({
+        accountId,
+      });
+      expect(stillThere.authDomain).toEqual(AUTH_DOMAIN);
+    }).pipe(logLevel),
   );
 
   // Same opt-in gate as above: toggling allow_authenticate_via_warp mutates the
   // account's live singleton org, so it requires CLOUDFLARE_TEST_AUTH_DOMAIN.
-  test.provider.skipIf(skip)(
-    "toggles allow_authenticate_via_warp and restores",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider.skipIf(skip)("toggles allow_authenticate_via_warp and restores", (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const original = yield* zeroTrust.listOrganizationsForAccount({
-          accountId,
-        });
-        const originalWarp = original.allowAuthenticateViaWarp ?? false;
-        const originalName = original.name ?? AUTH_DOMAIN!;
+      const original = yield* zeroTrust.listOrganizationsForAccount({
+        accountId,
+      });
+      const originalWarp = original.allowAuthenticateViaWarp ?? false;
+      const originalName = original.name ?? AUTH_DOMAIN!;
 
-        // Step 1 — set to true.
-        const enabled = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Access.Organization("Org", {
-              authDomain: AUTH_DOMAIN!,
-              name: originalName,
-              allowAuthenticateViaWarp: true,
-            });
-          }),
-        );
-        expect(enabled.allowAuthenticateViaWarp).toEqual(true);
-        const liveEnabled = yield* zeroTrust.listOrganizationsForAccount({
-          accountId,
-        });
-        expect(liveEnabled.allowAuthenticateViaWarp).toEqual(true);
+      // Step 1 — set to true.
+      const enabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Access.Organization("Org", {
+            authDomain: AUTH_DOMAIN!,
+            name: originalName,
+            allowAuthenticateViaWarp: true,
+          });
+        }),
+      );
+      expect(enabled.allowAuthenticateViaWarp).toEqual(true);
+      const liveEnabled = yield* zeroTrust.listOrganizationsForAccount({
+        accountId,
+      });
+      expect(liveEnabled.allowAuthenticateViaWarp).toEqual(true);
 
-        // Step 2 — flip to false.
-        const disabled = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Access.Organization("Org", {
-              authDomain: AUTH_DOMAIN!,
-              name: originalName,
-              allowAuthenticateViaWarp: false,
-            });
-          }),
-        );
-        expect(disabled.allowAuthenticateViaWarp).toEqual(false);
-        const liveDisabled = yield* zeroTrust.listOrganizationsForAccount({
-          accountId,
-        });
-        expect(liveDisabled.allowAuthenticateViaWarp).toEqual(false);
+      // Step 2 — flip to false.
+      const disabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Access.Organization("Org", {
+            authDomain: AUTH_DOMAIN!,
+            name: originalName,
+            allowAuthenticateViaWarp: false,
+          });
+        }),
+      );
+      expect(disabled.allowAuthenticateViaWarp).toEqual(false);
+      const liveDisabled = yield* zeroTrust.listOrganizationsForAccount({
+        accountId,
+      });
+      expect(liveDisabled.allowAuthenticateViaWarp).toEqual(false);
 
-        // Restore to original value via a final deploy so the account
-        // isn't left mutated by the test.
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Access.Organization("Org", {
-              authDomain: AUTH_DOMAIN!,
-              name: originalName,
-              allowAuthenticateViaWarp: originalWarp,
-            });
-          }),
-        );
+      // Restore to original value via a final deploy so the account
+      // isn't left mutated by the test.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Access.Organization("Org", {
+            authDomain: AUTH_DOMAIN!,
+            name: originalName,
+            allowAuthenticateViaWarp: originalWarp,
+          });
+        }),
+      );
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 
   // Canonical `list()` test (account singleton): there is no enumeration API
@@ -127,9 +120,7 @@ describe.sequential("Organization", () => {
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.Organization,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.Organization);
       const all = yield* provider.list();
 
       // Singleton: zero (Zero Trust never enabled) or exactly one.

@@ -28,10 +28,7 @@ export interface DeleteInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: guardduty.DeleteInvitationsRequest,
-    ) => Effect.Effect<
-      guardduty.DeleteInvitationsResponse,
-      guardduty.DeleteInvitationsError
-    >
+    ) => Effect.Effect<guardduty.DeleteInvitationsResponse, guardduty.DeleteInvitationsError>
   >
 > {}
 export const DeleteInvitations = Binding.Service<DeleteInvitations>(

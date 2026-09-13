@@ -75,9 +75,7 @@ describe("AWS.SNS.Topic", () => {
       const initialAttributes = yield* SNS.getTopicAttributes({
         TopicArn: topic.topicArn,
       });
-      expect(initialAttributes.Attributes?.DisplayName).toBe(
-        "managed-topic-v1",
-      );
+      expect(initialAttributes.Attributes?.DisplayName).toBe("managed-topic-v1");
 
       const updatedTopic = yield* stack.deploy(
         Effect.gen(function* () {
@@ -95,16 +93,12 @@ describe("AWS.SNS.Topic", () => {
       const updatedAttributes = yield* SNS.getTopicAttributes({
         TopicArn: updatedTopic.topicArn,
       });
-      expect(updatedAttributes.Attributes?.DisplayName).toBe(
-        "managed-topic-v2",
-      );
+      expect(updatedAttributes.Attributes?.DisplayName).toBe("managed-topic-v2");
 
       const tagResponse = yield* SNS.listTagsForResource({
         ResourceArn: updatedTopic.topicArn,
       });
-      const tags = Object.fromEntries(
-        (tagResponse.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-      );
+      const tags = Object.fromEntries((tagResponse.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
       expect(tags.updated).toBe("true");
       expect(tags.env).toBeUndefined();
 
@@ -190,63 +184,58 @@ describe("AWS.SNS.Topic", () => {
       }),
   );
 
-  test.provider(
-    "foreign-tagged topic requires adopt(true) to take over",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+  test.provider("foreign-tagged topic requires adopt(true) to take over", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-        // Deterministic name so a re-run reclaims any orphan from a
-        // previously-killed run instead of creating a new one.
-        const topicName = "alchemy-test-sns-takeover";
-        const topicArn = yield* topicArnFor(topicName);
+      // Deterministic name so a re-run reclaims any orphan from a
+      // previously-killed run instead of creating a new one.
+      const topicName = "alchemy-test-sns-takeover";
+      const topicArn = yield* topicArnFor(topicName);
 
-        // Pre-clean: reclaim a leftover unmanaged topic from a prior run.
-        yield* deleteTopicIdempotent(topicArn);
+      // Pre-clean: reclaim a leftover unmanaged topic from a prior run.
+      yield* deleteTopicIdempotent(topicArn);
+
+      yield* Effect.gen(function* () {
+        const original = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Topic("Original", { topicName });
+          }),
+        );
 
         yield* Effect.gen(function* () {
-          const original = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Topic("Original", { topicName });
-            }),
-          );
-
-          yield* Effect.gen(function* () {
-            const state = yield* yield* State;
-            yield* state.delete({
-              stack: stack.name,
-              stage: stack.stage,
-              fqn: "Original",
-            });
-          }).pipe(Effect.provide(stack.state));
-
-          const takenOver = yield* stack
-            .deploy(
-              Effect.gen(function* () {
-                return yield* Topic("Different", { topicName });
-              }),
-            )
-            .pipe(adopt(true));
-
-          expect(takenOver.topicArn).toEqual(original.topicArn);
-
-          const tagsResp = yield* SNS.listTagsForResource({
-            ResourceArn: takenOver.topicArn,
+          const state = yield* yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn: "Original",
           });
-          const tagMap = Object.fromEntries(
-            (tagsResp.Tags ?? [])
-              .filter(
-                (t): t is { Key: string; Value: string } =>
-                  typeof t.Value === "string",
-              )
-              .map((t) => [t.Key, t.Value]),
-          );
-          expect(tagMap["alchemy::id"]).toEqual("Different");
+        }).pipe(Effect.provide(stack.state));
 
-          yield* stack.destroy();
-          yield* assertTopicDeleted(takenOver.topicArn);
-        }).pipe(Effect.ensuring(deleteTopicIdempotent(topicArn)));
-      }),
+        const takenOver = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* Topic("Different", { topicName });
+            }),
+          )
+          .pipe(adopt(true));
+
+        expect(takenOver.topicArn).toEqual(original.topicArn);
+
+        const tagsResp = yield* SNS.listTagsForResource({
+          ResourceArn: takenOver.topicArn,
+        });
+        const tagMap = Object.fromEntries(
+          (tagsResp.Tags ?? [])
+            .filter((t): t is { Key: string; Value: string } => typeof t.Value === "string")
+            .map((t) => [t.Key, t.Value]),
+        );
+        expect(tagMap["alchemy::id"]).toEqual("Different");
+
+        yield* stack.destroy();
+        yield* assertTopicDeleted(takenOver.topicArn);
+      }).pipe(Effect.ensuring(deleteTopicIdempotent(topicArn)));
+    }),
   );
 
   // Canonical `list()` test (AWS account/region-scoped collection): deploy a

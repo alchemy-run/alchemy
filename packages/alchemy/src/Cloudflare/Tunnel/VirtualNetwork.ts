@@ -275,13 +275,11 @@ const getVnet = (accountId: string, virtualNetworkId: string) =>
  * so at most one live network can match.
  */
 const findByName = (accountId: string, name: string) =>
-  zeroTrust.listNetworkVirtualNetworks
-    .items({ accountId, name, isDeleted: false })
-    .pipe(
-      Stream.filter((v): v is ObservedVnet => v.name === name && !v.deletedAt),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-    );
+  zeroTrust.listNetworkVirtualNetworks.items({ accountId, name, isDeleted: false }).pipe(
+    Stream.filter((v): v is ObservedVnet => v.name === name && !v.deletedAt),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -289,10 +287,7 @@ const resolveName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-const toAttributes = (
-  vnet: ObservedVnet,
-  accountId: string,
-): VirtualNetworkAttributes => ({
+const toAttributes = (vnet: ObservedVnet, accountId: string): VirtualNetworkAttributes => ({
   virtualNetworkId: vnet.id,
   accountId,
   name: vnet.name,

@@ -41,8 +41,7 @@ export const makeHttpDnsBinding = <Client>(options: {
               permissionGroups: options.permissionGroups,
               resources: zone.zoneId.pipe(
                 Output.flatMap(
-                  (zoneId) =>
-                    Output.interpolate`com.cloudflare.api.account.zone.${zoneId}`,
+                  (zoneId) => Output.interpolate`com.cloudflare.api.account.zone.${zoneId}`,
                 ),
                 Output.map((zoneId) => ({
                   [zoneId]: "*",

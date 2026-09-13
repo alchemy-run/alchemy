@@ -31,8 +31,6 @@ export interface GetPipeline extends Binding.Service<
   "AWS.OSIS.GetPipeline",
   (
     pipeline: Pipeline,
-  ) => Effect.Effect<
-    () => Effect.Effect<osis.GetPipelineResponse, osis.GetPipelineError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<osis.GetPipelineResponse, osis.GetPipelineError>>
 > {}
 export const GetPipeline = Binding.Service<GetPipeline>("AWS.OSIS.GetPipeline");

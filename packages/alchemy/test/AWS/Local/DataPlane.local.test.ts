@@ -153,11 +153,9 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(listQueues.status).toBe(200);
       const queues = (yield* listQueues.json) as { QueueUrls?: string[] };
-      expect(
-        queues.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ),
-      ).toBe(true);
+      expect(queues.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`))).toBe(
+        true,
+      );
 
       const describeTable = yield* rawAwsJson({
         service: "dynamodb",
@@ -215,9 +213,7 @@ test.provider.skipIf(!dockerAvailable)(
         body: {},
       })).json) as { QueueUrls?: string[] };
       expect(
-        queuesAfter.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ) ?? false,
+        queuesAfter.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`)) ?? false,
       ).toBe(false);
 
       const tableAfter = yield* rawAwsJson({
@@ -283,9 +279,9 @@ test.provider.skipIf(!dockerAvailable)(
         Name: outputs.liveParam.parameterName,
       }).pipe(Effect.provide(liveContext));
       const liveValue = live.Parameter?.Value;
-      expect(
-        typeof liveValue === "string" ? liveValue : Redacted.value(liveValue!),
-      ).toBe("live-value");
+      expect(typeof liveValue === "string" ? liveValue : Redacted.value(liveValue!)).toBe(
+        "live-value",
+      );
 
       yield* stack.destroy();
 

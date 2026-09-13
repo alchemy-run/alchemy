@@ -7,11 +7,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { RailwayEnvironment } from "@/Railway/Environment.ts";
-import {
-  Sandbox,
-  SandboxProvider,
-  type SandboxProps,
-} from "@/Railway/Sandbox.ts";
+import { Sandbox, SandboxProvider, type SandboxProps } from "@/Railway/Sandbox.ts";
 
 const testLayer = (client: HttpClient.HttpClient) =>
   SandboxProvider().pipe(
@@ -62,13 +58,9 @@ const cloud = (status: Sandbox["Attributes"]["status"]) => ({
 const http = (respond: (query: string) => unknown) =>
   HttpClient.make((request) =>
     Effect.sync(() => {
-      if (request.body._tag !== "Uint8Array")
-        throw new Error("Expected JSON request");
+      if (request.body._tag !== "Uint8Array") throw new Error("Expected JSON request");
       const { query } = JSON.parse(new TextDecoder().decode(request.body.body));
-      return HttpClientResponse.fromWeb(
-        request,
-        Response.json({ data: respond(query) }),
-      );
+      return HttpClientResponse.fromWeb(request, Response.json({ data: respond(query) }));
     }),
   );
 
@@ -152,100 +144,92 @@ describe("Railway Sandbox provider", () => {
     ),
   );
 
-  it.effect(
-    "fails rather than returning a sandbox that never becomes ready",
-    () =>
-      Effect.gen(function* () {
-        const provider = yield* Sandbox.Provider;
-        const fiber = yield* provider
-          .reconcile({
-            ...context,
-            news: props,
-            olds: undefined,
-            output: undefined,
-          })
-          .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
-        yield* TestClock.adjust("30 seconds");
-        expect(yield* Fiber.join(fiber)).toMatchObject({
-          _tag: "Railway.SandboxPending",
-          sandboxId: "box",
-          status: "CREATING",
-        });
-      }).pipe(
-        Effect.provide(
-          testLayer(
-            http((query) =>
-              query.includes("sandboxCreate")
-                ? { sandboxCreate: cloud("CREATING") }
-                : { sandbox: cloud("CREATING") },
-            ),
-          ),
-        ),
-      ),
-  );
-
-  it.effect(
-    "recreates a missing cached sandbox and preserves an existing adopted one",
-    () => {
-      let creates = 0;
-      let exists = false;
-      return Effect.gen(function* () {
-        const provider = yield* Sandbox.Provider;
-        const recreated = yield* provider.reconcile({
-          ...context,
-          news: props,
-          olds: props,
-          output: attrs,
-        });
-        expect(recreated.status).toBe("RUNNING");
-        expect(creates).toBe(1);
-        yield* provider.reconcile({
+  it.effect("fails rather than returning a sandbox that never becomes ready", () =>
+    Effect.gen(function* () {
+      const provider = yield* Sandbox.Provider;
+      const fiber = yield* provider
+        .reconcile({
           ...context,
           news: props,
           olds: undefined,
-          output: recreated,
-        });
-        expect(creates).toBe(1);
-      }).pipe(
-        Effect.provide(
-          testLayer(
-            http((query) => {
-              if (query.includes("sandboxCreate")) {
-                creates++;
-                exists = true;
-                return { sandboxCreate: cloud("RUNNING") };
-              }
-              return { sandbox: exists ? cloud("RUNNING") : null };
-            }),
+          output: undefined,
+        })
+        .pipe(Effect.flip, Effect.forkChild({ startImmediately: true }));
+      yield* TestClock.adjust("30 seconds");
+      expect(yield* Fiber.join(fiber)).toMatchObject({
+        _tag: "Railway.SandboxPending",
+        sandboxId: "box",
+        status: "CREATING",
+      });
+    }).pipe(
+      Effect.provide(
+        testLayer(
+          http((query) =>
+            query.includes("sandboxCreate")
+              ? { sandboxCreate: cloud("CREATING") }
+              : { sandbox: cloud("CREATING") },
           ),
         ),
-      );
-    },
+      ),
+    ),
   );
 
-  it.effect(
-    "waits for DESTROYED instead of treating DESTROYING as absent",
-    () => {
-      let reads = 0;
-      return Effect.gen(function* () {
-        const provider = yield* Sandbox.Provider;
-        const fiber = yield* provider
-          .delete({ ...context, olds: props, output: attrs })
-          .pipe(Effect.forkChild({ startImmediately: true }));
-        yield* TestClock.adjust("2 seconds");
-        yield* Fiber.join(fiber);
-        expect(reads).toBe(3);
-      }).pipe(
-        Effect.provide(
-          testLayer(
-            http((query) =>
-              query.includes("sandboxDestroy")
-                ? { sandboxDestroy: cloud("DESTROYING") }
-                : { sandbox: cloud(++reads >= 3 ? "DESTROYED" : "DESTROYING") },
-            ),
+  it.effect("recreates a missing cached sandbox and preserves an existing adopted one", () => {
+    let creates = 0;
+    let exists = false;
+    return Effect.gen(function* () {
+      const provider = yield* Sandbox.Provider;
+      const recreated = yield* provider.reconcile({
+        ...context,
+        news: props,
+        olds: props,
+        output: attrs,
+      });
+      expect(recreated.status).toBe("RUNNING");
+      expect(creates).toBe(1);
+      yield* provider.reconcile({
+        ...context,
+        news: props,
+        olds: undefined,
+        output: recreated,
+      });
+      expect(creates).toBe(1);
+    }).pipe(
+      Effect.provide(
+        testLayer(
+          http((query) => {
+            if (query.includes("sandboxCreate")) {
+              creates++;
+              exists = true;
+              return { sandboxCreate: cloud("RUNNING") };
+            }
+            return { sandbox: exists ? cloud("RUNNING") : null };
+          }),
+        ),
+      ),
+    );
+  });
+
+  it.effect("waits for DESTROYED instead of treating DESTROYING as absent", () => {
+    let reads = 0;
+    return Effect.gen(function* () {
+      const provider = yield* Sandbox.Provider;
+      const fiber = yield* provider
+        .delete({ ...context, olds: props, output: attrs })
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* TestClock.adjust("2 seconds");
+      yield* Fiber.join(fiber);
+      expect(reads).toBe(3);
+    }).pipe(
+      Effect.provide(
+        testLayer(
+          http((query) =>
+            query.includes("sandboxDestroy")
+              ? { sandboxDestroy: cloud("DESTROYING") }
+              : { sandbox: cloud(++reads >= 3 ? "DESTROYED" : "DESTROYING") },
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
 });

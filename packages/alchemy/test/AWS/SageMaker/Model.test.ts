@@ -12,17 +12,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled patch carves ModelNotFound
 // out of the overloaded ValidationException. Runs in every CI pass.
-test.provider(
-  "describeModel on a nonexistent model fails with ModelNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        sagemaker.describeModel({
-          ModelName: "alchemy-nonexistent-sagemaker-model-probe",
-        }),
-      );
-      expect(error._tag).toBe("ModelNotFound");
-    }),
+test.provider("describeModel on a nonexistent model fails with ModelNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      sagemaker.describeModel({
+        ModelName: "alchemy-nonexistent-sagemaker-model-probe",
+      }),
+    );
+    expect(error._tag).toBe("ModelNotFound");
+  }),
 );
 
 const findModel = (modelName: string) =>
@@ -42,9 +40,7 @@ const sagemakerRole = Role("SageMakerModelRole", {
     ],
   },
   // CreateModel validates the execution role can pull the container image.
-  managedPolicyArns: [
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-  ],
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
 });
 
 test.provider(
@@ -94,9 +90,7 @@ test.provider(
       const { model: replaced } = yield* deployModel({ MODEL_VERSION: "2" });
       expect(replaced.modelName).not.toBe(model.modelName);
       const observedReplacement = yield* findModel(replaced.modelName);
-      expect(
-        observedReplacement?.PrimaryContainer?.Environment?.MODEL_VERSION,
-      ).toBe("2");
+      expect(observedReplacement?.PrimaryContainer?.Environment?.MODEL_VERSION).toBe("2");
       // the replaced model is deleted
       expect(yield* findModel(model.modelName)).toBeUndefined();
 

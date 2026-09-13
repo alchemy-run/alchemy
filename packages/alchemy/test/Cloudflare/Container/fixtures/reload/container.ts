@@ -21,10 +21,7 @@ export const RELOAD_CONTAINER_PORT = 17362;
  * content): the variant whose files are invisible to `bun --watch`, so its
  * hot reload rides the local worker runner's context watcher.
  */
-export class ReloadContainer extends Cloudflare.Container<ReloadContainer>()(
-  "ReloadContainer",
-  {
-    context: RELOAD_CONTEXT_DIR,
-    observability: { logs: { enabled: true } },
-  },
-) {}
+export class ReloadContainer extends Cloudflare.Container<ReloadContainer>()("ReloadContainer", {
+  context: RELOAD_CONTEXT_DIR,
+  observability: { logs: { enabled: true } },
+}) {}

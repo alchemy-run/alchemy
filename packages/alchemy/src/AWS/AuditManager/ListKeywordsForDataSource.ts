@@ -31,7 +31,6 @@ export interface ListKeywordsForDataSource extends Binding.Service<
   >
 > {}
 
-export const ListKeywordsForDataSource =
-  Binding.Service<ListKeywordsForDataSource>(
-    "AWS.AuditManager.ListKeywordsForDataSource",
-  );
+export const ListKeywordsForDataSource = Binding.Service<ListKeywordsForDataSource>(
+  "AWS.AuditManager.ListKeywordsForDataSource",
+);

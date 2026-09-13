@@ -129,9 +129,7 @@ export const HostnameCertificate = Resource<HostnameCertificate>(TypeId);
  * Returns true if the given value is an HostnameCertificate
  * resource.
  */
-export const isHostnameCertificate = (
-  value: unknown,
-): value is HostnameCertificate =>
+export const isHostnameCertificate = (value: unknown): value is HostnameCertificate =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameCertificateProvider = () =>
@@ -271,8 +269,7 @@ export const HostnameCertificateProvider = () =>
           // with a bounded retry.
           Effect.retry({
             while: (e) =>
-              e._tag === "HostnameCertificateInUse" ||
-              e._tag === "CertificatePendingDeployment",
+              e._tag === "HostnameCertificateInUse" || e._tag === "CertificatePendingDeployment",
             schedule: Schedule.spaced("5 seconds"),
             times: 10,
           }),
@@ -295,9 +292,7 @@ const isLive = (status: string | null | undefined): boolean =>
 const observeById = (zoneId: string, certificateId: string) =>
   originTls.getHostnameCertificate({ zoneId, certificateId }).pipe(
     Effect.map((cert) => (isLive(cert.status) ? cert : undefined)),
-    Effect.catchTag("HostnameCertificateNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("HostnameCertificateNotFound", () => Effect.succeed(undefined)),
   );
 
 // Locate a live certificate by exact PEM content. Tombstoned certificates
@@ -307,9 +302,7 @@ const findByContent = (zoneId: string, certificate: string) =>
   Effect.gen(function* () {
     const list = yield* originTls.listHostnameCertificates({ zoneId });
     return list.result.find(
-      (c) =>
-        isLive(c.status) &&
-        normalizePem(c.certificate ?? "") === normalizePem(certificate),
+      (c) => isLive(c.status) && normalizePem(c.certificate ?? "") === normalizePem(certificate),
     );
   });
 
@@ -328,10 +321,7 @@ type CertificateShape = {
   uploadedOn?: string | null;
 };
 
-const toAttributes = (
-  cert: CertificateShape,
-  zoneId: string,
-): HostnameCertificateAttributes => ({
+const toAttributes = (cert: CertificateShape, zoneId: string): HostnameCertificateAttributes => ({
   certificateId: cert.id!,
   zoneId,
   status: cert.status ?? undefined,

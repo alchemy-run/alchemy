@@ -86,9 +86,7 @@ export interface ConnectorProfile extends Resource<
  *
  * @resource
  */
-export const ConnectorProfile = Resource<ConnectorProfile>(
-  "AWS.AppFlow.ConnectorProfile",
-);
+export const ConnectorProfile = Resource<ConnectorProfile>("AWS.AppFlow.ConnectorProfile");
 
 export const ConnectorProfileProvider = () =>
   Provider.effect(
@@ -100,9 +98,7 @@ export const ConnectorProfileProvider = () =>
           .describeConnectorProfiles({ connectorProfileNames: [name] })
           .pipe(
             Effect.map((r) =>
-              (r.connectorProfileDetails ?? []).find(
-                (p) => p.connectorProfileName === name,
-              ),
+              (r.connectorProfileDetails ?? []).find((p) => p.connectorProfileName === name),
             ),
           );
 
@@ -121,23 +117,17 @@ export const ConnectorProfileProvider = () =>
           if (
             (olds.connectorProfileName !== undefined &&
               olds.connectorProfileName !== news.connectorProfileName) ||
-            (olds.connectorType !== undefined &&
-              olds.connectorType !== news.connectorType)
+            (olds.connectorType !== undefined && olds.connectorType !== news.connectorType)
           ) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ olds, output }) {
-          const name =
-            output?.connectorProfileName ?? olds?.connectorProfileName;
+          const name = output?.connectorProfileName ?? olds?.connectorProfileName;
           if (name === undefined) return undefined;
           const profile = yield* observe(name);
-          if (
-            profile === undefined ||
-            profile.connectorProfileArn === undefined
-          )
-            return undefined;
+          if (profile === undefined || profile.connectorProfileArn === undefined) return undefined;
           return toAttrs(name, profile);
         }),
 
@@ -169,9 +159,7 @@ export const ConnectorProfileProvider = () =>
           live = yield* observe(name);
           if (live === undefined || live.connectorProfileArn === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `Connector profile '${name}' was not found after reconcile`,
-              ),
+              new Error(`Connector profile '${name}' was not found after reconcile`),
             );
           }
 
@@ -185,9 +173,7 @@ export const ConnectorProfileProvider = () =>
               connectorProfileName: output.connectorProfileName,
               forceDelete: true,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // maxResults is load-bearing: a fully-empty request body serializes
@@ -206,8 +192,7 @@ export const ConnectorProfileProvider = () =>
                       connectorProfileName: string;
                       connectorProfileArn: string;
                     } =>
-                      p.connectorProfileName !== undefined &&
-                      p.connectorProfileArn !== undefined,
+                      p.connectorProfileName !== undefined && p.connectorProfileArn !== undefined,
                   )
                   .map((p) => toAttrs(p.connectorProfileName, p)),
               ),

@@ -99,15 +99,12 @@ export type LeakedCredentialDetection = Resource<
  * @product Leaked Credential Checks
  * @category Application Security
  */
-export const LeakedCredentialDetection =
-  Resource<LeakedCredentialDetection>(TypeId);
+export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(TypeId);
 
 /**
  * Returns true if the given value is a LeakedCredentialDetection resource.
  */
-export const isLeakedCredentialDetection = (
-  value: unknown,
-): value is LeakedCredentialDetection =>
+export const isLeakedCredentialDetection = (value: unknown): value is LeakedCredentialDetection =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LeakedCredentialDetectionProvider = () =>
@@ -127,9 +124,8 @@ export const LeakedCredentialDetectionProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (d): LeakedCredentialDetectionAttributes =>
-                    toAttributes(zone.id, d),
+                (page.result ?? []).map((d): LeakedCredentialDetectionAttributes =>
+                  toAttributes(zone.id, d),
                 ),
               ),
             ),
@@ -138,13 +134,10 @@ export const LeakedCredentialDetectionProvider = () =>
             // propagation. Either way the zone contributes nothing.
             Effect.catchTag(
               "LeakedCredentialChecksDisabled",
-              (): Effect.Effect<LeakedCredentialDetectionAttributes[]> =>
-                Effect.succeed([]),
+              (): Effect.Effect<LeakedCredentialDetectionAttributes[]> => Effect.succeed([]),
             ),
-            Effect.catchTag(
-              "Forbidden",
-              (): Effect.Effect<LeakedCredentialDetectionAttributes[]> =>
-                Effect.succeed([]),
+            Effect.catchTag("Forbidden", (): Effect.Effect<LeakedCredentialDetectionAttributes[]> =>
+              Effect.succeed([]),
             ),
           ),
         { concurrency: 10 },
@@ -156,13 +149,8 @@ export const LeakedCredentialDetectionProvider = () =>
       const o = olds as LeakedCredentialDetectionProps;
       const n = news as LeakedCredentialDetectionProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -207,11 +195,7 @@ export const LeakedCredentialDetectionProvider = () =>
       //    existing detections as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
       if (!observed) {
-        observed = yield* findByExpressions(
-          zoneId,
-          news.username,
-          news.password,
-        );
+        observed = yield* findByExpressions(zoneId, news.username, news.password);
       }
 
       // 3. Ensure — create when missing. Requires the zone's Leaked
@@ -278,9 +262,7 @@ const getDetection = (zoneId: string, detectionId: string) =>
   lcc.getDetection({ zoneId, detectionId }).pipe(
     Effect.map((d): ObservedDetection | undefined => d),
     Effect.catchTag("DetectionNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("LeakedCredentialChecksDisabled", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("LeakedCredentialChecksDisabled", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -297,13 +279,10 @@ const findByExpressions = (
     Effect.map((chunk) =>
       Array.from(chunk).find(
         (d): d is ObservedDetection =>
-          (d.username ?? undefined) === username &&
-          (d.password ?? undefined) === password,
+          (d.username ?? undefined) === username && (d.password ?? undefined) === password,
       ),
     ),
-    Effect.catchTag("LeakedCredentialChecksDisabled", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("LeakedCredentialChecksDisabled", () => Effect.succeed(undefined)),
   );
 
 const toAttributes = (

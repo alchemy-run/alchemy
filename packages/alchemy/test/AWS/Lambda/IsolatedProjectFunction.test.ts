@@ -5,10 +5,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
 import IsolatedProjectFunctionLive, {
   BODY,
   IsolatedProjectFunction,
@@ -33,9 +30,7 @@ test.provider(
 
       try {
         const { functionName, functionUrl } = yield* stack.deploy(
-          IsolatedProjectFunction.pipe(
-            Effect.provide(IsolatedProjectFunctionLive),
-          ),
+          IsolatedProjectFunction.pipe(Effect.provide(IsolatedProjectFunctionLive)),
         );
         expect(functionUrl).toBeTruthy();
 
@@ -54,15 +49,10 @@ test.provider(
         // Out-of-band proof the destroy removed the function (bounded retry
         // to ride out delete propagation).
         yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
-          Effect.flatMap(() =>
-            Effect.fail(new Error(`Function ${functionName} still exists`)),
-          ),
+          Effect.flatMap(() => Effect.fail(new Error(`Function ${functionName} still exists`))),
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
           }),
         );
       } finally {

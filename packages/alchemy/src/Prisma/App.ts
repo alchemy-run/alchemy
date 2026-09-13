@@ -17,12 +17,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedApp } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
@@ -222,18 +217,14 @@ const desiredBranchId = Effect.fn(function* (
 });
 
 const createDisplayName = (id: string, displayName: string | undefined) =>
-  displayName === undefined
-    ? createPhysicalName({ id })
-    : Effect.succeed(displayName);
+  displayName === undefined ? createPhysicalName({ id }) : Effect.succeed(displayName);
 
 const findApp = Effect.fn(function* (
   projectId: string,
   displayName: string,
   props: Pick<AppProps, "branchId" | "branchGitName">,
 ) {
-  const candidates = (yield* listApps(projectId)).filter(
-    (app) => app.name === displayName,
-  );
+  const candidates = (yield* listApps(projectId)).filter((app) => app.name === displayName);
   if (candidates.length === 0) return undefined;
   const branch = yield* desiredBranchId(projectId, props);
   if (!branch.resolved) return undefined;
@@ -259,11 +250,7 @@ const attrsFrom = (app: ObservedApp): App["Attributes"] => ({
   createdAt: app.createdAt,
 });
 
-const branchNeedsSync = Effect.fn(function* (
-  projectId: string,
-  app: ObservedApp,
-  props: AppProps,
-) {
+const branchNeedsSync = Effect.fn(function* (projectId: string, app: ObservedApp, props: AppProps) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return app.branchId !== props.branchId;
   }
@@ -278,9 +265,7 @@ const branchNeedsSync = Effect.fn(function* (
 const validateAppProps = (props: AppProps) =>
   Effect.gen(function* () {
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* Effect.fail(
-        new Error("branchId and branchGitName are mutually exclusive."),
-      );
+      return yield* Effect.fail(new Error("branchId and branchGitName are mutually exclusive."));
     }
     if (props.branchId === null || props.branchGitName === null) {
       return yield* Effect.fail(
@@ -303,8 +288,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.appId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -313,10 +297,7 @@ const ProviderLive = () =>
           }
           if (isResolved(news.regionId) && news.regionId !== undefined) {
             const currentRegionId = output?.regionId ?? olds.regionId;
-            if (
-              currentRegionId !== undefined &&
-              news.regionId !== currentRegionId
-            ) {
+            if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
               return yield* Effect.fail(
                 new Error(
                   `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
@@ -331,10 +312,7 @@ const ProviderLive = () =>
           };
           if (!isResolved(updateProps)) return undefined;
           const resolvedUpdateProps = {
-            ...(updateProps as Pick<
-              AppProps,
-              "displayName" | "branchId" | "branchGitName"
-            >),
+            ...(updateProps as Pick<AppProps, "displayName" | "branchId" | "branchGitName">),
             displayName: yield* createDisplayName(
               id,
               (updateProps as Pick<AppProps, "displayName">).displayName,
@@ -361,9 +339,7 @@ const ProviderLive = () =>
             : undefined;
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
-          const appId = isPrismaDevId(output?.appId)
-            ? undefined
-            : output?.appId;
+          const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -372,11 +348,7 @@ const ProviderLive = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findApp(
-                      projectId,
-                      yield* createDisplayName(id, olds.displayName),
-                      olds,
-                    )
+                  ? yield* findApp(projectId, yield* createDisplayName(id, olds.displayName), olds)
                   : undefined;
               });
           if (!app) return undefined;
@@ -397,9 +369,7 @@ const ProviderLive = () =>
               ),
             );
           }
-          const appId = isPrismaDevId(output?.appId)
-            ? undefined
-            : output?.appId;
+          const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let app: ObservedApp | undefined = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -411,9 +381,7 @@ const ProviderLive = () =>
               projectId,
               displayName,
               branchId: branch.id,
-              ...(news.regionId === undefined
-                ? {}
-                : { regionId: news.regionId }),
+              ...(news.regionId === undefined ? {} : { regionId: news.regionId }),
             }).pipe(
               // A replayed create would make a second App; the retry policy
               // cannot see the request, so opt out explicitly.
@@ -425,9 +393,7 @@ const ProviderLive = () =>
               Effect.catchTag("Conflict", (conflict) =>
                 findApp(projectId, displayName, news).pipe(
                   Effect.flatMap((app) =>
-                    app &&
-                    output?.appId !== undefined &&
-                    app.id === output.appId
+                    app && output?.appId !== undefined && app.id === output.appId
                       ? Effect.succeed({ app, created: false })
                       : Effect.fail(
                           new Error(
@@ -470,10 +436,7 @@ const ProviderLive = () =>
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
           if (!app) return;
-          if (
-            app.projectId !== output.projectId ||
-            app.region.id !== output.regionId
-          ) {
+          if (app.projectId !== output.projectId || app.region.id !== output.regionId) {
             return yield* Effect.fail(
               new Error(
                 `Prisma App '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched App.`,

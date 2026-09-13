@@ -3,10 +3,7 @@ import * as Layer from "effect/Layer";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import { makeHttpBucketBinding, type R2Auth } from "./BucketHttp.ts";
 import { makeReadR2HttpClient } from "./ReadBucketHttp.ts";
-import {
-  ReadWriteBucket,
-  type ReadWriteBucketClient,
-} from "./ReadWriteBucket.ts";
+import { ReadWriteBucket, type ReadWriteBucketClient } from "./ReadWriteBucket.ts";
 import { makeWriteR2HttpClient } from "./WriteBucketHttp.ts";
 
 /**

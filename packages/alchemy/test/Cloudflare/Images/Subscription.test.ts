@@ -16,40 +16,30 @@ import {
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const canUpload = process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD === "1";
 
-test.provider.skipIf(canUpload)(
-  "image uploads expose the typed entitlement rejection",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const cleanup = makeSubscriptionCleanup();
-      const error = yield* Effect.acquireRelease(
-        images.createV1({
-          accountId,
-          id: "alchemy-subscription-entitlement-probe",
-          url: "https://developers.cloudflare.com/og-docs.png",
-        }),
-        (image) =>
-          image.id
-            ? images.deleteV1({ accountId, imageId: image.id }).pipe(cleanup)
-            : Effect.void,
-      ).pipe(Effect.scoped, Effect.flip);
-      expect(error).toMatchObject({
-        _tag: "ImagesAccessNotEnabled",
-        code: 5403,
-      });
-      yield* stack.destroy();
-    }).pipe(
-      Effect.ensuring(
-        stack
-          .destroy()
-          .pipe(
-            Effect.timeout("15 seconds"),
-            Effect.orDie,
-            Effect.interruptible,
-          ),
-      ),
+test.provider.skipIf(canUpload)("image uploads expose the typed entitlement rejection", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const cleanup = makeSubscriptionCleanup();
+    const error = yield* Effect.acquireRelease(
+      images.createV1({
+        accountId,
+        id: "alchemy-subscription-entitlement-probe",
+        url: "https://developers.cloudflare.com/og-docs.png",
+      }),
+      (image) =>
+        image.id ? images.deleteV1({ accountId, imageId: image.id }).pipe(cleanup) : Effect.void,
+    ).pipe(Effect.scoped, Effect.flip);
+    expect(error).toMatchObject({
+      _tag: "ImagesAccessNotEnabled",
+      code: 5403,
+    });
+    yield* stack.destroy();
+  }).pipe(
+    Effect.ensuring(
+      stack.destroy().pipe(Effect.timeout("15 seconds"), Effect.orDie, Effect.interruptible),
     ),
+  ),
 );
 
 // Uploads require Images entitlement; the testing account returns ImagesAccessNotEnabled (5403).
@@ -71,14 +61,11 @@ test.provider.skipIf(!canUpload)(
         Effect.gen(function* () {
           const source = yield* variant;
           const queue = yield* Cloudflare.Queues.Queue("ImageEvents");
-          const subscription = yield* Cloudflare.Queues.Subscription(
-            "Uploads",
-            {
-              source: yield* Cloudflare.Images.Variant.ref("Variant"),
-              events: ["image.uploaded"],
-              queueId: queue.queueId,
-            },
-          );
+          const subscription = yield* Cloudflare.Queues.Subscription("Uploads", {
+            source: yield* Cloudflare.Images.Variant.ref("Variant"),
+            events: ["image.uploaded"],
+            queueId: queue.queueId,
+          });
           return { source, queue, subscription };
         }),
       );
@@ -135,13 +122,11 @@ test.provider.skipIf(!canUpload)(
                 times: 8,
               }),
             );
-          const decoded = yield* Effect.forEach(
-            pulled.messages ?? [],
-            ({ body }) => Schema.decodeUnknownEffect(SubscriptionEvent)(body),
+          const decoded = yield* Effect.forEach(pulled.messages ?? [], ({ body }) =>
+            Schema.decodeUnknownEffect(SubscriptionEvent)(body),
           );
           events.push(...decoded);
-          if (decoded.length)
-            yield* Effect.logInfo("Image subscription receipts", decoded);
+          if (decoded.length) yield* Effect.logInfo("Image subscription receipts", decoded);
           const acks = (pulled.messages ?? []).flatMap(({ leaseId }) =>
             leaseId ? [{ leaseId }] : [],
           );
@@ -190,13 +175,7 @@ test.provider.skipIf(!canUpload)(
     }).pipe(
       Effect.scoped,
       Effect.ensuring(
-        stack
-          .destroy()
-          .pipe(
-            Effect.timeout("15 seconds"),
-            Effect.orDie,
-            Effect.interruptible,
-          ),
+        stack.destroy().pipe(Effect.timeout("15 seconds"), Effect.orDie, Effect.interruptible),
       ),
     ),
   { timeout: 120_000, exclusive: true },

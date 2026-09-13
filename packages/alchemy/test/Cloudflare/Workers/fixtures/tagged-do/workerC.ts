@@ -8,9 +8,7 @@ import { Counter, CounterLive } from "./object.ts";
 // Tag — WorkerC also hosts its OWN Counter (declared in its public contract).
 // Because each Worker hosts its own DO namespace, the instances under
 // WorkerC are isolated from the instances under WorkerA/B.
-export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
-  "WorkerC",
-) {}
+export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()("WorkerC") {}
 
 // Layer — uses `Counter.from(WorkerC)` (self-reference) instead of
 // `yield* Counter`. The two forms are equivalent inside the host; the
@@ -48,9 +46,5 @@ export default WorkerC.make(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(
-    Effect.provide(
-      CounterLive.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)),
-    ),
-  ),
+  }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)))),
 );

@@ -45,15 +45,11 @@ export default FSxBindingsFunction.make(
     const createSnapshot = yield* FSx.CreateSnapshot();
     const deleteSnapshot = yield* FSx.DeleteSnapshot();
     const restoreVolumeFromSnapshot = yield* FSx.RestoreVolumeFromSnapshot();
-    const copySnapshotAndUpdateVolume =
-      yield* FSx.CopySnapshotAndUpdateVolume();
+    const copySnapshotAndUpdateVolume = yield* FSx.CopySnapshotAndUpdateVolume();
     const describeVolumes = yield* FSx.DescribeVolumes();
-    const describeStorageVirtualMachines =
-      yield* FSx.DescribeStorageVirtualMachines();
-    const describeDataRepositoryTasks =
-      yield* FSx.DescribeDataRepositoryTasks();
-    const describeDataRepositoryAssociations =
-      yield* FSx.DescribeDataRepositoryAssociations();
+    const describeStorageVirtualMachines = yield* FSx.DescribeStorageVirtualMachines();
+    const describeDataRepositoryTasks = yield* FSx.DescribeDataRepositoryTasks();
+    const describeDataRepositoryAssociations = yield* FSx.DescribeDataRepositoryAssociations();
     const cancelDataRepositoryTask = yield* FSx.CancelDataRepositoryTask();
 
     const bound = {
@@ -76,14 +72,10 @@ export default FSxBindingsFunction.make(
     // Run a probe expected to fail with a typed tag; return the tag so the
     // test can assert the exact typed error (proving both the IAM grant and
     // the typed error union end-to-end).
-    const probeTag = <A, E extends { _tag: string }, R>(
-      effect: Effect.Effect<A, E, R>,
-    ) =>
+    const probeTag = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
         Effect.result,
-        Effect.map((result) =>
-          result._tag === "Failure" ? result.failure._tag : "Success",
-        ),
+        Effect.map((result) => (result._tag === "Failure" ? result.failure._tag : "Success")),
       );
 
     return {
@@ -140,27 +132,17 @@ export default FSxBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/backup/delete-missing"
-        ) {
-          const tag = yield* probeTag(
-            deleteBackup({ BackupId: MISSING_BACKUP_ID }),
-          );
+        if (request.method === "POST" && pathname === "/backup/delete-missing") {
+          const tag = yield* probeTag(deleteBackup({ BackupId: MISSING_BACKUP_ID }));
           return yield* HttpServerResponse.json({ tag });
         }
 
         if (request.method === "POST" && pathname === "/backup/copy-missing") {
-          const tag = yield* probeTag(
-            copyBackup({ SourceBackupId: MISSING_BACKUP_ID }),
-          );
+          const tag = yield* probeTag(copyBackup({ SourceBackupId: MISSING_BACKUP_ID }));
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/snapshot/update-missing"
-        ) {
+        if (request.method === "POST" && pathname === "/snapshot/update-missing") {
           const tag = yield* probeTag(
             updateSnapshot({
               SnapshotId: MISSING_SNAPSHOT_ID,
@@ -170,20 +152,12 @@ export default FSxBindingsFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/snapshot/delete-missing"
-        ) {
-          const tag = yield* probeTag(
-            deleteSnapshot({ SnapshotId: MISSING_SNAPSHOT_ID }),
-          );
+        if (request.method === "POST" && pathname === "/snapshot/delete-missing") {
+          const tag = yield* probeTag(deleteSnapshot({ SnapshotId: MISSING_SNAPSHOT_ID }));
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/snapshot/create-missing-volume"
-        ) {
+        if (request.method === "POST" && pathname === "/snapshot/create-missing-volume") {
           const tag = yield* probeTag(
             createSnapshot({
               Name: "alchemy-fsx-bindings-probe",
@@ -193,10 +167,7 @@ export default FSxBindingsFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/volume/restore-missing"
-        ) {
+        if (request.method === "POST" && pathname === "/volume/restore-missing") {
           const tag = yield* probeTag(
             restoreVolumeFromSnapshot({
               VolumeId: MISSING_VOLUME_ID,
@@ -206,10 +177,7 @@ export default FSxBindingsFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/volume/copy-snapshot-missing"
-        ) {
+        if (request.method === "POST" && pathname === "/volume/copy-snapshot-missing") {
           const tag = yield* probeTag(
             copySnapshotAndUpdateVolume({
               VolumeId: MISSING_VOLUME_ID,
@@ -219,13 +187,8 @@ export default FSxBindingsFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/dr-task/cancel-missing"
-        ) {
-          const tag = yield* probeTag(
-            cancelDataRepositoryTask({ TaskId: MISSING_TASK_ID }),
-          );
+        if (request.method === "POST" && pathname === "/dr-task/cancel-missing") {
+          const tag = yield* probeTag(cancelDataRepositoryTask({ TaskId: MISSING_TASK_ID }));
           return yield* HttpServerResponse.json({ tag });
         }
 

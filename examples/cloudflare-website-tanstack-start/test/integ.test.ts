@@ -35,10 +35,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -90,15 +87,10 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read through the
     // `cloudflare:workers` env proxy in the server function — proves the
     // Worker rendered it at request time.
-    const html = yield* getBodyWhenReady(
-      base,
-      "Hello from TanStack Start on Cloudflare!",
-    );
+    const html = yield* getBodyWhenReady(base, "Hello from TanStack Start on Cloudflare!");
     // The Card component rendered under the heading.
     expect(html).toContain("Styled with Tailwind CSS");
-    expect(html).toContain(
-      "This card is a React component styled with Tailwind utilities.",
-    );
+    expect(html).toContain("This card is a React component styled with Tailwind utilities.");
   }),
   { timeout: 180_000 },
 );
@@ -205,16 +197,14 @@ test(
     // Seed the bucket via option 1 (direct binding) so the RPC `hello`
     // method has something to read.
     const seed = yield* executeWhenReady(
-      HttpClientRequest.put(
-        route(websiteUrl, { key, via: "http-client" }),
-      ).pipe(HttpClientRequest.bodyText("hello-http-client", "text/plain")),
+      HttpClientRequest.put(route(websiteUrl, { key, via: "http-client" })).pipe(
+        HttpClientRequest.bodyText("hello-http-client", "text/plain"),
+      ),
     );
     expect(seed.status).toBe(204);
 
     // HTTP client GET reads through Backend.hello — exercises toPromiseApi.
-    const get = yield* client.get(
-      route(websiteUrl, { key, via: "http-client" }),
-    );
+    const get = yield* client.get(route(websiteUrl, { key, via: "http-client" }));
     expect(get.status).toBe(200);
     expect(yield* get.text).toBe("hello-http-client");
   }),
@@ -239,9 +229,7 @@ test(
     const { websiteUrl } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    const res = yield* client.get(
-      route(websiteUrl, { key: "integ:does-not-exist", via: "rpc" }),
-    );
+    const res = yield* client.get(route(websiteUrl, { key: "integ:does-not-exist", via: "rpc" }));
     expect(res.status).toBe(404);
   }),
 );
@@ -252,9 +240,9 @@ test(
     const { websiteUrl } = yield* stack;
 
     const res = yield* executeWhenReady(
-      HttpClientRequest.put(
-        route(websiteUrl, { key: "integ:via-options", via: "rpc" }),
-      ).pipe(HttpClientRequest.bodyText("nope")),
+      HttpClientRequest.put(route(websiteUrl, { key: "integ:via-options", via: "rpc" })).pipe(
+        HttpClientRequest.bodyText("nope"),
+      ),
     );
     expect(res.status).toBe(400);
   }),

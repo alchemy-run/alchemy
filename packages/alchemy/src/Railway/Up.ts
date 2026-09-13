@@ -10,9 +10,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { RailwayEnvironment } from "./Environment.ts";
 
-export class DeployUploadFailed extends Data.TaggedError(
-  "Railway.DeployUploadFailed",
-)<{
+export class DeployUploadFailed extends Data.TaggedError("Railway.DeployUploadFailed")<{
   status: number;
   message: string;
 }> {}
@@ -34,8 +32,7 @@ const parseUpResponse = (value: unknown): UpResponse | undefined => {
     deploymentId: rec.deploymentId,
     url: typeof rec.url === "string" ? rec.url : "",
     logsUrl: typeof rec.logsUrl === "string" ? rec.logsUrl : "",
-    deploymentDomain:
-      typeof rec.deploymentDomain === "string" ? rec.deploymentDomain : "",
+    deploymentDomain: typeof rec.deploymentDomain === "string" ? rec.deploymentDomain : "",
   };
 };
 
@@ -47,9 +44,7 @@ const uploadUrl = (input: {
   message?: string;
 }): string => {
   const base = input.apiBaseUrl.replace(/\/+$/, "");
-  const url = new URL(
-    `${base}/project/${input.projectId}/environment/${input.environmentId}/up`,
-  );
+  const url = new URL(`${base}/project/${input.projectId}/environment/${input.environmentId}/up`);
   url.searchParams.set("serviceId", input.serviceId);
   if (input.message !== undefined && input.message.length > 0) {
     url.searchParams.set("message", input.message);
@@ -91,9 +86,7 @@ export const uploadDeployTarball = Effect.fn(function* (input: {
     return yield* new DeployUploadFailed({
       status: response.status,
       message:
-        body.length > 0
-          ? body
-          : `Failed to upload code with status ${String(response.status)}`,
+        body.length > 0 ? body : `Failed to upload code with status ${String(response.status)}`,
     });
   }
   const json = yield* response.json;

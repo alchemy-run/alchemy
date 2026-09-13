@@ -59,7 +59,6 @@ export interface CreateWhatsAppMessageTemplate extends Binding.Service<
     >
   >
 > {}
-export const CreateWhatsAppMessageTemplate =
-  Binding.Service<CreateWhatsAppMessageTemplate>(
-    "AWS.SocialMessaging.CreateWhatsAppMessageTemplate",
-  );
+export const CreateWhatsAppMessageTemplate = Binding.Service<CreateWhatsAppMessageTemplate>(
+  "AWS.SocialMessaging.CreateWhatsAppMessageTemplate",
+);

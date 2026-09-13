@@ -23,9 +23,7 @@ export interface ReadNamespace extends Binding.Service<
   (namespace: Namespace) => Effect.Effect<ReadNamespaceClient>
 > {}
 
-export const ReadNamespace = Binding.Service<ReadNamespace>(
-  "Cloudflare.KV.ReadNamespace",
-);
+export const ReadNamespace = Binding.Service<ReadNamespace>("Cloudflare.KV.ReadNamespace");
 
 export interface ReadNamespaceClient<Key extends string = string> {
   raw: Effect.Effect<runtime.KVNamespace, never, RuntimeContext>;
@@ -33,10 +31,7 @@ export interface ReadNamespaceClient<Key extends string = string> {
     key: Key,
     options?: Partial<KVNamespaceGetOptions<undefined>>,
   ): Effect.Effect<string | null, NamespaceError, RuntimeContext>;
-  get(
-    key: Key,
-    type: "text",
-  ): Effect.Effect<string | null, NamespaceError, RuntimeContext>;
+  get(key: Key, type: "text"): Effect.Effect<string | null, NamespaceError, RuntimeContext>;
   get<ExpectedValue = unknown>(
     key: Key,
     type: "json",
@@ -72,11 +67,7 @@ export interface ReadNamespaceClient<Key extends string = string> {
   get<ExpectedValue = unknown>(
     key: Array<Key>,
     type: "json",
-  ): Effect.Effect<
-    Map<string, ExpectedValue | null>,
-    NamespaceError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<Map<string, ExpectedValue | null>, NamespaceError, RuntimeContext>;
   get(
     key: Array<Key>,
     options?: Partial<KVNamespaceGetOptions<undefined>>,
@@ -88,18 +79,10 @@ export interface ReadNamespaceClient<Key extends string = string> {
   get<ExpectedValue = unknown>(
     key: Array<Key>,
     options?: KVNamespaceGetOptions<"json">,
-  ): Effect.Effect<
-    Map<string, ExpectedValue | null>,
-    NamespaceError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<Map<string, ExpectedValue | null>, NamespaceError, RuntimeContext>;
   list<Metadata = unknown>(
     options?: KVNamespaceListOptions,
-  ): Effect.Effect<
-    KVNamespaceListResult<Metadata, Key>,
-    NamespaceError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<KVNamespaceListResult<Metadata, Key>, NamespaceError, RuntimeContext>;
   getWithMetadata<Metadata = unknown>(
     key: Key,
     options?: Partial<KVNamespaceGetOptions<undefined>>,

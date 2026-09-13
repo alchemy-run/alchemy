@@ -41,10 +41,7 @@ import { ReadRedisHttp } from "./ReadRedisHttp.ts";
 import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
-import {
-  SandboxCheckpoint,
-  SandboxCheckpointProvider,
-} from "./SandboxCheckpoint.ts";
+import { SandboxCheckpoint, SandboxCheckpointProvider } from "./SandboxCheckpoint.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
 import { TcpProxy, TcpProxyProvider } from "./TcpProxy.ts";
@@ -56,9 +53,7 @@ import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
 import { Cdn, CdnProvider } from "./Website/Cdn.ts";
 import { WriteRedisHttp } from "./WriteRedisHttp.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Railway",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Railway") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

@@ -19,8 +19,7 @@ type TypeId = typeof TypeId;
  * like `crowdstrike_s2s` (which requires a posture integration's
  * `connectionId` in {@link DevicePostureRuleProps.input}).
  */
-export type DevicePostureRuleType =
-  zeroTrust.CreateDevicePostureRequest["type"];
+export type DevicePostureRuleType = zeroTrust.CreateDevicePostureRequest["type"];
 
 /**
  * The per-type check definition for a posture rule. The accepted shape
@@ -29,14 +28,12 @@ export type DevicePostureRuleType =
  * `{ enabled, operatingSystem }`, `disk_encryption` takes
  * `{ checkDisks?, requireAll? }`.
  */
-export type DevicePostureRuleInput =
-  zeroTrust.CreateDevicePostureRequest["input"];
+export type DevicePostureRuleInput = zeroTrust.CreateDevicePostureRequest["input"];
 
 /**
  * Platform conditions that scope which devices run the rule.
  */
-export type DevicePostureRuleMatch =
-  zeroTrust.CreateDevicePostureRequest["match"];
+export type DevicePostureRuleMatch = zeroTrust.CreateDevicePostureRequest["match"];
 
 export interface DevicePostureRuleProps {
   /**
@@ -161,9 +158,7 @@ export const DevicePostureRule = Resource<DevicePostureRule>(TypeId);
 /**
  * Returns true if the given value is a DevicePostureRule resource.
  */
-export const isDevicePostureRule = (
-  value: unknown,
-): value is DevicePostureRule =>
+export const isDevicePostureRule = (value: unknown): value is DevicePostureRule =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DevicePostureRuleProvider = () =>
@@ -246,12 +241,9 @@ export const DevicePostureRuleProvider = () =>
         (observed.name ?? "") !== name ||
         (news.description !== undefined &&
           !sameJSON(denull(observed.description), news.description)) ||
-        (news.schedule !== undefined &&
-          denull(observed.schedule) !== news.schedule) ||
-        (news.expiration !== undefined &&
-          denull(observed.expiration) !== news.expiration) ||
-        (news.match !== undefined &&
-          !sameJSON(normalizeMatch(observed.match), news.match)) ||
+        (news.schedule !== undefined && denull(observed.schedule) !== news.schedule) ||
+        (news.expiration !== undefined && denull(observed.expiration) !== news.expiration) ||
+        (news.match !== undefined && !sameJSON(normalizeMatch(observed.match), news.match)) ||
         (news.input !== undefined && !sameJSON(observed.input, news.input));
       if (!dirty) {
         return toAttributes(observed, accountId);
@@ -295,9 +287,7 @@ type ObservedRule =
 const observeRule = (accountId: string, ruleId: string) =>
   zeroTrust
     .getDevicePosture({ accountId, ruleId })
-    .pipe(
-      Effect.catchTag("PostureRuleNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a posture rule by exact name (oldest-id-first for determinism when
@@ -319,10 +309,7 @@ const createRuleName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  rule: ObservedRule,
-  accountId: string,
-): DevicePostureRuleAttributes => ({
+const toAttributes = (rule: ObservedRule, accountId: string): DevicePostureRuleAttributes => ({
   postureRuleId: rule.id ?? "",
   accountId,
   name: rule.name ?? "",
@@ -337,17 +324,13 @@ const toAttributes = (
 const normalizeMatch = (
   match: ObservedRule["match"],
 ): { platform: string | undefined }[] | undefined =>
-  match == null
-    ? undefined
-    : match.map((m) => ({ platform: denull(m.platform) }));
+  match == null ? undefined : match.map((m) => ({ platform: denull(m.platform) }));
 
 /**
  * Strip Cloudflare's `null` echoes to `undefined` so structural equality
  * (`JSON.stringify`) works.
  */
-const denull = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const denull = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 /** Structural deep-equality via canonical JSON. */
-const sameJSON = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const sameJSON = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

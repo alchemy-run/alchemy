@@ -9,10 +9,7 @@ import { poll } from "@/Util/poll.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Reading Flagship feature flags inside an Action via `ReadFlagsLocal` — the
 // local (current-credentials) implementation of the `ReadFlags` binding. It
@@ -54,10 +51,7 @@ test.provider(
                   description: "evaluate returns the flag value",
                   effect: flags.getBooleanValue(key, false),
                   predicate: (v) => v === true,
-                  schedule: Schedule.max([
-                    Schedule.spaced("3 seconds"),
-                    Schedule.recurs(20),
-                  ]),
+                  schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
                 });
 
                 const details = yield* flags.getBooleanDetails(key, false);

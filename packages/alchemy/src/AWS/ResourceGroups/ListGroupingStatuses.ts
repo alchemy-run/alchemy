@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link ListGroupingStatuses} — the group is injected from the binding. */
-export type ListGroupingStatusesRequest = Omit<
-  resourcegroups.ListGroupingStatusesInput,
-  "Group"
->;
+export type ListGroupingStatusesRequest = Omit<resourcegroups.ListGroupingStatusesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:ListGroupingStatuses`.

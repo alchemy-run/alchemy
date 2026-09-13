@@ -10,9 +10,6 @@ export const QueryHttp = Layer.effect(
     tag: "AWS.DynamoDB.Query",
     operation: DynamoDB.query,
     actions: ["dynamodb:Query"],
-    resources: (table) => [
-      table.tableArn,
-      Output.interpolate`${table.tableArn}/index/*`,
-    ],
+    resources: (table) => [table.tableArn, Output.interpolate`${table.tableArn}/index/*`],
   }),
 );

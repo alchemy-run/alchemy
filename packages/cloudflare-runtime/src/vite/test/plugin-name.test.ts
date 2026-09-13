@@ -9,9 +9,7 @@ import cloudflareVitePlugin, {
 
 const root = path.join(import.meta.dirname, "fixtures");
 
-const flattenPlugins = (
-  plugins: ReadonlyArray<unknown>,
-): Array<vite.Plugin> => {
+const flattenPlugins = (plugins: ReadonlyArray<unknown>): Array<vite.Plugin> => {
   const flat: Array<vite.Plugin> = [];
   const visit = (entry: unknown): void => {
     if (Array.isArray(entry)) {
@@ -35,19 +33,13 @@ const hasCloudflarePlugin = (plugins: ReadonlyArray<vite.Plugin>): boolean =>
 
 describe("alchemy Cloudflare Vite plugin name", () => {
   it("registers a prefixed presence plugin, not the official exact name", () => {
-    const plugins = flattenPlugins([
-      cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-    ]);
-    expect(
-      plugins.some(
-        (plugin) => plugin.name === ALCHEMY_CLOUDFLARE_VITE_PLUGIN_NAME,
-      ),
-    ).toBe(true);
-    expect(
-      plugins.some(
-        (plugin) => plugin.name === OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME,
-      ),
-    ).toBe(false);
+    const plugins = flattenPlugins([cloudflareVitePlugin({ main: "./worker-entry.ts" })]);
+    expect(plugins.some((plugin) => plugin.name === ALCHEMY_CLOUDFLARE_VITE_PLUGIN_NAME)).toBe(
+      true,
+    );
+    expect(plugins.some((plugin) => plugin.name === OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME)).toBe(
+      false,
+    );
     expect(hasCloudflarePlugin(plugins)).toBe(true);
   });
 
@@ -68,9 +60,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
       name: "vinext-style-scan",
       enforce: "pre",
       config(config) {
-        seenByLaterConfig = hasCloudflarePlugin(
-          flattenPlugins(config.plugins ?? []),
-        );
+        seenByLaterConfig = hasCloudflarePlugin(flattenPlugins(config.plugins ?? []));
       },
     };
 
@@ -79,11 +69,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
         configFile: false,
         root,
         logLevel: "silent",
-        plugins: [
-          official,
-          scanner,
-          cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-        ],
+        plugins: [official, scanner, cloudflareVitePlugin({ main: "./worker-entry.ts" })],
       },
       "serve",
     );
@@ -93,9 +79,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
     expect(seenByLaterConfig).toBe(true);
     expect(resolved.define?.["import.meta.official"]).toBeUndefined();
     expect(
-      resolved.plugins.some(
-        (plugin) => plugin.name === ALCHEMY_CLOUDFLARE_VITE_PLUGIN_NAME,
-      ),
+      resolved.plugins.some((plugin) => plugin.name === ALCHEMY_CLOUDFLARE_VITE_PLUGIN_NAME),
     ).toBe(true);
   });
 

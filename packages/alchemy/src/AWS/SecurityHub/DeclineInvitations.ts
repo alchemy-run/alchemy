@@ -27,10 +27,7 @@ export interface DeclineInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.DeclineInvitationsRequest,
-    ) => Effect.Effect<
-      securityhub.DeclineInvitationsResponse,
-      securityhub.DeclineInvitationsError
-    >
+    ) => Effect.Effect<securityhub.DeclineInvitationsResponse, securityhub.DeclineInvitationsError>
   >
 > {}
 export const DeclineInvitations = Binding.Service<DeclineInvitations>(

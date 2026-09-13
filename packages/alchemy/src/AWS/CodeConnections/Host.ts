@@ -153,17 +153,14 @@ const sameVpcConfiguration = (
     JSON.stringify([...(desired?.SubnetIds ?? [])].sort()) &&
   JSON.stringify([...(observed?.SecurityGroupIds ?? [])].sort()) ===
     JSON.stringify([...(desired?.SecurityGroupIds ?? [])].sort()) &&
-  (observed?.TlsCertificate ?? undefined) ===
-    (desired?.TlsCertificate ?? undefined);
+  (observed?.TlsCertificate ?? undefined) === (desired?.TlsCertificate ?? undefined);
 
 export const HostProvider = () =>
   Provider.effect(
     Host,
     Effect.gen(function* () {
       const toName = (id: string, props: Partial<HostProps>) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       /**
        * Read a host by ARN; a missing host reads as absent. `GetHost` does
@@ -172,11 +169,7 @@ export const HostProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* codeconnections
           .getHost({ HostArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response === undefined
           ? undefined
           : ({ ...response, HostArn: arn } satisfies codeconnections.Host);
@@ -186,9 +179,7 @@ export const HostProvider = () =>
       const findByName = Effect.fn(function* (name: string) {
         const hosts = yield* codeconnections.listHosts.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Hosts ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Hosts ?? [])),
         );
         return hosts.find((h) => h.Name === name);
       });
@@ -206,26 +197,19 @@ export const HostProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Provider type is immutable — replace on change. Endpoint and VPC
           // configuration are mutable via UpdateHost.
-          if (
-            (news?.providerType ?? undefined) !==
-            (olds?.providerType ?? undefined)
-          ) {
+          if ((news?.providerType ?? undefined) !== (olds?.providerType ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.hostName ?? (yield* toName(id, olds ?? {}));
-          const host = output?.hostArn
-            ? yield* getByArn(output.hostArn)
-            : yield* findByName(name);
+          const host = output?.hostArn ? yield* getByArn(output.hostArn) : yield* findByName(name);
           if (host?.HostArn === undefined) return undefined;
           const attrs = toAttrs(host, name);
           const tags = yield* fetchObservedTags(attrs.hostArn);
@@ -253,9 +237,7 @@ export const HostProvider = () =>
               VpcConfiguration: desiredVpc,
               Tags: toTagList(desiredTags),
             });
-            observed = created.HostArn
-              ? yield* getByArn(created.HostArn)
-              : yield* findByName(name);
+            observed = created.HostArn ? yield* getByArn(created.HostArn) : yield* findByName(name);
             if (observed?.HostArn === undefined) {
               observed = {
                 Name: name,

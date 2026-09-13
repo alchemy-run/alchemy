@@ -39,9 +39,7 @@ test.provider(
         project_id: deployed.branch.projectId,
         branch_id: deployed.branch.branchId,
       };
-      const credentials = (yield* SDK.listCredentials(
-        request,
-      )).credentials.filter(
+      const credentials = (yield* SDK.listCredentials(request)).credentials.filter(
         (item) =>
           item.principal_type === "user" &&
           item.branch_id === deployed.branch.branchId &&

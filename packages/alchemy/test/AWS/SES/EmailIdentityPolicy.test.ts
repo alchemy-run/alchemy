@@ -96,9 +96,7 @@ test.provider(
       const updated = yield* sesv2.getEmailIdentityPolicies({
         EmailIdentity: identity.emailIdentity,
       });
-      expect(updated.Policies?.[policy.policyName]).toContain(
-        "AllowSendUpdated",
-      );
+      expect(updated.Policies?.[policy.policyName]).toContain("AllowSendUpdated");
 
       yield* stack.destroy();
       yield* assertPolicyDeleted(identity.emailIdentity, policy.policyName);

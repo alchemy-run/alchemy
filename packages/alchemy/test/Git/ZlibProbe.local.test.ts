@@ -43,9 +43,7 @@ test(
       "deflate1",
     ]) {
       const n = path.startsWith("deflate") ? 200 : 2000;
-      yield* client
-        .get(`${url}/?path=${path}&n=50`)
-        .pipe(Effect.flatMap((r) => r.json));
+      yield* client.get(`${url}/?path=${path}&n=50`).pipe(Effect.flatMap((r) => r.json));
       const t0 = performance.now();
       const r = (yield* client
         .get(`${url}/?path=${path}&n=${n}`)

@@ -144,18 +144,13 @@ export default TransferTestFunction.make(
         if (request.method === "DELETE" && pathname === "/key") {
           const keyId = url.searchParams.get("id");
           if (keyId === null) {
-            return yield* HttpServerResponse.json(
-              { error: "missing id" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing id" }, { status: 400 });
           }
           const deleted = yield* deleteSshPublicKey({
             SshPublicKeyId: keyId,
           }).pipe(Effect.result);
           return yield* HttpServerResponse.json(
-            deleted._tag === "Success"
-              ? { ok: true }
-              : { ok: false, tag: deleted.failure._tag },
+            deleted._tag === "Success" ? { ok: true } : { ok: false, tag: deleted.failure._tag },
           );
         }
 
@@ -164,18 +159,14 @@ export default TransferTestFunction.make(
         if (request.method === "POST" && pathname === "/stop") {
           const stopped = yield* stopServer().pipe(Effect.result);
           return yield* HttpServerResponse.json(
-            stopped._tag === "Success"
-              ? { ok: true }
-              : { ok: false, tag: stopped.failure._tag },
+            stopped._tag === "Success" ? { ok: true } : { ok: false, tag: stopped.failure._tag },
           );
         }
 
         if (request.method === "POST" && pathname === "/start") {
           const started = yield* startServer().pipe(Effect.result);
           return yield* HttpServerResponse.json(
-            started._tag === "Success"
-              ? { ok: true }
-              : { ok: false, tag: started.failure._tag },
+            started._tag === "Success" ? { ok: true } : { ok: false, tag: started.failure._tag },
           );
         }
 

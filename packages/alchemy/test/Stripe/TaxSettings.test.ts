@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const getLive = GetTaxSettings({});
 
@@ -30,9 +27,7 @@ const waitForTaxBehavior = (expected: string | null | undefined) =>
     }),
   );
 
-const otherBehavior = (
-  current: string | null | undefined,
-): "exclusive" | "inclusive" =>
+const otherBehavior = (current: string | null | undefined): "exclusive" | "inclusive" =>
   current === "exclusive" ? "inclusive" : "exclusive";
 
 // Account-level singleton: run serially so tests do not clobber each
@@ -103,33 +98,25 @@ describe.sequential("TaxSettings", () => {
 
         const baseline = yield* getLive;
         const taxBehavior =
-          (baseline.defaults.tax_behavior as
-            | Stripe.TaxSettingsTaxBehavior
-            | null
-            | undefined) ?? undefined;
+          (baseline.defaults.tax_behavior as Stripe.TaxSettingsTaxBehavior | null | undefined) ??
+          undefined;
 
         const setting = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Stripe.TaxSettings("NoopTax", {
-              ...(taxBehavior !== undefined
-                ? { defaults: { taxBehavior } }
-                : {}),
+              ...(taxBehavior !== undefined ? { defaults: { taxBehavior } } : {}),
             });
           }),
         );
 
         expect(setting.taxBehavior).toEqual(taxBehavior);
         expect(setting.initialSettings.taxBehavior).toEqual(taxBehavior);
-        expect(setting.taxCode).toEqual(
-          baseline.defaults.tax_code ?? undefined,
-        );
+        expect(setting.taxCode).toEqual(baseline.defaults.tax_code ?? undefined);
 
         yield* stack.destroy();
 
         const after = yield* getLive;
-        expect(after.defaults.tax_behavior).toEqual(
-          baseline.defaults.tax_behavior,
-        );
+        expect(after.defaults.tax_behavior).toEqual(baseline.defaults.tax_behavior);
         expect(after.defaults.tax_code).toEqual(baseline.defaults.tax_code);
       }).pipe(logLevel),
     { timeout: 120_000 },
@@ -146,9 +133,7 @@ describe.sequential("TaxSettings", () => {
 
         expect(all.length).toEqual(1);
         expect(all[0]?.object).toEqual("tax.settings");
-        expect(all[0]?.initialSettings.taxBehavior).toEqual(
-          all[0]?.taxBehavior,
-        );
+        expect(all[0]?.initialSettings.taxBehavior).toEqual(all[0]?.taxBehavior);
         expect(all[0]?.initialSettings.taxCode).toEqual(all[0]?.taxCode);
 
         yield* stack.destroy();

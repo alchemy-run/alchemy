@@ -23,12 +23,7 @@ import type { Input } from "./Input.ts";
  * channel's ARN, and the runtime half injects the channel's id into every
  * request as `ChannelId`.
  */
-export const makeMediaLiveChannelHttpBinding = <
-  I extends { ChannelId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeMediaLiveChannelHttpBinding = <I extends { ChannelId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.MediaLive.StartChannel`. */
   tag: string;
   /** The distilled operation; `ChannelId` is injected from the channel. */
@@ -70,12 +65,7 @@ export const makeMediaLiveChannelHttpBinding = <
  * input's ARN, and the runtime half injects the input's id into every
  * request as `InputId`.
  */
-export const makeMediaLiveInputHttpBinding = <
-  I extends { InputId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeMediaLiveInputHttpBinding = <I extends { InputId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.MediaLive.DescribeInput`. */
   tag: string;
   /** The distilled operation; `InputId` is injected from the input. */

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "alchemy-test";
-import type {
-  LambdaFunctionURLEvent,
-  LambdaFunctionURLResult,
-} from "aws-lambda";
+import type { LambdaFunctionURLEvent, LambdaFunctionURLResult } from "aws-lambda";
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -38,8 +35,7 @@ describe("AWS.Lambda.HttpServer", () => {
     expect(JSON.parse(result.body ?? "")).toEqual({
       method: "GET",
       url: "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
-      originalUrl:
-        "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
+      originalUrl: "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
       host: "example.lambda-url.us-east-1.on.aws",
       protocol: "https",
       requestId: "req-123",
@@ -111,9 +107,7 @@ describe("AWS.Lambda.HttpServer", () => {
     expect(result.statusCode).toBe(200);
     expect(result.headers?.["content-type"]).toBe("application/octet-stream");
     expect(result.isBase64Encoded).toBe(true);
-    expect(Buffer.from(result.body ?? "", "base64").toString("utf8")).toBe(
-      "alchemy",
-    );
+    expect(Buffer.from(result.body ?? "", "base64").toString("utf8")).toBe("alchemy");
   });
 
   it("detects an API Gateway v2 HTTP API (payload 2.0) event and maps it like a Function URL event", async () => {
@@ -241,9 +235,7 @@ const invoke = async (
   return Effect.runPromise(out);
 };
 
-const makeEvent = (
-  overrides: Partial<LambdaFunctionURLEvent> = {},
-): LambdaFunctionURLEvent => {
+const makeEvent = (overrides: Partial<LambdaFunctionURLEvent> = {}): LambdaFunctionURLEvent => {
   const event: LambdaFunctionURLEvent = {
     version: "2.0",
     routeKey: "$default",

@@ -28,10 +28,7 @@ export interface ListDeploymentTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.ListDeploymentTargetsInput,
-    ) => Effect.Effect<
-      SVC.ListDeploymentTargetsOutput,
-      SVC.ListDeploymentTargetsError
-    >
+    ) => Effect.Effect<SVC.ListDeploymentTargetsOutput, SVC.ListDeploymentTargetsError>
   >
 > {}
 export const ListDeploymentTargets = Binding.Service<ListDeploymentTargets>(

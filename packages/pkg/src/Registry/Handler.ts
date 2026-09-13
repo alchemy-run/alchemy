@@ -28,14 +28,7 @@ import {
   RunRef,
   Upstream,
 } from "../Protocol.ts";
-import {
-  Bucket,
-  Cache,
-  COMMENT_MARKER,
-  Database,
-  RegistryConfig,
-  tarballKey,
-} from "./Bindings.ts";
+import { Bucket, Cache, COMMENT_MARKER, Database, RegistryConfig, tarballKey } from "./Bindings.ts";
 import * as GitHub from "./GitHub.ts";
 import * as KVCache from "./KVCache.ts";
 import { sweep } from "./Sweep.ts";
@@ -98,9 +91,7 @@ export const tagsFor = (run: Run): string[] => {
 
 /** The tag install commands are written against. */
 export const installTag = (run: Run) =>
-  run.pr !== null
-    ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}`
-    : run.headSha.slice(0, SHORT);
+  run.pr !== null ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}` : run.headSha.slice(0, SHORT);
 
 const upstream = (e: { readonly _tag: string; readonly message?: string }) =>
   new Upstream({ message: GitHub.describe(e) });
@@ -123,9 +114,7 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   if (!policy.repos.includes(ref.repo)) {
     return yield* new Forbidden({ message: `${ref.repo} may not publish` });
   }
-  const data = yield* github
-    .getRun(ref.repo, ref.runId)
-    .pipe(Effect.mapError(upstream));
+  const data = yield* github.getRun(ref.repo, ref.runId).pipe(Effect.mapError(upstream));
   if (
     data.status !== "in_progress" ||
     (data.run_attempt !== undefined && data.run_attempt !== ref.attempt)
@@ -151,12 +140,7 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
     // repository already published; matching the head repository keeps a
     // run's publication on its own pull request.
     const pulls = yield* github
-      .pullRequestsForCommit(
-        ref.repo,
-        headRepo,
-        data.head_branch,
-        data.head_sha,
-      )
+      .pullRequestsForCommit(ref.repo, headRepo, data.head_branch, data.head_sha)
       .pipe(Effect.mapError(upstream));
     const first = pulls[0];
     if (first === undefined) {
@@ -185,10 +169,7 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
  * run, and GitHub reports the run's artifacts to the App, so a matching
  * name means this run vouched for exactly this manifest text.
  */
-const requireVouched = Effect.fn("requireVouched")(function* (
-  run: Run,
-  manifestText: string,
-) {
+const requireVouched = Effect.fn("requireVouched")(function* (run: Run, manifestText: string) {
   const github = yield* GitHub.GitHubApp;
   const expected = manifestArtifactName(yield* sha256(manifestText));
   const artifacts = yield* github
@@ -201,22 +182,15 @@ const requireVouched = Effect.fn("requireVouched")(function* (
   }
 });
 
-const publish = Effect.fn("publish")(function* (
-  run: Run,
-  manifestText: string,
-) {
+const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) {
   const { policy } = yield* RegistryConfig;
   const r2 = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
   const github = yield* GitHub.GitHubApp;
   const base = yield* origin;
 
   yield* requireVouched(run, manifestText);
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(
-    manifestText,
-  ).pipe(
-    Effect.mapError(
-      (e) => new BadRequest({ message: `invalid manifest: ${String(e)}` }),
-    ),
+  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
+    Effect.mapError((e) => new BadRequest({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's
   // head, so the packed checkout has to be that commit: a `pull_request`
@@ -230,9 +204,7 @@ const publish = Effect.fn("publish")(function* (
   const packages = manifest.packages;
   const maxSize = policy.maxPackageSize;
   const tooLarge =
-    maxSize === undefined
-      ? undefined
-      : packages.find((pkg) => BigInt(pkg.size) > maxSize);
+    maxSize === undefined ? undefined : packages.find((pkg) => BigInt(pkg.size) > maxSize);
   if (tooLarge !== undefined) {
     return yield* new PackageTooLarge({
       message: `${tooLarge.name} exceeds ${maxSize} bytes`,
@@ -242,15 +214,9 @@ const publish = Effect.fn("publish")(function* (
   const missing = yield* Effect.filter(
     packages,
     (pkg) =>
-      r2
-        .head(tarballKey(pkg.name, pkg.sha256))
-        .pipe(Effect.map((object) => object === null)),
+      r2.head(tarballKey(pkg.name, pkg.sha256)).pipe(Effect.map((object) => object === null)),
     { concurrency: 8 },
-  ).pipe(
-    Effect.map((packages) =>
-      packages.map(({ name, sha256 }) => ({ name, sha256 })),
-    ),
-  );
+  ).pipe(Effect.map((packages) => packages.map(({ name, sha256 }) => ({ name, sha256 }))));
   if (missing.length > 0) {
     return yield* new MissingTarballs({ missing });
   }
@@ -297,9 +263,7 @@ const publish = Effect.fn("publish")(function* (
     })
     .pipe(
       Effect.catch((e) =>
-        Effect.logWarning(
-          `check run on ${run.repo}@${run.headSha} failed: ${GitHub.describe(e)}`,
-        ),
+        Effect.logWarning(`check run on ${run.repo}@${run.headSha} failed: ${GitHub.describe(e)}`),
       ),
     );
   if (run.pr !== null) {
@@ -311,9 +275,7 @@ const publish = Effect.fn("publish")(function* (
       .upsertComment(run.repo, run.pr, COMMENT_MARKER, body)
       .pipe(
         Effect.catch((e) =>
-          Effect.logWarning(
-            `comment on ${run.repo}#${run.pr} failed: ${GitHub.describe(e)}`,
-          ),
+          Effect.logWarning(`comment on ${run.repo}#${run.pr} failed: ${GitHub.describe(e)}`),
         ),
       );
   }
@@ -353,11 +315,7 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
       // The params schema already constrained this to 64 hex chars.
       sha256: Result.getOrThrow(Encoding.decodeHex(sha256)),
     })
-    .pipe(
-      Effect.mapError(
-        (e) => new BadRequest({ message: `upload rejected: ${String(e)}` }),
-      ),
-    );
+    .pipe(Effect.mapError((e) => new BadRequest({ message: `upload rejected: ${String(e)}` })));
   return { name, sha256, size: contentLength, uploaded: true };
 });
 
@@ -380,9 +338,7 @@ export const parseInstallPath = (
     // Malformed percent-encoding is a path nothing can be published under.
     return undefined;
   }
-  const tarball = path.match(
-    /^(@[^/]+\/[^/@]+|[^/@]+)\/-\/([a-f0-9]{64})\.tgz$/,
-  );
+  const tarball = path.match(/^(@[^/]+\/[^/@]+|[^/@]+)\/-\/([a-f0-9]{64})\.tgz$/);
   if (tarball) {
     return {
       kind: "tarball",
@@ -403,8 +359,7 @@ export const parseInstallPath = (
 const qualify = (name: string, scope: string | undefined) =>
   scope !== undefined && !name.startsWith("@") ? `${scope}/${name}` : name;
 
-const notFound = (message: string) =>
-  HttpServerResponse.json({ error: message }, { status: 404 });
+const notFound = (message: string) => HttpServerResponse.json({ error: message }, { status: 404 });
 
 /**
  * Install URLs: `/<name>/<tag>` redirects to the immutable tarball URL,
@@ -417,16 +372,10 @@ const install = Effect.gen(function* () {
   const r2 = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    return yield* HttpServerResponse.json(
-      { error: "method not allowed" },
-      { status: 405 },
-    );
+    return yield* HttpServerResponse.json({ error: "method not allowed" }, { status: 405 });
   }
   const host = request.headers.host ?? "localhost";
-  const target = parseInstallPath(
-    new URL(request.url, `https://${host}`).pathname,
-    aliases[host],
-  );
+  const target = parseInstallPath(new URL(request.url, `https://${host}`).pathname, aliases[host]);
   if (target === undefined) {
     return yield* notFound("not found");
   }
@@ -490,9 +439,7 @@ export const handler = Effect.gen(function* () {
 
   // Built once per isolate. The D1 client memoizes its connection on each
   // event's scope, so its layer is safe to share.
-  const github = yield* GitHub.GitHubApp.pipe(
-    Effect.provide(GitHub.GitHubAppLive),
-  );
+  const github = yield* GitHub.GitHubApp.pipe(Effect.provide(GitHub.GitHubAppLive));
   const services = Layer.mergeAll(
     Cloudflare.R2.ReadWriteBucketBinding,
     Cloudflare.KV.ReadWriteNamespaceBinding,
@@ -509,23 +456,20 @@ export const handler = Effect.gen(function* () {
     (ref) => Effect.map(lookupRun(ref), (value) => ({ value, ttl: RUN_CACHE })),
   );
 
-  yield* Cloudflare.Workers.cron(config.cron, () =>
-    sweep.pipe(Effect.provide(services)),
-  );
+  yield* Cloudflare.Workers.cron(config.cron, () => sweep.pipe(Effect.provide(services)));
 
   const registry = HttpApiBuilder.group(PkgApi, "Registry", (handlers) =>
     handlers
       .handle("publish", ({ payload }) =>
-        Effect.flatMap(runs(payload.run), (run) =>
-          publish(run, payload.manifest),
-        ).pipe(Effect.catchTag(storageFailures, (e) => Effect.die(e))),
+        Effect.flatMap(runs(payload.run), (run) => publish(run, payload.manifest)).pipe(
+          Effect.catchTag(storageFailures, (e) => Effect.die(e)),
+        ),
       )
       // Raw so the body streams into R2 instead of being buffered.
       .handleRaw("uploadTarball", ({ query, params, request }) =>
-        Effect.andThen(
-          runs(query),
-          uploadTarball(request, params.name, params.sha256),
-        ).pipe(Effect.catchTag("R2Error", (e) => Effect.die(e))),
+        Effect.andThen(runs(query), uploadTarball(request, params.name, params.sha256)).pipe(
+          Effect.catchTag("R2Error", (e) => Effect.die(e)),
+        ),
       ),
   );
 

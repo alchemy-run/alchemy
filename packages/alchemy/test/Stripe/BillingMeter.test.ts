@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -72,9 +69,7 @@ test.provider(
       expect(fetched.default_aggregation.formula).toEqual("sum");
       expect(fetched.value_settings.event_payload_key).toEqual("value");
       expect(fetched.customer_mapping.type).toEqual("by_id");
-      expect(fetched.customer_mapping.event_payload_key).toEqual(
-        "stripe_customer_id",
-      );
+      expect(fetched.customer_mapping.event_payload_key).toEqual("stripe_customer_id");
       expect(fetched.status).toEqual("active");
 
       const updated = yield* stack.deploy(

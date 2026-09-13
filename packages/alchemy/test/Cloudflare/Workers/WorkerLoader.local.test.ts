@@ -15,10 +15,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -41,10 +38,7 @@ const getJsonReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -73,17 +67,13 @@ test.provider(
 
       expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const first = (yield* getJsonReady(
-        `${deployed.worker.url}/?id=local-reuse`,
-      )) as {
+      const first = (yield* getJsonReady(`${deployed.worker.url}/?id=local-reuse`)) as {
         id: string;
         hits: number;
       };
       expect(first).toEqual({ id: "local-reuse", hits: 1 });
 
-      const second = (yield* getJsonReady(
-        `${deployed.worker.url}/?id=local-reuse`,
-      )) as {
+      const second = (yield* getJsonReady(`${deployed.worker.url}/?id=local-reuse`)) as {
         id: string;
         hits: number;
       };

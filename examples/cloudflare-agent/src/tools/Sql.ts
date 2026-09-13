@@ -19,9 +19,7 @@ export const SqlDurableObjectLive = Layer.effect(
       yield* object.storage.sql.exec("CREATE TABLE IF NOT EXIST ...");
 
       return ({ sql }) =>
-        object.storage.sql
-          .exec(sql)
-          .pipe(Effect.flatMap((result) => result.toArray()));
+        object.storage.sql.exec(sql).pipe(Effect.flatMap((result) => result.toArray()));
     });
   }),
 );

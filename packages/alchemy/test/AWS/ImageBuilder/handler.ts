@@ -66,18 +66,14 @@ export default ImageBuilderTestFunction.make(
       // The testing account deploys to us-west-2 (region is fixed here
       // because AWSEnvironment is deploy-only and this effect re-runs at
       // Lambda init).
-      parentImage:
-        "arn:aws:imagebuilder:us-west-2:aws:image/amazon-linux-2023-x86/x.x.x",
+      parentImage: "arn:aws:imagebuilder:us-west-2:aws:image/amazon-linux-2023-x86/x.x.x",
       components: [{ componentArn: component.componentBuildVersionArn }],
     });
-    const infra = yield* ImageBuilder.InfrastructureConfiguration(
-      "BindingsInfra",
-      {
-        instanceProfileName: profile.instanceProfileName,
-        instanceTypes: ["t3.micro"],
-        terminateInstanceOnFailure: true,
-      },
-    );
+    const infra = yield* ImageBuilder.InfrastructureConfiguration("BindingsInfra", {
+      instanceProfileName: profile.instanceProfileName,
+      instanceTypes: ["t3.micro"],
+      terminateInstanceOnFailure: true,
+    });
     const pipeline = yield* ImageBuilder.ImagePipeline("BindingsPipeline", {
       imageRecipeArn: recipe.imageRecipeArn,
       infrastructureConfigurationArn: infra.infrastructureConfigurationArn,
@@ -87,21 +83,15 @@ export default ImageBuilderTestFunction.make(
 
     // Event source: subscribe the host to image state-change events. The
     // deploy proves the EventBridge rule + invoke permission wiring.
-    yield* ImageBuilder.consumeImageEvents(
-      { kinds: ["image-state-change"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `image state change: ${event.resources[0]} -> ${event.detail.state?.status}`,
-          ),
-        ),
+    yield* ImageBuilder.consumeImageEvents({ kinds: ["image-state-change"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`image state change: ${event.resources[0]} -> ${event.detail.state?.status}`),
+      ),
     );
 
     const getPipeline = yield* ImageBuilder.GetImagePipeline(pipeline);
-    const listPipelineImages =
-      yield* ImageBuilder.ListImagePipelineImages(pipeline);
-    const startBuild =
-      yield* ImageBuilder.StartImagePipelineExecution(pipeline);
+    const listPipelineImages = yield* ImageBuilder.ListImagePipelineImages(pipeline);
+    const startBuild = yield* ImageBuilder.StartImagePipelineExecution(pipeline);
     const getImage = yield* ImageBuilder.GetImage();
     const cancelBuild = yield* ImageBuilder.CancelImageCreation();
     const deleteImage = yield* ImageBuilder.DeleteImage();
@@ -110,15 +100,11 @@ export default ImageBuilderTestFunction.make(
     const listImageBuildVersions = yield* ImageBuilder.ListImageBuildVersions();
     const listImagePackages = yield* ImageBuilder.ListImagePackages();
     const listImageScanFindings = yield* ImageBuilder.ListImageScanFindings();
-    const listImageScanFindingAggregations =
-      yield* ImageBuilder.ListImageScanFindingAggregations();
+    const listImageScanFindingAggregations = yield* ImageBuilder.ListImageScanFindingAggregations();
     const getWorkflowExecution = yield* ImageBuilder.GetWorkflowExecution();
-    const getWorkflowStepExecution =
-      yield* ImageBuilder.GetWorkflowStepExecution();
-    const listWorkflowStepExecutions =
-      yield* ImageBuilder.ListWorkflowStepExecutions();
-    const listWaitingWorkflowSteps =
-      yield* ImageBuilder.ListWaitingWorkflowSteps();
+    const getWorkflowStepExecution = yield* ImageBuilder.GetWorkflowStepExecution();
+    const listWorkflowStepExecutions = yield* ImageBuilder.ListWorkflowStepExecutions();
+    const listWaitingWorkflowSteps = yield* ImageBuilder.ListWaitingWorkflowSteps();
     const sendWorkflowStepAction = yield* ImageBuilder.SendWorkflowStepAction();
     const retryImage = yield* ImageBuilder.RetryImage();
 
@@ -167,8 +153,7 @@ export default ImageBuilderTestFunction.make(
             arn: imagePipeline?.arn,
             name: imagePipeline?.name,
             status: imagePipeline?.status,
-            timeoutMinutes:
-              imagePipeline?.imageTestsConfiguration?.timeoutMinutes,
+            timeoutMinutes: imagePipeline?.imageTestsConfiguration?.timeoutMinutes,
           });
         }
 
@@ -231,9 +216,7 @@ export default ImageBuilderTestFunction.make(
           });
           return yield* HttpServerResponse.json({
             ids: (workflowExecutions ?? []).flatMap((execution) =>
-              execution.workflowExecutionId !== undefined
-                ? [execution.workflowExecutionId]
-                : [],
+              execution.workflowExecutionId !== undefined ? [execution.workflowExecutionId] : [],
             ),
           });
         }
@@ -259,9 +242,8 @@ export default ImageBuilderTestFunction.make(
             Effect.map(({ imagePackageList }) => ({
               count: (imagePackageList ?? []).length,
             })),
-            Effect.catchTag(
-              ["InvalidRequestException", "ResourceNotFoundException"],
-              (error) => Effect.succeed({ reason: error._tag }),
+            Effect.catchTag(["InvalidRequestException", "ResourceNotFoundException"], (error) =>
+              Effect.succeed({ reason: error._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -337,10 +319,8 @@ export default ImageBuilderTestFunction.make(
             Effect.catchTag("ResourceNotFoundException", () =>
               Effect.succeed({ deleted: true as const }),
             ),
-            Effect.catchTag(
-              ["InvalidRequestException", "ResourceDependencyException"],
-              (error) =>
-                Effect.succeed({ deleted: false as const, reason: error._tag }),
+            Effect.catchTag(["InvalidRequestException", "ResourceDependencyException"], (error) =>
+              Effect.succeed({ deleted: false as const, reason: error._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);

@@ -80,21 +80,15 @@ export interface ProjectVPCEndpoint extends Resource<
  *
  * @resource
  */
-export const ProjectVPCEndpoint = Resource<ProjectVPCEndpoint>(
-  "Neon.ProjectVPCEndpoint",
-);
+export const ProjectVPCEndpoint = Resource<ProjectVPCEndpoint>("Neon.ProjectVPCEndpoint");
 
-export class InvalidProjectVPCEndpoint extends Data.TaggedError(
-  "InvalidProjectVPCEndpoint",
-)<{
+export class InvalidProjectVPCEndpoint extends Data.TaggedError("InvalidProjectVPCEndpoint")<{
   /** Invalid scope or unsafe mutation condition. */
   message: string;
 }> {}
 
 /** @internal */
-export const validateProjectVPCEndpoint = Effect.fn(function* (
-  props: ProjectVPCEndpointProps,
-) {
+export const validateProjectVPCEndpoint = Effect.fn(function* (props: ProjectVPCEndpointProps) {
   if (!props.project.projectId.trim()) {
     return yield* new InvalidProjectVPCEndpoint({
       message: "A project ID is required",
@@ -121,9 +115,7 @@ const request = (scope: { projectId: string; vpcEndpointId: string }) => ({
 const observe = (scope: { projectId: string; vpcEndpointId: string }) =>
   Neon.listProjectVPCEndpoints({ project_id: scope.projectId }).pipe(
     Effect.map((result) =>
-      result.endpoints.find(
-        (endpoint) => endpoint.vpc_endpoint_id === scope.vpcEndpointId,
-      ),
+      result.endpoints.find((endpoint) => endpoint.vpc_endpoint_id === scope.vpcEndpointId),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -137,8 +129,7 @@ const validateCloudScope = Effect.fn(function* (scope: {
   const { project } = yield* Neon.getProject({ project_id: scope.projectId });
   if (project.org_id !== scope.orgId || project.region_id !== scope.regionId) {
     return yield* new InvalidProjectVPCEndpoint({
-      message:
-        "Project and registered endpoint must share an organization and AWS region",
+      message: "Project and registered endpoint must share an organization and AWS region",
     });
   }
   yield* Neon.getOrganizationVPCEndpointDetails({
@@ -150,13 +141,7 @@ const validateCloudScope = Effect.fn(function* (scope: {
 
 export const ProjectVPCEndpointProvider = () =>
   Provider.succeed(ProjectVPCEndpoint, {
-    stables: [
-      "projectId",
-      "orgId",
-      "regionId",
-      "vpcEndpointId",
-      "initialLabel",
-    ],
+    stables: ["projectId", "orgId", "regionId", "vpcEndpointId", "initialLabel"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const previous = output ?? scopeOf(olds);
       if (
@@ -227,8 +212,7 @@ export const ProjectVPCEndpointProvider = () =>
         observed?.label !== news.label
       ) {
         return yield* new InvalidProjectVPCEndpoint({
-          message:
-            "Project restriction changed since its adoption baseline was captured",
+          message: "Project restriction changed since its adoption baseline was captured",
         });
       }
       if (observed?.label !== news.label) {
@@ -266,18 +250,10 @@ export const ProjectVPCEndpointProvider = () =>
     delete: Effect.fn(function* ({ output, olds }) {
       const observed = yield* observe(output);
       if (!observed) return;
-      if (
-        output.initialLabel !== null &&
-        observed.label === output.initialLabel
-      )
-        return;
-      if (
-        observed.label !== output.managedLabel &&
-        observed.label !== olds.label
-      ) {
+      if (output.initialLabel !== null && observed.label === output.initialLabel) return;
+      if (observed.label !== output.managedLabel && observed.label !== olds.label) {
         return yield* new InvalidProjectVPCEndpoint({
-          message:
-            "Refusing cleanup of an externally relabeled project restriction",
+          message: "Refusing cleanup of an externally relabeled project restriction",
         });
       }
       // A transferred project must not be mutated under its previous organization.

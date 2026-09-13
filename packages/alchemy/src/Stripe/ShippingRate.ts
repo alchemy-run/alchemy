@@ -39,12 +39,7 @@ export type ShippingRateType = "fixed_amount";
 export type ShippingRateTaxBehavior = "exclusive" | "inclusive" | "unspecified";
 
 /** Unit of time for a delivery-estimate bound. */
-export type ShippingRateDeliveryEstimateUnit =
-  | "business_day"
-  | "day"
-  | "hour"
-  | "month"
-  | "week";
+export type ShippingRateDeliveryEstimateUnit = "business_day" | "day" | "hour" | "month" | "week";
 
 export interface ShippingRateDeliveryEstimateBound {
   /**
@@ -230,9 +225,7 @@ export type ShippingRate = Resource<
  */
 export const ShippingRate = Resource<ShippingRate>("Stripe.ShippingRate");
 
-export class ShippingRateNotResolved extends Data.TaggedError(
-  "Stripe.ShippingRateNotResolved",
-)<{
+export class ShippingRateNotResolved extends Data.TaggedError("Stripe.ShippingRateNotResolved")<{
   displayName: string;
   currency: string;
 }> {}
@@ -243,9 +236,7 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const taxCodeOf = (
-  taxCode: ShippingRateTaxCode | null | undefined,
-): string | undefined => {
+const taxCodeOf = (taxCode: ShippingRateTaxCode | null | undefined): string | undefined => {
   if (taxCode == null) return undefined;
   if (typeof taxCode === "string") return taxCode;
   return taxCode.id;
@@ -271,9 +262,7 @@ const withoutBaseCurrency = <T>(
   currency: string,
 ): Record<string, T> | undefined => {
   if (options === undefined) return undefined;
-  const extra = Object.fromEntries(
-    Object.entries(options).filter(([key]) => key !== currency),
-  );
+  const extra = Object.fromEntries(Object.entries(options).filter(([key]) => key !== currency));
   return Object.keys(extra).length > 0 ? extra : undefined;
 };
 
@@ -286,9 +275,7 @@ const toWireCurrencyOptions = (
       currency,
       {
         amount: value.amount,
-        ...(value.taxBehavior !== undefined
-          ? { tax_behavior: value.taxBehavior }
-          : {}),
+        ...(value.taxBehavior !== undefined ? { tax_behavior: value.taxBehavior } : {}),
       },
     ]),
   );
@@ -311,9 +298,7 @@ const fromObservedEstimate = (
       value: estimate.maximum.value,
     };
   }
-  return out.minimum !== undefined || out.maximum !== undefined
-    ? out
-    : undefined;
+  return out.minimum !== undefined || out.maximum !== undefined ? out : undefined;
 };
 
 const toAttrs = (rate: StripeShippingRate): ShippingRateAttributes => ({
@@ -332,16 +317,10 @@ const toAttrs = (rate: StripeShippingRate): ShippingRateAttributes => ({
   livemode: rate.livemode,
 });
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
-      displayName ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
+      displayName ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
     );
   });
 
@@ -374,10 +353,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllShippingRates = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const rates: StripeShippingRate[] = [];
   for (const rate of [...active, ...inactive]) {
@@ -400,10 +378,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -429,16 +404,10 @@ const shouldReplace = (
   if (news.amount !== output.amount) return true;
   if (news.currency !== output.currency) return true;
   if ((news.type ?? "fixed_amount") !== output.type) return true;
-  if (
-    news.displayName !== undefined &&
-    news.displayName !== output.displayName
-  ) {
+  if (news.displayName !== undefined && news.displayName !== output.displayName) {
     return true;
   }
-  if (
-    news.taxCode !== undefined &&
-    news.taxCode !== (output.taxCode ?? undefined)
-  ) {
+  if (news.taxCode !== undefined && news.taxCode !== (output.taxCode ?? undefined)) {
     return true;
   }
   if (
@@ -471,9 +440,7 @@ export const ShippingRateProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -489,18 +456,11 @@ export const ShippingRateProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const metadata = yield* desiredMetadata(id, news.metadata);
       const desiredActive = news.active ?? true;
       const desiredType = news.type ?? "fixed_amount";
-      const extraCurrencyOptions = withoutBaseCurrency(
-        news.currencyOptions,
-        news.currency,
-      );
+      const extraCurrencyOptions = withoutBaseCurrency(news.currencyOptions, news.currency);
       const currencyOptions = toWireCurrencyOptions(extraCurrencyOptions);
 
       let current: StripeShippingRate | undefined = yield* observe({
@@ -521,9 +481,7 @@ export const ShippingRateProvider = () =>
           fixed_amount: {
             amount: news.amount,
             currency: news.currency,
-            ...(currencyOptions !== undefined
-              ? { currency_options: currencyOptions }
-              : {}),
+            ...(currencyOptions !== undefined ? { currency_options: currencyOptions } : {}),
           },
           metadata,
           ...(news.deliveryEstimate !== undefined
@@ -538,9 +496,7 @@ export const ShippingRateProvider = () =>
                 },
               }
             : {}),
-          ...(news.taxBehavior !== undefined
-            ? { tax_behavior: news.taxBehavior }
-            : {}),
+          ...(news.taxBehavior !== undefined ? { tax_behavior: news.taxBehavior } : {}),
           ...(news.taxCode !== undefined ? { tax_code: news.taxCode } : {}),
         }).pipe(
           withRequestOptions({
@@ -561,8 +517,7 @@ export const ShippingRateProvider = () =>
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const activeChanged = current.active !== desiredActive;
       const taxBehaviorChanged =
-        news.taxBehavior !== undefined &&
-        (current.tax_behavior ?? undefined) !== news.taxBehavior;
+        news.taxBehavior !== undefined && (current.tax_behavior ?? undefined) !== news.taxBehavior;
       const observedCurrencyOptions = withoutBaseCurrency(
         fromWireCurrencyOptions(current.fixed_amount?.currency_options),
         news.currency,
@@ -573,12 +528,7 @@ export const ShippingRateProvider = () =>
           stripNullish: true,
         });
 
-      if (
-        !activeChanged &&
-        !taxBehaviorChanged &&
-        !currencyOptionsChanged &&
-        !metadataChanged
-      ) {
+      if (!activeChanged && !taxBehaviorChanged && !currencyOptionsChanged && !metadataChanged) {
         return toAttrs(current);
       }
 
@@ -586,15 +536,11 @@ export const ShippingRateProvider = () =>
         shipping_rate_token: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(taxBehaviorChanged ? { tax_behavior: news.taxBehavior } : {}),
-        ...(currencyOptionsChanged
-          ? { fixed_amount: { currency_options: currencyOptions } }
-          : {}),
+        ...(currencyOptionsChanged ? { fixed_amount: { currency_options: currencyOptions } } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

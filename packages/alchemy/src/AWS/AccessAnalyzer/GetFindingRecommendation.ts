@@ -33,14 +33,10 @@ export interface GetFindingRecommendation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetFindingRecommendationRequest,
-    ) => Effect.Effect<
-      aa.GetFindingRecommendationResponse,
-      aa.GetFindingRecommendationError
-    >
+    ) => Effect.Effect<aa.GetFindingRecommendationResponse, aa.GetFindingRecommendationError>
   >
 > {}
 
-export const GetFindingRecommendation =
-  Binding.Service<GetFindingRecommendation>(
-    "AWS.AccessAnalyzer.GetFindingRecommendation",
-  );
+export const GetFindingRecommendation = Binding.Service<GetFindingRecommendation>(
+  "AWS.AccessAnalyzer.GetFindingRecommendation",
+);

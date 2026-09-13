@@ -64,28 +64,12 @@ export default AppConfigTestFunction.make(
     });
 
     const getConfig = yield* AppConfig.GetConfiguration(app, env, profile);
-    const createVersion = yield* AppConfig.CreateHostedConfigurationVersion(
-      app,
-      profile,
-    );
-    const startDeployment = yield* AppConfig.StartDeployment(
-      app,
-      env,
-      profile,
-      strategy,
-    );
-    const startSlowDeployment = yield* AppConfig.StartDeployment(
-      app,
-      env,
-      profile,
-      slowStrategy,
-    );
+    const createVersion = yield* AppConfig.CreateHostedConfigurationVersion(app, profile);
+    const startDeployment = yield* AppConfig.StartDeployment(app, env, profile, strategy);
+    const startSlowDeployment = yield* AppConfig.StartDeployment(app, env, profile, slowStrategy);
     const getDeployment = yield* AppConfig.GetDeployment(app, env);
     const stopDeployment = yield* AppConfig.StopDeployment(app, env);
-    const validateConfiguration = yield* AppConfig.ValidateConfiguration(
-      app,
-      profile,
-    );
+    const validateConfiguration = yield* AppConfig.ValidateConfiguration(app, profile);
 
     return {
       fetch: Effect.gen(function* () {
@@ -118,9 +102,7 @@ export default AppConfigTestFunction.make(
             version: string;
             slow?: boolean;
           };
-          const started = yield* (
-            body.slow ? startSlowDeployment : startDeployment
-          )({
+          const started = yield* (body.slow ? startSlowDeployment : startDeployment)({
             ConfigurationVersion: body.version,
           });
           return yield* HttpServerResponse.json({
@@ -130,9 +112,7 @@ export default AppConfigTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/deployment") {
-          const number = Number(
-            new URL(request.originalUrl).searchParams.get("number"),
-          );
+          const number = Number(new URL(request.originalUrl).searchParams.get("number"));
           const deployment = yield* getDeployment({
             DeploymentNumber: number,
           });

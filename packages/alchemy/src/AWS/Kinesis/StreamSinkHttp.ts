@@ -31,15 +31,10 @@ export const StreamSinkHttp = Layer.effect(
         }
       }
       const publish = yield* putRecords(stream);
-      return makeBatchedSink<
-        StreamSinkRecord,
-        Kinesis.PutRecordsOutput,
-        Kinesis.PutRecordsError
-      >({
+      return makeBatchedSink<StreamSinkRecord, Kinesis.PutRecordsOutput, Kinesis.PutRecordsError>({
         maxRecords: 500,
         maxBytes: 5 * 1024 * 1024,
-        sizeOf: (record) =>
-          record.Data.length + encoder.encode(record.PartitionKey).length,
+        sizeOf: (record) => record.Data.length + encoder.encode(record.PartitionKey).length,
         send: (batch) => publish({ Records: [...batch] }),
         // PutRecords failures are positional: Records[i] mirrors the request
         // order and carries an ErrorCode (throughput exceeded / internal
@@ -48,9 +43,7 @@ export const StreamSinkHttp = Layer.effect(
           if (!out.FailedRecordCount) {
             return [];
           }
-          return batch.filter(
-            (_, index) => out.Records[index]?.ErrorCode !== undefined,
-          );
+          return batch.filter((_, index) => out.Records[index]?.ErrorCode !== undefined);
         },
       });
     });

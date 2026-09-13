@@ -37,24 +37,17 @@ const runFixture = (path: string) =>
 
 describe("importStack", () => {
   test("loads stack entrypoint via relative path", () =>
-    expect(runFixture(fixtureRelativePath)).resolves.toBe(
-      "import-stack-fixture",
-    ));
+    expect(runFixture(fixtureRelativePath)).resolves.toBe("import-stack-fixture"));
 
   test("loads stack entrypoint via absolute path", () =>
-    expect(runFixture(fixtureAbsolutePath)).resolves.toBe(
-      "import-stack-fixture",
-    ));
+    expect(runFixture(fixtureAbsolutePath)).resolves.toBe("import-stack-fixture"));
 
   test("memoizes an opened stack session within a command scope", async () => {
     const [first, second] = await TestCore.run(
       Effect.all([
         open({ entrypoint: fixtureAbsolutePath, stage: "test" }),
         open({ entrypoint: fixtureAbsolutePath, stage: "test" }),
-      ]).pipe(
-        Effect.provide(routeCacheLayer),
-        Effect.provide(CliKit.layer({ input: false })),
-      ),
+      ]).pipe(Effect.provide(routeCacheLayer), Effect.provide(CliKit.layer({ input: false }))),
       { providers: TestLayers() },
     );
 
@@ -68,10 +61,7 @@ describe("importStack", () => {
       profile: "default",
     };
     const [first, second] = await TestCore.run(
-      Effect.all([
-        collectAuthProviders(options),
-        collectAuthProviders(options),
-      ]).pipe(
+      Effect.all([collectAuthProviders(options), collectAuthProviders(options)]).pipe(
         Effect.provide(routeCacheLayer),
         Effect.provide(CliKit.layer({ input: false })),
       ),
@@ -83,9 +73,7 @@ describe("importStack", () => {
 
   test("reports a missing stack entrypoint as a user-facing error", async () => {
     const result = await TestCore.run(
-      importStack(
-        path.join(import.meta.dirname, "missing-alchemy.run.ts"),
-      ).pipe(Effect.result),
+      importStack(path.join(import.meta.dirname, "missing-alchemy.run.ts")).pipe(Effect.result),
       { providers: TestLayers() },
     );
 

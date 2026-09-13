@@ -20,14 +20,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 // workspace's hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
 // Under the floci runner the standalone composite deploys only the framework
 // dev server (no Lambda/S3/CloudFront), so the standalone test below is
@@ -63,20 +56,14 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "NUXT_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "NUXT_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "NUXT_AWS_PAGE_MARKER", {
@@ -84,45 +71,25 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
           label: "SSR home page",
         });
         // The fixture's own nuxt.config.ts applied (runtimeConfig marker).
-        yield* expectUrlContains(
-          `${url}/`,
-          "config:nuxt-aws-user-config-loaded",
-          {
-            label: "user nuxt.config.ts applied",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "config:nuxt-aws-user-config-loaded", {
+          label: "user nuxt.config.ts applied",
+        });
         // Server API route through the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "NUXT_AWS_API_MARKER",
-          {
-            label: "API route",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "roundtrip",
-          {
-            label: "API route query echo",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "NUXT_AWS_API_MARKER", {
+          label: "API route",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+          label: "API route query echo",
+        });
         // Public file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "nuxt-aws-robots-marker",
-          {
-            label: "public asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "nuxt-aws-robots-marker", {
+          label: "public asset from S3",
+        });
         // Prerendered page (nitro wrote it into .output/public at build
         // time; the edge router serves it from S3 by exact match).
-        yield* expectUrlContains(
-          `${url}/prerendered`,
-          "NUXT_AWS_PRERENDERED_MARKER",
-          {
-            label: "prerendered page",
-          },
-        );
+        yield* expectUrlContains(`${url}/prerendered`, "NUXT_AWS_PRERENDERED_MARKER", {
+          label: "prerendered page",
+        });
 
         const distributionId = deployed.site.distribution!.distributionId;
 
@@ -166,9 +133,7 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         const url = deployed.router.url as string;
         // `https://{id}.cloudfront.net` live; the emulator serves the
         // router's edge on a local plain-HTTP port.
-        expect(url).toMatch(
-          runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
-        );
+        expect(url).toMatch(runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//);
 
         // SSR through the ROUTER's distribution (the site registered
         // itself in the router's KV store — no site-owned distribution).
@@ -190,36 +155,20 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         // assert the API route (dynamic, no cache-control) round-trips
         // with distinct query strings, which a day-long cached body under
         // CachingOptimized would break.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=router-one`,
-          "router-one",
-          {
-            label: "API via router (query one)",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=router-two`,
-          "router-two",
-          {
-            label: "API via router (query two)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=router-one`, "router-one", {
+          label: "API via router (query one)",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=router-two`, "router-two", {
+          label: "API via router (query two)",
+        });
         // Static asset from S3 through the router's edge function.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "nuxt-aws-robots-marker",
-          {
-            label: "public asset via router",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "nuxt-aws-robots-marker", {
+          label: "public asset via router",
+        });
         // Prerendered page from S3 by exact match.
-        yield* expectUrlContains(
-          `${url}/prerendered`,
-          "NUXT_AWS_PRERENDERED_MARKER",
-          {
-            label: "prerendered page via router",
-          },
-        );
+        yield* expectUrlContains(`${url}/prerendered`, "NUXT_AWS_PRERENDERED_MARKER", {
+          label: "prerendered page via router",
+        });
 
         const distributionId = deployed.router.distributionId as string;
 
@@ -239,9 +188,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

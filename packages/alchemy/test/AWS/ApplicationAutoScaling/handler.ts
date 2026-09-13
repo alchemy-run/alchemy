@@ -41,30 +41,24 @@ export default ApplicationAutoScalingTestFunction.make(
       billingMode: "PROVISIONED",
       provisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
     });
-    const target = yield* ApplicationAutoScaling.ScalableTarget(
-      "BindingsTarget",
-      {
-        serviceNamespace: "dynamodb",
-        resourceId: Output.interpolate`table/${table.tableName}`,
-        scalableDimension: "dynamodb:table:ReadCapacityUnits",
-        minCapacity: 1,
-        maxCapacity: 5,
-      },
-    );
-    const policy = yield* ApplicationAutoScaling.ScalingPolicy(
-      "BindingsPolicy",
-      {
-        serviceNamespace: target.serviceNamespace,
-        resourceId: target.resourceId,
-        scalableDimension: target.scalableDimension,
-        targetTracking: {
-          TargetValue: 70,
-          PredefinedMetricSpecification: {
-            PredefinedMetricType: "DynamoDBReadCapacityUtilization",
-          },
+    const target = yield* ApplicationAutoScaling.ScalableTarget("BindingsTarget", {
+      serviceNamespace: "dynamodb",
+      resourceId: Output.interpolate`table/${table.tableName}`,
+      scalableDimension: "dynamodb:table:ReadCapacityUnits",
+      minCapacity: 1,
+      maxCapacity: 5,
+    });
+    const policy = yield* ApplicationAutoScaling.ScalingPolicy("BindingsPolicy", {
+      serviceNamespace: target.serviceNamespace,
+      resourceId: target.resourceId,
+      scalableDimension: target.scalableDimension,
+      targetTracking: {
+        TargetValue: 70,
+        PredefinedMetricSpecification: {
+          PredefinedMetricType: "DynamoDBReadCapacityUtilization",
         },
       },
-    );
+    });
 
     const describeScalingActivities =
       yield* ApplicationAutoScaling.DescribeScalingActivities(target);
@@ -73,15 +67,12 @@ export default ApplicationAutoScalingTestFunction.make(
 
     // Subscribe to scaling-activity state-change (scaled-to-max) events —
     // creates the EventBridge rule + Lambda permission at deploy time.
-    yield* ApplicationAutoScaling.consumeScalingActivityEvents(
-      target,
-      {},
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `${event["detail-type"]}: ${event.detail.resourceId} scaledToMax=${event.detail.scaledToMax}`,
-          ),
+    yield* ApplicationAutoScaling.consumeScalingActivityEvents(target, {}, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(
+          `${event["detail-type"]}: ${event.detail.resourceId} scaledToMax=${event.detail.scaledToMax}`,
         ),
+      ),
     );
 
     const bound = {
@@ -129,9 +120,7 @@ export default ApplicationAutoScalingTestFunction.make(
             EndTime: new Date(now + 2 * 60 * 60 * 1000),
           }).pipe(
             Effect.map(() => "Forecast"),
-            Effect.catchTag("PredictiveScalingForecastNotSupported", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("PredictiveScalingForecastNotSupported", (e) => Effect.succeed(e._tag)),
             // Return whatever typed tag the API produced so an unexpected
             // error is observable in the test's assertion message instead
             // of an opaque 500. (The deployed bundle resolves distilled via

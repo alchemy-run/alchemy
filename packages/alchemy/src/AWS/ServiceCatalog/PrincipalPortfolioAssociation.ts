@@ -71,10 +71,9 @@ export interface PrincipalPortfolioAssociation extends Resource<
  *
  * @resource
  */
-export const PrincipalPortfolioAssociation =
-  Resource<PrincipalPortfolioAssociation>(
-    "AWS.ServiceCatalog.PrincipalPortfolioAssociation",
-  );
+export const PrincipalPortfolioAssociation = Resource<PrincipalPortfolioAssociation>(
+  "AWS.ServiceCatalog.PrincipalPortfolioAssociation",
+);
 
 export const PrincipalPortfolioAssociationProvider = () =>
   Provider.effect(
@@ -82,10 +81,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
     Effect.gen(function* () {
       // Enumerate the portfolio's principals and check for ours. A missing
       // portfolio means the association is gone too.
-      const isAssociated = Effect.fn(function* (
-        portfolioId: string,
-        principalArn: string,
-      ) {
+      const isAssociated = Effect.fn(function* (portfolioId: string, principalArn: string) {
         return yield* servicecatalog.listPrincipalsForPortfolio
           .pages({ PortfolioId: portfolioId })
           .pipe(
@@ -95,9 +91,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
                 .flatMap((page) => page.Principals ?? [])
                 .some((p) => p.PrincipalARN === principalArn),
             ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(false),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
           );
       });
 
@@ -110,53 +104,45 @@ export const PrincipalPortfolioAssociationProvider = () =>
         // the disassociate API accepts it.
         list: () =>
           Effect.gen(function* () {
-            const portfolioIds = yield* servicecatalog.listPortfolios
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((pages) =>
-                  Array.from(pages)
-                    .flatMap((page) => page.PortfolioDetails ?? [])
-                    .flatMap((portfolio) =>
-                      portfolio.Id === undefined ? [] : [portfolio.Id],
-                    ),
-                ),
-              );
+            const portfolioIds = yield* servicecatalog.listPortfolios.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((pages) =>
+                Array.from(pages)
+                  .flatMap((page) => page.PortfolioDetails ?? [])
+                  .flatMap((portfolio) => (portfolio.Id === undefined ? [] : [portfolio.Id])),
+              ),
+            );
 
             const associations = yield* Effect.forEach(
               portfolioIds,
               (portfolioId) =>
-                servicecatalog.listPrincipalsForPortfolio
-                  .pages({ PortfolioId: portfolioId })
-                  .pipe(
-                    Stream.runCollect,
-                    Effect.map((pages) =>
-                      Array.from(pages)
-                        .flatMap((page) => page.Principals ?? [])
-                        .flatMap((principal) => {
-                          if (principal.PrincipalARN === undefined) return [];
-                          const principalType =
-                            principal.PrincipalType === "IAM"
-                              ? ("IAM" as const)
-                              : principal.PrincipalType === "IAM_PATTERN"
-                                ? ("IAM_PATTERN" as const)
-                                : undefined;
-                          if (principalType === undefined) return [];
-                          return [
-                            {
-                              portfolioId,
-                              principalArn: principal.PrincipalARN,
-                              principalType,
-                            },
-                          ];
-                        }),
-                    ),
-                    // A portfolio can disappear between enumeration and
-                    // association hydration.
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed([]),
-                    ),
+                servicecatalog.listPrincipalsForPortfolio.pages({ PortfolioId: portfolioId }).pipe(
+                  Stream.runCollect,
+                  Effect.map((pages) =>
+                    Array.from(pages)
+                      .flatMap((page) => page.Principals ?? [])
+                      .flatMap((principal) => {
+                        if (principal.PrincipalARN === undefined) return [];
+                        const principalType =
+                          principal.PrincipalType === "IAM"
+                            ? ("IAM" as const)
+                            : principal.PrincipalType === "IAM_PATTERN"
+                              ? ("IAM_PATTERN" as const)
+                              : undefined;
+                        if (principalType === undefined) return [];
+                        return [
+                          {
+                            portfolioId,
+                            principalArn: principal.PrincipalARN,
+                            principalType,
+                          },
+                        ];
+                      }),
                   ),
+                  // A portfolio can disappear between enumeration and
+                  // association hydration.
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+                ),
               { concurrency: 5 },
             );
             return associations.flat();
@@ -182,8 +168,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
             ? {
                 portfolioId,
                 principalArn,
-                principalType:
-                  output?.principalType ?? olds?.principalType ?? "IAM",
+                principalType: output?.principalType ?? olds?.principalType ?? "IAM",
               }
             : undefined;
         }),
@@ -198,9 +183,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
             });
             // The principal list is eventually consistent — wait (bounded)
             // until the association is visible so a subsequent read converges.
-            yield* awaitVisible(
-              isAssociated(news.portfolioId, news.principalArn),
-            );
+            yield* awaitVisible(isAssociated(news.portfolioId, news.principalArn));
           }
           yield* session.note(`${news.portfolioId}/${news.principalArn}`);
           return {
@@ -217,9 +200,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
                 PrincipalARN: output.principalArn,
                 PrincipalType: output.principalType,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
         }),
       });

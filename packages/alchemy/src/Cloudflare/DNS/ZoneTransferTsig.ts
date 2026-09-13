@@ -154,11 +154,7 @@ export const ZoneTransferTsigProvider = () =>
       // Sync — PUT with the full body; skip the call on no delta. The
       // observed secret comes back from the GET, so the comparison is
       // exact (not a guess from `olds`).
-      if (
-        observed.name === name &&
-        observed.algo === news.algo &&
-        observed.secret === secret
-      ) {
+      if (observed.name === name && observed.algo === news.algo && observed.secret === secret) {
         return toAttributes(observed, output?.accountId ?? accountId);
       }
       const updated = yield* dns.updateZoneTransferTsig({

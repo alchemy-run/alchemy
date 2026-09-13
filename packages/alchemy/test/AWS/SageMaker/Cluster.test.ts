@@ -13,17 +13,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove describeCluster returns the typed
 // ResourceNotFound for a nonexistent HyperPod cluster. Runs in every CI pass.
-test.provider(
-  "describeCluster on a nonexistent cluster fails with ResourceNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        sagemaker.describeCluster({
-          ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFound");
-    }),
+test.provider("describeCluster on a nonexistent cluster fails with ResourceNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      sagemaker.describeCluster({
+        ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFound");
+  }),
 );
 
 const findCluster = (name: string) =>
@@ -61,9 +59,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
               },
             ],
           },
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy",
-          ],
+          managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy"],
         });
         return { bucket, role };
       });
@@ -112,9 +108,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       // Out-of-band verification via distilled.
       const described = yield* findCluster(cluster.clusterName);
       expect(described?.ClusterStatus).toBe("InService");
-      expect(
-        described?.InstanceGroups?.map((g) => g.InstanceGroupName),
-      ).toEqual(["controller"]);
+      expect(described?.InstanceGroups?.map((g) => g.InstanceGroupName)).toEqual(["controller"]);
 
       // Destroy and verify gone.
       yield* stack.destroy();

@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "DeadlineBindings");
 
 // Bounded Lambda function URL cold-start/DNS/IAM propagation probe.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("6 seconds"),
-  Schedule.recurs(9),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(9)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -45,9 +42,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -57,17 +52,12 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       // Deadline's control plane can need several seconds to settle a fresh
       // farm/queue and sometimes returns a run of 5xx responses meanwhile.
       // Keep the retry bounded to nine attempts and 24 seconds of backoff.
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 /**
  * The account's farm quota is 2 and a deploy killed mid-crash leaks a farm
@@ -80,9 +70,7 @@ const reapLeakedFarms = Effect.gen(function* () {
     EffectStream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
-  const leaked = farms.filter((farm) =>
-    /TestFarm|BindingsFarm|FleetFarm/.test(farm.displayName),
-  );
+  const leaked = farms.filter((farm) => /TestFarm|BindingsFarm|FleetFarm/.test(farm.displayName));
   yield* Effect.forEach(
     leaked,
     (farm) =>
@@ -95,39 +83,24 @@ const reapLeakedFarms = Effect.gen(function* () {
         // with ConflictException until they finish. Bounded.
         yield* Effect.retry(deadline.deleteFarm({ farmId }), {
           while: (e): boolean => e._tag === "ConflictException",
-          schedule: Schedule.max([
-            Schedule.spaced("6 seconds"),
-            Schedule.recurs(9),
-          ]),
-        }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-        );
-        yield* Effect.logInfo(
-          `reaped leaked farm ${farmId} (${farm.displayName})`,
-        );
+          schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+        yield* Effect.logInfo(`reaped leaked farm ${farmId} (${farm.displayName})`);
       }),
     { discard: true },
   );
 });
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("Deadline Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Deadline test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Deadline test setup: destroying previous resources");
       yield* sharedStack.destroy();
       // Raw distilled calls need the provider environment (credentials).
-      yield* Core.withProviders(
-        reapLeakedFarms,
-        testOptions,
-        "DeadlineBindings",
-      );
+      yield* Core.withProviders(reapLeakedFarms, testOptions, "DeadlineBindings");
 
       yield* Effect.logInfo("Deadline test setup: deploying fixture");
       const attrs = yield* sharedStack.deploy(
@@ -141,9 +114,7 @@ describe.sequential("Deadline Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Deadline test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Deadline test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -151,9 +122,7 @@ describe.sequential("Deadline Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Deadline test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Deadline test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -194,9 +163,7 @@ describe.sequential("Deadline Bindings", () => {
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (j): boolean =>
-                settled.includes(
-                  (j as { lifecycleStatus: string }).lifecycleStatus,
-                ),
+                settled.includes((j as { lifecycleStatus: string }).lifecycleStatus),
               times: 10,
             }),
           )) as { jobId: string; priority: number; lifecycleStatus: string };
@@ -208,8 +175,7 @@ describe.sequential("Deadline Bindings", () => {
           const listed = (yield* getJson("/jobs").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
-              until: (j): boolean =>
-                (j as { ids: string[] }).ids.includes(jobId),
+              until: (j): boolean => (j as { ids: string[] }).ids.includes(jobId),
               times: 10,
             }),
           )) as { ids: string[] };
@@ -230,8 +196,7 @@ describe.sequential("Deadline Bindings", () => {
           const updated = (yield* getJson(`/job?jobId=${jobId}`).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
-              until: (j): boolean =>
-                (j as { priority: number }).priority === 75,
+              until: (j): boolean => (j as { priority: number }).priority === 75,
               times: 10,
             }),
           )) as { priority: number };
@@ -257,18 +222,14 @@ describe.sequential("Deadline Bindings", () => {
           expect(steps.names).toContain("Echo");
           stepId = steps.ids[0]!;
 
-          const step = (yield* getJson(
-            `/step?jobId=${jobId}&stepId=${stepId}`,
-          )) as {
+          const step = (yield* getJson(`/step?jobId=${jobId}&stepId=${stepId}`)) as {
             stepId: string;
             name: string;
           };
           expect(step.stepId).toBe(stepId);
           expect(step.name).toBe("Echo");
 
-          const tasks = (yield* getJson(
-            `/tasks?jobId=${jobId}&stepId=${stepId}`,
-          )) as {
+          const tasks = (yield* getJson(`/tasks?jobId=${jobId}&stepId=${stepId}`)) as {
             ids: string[];
           };
           expect(tasks.ids.length).toBeGreaterThanOrEqual(1);
@@ -325,9 +286,7 @@ describe.sequential("Deadline Bindings", () => {
       "cancels a READY task, then requeues the step",
       (_stack) =>
         Effect.gen(function* () {
-          const tasks = (yield* getJson(
-            `/tasks?jobId=${jobId}&stepId=${stepId}`,
-          )) as {
+          const tasks = (yield* getJson(`/tasks?jobId=${jobId}&stepId=${stepId}`)) as {
             ids: string[];
           };
           const taskId = tasks.ids[0]!;
@@ -335,9 +294,7 @@ describe.sequential("Deadline Bindings", () => {
           // Cancel the single task and watch it converge to CANCELED. (The
           // fixture queue has no fleet, so the pending state is READY or
           // NOT_COMPATIBLE — never RUNNING.)
-          yield* postJson(
-            `/task/cancel?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
-          );
+          yield* postJson(`/task/cancel?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`);
           const canceled = (yield* getJson(
             `/task?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
           ).pipe(
@@ -383,9 +340,7 @@ describe.sequential("Deadline Bindings", () => {
 
           // ListSessionActions requires a sessionId or taskId scope — use
           // the job's single task.
-          const tasks = (yield* getJson(
-            `/tasks?jobId=${jobId}&stepId=${stepId}`,
-          )) as {
+          const tasks = (yield* getJson(`/tasks?jobId=${jobId}&stepId=${stepId}`)) as {
             ids: string[];
           };
           const actions = (yield* getJson(
@@ -411,13 +366,10 @@ describe.sequential("Deadline Bindings", () => {
           };
           expect(started.aggregationId).toBeTruthy();
 
-          const result = (yield* getJson(
-            `/stats?aggregationId=${started.aggregationId}`,
-          ).pipe(
+          const result = (yield* getJson(`/stats?aggregationId=${started.aggregationId}`).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("6 seconds"),
-              until: (r): boolean =>
-                (r as { status: string }).status !== "IN_PROGRESS",
+              until: (r): boolean => (r as { status: string }).status !== "IN_PROGRESS",
               times: 9,
             }),
           )) as { status: string; count: number };
@@ -429,18 +381,16 @@ describe.sequential("Deadline Bindings", () => {
   });
 
   describe("consumeFarmEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeFarmEvents must
-          // have materialized as a rule on the default bus with the Lambda
-          // as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeFarmEvents must
+        // have materialized as a rule on the default bus with the Lambda
+        // as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

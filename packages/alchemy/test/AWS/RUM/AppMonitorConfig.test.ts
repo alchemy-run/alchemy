@@ -4,12 +4,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
-import {
-  AppMonitor,
-  type MetricDefinition,
-  MetricsDestination,
-  ResourcePolicy,
-} from "@/AWS/RUM";
+import { AppMonitor, type MetricDefinition, MetricsDestination, ResourcePolicy } from "@/AWS/RUM";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 
@@ -90,10 +85,7 @@ test.provider(
 
       // Create: one extended metric definition + a PutRumEvents policy.
       const created = yield* stack.deploy(
-        program(
-          [{ name: "SessionCount", eventPattern: sessionCountPattern }],
-          "AlchemyRumTest",
-        ),
+        program([{ name: "SessionCount", eventPattern: sessionCountPattern }], "AlchemyRumTest"),
       );
       expect(created.metrics.appMonitorName).toBe(MONITOR_NAME);
       expect(created.metrics.destination).toBe("CloudWatch");
@@ -133,13 +125,8 @@ test.provider(
       expect(updated.policy.policyRevisionId).toBe(firstRevision);
 
       const defsAfterUpdate = yield* listDefinitions();
-      expect(defsAfterUpdate.map((d) => d.Name).sort()).toEqual([
-        "JsErrorCount",
-        "SessionCount",
-      ]);
-      expect(
-        defsAfterUpdate.find((d) => d.Name === "SessionCount")?.DimensionKeys,
-      ).toEqual({
+      expect(defsAfterUpdate.map((d) => d.Name).sort()).toEqual(["JsErrorCount", "SessionCount"]);
+      expect(defsAfterUpdate.find((d) => d.Name === "SessionCount")?.DimensionKeys).toEqual({
         "metadata.browserName": "BrowserName",
       });
 
@@ -164,9 +151,7 @@ test.provider(
 
       // Everything died with the stack: the monitor (and with it the
       // destination + policy) is a typed not-found.
-      const gone = yield* Effect.flip(
-        rum.getAppMonitor({ Name: MONITOR_NAME }),
-      );
+      const gone = yield* Effect.flip(rum.getAppMonitor({ Name: MONITOR_NAME }));
       expect(gone._tag).toBe("ResourceNotFoundException");
     }),
   { timeout: 240_000 },

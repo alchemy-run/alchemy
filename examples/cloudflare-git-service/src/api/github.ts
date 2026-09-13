@@ -54,11 +54,9 @@ export const GitHubLive = HttpApiBuilder.group(AppApi, "github", (h) =>
                     ? 403
                     : error._tag === "Unauthorized"
                       ? 401
-                      : error._tag === "RepoNotFound" ||
-                          error._tag === "PullNotFound"
+                      : error._tag === "RepoNotFound" || error._tag === "PullNotFound"
                         ? 404
-                        : error._tag === "SchemaError" ||
-                            error._tag === "HttpServerError"
+                        : error._tag === "SchemaError" || error._tag === "HttpServerError"
                           ? 400
                           : 409,
               },

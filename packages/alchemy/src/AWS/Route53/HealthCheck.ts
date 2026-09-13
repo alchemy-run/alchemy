@@ -158,9 +158,8 @@ export const HealthCheck = Resource<HealthCheck>("AWS.Route53.HealthCheck");
  * the owning service may retain them as tombstones after its resource is
  * deleted. They therefore must not be returned to account-wide nuke inventory.
  */
-export const isNukeableHealthCheck = (check: {
-  LinkedService?: route53.LinkedService;
-}): boolean => check.LinkedService === undefined;
+export const isNukeableHealthCheck = (check: { LinkedService?: route53.LinkedService }): boolean =>
+  check.LinkedService === undefined;
 
 const toConfig = (props: HealthCheckProps): route53.HealthCheckConfig => ({
   Type: props.type,
@@ -268,13 +267,11 @@ export const HealthCheckProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.HealthChecks ?? [])
-                  .filter(isNukeableHealthCheck)
-                  .map((check) => ({
-                    id: check.Id,
-                    healthCheckId: check.Id,
-                    type: check.HealthCheckConfig.Type,
-                  })),
+                (page.HealthChecks ?? []).filter(isNukeableHealthCheck).map((check) => ({
+                  id: check.Id,
+                  healthCheckId: check.Id,
+                  type: check.HealthCheckConfig.Type,
+                })),
               ),
             ),
           ),
@@ -327,17 +324,11 @@ export const HealthCheckProvider = () =>
                           existing
                             ? Effect.succeed(existing)
                             : Effect.die(
-                                new Error(
-                                  "health check exists but could not be observed",
-                                ),
+                                new Error("health check exists but could not be observed"),
                               ),
                         ),
                       )
-                    : Effect.die(
-                        new Error(
-                          "health check already exists for caller reference",
-                        ),
-                      ),
+                    : Effect.die(new Error("health check already exists for caller reference")),
                 ),
               );
           }
@@ -355,10 +346,7 @@ export const HealthCheckProvider = () =>
                 // Optimistic-lock retry: re-read for the latest version.
                 Effect.retry({
                   while: (e) => e._tag === "HealthCheckVersionMismatch",
-                  schedule: Schedule.max([
-                    Schedule.fixed("1 second"),
-                    Schedule.recurs(5),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(5)]),
                 }),
               );
             check = updated;
@@ -380,10 +368,7 @@ export const HealthCheckProvider = () =>
             // Still referenced by a record whose delete is propagating.
             Effect.retry({
               while: (e) => e._tag === "HealthCheckInUse",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
             }),
             Effect.catchTag("HealthCheckInUse", () => Effect.void),
           );

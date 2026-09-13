@@ -45,9 +45,7 @@ test.provider(
       const http = yield* HttpClient.HttpClient;
       const initial = yield* HttpClient.filterStatusOk(http)
         .get(fn.url)
-        .pipe(
-          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
-        );
+        .pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }));
       expect(initial.status).toBe(200);
       expect(yield* initial.json).toEqual({ theme: "system", pageSize: 25 });
       const upload = (yield* (yield* http.get(`${fn.url}/presign`)).json) as {
@@ -58,11 +56,8 @@ test.provider(
           body: HttpBody.text("effect presign", "text/plain"),
         })).status,
       ).toBe(200);
-      const download = (yield* (yield* http.get(`${fn.url}/download`))
-        .json) as { url: string };
-      expect(yield* (yield* http.get(download.url)).text).toBe(
-        "effect presign",
-      );
+      const download = (yield* (yield* http.get(`${fn.url}/download`)).json) as { url: string };
+      expect(yield* (yield* http.get(download.url)).text).toBe("effect presign");
       const written = yield* http.get(`${fn.url}/write`);
       if (written.status !== 200)
         yield* Effect.log("Storage write failed", {
@@ -85,9 +80,7 @@ test.provider(
         theme: "dark",
         pageSize: 50,
       });
-      expect(yield* (yield* http.get(`${fn.url}/invalid`)).text).toBe(
-        "rejected",
-      );
+      expect(yield* (yield* http.get(`${fn.url}/invalid`)).text).toBe("rejected");
       const invalidRead = yield* http.get(fn.url);
       expect(invalidRead.status).toBe(500);
       expect(yield* invalidRead.text).toBe("Storage request failed");
@@ -113,11 +106,7 @@ test.provider(
           const bucket = yield* StorageBucket;
           const fn = yield* NeonFunction("StorageNative", {
             branch: bucket.Props.branch!,
-            main: (yield* Path.Path).join(
-              import.meta.dirname,
-              "fixtures",
-              "StorageNative.ts",
-            ),
+            main: (yield* Path.Path).join(import.meta.dirname, "fixtures", "StorageNative.ts"),
             env: {
               BUCKET_NAME: bucket.bucketName,
               APP_TOKEN: Redacted.make("neon-storage-fixture-token"),
@@ -131,9 +120,7 @@ test.provider(
       expect((yield* http.get(fn.url)).status).toBe(401);
       const presign = yield* HttpClient.filterStatusOk(http)
         .get(`${fn.url}/presign`, { headers })
-        .pipe(
-          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
-        );
+        .pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }));
       const { url } = (yield* presign.json) as { url: string };
       const upload = yield* http.put(url, {
         body: HttpBody.text("native roundtrip"),
@@ -141,10 +128,9 @@ test.provider(
       expect(upload.status).toBe(200);
       const download = yield* http.get(fn.url, { headers });
       expect(yield* download.text).toBe("native roundtrip");
-      expect(
-        (yield* (yield* bucketStorageClient(bucket)).head("native.txt"))
-          ?.ContentLength,
-      ).toBe(16);
+      expect((yield* (yield* bucketStorageClient(bucket)).head("native.txt"))?.ContentLength).toBe(
+        16,
+      );
       yield* stack.destroy();
       yield* stack.destroy();
     }),

@@ -41,12 +41,7 @@ export interface ListNamespaces extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListNamespacesRequest,
-    ) => Effect.Effect<
-      s3tables.ListNamespacesResponse,
-      s3tables.ListNamespacesError
-    >
+    ) => Effect.Effect<s3tables.ListNamespacesResponse, s3tables.ListNamespacesError>
   >
 > {}
-export const ListNamespaces = Binding.Service<ListNamespaces>(
-  "AWS.S3Tables.ListNamespaces",
-);
+export const ListNamespaces = Binding.Service<ListNamespaces>("AWS.S3Tables.ListNamespaces");

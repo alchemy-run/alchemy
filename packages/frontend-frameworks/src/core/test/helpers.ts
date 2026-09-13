@@ -10,30 +10,22 @@ import { afterAll } from "vitest";
 export const run = <A, E>(
   effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
 ): Promise<A> =>
-  Effect.runPromise(
-    effect.pipe(Effect.provide(NodeServices.layer)) as Effect.Effect<A, E>,
-  );
+  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)) as Effect.Effect<A, E>);
 
 const tempDirs: Array<string> = [];
 
 afterAll(async () => {
   await Promise.all(
-    tempDirs.map((dir) =>
-      NodeFsPromises.rm(dir, { recursive: true, force: true }),
-    ),
+    tempDirs.map((dir) => NodeFsPromises.rm(dir, { recursive: true, force: true })),
   );
 });
 
 /** Create a temp project directory populated with the given files. */
-export const makeProject = async (
-  files: Record<string, string>,
-): Promise<string> => {
+export const makeProject = async (files: Record<string, string>): Promise<string> => {
   // realpath: macOS tmpdir is a symlink (/var -> /private/var); Vite resolves
   // module ids to real paths, so tests must compare against real paths too.
   const dir = await NodeFsPromises.realpath(
-    await NodeFsPromises.mkdtemp(
-      NodePath.join(NodeOs.tmpdir(), "framework-core-test-"),
-    ),
+    await NodeFsPromises.mkdtemp(NodePath.join(NodeOs.tmpdir(), "framework-core-test-")),
   );
   tempDirs.push(dir);
   const withDefaults = {

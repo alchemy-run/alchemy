@@ -58,7 +58,6 @@ export interface GenerateEmbedUrlForRegisteredUser extends Binding.Service<
     >
   >
 > {}
-export const GenerateEmbedUrlForRegisteredUser =
-  Binding.Service<GenerateEmbedUrlForRegisteredUser>(
-    "AWS.QuickSight.GenerateEmbedUrlForRegisteredUser",
-  );
+export const GenerateEmbedUrlForRegisteredUser = Binding.Service<GenerateEmbedUrlForRegisteredUser>(
+  "AWS.QuickSight.GenerateEmbedUrlForRegisteredUser",
+);

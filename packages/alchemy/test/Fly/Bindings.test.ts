@@ -25,10 +25,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Fly.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
@@ -74,18 +71,13 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 const retryTransient = {
   while: (e: NotReady | HttpClientError) =>
     e._tag === "NotReady" &&
-    (e.status === 0 ||
-      e.status === 404 ||
-      e.status === 502 ||
-      e.status === 503),
+    (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503),
   schedule: Schedule.spaced("2 seconds"),
   times: 8,
 } as const;
 
 /** Decode the body, turning any non-200 (or undecodable body) into `NotReady`. */
-const readJson = (
-  res: HttpClientResponse.HttpClientResponse,
-): Effect.Effect<unknown, NotReady> =>
+const readJson = (res: HttpClientResponse.HttpClientResponse): Effect.Effect<unknown, NotReady> =>
   res.json.pipe(
     Effect.catch(() => Effect.fail(new NotReady({ status: res.status }))),
     Effect.flatMap((body) =>
@@ -114,9 +106,7 @@ const postJson = (path: string, body: unknown) =>
   Effect.gen(function* () {
     const { url } = yield* stack;
     return yield* HttpClient.execute(
-      HttpClientRequest.post(`${url}${path}`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(body),
-      ),
+      HttpClientRequest.post(`${url}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
     ).pipe(
       Effect.timeoutOrElse({
         duration: "8 seconds",

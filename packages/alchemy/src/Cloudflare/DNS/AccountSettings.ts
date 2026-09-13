@@ -235,9 +235,7 @@ export const AccountDnsSettings = Resource<AccountDnsSettings>(TypeId, {
 /**
  * Returns true if the given value is an AccountDnsSettings resource.
  */
-export const isAccountDnsSettings = (
-  value: unknown,
-): value is AccountDnsSettings =>
+export const isAccountDnsSettings = (value: unknown): value is AccountDnsSettings =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountDnsSettingsProvider = () =>
@@ -341,15 +339,12 @@ export const AccountDnsSettingsProvider = () =>
 // Snapshot + diff helpers
 // ---------------------------------------------------------------------------
 
-type SettingsResponse =
-  | dns.GetSettingAccountResponse
-  | dns.PatchSettingAccountResponse;
+type SettingsResponse = dns.GetSettingAccountResponse | dns.PatchSettingAccountResponse;
 
 type PatchBody = Omit<dns.PatchSettingAccountRequest, "accountId">;
 type ZoneDefaultsPatch = NonNullable<PatchBody["zoneDefaults"]>;
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const toSnapshot = (r: SettingsResponse): AccountDnsSettingsSnapshot => ({
   enforceDnsOnly: undef(r.enforceDnsOnly) ?? false,
@@ -436,10 +431,7 @@ const computeDelta = (
 ): PatchBody | undefined => {
   const body: PatchBody = {};
   let dirty = false;
-  if (
-    news.enforceDnsOnly !== undefined &&
-    news.enforceDnsOnly !== observed.enforceDnsOnly
-  ) {
+  if (news.enforceDnsOnly !== undefined && news.enforceDnsOnly !== observed.enforceDnsOnly) {
     body.enforceDnsOnly = news.enforceDnsOnly;
     dirty = true;
   }
@@ -448,17 +440,11 @@ const computeDelta = (
   if (zd !== undefined) {
     const zdBody: ZoneDefaultsPatch = {};
     let zdDirty = false;
-    if (
-      zd.flattenAllCnames !== undefined &&
-      zd.flattenAllCnames !== ozd.flattenAllCnames
-    ) {
+    if (zd.flattenAllCnames !== undefined && zd.flattenAllCnames !== ozd.flattenAllCnames) {
       zdBody.flattenAllCnames = zd.flattenAllCnames;
       zdDirty = true;
     }
-    if (
-      zd.foundationDns !== undefined &&
-      zd.foundationDns !== ozd.foundationDns
-    ) {
+    if (zd.foundationDns !== undefined && zd.foundationDns !== ozd.foundationDns) {
       zdBody.foundationDns = zd.foundationDns;
       zdDirty = true;
     }
@@ -469,17 +455,11 @@ const computeDelta = (
       zdBody.internalDns = { referenceZoneId: zd.internalDns.referenceZoneId };
       zdDirty = true;
     }
-    if (
-      zd.multiProvider !== undefined &&
-      zd.multiProvider !== ozd.multiProvider
-    ) {
+    if (zd.multiProvider !== undefined && zd.multiProvider !== ozd.multiProvider) {
       zdBody.multiProvider = zd.multiProvider;
       zdDirty = true;
     }
-    if (
-      zd.nameservers !== undefined &&
-      zd.nameservers.type !== ozd.nameservers.type
-    ) {
+    if (zd.nameservers !== undefined && zd.nameservers.type !== ozd.nameservers.type) {
       zdBody.nameservers = { type: zd.nameservers.type };
       zdDirty = true;
     }
@@ -487,10 +467,7 @@ const computeDelta = (
       zdBody.nsTtl = zd.nsTtl;
       zdDirty = true;
     }
-    if (
-      zd.secondaryOverrides !== undefined &&
-      zd.secondaryOverrides !== ozd.secondaryOverrides
-    ) {
+    if (zd.secondaryOverrides !== undefined && zd.secondaryOverrides !== ozd.secondaryOverrides) {
       zdBody.secondaryOverrides = zd.secondaryOverrides;
       zdDirty = true;
     }

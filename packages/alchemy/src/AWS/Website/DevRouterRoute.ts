@@ -17,9 +17,7 @@ import type { WebsiteDomainProps, WebsiteRouterDomainProps } from "./shared.ts";
 export const asRouterDomain = (
   domain: WebsiteDomainProps | undefined,
 ): WebsiteRouterDomainProps | undefined =>
-  domain && "router" in domain && domain.router
-    ? (domain as WebsiteRouterDomainProps)
-    : undefined;
+  domain && "router" in domain && domain.router ? (domain as WebsiteRouterDomainProps) : undefined;
 
 /**
  * Escape a host pattern into the regex form the Router's edge function
@@ -52,99 +50,94 @@ const toHostPatternRegex = (pattern: string) =>
  * attachment computes them.
  * @internal
  */
-export const registerDevRouterRoute = Effect.fn("AWS.Website.DevRouterRoute")(
-  function* (
-    domain: WebsiteRouterDomainProps,
-    /** The local dev server's URL (e.g. `http://localhost:5173`). */
-    devUrl: Input<string | undefined>,
-  ) {
-    const router = domain.router;
-    const stack = yield* Stack;
-    const stage = yield* Stage;
-    const ns = yield* Namespace.CurrentNamespace;
-    const fqn = ns ? toPath(ns).join("/") : "";
-    const kvNamespace = createHash("md5")
-      .update(`${stack.name}-${stage}-${fqn}`)
-      .digest("hex")
-      .substring(0, 4);
+export const registerDevRouterRoute = Effect.fn("AWS.Website.DevRouterRoute")(function* (
+  domain: WebsiteRouterDomainProps,
+  /** The local dev server's URL (e.g. `http://localhost:5173`). */
+  devUrl: Input<string | undefined>,
+) {
+  const router = domain.router;
+  const stack = yield* Stack;
+  const stage = yield* Stage;
+  const ns = yield* Namespace.CurrentNamespace;
+  const fqn = ns ? toPath(ns).join("/") : "";
+  const kvNamespace = createHash("md5")
+    .update(`${stack.name}-${stage}-${fqn}`)
+    .digest("hex")
+    .substring(0, 4);
 
-    const routerPathPrefix = domain.path
-      ? "/" + domain.path.replace(/^\//, "").replace(/\/$/, "")
+  const routerPathPrefix = domain.path
+    ? "/" + domain.path.replace(/^\//, "").replace(/\/$/, "")
+    : undefined;
+
+  // One KV route entry per host pattern — identical shape, ids, and
+  // ordering to the live attachment in `makeKvSite`.
+  const hostPatterns: [id: string, pattern: string | undefined][] = [
+    ["RoutesUpdate", domain.name],
+    ...(domain.aliases ?? []).map((alias, index): [string, string] => [
+      `RoutesUpdateAlias${index + 1}`,
+      alias,
+    ]),
+    ...(domain.redirects ?? []).map((redirect, index): [string, string] => [
+      `RoutesUpdateRedirect${index + 1}`,
+      redirect,
+    ]),
+  ];
+
+  yield* Effect.forEach(
+    hostPatterns,
+    ([routeId, pattern]) =>
+      KvRoutesUpdate(routeId, {
+        store: router.kvStoreArn,
+        namespace: router.kvNamespace as any,
+        key: "routes",
+        entry: [
+          "site",
+          kvNamespace,
+          pattern ? toHostPatternRegex(pattern) : "",
+          routerPathPrefix ?? "/",
+        ].join(","),
+      }),
+    { concurrency: "unbounded" },
+  );
+
+  const redirect =
+    domain.redirects?.length && domain.name
+      ? { hosts: domain.redirects, to: domain.name }
       : undefined;
 
-    // One KV route entry per host pattern — identical shape, ids, and
-    // ordering to the live attachment in `makeKvSite`.
-    const hostPatterns: [id: string, pattern: string | undefined][] = [
-      ["RoutesUpdate", domain.name],
-      ...(domain.aliases ?? []).map((alias, index): [string, string] => [
-        `RoutesUpdateAlias${index + 1}`,
-        alias,
-      ]),
-      ...(domain.redirects ?? []).map((redirect, index): [string, string] => [
-        `RoutesUpdateRedirect${index + 1}`,
-        redirect,
-      ]),
-    ];
+  yield* KvEntries("KvEntries", {
+    store: router.kvStoreArn,
+    namespace: kvNamespace,
+    entries: {
+      metadata: Output.map(
+        Output.asOutput(devUrl as any) as Output.Output<string | undefined>,
+        (resolved) => {
+          if (!resolved) {
+            throw new Error(
+              "A Router-attached site needs a dev server URL to route to during `alchemy dev` — set `dev.url` (or make the dev command print its own localhost URL).",
+            );
+          }
+          return JSON.stringify({
+            base: routerPathPrefix && routerPathPrefix !== "/" ? routerPathPrefix : undefined,
+            // `[[host]]` — one server, no geo coordinates, so
+            // `findNearestServer` returns it unconditionally. The host
+            // carries the dev server's port; the emulated edge resolves
+            // loopback origins to a container-reachable address.
+            servers: [[new URL(resolved).host]],
+            // Dev servers speak plain HTTP. `setUrlOrigin` in cfcode.ts
+            // already threads `metadata.origin` through to
+            // `cf.updateRequestOrigin`.
+            origin: { protocol: "http" },
+            redirect,
+          });
+        },
+      ),
+    },
+    purge: true,
+  });
 
-    yield* Effect.forEach(
-      hostPatterns,
-      ([routeId, pattern]) =>
-        KvRoutesUpdate(routeId, {
-          store: router.kvStoreArn,
-          namespace: router.kvNamespace as any,
-          key: "routes",
-          entry: [
-            "site",
-            kvNamespace,
-            pattern ? toHostPatternRegex(pattern) : "",
-            routerPathPrefix ?? "/",
-          ].join(","),
-        }),
-      { concurrency: "unbounded" },
-    );
-
-    const redirect =
-      domain.redirects?.length && domain.name
-        ? { hosts: domain.redirects, to: domain.name }
-        : undefined;
-
-    yield* KvEntries("KvEntries", {
-      store: router.kvStoreArn,
-      namespace: kvNamespace,
-      entries: {
-        metadata: Output.map(
-          Output.asOutput(devUrl as any) as Output.Output<string | undefined>,
-          (resolved) => {
-            if (!resolved) {
-              throw new Error(
-                "A Router-attached site needs a dev server URL to route to during `alchemy dev` — set `dev.url` (or make the dev command print its own localhost URL).",
-              );
-            }
-            return JSON.stringify({
-              base:
-                routerPathPrefix && routerPathPrefix !== "/"
-                  ? routerPathPrefix
-                  : undefined,
-              // `[[host]]` — one server, no geo coordinates, so
-              // `findNearestServer` returns it unconditionally. The host
-              // carries the dev server's port; the emulated edge resolves
-              // loopback origins to a container-reachable address.
-              servers: [[new URL(resolved).host]],
-              // Dev servers speak plain HTTP. `setUrlOrigin` in cfcode.ts
-              // already threads `metadata.origin` through to
-              // `cf.updateRequestOrigin`.
-              origin: { protocol: "http" },
-              redirect,
-            });
-          },
-        ),
-      },
-      purge: true,
-    });
-
-    // The site's own `url` output stays the dev server's localhost address
-    // (the point of `alchemy dev` is the HMR server); the Router serves the
-    // same content at `router.url + domain.path`.
-    return kvNamespace;
-  },
-);
+  // The site's own `url` output stays the dev server's localhost address
+  // (the point of `alchemy dev` is the HMR server); the Router serves the
+  // same content at `router.url + domain.path`.
+  return kvNamespace;
+});

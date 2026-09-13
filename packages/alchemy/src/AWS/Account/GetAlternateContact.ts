@@ -35,10 +35,7 @@ export interface GetAlternateContact extends Binding.Service<
   () => Effect.Effect<
     (
       request: account.GetAlternateContactRequest,
-    ) => Effect.Effect<
-      account.GetAlternateContactResponse,
-      account.GetAlternateContactError
-    >
+    ) => Effect.Effect<account.GetAlternateContactResponse, account.GetAlternateContactError>
   >
 > {}
 export const GetAlternateContact = Binding.Service<GetAlternateContact>(

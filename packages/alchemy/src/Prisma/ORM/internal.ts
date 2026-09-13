@@ -38,18 +38,11 @@ export const isTransientDbError = (error: CliError): boolean => {
   const meta = error.meta ?? {};
   // The CLI reports the driver's errno under `sqlState` for connection
   // failures (`ECONNREFUSED`, ...) and a real SQLSTATE for statement ones.
-  const errno = [meta.sqlState, meta.code].find(
-    (value) => typeof value === "string",
-  );
+  const errno = [meta.sqlState, meta.code].find((value) => typeof value === "string");
   return (
-    [
-      "ECONNREFUSED",
-      "ECONNRESET",
-      "ENOTFOUND",
-      "ETIMEDOUT",
-      "EAI_AGAIN",
-    ].includes(errno as string) ||
-    /connection|timeout|reachable/i.test(error.message)
+    ["ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "ETIMEDOUT", "EAI_AGAIN"].includes(
+      errno as string,
+    ) || /connection|timeout|reachable/i.test(error.message)
   );
 };
 
@@ -91,8 +84,7 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
   const manifest = yield* fs.readFileString(manifestPath).pipe(
     Effect.flatMap((text) =>
       Effect.try({
-        try: () =>
-          JSON.parse(text) as { bin?: Record<string, string> | string },
+        try: () => JSON.parse(text) as { bin?: Record<string, string> | string },
         catch: (cause) =>
           new CliError({
             message: `Failed to parse ${manifestPath}: ${cause}`,
@@ -105,8 +97,7 @@ export const resolvePrismaCliBin = Effect.gen(function* () {
         : new CliError({ message: `Failed to read ${manifestPath}: ${cause}` }),
     ),
   );
-  const bin =
-    typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
+  const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.prisma;
   if (bin === undefined) {
     return yield* Effect.fail(
       new CliError({
@@ -174,24 +165,16 @@ const parseEnvelope = (stdout: string): CliEnvelope | undefined => {
 export const runPrismaCli = <T>(
   args: readonly string[],
   options: { readonly cwd: string },
-): Effect.Effect<
-  T,
-  CliError,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
-> =>
+): Effect.Effect<T, CliError, FileSystem.FileSystem | Path.Path | ChildProcessSpawner> =>
   Effect.gen(function* () {
     const bin = yield* resolvePrismaCliBin;
     const nodeExecPath = yield* Effect.sync(() => process.execPath);
     const result = yield* exec(
-      ChildProcess.make(
-        nodeExecPath,
-        [bin, ...args, "--json", "--no-interactive"],
-        {
-          cwd: options.cwd,
-          env: { PRISMA_DISABLE_TELEMETRY: "1", DO_NOT_TRACK: "1" },
-          extendEnv: true,
-        },
-      ),
+      ChildProcess.make(nodeExecPath, [bin, ...args, "--json", "--no-interactive"], {
+        cwd: options.cwd,
+        env: { PRISMA_DISABLE_TELEMETRY: "1", DO_NOT_TRACK: "1" },
+        extendEnv: true,
+      }),
     ).pipe(
       // exec fully drains stdout/stderr and the exit code before returning,
       // so the process handle's scope can close right here.
@@ -317,9 +300,7 @@ export const rewriteEmittedTypes = (dtsPath: string) =>
       rewritten = rewritten.replaceAll(internal, publicPrefix);
     }
     if (rewritten.includes("@internal/")) {
-      const leftover = rewritten
-        .split("\n")
-        .find((line) => line.includes("@internal/"));
+      const leftover = rewritten.split("\n").find((line) => line.includes("@internal/"));
       return yield* Effect.fail(
         new CliError({
           message: [
@@ -404,9 +385,7 @@ export const readMigrationPackages = (migrationsDirAbs: string) =>
 export const resolveGraphHead = (
   packages: readonly MigrationPackage[],
 ): MigrationPackage | undefined => {
-  const froms = new Set(
-    packages.flatMap((pkg) => (pkg.from === null ? [] : [pkg.from])),
-  );
+  const froms = new Set(packages.flatMap((pkg) => (pkg.from === null ? [] : [pkg.from])));
   const heads = packages.filter((pkg) => !froms.has(pkg.to));
   return heads.at(-1);
 };

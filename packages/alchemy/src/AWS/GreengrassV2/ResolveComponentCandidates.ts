@@ -47,7 +47,6 @@ export interface ResolveComponentCandidates extends Binding.Service<
     >
   >
 > {}
-export const ResolveComponentCandidates =
-  Binding.Service<ResolveComponentCandidates>(
-    "AWS.GreengrassV2.ResolveComponentCandidates",
-  );
+export const ResolveComponentCandidates = Binding.Service<ResolveComponentCandidates>(
+  "AWS.GreengrassV2.ResolveComponentCandidates",
+);

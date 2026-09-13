@@ -4,11 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import {
-  AlertManagerDefinition,
-  RuleGroupsNamespace,
-  Workspace,
-} from "@/AWS/AMP";
+import { AlertManagerDefinition, RuleGroupsNamespace, Workspace } from "@/AWS/AMP";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -44,31 +40,24 @@ const assertWorkspaceDeleted = (workspaceId: string) =>
         ? Effect.fail(new WorkspaceStillExists({ workspaceId }))
         : Effect.succeed(undefined),
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "WorkspaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag the read/delete paths depend on.
-test.provider(
-  "describeWorkspace on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        amp.describeWorkspace({
-          workspaceId: "ws-00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeWorkspace on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      amp.describeWorkspace({
+        workspaceId: "ws-00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // AMP workspaces + rule/alert sub-resources are cheap and quick to
@@ -105,9 +94,7 @@ test.provider(
       expect(created.workspace.workspaceArn).toContain(":workspace/");
       expect(created.workspace.status).toBe("ACTIVE");
       expect(created.workspace.prometheusEndpoint).toContain("aps-workspaces");
-      expect(created.rules.ruleGroupsNamespaceArn).toContain(
-        ":rulegroupsnamespace/",
-      );
+      expect(created.rules.ruleGroupsNamespaceArn).toContain(":rulegroupsnamespace/");
       expect(created.alerts.workspaceId).toBe(workspaceId);
 
       // Out-of-band verification via distilled.
@@ -121,9 +108,7 @@ test.provider(
       });
       expect(describedRules.ruleGroupsNamespace.data).toBeDefined();
       expect(decode(describedRules.ruleGroupsNamespace.data!)).toBe(RULES_V1);
-      expect(describedRules.ruleGroupsNamespace.tags?.["alchemy::id"]).toBe(
-        "Rules",
-      );
+      expect(describedRules.ruleGroupsNamespace.tags?.["alchemy::id"]).toBe("Rules");
 
       // The workspace Alertmanager provisions asynchronously (a few
       // minutes); the definition exists immediately but its `data` blob is
@@ -132,14 +117,10 @@ test.provider(
         workspaceId,
       });
       expect(
-        ["ACTIVE", "CREATING"].includes(
-          describedAlerts.alertManagerDefinition.status.statusCode,
-        ),
+        ["ACTIVE", "CREATING"].includes(describedAlerts.alertManagerDefinition.status.statusCode),
       ).toBe(true);
       if (describedAlerts.alertManagerDefinition.data !== undefined) {
-        expect(decode(describedAlerts.alertManagerDefinition.data)).toBe(
-          ALERTS,
-        );
+        expect(decode(describedAlerts.alertManagerDefinition.data)).toBe(ALERTS);
       }
 
       // Update: change the alias and the rules definition in place.
@@ -165,12 +146,8 @@ test.provider(
 
       // Stable identifiers survive the in-place update.
       expect(updated.workspace.workspaceId).toBe(workspaceId);
-      expect(updated.workspace.workspaceArn).toBe(
-        created.workspace.workspaceArn,
-      );
-      expect(updated.rules.ruleGroupsNamespaceArn).toBe(
-        created.rules.ruleGroupsNamespaceArn,
-      );
+      expect(updated.workspace.workspaceArn).toBe(created.workspace.workspaceArn);
+      expect(updated.rules.ruleGroupsNamespaceArn).toBe(created.rules.ruleGroupsNamespaceArn);
 
       const afterWs = yield* amp.describeWorkspace({ workspaceId });
       expect(afterWs.workspace.alias).toBe("alchemy-test-amp-v2");

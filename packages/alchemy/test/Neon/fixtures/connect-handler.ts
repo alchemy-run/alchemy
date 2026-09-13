@@ -8,8 +8,7 @@ import { ConnectBranch, ConnectProject } from "./connect-database.ts";
 
 export const connectHandler = Effect.gen(function* () {
   const context = yield* CurrentRuntimeContext;
-  if (!context)
-    return yield* Effect.die(new Error("Connect fixture requires a host"));
+  if (!context) return yield* Effect.die(new Error("Connect fixture requires a host"));
   const branchResource = yield* ConnectBranch;
   const keys = connectEnvKeys(branchResource);
   const branch = yield* Connect(branchResource);

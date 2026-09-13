@@ -67,11 +67,7 @@ export default DynamoDBStreamFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(
-          AWS.Lambda.TableEventSource,
-          AWS.SQS.QueueSinkHttp,
-          TableAndQueueLive,
-        ),
+        Layer.mergeAll(AWS.Lambda.TableEventSource, AWS.SQS.QueueSinkHttp, TableAndQueueLive),
         Layer.mergeAll(AWS.SQS.SendMessageBatchHttp),
       ),
     ),

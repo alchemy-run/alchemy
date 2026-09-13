@@ -9,9 +9,7 @@ import { Authentication } from "./middleware.ts";
 
 export const PublicLive = HttpApiBuilder.group(Api, "public", (handlers) =>
   Effect.gen(function* () {
-    const github = yield* Config.Boolean("GITHUB_ENABLED").pipe(
-      Config.withDefault(false),
-    );
+    const github = yield* Config.Boolean("GITHUB_ENABLED").pipe(Config.withDefault(false));
     return handlers
       .handle("health", () => Effect.succeed({ ok: true as const }))
       .handle("providers", () => Effect.succeed({ github }));

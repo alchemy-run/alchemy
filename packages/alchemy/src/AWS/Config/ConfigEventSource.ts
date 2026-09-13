@@ -122,20 +122,14 @@ export const consumeConfigEvents = <StreamReq = never, Req = never>(
   ) => Effect.Effect<void, never, Req>,
 ) => {
   const detail = {
-    ...(props.configRuleNames !== undefined
-      ? { configRuleName: [...props.configRuleNames] }
-      : {}),
-    ...(props.resourceTypes !== undefined
-      ? { resourceType: [...props.resourceTypes] }
-      : {}),
+    ...(props.configRuleNames !== undefined ? { configRuleName: [...props.configRuleNames] } : {}),
+    ...(props.resourceTypes !== undefined ? { resourceType: [...props.resourceTypes] } : {}),
   };
   return consumeBusEvents(
     props.id ?? "ConfigEvents",
     {
       source: ["aws.config"],
-      "detail-type": (props.kinds ?? (["compliance"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
+      "detail-type": (props.kinds ?? (["compliance"] as const)).map((kind) => DETAIL_TYPES[kind]),
       ...(Object.keys(detail).length > 0 ? { detail } : {}),
     },
     { description: props.description, state: props.state },

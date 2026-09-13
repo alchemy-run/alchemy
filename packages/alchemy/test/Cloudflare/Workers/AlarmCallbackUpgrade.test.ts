@@ -5,20 +5,13 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
-import type {
-  MigrationProbe,
-  Snapshot,
-} from "./fixtures/alarm-upgrade/types.ts";
+import type { MigrationProbe, Snapshot } from "./fixtures/alarm-upgrade/types.ts";
 import AlarmUpgradeWorker from "./fixtures/alarm-upgrade/v2.ts";
 
 class WorkerVersionPending extends Error {}
 
 const requestJson = Effect.fn(
-  function* (
-    url: string,
-    action = "snapshot",
-    workerVersion: Snapshot["version"] = "v2",
-  ) {
+  function* (url: string, action = "snapshot", workerVersion: Snapshot["version"] = "v2") {
     const fresh = yield* Effect.sync(() => {
       const fresh = new URL(`${url}/${action}`);
       fresh.searchParams.set("cb", String(Date.now()));
@@ -46,15 +39,11 @@ const requestJson = Effect.fn(
         body === "Alarm worker version mismatch"
       ) {
         return yield* Effect.fail(
-          new WorkerVersionPending(
-            `Waiting for Worker ${workerVersion}; got ${actualVersion}`,
-          ),
+          new WorkerVersionPending(`Waiting for Worker ${workerVersion}; got ${actualVersion}`),
         );
       }
       return yield* Effect.fail(
-        new Error(
-          `Upgrade fixture ${action}: HTTP ${response.status}\n${body}`,
-        ),
+        new Error(`Upgrade fixture ${action}: HTTP ${response.status}\n${body}`),
       );
     }
     const body: unknown = yield* response.json;
@@ -67,29 +56,19 @@ const requestJson = Effect.fn(
   }),
 );
 
-const request = (
-  url: string,
-  action = "snapshot",
-  workerVersion: Snapshot["version"] = "v2",
-) =>
-  requestJson(url, action, workerVersion).pipe(
-    Effect.map((body) => body as Snapshot),
-  );
+const request = (url: string, action = "snapshot", workerVersion: Snapshot["version"] = "v2") =>
+  requestJson(url, action, workerVersion).pipe(Effect.map((body) => body as Snapshot));
 
 const ready = (url: string, version: Snapshot["version"], name?: string) =>
   request(
     url,
-    name === undefined
-      ? "snapshot"
-      : `snapshot?name=${encodeURIComponent(name)}`,
+    name === undefined ? "snapshot" : `snapshot?name=${encodeURIComponent(name)}`,
     version,
   ).pipe(
     Effect.flatMap((snapshot) =>
       snapshot.version === version
         ? Effect.succeed(snapshot)
-        : Effect.fail(
-            new Error(`Waiting for ${version}; got ${snapshot.version}`),
-          ),
+        : Effect.fail(new Error(`Waiting for ${version}; got ${snapshot.version}`)),
     ),
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
   );
@@ -101,19 +80,12 @@ const delivered = (
 ) =>
   request(url, "snapshot", workerVersion).pipe(
     Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 10, until }),
-    Effect.tap((snapshot) =>
-      Effect.sync(() => expect(until(snapshot)).toBe(true)),
-    ),
+    Effect.tap((snapshot) => Effect.sync(() => expect(until(snapshot)).toBe(true))),
   );
 
-const count = (
-  snapshot: Snapshot,
-  channel: "legacy" | "callback",
-  id: string,
-) =>
-  snapshot.deliveries.filter(
-    (delivery) => delivery.channel === channel && delivery.id === id,
-  ).length;
+const count = (snapshot: Snapshot, channel: "legacy" | "callback", id: string) =>
+  snapshot.deliveries.filter((delivery) => delivery.channel === channel && delivery.id === id)
+    .length;
 
 for (const dev of [true, false]) {
   describe(dev ? "local alarm upgrade" : "live alarm upgrade", () => {
@@ -125,9 +97,7 @@ for (const dev of [true, false]) {
         Effect.gen(function* () {
           yield* stack.destroy();
           const main = yield* Effect.sync(
-            () =>
-              new URL("./fixtures/alarm-upgrade/v1.ts", import.meta.url)
-                .pathname,
+            () => new URL("./fixtures/alarm-upgrade/v1.ts", import.meta.url).pathname,
           );
           const originalDeployment = yield* stack.deploy(
             Effect.gen(function* () {
@@ -162,11 +132,7 @@ for (const dev of [true, false]) {
           expect(initial.marker).toBeNull();
           yield* request(original.url!, "seed", "v1");
           yield* ready(original.url!, "v1", "future-version");
-          const futureOriginal = yield* request(
-            original.url!,
-            "seed?name=future-version",
-            "v1",
-          );
+          const futureOriginal = yield* request(original.url!, "seed?name=future-version", "v1");
           yield* ready(original.url!, "v1", "atomic-migration");
           const rollbackOriginal = yield* request(
             original.url!,
@@ -184,8 +150,7 @@ for (const dev of [true, false]) {
             (snapshot) =>
               count(snapshot, "legacy", "v1-proof") === 1 &&
               snapshot.legacyRows.length === 3 &&
-              snapshot.alarm ===
-                Math.min(...snapshot.legacyRows.map((row) => row.run_at)),
+              snapshot.alarm === Math.min(...snapshot.legacyRows.map((row) => row.run_at)),
             "v1",
           );
           expect(before.version).toBe("v1");
@@ -204,9 +169,7 @@ for (const dev of [true, false]) {
             { name: "repeat_ms", type: "INTEGER", notnull: 0, pk: 0 },
             { name: "payload", type: "TEXT", notnull: 1, pk: 0 },
           ]);
-          expect(before.alarm).toBe(
-            Math.min(...before.legacyRows.map((row) => row.run_at)),
-          );
+          expect(before.alarm).toBe(Math.min(...before.legacyRows.map((row) => row.run_at)));
           expect(before.deliveries).toEqual([
             {
               version: "v1",
@@ -256,16 +219,10 @@ for (const dev of [true, false]) {
           expect(after.callbacks).toEqual([]);
           if (upgradedDeployment.reader) {
             // Local restarts are atomic; live edges can still run V1 against the V2 object.
-            const viaV1 = yield* request(
-              upgradedDeployment.reader.url!,
-              "snapshot",
-              "v1",
-            );
+            const viaV1 = yield* request(upgradedDeployment.reader.url!, "snapshot", "v1");
             expect(viaV1).toEqual(after);
             const rejected = yield* requestWorker(
-              HttpClientRequest.post(
-                `${upgradedDeployment.reader.url!}/callback-first`,
-              ).pipe(
+              HttpClientRequest.post(`${upgradedDeployment.reader.url!}/callback-first`).pipe(
                 HttpClientRequest.setHeader("x-alarm-worker-version", "v2"),
               ),
             );
@@ -309,14 +266,9 @@ for (const dev of [true, false]) {
           ]);
           expect(legacyCanceled.callbacks).toEqual(callbackFirst.callbacks);
           expect(legacyCanceled.alarm).toBe(callbackFirst.alarm);
-          const callbackCanceled = yield* request(
-            upgraded.url!,
-            "cancel-callback",
-          );
+          const callbackCanceled = yield* request(upgraded.url!, "cancel-callback");
           expect(callbackCanceled.callbacks).toEqual([]);
-          expect(callbackCanceled.legacyRows).toEqual(
-            legacyCanceled.legacyRows,
-          );
+          expect(callbackCanceled.legacyRows).toEqual(legacyCanceled.legacyRows);
           expect(callbackCanceled.alarm).toBe(before.alarm);
 
           // Pending jobs start five minutes ahead so deployment latency cannot consume them in V1.
@@ -344,14 +296,11 @@ for (const dev of [true, false]) {
           expect(fired.legacyRows[0].id).toBe("legacy-repeat");
           expect(fired.legacyRows[0].repeat_ms).toBe(2_000);
           expect(fired.legacyRows[0].run_at).toBeGreaterThan(
-            released.legacyRows.find((row) => row.id === "legacy-repeat")!
-              .run_at,
+            released.legacyRows.find((row) => row.id === "legacy-repeat")!.run_at,
           );
           expect(fired.callbacks).toEqual([]);
           expect(fired.alarm).toBe(fired.legacyRows[0].run_at);
-          for (const delivery of fired.deliveries.filter(
-            (event) => event.id !== "v1-proof",
-          )) {
+          for (const delivery of fired.deliveries.filter((event) => event.id !== "v1-proof")) {
             expect(delivery.version).toBe("v2");
             if (delivery.channel === "legacy") {
               expect(delivery.payload).toEqual({
@@ -361,9 +310,7 @@ for (const dev of [true, false]) {
             }
           }
           expect(count(fired, "legacy", "legacy-cancel")).toBe(0);
-          expect(
-            fired.deliveries.filter((event) => event.channel === "callback"),
-          ).toEqual([
+          expect(fired.deliveries.filter((event) => event.channel === "callback")).toEqual([
             {
               version: "v2",
               channel: "callback",
@@ -398,9 +345,7 @@ for (const dev of [true, false]) {
               snapshot.alarm === null,
           );
           expect(count(legacySurvived, "callback", "must-not-fire")).toBe(0);
-          expect(count(legacySurvived, "callback", "canceled-callback")).toBe(
-            0,
-          );
+          expect(count(legacySurvived, "callback", "canceled-callback")).toBe(0);
           expect(count(legacySurvived, "legacy", "legacy-cancel")).toBe(0);
           expect(legacySurvived.legacyRows).toEqual([]);
           expect(legacySurvived.callbacks).toEqual([]);
@@ -429,14 +374,10 @@ for (const dev of [true, false]) {
             "migration-rollback?name=atomic-migration",
           )) as MigrationProbe;
           expect(rollback.before.id).toBe(rollbackOriginal.id);
-          expect(rollback.before.legacyRows).toEqual(
-            rollbackOriginal.legacyRows,
-          );
+          expect(rollback.before.legacyRows).toEqual(rollbackOriginal.legacyRows);
           expect(rollback.before.schemaVersion).toBeNull();
           expect(rollback.before.schemaRows).toEqual([]);
-          expect(rollback.before.tables).not.toContain(
-            "alchemy_alarm_callbacks",
-          );
+          expect(rollback.before.tables).not.toContain("alchemy_alarm_callbacks");
           expect(rollback.before.tables).not.toContain("alchemy_alarm_schema");
           expect(
             rollback.before.schema.some(
@@ -444,34 +385,20 @@ for (const dev of [true, false]) {
             ),
           ).toBe(false);
           expect(rollback.failure).not.toBeNull();
-          expect(rollback.failure!.message).toContain(
-            "idx_alchemy_alarm_callbacks_run_at",
-          );
+          expect(rollback.failure!.message).toContain("idx_alchemy_alarm_callbacks_run_at");
           expect(rollback.after).toEqual(rollback.before);
           expect(rollback.after.alarm).toBe(rollbackOriginal.alarm);
           expect(rollback.retryBefore?.schemaVersion).toBe(0);
-          expect(rollback.retryBefore?.schemaRows).toEqual([
-            { id: 1, version: 0 },
-          ]);
-          expect(rollback.retryBefore?.legacyRows).toEqual(
-            rollbackOriginal.legacyRows,
-          );
+          expect(rollback.retryBefore?.schemaRows).toEqual([{ id: 1, version: 0 }]);
+          expect(rollback.retryBefore?.legacyRows).toEqual(rollbackOriginal.legacyRows);
           expect(rollback.recovered?.schemaVersion).toBe(1);
-          expect(rollback.recovered?.schemaRows).toEqual([
-            { id: 1, version: 1 },
-          ]);
-          expect(rollback.recovered?.legacyRows).toEqual(
-            rollbackOriginal.legacyRows,
-          );
+          expect(rollback.recovered?.schemaRows).toEqual([{ id: 1, version: 1 }]);
+          expect(rollback.recovered?.legacyRows).toEqual(rollbackOriginal.legacyRows);
           expect(rollback.recovered?.callbacks).toEqual([]);
-          expect(rollback.recovered?.tables).toContain(
-            "alchemy_alarm_callbacks",
-          );
+          expect(rollback.recovered?.tables).toContain("alchemy_alarm_callbacks");
           expect(
             rollback.recovered?.schema.some(
-              (row) =>
-                row.name === "idx_alchemy_scheduled_events_run_at" &&
-                row.type === "index",
+              (row) => row.name === "idx_alchemy_scheduled_events_run_at" && row.type === "index",
             ),
           ).toBe(true);
           expect(rollback.recovered?.alarm).toBe(rollbackOriginal.alarm);

@@ -20,9 +20,7 @@ export default class Caller extends Function<Caller>()(
   Effect.gen(function* () {
     const greeter = yield* bindFunction(Greeter);
     return {
-      fetch: greeter
-        .greet("sam")
-        .pipe(Effect.map((greeting) => HttpServerResponse.text(greeting))),
+      fetch: greeter.greet("sam").pipe(Effect.map((greeting) => HttpServerResponse.text(greeting))),
     };
   }),
 ) {}

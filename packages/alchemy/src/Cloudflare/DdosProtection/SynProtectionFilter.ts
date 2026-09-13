@@ -98,9 +98,7 @@ export const SynProtectionFilter = Resource<SynProtectionFilter>(TypeId);
 /**
  * Returns true if the given value is a SynProtectionFilter resource.
  */
-export const isSynProtectionFilter = (
-  value: unknown,
-): value is SynProtectionFilter =>
+export const isSynProtectionFilter = (value: unknown): value is SynProtectionFilter =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SynProtectionFilterProvider = () =>
@@ -113,22 +111,18 @@ export const SynProtectionFilterProvider = () =>
     // as an empty enumeration rather than an error.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* ddos.listAdvancedTcpProtectionSynProtectionFilters
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((filter) =>
-                toAttributes(filter, accountId),
-              ),
-            ),
+      return yield* ddos.listAdvancedTcpProtectionSynProtectionFilters.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((filter) => toAttributes(filter, accountId)),
           ),
-          Effect.catchTags({
-            AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
-            Forbidden: () => Effect.succeed([]),
-          }),
-        );
+        ),
+        Effect.catchTags({
+          AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
+          Forbidden: () => Effect.succeed([]),
+        }),
+      );
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -157,9 +151,7 @@ export const SynProtectionFilterProvider = () =>
 
       // 1. Observe — the filter id cached on `output` is a hint, not a
       //    guarantee: a missing filter falls through to create.
-      let observed = output?.filterId
-        ? yield* getFilter(accountId, output.filterId)
-        : undefined;
+      let observed = output?.filterId ? yield* getFilter(accountId, output.filterId) : undefined;
 
       // 2. Ensure — create when missing. Expressions are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
@@ -174,16 +166,14 @@ export const SynProtectionFilterProvider = () =>
 
       // 3. Sync — diff observed expression/mode against desired; skip the
       //    patch entirely on a no-op.
-      const dirty =
-        observed.expression !== news.expression || observed.mode !== news.mode;
+      const dirty = observed.expression !== news.expression || observed.mode !== news.mode;
       if (dirty) {
-        observed =
-          yield* ddos.patchAdvancedTcpProtectionSynProtectionFilterItem({
-            accountId,
-            filterId: observed.id,
-            expression: news.expression,
-            mode: news.mode,
-          });
+        observed = yield* ddos.patchAdvancedTcpProtectionSynProtectionFilterItem({
+          accountId,
+          filterId: observed.id,
+          expression: news.expression,
+          mode: news.mode,
+        });
       }
 
       return toAttributes(observed, accountId);
@@ -195,28 +185,21 @@ export const SynProtectionFilterProvider = () =>
           accountId: output.accountId,
           filterId: output.filterId,
         })
-        .pipe(
-          Effect.catchTag("SynProtectionFilterNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("SynProtectionFilterNotFound", () => Effect.void));
     }),
   });
 
-type ObservedFilter =
-  ddos.GetAdvancedTcpProtectionSynProtectionFilterItemResponse;
+type ObservedFilter = ddos.GetAdvancedTcpProtectionSynProtectionFilterItemResponse;
 
 /**
  * Read a filter by id, mapping "gone" (`SynProtectionFilterNotFound`,
  * HTTP 404) to `undefined`.
  */
 const getFilter = (accountId: string, filterId: string) =>
-  ddos
-    .getAdvancedTcpProtectionSynProtectionFilterItem({ accountId, filterId })
-    .pipe(
-      Effect.map((filter): ObservedFilter | undefined => filter),
-      Effect.catchTag("SynProtectionFilterNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  ddos.getAdvancedTcpProtectionSynProtectionFilterItem({ accountId, filterId }).pipe(
+    Effect.map((filter): ObservedFilter | undefined => filter),
+    Effect.catchTag("SynProtectionFilterNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a filter by exact expression. Expressions are not unique on

@@ -194,9 +194,7 @@ export type Alert = Resource<
  */
 export const Alert = Resource<Alert>("Stripe.Alert");
 
-export class AlertNotResolved extends Data.TaggedError(
-  "Stripe.AlertNotResolved",
-)<{
+export class AlertNotResolved extends Data.TaggedError("Stripe.AlertNotResolved")<{
   title: string;
 }> {}
 
@@ -204,16 +202,11 @@ type AlertAttributes = Alert["Attributes"];
 
 const toTitle = (id: string, title: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      title ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: TITLE_MAX_LENGTH }))
-    );
+    return title ?? existing ?? (yield* createPhysicalName({ id, maxLength: TITLE_MAX_LENGTH }));
   });
 
-const toMeterId = (
-  meter: ThresholdsResourceUsageThresholdConfigMeter,
-): string => (typeof meter === "string" ? meter : meter.id);
+const toMeterId = (meter: ThresholdsResourceUsageThresholdConfigMeter): string =>
+  typeof meter === "string" ? meter : meter.id;
 
 const toCustomerId = (
   customer: ThresholdsResourceUsageAlertFilterCustomer | null,
@@ -229,9 +222,7 @@ const toUsageThreshold = (
   if (config === null) return undefined;
   const filters = (config.filters ?? []).map((filter) => {
     const customer = toCustomerId(filter.customer);
-    return customer !== undefined
-      ? { type: filter.type, customer }
-      : { type: filter.type };
+    return customer !== undefined ? { type: filter.type, customer } : { type: filter.type };
   });
   return {
     gte: config.gte,
@@ -253,9 +244,7 @@ const toAttrs = (alert: StripeBillingAlert): AlertAttributes => ({
 const isMissingAlert = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingAlert({ id }).pipe(
-    Effect.catchIf(isMissingAlert, () => Effect.succeed(undefined)),
-  );
+  GetBillingAlert({ id }).pipe(Effect.catchIf(isMissingAlert, () => Effect.succeed(undefined)));
 
 const listAlerts = Effect.fn(function* () {
   const alerts: StripeBillingAlert[] = [];
@@ -282,8 +271,7 @@ const findByTitle = Effect.fn(function* (title: string) {
   return alerts.find((alert) => alert.title === title);
 });
 
-const isArchived = (alert: StripeBillingAlert): boolean =>
-  alert.status === "archived";
+const isArchived = (alert: StripeBillingAlert): boolean => alert.status === "archived";
 
 const observe = Effect.fn(function* (input: { id?: string; title?: string }) {
   if (input.id !== undefined) {
@@ -316,10 +304,7 @@ const filtersEqual = (
   return true;
 };
 
-const shouldReplace = (
-  news: AlertProps,
-  output: AlertAttributes | undefined,
-): boolean => {
+const shouldReplace = (news: AlertProps, output: AlertAttributes | undefined): boolean => {
   if (output === undefined) return false;
   if (news.title !== undefined && news.title !== output.title) return true;
   if (news.alertType !== undefined && news.alertType !== output.alertType) {
@@ -348,9 +333,7 @@ const toCreateUsageThreshold = (threshold: AlertUsageThreshold) => ({
     ? {
         filters: threshold.filters.map((filter) => ({
           type: filter.type,
-          ...(filter.customer !== undefined
-            ? { customer: filter.customer }
-            : {}),
+          ...(filter.customer !== undefined ? { customer: filter.customer } : {}),
         })),
       }
     : {}),

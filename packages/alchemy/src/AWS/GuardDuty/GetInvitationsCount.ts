@@ -28,10 +28,7 @@ export interface GetInvitationsCount extends Binding.Service<
   () => Effect.Effect<
     (
       request?: guardduty.GetInvitationsCountRequest,
-    ) => Effect.Effect<
-      guardduty.GetInvitationsCountResponse,
-      guardduty.GetInvitationsCountError
-    >
+    ) => Effect.Effect<guardduty.GetInvitationsCountResponse, guardduty.GetInvitationsCountError>
   >
 > {}
 export const GetInvitationsCount = Binding.Service<GetInvitationsCount>(

@@ -30,12 +30,7 @@ export interface ListUsers extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.ListUsersRequest,
-    ) => Effect.Effect<
-      rekognition.ListUsersResponse,
-      rekognition.ListUsersError
-    >
+    ) => Effect.Effect<rekognition.ListUsersResponse, rekognition.ListUsersError>
   >
 > {}
-export const ListUsers = Binding.Service<ListUsers>(
-  "AWS.Rekognition.ListUsers",
-);
+export const ListUsers = Binding.Service<ListUsers>("AWS.Rekognition.ListUsers");

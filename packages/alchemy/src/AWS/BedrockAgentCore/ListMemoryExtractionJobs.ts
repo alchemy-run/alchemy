@@ -48,7 +48,6 @@ export interface ListMemoryExtractionJobs extends Binding.Service<
     >
   >
 > {}
-export const ListMemoryExtractionJobs =
-  Binding.Service<ListMemoryExtractionJobs>(
-    "AWS.BedrockAgentCore.ListMemoryExtractionJobs",
-  );
+export const ListMemoryExtractionJobs = Binding.Service<ListMemoryExtractionJobs>(
+  "AWS.BedrockAgentCore.ListMemoryExtractionJobs",
+);

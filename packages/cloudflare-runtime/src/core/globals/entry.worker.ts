@@ -22,10 +22,7 @@ import {
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
 } from "./ProxyHeaders.shared.ts";
-import {
-  PATH_SCHEDULED,
-  PATH_SCHEDULED_LEGACY,
-} from "./ScheduledOptions.shared.ts";
+import { PATH_SCHEDULED, PATH_SCHEDULED_LEGACY } from "./ScheduledOptions.shared.ts";
 
 interface Env {
   [BINDING_PROXY_SHARED_SECRET]: string;
@@ -98,16 +95,11 @@ function joinPath(base: string, ...segments: Array<string>): string {
  * (`workers/email/validate.ts` `isEmailReplyable`; the log callback is
  * replaced with a direct `console.error`).
  */
-function isEmailReplyable(
-  email: Email,
-  incomingEmailHeaders: Headers,
-): boolean {
+function isEmailReplyable(email: Email, incomingEmailHeaders: Headers): boolean {
   // The x-auto-response-suppress header is set by MS Exchange and some other
   // email services on outgoing email to opt-out of automatic responses. If
   // it's set, don't allow the user Worker to reply to the email
-  const autoResponseSuppress = incomingEmailHeaders
-    .get("x-auto-response-suppress")
-    ?.toLowerCase();
+  const autoResponseSuppress = incomingEmailHeaders.get("x-auto-response-suppress")?.toLowerCase();
   if (autoResponseSuppress !== undefined && autoResponseSuppress !== "none") {
     return false;
   }
@@ -115,9 +107,7 @@ function isEmailReplyable(
   // The auto-submitted header is set by some services to indicate that the
   // email is auto generated. If it's set, don't allow the user Worker to
   // reply to the email
-  const autoSubmittedValue = incomingEmailHeaders
-    .get("auto-submitted")
-    ?.toLowerCase();
+  const autoSubmittedValue = incomingEmailHeaders.get("auto-submitted")?.toLowerCase();
   if (autoSubmittedValue !== undefined && autoSubmittedValue !== "no") {
     return false;
   }
@@ -164,9 +154,7 @@ async function validateReply(
 ): Promise<Uint8Array> {
   const rawEmail: ReadableStream<Uint8Array> = replyMessage[RAW_EMAIL];
 
-  const rawEmailBuffer = new Uint8Array(
-    await new Response(rawEmail).arrayBuffer(),
-  );
+  const rawEmailBuffer = new Uint8Array(await new Response(rawEmail).arrayBuffer());
 
   let parsedReply: Email;
   try {
@@ -304,21 +292,15 @@ async function handleEmail(
     parsedIncomingEmail = await PostalMime.parse(incomingEmailRaw);
   } catch (e) {
     const error = e as Error;
-    return new Response(
-      `Email could not be parsed: ${error.name}: ${error.message}`,
-      {
-        status: 400,
-      },
-    );
+    return new Response(`Email could not be parsed: ${error.name}: ${error.message}`, {
+      status: 400,
+    });
   }
 
   if (parsedIncomingEmail.messageId === undefined) {
-    return new Response(
-      "Email could not be parsed: invalid or no message id provided",
-      {
-        status: 400,
-      },
-    );
+    return new Response("Email could not be parsed: invalid or no message id provided", {
+      status: 400,
+    });
   }
 
   // Emails can contain both an "envelope" from/to and a "header" from/to.
@@ -359,23 +341,16 @@ async function handleEmail(
     rawSize: incomingEmailRaw.byteLength,
     headers: incomingEmailHeaders,
     setReject: (reason: string): void => {
-      console.error(
-        `Email handler rejected message with the following reason: "${reason}"`,
-      );
+      console.error(`Email handler rejected message with the following reason: "${reason}"`);
       maybeClientError = reason;
     },
-    forward: async (
-      rcptTo: string,
-      headers?: Headers,
-    ): Promise<EmailSendResult> => {
+    forward: async (rcptTo: string, headers?: Headers): Promise<EmailSendResult> => {
       console.log(
         `Email handler forwarded message with\n  rcptTo: ${rcptTo}${renderEmailHeaders(headers)}`,
       );
       return { messageId: synthesizeLocalMessageId() };
     },
-    reply: async (
-      replyMessage: LocalEmailMessage,
-    ): Promise<EmailSendResult> => {
+    reply: async (replyMessage: LocalEmailMessage): Promise<EmailSendResult> => {
       if (!isEmailReplyable(parsedIncomingEmail, incomingEmailHeaders)) {
         throw new Error("Original email is not replyable");
       }
@@ -384,9 +359,7 @@ async function handleEmail(
       const disk = env[BINDING_EMAIL_DISK];
       const directory = env[BINDING_EMAIL_DIRECTORY];
       if (disk === undefined || directory === undefined) {
-        throw new Error(
-          "Cannot persist the email reply: the runtime storage has no disk path.",
-        );
+        throw new Error("Cannot persist the email reply: the runtime storage has no disk path.");
       }
       const fileName = `${crypto.randomUUID()}.eml`;
       await disk.fetch(new URL(fileName, "http://placeholder/").toString(), {
@@ -395,9 +368,7 @@ async function handleEmail(
       });
       const file = joinPath(directory, fileName);
 
-      console.log(
-        `Email handler replied to sender with the following message:\n  ${file}`,
-      );
+      console.log(`Email handler replied to sender with the following message:\n  ${file}`);
 
       return { messageId: synthesizeLocalMessageId() };
     },
@@ -413,12 +384,9 @@ async function handleEmail(
   ).email(message);
 
   if (maybeClientError !== undefined) {
-    return new Response(
-      `Worker rejected email with the following reason: ${maybeClientError}`,
-      {
-        status: 400,
-      },
-    );
+    return new Response(`Worker rejected email with the following reason: ${maybeClientError}`, {
+      status: 400,
+    });
   }
 
   return new Response("Worker successfully processed email", { status: 200 });
@@ -468,10 +436,7 @@ export default <ExportedHandler<Env>>{
     // Like the queue route above, this is always on: the entry socket only
     // binds 127.0.0.1 during local development, so there is no equivalent of
     // Miniflare's `unsafeTriggerHandlers` gate.
-    if (
-      url.pathname === PATH_SCHEDULED ||
-      url.pathname === PATH_SCHEDULED_LEGACY
-    ) {
+    if (url.pathname === PATH_SCHEDULED || url.pathname === PATH_SCHEDULED_LEGACY) {
       try {
         const time = url.searchParams.get("time");
         const result = await env[BINDING_USER_WORKER_DIRECT].scheduled({
@@ -506,11 +471,7 @@ export default <ExportedHandler<Env>>{
     // the error stack, matching Miniflare's entry worker catch-all.
     if (url.pathname === PATH_EMAIL) {
       try {
-        return await handleEmail(
-          url.searchParams,
-          request as unknown as WorkersRequest,
-          env,
-        );
+        return await handleEmail(url.searchParams, request as unknown as WorkersRequest, env);
       } catch (e) {
         return new Response((e as Error | undefined)?.stack ?? String(e), {
           status: 500,
@@ -553,9 +514,7 @@ export default <ExportedHandler<Env>>{
       // `clientIp` includes the port, e.g. `127.0.0.1:52621` or `[::1]:52621`
       const ipv4Regex = /(?<ip>.*?):\d+/;
       const ipv6Regex = /\[(?<ip>.*?)\]:\d+/;
-      const ip =
-        clientIp.match(ipv6Regex)?.groups?.ip ??
-        clientIp.match(ipv4Regex)?.groups?.ip;
+      const ip = clientIp.match(ipv6Regex)?.groups?.ip ?? clientIp.match(ipv4Regex)?.groups?.ip;
       if (ip) {
         headers.set("CF-Connecting-IP", ip);
       }
@@ -563,15 +522,10 @@ export default <ExportedHandler<Env>>{
 
     // The experimental and standard workers-types `Request` generics
     // disagree; at runtime these are the same class.
-    const userRequest = new Request(
-      new Request(url, request as unknown as Request),
-      {
-        headers,
-        cf,
-      },
-    );
-    return await env.USER_WORKER.fetch(
-      userRequest as unknown as typeof request,
-    );
+    const userRequest = new Request(new Request(url, request as unknown as Request), {
+      headers,
+      cf,
+    });
+    return await env.USER_WORKER.fetch(userRequest as unknown as typeof request);
   },
 };

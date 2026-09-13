@@ -21,10 +21,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -44,10 +41,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -72,10 +66,7 @@ test.provider(
         Effect.gen(function* () {
           const kv = yield* Cloudflare.KV.Namespace("LocalKV");
           const worker = yield* Cloudflare.Worker("kv-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/kv-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/kv-local-worker.ts"),
             env: { KV: kv },
           });
           return { kv, worker };
@@ -87,9 +78,7 @@ test.provider(
       expect(deployed.kv.namespaceId).toMatch(/^dev:/);
       expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/roundtrip`,
-      )) as {
+      const body = (yield* getJsonReady(`${deployed.worker.url}/roundtrip`)) as {
         value: string;
         value2: string;
         metadata: { hello: string };
@@ -151,10 +140,7 @@ test.provider(
           const seeded = yield* Seed({});
 
           const worker = yield* Cloudflare.Worker("kv-action-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/kv-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/kv-local-worker.ts"),
             env: { KV: ns },
           });
           return { ns, worker, seeded };
@@ -169,9 +155,7 @@ test.provider(
 
       // The worker's native binding reads the same simulator storage the
       // Action's gateway wrote to.
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/get?key=seeded`,
-      )) as {
+      const body = (yield* getJsonReady(`${deployed.worker.url}/get?key=seeded`)) as {
         value: string | null;
       };
       expect(body.value).toBe("from-action");
@@ -197,14 +181,9 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const localKv = yield* Cloudflare.KV.Namespace("MixedLocalKV");
-          const liveKv = yield* Cloudflare.KV.Namespace("MixedLiveKV").pipe(
-            Alchemy.remote(),
-          );
+          const liveKv = yield* Cloudflare.KV.Namespace("MixedLiveKV").pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("kv-mixed-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/kv-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/kv-local-worker.ts"),
             env: { KV: localKv, KV_LIVE: liveKv },
           });
           return { localKv, liveKv, worker };
@@ -216,14 +195,10 @@ test.provider(
       expect(deployed.liveKv.namespaceId).not.toMatch(/^dev:/);
 
       // Both bindings round-trip through the same locally-served worker.
-      const local = (yield* getJsonReady(
-        `${deployed.worker.url}/roundtrip`,
-      )) as { value: string };
+      const local = (yield* getJsonReady(`${deployed.worker.url}/roundtrip`)) as { value: string };
       expect(local.value).toBe("value1");
 
-      const live = (yield* getJsonReady(
-        `${deployed.worker.url}/roundtrip?binding=KV_LIVE`,
-      )) as {
+      const live = (yield* getJsonReady(`${deployed.worker.url}/roundtrip?binding=KV_LIVE`)) as {
         value: string;
         value2: string;
       };
@@ -242,9 +217,7 @@ test.provider(
         .pipe(
           Effect.flatMap((res) =>
             Effect.tryPromise(() =>
-              new Response(
-                Stream.toReadableStream(res.body) as BodyInit,
-              ).text(),
+              new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
             ),
           ),
         );

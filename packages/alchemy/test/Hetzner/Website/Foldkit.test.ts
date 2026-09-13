@@ -11,17 +11,11 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../Cloudflare/Website/foldkit-fixture",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../Cloudflare/Website/foldkit-fixture");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
 
@@ -53,12 +47,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           const site = yield* Hetzner.Website.Foldkit("Web", {
             rootDir,
             memo: {
-              include: [
-                "index.html",
-                "src/**",
-                "package.json",
-                "vite.config.ts",
-              ],
+              include: ["index.html", "src/**", "package.json", "vite.config.ts"],
             },
           });
           return { site };

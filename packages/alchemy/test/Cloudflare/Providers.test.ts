@@ -14,86 +14,80 @@ import * as Cloudflare from "@/Cloudflare";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 
-it.live(
-  "building the Cloudflare provider layers rejects an unknown explicit profile",
-  () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.result(
-        Effect.sandbox(Layer.build(Cloudflare.providers())),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("does not exist");
-        expect(String(result.failure)).toContain("alchemy profile create");
-      }
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
-          Layer.succeed(Stage, "test"),
-          Layer.succeed(Stack, {
-            name: "test",
-            stage: "test",
-            resources: {},
-            bindings: {},
-            actions: {},
+it.live("building the Cloudflare provider layers rejects an unknown explicit profile", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(Effect.sandbox(Layer.build(Cloudflare.providers())));
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain("does not exist");
+      expect(String(result.failure)).toContain("alchemy profile create");
+    }
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.succeed(AuthProviders, {}),
+        Layer.succeed(Stage, "test"),
+        Layer.succeed(Stack, {
+          name: "test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Layer.succeed(AlchemyContext, {
+          dev: false,
+          adopt: false,
+          dotAlchemy: ".alchemy",
+        }),
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({
+            ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-            }),
-          ),
-          Layer.sync(ArtifactStore, createArtifactStore),
-          NodeServices.layer,
-          FetchHttpClient.layer,
         ),
+        Layer.sync(ArtifactStore, createArtifactStore),
+        NodeServices.layer,
+        FetchHttpClient.layer,
       ),
-      Effect.provide(CliKit.layer({ input: false })),
     ),
+    Effect.provide(CliKit.layer({ input: false })),
+  ),
 );
 
-it.live(
-  "builds Cloudflare providers from CI environment credentials without a profile",
-  () =>
-    Effect.gen(function* () {
-      yield* Layer.build(Cloudflare.providers());
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
-          Layer.succeed(Stage, "test"),
-          Layer.succeed(Stack, {
-            name: "test",
-            stage: "test",
-            resources: {},
-            bindings: {},
-            actions: {},
+it.live("builds Cloudflare providers from CI environment credentials without a profile", () =>
+  Effect.gen(function* () {
+    yield* Layer.build(Cloudflare.providers());
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.succeed(AuthProviders, {}),
+        Layer.succeed(Stage, "test"),
+        Layer.succeed(Stack, {
+          name: "test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Layer.succeed(AlchemyContext, {
+          dev: false,
+          adopt: false,
+          dotAlchemy: ".alchemy",
+        }),
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({
+            CI: true,
+            CLOUDFLARE_API_TOKEN: "test-token",
+            CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+            ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              CI: true,
-              CLOUDFLARE_API_TOKEN: "test-token",
-              CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
-              ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-            }),
-          ),
-          Layer.sync(ArtifactStore, createArtifactStore),
-          NodeServices.layer,
-          FetchHttpClient.layer,
         ),
+        Layer.sync(ArtifactStore, createArtifactStore),
+        NodeServices.layer,
+        FetchHttpClient.layer,
       ),
-      Effect.provide(CliKit.layer({ input: false })),
     ),
+    Effect.provide(CliKit.layer({ input: false })),
+  ),
 );

@@ -7,10 +7,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Creating a real repository + variable requires an owner the token can
 // write to — the dedicated test org (never a real one). Set

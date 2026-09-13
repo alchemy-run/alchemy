@@ -12,28 +12,24 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated live probe: `list()` enumerates every v2 VPC link and maps each
 // item to the `read` Attributes shape.
-test.provider.skipIf(!!process.env.FAST)(
-  "list returns the account/region VPC links",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(VpcLink);
-      const all = yield* provider.list();
+test.provider.skipIf(!!process.env.FAST)("list returns the account/region VPC links", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(VpcLink);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      for (const link of all) {
-        expect(typeof link.vpcLinkId).toBe("string");
-        expect(Array.isArray(link.subnetIds)).toBe(true);
-      }
-    }),
+    expect(Array.isArray(all)).toBe(true);
+    for (const link of all) {
+      expect(typeof link.vpcLinkId).toBe("string");
+      expect(Array.isArray(link.subnetIds)).toBe(true);
+    }
+  }),
 );
 
 // Full lifecycle. SKIPPED by default: a v2 VPC link takes ~1-2 minutes to
 // reach AVAILABLE (and a comparable window to release its ENIs on delete),
 // which exceeds the suite's provisioning-wait budget. Set
 // AWS_TEST_APIGWV2_VPCLINK=1 to run it against the default VPC's subnets.
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.AWS_TEST_APIGWV2_VPCLINK,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.AWS_TEST_APIGWV2_VPCLINK)(
   "create, rename, delete VPC link",
   (stack) =>
     Effect.gen(function* () {
@@ -79,9 +75,7 @@ test.provider.skipIf(
       const gone = yield* agw2.getVpcLink({ VpcLinkId: link.vpcLinkId }).pipe(
         // DELETING still resolves; the link is fully gone on NotFound.
         Effect.map((r) => r.VpcLinkStatus ?? "unknown"),
-        Effect.catchTag("NotFoundException", () =>
-          Effect.succeed("deleted" as const),
-        ),
+        Effect.catchTag("NotFoundException", () => Effect.succeed("deleted" as const)),
       );
       expect(["deleted", "DELETING"]).toContain(gone);
     }),

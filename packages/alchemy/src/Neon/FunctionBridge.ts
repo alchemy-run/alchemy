@@ -34,10 +34,7 @@ const closeRequestScope = (scope: Scope.Scope) => {
 /** Build a Node-only Fetch bridge once per process, with a fresh scope for every request. */
 export const makeFunctionBridge = (entrypoint: unknown) => {
   const instanceScope = Scope.makeUnsafe();
-  const tag = Self as unknown as Context.Service<
-    never,
-    { RuntimeContext: FunctionRuntimeContext }
-  >;
+  const tag = Self as unknown as Context.Service<never, { RuntimeContext: FunctionRuntimeContext }>;
   const platform = Layer.mergeAll(
     NodeServices.layer,
     FetchHttpClient.layer,
@@ -99,14 +96,11 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
           built.context,
           Context.make(RuntimeContext, built.runtime),
           Context.make(FunctionRequest, request),
-          Context.make(
-            HttpServerRequest.HttpServerRequest,
-            HttpServerRequest.fromWeb(request),
-          ),
+          Context.make(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request)),
         );
-        const handler = safeHttpEffect(
-          built.dispatch(new URL(request.url).pathname),
-        ).pipe(Effect.interruptible);
+        const handler = safeHttpEffect(built.dispatch(new URL(request.url).pathname)).pipe(
+          Effect.interruptible,
+        );
         return yield* EffectHttp.toHandled(handler, (req, res) =>
           Effect.gen(function* () {
             const scope = yield* Effect.scope;
@@ -145,12 +139,9 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
               response,
               res.body._tag === "Stream" && web.body
                 ? new Response(
-                    web.body.pipeThrough(
-                      new TransformStream<Uint8Array, Uint8Array>(),
-                      {
-                        signal: request.signal,
-                      },
-                    ),
+                    web.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), {
+                      signal: request.signal,
+                    }),
                     {
                       status: web.status,
                       statusText: web.statusText,
@@ -160,12 +151,7 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
                 : web,
             );
           }),
-        ).pipe(
-          Effect.andThen(Deferred.await(response)),
-          Effect.provideContext(services),
-        );
-      }).pipe((effect) =>
-        Effect.runPromise(effect, { signal: request.signal }),
-      ),
+        ).pipe(Effect.andThen(Deferred.await(response)), Effect.provideContext(services));
+      }).pipe((effect) => Effect.runPromise(effect, { signal: request.signal })),
   };
 };

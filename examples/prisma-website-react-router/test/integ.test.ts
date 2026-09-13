@@ -31,9 +31,7 @@ test(
     const url = yield* base;
     const response = yield* Test.getWhenReady(url);
     expect(response.status).toBe(200);
-    expect(yield* response.text).toContain(
-      "Hello from React Router on Prisma!",
-    );
+    expect(yield* response.text).toContain("Hello from React Router on Prisma!");
   }),
   { timeout: 120_000 },
 );
@@ -57,9 +55,7 @@ test(
   Effect.gen(function* () {
     const url = yield* base;
     for (const name of ["Prisma", "Alchemy"]) {
-      const response = yield* Test.getWhenReady(
-        `${url}/api/hello?name=${name}`,
-      );
+      const response = yield* Test.getWhenReady(`${url}/api/hello?name=${name}`);
       expect(response.status).toBe(200);
       expect(yield* response.json).toEqual({
         name,

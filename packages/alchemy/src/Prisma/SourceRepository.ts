@@ -23,12 +23,7 @@ import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedSourceRepository } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
@@ -169,9 +164,7 @@ export interface SourceRepository extends Resource<
  *
  * @resource
  */
-export const SourceRepository = Resource<SourceRepository>(
-  "Prisma.SourceRepository",
-);
+export const SourceRepository = Resource<SourceRepository>("Prisma.SourceRepository");
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
@@ -181,9 +174,7 @@ const listSourceRepositories = (projectId: string) =>
     let cursor: string | undefined;
     while (true) {
       const page = yield* getSourceRepositories(
-        cursor === undefined
-          ? { projectId, limit: 100 }
-          : { projectId, limit: 100, cursor },
+        cursor === undefined ? { projectId, limit: 100 } : { projectId, limit: 100, cursor },
       );
       repos.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
@@ -204,9 +195,7 @@ const listSourceRepositories = (projectId: string) =>
 const findRepository = (projectId: string) =>
   listSourceRepositories(projectId).pipe(
     Effect.flatMap((repos) => {
-      const active = repos.filter(
-        (repo: ObservedSourceRepository) => repo.status === "active",
-      );
+      const active = repos.filter((repo: ObservedSourceRepository) => repo.status === "active");
       return active.length > 1
         ? Effect.fail(
             new Error(
@@ -226,12 +215,9 @@ const matchesDesiredRepository = (
   repo.projectId === projectId &&
   repo.repoId === props.providerRepositoryId &&
   repo.provider === (props.provider ?? "github") &&
-  (props.installationId === undefined ||
-    repo.installationId === props.installationId);
+  (props.installationId === undefined || repo.installationId === props.installationId);
 
-const attrsFrom = (
-  repo: ObservedSourceRepository,
-): SourceRepository["Attributes"] => ({
+const attrsFrom = (repo: ObservedSourceRepository): SourceRepository["Attributes"] => ({
   sourceRepositoryId: repo.id,
   projectId: repo.projectId,
   repoId: repo.repoId,
@@ -305,8 +291,7 @@ const verifyRepositoryLink = Effect.fn(function* (
     return items;
   });
   const defaults = branches.filter(
-    (branch) =>
-      branch.gitName === observed.defaultBranch && branch.isDefault === true,
+    (branch) => branch.gitName === observed.defaultBranch && branch.isDefault === true,
   );
   if (defaults.length !== 1) {
     return yield* Effect.fail(
@@ -364,9 +349,7 @@ const ProviderLive = () =>
             const items: GetProjectsResponse["data"][number][] = [];
             let cursor: string | undefined;
             while (true) {
-              const page = yield* getProjects(
-                cursor === undefined ? {} : { cursor },
-              );
+              const page = yield* getProjects(cursor === undefined ? {} : { cursor });
               items.push(...page.data);
               const nextCursor = page.pagination.nextCursor;
               if (!page.pagination.hasMore) break;
@@ -397,8 +380,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.sourceRepositoryId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -407,12 +389,9 @@ const ProviderLive = () =>
             : undefined;
           const observedMismatch =
             output &&
-            ((newProjectId !== undefined &&
-              output.projectId !== newProjectId) ||
-              (newRepositoryId !== undefined &&
-                output.repoId !== newRepositoryId) ||
-              (isResolved(news.provider) &&
-                output.provider !== (news.provider ?? "github")) ||
+            ((newProjectId !== undefined && output.projectId !== newProjectId) ||
+              (newRepositoryId !== undefined && output.repoId !== newRepositoryId) ||
+              (isResolved(news.provider) && output.provider !== (news.provider ?? "github")) ||
               (isResolved(news.installationId) &&
                 news.installationId !== undefined &&
                 output.installationId !== news.installationId) ||
@@ -423,8 +402,7 @@ const ProviderLive = () =>
               (news.provider ?? "github") !== (olds.provider ?? "github")) ||
             (isResolved(news.providerRepositoryId) &&
               news.providerRepositoryId !== olds.providerRepositoryId) ||
-            (isResolved(news.installationId) &&
-              news.installationId !== olds.installationId) ||
+            (isResolved(news.installationId) && news.installationId !== olds.installationId) ||
             observedMismatch
           ) {
             return yield* Effect.fail(
@@ -499,41 +477,37 @@ const ProviderLive = () =>
               }
               return items;
             })).map((app) => app.id);
-            const previouslyUnassignedDatabases = (yield* Effect.gen(
-              function* () {
-                const items: GetProjectDatabasesResponse["data"][number][] = [];
-                let cursor: string | undefined;
-                while (true) {
-                  const page = yield* getProjectDatabases(
-                    cursor === undefined
-                      ? { projectId, limit: 100 }
-                      : { projectId, limit: 100, cursor },
+            const previouslyUnassignedDatabases = (yield* Effect.gen(function* () {
+              const items: GetProjectDatabasesResponse["data"][number][] = [];
+              let cursor: string | undefined;
+              while (true) {
+                const page = yield* getProjectDatabases(
+                  cursor === undefined
+                    ? { projectId, limit: 100 }
+                    : { projectId, limit: 100, cursor },
+                );
+                items.push(...page.data);
+                const nextCursor = page.pagination.nextCursor;
+                if (!page.pagination.hasMore) break;
+                if (nextCursor === null) {
+                  return yield* Effect.fail(
+                    new PrismaPaginationError({
+                      message:
+                        "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
+                    }),
                   );
-                  items.push(...page.data);
-                  const nextCursor = page.pagination.nextCursor;
-                  if (!page.pagination.hasMore) break;
-                  if (nextCursor === null) {
-                    return yield* Effect.fail(
-                      new PrismaPaginationError({
-                        message:
-                          "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
-                      }),
-                    );
-                  }
-                  cursor = nextCursor;
                 }
-                return items;
-              },
-            ))
+                cursor = nextCursor;
+              }
+              return items;
+            }))
               .filter((database) => database.branchId === null)
               .map((database) => database.id);
             repo = yield* createSourceRepository({
               projectId,
               provider: news.provider ?? "github",
               providerRepositoryId: news.providerRepositoryId,
-              ...(news.installationId === undefined
-                ? {}
-                : { installationId: news.installationId }),
+              ...(news.installationId === undefined ? {} : { installationId: news.installationId }),
             }).pipe(
               // A replayed create would link the repository twice; the retry
               // policy cannot see the request, so opt out explicitly.

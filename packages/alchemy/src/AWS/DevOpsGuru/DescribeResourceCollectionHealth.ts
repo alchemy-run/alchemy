@@ -37,7 +37,6 @@ export interface DescribeResourceCollectionHealth extends Binding.Service<
     >
   >
 > {}
-export const DescribeResourceCollectionHealth =
-  Binding.Service<DescribeResourceCollectionHealth>(
-    "AWS.DevOpsGuru.DescribeResourceCollectionHealth",
-  );
+export const DescribeResourceCollectionHealth = Binding.Service<DescribeResourceCollectionHealth>(
+  "AWS.DevOpsGuru.DescribeResourceCollectionHealth",
+);

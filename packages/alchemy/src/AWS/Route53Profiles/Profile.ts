@@ -107,8 +107,7 @@ const untilProfileSettled = <E, R>(
   self.pipe(
     Effect.repeat({
       schedule: Schedule.fixed("2 seconds"),
-      until: (profile) =>
-        profile === undefined || profile.Status !== "CREATING",
+      until: (profile) => profile === undefined || profile.Status !== "CREATING",
       times: 15,
     }),
   );
@@ -119,13 +118,8 @@ export const ProfileProvider = () =>
     Effect.gen(function* () {
       // `props` may be undefined at runtime — all ProfileProps fields are
       // optional, so callers can omit the props object entirely.
-      const createName = Effect.fn(function* (
-        id: string,
-        props: ProfileProps | undefined,
-      ) {
-        return (
-          props?.name ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: ProfileProps | undefined) {
+        return props?.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       // A deleted Profile lingers in `DELETING`/`DELETED` and is still
@@ -139,17 +133,13 @@ export const ProfileProvider = () =>
               ? undefined
               : r.Profile,
           ),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const findByName = (name: string) =>
         profiles.listProfiles.items({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).find((summary) => summary.Name === name),
-          ),
+          Effect.map((chunk) => Array.from(chunk).find((summary) => summary.Name === name)),
         );
 
       const readTags = (profileArn: string) =>
@@ -198,9 +188,7 @@ export const ProfileProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((summary) =>
-                summary.Id !== undefined &&
-                summary.Arn !== undefined &&
-                summary.Name !== undefined
+                summary.Id !== undefined && summary.Arn !== undefined && summary.Name !== undefined
                   ? [
                       {
                         profileId: summary.Id,
@@ -238,20 +226,12 @@ export const ProfileProvider = () =>
           if (oldName !== newName) return { action: "replace" } as const;
           // Fall through: tags changes take the default update path.
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
           const name = output?.profileName ?? (yield* createName(id, news));
 
           // OBSERVE — output is only an id cache; fall back to a lookup by
           // deterministic name so state loss / adoption converges.
-          let live = output?.profileId
-            ? yield* observe(output.profileId)
-            : undefined;
+          let live = output?.profileId ? yield* observe(output.profileId) : undefined;
           if (!live) {
             const found = yield* findByName(name);
             live = found?.Id ? yield* observe(found.Id) : undefined;
@@ -285,9 +265,7 @@ export const ProfileProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // VPC disassociations drain asynchronously; DeleteProfile conflicts
           // until they finish, so retry on a bounded schedule.
-          yield* retryDeleteConflict(
-            profiles.deleteProfile({ ProfileId: output.profileId }),
-          ).pipe(
+          yield* retryDeleteConflict(profiles.deleteProfile({ ProfileId: output.profileId })).pipe(
             Effect.asVoid,
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );

@@ -24,14 +24,10 @@ const member = {
   user_id: "authorized-user",
   org_role: "editor" as const,
 };
-const refused = <A, R>(
-  effect: Effect.Effect<A, GovernanceRoleSafetyError, R>,
-) =>
+const refused = <A, R>(effect: Effect.Effect<A, GovernanceRoleSafetyError, R>) =>
   effect.pipe(
     Effect.as(false),
-    Effect.catchTag("NeonGovernanceRoleSafetyError", () =>
-      Effect.succeed(true),
-    ),
+    Effect.catchTag("NeonGovernanceRoleSafetyError", () => Effect.succeed(true)),
   );
 
 unit.effect(
@@ -79,45 +75,41 @@ unit.effect(
     }),
 );
 
-unit.effect(
-  "project role state refuses missing, inconsistent and org-admin grant evidence",
-  () =>
-    Effect.gen(function* () {
-      expect(yield* refused(projectMemberDirectRole(member))).toBe(true);
-      expect(
-        yield* refused(
-          projectMemberDirectRole({ ...member, grant_source: "explicit" }),
-        ),
-      ).toBe(true);
-      expect(
-        yield* refused(
-          projectMemberDirectRole({
-            ...member,
-            grant_source: "org_role_default",
-            explicit_project_permission: "VIEWER",
-          }),
-        ),
-      ).toBe(true);
-      expect(
-        yield* refused(
-          projectMemberDirectRole({
-            ...member,
-            org_role: "admin",
-            grant_source: "org_admin_override",
-            project_role: "admin",
-          }),
-        ),
-      ).toBe(true);
-      expect(
-        yield* refused(
-          projectMemberDirectRole({
-            ...member,
-            grant_source: "org_admin_override",
-            explicit_project_permission: "VIEWER",
-          }),
-        ),
-      ).toBe(true);
-    }),
+unit.effect("project role state refuses missing, inconsistent and org-admin grant evidence", () =>
+  Effect.gen(function* () {
+    expect(yield* refused(projectMemberDirectRole(member))).toBe(true);
+    expect(yield* refused(projectMemberDirectRole({ ...member, grant_source: "explicit" }))).toBe(
+      true,
+    );
+    expect(
+      yield* refused(
+        projectMemberDirectRole({
+          ...member,
+          grant_source: "org_role_default",
+          explicit_project_permission: "VIEWER",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      yield* refused(
+        projectMemberDirectRole({
+          ...member,
+          org_role: "admin",
+          grant_source: "org_admin_override",
+          project_role: "admin",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      yield* refused(
+        projectMemberDirectRole({
+          ...member,
+          grant_source: "org_admin_override",
+          explicit_project_permission: "VIEWER",
+        }),
+      ),
+    ).toBe(true);
+  }),
 );
 
 unit.effect(
@@ -131,47 +123,28 @@ unit.effect(
         originalRole: null,
         managedRole: "editor",
       };
-      expect(
-        yield* governanceRoleTransition(baseline, "editor", null, true),
-      ).toBe(true);
-      expect(yield* governanceRoleTransition(baseline, null, null, true)).toBe(
-        false,
-      );
-      expect(
-        yield* refused(
-          governanceRoleTransition(baseline, "viewer", null, true),
-        ),
-      ).toBe(true);
+      expect(yield* governanceRoleTransition(baseline, "editor", null, true)).toBe(true);
+      expect(yield* governanceRoleTransition(baseline, null, null, true)).toBe(false);
+      expect(yield* refused(governanceRoleTransition(baseline, "viewer", null, true))).toBe(true);
       const adopted = { ...baseline, originalRole: "viewer" as const };
-      expect(
-        yield* governanceRoleTransition(adopted, "editor", "viewer", true),
-      ).toBe(true);
-      expect(
-        yield* governanceRoleTransition(adopted, "viewer", "viewer", true),
-      ).toBe(false);
-      expect(
-        yield* refused(governanceRoleTransition(adopted, null, "viewer", true)),
-      ).toBe(true);
+      expect(yield* governanceRoleTransition(adopted, "editor", "viewer", true)).toBe(true);
+      expect(yield* governanceRoleTransition(adopted, "viewer", "viewer", true)).toBe(false);
+      expect(yield* refused(governanceRoleTransition(adopted, null, "viewer", true))).toBe(true);
       expect(
         yield* refused(
-          requireGovernanceBaseline<ProjectGovernanceRole | null>(
-            undefined,
-            baseline,
-          ),
+          requireGovernanceBaseline<ProjectGovernanceRole | null>(undefined, baseline),
         ),
       ).toBe(true);
     }),
 );
 
-unit.effect(
-  "project role validation rejects unknown persisted permissions",
-  () =>
-    Effect.gen(function* () {
-      for (const role of [null, "viewer", "editor", "admin"] as const)
-        yield* validateProjectGovernanceRole(role);
-      // @ts-expect-error Runtime validation protects JavaScript callers and persisted state.
-      expect(yield* refused(validateProjectGovernanceRole("owner"))).toBe(true);
-    }),
+unit.effect("project role validation rejects unknown persisted permissions", () =>
+  Effect.gen(function* () {
+    for (const role of [null, "viewer", "editor", "admin"] as const)
+      yield* validateProjectGovernanceRole(role);
+    // @ts-expect-error Runtime validation protects JavaScript callers and persisted state.
+    expect(yield* refused(validateProjectGovernanceRole("owner"))).toBe(true);
+  }),
 );
 
 const { test } = Test.make({ providers: providers() });
@@ -196,9 +169,7 @@ const context = {
     note: () => Effect.void,
   },
 };
-const noCloudCredentials = Effect.die(
-  "Safety-only governance tests must not issue Neon requests",
-);
+const noCloudCredentials = Effect.die("Safety-only governance tests must not issue Neon requests");
 
 test.provider(
   "project grant identity changes are refused by diff before cloud I/O",
@@ -224,9 +195,7 @@ test.provider(
           { ...olds, memberId: "member-other" },
           { ...olds, project: { projectId: "project-other" } },
         ]) {
-          expect(
-            yield* refused(provider.diff!({ ...context, olds, news, output })),
-          ).toBe(true);
+          expect(yield* refused(provider.diff!({ ...context, olds, news, output }))).toBe(true);
         }
         expect(
           yield* provider.diff!({
@@ -254,9 +223,7 @@ test.provider(
       };
       for (const olds of [undefined, news]) {
         expect(
-          yield* refused(
-            provider.reconcile({ ...context, news, olds, output: undefined }),
-          ),
+          yield* refused(provider.reconcile({ ...context, news, olds, output: undefined })),
         ).toBe(true);
       }
       const output = {
@@ -267,17 +234,11 @@ test.provider(
         baseline,
       };
       yield* Effect.sync(() => Reflect.deleteProperty(output, "baseline"));
-      expect(
-        yield* refused(provider.read!({ ...context, olds: news, output })),
-      ).toBe(true);
-      expect(
-        yield* refused(
-          provider.reconcile({ ...context, news, olds: news, output }),
-        ),
-      ).toBe(true);
-      expect(
-        yield* refused(provider.delete({ ...context, olds: news, output })),
-      ).toBe(true);
+      expect(yield* refused(provider.read!({ ...context, olds: news, output }))).toBe(true);
+      expect(yield* refused(provider.reconcile({ ...context, news, olds: news, output }))).toBe(
+        true,
+      );
+      expect(yield* refused(provider.delete({ ...context, olds: news, output }))).toBe(true);
     }).pipe(Effect.provideService(SDK.Credentials, noCloudCredentials)),
   { timeout: 120_000 },
 );
@@ -300,13 +261,9 @@ test.provider.skipIf(!orgId || !memberId)(
       });
       if (membership.role === "admin" || !membership.joined_at)
         return yield* new GovernanceRoleSafetyError({
-          message:
-            "Governance test fixture must be an active, non-admin member",
+          message: "Governance test fixture must be an active, non-admin member",
         });
-      yield* validateGovernanceActor(
-        membership.user_id,
-        (yield* SDK.getCurrentUserInfo({})).id,
-      );
+      yield* validateGovernanceActor(membership.user_id, (yield* SDK.getCurrentUserInfo({})).id);
       const base = Effect.gen(function* () {
         const project = yield* Project("GovernanceProject", {
           orgId,
@@ -325,9 +282,7 @@ test.provider.skipIf(!orgId || !memberId)(
             limit: 500,
             cursor,
           });
-          const current = response.project_members.find(
-            (entry) => entry.member_id === memberId,
-          );
+          const current = response.project_members.find((entry) => entry.member_id === memberId);
           if (current) return yield* projectMemberDirectRole(current);
           if (!response.pagination?.next) break;
           cursor = response.pagination.next;
@@ -338,10 +293,7 @@ test.provider.skipIf(!orgId || !memberId)(
         });
       });
       expect(yield* observeGrant).toBeNull();
-      const application = (
-        role: ProjectGovernanceRole,
-        takeOwnership = false,
-      ) =>
+      const application = (role: ProjectGovernanceRole, takeOwnership = false) =>
         Effect.gen(function* () {
           yield* base;
           const access = yield* ProjectMemberRole("AuthorizedProjectGrant", {

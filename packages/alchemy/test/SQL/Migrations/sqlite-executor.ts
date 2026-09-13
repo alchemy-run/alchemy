@@ -13,9 +13,7 @@ export const makeSqliteExecutor = (db: Database): SqlExecutor => ({
   query: (sql, params) =>
     Effect.try({
       try: () =>
-        db.query(sql).all(...((params ?? []) as never[])) as Array<
-          Record<string, unknown>
-        >,
+        db.query(sql).all(...((params ?? []) as never[])) as Array<Record<string, unknown>>,
       catch: (cause) => new MigrationError({ message: String(cause), cause }),
     }),
   batch: (statements) =>

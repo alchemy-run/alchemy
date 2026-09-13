@@ -43,8 +43,7 @@ export default GetSecretOnlyTestFunction.make(
             name: result.Name,
             versionId: result.VersionId,
             secretString:
-              typeof result.SecretString === "string" ||
-              result.SecretString === undefined
+              typeof result.SecretString === "string" || result.SecretString === undefined
                 ? result.SecretString
                 : Redacted.value(result.SecretString),
           });
@@ -55,9 +54,7 @@ export default GetSecretOnlyTestFunction.make(
             SecretId: yield* secretArn,
           }).pipe(
             Effect.as("Allowed"),
-            Effect.catchTag("AccessDeniedException", (error) =>
-              Effect.succeed(error._tag),
-            ),
+            Effect.catchTag("AccessDeniedException", (error) => Effect.succeed(error._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

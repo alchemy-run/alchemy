@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link BatchDisassociateResource}.
  */
-export interface BatchDisassociateResourceRequest
-  extends fms.BatchDisassociateResourceRequest {}
+export interface BatchDisassociateResourceRequest extends fms.BatchDisassociateResourceRequest {}
 
 /**
  * Runtime binding for `fms:BatchDisassociateResource`.
@@ -35,14 +34,10 @@ export interface BatchDisassociateResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: BatchDisassociateResourceRequest,
-    ) => Effect.Effect<
-      fms.BatchDisassociateResourceResponse,
-      fms.BatchDisassociateResourceError
-    >
+    ) => Effect.Effect<fms.BatchDisassociateResourceResponse, fms.BatchDisassociateResourceError>
   >
 > {}
 
-export const BatchDisassociateResource =
-  Binding.Service<BatchDisassociateResource>(
-    "AWS.FMS.BatchDisassociateResource",
-  );
+export const BatchDisassociateResource = Binding.Service<BatchDisassociateResource>(
+  "AWS.FMS.BatchDisassociateResource",
+);

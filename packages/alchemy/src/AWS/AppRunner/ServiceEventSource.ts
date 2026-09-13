@@ -45,8 +45,7 @@ export interface OperationStatusChangeDetail {
 export type ServiceStatusChangeEvent = EventRecord<ServiceStatusChangeDetail>;
 
 /** An operation-status-change EventBridge event delivered to the handler. */
-export type OperationStatusChangeEvent =
-  EventRecord<OperationStatusChangeDetail>;
+export type OperationStatusChangeEvent = EventRecord<OperationStatusChangeDetail>;
 
 export interface ServiceStatusChangeEventSourceProps extends EventRouteProps {
   /**
@@ -113,9 +112,7 @@ export const consumeServiceStatusChanges = <StreamReq = never, Req = never>(
       {
         source: ["aws.apprunner"],
         "detail-type": ["AppRunner Service Status Change"],
-        ...(currentStatus && currentStatus.length > 0
-          ? { detail: { currentStatus } }
-          : {}),
+        ...(currentStatus && currentStatus.length > 0 ? { detail: { currentStatus } } : {}),
       },
       routeProps,
       process,
@@ -160,9 +157,7 @@ export const consumeOperationStatusChanges = <StreamReq = never, Req = never>(
       {
         source: ["aws.apprunner"],
         "detail-type": ["AppRunner Service Operation Status Change"],
-        ...(operationStatus && operationStatus.length > 0
-          ? { detail: { operationStatus } }
-          : {}),
+        ...(operationStatus && operationStatus.length > 0 ? { detail: { operationStatus } } : {}),
       },
       routeProps,
       process,

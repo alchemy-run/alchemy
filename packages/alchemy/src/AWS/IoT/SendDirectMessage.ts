@@ -2,8 +2,7 @@ import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface SendDirectMessageRequest
-  extends iotdata.SendDirectMessageRequest {}
+export interface SendDirectMessageRequest extends iotdata.SendDirectMessageRequest {}
 
 /**
  * Runtime binding for the IoT data-plane `SendDirectMessage` operation (IAM
@@ -36,13 +35,8 @@ export interface SendDirectMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendDirectMessageRequest,
-    ) => Effect.Effect<
-      iotdata.SendDirectMessageResponse,
-      iotdata.SendDirectMessageError
-    >
+    ) => Effect.Effect<iotdata.SendDirectMessageResponse, iotdata.SendDirectMessageError>
   >
 > {}
 
-export const SendDirectMessage = Binding.Service<SendDirectMessage>(
-  "AWS.IoT.SendDirectMessage",
-);
+export const SendDirectMessage = Binding.Service<SendDirectMessage>("AWS.IoT.SendDirectMessage");

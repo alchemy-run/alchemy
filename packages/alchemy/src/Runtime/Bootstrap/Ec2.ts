@@ -13,12 +13,7 @@ import * as Logger from "effect/Logger";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { BunHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackFromEnv,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
 
 /** Serve the bundled program with a Bun HTTP server on the instance's `PORT`. */
 export const bootstrap = (entrypoint: unknown): Promise<void> => {

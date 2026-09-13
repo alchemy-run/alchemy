@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -21,9 +18,7 @@ const waitUntilDisabled = (id: string) =>
   GetPaymentMethodDomain({
     payment_method_domain: id,
   }).pipe(
-    Effect.map((domain) =>
-      domain.enabled ? ("enabled" as const) : ("disabled" as const),
-    ),
+    Effect.map((domain) => (domain.enabled ? ("enabled" as const) : ("disabled" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("disabled" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -82,9 +77,7 @@ test.provider(
         payment_method_domain: updated.id,
       });
       expect(refetched.id).toEqual(updated.id);
-      expect(refetched.domain_name).toEqual(
-        "alchemy-pmd-lifecycle.example.com",
-      );
+      expect(refetched.domain_name).toEqual("alchemy-pmd-lifecycle.example.com");
       expect(refetched.enabled).toEqual(false);
 
       yield* stack.destroy();

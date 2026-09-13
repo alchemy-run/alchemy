@@ -141,9 +141,7 @@ export type AppsSecret = Resource<
  */
 export const AppsSecret = Resource<AppsSecret>("Stripe.AppsSecret");
 
-export class AppsSecretNotResolved extends Data.TaggedError(
-  "Stripe.AppsSecretNotResolved",
-)<{
+export class AppsSecretNotResolved extends Data.TaggedError("Stripe.AppsSecretNotResolved")<{
   name: string;
 }> {}
 
@@ -165,28 +163,17 @@ const toWireScope = (
   GetAppsSecretsFindRequestScope &
   GetAppsSecretsRequestScope &
   CreateAppsSecretsDeleteRequestScope =>
-  scope.user !== undefined
-    ? { type: scope.type, user: scope.user }
-    : { type: scope.type };
+  scope.user !== undefined ? { type: scope.type, user: scope.user } : { type: scope.type };
 
-const fromObservedScope = (
-  scope: StripeAppsSecret["scope"],
-): AppsSecretScope =>
-  scope.user !== undefined
-    ? { type: scope.type, user: scope.user }
-    : { type: scope.type };
+const fromObservedScope = (scope: StripeAppsSecret["scope"]): AppsSecretScope =>
+  scope.user !== undefined ? { type: scope.type, user: scope.user } : { type: scope.type };
 
 const scopesEqual = (left: AppsSecretScope, right: AppsSecretScope): boolean =>
-  left.type === right.type &&
-  (left.user ?? undefined) === (right.user ?? undefined);
+  left.type === right.type && (left.user ?? undefined) === (right.user ?? undefined);
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
 const toAttrs = (secret: StripeAppsSecret): AppsSecretAttributes => ({
@@ -201,9 +188,7 @@ const toAttrs = (secret: StripeAppsSecret): AppsSecretAttributes => ({
 
 const isMissingSecret = isMissingStripeResource;
 
-const isPresent = (
-  secret: StripeAppsSecret | undefined,
-): secret is StripeAppsSecret =>
+const isPresent = (secret: StripeAppsSecret | undefined): secret is StripeAppsSecret =>
   secret !== undefined && secret.deleted !== true;
 
 const findByName = (name: string, scope: AppsSecretScope) =>
@@ -250,10 +235,7 @@ const observe = Effect.fn(function* (input: {
     const secrets = yield* listByScope(input.scope);
     const byId = secrets.find((secret) => secret.id === input.id);
     if (byId !== undefined) {
-      const expanded = yield* findByName(
-        byId.name,
-        fromObservedScope(byId.scope),
-      );
+      const expanded = yield* findByName(byId.name, fromObservedScope(byId.scope));
       if (expanded !== undefined) return expanded;
       return byId;
     }
@@ -267,10 +249,7 @@ const shouldReplace = (
 ): boolean => {
   if (output === undefined) return false;
   if (news.name !== undefined && news.name !== output.name) return true;
-  if (
-    news.scope !== undefined &&
-    !scopesEqual(toScope(news.scope), output.scope)
-  ) {
+  if (news.scope !== undefined && !scopesEqual(toScope(news.scope), output.scope)) {
     return true;
   }
   return false;
@@ -289,9 +268,7 @@ export const AppsSecretProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const name =
-        output?.name ??
-        (typeof olds?.name === "string" ? olds.name : undefined);
+      const name = output?.name ?? (typeof olds?.name === "string" ? olds.name : undefined);
       const scope = toScope(
         output?.scope ??
           (olds?.scope !== undefined && typeof olds.scope === "object"
@@ -335,9 +312,7 @@ export const AppsSecretProvider = () =>
           name,
           payload: news.payload,
           scope: toWireScope(scope),
-          ...(desiredExpiresAt !== undefined
-            ? { expires_at: desiredExpiresAt }
-            : {}),
+          ...(desiredExpiresAt !== undefined ? { expires_at: desiredExpiresAt } : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey,
@@ -363,10 +338,8 @@ export const AppsSecretProvider = () =>
       }
 
       const observedPayload = current.payload ?? undefined;
-      const payloadChanged =
-        observedPayload !== undefined && observedPayload !== news.payload;
-      const expiresChanged =
-        (current.expires_at ?? undefined) !== desiredExpiresAt;
+      const payloadChanged = observedPayload !== undefined && observedPayload !== news.payload;
+      const expiresChanged = (current.expires_at ?? undefined) !== desiredExpiresAt;
 
       if (!payloadChanged && !expiresChanged) {
         return toAttrs(current);

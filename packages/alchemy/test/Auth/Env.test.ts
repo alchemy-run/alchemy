@@ -13,10 +13,7 @@ import {
 import { TerminalCancelled } from "@/Cli/CliKit/index.ts";
 
 const provideConfig = (values: Record<string, unknown>) =>
-  Effect.provideService(
-    ConfigProvider.ConfigProvider,
-    ConfigProvider.fromUnknown(values),
-  );
+  Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(values));
 
 it.effect("reads optional environment configuration", () =>
   Effect.gen(function* () {

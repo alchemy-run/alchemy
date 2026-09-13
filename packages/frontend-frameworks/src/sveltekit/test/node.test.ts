@@ -25,9 +25,7 @@ describe("makeNodeTarget", () => {
 
   it("produces the in-memory kit adapter from the adapter hook", () => {
     const adapter = makeNodeAdapter();
-    expect(adapter.name).toBe(
-      "@alchemy.run/frontend-frameworks/sveltekit/node",
-    );
+    expect(adapter.name).toBe("@alchemy.run/frontend-frameworks/sveltekit/node");
     expect(adapter.result.current).toBeUndefined();
     expect(typeof adapter.adapt).toBe("function");
   });
@@ -57,9 +55,7 @@ describe("makeNodeTarget", () => {
       ),
     );
     expect(output.clientDirectory).toBe(path.join(root, "dist/client"));
-    await expect(
-      fs.stat(path.join(root, "dist/client/stale.txt")),
-    ).rejects.toThrow();
+    await expect(fs.stat(path.join(root, "dist/client/stale.txt"))).rejects.toThrow();
 
     const deployed = await makeProject({});
     await fs.cp(path.join(root, "dist"), deployed, { recursive: true });
@@ -72,15 +68,11 @@ describe("makeNodeTarget", () => {
     await new Promise<void>((resolve, reject) =>
       reservation.close((error) => (error ? reject(error) : resolve())),
     );
-    const child = spawn(
-      process.execPath,
-      [path.join(deployed, output.serverModules![0]!.name)],
-      {
-        cwd: deployed,
-        env: { ...process.env, PORT: String(port) },
-        stdio: "ignore",
-      },
-    );
+    const child = spawn(process.execPath, [path.join(deployed, output.serverModules![0]!.name)], {
+      cwd: deployed,
+      env: { ...process.env, PORT: String(port) },
+      stdio: "ignore",
+    });
     const exited = once(child, "exit");
     const base = `http://127.0.0.1:${port}`;
     try {

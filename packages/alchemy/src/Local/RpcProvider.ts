@@ -207,17 +207,12 @@ export const effect = <
                   Predicate.isString(args[0].instanceId)
                   ? Layer.merge(
                       layerFallback(InstanceId, args[0].instanceId),
-                      Layer.succeed(
-                        Artifacts,
-                        makeScopedArtifacts(store, args[0].instanceId),
-                      ),
+                      Layer.succeed(Artifacts, makeScopedArtifacts(store, args[0].instanceId)),
                     )
                   : Layer.empty,
               );
               return result.pipe(
-                Stream.isStream(result)
-                  ? Stream.provide(services)
-                  : Effect.provide(services),
+                Stream.isStream(result) ? Stream.provide(services) : Effect.provide(services),
               );
             };
           },
@@ -227,15 +222,10 @@ export const effect = <
     }),
   );
 
-const layerFallback = <I, S>(
-  service: Context.Key<I, S>,
-  defaultValue: NoInfer<S>,
-) =>
+const layerFallback = <I, S>(service: Context.Key<I, S>, defaultValue: NoInfer<S>) =>
   Layer.effect(
     service,
-    Effect.serviceOption(service).pipe(
-      Effect.map(Option.getOrElse(() => defaultValue)),
-    ),
+    Effect.serviceOption(service).pipe(Effect.map(Option.getOrElse(() => defaultValue))),
   );
 
 /**
@@ -247,8 +237,7 @@ const layerFallback = <I, S>(
  */
 export const providerServices = <ROut, E, RIn>(
   self: Layer.Layer<ROut, E, RIn>,
-): Layer.Layer<ROut, E, RIn | AlchemyContext> =>
-  providerServicesEffect(Effect.succeed(self));
+): Layer.Layer<ROut, E, RIn | AlchemyContext> => providerServicesEffect(Effect.succeed(self));
 
 /**
  * Conditionally constructs a layer for use by an RpcProvider.

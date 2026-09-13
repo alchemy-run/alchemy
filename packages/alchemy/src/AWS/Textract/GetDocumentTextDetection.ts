@@ -35,7 +35,6 @@ export interface GetDocumentTextDetection extends Binding.Service<
     >
   >
 > {}
-export const GetDocumentTextDetection =
-  Binding.Service<GetDocumentTextDetection>(
-    "AWS.Textract.GetDocumentTextDetection",
-  );
+export const GetDocumentTextDetection = Binding.Service<GetDocumentTextDetection>(
+  "AWS.Textract.GetDocumentTextDetection",
+);

@@ -3,18 +3,14 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  resolveAccessContext,
-  type WorkerExecutionContextAccess,
-} from "./WorkerAccess.ts";
+import { resolveAccessContext, type WorkerExecutionContextAccess } from "./WorkerAccess.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
-export class WorkerEnvironment extends Context.Service<
-  WorkerEnvironment,
-  Record<string, any>
->()("Cloudflare.Workers.WorkerEnvironment") {}
+export class WorkerEnvironment extends Context.Service<WorkerEnvironment, Record<string, any>>()(
+  "Cloudflare.Workers.WorkerEnvironment",
+) {}
 
 export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   message: string;
@@ -61,11 +57,7 @@ export class WorkerExecutionContext extends Context.Service<
      * or `undefined` when the request did not pass through Access. Under
      * `alchemy dev` the Worker's `dev.access` config simulates it.
      */
-    readonly access: Effect.Effect<
-      WorkerExecutionContextAccess | undefined,
-      never,
-      RuntimeContext
-    >;
+    readonly access: Effect.Effect<WorkerExecutionContextAccess | undefined, never, RuntimeContext>;
     /**
      * The raw workerd ExecutionContext, for interop with async APIs.
      */
@@ -96,10 +88,7 @@ export const fromExecutionContext = (
             try: () => ctx.cache!.purge(options),
             catch: (cause) =>
               new CachePurgeError({
-                message:
-                  cause instanceof Error
-                    ? cause.message
-                    : "Unknown cache purge error",
+                message: cause instanceof Error ? cause.message : "Unknown cache purge error",
                 cause,
               }),
           })
@@ -124,14 +113,14 @@ export const fromExecutionContext = (
  */
 export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
   get raw(): cf.ExecutionContext {
-    throw new Error(
-      "WorkerExecutionContext.raw is only available inside a request handler",
-    );
+    throw new Error("WorkerExecutionContext.raw is only available inside a request handler");
   },
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    liveExecutionContext.pipe(
-      Effect.flatMap((live) => live.waitUntil(effect)),
-    ) as Effect.Effect<void, never, R | RuntimeContext>,
+    liveExecutionContext.pipe(Effect.flatMap((live) => live.waitUntil(effect))) as Effect.Effect<
+      void,
+      never,
+      R | RuntimeContext
+    >,
   passThroughOnException: () =>
     liveExecutionContext.pipe(
       Effect.flatMap((live) => live.passThroughOnException()),
@@ -145,9 +134,7 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
   // A getter so this module-level literal doesn't eagerly reference
   // `liveExecutionContext` before its declaration below.
   get access() {
-    return liveExecutionContext.pipe(
-      Effect.flatMap((live) => live.access),
-    ) as Effect.Effect<
+    return liveExecutionContext.pipe(Effect.flatMap((live) => live.access)) as Effect.Effect<
       WorkerExecutionContextAccess | undefined,
       never,
       RuntimeContext
@@ -158,11 +145,7 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
 const liveExecutionContext = WorkerExecutionContext.pipe(
   Effect.flatMap((live) =>
     live === deferredExecutionContext
-      ? Effect.die(
-          new Error(
-            "WorkerExecutionContext can only be used inside a request handler",
-          ),
-        )
+      ? Effect.die(new Error("WorkerExecutionContext can only be used inside a request handler"))
       : Effect.succeed(live),
   ),
 );

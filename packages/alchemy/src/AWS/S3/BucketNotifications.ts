@@ -77,12 +77,7 @@ export interface NotificationsProps<Events extends S3EventType[]> {
  *
  * @binding
  */
-export function consumeBucketEvents<
-  B extends Bucket,
-  Req = never,
-  StreamReq = never,
-  const Events extends S3EventType[] = S3EventType[],
->(
+export function consumeBucketEvents<B extends Bucket, Req = never, StreamReq = never>(
   bucket: B,
   handler: (
     stream: Stream.Stream<BucketNotification, never, StreamReq>,
@@ -118,7 +113,6 @@ export function consumeBucketEvents<
 ) {
   const props: NotificationsProps<Events> =
     typeof propsOrHandler === "function" ? {} : propsOrHandler;
-  const handler =
-    typeof propsOrHandler === "function" ? propsOrHandler : maybeHandler!;
+  const handler = typeof propsOrHandler === "function" ? propsOrHandler : maybeHandler!;
   return BucketEventSource.use((source) => source(bucket, props, handler));
 }

@@ -27,10 +27,7 @@ export interface ListRecoveryPoints extends Binding.Service<
   () => Effect.Effect<
     (
       request?: serverless.ListRecoveryPointsRequest,
-    ) => Effect.Effect<
-      serverless.ListRecoveryPointsResponse,
-      serverless.ListRecoveryPointsError
-    >
+    ) => Effect.Effect<serverless.ListRecoveryPointsResponse, serverless.ListRecoveryPointsError>
   >
 > {}
 export const ListRecoveryPoints = Binding.Service<ListRecoveryPoints>(

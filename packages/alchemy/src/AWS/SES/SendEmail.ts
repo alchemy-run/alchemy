@@ -10,10 +10,7 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * `FromEmailAddress` defaults to the bound identity (override it for domain
  * identities, e.g. `hello@{domain}`).
  */
-export interface SendEmailRequest extends Omit<
-  sesv2.SendEmailRequest,
-  "ConfigurationSetName"
-> {}
+export interface SendEmailRequest extends Omit<sesv2.SendEmailRequest, "ConfigurationSetName"> {}
 
 /**
  * Runtime binding for `sesv2:SendEmail`.
@@ -76,9 +73,7 @@ export interface SendEmail extends Binding.Service<
     identity: I,
     configurationSet?: ConfigurationSet,
   ) => Effect.Effect<
-    (
-      request: SendEmailRequest,
-    ) => Effect.Effect<sesv2.SendEmailResponse, sesv2.SendEmailError>
+    (request: SendEmailRequest) => Effect.Effect<sesv2.SendEmailResponse, sesv2.SendEmailError>
   >
 > {}
 export const SendEmail = Binding.Service<SendEmail>("AWS.SES.SendEmail");

@@ -30,12 +30,7 @@ export interface CreateSolution extends Binding.Service<
   () => Effect.Effect<
     (
       request: personalize.CreateSolutionRequest,
-    ) => Effect.Effect<
-      personalize.CreateSolutionResponse,
-      personalize.CreateSolutionError
-    >
+    ) => Effect.Effect<personalize.CreateSolutionResponse, personalize.CreateSolutionError>
   >
 > {}
-export const CreateSolution = Binding.Service<CreateSolution>(
-  "AWS.Personalize.CreateSolution",
-);
+export const CreateSolution = Binding.Service<CreateSolution>("AWS.Personalize.CreateSolution");

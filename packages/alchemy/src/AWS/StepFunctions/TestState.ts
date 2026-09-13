@@ -35,11 +35,7 @@ export interface TestState extends Binding.Service<
   TestState,
   "AWS.StepFunctions.TestState",
   () => Effect.Effect<
-    (
-      request: TestStateRequest,
-    ) => Effect.Effect<sfn.TestStateOutput, sfn.TestStateError>
+    (request: TestStateRequest) => Effect.Effect<sfn.TestStateOutput, sfn.TestStateError>
   >
 > {}
-export const TestState = Binding.Service<TestState>(
-  "AWS.StepFunctions.TestState",
-);
+export const TestState = Binding.Service<TestState>("AWS.StepFunctions.TestState");

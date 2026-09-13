@@ -45,10 +45,7 @@ export interface ListMemoryRecords extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListMemoryRecordsRequest,
-    ) => Effect.Effect<
-      agentcore.ListMemoryRecordsOutput,
-      agentcore.ListMemoryRecordsError
-    >
+    ) => Effect.Effect<agentcore.ListMemoryRecordsOutput, agentcore.ListMemoryRecordsError>
   >
 > {}
 export const ListMemoryRecords = Binding.Service<ListMemoryRecords>(

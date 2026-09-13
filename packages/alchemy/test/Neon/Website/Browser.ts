@@ -21,8 +21,7 @@ const command = Effect.fn(
       ],
       { concurrency: "unbounded" },
     );
-    if (code !== 0)
-      return yield* Effect.fail(new Error(`Browser command failed: ${stderr}`));
+    if (code !== 0) return yield* Effect.fail(new Error(`Browser command failed: ${stderr}`));
     return stdout;
   },
   Effect.scoped,
@@ -37,12 +36,7 @@ export const browserRoundtrip = Effect.fn(
     if (process.env.NEON_WEBSITE_BROWSER !== "1") return;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const screenshots = path.join(
-      initialCwd,
-      ".alchemy",
-      "log",
-      "website-browser",
-    );
+    const screenshots = path.join(initialCwd, ".alchemy", "log", "website-browser");
     yield* fs.makeDirectory(screenshots, { recursive: true });
     const opened = yield* command([
       "new-tab",
@@ -56,35 +50,17 @@ export const browserRoundtrip = Effect.fn(
           tabs?: { id: number; active: boolean }[];
         },
     );
-    const openedTab =
-      browser.openedTab ?? browser.tabs?.find((tab) => tab.active)?.id;
+    const openedTab = browser.openedTab ?? browser.tabs?.find((tab) => tab.active)?.id;
     if (openedTab === undefined)
-      return yield* Effect.fail(
-        new Error("Browser did not report its active tab"),
-      );
+      return yield* Effect.fail(new Error("Browser did not report its active tab"));
     const tab = { key: browser.key, openedTab };
     const action = (...args: string[]) =>
-      command([
-        "action",
-        "--browser",
-        tab.key,
-        "--tab",
-        String(tab.openedTab),
-        "--",
-        ...args,
-      ]);
+      command(["action", "--browser", tab.key, "--tab", String(tab.openedTab), "--", ...args]);
     yield* Effect.addFinalizer(() =>
       action("eval", "location.href = 'about:blank'").pipe(
         Effect.andThen(action("close")),
         Effect.andThen(
-          command([
-            "action",
-            "--browser",
-            tab.key,
-            "--tab",
-            String(tab.openedTab),
-            "done",
-          ]),
+          command(["action", "--browser", tab.key, "--tab", String(tab.openedTab), "done"]),
         ),
         Effect.ignore,
       ),
@@ -104,40 +80,16 @@ export const browserRoundtrip = Effect.fn(
         }),
       );
       expect(snapshot).toContain(label);
-      yield* action(
-        "find",
-        "role",
-        "button",
-        "click",
-        "--name",
-        label,
-        "--exact",
-      );
+      yield* action("find", "role", "button", "click", "--name", label, "--exact");
       if (slug === "foldkit") {
         expect(yield* action("get", "text", "#count")).toContain("1");
-        yield* action(
-          "find",
-          "role",
-          "button",
-          "click",
-          "--name",
-          "Reset",
-          "--exact",
-        );
+        yield* action("find", "role", "button", "click", "--name", "Reset", "--exact");
         expect(yield* action("get", "text", "#count")).toContain("0");
       } else {
         expect(yield* action("snapshot", "-i")).toContain("count: 1");
         if (!["vocs", "waku"].includes(slug)) {
           expect(snapshot).toContain("Load greeting");
-          yield* action(
-            "find",
-            "role",
-            "button",
-            "click",
-            "--name",
-            "Load greeting",
-            "--exact",
-          );
+          yield* action("find", "role", "button", "click", "--name", "Load greeting", "--exact");
           expect(
             yield* action(
               "get",
@@ -155,35 +107,21 @@ export const browserRoundtrip = Effect.fn(
       }
       if (slug === "nextjs") {
         yield* action("fill", "#name", `Neon visitor ${width}`);
-        yield* action(
-          "find",
-          "role",
-          "button",
-          "click",
-          "--name",
-          "Submit name",
-          "--exact",
-        );
+        yield* action("find", "role", "button", "click", "--name", "Submit name", "--exact");
         expect(
           yield* action("get", "text", "body").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("500 millis"),
               times: 8,
-              until: (text) =>
-                text.includes(`Submitted: Neon visitor ${width}`),
+              until: (text) => text.includes(`Submitted: Neon visitor ${width}`),
             }),
           ),
         ).toContain(`Submitted: Neon visitor ${width}`);
         yield* action("reload");
-        expect(yield* action("get", "text", "body")).toContain(
-          `Submitted: Neon visitor ${width}`,
-        );
+        expect(yield* action("get", "text", "body")).toContain(`Submitted: Neon visitor ${width}`);
       }
       expect(
-        yield* action(
-          "eval",
-          "document.documentElement.scrollWidth <= window.innerWidth",
-        ),
+        yield* action("eval", "document.documentElement.scrollWidth <= window.innerWidth"),
       ).toContain("true");
       yield* action(
         "screenshot",
@@ -206,10 +144,7 @@ export const browserRoundtrip = Effect.fn(
           ["/guide", "Deployment guide"],
           ["/", "Alchemy with Vocs"],
         ]) {
-          yield* action(
-            "click",
-            `nav[aria-label="Pagination"] a[href="${route}"]`,
-          );
+          yield* action("click", `nav[aria-label="Pagination"] a[href="${route}"]`);
           const headingText = action("get", "text", "h1").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("500 millis"),
@@ -223,14 +158,9 @@ export const browserRoundtrip = Effect.fn(
         }
         yield* action("back");
         expect(yield* action("get", "url")).toContain("/guide");
-        yield* action(
-          "eval",
-          `location.href = ${JSON.stringify(`${base}/counter`)}`,
-        );
+        yield* action("eval", `location.href = ${JSON.stringify(`${base}/counter`)}`);
       }
-      yield* Effect.logInfo(
-        `Website browser ${slug} ${width}x${height}: passed`,
-      );
+      yield* Effect.logInfo(`Website browser ${slug} ${width}x${height}: passed`);
     }
   },
   Effect.scoped,

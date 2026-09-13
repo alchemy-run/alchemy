@@ -37,12 +37,7 @@ export interface UpdateTimeToLive extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateTimeToLiveRequest,
-    ) => Effect.Effect<
-      DynamoDB.UpdateTimeToLiveOutput,
-      DynamoDB.UpdateTimeToLiveError
-    >
+    ) => Effect.Effect<DynamoDB.UpdateTimeToLiveOutput, DynamoDB.UpdateTimeToLiveError>
   >
 > {}
-export const UpdateTimeToLive = Binding.Service<UpdateTimeToLive>(
-  "AWS.DynamoDB.UpdateTimeToLive",
-);
+export const UpdateTimeToLive = Binding.Service<UpdateTimeToLive>("AWS.DynamoDB.UpdateTimeToLive");

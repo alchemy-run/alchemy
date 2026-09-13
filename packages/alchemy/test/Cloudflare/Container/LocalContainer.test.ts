@@ -13,10 +13,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // First request has to wait for the local runtime to `docker pull` the image
 // and boot the container, so give it plenty of room.

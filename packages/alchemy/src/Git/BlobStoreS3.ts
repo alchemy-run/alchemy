@@ -61,12 +61,10 @@ import {
   type BlobStoreShape,
 } from "./BlobStore.ts";
 
-const s3Error =
-  (what: string) =>
-  (error: { readonly _tag?: string; readonly message?: string }) =>
-    new BlobStoreError({
-      reason: `${what}: ${error._tag ?? "S3Error"}${error.message ? `: ${error.message}` : ""}`,
-    });
+const s3Error = (what: string) => (error: { readonly _tag?: string; readonly message?: string }) =>
+  new BlobStoreError({
+    reason: `${what}: ${error._tag ?? "S3Error"}${error.message ? `: ${error.message}` : ""}`,
+  });
 
 const collectBytes = (
   stream: Stream.Stream<Uint8Array, Error>,
@@ -94,9 +92,7 @@ const collectBytes = (
  * @layer
  * @provides Git.BlobStore
  */
-export const BlobStoreS3 = (
-  bucket: Parameters<typeof GetObject>[0],
-): Layer.Layer<BlobStore> =>
+export const BlobStoreS3 = (bucket: Parameters<typeof GetObject>[0]): Layer.Layer<BlobStore> =>
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {
@@ -125,9 +121,7 @@ export const BlobStoreS3 = (
                 size: output.ContentLength ?? 0,
                 bytes: collectBytes(body, `get ${key}`),
                 stream: body.pipe(
-                  Stream.mapError((error) =>
-                    s3Error(`stream ${key}`)({ message: String(error) }),
-                  ),
+                  Stream.mapError((error) => s3Error(`stream ${key}`)({ message: String(error) })),
                 ),
               };
             }),
@@ -139,8 +133,7 @@ export const BlobStoreS3 = (
           putObject({
             Key: key,
             Body: body,
-            ContentLength:
-              body instanceof Uint8Array ? body.length : opts?.contentLength,
+            ContentLength: body instanceof Uint8Array ? body.length : opts?.contentLength,
           }).pipe(Effect.mapError(s3Error(`put ${key}`)), Effect.asVoid),
 
         head: (key) =>
@@ -184,10 +177,7 @@ export const BlobStoreS3 = (
                         ETag: p.etag,
                       })),
                     },
-                  }).pipe(
-                    Effect.mapError(s3Error(`complete ${key}`)),
-                    Effect.asVoid,
-                  ),
+                  }).pipe(Effect.mapError(s3Error(`complete ${key}`)), Effect.asVoid),
                 abort: abortMultipart({ Key: key, UploadId }).pipe(
                   Effect.mapError(s3Error(`abort ${key}`)),
                   Effect.asVoid,
@@ -221,30 +211,25 @@ export const BlobStoreS3 = (
         },
 
         list: (prefix) =>
-          Stream.paginate(
-            undefined as string | undefined,
-            (ContinuationToken) =>
-              listObjectsV2({
-                Prefix: prefix,
-                ContinuationToken,
-                MaxKeys: 1000,
-              }).pipe(
-                Effect.mapError(s3Error(`list ${prefix}`)),
-                Effect.map((page) => {
-                  const metas = (page.Contents ?? []).flatMap(
-                    (object): Array<BlobMeta> =>
-                      object.Key === undefined
-                        ? []
-                        : [{ key: object.Key, size: object.Size ?? 0 }],
-                  );
-                  return [
-                    metas,
-                    page.IsTruncated && page.NextContinuationToken
-                      ? Option.some(page.NextContinuationToken)
-                      : Option.none<string>(),
-                  ] as const;
-                }),
-              ),
+          Stream.paginate(undefined as string | undefined, (ContinuationToken) =>
+            listObjectsV2({
+              Prefix: prefix,
+              ContinuationToken,
+              MaxKeys: 1000,
+            }).pipe(
+              Effect.mapError(s3Error(`list ${prefix}`)),
+              Effect.map((page) => {
+                const metas = (page.Contents ?? []).flatMap((object): Array<BlobMeta> =>
+                  object.Key === undefined ? [] : [{ key: object.Key, size: object.Size ?? 0 }],
+                );
+                return [
+                  metas,
+                  page.IsTruncated && page.NextContinuationToken
+                    ? Option.some(page.NextContinuationToken)
+                    : Option.none<string>(),
+                ] as const;
+              }),
+            ),
           ),
       } satisfies BlobStoreShape;
     }),

@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Outgoing zone transfers are an Enterprise feature. On the testing
 // account, `POST /zones/{id}/secondary_dns/outgoing` fails with HTTP
@@ -31,16 +27,12 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -76,9 +68,7 @@ test.provider.skipIf(outgoingEntitled)(
       ).pipe(
         Effect.flip,
         Effect.ensuring(
-          dns
-            .deleteZoneTransferPeer({ accountId, peerId: peer.id })
-            .pipe(Effect.ignore),
+          dns.deleteZoneTransferPeer({ accountId, peerId: peer.id }).pipe(Effect.ignore),
         ),
       );
       expect(error._tag).toEqual("OutgoingZoneTransfersNotAllowed");
@@ -101,14 +91,11 @@ test.provider.skipIf(!outgoingEntitled)(
             ip: "192.0.2.53",
             port: 53,
           });
-          const outgoing = yield* Cloudflare.DNS.ZoneTransferOutgoing(
-            "Outgoing",
-            {
-              zoneId,
-              name: `${zoneName}.`,
-              peers: [peer.peerId],
-            },
-          );
+          const outgoing = yield* Cloudflare.DNS.ZoneTransferOutgoing("Outgoing", {
+            zoneId,
+            name: `${zoneName}.`,
+            peers: [peer.peerId],
+          });
           return { outgoing, peer };
         }),
       );
@@ -126,15 +113,12 @@ test.provider.skipIf(!outgoingEntitled)(
             ip: "192.0.2.53",
             port: 53,
           });
-          const outgoing = yield* Cloudflare.DNS.ZoneTransferOutgoing(
-            "Outgoing",
-            {
-              zoneId,
-              name: `${zoneName}.`,
-              peers: [peer.peerId],
-              enabled: false,
-            },
-          );
+          const outgoing = yield* Cloudflare.DNS.ZoneTransferOutgoing("Outgoing", {
+            zoneId,
+            name: `${zoneName}.`,
+            peers: [peer.peerId],
+            enabled: false,
+          });
           return outgoing;
         }),
       );
@@ -143,9 +127,7 @@ test.provider.skipIf(!outgoingEntitled)(
       yield* stack.destroy();
 
       // Once deleted, the GET reports the typed not-found tag.
-      const gone = yield* retryForbidden(
-        dns.getZoneTransferOutgoing({ zoneId }),
-      ).pipe(Effect.flip);
+      const gone = yield* retryForbidden(dns.getZoneTransferOutgoing({ zoneId })).pipe(Effect.flip);
       expect(gone._tag).toEqual("OutgoingZoneTransferNotFound");
 
       // Re-running destroy is idempotent.
@@ -168,9 +150,7 @@ test.provider(
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DNS.ZoneTransferOutgoing,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.ZoneTransferOutgoing);
       const all = yield* provider.list();
 
       // Always-on assertion: list() returns a well-typed Attributes[] and

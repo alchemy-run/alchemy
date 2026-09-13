@@ -65,9 +65,7 @@ const fail = (message: string, cause?: unknown) =>
  *   workspace set.
  * - `bundle` — workerd resolve conditions and the `cloudflare:` externals.
  */
-export const makeCloudflareTarget = (
-  config: SvelteKitTargetConfig = {},
-): SvelteKitTarget =>
+export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): SvelteKitTarget =>
   makeDeployTarget({
     platform: "cloudflare",
     config,
@@ -105,16 +103,11 @@ export const makeCloudflareTarget = (
           );
         }
         const root = context.root;
-        const distDirectory =
-          output.distDirectory ?? path.resolve(root, "dist");
+        const distDirectory = output.distDirectory ?? path.resolve(root, "dist");
         const serverOutDir = path.join(distDirectory, "server");
         yield* fs
           .remove(serverOutDir, { recursive: true, force: true })
-          .pipe(
-            Effect.mapError((error) =>
-              fail("Failed to clean dist/server", error),
-            ),
-          );
+          .pipe(Effect.mapError((error) => fail("Failed to clean dist/server", error)));
 
         const externalDirectories = yield* Effect.tryPromise({
           try: async () => {
@@ -125,9 +118,7 @@ export const makeCloudflareTarget = (
                 ...(config.compatibilityDate !== undefined
                   ? { compatibilityDate: config.compatibilityDate }
                   : undefined),
-                compatibilityFlags: config.compatibilityFlags ?? [
-                  "nodejs_compat",
-                ],
+                compatibilityFlags: config.compatibilityFlags ?? ["nodejs_compat"],
                 exports: ["default"],
               }),
             });
@@ -158,8 +149,7 @@ export const makeCloudflareTarget = (
               await bundle.close();
             }
           },
-          catch: (error) =>
-            fail("Failed to bundle the worker for workerd", error),
+          catch: (error) => fail("Failed to bundle the worker for workerd", error),
         });
 
         const wrapCollectorError = (error: FrameworkCore.CollectorError) =>
@@ -172,10 +162,9 @@ export const makeCloudflareTarget = (
           modules,
           NodePath.join("server", "index.js"),
         );
-        const externalWorkspaces =
-          yield* FrameworkCore.collectExternalWorkspaces(
-            externalDirectories,
-          ).pipe(Effect.mapError(wrapCollectorError));
+        const externalWorkspaces = yield* FrameworkCore.collectExternalWorkspaces(
+          externalDirectories,
+        ).pipe(Effect.mapError(wrapCollectorError));
 
         return {
           ...output,

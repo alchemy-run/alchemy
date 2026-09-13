@@ -71,10 +71,7 @@ export default LogGroupEventSourceFunction.make(
     Effect.provide(
       Layer.provideMerge(
         Layer.mergeAll(AWS.Lambda.LogGroupEventSource, AWS.SQS.QueueSinkHttp),
-        Layer.mergeAll(
-          AWS.SQS.SendMessageBatchHttp,
-          SourceGroupAndResultQueueLive,
-        ),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchHttp, SourceGroupAndResultQueueLive),
       ),
     ),
   ),

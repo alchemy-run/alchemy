@@ -88,9 +88,7 @@ export interface ArchiveRule extends Resource<
  *
  * @resource
  */
-export const ArchiveRule = Resource<ArchiveRule>(
-  "AWS.AccessAnalyzer.ArchiveRule",
-);
+export const ArchiveRule = Resource<ArchiveRule>("AWS.AccessAnalyzer.ArchiveRule");
 
 export const ArchiveRuleProvider = () =>
   Provider.effect(
@@ -109,15 +107,10 @@ export const ArchiveRuleProvider = () =>
           ]),
         );
 
-      const observe = Effect.fn(function* (
-        analyzerName: string,
-        ruleName: string,
-      ) {
+      const observe = Effect.fn(function* (analyzerName: string, ruleName: string) {
         return yield* aa.getArchiveRule({ analyzerName, ruleName }).pipe(
           Effect.map((r) => r.archiveRule),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -150,7 +143,7 @@ export const ArchiveRuleProvider = () =>
           // filter is mutable → default update path
         }),
 
-        reconcile: Effect.fn(function* ({ news, output, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
           const filter = toFilter(news.filter);
 
           // 1. OBSERVE — cloud state is authoritative
@@ -196,9 +189,7 @@ export const ArchiveRuleProvider = () =>
               analyzerName: output.analyzerName,
               ruleName: output.ruleName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

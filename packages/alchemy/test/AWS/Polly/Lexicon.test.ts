@@ -24,20 +24,12 @@ const PLS_V1 = plsDocument("infrastructure as code");
 const PLS_V2 = plsDocument("infrastructure as effects");
 
 const unredact = (value: string | Redacted.Redacted<string> | undefined) =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 const getLexicon = (name: string) =>
   polly
     .getLexicon({ Name: name })
-    .pipe(
-      Effect.catchTag("LexiconNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("LexiconNotFoundException", () => Effect.succeed(undefined)));
 
 const waitForContent = (name: string, content: string) =>
   Effect.gen(function* () {
@@ -83,13 +75,8 @@ test.provider(
       expect(deployed.lexemesCount).toBe(1);
 
       // Out-of-band verification via distilled.
-      const created = yield* waitForContent(
-        lexiconName,
-        "infrastructure as code",
-      );
-      expect(unredact(created?.Lexicon?.Content)).toContain(
-        "infrastructure as code",
-      );
+      const created = yield* waitForContent(lexiconName, "infrastructure as code");
+      expect(unredact(created?.Lexicon?.Content)).toContain("infrastructure as code");
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(Lexicon);
@@ -105,13 +92,8 @@ test.provider(
           });
         }),
       );
-      const updated = yield* waitForContent(
-        lexiconName,
-        "infrastructure as effects",
-      );
-      expect(unredact(updated?.Lexicon?.Content)).toContain(
-        "infrastructure as effects",
-      );
+      const updated = yield* waitForContent(lexiconName, "infrastructure as effects");
+      expect(unredact(updated?.Lexicon?.Content)).toContain("infrastructure as effects");
 
       // Destroy — the lexicon is gone.
       yield* stack.destroy();

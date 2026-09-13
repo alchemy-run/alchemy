@@ -30,9 +30,7 @@ export const ResourceStateSchema = Schema.Any.pipe(HttpApiSchema.asJson());
 export class BearerTokenValidator extends Context.Service<
   BearerTokenValidator,
   {
-    readonly validate: (
-      token: string,
-    ) => Effect.Effect<void, HttpApiError.Unauthorized>;
+    readonly validate: (token: string) => Effect.Effect<void, HttpApiError.Unauthorized>;
   }
 >()("alchemy/State/BearerTokenValidator") {}
 
@@ -46,19 +44,13 @@ export class StateAuth extends HttpApiMiddleware.Service<
   error: HttpApiError.UnauthorizedNoContent,
 }) {}
 
-export const StateAuthLive: Layer.Layer<
-  StateAuth,
-  never,
-  BearerTokenValidator
-> = Layer.effect(
+export const StateAuthLive: Layer.Layer<StateAuth, never, BearerTokenValidator> = Layer.effect(
   StateAuth,
   Effect.gen(function* () {
     const validator = yield* BearerTokenValidator;
     return {
       bearer: (httpEffect, { credential }) =>
-        validator
-          .validate(Redacted.value(credential))
-          .pipe(Effect.flatMap(() => httpEffect)),
+        validator.validate(Redacted.value(credential)).pipe(Effect.flatMap(() => httpEffect)),
     };
   }),
 );
@@ -90,14 +82,10 @@ export const ListStacks = HttpApiEndpoint.get("listStacks", "/state/stacks", {
   success: Schema.Array(Schema.String),
 });
 
-export const ListStages = HttpApiEndpoint.get(
-  "listStages",
-  "/state/stacks/:stack/stages",
-  {
-    params: StackParams,
-    success: Schema.Array(Schema.String),
-  },
-);
+export const ListStages = HttpApiEndpoint.get("listStages", "/state/stacks/:stack/stages", {
+  params: StackParams,
+  success: Schema.Array(Schema.String),
+});
 
 export const ListResources = HttpApiEndpoint.get(
   "listResources",
@@ -136,15 +124,11 @@ export const DeleteState = HttpApiEndpoint.delete(
   },
 );
 
-export const DeleteStack = HttpApiEndpoint.delete(
-  "deleteStack",
-  "/state/stacks/:stack",
-  {
-    params: StackParams,
-    query: OptionalStageQuery,
-    success: HttpApiSchema.NoContent,
-  },
-);
+export const DeleteStack = HttpApiEndpoint.delete("deleteStack", "/state/stacks/:stack", {
+  params: StackParams,
+  query: OptionalStageQuery,
+  success: HttpApiSchema.NoContent,
+});
 
 export const GetReplacedResources = HttpApiEndpoint.get(
   "getReplacedResources",
@@ -213,10 +197,6 @@ export class StateGroup extends HttpApiGroup.make("state")
   .add(SetStackOutput)
   .middleware(StateAuth) {}
 
-export class VersionGroup extends HttpApiGroup.make("version").add(
-  GetVersion,
-) {}
+export class VersionGroup extends HttpApiGroup.make("version").add(GetVersion) {}
 
-export class StateApi extends HttpApi.make("alchemy-state")
-  .add(StateGroup)
-  .add(VersionGroup) {}
+export class StateApi extends HttpApi.make("alchemy-state").add(StateGroup).add(VersionGroup) {}

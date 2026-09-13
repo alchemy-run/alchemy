@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link ListTaskInstances} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type ListTaskInstancesInput = Omit<
-  mwaa.ListTaskInstancesRequest,
-  "WorkflowArn"
->;
+export type ListTaskInstancesInput = Omit<mwaa.ListTaskInstancesRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:ListTaskInstances`.
@@ -41,10 +38,7 @@ export interface ListTaskInstances extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListTaskInstancesInput,
-    ) => Effect.Effect<
-      mwaa.ListTaskInstancesResponse,
-      mwaa.ListTaskInstancesError
-    >
+    ) => Effect.Effect<mwaa.ListTaskInstancesResponse, mwaa.ListTaskInstancesError>
   >
 > {}
 export const ListTaskInstances = Binding.Service<ListTaskInstances>(

@@ -18,18 +18,14 @@ export const MAX_PORT = 65535;
  * the loaded module's `version` export: prefer `port: 0` (race-free at
  * bind) when supported, fall back to an ephemeral-port probe otherwise.
  */
-export const viteSupportsPortZero = (
-  version: string | null | undefined,
-): boolean => {
+export const viteSupportsPortZero = (version: string | null | undefined): boolean => {
   if (typeof version !== "string") return false;
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
   if (!match) return false;
   const major = Number(match[1]);
   const minor = Number(match[2]);
   const patch = Number(match[3]);
-  return (
-    major > 8 || (major === 8 && (minor > 2 || (minor === 2 && patch >= 1)))
-  );
+  return major > 8 || (major === 8 && (minor > 2 || (minor === 2 && patch >= 1)));
 };
 
 /**
@@ -43,10 +39,7 @@ export const viteSupportsPortZero = (
 export const MAX_PORT_SEARCH_ATTEMPTS = 128;
 
 /** The bind failed because the address is genuinely taken (scanning to the next port can help). */
-const ADDRESS_IN_USE_CODES: ReadonlySet<string> = new Set([
-  "EADDRINUSE",
-  "EACCES",
-]);
+const ADDRESS_IN_USE_CODES: ReadonlySet<string> = new Set(["EADDRINUSE", "EACCES"]);
 
 /**
  * The bind failed because this host doesn't exist on this machine (e.g. `::`
@@ -62,10 +55,7 @@ const UNSUPPORTED_HOST_CODES: ReadonlySet<string> = new Set([
 ]);
 
 const errorCode = (error: unknown): string | undefined =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  typeof error.code === "string"
+  typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
     ? error.code
     : undefined;
 
@@ -87,8 +77,7 @@ export const isUnsupportedHostError = (
     !(
       hasIPv6Interface ??
       Object.values(NodeOs.networkInterfaces()).some(
-        (addresses) =>
-          addresses?.some((address) => address.family === "IPv6") ?? false,
+        (addresses) => addresses?.some((address) => address.family === "IPv6") ?? false,
       )
     )
   );
@@ -225,8 +214,7 @@ export const make = (options: PortsOptions) =>
         capacity: options.cache ? Infinity : 0,
         // Cache for 30 seconds if the port is *not* available to prevent redundant lookups.
         // If a port *is* available, we don't cache it since it will likely be claimed shortly after lookup.
-        timeToLive: (exit) =>
-          exit._tag === "Success" && exit.value ? 0 : "30 seconds",
+        timeToLive: (exit) => (exit._tag === "Success" && exit.value ? 0 : "30 seconds"),
       },
     );
     const reserveLocal = (port: number) => Cache.set(cache, port, false);
@@ -251,9 +239,7 @@ export const make = (options: PortsOptions) =>
           yield* reserve(port);
           return port;
         }
-        yield* Effect.logDebug(
-          `Port ${port} is not available, trying ${port + 1}...`,
-        );
+        yield* Effect.logDebug(`Port ${port} is not available, trying ${port + 1}...`);
         port++;
       }
       // This should essentially never happen, so it's a `die` rather than a `fail`.

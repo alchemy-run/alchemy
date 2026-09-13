@@ -13,10 +13,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AnalyticsEngineBindingStack",
@@ -45,9 +42,7 @@ test(
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.get(`${url}/write`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200 ? Effect.succeed(res) : Effect.fail(res),
-      ),
+      Effect.flatMap((res) => (res.status === 200 ? Effect.succeed(res) : Effect.fail(res))),
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
         times: 10,

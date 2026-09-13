@@ -48,9 +48,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
           const schema = yield* (yield* storage.sql.exec<SchemaObject>(
             "SELECT name, type, sql FROM sqlite_master WHERE name LIKE 'alchemy_%' OR name LIKE 'idx_alchemy_%' ORDER BY name",
           )).toArray();
-          const tables = schema
-            .filter((row) => row.type === "table")
-            .map((row) => row.name);
+          const tables = schema.filter((row) => row.type === "table").map((row) => row.name);
           const schemaRows = tables.includes("alchemy_alarm_schema")
             ? yield* (yield* storage.sql.exec<SchemaVersion>(
                 "SELECT id, version FROM alchemy_alarm_schema ORDER BY id",
@@ -87,8 +85,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
       return {
         // V1 Workers can still reach the upgraded object during edge rollout.
         snapshot: () => snapshot(true),
-        reconstruct: () =>
-          state.abort("alarm upgrade reconstruction", { retryAlarm: false }),
+        reconstruct: () => state.abort("alarm upgrade reconstruction", { retryAlarm: false }),
         probe: Effect.fn(
           function* (kind: "future" | "rollback") {
             if (kind === "future") {
@@ -97,14 +94,10 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
                 after: "5 minutes",
                 payload: { value: "future-preserved" },
               });
-              yield* storage.sql.exec(
-                "UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1",
-              );
+              yield* storage.sql.exec("UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1");
             } else {
               // Fail after the migration has created its first index and callback table.
-              yield* storage.sql.exec(
-                "DROP INDEX idx_alchemy_scheduled_events_run_at",
-              );
+              yield* storage.sql.exec("DROP INDEX idx_alchemy_scheduled_events_run_at");
               yield* storage.sql.exec(
                 "CREATE TABLE idx_alchemy_alarm_callbacks_run_at (value TEXT)",
               );
@@ -133,9 +126,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
             let retryBefore: Snapshot | null = null;
             let recovered: Snapshot | null = null;
             if (kind === "rollback") {
-              yield* storage.sql.exec(
-                "DROP TABLE idx_alchemy_alarm_callbacks_run_at",
-              );
+              yield* storage.sql.exec("DROP TABLE idx_alchemy_alarm_callbacks_run_at");
               yield* storage.sql.exec(`
               CREATE TABLE alchemy_alarm_schema (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -239,9 +230,7 @@ export default class AlarmUpgradeWorker extends Cloudflare.Worker<AlarmUpgradeWo
         }
         const url = new URL(request.url, "http://localhost");
         const action = url.pathname.slice(1);
-        const object = objects.getByName(
-          url.searchParams.get("name") ?? "persisted-object",
-        );
+        const object = objects.getByName(url.searchParams.get("name") ?? "persisted-object");
         if (request.method !== "POST" && action !== "snapshot") {
           return HttpServerResponse.text("Method Not Allowed", { status: 405 });
         }

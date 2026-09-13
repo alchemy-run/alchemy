@@ -30,10 +30,7 @@ export interface CreateSbomExport extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.CreateSbomExportRequest,
-    ) => Effect.Effect<
-      inspector2.CreateSbomExportResponse,
-      inspector2.CreateSbomExportError
-    >
+    ) => Effect.Effect<inspector2.CreateSbomExportResponse, inspector2.CreateSbomExportError>
   >
 > {}
 export const CreateSbomExport = Binding.Service<CreateSbomExport>(

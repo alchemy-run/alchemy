@@ -34,6 +34,4 @@ export interface GetDatabase extends Binding.Service<
   >
 > {}
 
-export const GetDatabase = Binding.Service<GetDatabase>(
-  "AWS.Athena.GetDatabase",
-);
+export const GetDatabase = Binding.Service<GetDatabase>("AWS.Athena.GetDatabase");

@@ -42,16 +42,13 @@ export default class EventFunction extends Function<EventFunction>()(
         Effect.asVoid,
       ),
     );
-    yield* BucketEventSource(
-      uploads,
-      { name: "Uploads", prefix: "incoming/" },
-      (event) =>
-        prepare.pipe(
-          Effect.andThen(
-            sql`INSERT INTO alchemy_function_events (id, kind, object_key) VALUES (${event.invocationId}, 'upload', ${event.objectKey}) ON CONFLICT DO NOTHING`,
-          ),
-          Effect.asVoid,
+    yield* BucketEventSource(uploads, { name: "Uploads", prefix: "incoming/" }, (event) =>
+      prepare.pipe(
+        Effect.andThen(
+          sql`INSERT INTO alchemy_function_events (id, kind, object_key) VALUES (${event.invocationId}, 'upload', ${event.objectKey}) ON CONFLICT DO NOTHING`,
         ),
+        Effect.asVoid,
+      ),
     );
     return {
       fetch: Effect.gen(function* () {
@@ -71,12 +68,6 @@ export default class EventFunction extends Function<EventFunction>()(
       }),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        WriteBucketHttp,
-        CronEventSourceHttp,
-        BucketEventSourceHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(WriteBucketHttp, CronEventSourceHttp, BucketEventSourceHttp)),
   ),
 ) {}

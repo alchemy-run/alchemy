@@ -35,10 +35,7 @@ export interface ListInvalidations extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListInvalidationsRequest,
-    ) => Effect.Effect<
-      cloudfront.ListInvalidationsResult,
-      cloudfront.ListInvalidationsError
-    >
+    ) => Effect.Effect<cloudfront.ListInvalidationsResult, cloudfront.ListInvalidationsError>
   >
 > {}
 

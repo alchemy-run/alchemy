@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -150,26 +145,18 @@ export interface DataSource extends Resource<
  */
 export const DataSource = Resource<DataSource>("AWS.Kendra.DataSource");
 
-const createDataSourceName = (
-  id: string,
-  props: { name?: string | undefined },
-) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 100 });
+const createDataSourceName = (id: string, props: { name?: string | undefined }) =>
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 100 });
 
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* kendra
     .listTagsForResource({ ResourceARN: arn })
     .pipe(
-      Effect.catchTag(
-        ["ResourceNotFoundException", "ResourceUnavailableException"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["ResourceNotFoundException", "ResourceUnavailableException"], () =>
+        Effect.succeed(undefined),
       ),
     );
-  return Object.fromEntries(
-    (response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-  );
+  return Object.fromEntries((response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
 });
 
 const currentArnOf = Effect.gen(function* () {
@@ -190,11 +177,7 @@ const readDataSourceById = Effect.fn(function* (
 ) {
   const described = yield* kendra
     .describeDataSource({ IndexId: indexId, Id: dataSourceId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.Status === "DELETING") return undefined;
   const arn = arnOf(described.IndexId ?? indexId, described.Id ?? dataSourceId);
   const state: DataSourceState = {
@@ -217,21 +200,15 @@ const findDataSourceByName = Effect.fn(function* (
   name: string,
   arnOf: (indexId: string, dataSourceId: string) => string,
 ) {
-  const summaries = yield* kendra.listDataSources
-    .pages({ IndexId: indexId })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.SummaryItems ?? []),
-      ),
-      // The parent index may itself be gone.
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as kendra.DataSourceSummary[]),
-      ),
-    );
-  const match = summaries.find(
-    (summary) => summary.Name === name && summary.Status !== "DELETING",
+  const summaries = yield* kendra.listDataSources.pages({ IndexId: indexId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.SummaryItems ?? [])),
+    // The parent index may itself be gone.
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed([] as kendra.DataSourceSummary[]),
+    ),
   );
+  const match = summaries.find((summary) => summary.Name === name && summary.Status !== "DELETING");
   if (!match?.Id) return undefined;
   return yield* readDataSourceById(indexId, match.Id, arnOf);
 });
@@ -249,9 +226,7 @@ class DataSourceNotReady extends Data.TaggedError("DataSourceNotReady")<{
  * A data source whose asynchronous provisioning converged to the terminal
  * `FAILED` status.
  */
-export class DataSourceProvisioningFailed extends Data.TaggedError(
-  "DataSourceProvisioningFailed",
-)<{
+export class DataSourceProvisioningFailed extends Data.TaggedError("DataSourceProvisioningFailed")<{
   readonly id: string;
   readonly message: string | undefined;
 }> {}
@@ -281,25 +256,15 @@ const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
   });
 
-const waitForDataSourceStatus = (
-  indexId: string,
-  id: string,
-  target: "ACTIVE" | "DELETED",
-) =>
+const waitForDataSourceStatus = (indexId: string, id: string, target: "ACTIVE" | "DELETED") =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const described = yield* kendra
         .describeDataSource({ IndexId: indexId, Id: id })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new DataSourceNotReady({ id, status: described.Status }),
-        );
+        return yield* Effect.fail(new DataSourceNotReady({ id, status: described.Status }));
       }
       if (described?.Status === "ACTIVE") return;
       if (described?.Status === "FAILED") {
@@ -310,9 +275,7 @@ const waitForDataSourceStatus = (
           }),
         );
       }
-      return yield* Effect.fail(
-        new DataSourceNotReady({ id, status: described?.Status }),
-      );
+      return yield* Effect.fail(new DataSourceNotReady({ id, status: described?.Status }));
     }),
   );
 
@@ -352,9 +315,7 @@ export const DataSourceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("Kendra DataSource requires props"),
-            );
+            return yield* Effect.fail(new Error("Kendra DataSource requires props"));
           }
           const arnOf = yield* currentArnOf;
           const indexId = news.indexId;
@@ -381,23 +342,18 @@ export const DataSourceProvider = () =>
                 Schedule: news.schedule,
                 RoleArn: news.roleArn,
                 LanguageCode: news.languageCode,
-                CustomDocumentEnrichmentConfiguration:
-                  news.customDocumentEnrichmentConfiguration,
+                CustomDocumentEnrichmentConfiguration: news.customDocumentEnrichmentConfiguration,
                 Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
               }),
             );
-            yield* session.note(
-              `Creating data source ${name} (${created.Id})...`,
-            );
+            yield* session.note(`Creating data source ${name} (${created.Id})...`);
             yield* waitForDataSourceStatus(indexId, created.Id, "ACTIVE");
             state = yield* readDataSourceById(indexId, created.Id, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created data source ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created data source ${name}`));
             }
           }
 
@@ -407,10 +363,8 @@ export const DataSourceProvider = () =>
             name !== described.Name ||
             (news.description ?? "") !== (described.Description ?? "") ||
             (news.schedule ?? "") !== (described.Schedule ?? "") ||
-            (news.roleArn !== undefined &&
-              news.roleArn !== described.RoleArn) ||
-            (news.languageCode !== undefined &&
-              news.languageCode !== described.LanguageCode) ||
+            (news.roleArn !== undefined && news.roleArn !== described.RoleArn) ||
+            (news.languageCode !== undefined && news.languageCode !== described.LanguageCode) ||
             news.configuration !== undefined ||
             news.vpcConfiguration !== undefined ||
             news.customDocumentEnrichmentConfiguration !== undefined;
@@ -425,8 +379,7 @@ export const DataSourceProvider = () =>
               Schedule: news.schedule,
               RoleArn: news.roleArn,
               LanguageCode: news.languageCode,
-              CustomDocumentEnrichmentConfiguration:
-                news.customDocumentEnrichmentConfiguration,
+              CustomDocumentEnrichmentConfiguration: news.customDocumentEnrichmentConfiguration,
             });
             yield* waitForDataSourceStatus(indexId, state.attrs.id, "ACTIVE");
             yield* session.note(`Updated data source ${name}`);
@@ -449,24 +402,16 @@ export const DataSourceProvider = () =>
 
           yield* session.note(state.attrs.arn);
 
-          const final = yield* readDataSourceById(
-            indexId,
-            state.attrs.id,
-            arnOf,
-          );
+          const final = yield* readDataSourceById(indexId, state.attrs.id, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled data source ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled data source ${name}`));
           }
           return final.attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* kendra
             .deleteDataSource({ IndexId: output.indexId, Id: output.id })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitForDataSourceStatus(output.indexId, output.id, "DELETED");
         }),
       };

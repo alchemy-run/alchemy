@@ -119,27 +119,19 @@ export type Message<Body = unknown> = cf.Message<Body>;
  */
 export function consumeQueueMessages<Body = unknown>(
   queue: Queue,
-  process: (
-    stream: Stream.Stream<Message<Body>>,
-  ) => Effect.Effect<void, unknown, any>,
+  process: (stream: Stream.Stream<Message<Body>>) => Effect.Effect<void, unknown, any>,
 ): Effect.Effect<void, never, EventSource>;
 export function consumeQueueMessages<Body = unknown>(
   queue: Queue,
   props: MessagesProps,
-  process: (
-    stream: Stream.Stream<Message<Body>>,
-  ) => Effect.Effect<void, unknown, any>,
+  process: (stream: Stream.Stream<Message<Body>>) => Effect.Effect<void, unknown, any>,
 ): Effect.Effect<void, never, EventSource>;
 export function consumeQueueMessages<Body = unknown>(
   queue: Queue,
   propsOrProcess:
     | MessagesProps
-    | ((
-        stream: Stream.Stream<Message<Body>>,
-      ) => Effect.Effect<void, unknown, any>),
-  maybeProcess?: (
-    stream: Stream.Stream<Message<Body>>,
-  ) => Effect.Effect<void, unknown, any>,
+    | ((stream: Stream.Stream<Message<Body>>) => Effect.Effect<void, unknown, any>),
+  maybeProcess?: (stream: Stream.Stream<Message<Body>>) => Effect.Effect<void, unknown, any>,
 ): Effect.Effect<void, never, EventSource> {
   const [props, process] =
     typeof propsOrProcess === "function"
@@ -157,19 +149,16 @@ export function consumeQueueMessages<Body = unknown>(
 export type EventSourceService = <Body = unknown>(
   queue: Queue,
   props: MessagesProps,
-  process: (
-    stream: Stream.Stream<Message<Body>>,
-  ) => Effect.Effect<void, unknown, any>,
+  process: (stream: Stream.Stream<Message<Body>>) => Effect.Effect<void, unknown, any>,
 ) => Effect.Effect<void, never, never>;
 
 /**
  * Service tag for the Cloudflare Queue event source. Provided by
  * {@link EventSourceLive} on the Worker's runtime layer.
  */
-export class EventSource extends Context.Service<
-  EventSource,
-  EventSourceService
->()("Cloudflare.Queues.EventSource") {}
+export class EventSource extends Context.Service<EventSource, EventSourceService>()(
+  "Cloudflare.Queues.EventSource",
+) {}
 
 /**
  * Runtime layer for {@link consumeQueueMessages}. Wires each
@@ -188,9 +177,7 @@ export const EventSourceLive = Layer.effect(
     return Effect.fn(function* <Body, Req>(
       queue: Queue,
       props: MessagesProps,
-      process: (
-        stream: Stream.Stream<Message<Body>>,
-      ) => Effect.Effect<void, unknown, any>,
+      process: (stream: Stream.Stream<Message<Body>>) => Effect.Effect<void, unknown, any>,
     ) {
       // Deploy-time: yield the Consumer resource as a sibling of the
       // Worker so Cloudflare dispatches messages from the queue to it.

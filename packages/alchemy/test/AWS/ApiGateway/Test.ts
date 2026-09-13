@@ -3,8 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import { makeApiGatewayTestLease } from "./TestLease.ts";
 
 const apiGatewayOptions = (options: TestOptions | undefined): TestOptions => {
-  const normalized =
-    typeof options === "number" ? { timeout: options } : options;
+  const normalized = typeof options === "number" ? { timeout: options } : options;
   return {
     ...normalized,
     // Once a file owns the service lease an individual lifecycle is fast —

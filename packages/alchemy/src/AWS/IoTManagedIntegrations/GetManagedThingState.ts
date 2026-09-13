@@ -29,10 +29,7 @@ export interface GetManagedThingState extends Binding.Service<
   (
     thing: ManagedThing,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mi.GetManagedThingStateResponse,
-      mi.GetManagedThingStateError
-    >
+    () => Effect.Effect<mi.GetManagedThingStateResponse, mi.GetManagedThingStateError>
   >
 > {}
 export const GetManagedThingState = Binding.Service<GetManagedThingState>(

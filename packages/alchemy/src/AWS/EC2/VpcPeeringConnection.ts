@@ -13,8 +13,7 @@ import type { VpcId } from "./Vpc.ts";
 export type VpcPeeringConnectionId<ID extends string = string> = `pcx-${ID}`;
 export const VpcPeeringConnectionId = <ID extends string>(
   id: ID,
-): ID & VpcPeeringConnectionId<ID> =>
-  `pcx-${id}` as ID & VpcPeeringConnectionId<ID>;
+): ID & VpcPeeringConnectionId<ID> => `pcx-${id}` as ID & VpcPeeringConnectionId<ID>;
 
 export type VpcPeeringConnectionStatus =
   | "initiating-request"
@@ -29,13 +28,7 @@ export type VpcPeeringConnectionStatus =
 
 // Terminal states from which a peering connection cannot recover — observing
 // one of these means the cached connection is dead and must be recreated.
-const DEAD_STATES = new Set<string>([
-  "deleted",
-  "deleting",
-  "rejected",
-  "failed",
-  "expired",
-]);
+const DEAD_STATES = new Set<string>(["deleted", "deleting", "rejected", "failed", "expired"]);
 
 export interface VpcPeeringConnectionProps {
   /**
@@ -168,9 +161,7 @@ export interface VpcPeeringConnection extends Resource<
  *
  * @resource
  */
-export const VpcPeeringConnection = Resource<VpcPeeringConnection>(
-  "AWS.EC2.VpcPeeringConnection",
-);
+export const VpcPeeringConnection = Resource<VpcPeeringConnection>("AWS.EC2.VpcPeeringConnection");
 
 class PeeringNotSettled {
   readonly _tag = "PeeringNotSettled";
@@ -180,10 +171,7 @@ export const VpcPeeringConnectionProvider = () =>
   Provider.effect(
     VpcPeeringConnection,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -192,17 +180,15 @@ export const VpcPeeringConnectionProvider = () =>
       });
 
       const describePeering = (pcxId: string) =>
-        ec2
-          .describeVpcPeeringConnections({ VpcPeeringConnectionIds: [pcxId] })
-          .pipe(
-            Effect.map((r) => r.VpcPeeringConnections?.[0]),
-            Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        ec2.describeVpcPeeringConnections({ VpcPeeringConnectionIds: [pcxId] }).pipe(
+          Effect.map((r) => r.VpcPeeringConnections?.[0]),
+          Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
       // Poll until the connection reaches a settled state (out of the transient
       // "initiating-request"/"provisioning" states) or becomes `target`.
@@ -222,10 +208,8 @@ export const VpcPeeringConnectionProvider = () =>
         );
 
       const toAttrs = (pcx: ec2.VpcPeeringConnection) => ({
-        vpcPeeringConnectionId:
-          pcx.VpcPeeringConnectionId as VpcPeeringConnectionId,
-        status: (pcx.Status?.Code ??
-          "initiating-request") as VpcPeeringConnectionStatus,
+        vpcPeeringConnectionId: pcx.VpcPeeringConnectionId as VpcPeeringConnectionId,
+        status: (pcx.Status?.Code ?? "initiating-request") as VpcPeeringConnectionStatus,
         requesterVpcId: pcx.RequesterVpcInfo?.VpcId as VpcId,
         accepterVpcId: pcx.AccepterVpcInfo?.VpcId as VpcId,
         accepterOwnerId: pcx.AccepterVpcInfo?.OwnerId ?? "",
@@ -236,26 +220,24 @@ export const VpcPeeringConnectionProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const items = yield* ec2.describeVpcPeeringConnections
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.VpcPeeringConnections ?? [])
-                      .filter(
-                        (
-                          pcx,
-                        ): pcx is ec2.VpcPeeringConnection & {
-                          VpcPeeringConnectionId: string;
-                        } =>
-                          pcx.VpcPeeringConnectionId != null &&
-                          !DEAD_STATES.has(pcx.Status?.Code ?? ""),
-                      )
-                      .map(toAttrs),
-                  ),
+            const items = yield* ec2.describeVpcPeeringConnections.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.VpcPeeringConnections ?? [])
+                    .filter(
+                      (
+                        pcx,
+                      ): pcx is ec2.VpcPeeringConnection & {
+                        VpcPeeringConnectionId: string;
+                      } =>
+                        pcx.VpcPeeringConnectionId != null &&
+                        !DEAD_STATES.has(pcx.Status?.Code ?? ""),
+                    )
+                    .map(toAttrs),
                 ),
-              );
+              ),
+            );
             return items satisfies VpcPeeringConnection["Attributes"][];
           }),
 
@@ -283,10 +265,8 @@ export const VpcPeeringConnectionProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const desiredTags = yield* createTags(id, news.tags);
 
-          const sameAccount =
-            news.peerOwnerId === undefined || news.peerOwnerId === accountId;
-          const sameRegion =
-            news.peerRegion === undefined || news.peerRegion === region;
+          const sameAccount = news.peerOwnerId === undefined || news.peerOwnerId === accountId;
+          const sameRegion = news.peerRegion === undefined || news.peerRegion === region;
           const autoAccept = news.autoAccept ?? (sameAccount && sameRegion);
 
           // Observe — the cached connection may have been deleted or moved to a
@@ -315,9 +295,7 @@ export const VpcPeeringConnectionProvider = () =>
               ],
             });
             pcx = result.VpcPeeringConnection!;
-            yield* session.note(
-              `VPC peering connection created: ${pcx.VpcPeeringConnectionId}`,
-            );
+            yield* session.note(`VPC peering connection created: ${pcx.VpcPeeringConnectionId}`);
           }
 
           const pcxId = pcx.VpcPeeringConnectionId!;
@@ -328,19 +306,15 @@ export const VpcPeeringConnectionProvider = () =>
             const settled = yield* waitFor(pcxId, "pending-acceptance");
             if (settled?.Status?.Code === "pending-acceptance") {
               yield* session.note("Accepting VPC peering connection...");
-              yield* ec2
-                .acceptVpcPeeringConnection({ VpcPeeringConnectionId: pcxId })
-                .pipe(
-                  // A concurrent reconcile may have accepted it already.
-                  Effect.catchTag(
-                    "InvalidVpcPeeringConnectionID.NotFound",
-                    () => Effect.succeed(undefined),
-                  ),
-                  Effect.catchTag(
-                    "InvalidVpcPeeringConnectionId.NotFound",
-                    () => Effect.succeed(undefined),
-                  ),
-                );
+              yield* ec2.acceptVpcPeeringConnection({ VpcPeeringConnectionId: pcxId }).pipe(
+                // A concurrent reconcile may have accepted it already.
+                Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+                Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
               yield* waitFor(pcxId, "active");
             }
           }
@@ -360,9 +334,10 @@ export const VpcPeeringConnectionProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);
@@ -391,18 +366,10 @@ export const VpcPeeringConnectionProvider = () =>
           }
 
           yield* session.note(`Deleting VPC peering connection: ${pcxId}`);
-          yield* ec2
-            .deleteVpcPeeringConnection({ VpcPeeringConnectionId: pcxId })
-            .pipe(
-              Effect.catchTag(
-                "InvalidVpcPeeringConnectionID.NotFound",
-                () => Effect.void,
-              ),
-              Effect.catchTag(
-                "InvalidVpcPeeringConnectionId.NotFound",
-                () => Effect.void,
-              ),
-            );
+          yield* ec2.deleteVpcPeeringConnection({ VpcPeeringConnectionId: pcxId }).pipe(
+            Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () => Effect.void),
+            Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () => Effect.void),
+          );
         }),
       };
     }),

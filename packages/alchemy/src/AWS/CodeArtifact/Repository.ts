@@ -121,9 +121,7 @@ const toTagRecord = (
 const upstreamNames = (
   upstreams: ReadonlyArray<{ repositoryName?: string }> | undefined,
 ): string[] =>
-  (upstreams ?? [])
-    .map((u) => u.repositoryName)
-    .filter((n): n is string => typeof n === "string");
+  (upstreams ?? []).map((u) => u.repositoryName).filter((n): n is string => typeof n === "string");
 
 const externalConnectionNames = (
   connections: ReadonlyArray<{ externalConnectionName?: string }> | undefined,
@@ -151,11 +149,7 @@ export const RepositoryProvider = () =>
       ) {
         const response = yield* codeartifact
           .describeRepository({ domain, domainOwner, repository: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.repository;
       });
 
@@ -171,17 +165,11 @@ export const RepositoryProvider = () =>
         administratorAccount: repository.administratorAccount ?? "",
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codeartifact
           .listTagsForResource({ resourceArn: arn })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        const { removed, upsert } = diffTags(
-          toTagRecord(observed?.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(toTagRecord(observed?.tags), desiredTags);
         if (upsert.length > 0) {
           yield* codeartifact.tagResource({
             resourceArn: arn,
@@ -201,31 +189,23 @@ export const RepositoryProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // The containing domain is immutable — replace on change.
           if (
             (news?.domain ?? undefined) !== (olds?.domain ?? undefined) ||
-            (news?.domainOwner ?? undefined) !==
-              (olds?.domainOwner ?? undefined)
+            (news?.domainOwner ?? undefined) !== (olds?.domainOwner ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.repositoryName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.repositoryName ?? (yield* toName(id, olds ?? {}));
           const domain = output?.domainName ?? olds?.domain;
           if (domain === undefined) return undefined;
-          const repository = yield* getRepository(
-            domain,
-            olds?.domainOwner,
-            name,
-          );
+          const repository = yield* getRepository(domain, olds?.domainOwner, name);
           if (repository?.arn === undefined) return undefined;
           const attrs = toAttrs(repository, name, domain);
           const tags = yield* codeartifact
@@ -276,12 +256,8 @@ export const RepositoryProvider = () =>
           } else {
             // 3a. Sync description + upstreams via updateRepository if they drift.
             const descChanged =
-              (news.description ?? undefined) !==
-              (observed.description ?? undefined);
-            const upstreamsChanged = !sameSet(
-              desiredUpstreams,
-              upstreamNames(observed.upstreams),
-            );
+              (news.description ?? undefined) !== (observed.description ?? undefined);
+            const upstreamsChanged = !sameSet(desiredUpstreams, upstreamNames(observed.upstreams));
             if (descChanged || upstreamsChanged) {
               observed = yield* codeartifact
                 .updateRepository({
@@ -299,9 +275,7 @@ export const RepositoryProvider = () =>
 
           // 3b. Sync the external connection — AWS allows at most one.
           const desiredConn = news.externalConnection;
-          const currentConns = externalConnectionNames(
-            observed!.externalConnections,
-          );
+          const currentConns = externalConnectionNames(observed!.externalConnections);
           for (const conn of currentConns) {
             if (conn !== desiredConn) {
               yield* codeartifact.disassociateExternalConnection({
@@ -312,10 +286,7 @@ export const RepositoryProvider = () =>
               });
             }
           }
-          if (
-            desiredConn !== undefined &&
-            !currentConns.includes(desiredConn)
-          ) {
+          if (desiredConn !== undefined && !currentConns.includes(desiredConn)) {
             observed = yield* codeartifact
               .associateExternalConnection({
                 domain,

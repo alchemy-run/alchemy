@@ -58,9 +58,7 @@ const canonicalTargets = <
 const canonical = (configuration: S3.NotificationConfiguration) => ({
   QueueConfigurations: canonicalTargets(configuration.QueueConfigurations),
   TopicConfigurations: canonicalTargets(configuration.TopicConfigurations),
-  LambdaFunctionConfigurations: canonicalTargets(
-    configuration.LambdaFunctionConfigurations,
-  ),
+  LambdaFunctionConfigurations: canonicalTargets(configuration.LambdaFunctionConfigurations),
   EventBridgeConfiguration: configuration.EventBridgeConfiguration,
 });
 
@@ -71,17 +69,12 @@ const readEventBridgeOwner = (bucketName: string) =>
   S3.getBucketTagging({ Bucket: bucketName }).pipe(
     Effect.map(
       (response) =>
-        response.TagSet.find(
-          (tag) => tag.Key === "alchemy:notifications:eventbridge",
-        )?.Value,
+        response.TagSet.find((tag) => tag.Key === "alchemy:notifications:eventbridge")?.Value,
     ),
     Effect.catchTag("NoSuchTagSet", () => Effect.succeed(undefined)),
   );
 
-const notificationQueue = Effect.fn(function* (
-  id: string,
-  bucket: AWS.S3.Bucket,
-) {
+const notificationQueue = Effect.fn(function* (id: string, bucket: AWS.S3.Bucket) {
   const queue = yield* AWS.SQS.Queue(id);
   // Keep both the self-reference and bucket dependency in the binding graph.
   yield* queue.bind("AllowBucketNotifications", {
@@ -139,18 +132,9 @@ test.provider(
               notificationConfiguration: {
                 QueueConfigurations: [
                   {
-                    QueueArn:
-                      destination === "first"
-                        ? first.queueArn
-                        : second.queueArn,
-                    Events: [
-                      updated
-                        ? "s3:ObjectRemoved:Delete"
-                        : "s3:ObjectCreated:Put",
-                    ],
-                    Filter: updated
-                      ? filter("updated/")
-                      : filter("initial/", ".txt"),
+                    QueueArn: destination === "first" ? first.queueArn : second.queueArn,
+                    Events: [updated ? "s3:ObjectRemoved:Delete" : "s3:ObjectCreated:Put"],
+                    Filter: updated ? filter("updated/") : filter("initial/", ".txt"),
                   },
                 ],
               },
@@ -189,9 +173,7 @@ test.provider(
         QueueUrl: first.queueUrl,
         AttributeNames: ["Policy"],
       }).pipe(
-        Effect.map((response) =>
-          normalizePolicyDocument(response.Attributes?.Policy ?? ""),
-        ),
+        Effect.map((response) => normalizePolicyDocument(response.Attributes?.Policy ?? "")),
         Effect.repeat({
           until: (policy) => policy === expectedPolicy,
           schedule: Schedule.spaced("2 seconds"),
@@ -235,17 +217,11 @@ test.provider(
         NotificationConfiguration: {},
       });
       yield* stack.deploy(definition(true, "second"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(switched),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(switched));
       yield* stack.deploy(definition(true, "second"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(switched),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(switched));
       yield* stack.deploy(definition(true, "second", false));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical({}),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical({}));
 
       yield* stack.destroy();
       yield* Effect.all(
@@ -298,8 +274,7 @@ test.provider(
             },
           });
           const fn = yield* AWS.Lambda.Function("Target", {
-            main: new URL("./fixtures/notification-target.ts", import.meta.url)
-              .pathname,
+            main: new URL("./fixtures/notification-target.ts", import.meta.url).pathname,
             isExternal: true,
             handler: "handler",
             functionUrl: false,
@@ -310,27 +285,17 @@ test.provider(
             principal: "s3.amazonaws.com",
             sourceArn: bucket.bucketArn,
           });
-          const events: S3.Event[] = [
-            "s3:ObjectCreated:Put",
-            "s3:ObjectCreated:Post",
-          ];
+          const events: S3.Event[] = ["s3:ObjectCreated:Put", "s3:ObjectCreated:Post"];
           if (reversed) events.reverse();
           const bindings = [
             ...(mode === "all"
               ? [
                   bucket.bind("QueueNotifications", {
                     notificationConfiguration: {
-                      QueueConfigurations: (reversed
-                        ? ["b", "a"]
-                        : ["a", "b"]
-                      ).map((key) => ({
+                      QueueConfigurations: (reversed ? ["b", "a"] : ["a", "b"]).map((key) => ({
                         QueueArn: queue.queueArn,
                         Events: events,
-                        Filter: filter(
-                          `owned/queue-${key}/`,
-                          ".json",
-                          reversed,
-                        ),
+                        Filter: filter(`owned/queue-${key}/`, ".json", reversed),
                       })),
                     },
                   }),
@@ -376,9 +341,7 @@ test.provider(
         ...owned.TopicConfigurations!,
         ...owned.LambdaFunctionConfigurations!,
       ].map((target) => target.Id);
-      expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(
-        true,
-      );
+      expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
       expect(new Set(ids).size).toBe(4);
       const actual = canonical(owned);
       const events = ["s3:ObjectCreated:Post", "s3:ObjectCreated:Put"];
@@ -437,14 +400,8 @@ test.provider(
         EventBridgeConfiguration: {},
       };
       const combined: S3.NotificationConfiguration = {
-        QueueConfigurations: [
-          ...owned.QueueConfigurations!,
-          ...foreign.QueueConfigurations!,
-        ],
-        TopicConfigurations: [
-          ...owned.TopicConfigurations!,
-          ...foreign.TopicConfigurations!,
-        ],
+        QueueConfigurations: [...owned.QueueConfigurations!, ...foreign.QueueConfigurations!],
+        TopicConfigurations: [...owned.TopicConfigurations!, ...foreign.TopicConfigurations!],
         LambdaFunctionConfigurations: [
           ...owned.LambdaFunctionConfigurations!,
           ...foreign.LambdaFunctionConfigurations!,
@@ -456,19 +413,13 @@ test.provider(
         Bucket: bucket.bucketName,
         NotificationConfiguration: combined,
       });
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(combined),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(combined));
 
       yield* stack.deploy(definition("all", true));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(combined),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(combined));
       // Exercise the provider's no-change notification sync, not only an engine noop.
       yield* stack.deploy(definition("all", true, "noop"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(combined),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(combined));
       yield* stack.deploy(definition("without-queue", true, "noop"));
       expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
         canonical({
@@ -477,9 +428,7 @@ test.provider(
         }),
       );
       yield* stack.deploy(definition("none", true, "noop"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(foreign),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(foreign));
 
       yield* stack.destroy();
       yield* Effect.all(
@@ -494,9 +443,7 @@ test.provider(
           ),
           Lambda.getFunction({ FunctionName: fn.functionName }).pipe(
             Effect.as(false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             Effect.repeat(waitPolicy),
             Effect.tap((gone) => Effect.sync(() => expect(gone).toBe(true))),
           ),
@@ -524,25 +471,17 @@ test.provider(
         });
       const bucket = yield* stack.deploy(definition(["First", "Second"]));
       const enabled = canonical({ EventBridgeConfiguration: {} });
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        enabled,
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(enabled);
       const owner = yield* readEventBridgeOwner(bucket.bucketName);
       expect(owner).toBeTruthy();
       yield* stack.deploy(definition(["Second"]));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        enabled,
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(enabled);
       // Force tag sync while keeping the remaining notification binding unchanged.
       yield* stack.deploy(definition(["Second"], "tag-sync"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        enabled,
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(enabled);
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBe(owner);
       yield* stack.deploy(definition([], "tag-sync"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical({}),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical({}));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBeUndefined();
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
@@ -576,9 +515,7 @@ test.provider(
           return { bucket, queue };
         });
       const { bucket, queue } = yield* stack.deploy(definition(false));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical({}),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical({}));
       const foreign: S3.NotificationConfiguration = {
         QueueConfigurations: [
           {
@@ -594,26 +531,17 @@ test.provider(
         Bucket: bucket.bucketName,
         NotificationConfiguration: foreign,
       });
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(foreign),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(foreign));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBeUndefined();
       yield* stack.deploy(definition(true));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(foreign),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(foreign));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBeUndefined();
       yield* stack.deploy(definition(false));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(foreign),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(foreign));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBeUndefined();
       yield* stack.destroy();
       yield* Effect.all(
-        [
-          assertBucketDeleted(bucket.bucketName),
-          assertQueueDeleted(queue.queueUrl),
-        ],
+        [assertBucketDeleted(bucket.bucketName), assertQueueDeleted(queue.queueUrl)],
         { concurrency: 2 },
       );
     }),
@@ -629,8 +557,7 @@ test.provider(
         Effect.gen(function* () {
           const bucket = yield* AWS.S3.Bucket("Bucket", {});
           const fn = yield* AWS.Lambda.Function("Target", {
-            main: new URL("./fixtures/notification-target.ts", import.meta.url)
-              .pathname,
+            main: new URL("./fixtures/notification-target.ts", import.meta.url).pathname,
             isExternal: true,
             handler: "handler",
             functionUrl: false,
@@ -648,26 +575,20 @@ test.provider(
                   {
                     LambdaFunctionArn: fn.functionArn,
                     Events: ["s3:ObjectCreated:Put"],
-                    Filter: filter(
-                      mode === "legacy" ? "owned/original/" : "owned/updated/",
-                    ),
+                    Filter: filter(mode === "legacy" ? "owned/original/" : "owned/updated/"),
                   },
                 ],
               },
             });
             yield* bucket.bind(
-              mode === "legacy"
-                ? "RemovedNotifications"
-                : "ExternalNotifications",
+              mode === "legacy" ? "RemovedNotifications" : "ExternalNotifications",
               {
                 notificationConfiguration: {
                   LambdaFunctionConfigurations: [
                     {
                       LambdaFunctionArn: fn.functionArn,
                       Events: ["s3:ObjectCreated:Put"],
-                      Filter: filter(
-                        mode === "legacy" ? "owned/removed/" : "external/",
-                      ),
+                      Filter: filter(mode === "legacy" ? "owned/removed/" : "external/"),
                     },
                   ],
                 },
@@ -701,9 +622,7 @@ test.provider(
       const legacy = yield* readNotifications(bucket.bucketName);
       expect(legacy.LambdaFunctionConfigurations).toHaveLength(3);
       const legacyIds = legacy
-        .LambdaFunctionConfigurations!.filter(
-          (target) => target.Id !== foreign.Id,
-        )
+        .LambdaFunctionConfigurations!.filter((target) => target.Id !== foreign.Id)
         .map((target) => target.Id!);
       expect(legacyIds).toHaveLength(2);
       for (const id of legacyIds) {
@@ -715,18 +634,14 @@ test.provider(
         const key = { stack: stack.name, stage: stack.stage, fqn: "Bucket" };
         const row = yield* state.get(key);
         if (!row || !isResourceState(row) || !row.attr) {
-          return yield* Effect.fail(
-            new Error("Expected persisted bucket attributes"),
-          );
+          return yield* Effect.fail(new Error("Expected persisted bucket attributes"));
         }
         const bindings = row.bindings.map((binding) => ({
           ...binding,
           data: {
             notificationConfiguration: {
               LambdaFunctionConfigurations:
-                binding.sid === "ChangingNotifications"
-                  ? [legacyTargets[0]!]
-                  : [legacyTargets[1]!],
+                binding.sid === "ChangingNotifications" ? [legacyTargets[0]!] : [legacyTargets[1]!],
             },
           },
         }));
@@ -767,9 +682,7 @@ test.provider(
         expect(legacyIds).not.toContain(target.Id);
       }
       yield* stack.deploy(definition("updated"));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical(updated),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical(updated));
       yield* stack.deploy(definition("none"));
       expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
         canonical({ LambdaFunctionConfigurations: [foreign] }),
@@ -780,9 +693,7 @@ test.provider(
         FunctionName: fn.functionName,
       }).pipe(
         Effect.as(false),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         Effect.repeat(waitPolicy),
       );
       expect(gone).toBe(true);
@@ -820,27 +731,19 @@ test.provider(
         const key = { stack: stack.name, stage: stack.stage, fqn: "Bucket" };
         const row = yield* state.get(key);
         if (!row || !isResourceState(row) || !row.attr) {
-          return yield* Effect.fail(
-            new Error("Expected persisted bucket attributes"),
-          );
+          return yield* Effect.fail(new Error("Expected persisted bucket attributes"));
         }
         const attr = { ...row.attr };
         delete attr.managedNotificationConfiguration;
         yield* state.set({ ...key, value: { ...row, attr, bindings: [] } });
       }).pipe(Effect.provide(stack.state));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical({}),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical({}));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBe(owner);
       const retained = yield* stack.deploy(definition(false));
       expect(retained.bucketName).toBe(bucket.bucketName);
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical({}),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical({}));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBeUndefined();
-      expect(
-        (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-      ).toContainEqual({
+      expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual({
         Key: "purpose",
         Value: "eventbridge-marker-recovery",
       });
@@ -869,9 +772,7 @@ test.provider(
         });
       const bucket = yield* stack.deploy(definition(true));
       const enabled = canonical({ EventBridgeConfiguration: {} });
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        enabled,
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(enabled);
       const owner = yield* readEventBridgeOwner(bucket.bucketName);
       expect(owner).toBeTruthy();
 
@@ -881,33 +782,23 @@ test.provider(
         const key = { stack: stack.name, stage: stack.stage, fqn: "Bucket" };
         const row = yield* state.get(key);
         if (!row || !isResourceState(row) || !row.attr) {
-          return yield* Effect.fail(
-            new Error("Expected persisted bucket attributes"),
-          );
+          return yield* Effect.fail(new Error("Expected persisted bucket attributes"));
         }
-        expect(
-          row.attr.managedNotificationConfiguration?.EventBridgeConfiguration,
-        ).toEqual({});
+        expect(row.attr.managedNotificationConfiguration?.EventBridgeConfiguration).toEqual({});
         const attr = { ...row.attr };
         delete attr.managedNotificationConfiguration;
         const persisted = yield* state.set({ ...key, value: { ...row, attr } });
         expect(persisted.attr.managedNotificationConfiguration).toBeUndefined();
         expect(persisted.attr.bucketName).toBe(bucket.bucketName);
       }).pipe(Effect.provide(stack.state));
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        enabled,
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(enabled);
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBe(owner);
 
       const retained = yield* stack.deploy(definition(false));
       expect(retained.bucketName).toBe(bucket.bucketName);
-      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(
-        canonical({}),
-      );
+      expect(canonical(yield* readNotifications(bucket.bucketName))).toEqual(canonical({}));
       expect(yield* readEventBridgeOwner(bucket.bucketName)).toBeUndefined();
-      expect(
-        (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-      ).toContainEqual({
+      expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual({
         Key: "purpose",
         Value: "notifications-crash-recovery",
       });

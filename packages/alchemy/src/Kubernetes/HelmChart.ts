@@ -7,11 +7,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import type { ClusterTransport } from "./ClusterAdapter.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   connectCluster,
   deleteObjects,
@@ -19,15 +15,8 @@ import {
   resolveKindSpec,
 } from "./internal/client.ts";
 import { renderHelmChart } from "./internal/helm.ts";
-import type {
-  KubernetesObjectDefinition,
-  KubernetesObjectRef,
-} from "./internal/objects.ts";
-import {
-  connectionIdentity,
-  connectionOfOutput,
-  tryConnectionOf,
-} from "./internal/workload.ts";
+import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
+import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface HelmChartProps {
@@ -176,13 +165,9 @@ export const HelmChart = Resource<HelmChart>("Kubernetes.HelmChart", {
  * content hash when `chart` is a local path (so editing a local chart is
  * visible to `diff` even though no prop changed).
  */
-const computeChartHash = Effect.fn(function* (
-  news: HelmChartProps,
-  releaseName: string,
-) {
+const computeChartHash = Effect.fn(function* (news: HelmChartProps, releaseName: string) {
   const fs = yield* FileSystem.FileSystem;
-  const isLocalDir =
-    !news.chart.startsWith("oci://") && (yield* fs.exists(news.chart));
+  const isLocalDir = !news.chart.startsWith("oci://") && (yield* fs.exists(news.chart));
   return yield* sha256Object({
     chart: news.chart,
     repo: news.repo,
@@ -192,9 +177,7 @@ const computeChartHash = Effect.fn(function* (
     values: news.values,
     includeCrds: news.includeCrds ?? true,
     createNamespace: news.createNamespace ?? false,
-    localChart: isLocalDir
-      ? yield* hashDirectory({ cwd: news.chart })
-      : undefined,
+    localChart: isLocalDir ? yield* hashDirectory({ cwd: news.chart }) : undefined,
   });
 });
 
@@ -251,9 +234,7 @@ export const HelmChartProvider = () =>
           // moving any of it means a different set of objects.
           if (
             output &&
-            ((oldCluster !== undefined &&
-              newCluster !== undefined &&
-              oldCluster !== newCluster) ||
+            ((oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) ||
               output.releaseName !== releaseName ||
               output.namespace !== (news.namespace ?? "default"))
           ) {
@@ -324,9 +305,7 @@ export const HelmChartProvider = () =>
           // The objects live in-cluster; if the cluster itself is gone, so
           // are they.
           const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return undefined;
           return output;
@@ -336,9 +315,7 @@ export const HelmChartProvider = () =>
           if (!connection) return;
           const transport = yield* connectCluster(connection).pipe(
             // Cluster already destroyed — its objects went with it.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return;
           yield* deleteObjects({ transport, objects: output.objects });

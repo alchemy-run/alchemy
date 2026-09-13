@@ -8,10 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 // Bun processes. Hold a service-local cross-process lease for each file's full
 // setup/assert/teardown lifecycle so Sink.test and Bindings.test cannot delete,
 // replace, or throttle each other's singleton sink.
-const profile = (process.env.ALCHEMY_PROFILE ?? "testing").replace(
-  /[^a-zA-Z0-9_.-]/g,
-  "-",
-);
+const profile = (process.env.ALCHEMY_PROFILE ?? "testing").replace(/[^a-zA-Z0-9_.-]/g, "-");
 const uid = process.getuid?.() ?? 0;
 const lockDirectory = join(tmpdir(), `alchemy-test-oam-${uid}-${profile}.lock`);
 const ownerFile = join(lockDirectory, "owner");
@@ -52,12 +49,10 @@ export const makeOamTestLease = () => {
       Effect.as(true),
       Effect.catchCause(() => Effect.succeed(false)),
     );
-    const tryWriteOwner = fs
-      .writeFileString(ownerFile, String(process.pid))
-      .pipe(
-        Effect.as(true),
-        Effect.catchCause(() => Effect.succeed(false)),
-      );
+    const tryWriteOwner = fs.writeFileString(ownerFile, String(process.pid)).pipe(
+      Effect.as(true),
+      Effect.catchCause(() => Effect.succeed(false)),
+    );
     const tryReadOwnerPid = fs.readFileString(ownerFile).pipe(
       Effect.map((content) => Number.parseInt(content, 10)),
       Effect.catchCause(() => Effect.succeed<number | undefined>(undefined)),
@@ -87,11 +82,7 @@ export const makeOamTestLease = () => {
       // (e.g. EFAULT on a reboot-stale path). Inspect the recorded owner.
       const ownerPid = yield* tryReadOwnerPid;
 
-      if (
-        ownerPid !== undefined &&
-        Number.isFinite(ownerPid) &&
-        processIsAlive(ownerPid)
-      ) {
+      if (ownerPid !== undefined && Number.isFinite(ownerPid) && processIsAlive(ownerPid)) {
         unreadablePolls = 0;
         yield* Effect.sleep(pollInterval);
         continue;

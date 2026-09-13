@@ -48,7 +48,6 @@ export interface ListResolverEndpointIpAddresses extends Binding.Service<
   >
 > {}
 
-export const ListResolverEndpointIpAddresses =
-  Binding.Service<ListResolverEndpointIpAddresses>(
-    "AWS.Route53Resolver.ListResolverEndpointIpAddresses",
-  );
+export const ListResolverEndpointIpAddresses = Binding.Service<ListResolverEndpointIpAddresses>(
+  "AWS.Route53Resolver.ListResolverEndpointIpAddresses",
+);

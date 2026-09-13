@@ -49,9 +49,7 @@ export default Cloudflare.Worker(
         // Surface failures as 5xx (not a thrown defect) so the test's readiness
         // retry treats a mid-restart blip as retryable rather than fatal.
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(String(cause), { status: 503 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(String(cause), { status: 503 })),
         ),
       ),
     };

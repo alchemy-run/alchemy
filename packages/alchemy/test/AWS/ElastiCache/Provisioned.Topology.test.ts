@@ -20,17 +20,10 @@ const waitForAvailable = (replicationGroupId: string) =>
     Effect.flatMap((response) =>
       response.ReplicationGroups?.[0]?.Status === "available"
         ? Effect.succeed(response.ReplicationGroups[0])
-        : Effect.fail(
-            new Error(
-              `replication group '${replicationGroupId}' is not available`,
-            ),
-          ),
+        : Effect.fail(new Error(`replication group '${replicationGroupId}' is not available`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
     }),
   );
 
@@ -61,9 +54,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const created = yield* deploy(1, 0);
       const withReplica = yield* deploy(1, 1);
-      const replicaGroup = yield* waitForAvailable(
-        withReplica.cache.replicationGroupId,
-      );
+      const replicaGroup = yield* waitForAvailable(withReplica.cache.replicationGroupId);
       expect(replicaGroup.AutomaticFailover).toBe("enabled");
       expect(replicaGroup.MultiAZ).toBe("enabled");
       expect(replicaGroup.NodeGroups?.[0]?.NodeGroupMembers).toHaveLength(2);
@@ -101,11 +92,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const scaled = yield* deploy(3);
       const group = yield* waitForAvailable(scaled.cache.replicationGroupId);
       expect(group.NodeGroups).toHaveLength(3);
-      expect(
-        group.NodeGroups?.every(
-          (shard) => shard.NodeGroupMembers?.length === 1,
-        ),
-      ).toBe(true);
+      expect(group.NodeGroups?.every((shard) => shard.NodeGroupMembers?.length === 1)).toBe(true);
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(created.cache.replicationGroupId);
@@ -141,18 +128,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const before = yield* waitForAvailable(cache.replicationGroupId);
       const nodeGroupId = before.NodeGroups?.[0]?.NodeGroupId;
-      if (!nodeGroupId)
-        return yield* Effect.fail(
-          new Error("replication group has no node group"),
-        );
+      if (!nodeGroupId) return yield* Effect.fail(new Error("replication group has no node group"));
       yield* ElastiCache.testFailover({
         ReplicationGroupId: cache.replicationGroupId,
         NodeGroupId: nodeGroupId,
       });
       const reconciled = yield* deploy();
-      expect(reconciled.cache.replicationGroupId).toBe(
-        cache.replicationGroupId,
-      );
+      expect(reconciled.cache.replicationGroupId).toBe(cache.replicationGroupId);
       const after = yield* waitForAvailable(cache.replicationGroupId);
       expect(after.AutomaticFailover).toBe("enabled");
       expect(after.MultiAZ).toBe("enabled");

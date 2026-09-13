@@ -10,10 +10,7 @@ import { Function } from "@/Neon/Function.ts";
 import { Project } from "@/Neon/Project.ts";
 import { providers } from "@/Neon/Providers.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import {
-  functionRolloutSamples,
-  functionRolloutTimeout,
-} from "./FunctionRollout.ts";
+import { functionRolloutSamples, functionRolloutTimeout } from "./FunctionRollout.ts";
 
 const { test } = Test.make({ providers: providers() });
 const Observation = Schema.Struct({
@@ -71,11 +68,7 @@ test.provider.skipIf(!!process.env.FAST)(
         );
       const first = yield* deploy("one");
       let request = 0;
-      const sample = Effect.fn(function* (
-        url: string,
-        slug: string,
-        method: "GET" | "POST",
-      ) {
+      const sample = Effect.fn(function* (url: string, slug: string, method: "GET" | "POST") {
         const nonce = `${slug}-${method}-${request++}`;
         const response = yield* HttpClient.execute(
           HttpClientRequest.make(method)(url).pipe(
@@ -99,25 +92,22 @@ test.provider.skipIf(!!process.env.FAST)(
         return body;
       });
       for (let index = 0; index < 4; index++) {
-        expect(
-          yield* sample(first.warm.url, first.warm.slug, "GET"),
-        ).toMatchObject({ version: "one", environment: "one" });
+        expect(yield* sample(first.warm.url, first.warm.slug, "GET")).toMatchObject({
+          version: "one",
+          environment: "one",
+        });
       }
       const updated = yield* deploy("two");
       for (const key of ["warm", "cold"] as const) {
         expect(updated[key].url).toBe(first[key].url);
         expect(updated[key].functionId).toBe(first[key].functionId);
-        expect(updated[key].activeDeploymentId).not.toBe(
-          first[key].activeDeploymentId,
-        );
+        expect(updated[key].activeDeploymentId).not.toBe(first[key].activeDeploymentId);
         const observed = yield* getProjectBranchFunction({
           project_id: updated[key].projectId,
           branch_id: updated[key].branchId,
           slug: updated[key].slug,
         });
-        expect(observed.function.active_deployment?.id).toBe(
-          updated[key].activeDeploymentId,
-        );
+        expect(observed.function.active_deployment?.id).toBe(updated[key].activeDeploymentId);
         expect(observed.function.active_deployment?.status).toBe("completed");
       }
       const samples = yield* functionRolloutSamples(
@@ -131,17 +121,13 @@ test.provider.skipIf(!!process.env.FAST)(
           { concurrency: 4 },
         ),
         (responses) =>
-          responses.every(
-            (body) => body.version === "two" && body.environment === "two",
-          ),
+          responses.every((body) => body.version === "two" && body.environment === "two"),
       );
       for (const body of samples.flat())
         expect(body).toMatchObject({ version: "two", environment: "two" });
       const unchanged = yield* deploy("two");
       for (const key of ["warm", "cold"] as const)
-        expect(unchanged[key].activeDeploymentId).toBe(
-          updated[key].activeDeploymentId,
-        );
+        expect(unchanged[key].activeDeploymentId).toBe(updated[key].activeDeploymentId);
       yield* stack.destroy();
       expect(
         yield* getProject({ project_id: updated.warm.projectId }).pipe(

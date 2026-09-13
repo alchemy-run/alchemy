@@ -31,8 +31,7 @@ export const sigilCli = () =>
           startPlanningSession(cli, label, detail, title),
         approvePlan: (plan, options) => approvePlan(cli, plan, options),
         displayPlan: (plan, options) => displayPlan(cli, plan, options),
-        startApplySession: (plan, options) =>
-          startApplySession(cli, plan, options, preferences),
+        startApplySession: (plan, options) => startApplySession(cli, plan, options, preferences),
       });
     }),
   );
@@ -95,21 +94,15 @@ const startPlanningSession = Effect.fn(function* (
           Effect.map((now) => `${message} (${formatElapsed(now - startedAt)})`),
         );
   return {
-    update: (
-      nextLabel: string,
-      nextDetail?: string,
-      options?: { readonly spinning?: boolean },
-    ) =>
+    update: (nextLabel: string, nextDetail?: string, options?: { readonly spinning?: boolean }) =>
       progress.update({
         label: nextLabel,
         detail: nextDetail,
         title: title === undefined ? undefined : `${nextLabel} · ${title}`,
         spinning: options?.spinning ?? true,
       }),
-    succeed: (message?: string) =>
-      finish(Effect.flatMap(settled(message), progress.succeed)),
-    fail: (message?: string) =>
-      finish(Effect.flatMap(settled(message), progress.fail)),
+    succeed: (message?: string) => finish(Effect.flatMap(settled(message), progress.succeed)),
+    fail: (message?: string) => finish(Effect.flatMap(settled(message), progress.fail)),
     close: finish(progress.close),
   };
 });
@@ -173,9 +166,7 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
         progress.finish(
           outcome,
           labels[outcome],
-          options?.dev && outcome === "success" && outputReady
-            ? "output"
-            : "plan",
+          options?.dev && outcome === "success" && outputReady ? "output" : "plan",
         );
         if (!options?.dev) progress.setViewport("full");
       }).pipe(Effect.andThen(options?.dev ? Effect.void : close)),

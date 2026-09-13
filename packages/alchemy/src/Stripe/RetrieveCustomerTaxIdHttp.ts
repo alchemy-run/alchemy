@@ -33,20 +33,19 @@ export const RetrieveCustomerTaxIdHttp = Layer.effect(
       );
       const id = yield* asStringEffect(taxId.id);
       const customer = yield* asStringEffect(taxId.customer);
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
-      return Effect.fn(`Stripe.RetrieveCustomerTaxId(${taxId.LogicalId})`)(
-        function* (request?: { expand?: string[] }) {
-          return yield* auth(
-            GetCustomerTaxIdsById({
-              ...(request ?? {}),
-              id: yield* id,
-              customer: yield* customer,
-            }),
-          );
-        },
-      );
+      return Effect.fn(`Stripe.RetrieveCustomerTaxId(${taxId.LogicalId})`)(function* (request?: {
+        expand?: string[];
+      }) {
+        return yield* auth(
+          GetCustomerTaxIdsById({
+            ...(request ?? {}),
+            id: yield* id,
+            customer: yield* customer,
+          }),
+        );
+      });
     });
   }),
 );

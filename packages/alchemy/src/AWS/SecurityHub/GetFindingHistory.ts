@@ -29,10 +29,7 @@ export interface GetFindingHistory extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.GetFindingHistoryRequest,
-    ) => Effect.Effect<
-      securityhub.GetFindingHistoryResponse,
-      securityhub.GetFindingHistoryError
-    >
+    ) => Effect.Effect<securityhub.GetFindingHistoryResponse, securityhub.GetFindingHistoryError>
   >
 > {}
 export const GetFindingHistory = Binding.Service<GetFindingHistory>(

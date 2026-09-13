@@ -41,17 +41,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const clusterArn =
-        process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN!;
+      const clusterArn = process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN!;
 
       const existing = yield* sagemaker.listClusterSchedulerConfigs({
         ClusterArn: clusterArn,
       });
-      if (
-        (existing.ClusterSchedulerConfigSummaries ?? []).some(
-          (s) => s.Status !== "Deleted",
-        )
-      ) {
+      if ((existing.ClusterSchedulerConfigSummaries ?? []).some((s) => s.Status !== "Deleted")) {
         // One policy per cluster: creating a second must fail with the
         // typed ClusterSchedulerConfigAlreadyExists tag.
         const error = yield* Effect.flip(
@@ -80,9 +75,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
         }),
       );
 
-      expect(policy.clusterSchedulerConfigArn).toContain(
-        ":cluster-scheduler-config/",
-      );
+      expect(policy.clusterSchedulerConfigArn).toContain(":cluster-scheduler-config/");
       expect(policy.clusterArn).toBe(clusterArn);
 
       // Out-of-band verification via distilled.
@@ -110,9 +103,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
           return { policy };
         }),
       );
-      expect(updated.clusterSchedulerConfigId).toBe(
-        policy.clusterSchedulerConfigId,
-      );
+      expect(updated.clusterSchedulerConfigId).toBe(policy.clusterSchedulerConfigId);
       expect(updated.clusterSchedulerConfigVersion).toBeGreaterThan(
         policy.clusterSchedulerConfigVersion,
       );

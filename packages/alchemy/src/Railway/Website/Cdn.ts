@@ -69,18 +69,14 @@ export interface Cdn extends Resource<
  */
 export const Cdn = Resource<Cdn>("Railway.Website.Cdn");
 
-export class CdnServiceMissing extends Data.TaggedError(
-  "Railway.Website.CdnServiceMissing",
-)<{
+export class CdnServiceMissing extends Data.TaggedError("Railway.Website.CdnServiceMissing")<{
   message: string;
 }> {}
 
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { serviceId?: unknown };
-  return typeof rec.serviceId === "string" && rec.serviceId.length > 0
-    ? rec.serviceId
-    : undefined;
+  return typeof rec.serviceId === "string" && rec.serviceId.length > 0 ? rec.serviceId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -117,15 +113,10 @@ export class CdnConfigurationPending extends Data.TaggedError(
 )<{ serviceId: string; environmentId: string }> {}
 
 const getConfig = (serviceId: string, environmentId: string) =>
-  railway
-    .serviceInstance(
-      { serviceId, environmentId },
-      { edgeConfig: edgeConfigSelection },
-    )
-    .pipe(
-      Effect.map((instance) => instance.edgeConfig ?? undefined),
-      railway.catchTags("RailwayNotFound", () => Effect.succeed(undefined)),
-    );
+  railway.serviceInstance({ serviceId, environmentId }, { edgeConfig: edgeConfigSelection }).pipe(
+    Effect.map((instance) => instance.edgeConfig ?? undefined),
+    railway.catchTags("RailwayNotFound", () => Effect.succeed(undefined)),
+  );
 
 const getReadyConfig = (serviceId: string, environmentId: string) =>
   railway
@@ -141,22 +132,14 @@ const getReadyConfig = (serviceId: string, environmentId: string) =>
     )
     .pipe(
       Effect.flatMap((instance) =>
-        [
-          ...instance.domains.serviceDomains,
-          ...instance.domains.customDomains,
-        ].some(
-          (domain) =>
-            domain.syncStatus === "ACTIVE" ||
-            domain.syncStatus === "UNSPECIFIED",
+        [...instance.domains.serviceDomains, ...instance.domains.customDomains].some(
+          (domain) => domain.syncStatus === "ACTIVE" || domain.syncStatus === "UNSPECIFIED",
         )
           ? Effect.succeed(instance.edgeConfig ?? undefined)
-          : Effect.fail(
-              new CdnPublicDomainPending({ serviceId, environmentId }),
-            ),
+          : Effect.fail(new CdnPublicDomainPending({ serviceId, environmentId })),
       ),
       Effect.retry({
-        while: (error) =>
-          error._tag === "Railway.Website.CdnPublicDomainPending",
+        while: (error) => error._tag === "Railway.Website.CdnPublicDomainPending",
         times: 8,
         schedule: Schedule.spaced("2 seconds"),
       }),
@@ -186,10 +169,8 @@ export const CdnProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const serviceId = output?.serviceId ?? serviceIdOf(olds?.service);
-      const environmentId =
-        output?.environmentId ?? environmentIdOf(olds?.environment);
-      if (serviceId === undefined || environmentId === undefined)
-        return undefined;
+      const environmentId = output?.environmentId ?? environmentIdOf(olds?.environment);
+      if (serviceId === undefined || environmentId === undefined) return undefined;
       const current = yield* getConfig(serviceId, environmentId);
       return current === undefined
         ? undefined
@@ -206,8 +187,7 @@ export const CdnProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const serviceId = serviceIdOf(news.service) ?? output?.serviceId ?? "";
-      const environmentId =
-        environmentIdOf(news.environment) ?? output?.environmentId ?? "";
+      const environmentId = environmentIdOf(news.environment) ?? output?.environmentId ?? "";
       if (serviceId.length === 0 || environmentId.length === 0) {
         return yield* new CdnServiceMissing({
           message: "Railway.Website.Cdn requires a Service and environment.",
@@ -243,16 +223,12 @@ export const CdnProvider = () =>
           observed.caching.mode.toLowerCase() !== "off" &&
           observed.caching.htmlCaching === config.caching.htmlCaching &&
           observed.caching.purgeOnDeploy === config.caching.purgeOnDeploy &&
-          observed.caching.defaultTtlSeconds ===
-            config.caching.defaultTtlSeconds
+          observed.caching.defaultTtlSeconds === config.caching.defaultTtlSeconds
             ? Effect.succeed(observed)
-            : Effect.fail(
-                new CdnConfigurationPending({ serviceId, environmentId }),
-              ),
+            : Effect.fail(new CdnConfigurationPending({ serviceId, environmentId })),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "Railway.Website.CdnConfigurationPending",
+          while: (error) => error._tag === "Railway.Website.CdnConfigurationPending",
           times: 8,
           schedule: Schedule.spaced("1 second"),
         }),

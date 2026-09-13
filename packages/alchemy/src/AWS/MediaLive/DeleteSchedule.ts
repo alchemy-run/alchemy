@@ -29,12 +29,7 @@ export interface DeleteSchedule extends Binding.Service<
   (
     channel: Channel,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      medialive.DeleteScheduleResponse,
-      medialive.DeleteScheduleError
-    >
+    () => Effect.Effect<medialive.DeleteScheduleResponse, medialive.DeleteScheduleError>
   >
 > {}
-export const DeleteSchedule = Binding.Service<DeleteSchedule>(
-  "AWS.MediaLive.DeleteSchedule",
-);
+export const DeleteSchedule = Binding.Service<DeleteSchedule>("AWS.MediaLive.DeleteSchedule");

@@ -7,9 +7,7 @@ import { expect, it } from "alchemy-test";
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(here, "../bin/alchemy-test.ts");
 const apiUrl = pathToFileURL(resolve(here, "../src/index.ts")).href;
-const effectUrl = pathToFileURL(
-  resolve(here, "../../../node_modules/effect/dist/Effect.js"),
-).href;
+const effectUrl = pathToFileURL(resolve(here, "../../../node_modules/effect/dist/Effect.js")).href;
 
 const fixture = (hook: string, body: string): string => `
   import { it, registerHook } from ${JSON.stringify(apiUrl)};
@@ -43,15 +41,12 @@ it("streams file-hook output to the run log while the hook is still running", as
       `,
     );
 
-    const child = Bun.spawn(
-      [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
-      {
-        cwd: root,
-        stdout: "pipe",
-        stderr: "pipe",
-        env: { ...process.env, NO_COLOR: "1" },
-      },
-    );
+    const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "1"], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, NO_COLOR: "1" },
+    });
     try {
       // Poll the run log (created under the child's cwd) for the sentinel.
       // The hook sleeps 8s after logging; seeing the sentinel within ~6s
@@ -63,9 +58,7 @@ it("streams file-hook output to the run log while the hook is still running", as
         const { readdir, readFile } = await import("node:fs/promises");
         const entries = await readdir(logDir).catch(() => [] as string[]);
         for (const entry of entries) {
-          const content = await readFile(resolve(logDir, entry), "utf8").catch(
-            () => "",
-          );
+          const content = await readFile(resolve(logDir, entry), "utf8").catch(() => "");
           if (content.includes("hook-live-sentinel")) {
             streamed = true;
             break;
@@ -97,14 +90,8 @@ it("--exclude skips folders unless they are passed explicitly", async () => {
       it(${JSON.stringify(name)}, () => {});
     `;
     await Promise.all([
-      writeFile(
-        resolve(root, "test", "Railway", "Excluded.test.ts"),
-        testFile("excluded-test"),
-      ),
-      writeFile(
-        resolve(root, "test", "Other", "Included.test.ts"),
-        testFile("included-test"),
-      ),
+      writeFile(resolve(root, "test", "Railway", "Excluded.test.ts"), testFile("excluded-test")),
+      writeFile(resolve(root, "test", "Other", "Included.test.ts"), testFile("included-test")),
     ]);
 
     const runCli = async (args: ReadonlyArray<string>) => {
@@ -132,11 +119,7 @@ it("--exclude skips folders unless they are passed explicitly", async () => {
     expect(excluded.output).not.toContain("excluded-test");
 
     // An explicit positional root inside the excluded path overrides it.
-    const explicit = await runCli([
-      "test/Railway/Excluded.test.ts",
-      "--exclude",
-      "test/Railway",
-    ]);
+    const explicit = await runCli(["test/Railway/Excluded.test.ts", "--exclude", "test/Railway"]);
     expect(explicit.exitCode).toBe(0);
     expect(explicit.output).toContain("excluded-test");
 
@@ -154,10 +137,7 @@ it("fails the process for every hook kind and preserves hook output", async () =
   const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-hooks-"));
   try {
     await Promise.all([
-      writeFile(
-        resolve(root, "before-all.test.ts"),
-        fixture("beforeAll", 'it("body", () => {});'),
-      ),
+      writeFile(resolve(root, "before-all.test.ts"), fixture("beforeAll", 'it("body", () => {});')),
       writeFile(
         resolve(root, "before-each.test.ts"),
         fixture("beforeEach", 'it("body", () => {});'),
@@ -169,21 +149,15 @@ it("fails the process for every hook kind and preserves hook output", async () =
           'it.fails("expected body failure", () => { throw new Error("expected-body-failure"); });',
         ),
       ),
-      writeFile(
-        resolve(root, "after-all.test.ts"),
-        fixture("afterAll", 'it("body", () => {});'),
-      ),
+      writeFile(resolve(root, "after-all.test.ts"), fixture("afterAll", 'it("body", () => {});')),
     ]);
 
-    const child = Bun.spawn(
-      [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
-      {
-        cwd: root,
-        stdout: "pipe",
-        stderr: "pipe",
-        env: { ...process.env, NO_COLOR: "1" },
-      },
-    );
+    const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "1"], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, NO_COLOR: "1" },
+    });
     const [exitCode, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
@@ -229,15 +203,12 @@ it("runs every afterAll hook even when an earlier one fails", async () => {
       `,
     );
 
-    const child = Bun.spawn(
-      [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
-      {
-        cwd: root,
-        stdout: "pipe",
-        stderr: "pipe",
-        env: { ...process.env, NO_COLOR: "1" },
-      },
-    );
+    const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "1"], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, NO_COLOR: "1" },
+    });
     const [exitCode, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),

@@ -36,10 +36,7 @@ export interface ListTagsForResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTagsForResourceRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListTagsForResourceOutput,
-      cloudwatch.ListTagsForResourceError
-    >
+    ) => Effect.Effect<cloudwatch.ListTagsForResourceOutput, cloudwatch.ListTagsForResourceError>
   >
 > {}
 

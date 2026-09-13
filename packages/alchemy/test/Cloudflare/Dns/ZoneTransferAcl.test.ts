@@ -10,15 +10,10 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out fresh-token 403 blips on out-of-band calls.
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -38,10 +33,7 @@ const expectGone = (accountId: string, aclId: string) =>
     Effect.catchTag("AclNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "AclNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -131,9 +123,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DNS.ZoneTransferAcl,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.ZoneTransferAcl);
       const all = yield* provider.list();
 
       // Exhaustively-paginated result contains the deployed ACL, in the

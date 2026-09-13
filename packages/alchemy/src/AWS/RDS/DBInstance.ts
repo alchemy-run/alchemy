@@ -887,8 +887,7 @@ const toTagRecord = (
 const sameFingerprint = (
   a: Redacted.Redacted<string> | undefined,
   b: Redacted.Redacted<string> | undefined,
-): boolean =>
-  a !== undefined && b !== undefined && Redacted.value(a) === Redacted.value(b);
+): boolean => a !== undefined && b !== undefined && Redacted.value(a) === Redacted.value(b);
 
 const toAttrs = ({
   instance,
@@ -925,9 +924,7 @@ const toAttrs = ({
   ),
   dbParameterGroupApplyStatuses: Object.fromEntries(
     (instance.DBParameterGroups ?? []).flatMap((group) =>
-      group.DBParameterGroupName
-        ? [[group.DBParameterGroupName, group.ParameterApplyStatus]]
-        : [],
+      group.DBParameterGroupName ? [[group.DBParameterGroupName, group.ParameterApplyStatus]] : [],
     ),
   ),
   vpcSecurityGroupIds: (instance.VpcSecurityGroups ?? []).flatMap((group) =>
@@ -935,9 +932,7 @@ const toAttrs = ({
   ),
   vpcSecurityGroupStatuses: Object.fromEntries(
     (instance.VpcSecurityGroups ?? []).flatMap((group) =>
-      group.VpcSecurityGroupId
-        ? [[group.VpcSecurityGroupId, group.Status]]
-        : [],
+      group.VpcSecurityGroupId ? [[group.VpcSecurityGroupId, group.Status]] : [],
     ),
   ),
   allocatedStorage: instance.AllocatedStorage,
@@ -966,9 +961,8 @@ const toAttrs = ({
   masterUsername: instance.MasterUsername,
   masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
   masterUserSecretResourcePolicy,
-  optionGroupMemberships: (instance.OptionGroupMemberships ?? []).flatMap(
-    (membership) =>
-      membership.OptionGroupName ? [membership.OptionGroupName] : [],
+  optionGroupMemberships: (instance.OptionGroupMemberships ?? []).flatMap((membership) =>
+    membership.OptionGroupName ? [membership.OptionGroupName] : [],
   ),
   licenseModel: instance.LicenseModel,
   dbInstancePort: instance.DbInstancePort,
@@ -999,49 +993,32 @@ const logExportDelta = (
   };
 };
 
-const sameMembers = (
-  desired: readonly string[],
-  observed: readonly (string | undefined)[],
-) => {
+const sameMembers = (desired: readonly string[], observed: readonly (string | undefined)[]) => {
   const want = new Set(desired);
   const have = new Set(observed);
   return want.size === have.size && [...want].every((value) => have.has(value));
 };
 
-const clusterOwnsConfiguration = (
-  props: DBInstanceProps,
-  observed?: rds.DBInstance,
-) =>
+const clusterOwnsConfiguration = (props: DBInstanceProps, observed?: rds.DBInstance) =>
   props.dbClusterIdentifier !== undefined ||
   observed?.DBClusterIdentifier !== undefined ||
   props.engine.startsWith("aurora") ||
   observed?.Engine?.startsWith("aurora") === true;
 
-const securityConfiguration = (
-  props: DBInstanceProps,
-  observed?: rds.DBInstance,
-) => {
+const securityConfiguration = (props: DBInstanceProps, observed?: rds.DBInstance) => {
   const clusterOwned = clusterOwnsConfiguration(props, observed);
   const custom =
-    props.engine.startsWith("custom-") ||
-    observed?.Engine?.startsWith("custom-") === true;
-  const supportsIam = ["postgres", "mysql", "mariadb"].includes(
-    observed?.Engine ?? props.engine,
-  );
+    props.engine.startsWith("custom-") || observed?.Engine?.startsWith("custom-") === true;
+  const supportsIam = ["postgres", "mysql", "mariadb"].includes(observed?.Engine ?? props.engine);
   return {
     publiclyAccessible:
-      clusterOwned &&
-      !props.engine.startsWith("aurora") &&
-      !observed?.Engine?.startsWith("aurora")
+      clusterOwned && !props.engine.startsWith("aurora") && !observed?.Engine?.startsWith("aurora")
         ? undefined
         : (props.publiclyAccessible ?? false),
     iamAuthentication: clusterOwned
       ? undefined
-      : (props.enableIAMDatabaseAuthentication ??
-        (supportsIam ? false : undefined)),
-    deletionProtection: clusterOwned
-      ? undefined
-      : (props.deletionProtection ?? false),
+      : (props.enableIAMDatabaseAuthentication ?? (supportsIam ? false : undefined)),
+    deletionProtection: clusterOwned ? undefined : (props.deletionProtection ?? false),
     networkType: clusterOwned ? undefined : (props.networkType ?? "IPV4"),
     logExports: clusterOwned
       ? undefined
@@ -1065,45 +1042,32 @@ const effectiveLogExports = (instance: rds.DBInstance) => {
   return [...exports];
 };
 
-const iamConverged = (
-  desired: SecurityConfiguration,
-  instance: rds.DBInstance,
-) =>
+const iamConverged = (desired: SecurityConfiguration, instance: rds.DBInstance) =>
   desired.iamAuthentication === undefined ||
   (desired.iamAuthentication === instance.IAMDatabaseAuthenticationEnabled &&
-    instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
-      undefined);
+    instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled === undefined);
 
-const securityConverged = (
-  desired: SecurityConfiguration,
-  instance: rds.DBInstance,
-) =>
+const securityConverged = (desired: SecurityConfiguration, instance: rds.DBInstance) =>
   iamConverged(desired, instance) &&
   (desired.publiclyAccessible === undefined ||
     desired.publiclyAccessible === instance.PubliclyAccessible) &&
   (desired.deletionProtection === undefined ||
     desired.deletionProtection === instance.DeletionProtection) &&
-  (desired.networkType === undefined ||
-    desired.networkType === instance.NetworkType) &&
+  (desired.networkType === undefined || desired.networkType === instance.NetworkType) &&
   (desired.logExports === undefined ||
-    (sameMembers(
-      desired.logExports,
-      instance.EnabledCloudwatchLogsExports ?? [],
-    ) &&
+    (sameMembers(desired.logExports, instance.EnabledCloudwatchLogsExports ?? []) &&
       (pendingLogExports(instance)?.LogTypesToEnable?.length ?? 0) === 0 &&
       (pendingLogExports(instance)?.LogTypesToDisable?.length ?? 0) === 0));
 
-class DBInstanceSecurityPending extends Data.TaggedError(
-  "DBInstanceSecurityPending",
-)<{ instanceId: string }> {
+class DBInstanceSecurityPending extends Data.TaggedError("DBInstanceSecurityPending")<{
+  instanceId: string;
+}> {
   override get message() {
     return `DB instance '${this.instanceId}' security configuration did not converge`;
   }
 }
 
-class InvalidDBInstanceAssociations extends Data.TaggedError(
-  "InvalidDBInstanceAssociations",
-)<{
+class InvalidDBInstanceAssociations extends Data.TaggedError("InvalidDBInstanceAssociations")<{
   message: string;
 }> {}
 
@@ -1111,12 +1075,10 @@ const resolveAssociations = Effect.fn(function* (
   props: DBInstanceProps,
   observed?: rds.DBInstance,
 ) {
-  const clusterIdentifier =
-    props.dbClusterIdentifier ?? observed?.DBClusterIdentifier;
+  const clusterIdentifier = props.dbClusterIdentifier ?? observed?.DBClusterIdentifier;
   const clusterOwned = clusterOwnsConfiguration(props, observed);
   const aurora =
-    props.engine.startsWith("aurora") ||
-    observed?.Engine?.startsWith("aurora") === true;
+    props.engine.startsWith("aurora") || observed?.Engine?.startsWith("aurora") === true;
   const custom = props.engine.startsWith("custom-");
   if (clusterOwned && !aurora) {
     if (props.dbParameterGroupName !== undefined) {
@@ -1129,13 +1091,11 @@ const resolveAssociations = Effect.fn(function* (
   if (
     props.engine.startsWith("db2-") &&
     props.dbParameterGroupName === undefined &&
-    (props.licenseModel ??
-      observed?.LicenseModel ??
-      "bring-your-own-license") === "bring-your-own-license"
+    (props.licenseModel ?? observed?.LicenseModel ?? "bring-your-own-license") ===
+      "bring-your-own-license"
   ) {
     return yield* new InvalidDBInstanceAssociations({
-      message:
-        "Db2 BYOL requires an explicit parameter group with IBM licensing IDs",
+      message: "Db2 BYOL requires an explicit parameter group with IBM licensing IDs",
     });
   }
   let dbParameterGroupName = props.dbParameterGroupName;
@@ -1166,9 +1126,7 @@ const resolveAssociations = Effect.fn(function* (
       .pipe(Stream.runCollect);
     const families = new Set(
       pages.flatMap((page) =>
-        (page.DBEngineVersions ?? []).map(
-          (version) => version.DBParameterGroupFamily,
-        ),
+        (page.DBEngineVersions ?? []).map((version) => version.DBParameterGroupFamily),
       ),
     );
     const family = [...families][0];
@@ -1180,8 +1138,7 @@ const resolveAssociations = Effect.fn(function* (
     }
     dbParameterGroupName = `default.${family}`;
   }
-  if (clusterOwned)
-    return { dbParameterGroupName, vpcSecurityGroupIds: undefined };
+  if (clusterOwned) return { dbParameterGroupName, vpcSecurityGroupIds: undefined };
   let vpcSecurityGroupIds = props.vpcSecurityGroupIds;
   if (vpcSecurityGroupIds === undefined) {
     const vpcId =
@@ -1228,16 +1185,11 @@ const resolveAssociations = Effect.fn(function* (
 
 type Associations = Effect.Success<ReturnType<typeof resolveAssociations>>;
 
-const parameterGroupMatches = (
-  desired: Associations,
-  instance: rds.DBInstance,
-) =>
+const parameterGroupMatches = (desired: Associations, instance: rds.DBInstance) =>
   desired.dbParameterGroupName === undefined ||
   sameMembers(
     [desired.dbParameterGroupName],
-    (instance.DBParameterGroups ?? []).map(
-      (group) => group.DBParameterGroupName,
-    ),
+    (instance.DBParameterGroups ?? []).map((group) => group.DBParameterGroupName),
   );
 
 const securityGroupsMatch = (desired: Associations, instance: rds.DBInstance) =>
@@ -1247,22 +1199,16 @@ const securityGroupsMatch = (desired: Associations, instance: rds.DBInstance) =>
     (instance.VpcSecurityGroups ?? []).map((group) => group.VpcSecurityGroupId),
   );
 
-const associationsConverged = (
-  desired: Associations,
-  instance: rds.DBInstance,
-) =>
+const associationsConverged = (desired: Associations, instance: rds.DBInstance) =>
   parameterGroupMatches(desired, instance) &&
   (desired.dbParameterGroupName === undefined ||
     (instance.DBParameterGroups ?? []).every(
       (group) =>
-        group.ParameterApplyStatus === "in-sync" ||
-        group.ParameterApplyStatus === "pending-reboot",
+        group.ParameterApplyStatus === "in-sync" || group.ParameterApplyStatus === "pending-reboot",
     )) &&
   securityGroupsMatch(desired, instance) &&
   (desired.vpcSecurityGroupIds === undefined ||
-    (instance.VpcSecurityGroups ?? []).every(
-      (group) => group.Status === "active",
-    ));
+    (instance.VpcSecurityGroups ?? []).every((group) => group.Status === "active"));
 
 class InvalidDBInstancePort extends Data.TaggedError("InvalidDBInstancePort")<{
   message: string;
@@ -1276,11 +1222,7 @@ const desiredInstancePort = Effect.fn(function* (
     return undefined;
   }
   if (props.port !== undefined) {
-    if (
-      !Number.isInteger(props.port) ||
-      props.port < 1150 ||
-      props.port > 65535
-    ) {
+    if (!Number.isInteger(props.port) || props.port < 1150 || props.port > 65535) {
       return yield* new InvalidDBInstancePort({
         message: "port must be an integer between 1150 and 65535",
       });
@@ -1289,15 +1231,8 @@ const desiredInstancePort = Effect.fn(function* (
   }
   if (props.engine === "postgres") return 5432;
   if (props.engine === "mysql" || props.engine === "mariadb") return 3306;
-  if (
-    props.engine.startsWith("oracle-") ||
-    props.engine.startsWith("custom-oracle-")
-  )
-    return 1521;
-  if (
-    props.engine.startsWith("sqlserver-") ||
-    props.engine.startsWith("custom-sqlserver-")
-  )
+  if (props.engine.startsWith("oracle-") || props.engine.startsWith("custom-oracle-")) return 1521;
+  if (props.engine.startsWith("sqlserver-") || props.engine.startsWith("custom-sqlserver-"))
     return 1433;
   if (props.engine.startsWith("db2-")) return 50000;
   return yield* new InvalidDBInstancePort({
@@ -1307,12 +1242,11 @@ const desiredInstancePort = Effect.fn(function* (
 
 const portConverged = (instance: rds.DBInstance, port: number | undefined) =>
   port === undefined ||
-  (instance.Endpoint?.Port === port &&
-    instance.PendingModifiedValues?.Port === undefined);
+  (instance.Endpoint?.Port === port && instance.PendingModifiedValues?.Port === undefined);
 
-class InvalidDBInstanceStorage extends Data.TaggedError(
-  "InvalidDBInstanceStorage",
-)<{ message: string }> {}
+class InvalidDBInstanceStorage extends Data.TaggedError("InvalidDBInstanceStorage")<{
+  message: string;
+}> {}
 
 type StorageRequest = Required<
   Pick<rds.CreateDBInstanceMessage, "AllocatedStorage" | "StorageType">
@@ -1325,10 +1259,7 @@ interface DesiredStorage {
   throughput: number;
 }
 
-const resolveStorage = Effect.fn(function* (
-  props: DBInstanceProps,
-  allocatedFloor = 0,
-) {
+const resolveStorage = Effect.fn(function* (props: DBInstanceProps, allocatedFloor = 0) {
   if (props.dbClusterIdentifier || props.engine.startsWith("aurora")) {
     if (
       props.allocatedStorage !== undefined ||
@@ -1365,8 +1296,7 @@ const resolveStorage = Effect.fn(function* (
         : storageType === "standard"
           ? 5
           : 20;
-  const requested =
-    props.allocatedStorage ?? (provisioned ? 100 : custom ? 40 : 20);
+  const requested = props.allocatedStorage ?? (provisioned ? 100 : custom ? 40 : 20);
   if (!Number.isInteger(requested) || requested <= 0) {
     return yield* new InvalidDBInstanceStorage({
       message: "allocatedStorage must be a positive integer",
@@ -1384,28 +1314,17 @@ const resolveStorage = Effect.fn(function* (
   }
   const ratioCapacity = Math.max(allocation, props.maxAllocatedStorage ?? 0);
   if (storageType !== "gp3") {
-    if (
-      props.storageThroughput !== undefined ||
-      (!provisioned && props.iops !== undefined)
-    ) {
+    if (props.storageThroughput !== undefined || (!provisioned && props.iops !== undefined)) {
       return yield* new InvalidDBInstanceStorage({
         message: `${storageType} does not support the declared IOPS/throughput settings`,
       });
     }
     const minimumIops = provisioned
-      ? Math.max(
-          1000,
-          Math.ceil(
-            ratioCapacity * (sqlServer && storageType === "io1" ? 1 : 0.5),
-          ),
-        )
+      ? Math.max(1000, Math.ceil(ratioCapacity * (sqlServer && storageType === "io1" ? 1 : 0.5)))
       : 0;
     const iops = props.iops ?? minimumIops;
     const maximumIops = allocation * (storageType === "io1" ? 50 : 1000);
-    if (
-      provisioned &&
-      (!Number.isInteger(iops) || iops < minimumIops || iops > maximumIops)
-    ) {
+    if (provisioned && (!Number.isInteger(iops) || iops < minimumIops || iops > maximumIops)) {
       return yield* new InvalidDBInstanceStorage({
         message: `The allocation and autoscaling limit require ${storageType} IOPS between ${minimumIops} and ${maximumIops}`,
       });
@@ -1441,8 +1360,7 @@ const resolveStorage = Effect.fn(function* (
     !Number.isInteger(throughput) ||
     throughput < minimumThroughput ||
     throughput > iops * 0.25 ||
-    (!configurable &&
-      (iops !== baselineIops || throughput !== baselineThroughput))
+    (!configurable && (iops !== baselineIops || throughput !== baselineThroughput))
   ) {
     return yield* new InvalidDBInstanceStorage({
       message: configurable
@@ -1468,10 +1386,7 @@ const hasPendingStorage = (instance: rds.DBInstance) =>
   instance.PendingModifiedValues?.Iops !== undefined ||
   instance.PendingModifiedValues?.StorageThroughput !== undefined;
 
-const storageConverged = (
-  observed: rds.DBInstance,
-  desired: DesiredStorage | undefined,
-): boolean =>
+const storageConverged = (observed: rds.DBInstance, desired: DesiredStorage | undefined): boolean =>
   desired === undefined ||
   ((observed.AllocatedStorage ?? 0) >= desired.request.AllocatedStorage &&
     observed.StorageType === desired.request.StorageType &&
@@ -1486,13 +1401,10 @@ const toStorageConfiguration = Effect.fn(function* (props: DBInstanceProps) {
     !props.engine.startsWith("custom-");
   if (!supportsAutoscaling && props.maxAllocatedStorage !== undefined) {
     return yield* new InvalidDBInstanceStorage({
-      message:
-        "maxAllocatedStorage is not supported for cluster members or RDS Custom",
+      message: "maxAllocatedStorage is not supported for cluster members or RDS Custom",
     });
   }
-  const maxAllocatedStorage = supportsAutoscaling
-    ? (props.maxAllocatedStorage ?? 0)
-    : undefined;
+  const maxAllocatedStorage = supportsAutoscaling ? (props.maxAllocatedStorage ?? 0) : undefined;
   if (
     maxAllocatedStorage !== undefined &&
     (!Number.isInteger(maxAllocatedStorage) || maxAllocatedStorage < 0)
@@ -1502,30 +1414,19 @@ const toStorageConfiguration = Effect.fn(function* (props: DBInstanceProps) {
     });
   }
   return {
-    allocatedStorage:
-      props.dbClusterIdentifier === undefined
-        ? props.allocatedStorage
-        : undefined,
+    allocatedStorage: props.dbClusterIdentifier === undefined ? props.allocatedStorage : undefined,
     maxAllocatedStorage,
   };
 });
 
-type StorageConfiguration = Effect.Success<
-  ReturnType<typeof toStorageConfiguration>
->;
+type StorageConfiguration = Effect.Success<ReturnType<typeof toStorageConfiguration>>;
 
-const allocationConverged = (
-  desired: StorageConfiguration,
-  observed: rds.DBInstance,
-) =>
+const allocationConverged = (desired: StorageConfiguration, observed: rds.DBInstance) =>
   desired.allocatedStorage === undefined ||
   (observed.AllocatedStorage !== undefined &&
     observed.AllocatedStorage >= desired.allocatedStorage);
 
-const autoscalingConverged = (
-  desired: StorageConfiguration,
-  observed: rds.DBInstance,
-) => {
+const autoscalingConverged = (desired: StorageConfiguration, observed: rds.DBInstance) => {
   const ceiling = desired.maxAllocatedStorage;
   if (ceiling === undefined) return true;
   // RDS reports disabled autoscaling as zero; equality also prevents growth.
@@ -1538,21 +1439,21 @@ const autoscalingConverged = (
   return ceiling === observed.MaxAllocatedStorage;
 };
 
-class InvalidDBInstanceSecretPolicy extends Data.TaggedError(
-  "InvalidDBInstanceSecretPolicy",
-)<{ message: string }> {}
+class InvalidDBInstanceSecretPolicy extends Data.TaggedError("InvalidDBInstanceSecretPolicy")<{
+  message: string;
+}> {}
 
-class DBInstanceManagedSecretMissing extends Data.TaggedError(
-  "DBInstanceManagedSecretMissing",
-)<{ instanceId: string }> {
+class DBInstanceManagedSecretMissing extends Data.TaggedError("DBInstanceManagedSecretMissing")<{
+  instanceId: string;
+}> {
   override get message() {
     return `DB instance '${this.instanceId}' has no RDS-managed master secret for its resource policy`;
   }
 }
 
-class DBInstanceSecretPolicyPending extends Data.TaggedError(
-  "DBInstanceSecretPolicyPending",
-)<{ instanceId: string }> {
+class DBInstanceSecretPolicyPending extends Data.TaggedError("DBInstanceSecretPolicyPending")<{
+  instanceId: string;
+}> {
   override get message() {
     return `DB instance '${this.instanceId}' managed-secret resource policy has not propagated`;
   }
@@ -1567,9 +1468,7 @@ class DBInstancePending extends Data.TaggedError("DBInstancePending")<{
   }
 }
 
-class DBInstanceReadinessBlocked extends Data.TaggedError(
-  "DBInstanceReadinessBlocked",
-)<{
+class DBInstanceReadinessBlocked extends Data.TaggedError("DBInstanceReadinessBlocked")<{
   instanceId: string;
   status: string;
 }> {
@@ -1621,11 +1520,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(
-            Effect.catchTag("DBInstanceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBInstances?.[0];
       });
 
@@ -1653,10 +1548,7 @@ export const DBInstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DBInstancePending",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -1672,8 +1564,7 @@ export const DBInstanceProvider = () =>
               Schedule.spaced("1 minute"),
             ]),
             times: 10,
-            until: (instance) =>
-              instanceReady(instance) && securityConverged(desired, instance),
+            until: (instance) => instanceReady(instance) && securityConverged(desired, instance),
           }),
         );
         if (!instanceReady(instance) || !securityConverged(desired, instance)) {
@@ -1682,10 +1573,7 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      const waitForAssociations = Effect.fn(function* (
-        instanceId: string,
-        desired: Associations,
-      ) {
+      const waitForAssociations = Effect.fn(function* (instanceId: string, desired: Associations) {
         const instance = yield* observeReadiness(instanceId).pipe(
           Effect.flatMap((instance) =>
             instance?.DBParameterGroups?.some(
@@ -1705,14 +1593,10 @@ export const DBInstanceProvider = () =>
             ]),
             times: 10,
             until: (instance) =>
-              instanceReady(instance) &&
-              associationsConverged(desired, instance),
+              instanceReady(instance) && associationsConverged(desired, instance),
           }),
         );
-        if (
-          !instanceReady(instance) ||
-          !associationsConverged(desired, instance)
-        ) {
+        if (!instanceReady(instance) || !associationsConverged(desired, instance)) {
           return yield* new InvalidDBInstanceAssociations({
             message: `DB instance '${instanceId}' associations did not converge`,
           });
@@ -1720,10 +1604,7 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      const waitForPort = Effect.fn(function* (
-        instanceId: string,
-        port: number,
-      ) {
+      const waitForPort = Effect.fn(function* (instanceId: string, port: number) {
         const instance = yield* observeReadiness(instanceId).pipe(
           Effect.repeat({
             schedule: Schedule.min([
@@ -1731,8 +1612,7 @@ export const DBInstanceProvider = () =>
               Schedule.spaced("1 minute"),
             ]),
             times: 10,
-            until: (instance) =>
-              instanceReady(instance) && portConverged(instance, port),
+            until: (instance) => instanceReady(instance) && portConverged(instance, port),
           }),
         );
         if (!instanceReady(instance) || !portConverged(instance, port)) {
@@ -1766,9 +1646,7 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      const validateMasterSecretPolicy = Effect.fn(function* (
-        policy: PolicyDocument | undefined,
-      ) {
+      const validateMasterSecretPolicy = Effect.fn(function* (policy: PolicyDocument | undefined) {
         if (policy === undefined) return;
         const validation = yield* secretsmanager.validateResourcePolicy({
           ResourcePolicy: stringifyPolicyDocument(policy),
@@ -1809,16 +1687,11 @@ export const DBInstanceProvider = () =>
         if (instance.DBClusterIdentifier !== undefined) {
           return { instance, policy: undefined };
         }
-        if (
-          instance.MasterUserSecret?.SecretArn === undefined &&
-          policy !== undefined
-        ) {
+        if (instance.MasterUserSecret?.SecretArn === undefined && policy !== undefined) {
           instance = yield* readInstance(instanceId).pipe(
             Effect.flatMap((current) =>
               current?.MasterUserSecret?.SecretArn === undefined
-                ? Effect.fail(
-                    new DBInstanceManagedSecretMissing({ instanceId }),
-                  )
+                ? Effect.fail(new DBInstanceManagedSecretMissing({ instanceId }))
                 : Effect.succeed(current),
             ),
             Effect.retry({
@@ -1830,8 +1703,7 @@ export const DBInstanceProvider = () =>
         }
         const secretArn = instance.MasterUserSecret?.SecretArn;
         if (secretArn === undefined) return { instance, policy: undefined };
-        const desired =
-          policy === undefined ? undefined : normalizePolicyDocument(policy);
+        const desired = policy === undefined ? undefined : normalizePolicyDocument(policy);
         const observed = yield* readObservedSecretPolicy(instance);
         if (observed === desired) return { instance, policy: observed };
         const writePolicy =
@@ -1902,9 +1774,7 @@ export const DBInstanceProvider = () =>
           ),
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
-          yield* validateMasterSecretPolicy(
-            news.masterUserSecretResourcePolicy,
-          );
+          yield* validateMasterSecretPolicy(news.masterUserSecretResourcePolicy);
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
             (yield* toIdentifier(id, news))
@@ -1935,27 +1805,20 @@ export const DBInstanceProvider = () =>
             }
             const port = yield* desiredInstancePort(news, instance);
             const associations = yield* resolveAssociations(news, instance);
-            const desiredStorage = yield* resolveStorage(
-              news,
-              instance.AllocatedStorage,
-            );
+            const desiredStorage = yield* resolveStorage(news, instance.AllocatedStorage);
             if (
               !storageConverged(instance, desiredStorage) ||
               !autoscalingConverged(storage, instance) ||
               !portConverged(instance, port) ||
               !associationsConverged(associations, instance) ||
-              !securityConverged(
-                securityConfiguration(news, instance),
-                instance,
-              ) ||
+              !securityConverged(securityConfiguration(news, instance), instance) ||
               !Object.hasOwn(output, "vpcSecurityGroupStatuses") ||
               (news.masterUserSecretResourcePolicy !== undefined &&
                 instance.MasterUserSecret?.SecretArn === undefined) ||
               (news.masterUserSecretResourcePolicy === undefined
                 ? undefined
-                : normalizePolicyDocument(
-                    news.masterUserSecretResourcePolicy,
-                  )) !== (yield* readObservedSecretPolicy(instance))
+                : normalizePolicyDocument(news.masterUserSecretResourcePolicy)) !==
+                (yield* readObservedSecretPolicy(instance))
             ) {
               return { action: "update" } as const;
             }
@@ -1964,10 +1827,7 @@ export const DBInstanceProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =
             output?.dbInstanceIdentifier ??
-            (yield* toIdentifier(
-              id,
-              olds ?? { dbInstanceClass: "", engine: "" },
-            ));
+            (yield* toIdentifier(id, olds ?? { dbInstanceClass: "", engine: "" }));
           const instance = yield* readInstance(identifier);
           if (!instance?.DBInstanceArn) {
             return undefined;
@@ -1979,18 +1839,13 @@ export const DBInstanceProvider = () =>
             // and last-sent fingerprint forward so a refresh drops neither.
             skipFinalSnapshot: output?.skipFinalSnapshot,
             finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
-            masterUserPasswordFingerprint:
-              output?.masterUserPasswordFingerprint,
-            masterUserSecretResourcePolicy:
-              yield* readObservedSecretPolicy(instance),
+            masterUserPasswordFingerprint: output?.masterUserPasswordFingerprint,
+            masterUserSecretResourcePolicy: yield* readObservedSecretPolicy(instance),
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          yield* validateMasterSecretPolicy(
-            news.masterUserSecretResourcePolicy,
-          );
-          const identifier =
-            output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          yield* validateMasterSecretPolicy(news.masterUserSecretResourcePolicy);
+          const identifier = output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           // AWS never returns the master password, so there is nothing to
           // observe-and-diff — fingerprint the configured value instead and
           // only send `MasterUserPassword` when the fingerprint changed.
@@ -2002,9 +1857,7 @@ export const DBInstanceProvider = () =>
           const passwordFingerprint =
             news.masterUserPassword !== undefined
               ? Redacted.make(
-                  yield* sha256(
-                    `${identifier}:${Redacted.value(news.masterUserPassword)}`,
-                  ),
+                  yield* sha256(`${identifier}:${Redacted.value(news.masterUserPassword)}`),
                 )
               : undefined;
           const internalTags = yield* createInternalTags(id);
@@ -2014,9 +1867,7 @@ export const DBInstanceProvider = () =>
           const performanceInsightsRetentionDays = toWireDays(
             news.performanceInsightsRetentionPeriod,
           );
-          const monitoringIntervalSeconds = toWireSeconds(
-            news.monitoringInterval,
-          );
+          const monitoringIntervalSeconds = toWireSeconds(news.monitoringInterval);
 
           const storage = yield* toStorageConfiguration(news);
           // Observe — fetch live instance state.
@@ -2030,8 +1881,7 @@ export const DBInstanceProvider = () =>
               news.engine.startsWith("custom-") ||
               observed?.DBClusterIdentifier !== undefined ||
               news.manageMasterUserPassword === false ||
-              (!observed?.MasterUserSecret?.SecretArn &&
-                !news.manageMasterUserPassword))
+              (!observed?.MasterUserSecret?.SecretArn && !news.manageMasterUserPassword))
           ) {
             return yield* new InvalidDBInstanceSecretPolicy({
               message:
@@ -2041,10 +1891,7 @@ export const DBInstanceProvider = () =>
           let security = securityConfiguration(news, observed);
           let port = yield* desiredInstancePort(news, observed);
           let associations = yield* resolveAssociations(news, observed);
-          let desiredStorage = yield* resolveStorage(
-            news,
-            observed?.AllocatedStorage,
-          );
+          let desiredStorage = yield* resolveStorage(news, observed?.AllocatedStorage);
 
           // Ensure — create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
@@ -2081,8 +1928,7 @@ export const DBInstanceProvider = () =>
                 EnableIAMDatabaseAuthentication: security.iamAuthentication,
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
-                PerformanceInsightsRetentionPeriod:
-                  performanceInsightsRetentionDays,
+                PerformanceInsightsRetentionPeriod: performanceInsightsRetentionDays,
                 MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
                 EnableCloudwatchLogsExports: security.logExports,
@@ -2100,9 +1946,7 @@ export const DBInstanceProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBInstanceAlreadyExistsFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBInstanceAlreadyExistsFault", () => Effect.succeed(false)),
               );
 
             observed = yield* waitForInstance(identifier);
@@ -2114,10 +1958,7 @@ export const DBInstanceProvider = () =>
                 (instance) => !hasPendingStorage(instance),
               );
             }
-            desiredStorage = yield* resolveStorage(
-              news,
-              observed.AllocatedStorage,
-            );
+            desiredStorage = yield* resolveStorage(news, observed.AllocatedStorage);
 
             associations = yield* resolveAssociations(news, observed);
 
@@ -2195,18 +2036,12 @@ export const DBInstanceProvider = () =>
               core.MasterUserSecretKmsKeyId = news.masterUserSecretKmsKeyId;
               coreDirty = true;
             }
-            if (
-              news.manageMasterUserPassword &&
-              news.rotateMasterUserPassword
-            ) {
+            if (news.manageMasterUserPassword && news.rotateMasterUserPassword) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
             } else if (
               news.masterUserPassword !== undefined &&
-              !sameFingerprint(
-                passwordFingerprint,
-                output?.masterUserPasswordFingerprint,
-              )
+              !sameFingerprint(passwordFingerprint, output?.masterUserPasswordFingerprint)
             ) {
               core.MasterUserPassword = news.masterUserPassword;
               coreDirty = true;
@@ -2234,10 +2069,7 @@ export const DBInstanceProvider = () =>
               (instance) => !hasPendingStorage(instance),
             );
           }
-          desiredStorage = yield* resolveStorage(
-            news,
-            observed.AllocatedStorage,
-          );
+          desiredStorage = yield* resolveStorage(news, observed.AllocatedStorage);
           if (desiredStorage && !storageConverged(observed, desiredStorage)) {
             yield* rds.modifyDBInstance({
               DBInstanceIdentifier: identifier,
@@ -2260,8 +2092,7 @@ export const DBInstanceProvider = () =>
                 : storage.maxAllocatedStorage;
             if (ceiling === undefined) {
               return yield* new InvalidDBInstanceStorage({
-                message:
-                  "RDS did not return the allocated storage needed to disable autoscaling",
+                message: "RDS did not return the allocated storage needed to disable autoscaling",
               });
             }
             // AWS disables autoscaling when the ceiling equals live allocation.
@@ -2273,8 +2104,7 @@ export const DBInstanceProvider = () =>
             observed = yield* waitForStorage(
               identifier,
               (instance) =>
-                allocationConverged(storage, instance) &&
-                autoscalingConverged(storage, instance),
+                allocationConverged(storage, instance) && autoscalingConverged(storage, instance),
             );
           }
 
@@ -2299,14 +2129,8 @@ export const DBInstanceProvider = () =>
 
           associations = yield* resolveAssociations(news, observed);
           if (!associationsConverged(associations, observed)) {
-            const parameterChanged = !parameterGroupMatches(
-              associations,
-              observed,
-            );
-            const securityChanged = !securityGroupsMatch(
-              associations,
-              observed,
-            );
+            const parameterChanged = !parameterGroupMatches(associations, observed);
+            const securityChanged = !securityGroupsMatch(associations, observed);
             if (securityChanged && news.engine.startsWith("custom-")) {
               return yield* new InvalidDBInstanceAssociations({
                 message:
@@ -2319,9 +2143,7 @@ export const DBInstanceProvider = () =>
                 DBParameterGroupName: parameterChanged
                   ? associations.dbParameterGroupName
                   : undefined,
-                VpcSecurityGroupIds: securityChanged
-                  ? associations.vpcSecurityGroupIds
-                  : undefined,
+                VpcSecurityGroupIds: securityChanged ? associations.vpcSecurityGroupIds : undefined,
                 ApplyImmediately: true,
               });
             }
@@ -2329,12 +2151,10 @@ export const DBInstanceProvider = () =>
           }
 
           security = securityConfiguration(news, observed);
-          const iamPending =
-            observed.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled;
+          const iamPending = observed.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled;
           const iamChanged = !iamConverged(security, observed);
           const networkChanged =
-            security.networkType !== undefined &&
-            security.networkType !== observed.NetworkType;
+            security.networkType !== undefined && security.networkType !== observed.NetworkType;
           if (iamChanged || networkChanged) {
             // IAM and network changes honor maintenance scheduling. AWS cannot
             // selectively apply one queued change without applying the rest.
@@ -2356,21 +2176,14 @@ export const DBInstanceProvider = () =>
           const protectionChanged =
             security.deletionProtection !== undefined &&
             security.deletionProtection !== observed.DeletionProtection;
-          const logDelta = logExportDelta(
-            effectiveLogExports(observed),
-            security.logExports,
-          );
+          const logDelta = logExportDelta(effectiveLogExports(observed), security.logExports);
           if (publicChanged || protectionChanged || logDelta) {
             // These fields apply immediately even with false; leave unrelated
             // maintenance-window changes queued rather than flushing them.
             yield* rds.modifyDBInstance({
               DBInstanceIdentifier: identifier,
-              PubliclyAccessible: publicChanged
-                ? security.publiclyAccessible
-                : undefined,
-              DeletionProtection: protectionChanged
-                ? security.deletionProtection
-                : undefined,
+              PubliclyAccessible: publicChanged ? security.publiclyAccessible : undefined,
+              DeletionProtection: protectionChanged ? security.deletionProtection : undefined,
               CloudwatchLogsExportConfiguration: logDelta,
               ApplyImmediately: false,
             });
@@ -2432,9 +2245,7 @@ export const DBInstanceProvider = () =>
               SkipFinalSnapshot: skipFinalSnapshot,
               FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
-            .pipe(
-              Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
           // Block until the instance is fully gone. RDS deletion is async; if we
           // return while it is still `deleting`, a dependent (e.g. a
           // DBSubnetGroup or VPC) is torn down next and AWS rejects it with
@@ -2446,9 +2257,7 @@ export const DBInstanceProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBInstanceNotFoundFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(false)),
               ),
             {
               schedule: Schedule.max([

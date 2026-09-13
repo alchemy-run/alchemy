@@ -20,10 +20,7 @@ const sharedStack = Core.scratchStack(testOptions, "GreengrassV2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -43,31 +40,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // A type alias (not an interface) so it keeps the implicit index signature —
 // interfaces are not comparable to the JSON `JsonObject` type that
@@ -80,9 +68,7 @@ type Probe = {
 describe.sequential("GreengrassV2 Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "GreengrassV2 test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("GreengrassV2 test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("GreengrassV2 test setup: deploying fixture");
@@ -97,9 +83,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `GreengrassV2 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`GreengrassV2 test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -107,9 +91,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `GreengrassV2 test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`GreengrassV2 test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -129,23 +111,21 @@ describe.sequential("GreengrassV2 Bindings", () => {
   });
 
   describe("DescribeComponent", () => {
-    test.provider(
-      "reads the bound component version's metadata (injected arn)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/component")) as {
-            arn: string;
-            componentName: string;
-            componentVersion: string;
-            state: string;
-          };
-          expect(response.componentName).toBe(COMPONENT_NAME);
-          expect(response.componentVersion).toBe(COMPONENT_VERSION);
-          expect(response.arn).toContain(
-            `:components:${COMPONENT_NAME}:versions:${COMPONENT_VERSION}`,
-          );
-          expect(response.state).toBe("DEPLOYABLE");
-        }),
+    test.provider("reads the bound component version's metadata (injected arn)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/component")) as {
+          arn: string;
+          componentName: string;
+          componentVersion: string;
+          state: string;
+        };
+        expect(response.componentName).toBe(COMPONENT_NAME);
+        expect(response.componentVersion).toBe(COMPONENT_VERSION);
+        expect(response.arn).toContain(
+          `:components:${COMPONENT_NAME}:versions:${COMPONENT_VERSION}`,
+        );
+        expect(response.state).toBe("DEPLOYABLE");
+      }),
     );
   });
 
@@ -163,36 +143,29 @@ describe.sequential("GreengrassV2 Bindings", () => {
   });
 
   describe("GetComponentVersionArtifact", () => {
-    test.provider(
-      "a missing artifact surfaces a typed error (never AccessDenied)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/artifact")) as Probe;
-          expect(response.ok).toBe(false);
-          expect(response.tag).not.toBe("AccessDeniedException");
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
-        }),
+    test.provider("a missing artifact surfaces a typed error (never AccessDenied)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/artifact")) as Probe;
+        expect(response.ok).toBe(false);
+        expect(response.tag).not.toBe("AccessDeniedException");
+        expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
+      }),
     );
   });
 
   describe("GetDeployment", () => {
-    test.provider(
-      "reads the bound deployment's detail (injected deployment id)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/deployment")) as {
-            deploymentId: string;
-            deploymentStatus: string;
-            targetArn: string;
-            isLatestForTarget: boolean;
-          };
-          expect(response.deploymentId).toBeTruthy();
-          expect(response.targetArn).toContain(":thing/");
-          expect(response.isLatestForTarget).toBe(true);
-        }),
+    test.provider("reads the bound deployment's detail (injected deployment id)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/deployment")) as {
+          deploymentId: string;
+          deploymentStatus: string;
+          targetArn: string;
+          isLatestForTarget: boolean;
+        };
+        expect(response.deploymentId).toBeTruthy();
+        expect(response.targetArn).toContain(":thing/");
+        expect(response.isLatestForTarget).toBe(true);
+      }),
     );
   });
 
@@ -209,15 +182,13 @@ describe.sequential("GreengrassV2 Bindings", () => {
   });
 
   describe("ListComponents", () => {
-    test.provider(
-      "enumerates private components incl. the fixture's",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/components")) as {
-            names: string[];
-          };
-          expect(response.names).toContain(COMPONENT_NAME);
-        }),
+    test.provider("enumerates private components incl. the fixture's", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/components")) as {
+          names: string[];
+        };
+        expect(response.names).toContain(COMPONENT_NAME);
+      }),
     );
   });
 
@@ -261,9 +232,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
           )) as Record<string, Probe>;
           // Point reads/writes on a missing core device are typed not-found.
           expect(response.getCoreDevice!.tag).toBe("ResourceNotFoundException");
-          expect(response.deleteCoreDevice!.tag).toBe(
-            "ResourceNotFoundException",
-          );
+          expect(response.deleteCoreDevice!.tag).toBe("ResourceNotFoundException");
           // Every probe proves IAM: none may be AccessDenied.
           for (const probe of Object.values(response)) {
             expect(probe.tag).not.toBe("AccessDeniedException");
@@ -294,34 +263,30 @@ describe.sequential("GreengrassV2 Bindings", () => {
     // even with greengrass:ResolveComponentCandidates granted. This ungated
     // probe proves the binding's request plumbing end-to-end: the call
     // reaches the service and surfaces the documented typed rejection.
-    test.provider(
-      "IAM-signed resolve surfaces the documented typed rejection",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/resolve")) as {
-            ok: boolean;
-            names: string[];
-            tag?: string;
-          };
-          expect(response.ok).toBe(false);
-          expect(response.tag).toBe("AccessDeniedException");
-        }),
+    test.provider("IAM-signed resolve surfaces the documented typed rejection", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/resolve")) as {
+          ok: boolean;
+          names: string[];
+          tag?: string;
+        };
+        expect(response.ok).toBe(false);
+        expect(response.tag).toBe("AccessDeniedException");
+      }),
     );
   });
 
   describe("consumeGreengrassEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeGreengrassEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeGreengrassEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 
@@ -339,8 +304,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
           const response = (yield* postJson("/cancel-deployment").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
-              until: (r): boolean =>
-                (r as Probe).tag !== "AccessDeniedException",
+              until: (r): boolean => (r as Probe).tag !== "AccessDeniedException",
               times: 20,
             }),
           )) as Probe;
@@ -349,8 +313,7 @@ describe.sequential("GreengrassV2 Bindings", () => {
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
               until: (d): boolean =>
-                (d as { deploymentStatus: string }).deploymentStatus ===
-                "CANCELED",
+                (d as { deploymentStatus: string }).deploymentStatus === "CANCELED",
               times: 10,
             }),
           )) as { deploymentStatus: string };

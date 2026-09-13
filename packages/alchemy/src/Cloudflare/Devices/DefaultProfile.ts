@@ -296,42 +296,18 @@ export const DeviceDefaultProfileProvider = () =>
           needsPatch = true;
         }
       };
-      setIf(
-        "captivePortal",
-        news.captivePortal,
-        denull(obs.profile.captivePortal),
-      );
+      setIf("captivePortal", news.captivePortal, denull(obs.profile.captivePortal));
       setIf("autoConnect", news.autoConnect, denull(obs.profile.autoConnect));
-      setIf(
-        "allowedToLeave",
-        news.allowedToLeave,
-        denull(obs.profile.allowedToLeave),
-      );
-      setIf(
-        "allowModeSwitch",
-        news.allowModeSwitch,
-        denull(obs.profile.allowModeSwitch),
-      );
-      setIf(
-        "allowUpdates",
-        news.allowUpdates,
-        denull(obs.profile.allowUpdates),
-      );
+      setIf("allowedToLeave", news.allowedToLeave, denull(obs.profile.allowedToLeave));
+      setIf("allowModeSwitch", news.allowModeSwitch, denull(obs.profile.allowModeSwitch));
+      setIf("allowUpdates", news.allowUpdates, denull(obs.profile.allowUpdates));
       setIf(
         "disableAutoFallback",
         news.disableAutoFallback,
         denull(obs.profile.disableAutoFallback),
       );
-      setIf(
-        "excludeOfficeIps",
-        news.excludeOfficeIps,
-        denull(obs.profile.excludeOfficeIps),
-      );
-      setIf(
-        "switchLocked",
-        news.switchLocked,
-        denull(obs.profile.switchLocked),
-      );
+      setIf("excludeOfficeIps", news.excludeOfficeIps, denull(obs.profile.excludeOfficeIps));
+      setIf("switchLocked", news.switchLocked, denull(obs.profile.switchLocked));
       // lanAllowMinutes / lanAllowSubnetSize are accepted by PATCH but
       // not surfaced on GET, so we cannot diff them. Push them every
       // time the user sets them — the API is idempotent.
@@ -354,11 +330,7 @@ export const DeviceDefaultProfileProvider = () =>
         denull(obs.profile.sccmVpnBoundarySupport),
       );
       setIf("supportUrl", news.supportUrl, denull(obs.profile.supportUrl));
-      setIf(
-        "tunnelProtocol",
-        news.tunnelProtocol,
-        denull(obs.profile.tunnelProtocol),
-      );
+      setIf("tunnelProtocol", news.tunnelProtocol, denull(obs.profile.tunnelProtocol));
 
       if (
         desiredSm !== undefined &&
@@ -450,9 +422,7 @@ export const DeviceDefaultProfileProvider = () =>
 // a default-policy list endpoint is empty, and distilled's schema
 // rejects that as a transport error. Swallow into `undefined` so the
 // reconciler treats an empty list as "no entries" rather than failing.
-const listOrEmpty = <A, Err, Req>(
-  op: Effect.Effect<{ result?: readonly A[] | null }, Err, Req>,
-) =>
+const listOrEmpty = <A, Err, Req>(op: Effect.Effect<{ result?: readonly A[] | null }, Err, Req>) =>
   op.pipe(
     Effect.catch(() =>
       Effect.succeed({
@@ -468,9 +438,7 @@ const observe = Effect.fn(function* () {
       zeroTrust.getDevicePolicyDefault({ accountId }),
       listOrEmpty(zeroTrust.getDevicePolicyDefaultInclude({ accountId })),
       listOrEmpty(zeroTrust.getDevicePolicyDefaultExclude({ accountId })),
-      listOrEmpty(
-        zeroTrust.getDevicePolicyDefaultFallbackDomain({ accountId }),
-      ),
+      listOrEmpty(zeroTrust.getDevicePolicyDefaultFallbackDomain({ accountId })),
     ],
     { concurrency: "unbounded" },
   );
@@ -527,8 +495,7 @@ const buildAttrs = (
  * Strip Cloudflare's `null` echoes to `undefined` so structural equality
  * (`JSON.stringify`) works.
  */
-const denull = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const denull = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const normalizeSplit = (
   entry:
@@ -556,9 +523,7 @@ const normalizeFallback = (entry: {
  */
 const encodeSplit = (
   e: DeviceDefaultProfile.SplitTunnelEntry,
-):
-  | { address: string; description?: string }
-  | { host: string; description?: string } => {
+): { address: string; description?: string } | { host: string; description?: string } => {
   if (e.host && !e.address) {
     return e.description !== undefined
       ? { host: e.host, description: e.description }
@@ -581,8 +546,7 @@ const encodeFallback = (
 };
 
 /** Structural deep-equality via canonical JSON. */
-const sameJSON = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const sameJSON = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 const inferMode = (observed: {
   include?: readonly unknown[] | null | undefined;

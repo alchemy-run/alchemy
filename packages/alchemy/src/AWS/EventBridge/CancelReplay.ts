@@ -29,12 +29,7 @@ export interface CancelReplay extends Binding.Service<
   () => Effect.Effect<
     (
       request: CancelReplayRequest,
-    ) => Effect.Effect<
-      eventbridge.CancelReplayResponse,
-      eventbridge.CancelReplayError
-    >
+    ) => Effect.Effect<eventbridge.CancelReplayResponse, eventbridge.CancelReplayError>
   >
 > {}
-export const CancelReplay = Binding.Service<CancelReplay>(
-  "AWS.EventBridge.CancelReplay",
-);
+export const CancelReplay = Binding.Service<CancelReplay>("AWS.EventBridge.CancelReplay");

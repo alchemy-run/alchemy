@@ -23,18 +23,9 @@ const environmentSelection = {
   isEphemeral: true,
   deletedAt: true,
 } as const satisfies railway.Selection<"Environment">;
-type EnvironmentResponse = railway.Result<
-  "Environment!",
-  typeof environmentSelection
->;
-type CreateEnvironmentResponse = railway.Result<
-  "Environment!",
-  typeof environmentSelection
->;
-type RenameEnvironmentResponse = railway.Result<
-  "Environment!",
-  typeof environmentSelection
->;
+type EnvironmentResponse = railway.Result<"Environment!", typeof environmentSelection>;
+type CreateEnvironmentResponse = railway.Result<"Environment!", typeof environmentSelection>;
+type RenameEnvironmentResponse = railway.Result<"Environment!", typeof environmentSelection>;
 type EnvironmentsResponseEdgesItemNode = railway.Result<
   "Environment!",
   typeof environmentSelection
@@ -165,16 +156,12 @@ const resolveEnvironmentProps = (
  * @resource
  */
 export const Environment: typeof EnvironmentResource = Object.assign(
-  (
-    id: string,
-    props: EnvironmentProps | Effect.Effect<EnvironmentProps, never, Providers>,
-  ) => EnvironmentResource(id, resolveEnvironmentProps(props)),
+  (id: string, props: EnvironmentProps | Effect.Effect<EnvironmentProps, never, Providers>) =>
+    EnvironmentResource(id, resolveEnvironmentProps(props)),
   EnvironmentResource,
 );
 
-export class EnvironmentNotCreated extends Data.TaggedError(
-  "Railway.EnvironmentNotCreated",
-)<{
+export class EnvironmentNotCreated extends Data.TaggedError("Railway.EnvironmentNotCreated")<{
   name: string;
   projectId: string;
 }> {}
@@ -213,15 +200,12 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
     return yield* createRailwayEnvironmentName(id);
   });
 
-const isGone = (env: CloudEnvironment | undefined) =>
-  env === undefined || env.deletedAt != null;
+const isGone = (env: CloudEnvironment | undefined) => env === undefined || env.deletedAt != null;
 
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const getById = (environmentId: string, projectId?: string) =>
@@ -239,28 +223,22 @@ const getById = (environmentId: string, projectId?: string) =>
     );
 
 const findByName = (projectId: string, name: string) =>
-  railway.environments
-    .items({ projectId, first: 50 }, environmentSelection)
-    .pipe(
-      Stream.filter((env) => !isGone(env) && env.name === name),
-      Stream.take(1),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-    );
+  railway.environments.items({ projectId, first: 50 }, environmentSelection).pipe(
+    Stream.filter((env) => !isGone(env) && env.name === name),
+    Stream.take(1),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+  );
 
-const listProjectEnvironments = (projectId: string) =>
-  railway.environments
-    .items({ projectId, first: 50 }, environmentSelection)
-    .pipe(
-      Stream.runCollect,
-      Effect.map((envs) => Array.from(envs)),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed([] as EnvironmentsResponseEdgesItemNode[]),
-      ),
-    );
+const _listProjectEnvironments = (projectId: string) =>
+  railway.environments.items({ projectId, first: 50 }, environmentSelection).pipe(
+    Stream.runCollect,
+    Effect.map((envs) => Array.from(envs)),
+    railway.catchTags(["RailwayNotFound"], () =>
+      Effect.succeed([] as EnvironmentsResponseEdgesItemNode[]),
+    ),
+  );
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
@@ -280,15 +258,12 @@ export const EnvironmentProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const name = yield* resolveName(id, olds?.name, output?.name);
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const found =
         (output?.environmentId !== undefined
           ? yield* getById(output.environmentId, output.projectId)
           : undefined) ??
-        (projectId !== undefined
-          ? yield* findByName(projectId, name)
-          : undefined);
+        (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, { name, projectId });
       if (output !== undefined) return attrs;
@@ -299,15 +274,9 @@ export const EnvironmentProvider = () =>
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         railway.environments
-          .items(
-            { projectId: project.projectId, first: 50 },
-            environmentSelection,
-          )
+          .items({ projectId: project.projectId, first: 50 }, environmentSelection)
           .pipe(
-            Stream.filter(
-              (env) =>
-                env.deletedAt == null && matchesAlchemyPhysicalName(env.name),
-            ),
+            Stream.filter((env) => env.deletedAt == null && matchesAlchemyPhysicalName(env.name)),
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).map((env) => {
@@ -361,11 +330,7 @@ export const EnvironmentProvider = () =>
             },
             environmentSelection,
           ),
-        ).pipe(
-          railway.catchTags("RailwayValidationError", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        ).pipe(railway.catchTags("RailwayValidationError", () => Effect.succeed(undefined)));
         current = created ?? (yield* findByName(projectId, name));
       }
 
@@ -395,9 +360,7 @@ export const EnvironmentProvider = () =>
       yield* waitUntilDeleted(
         "Environment",
         environmentId,
-        getById(environmentId, output.projectId).pipe(
-          Effect.map((env) => env === undefined),
-        ),
+        getById(environmentId, output.projectId).pipe(Effect.map((env) => env === undefined)),
       );
     }),
   });

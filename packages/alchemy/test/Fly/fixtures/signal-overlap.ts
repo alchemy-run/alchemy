@@ -93,19 +93,13 @@ export const readEvidence = <S extends Schema.Top>(file: string, schema: S) =>
           onExcessProperty: "error",
         }),
       ),
-      Effect.mapError(
-        () =>
-          new Error("Missing or invalid signal evidence; preserve the attempt"),
-      ),
+      Effect.mapError(() => new Error("Missing or invalid signal evidence; preserve the attempt")),
     );
   });
 
 export const assertSingleRunner = Effect.gen(function* () {
   const args = yield* Effect.sync(() => process.argv.slice(2));
-  const focused =
-    args[0] === "--exclude" && args[1] === "test/Railway"
-      ? args.slice(2)
-      : args;
+  const focused = args[0] === "--exclude" && args[1] === "test/Railway" ? args.slice(2) : args;
   expect(focused).toEqual([
     signalOverlapFile,
     "-t",
@@ -140,12 +134,8 @@ export const assertSingleRunner = Effect.gen(function* () {
     expect(source).not.toMatch(
       /(?:from\s+|import\s*(?:\(\s*)?|require\s*\()\s*["'](?:node:)?child_process["']/,
     );
-    expect(source).not.toMatch(
-      /\b(?:Bun|Deno)\s*\.\s*(?:spawn|spawnSync|Command)\s*\(/,
-    );
-    expect(source).not.toMatch(
-      /from\s+["'][^"']*(?:ChildProcess|CommandExecutor)[^"']*["']/,
-    );
+    expect(source).not.toMatch(/\b(?:Bun|Deno)\s*\.\s*(?:spawn|spawnSync|Command)\s*\(/);
+    expect(source).not.toMatch(/from\s+["'][^"']*(?:ChildProcess|CommandExecutor)[^"']*["']/);
   }
 });
 
@@ -164,10 +154,7 @@ export const boundary = (event: TransportEvent) => {
   };
 };
 
-export const firstReturnedUncordon = (
-  events: readonly TransportEvent[],
-  appName: string,
-) =>
+export const firstReturnedUncordon = (events: readonly TransportEvent[], appName: string) =>
   events.find(
     (event) =>
       event.stage === "forwarded" &&
@@ -193,9 +180,7 @@ export const matches = (
       event.path.endsWith("/uncordon")
     );
   if (phase === "retirement")
-    return (
-      event.method === "DELETE" && event.path === `${base}/${predecessorId}`
-    );
+    return event.method === "DELETE" && event.path === `${base}/${predecessorId}`;
   const returned = firstReturnedUncordon(events, appName);
   return (
     returned !== undefined &&
@@ -213,9 +198,7 @@ export const assertBoundary = (witness: Witness) =>
     expect(barrier.status).toBeGreaterThanOrEqual(200);
     expect(barrier.status).toBeLessThan(300);
     expect(barrier.machineId).toBe(
-      witness.phase === "retirement"
-        ? witness.predecessor.id
-        : witness.candidate.id,
+      witness.phase === "retirement" ? witness.predecessor.id : witness.candidate.id,
     );
     if (witness.phase === "overlap") {
       expect(returnedUncordon).toBeDefined();
@@ -261,10 +244,7 @@ export const assertInventory = (stack: ScratchStack, witness: Witness) =>
           : "promoting",
     );
     if (witness.phase !== "retirement") {
-      const predecessor = yield* machine(
-        witness.appName,
-        witness.predecessor.id,
-      );
+      const predecessor = yield* machine(witness.appName, witness.predecessor.id);
       expect(yield* identity(predecessor, stack)).toEqual(witness.predecessor);
       expect(predecessor.cordoned).toBe(false);
       expect(predecessor.state).toBe("started");
@@ -280,24 +260,16 @@ export const observeLease = (appName: string, machineId: string) =>
       present: !!value.data?.nonce,
       expiresAt: value.data?.expires_at ?? 0,
     })),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed({ present: false, expiresAt: 0 }),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed({ present: false, expiresAt: 0 })),
     Effect.timeout("10 seconds"),
-    Effect.mapError(
-      (error) => new Error(`Signal lease observation failed (${error._tag})`),
-    ),
-    Effect.flatMap((value) =>
-      nowSeconds.pipe(Effect.map((at) => ({ machineId, ...value, at }))),
-    ),
+    Effect.mapError((error) => new Error(`Signal lease observation failed (${error._tag})`)),
+    Effect.flatMap((value) => nowSeconds.pipe(Effect.map((at) => ({ machineId, ...value, at })))),
   );
 
 export const observeLeases = (witness: Witness) =>
-  Effect.forEach(
-    witness.leases,
-    (held) => observeLease(witness.appName, held.machineId),
-    { concurrency: 2 },
-  );
+  Effect.forEach(witness.leases, (held) => observeLease(witness.appName, held.machineId), {
+    concurrency: 2,
+  });
 
 export const observeExpiry = (witness: Witness) =>
   Effect.gen(function* () {
@@ -307,9 +279,7 @@ export const observeExpiry = (witness: Witness) =>
     for (const [index, value] of initial.entries()) {
       expect(value.present).toBe(true);
       expect(value.expiresAt).toBeGreaterThan(value.at);
-      expect(value.expiresAt).toBeGreaterThanOrEqual(
-        witness.leases[index]!.expiresAt,
-      );
+      expect(value.expiresAt).toBeGreaterThanOrEqual(witness.leases[index]!.expiresAt);
       expect(value.expiresAt).toBeLessThanOrEqual(witness.recordedAt + 130);
     }
     const samples: (typeof LeaseObservation.Type)[] = [];
@@ -340,10 +310,7 @@ export const observeExpiry = (witness: Witness) =>
     return { initial, samples };
   });
 
-export const assertReleased = (
-  witness: Witness,
-  finalized: typeof Finalized.Type,
-) =>
+export const assertReleased = (witness: Witness, finalized: typeof Finalized.Type) =>
   Effect.gen(function* () {
     expect(witness.signal).toBe("SIGINT");
     expect(witness.leases.length).toBeGreaterThan(0);
@@ -356,24 +323,17 @@ export const assertReleased = (
       witness.leases.map((value) => value.machineId).sort(),
     );
     for (const held of witness.leases) {
-      const observed = finalized.leases.find(
-        (value) => value.machineId === held.machineId,
-      )!;
+      const observed = finalized.leases.find((value) => value.machineId === held.machineId)!;
       expect(observed.present).toBe(false);
       expect(observed.at).toBeGreaterThanOrEqual(witness.recordedAt);
       expect(observed.at).toBeLessThan(held.expiresAt);
       expect(finalized.at).toBeLessThan(held.expiresAt);
       const release = finalized.releases.find(
-        (event) =>
-          event.machineId === held.machineId &&
-          event.status >= 200 &&
-          event.status < 300,
+        (event) => event.machineId === held.machineId && event.status >= 200 && event.status < 300,
       );
       expect(release).toBeDefined();
       expect(release!.method).toBe("DELETE");
-      expect(release!.path).toBe(
-        `/v1/apps/${witness.appName}/machines/${held.machineId}/lease`,
-      );
+      expect(release!.path).toBe(`/v1/apps/${witness.appName}/machines/${held.machineId}/lease`);
       expect(release!.sequence).toBeGreaterThan(witness.barrier.sequence);
       // A deleted Machine cannot masquerade as a released lease.
       const surviving = yield* machine(witness.appName, held.machineId);
@@ -384,11 +344,7 @@ export const assertReleased = (
     return { finalized, current };
   });
 
-export const assertConverged = (
-  stack: ScratchStack,
-  witness: Witness,
-  ids: string[],
-) =>
+export const assertConverged = (stack: ScratchStack, witness: Witness, ids: string[]) =>
   Effect.gen(function* () {
     expect(ids).toEqual([witness.candidate.id]);
     const live = yield* census(witness.appName);
@@ -400,9 +356,8 @@ export const assertConverged = (
         until: (value) =>
           value.state === "started" &&
           value.cordoned === false &&
-          value.checks?.some(
-            (check) => check.name === "ready" && check.status === "passing",
-          ) === true,
+          value.checks?.some((check) => check.name === "ready" && check.status === "passing") ===
+            true,
       }),
       Effect.timeout("60 seconds"),
     );
@@ -413,21 +368,14 @@ export const assertConverged = (
     expect(current.state).toBe("started");
     expect(current.cordoned).toBe(false);
     expect(current.config?.env?.VERSION).toBe("two");
-    const ready =
-      current.checks?.filter((check) => check.name === "ready") ?? [];
+    const ready = current.checks?.filter((check) => check.name === "ready") ?? [];
     expect(ready.length).toBeGreaterThan(0);
     expect(ready.every((check) => check.status === "passing")).toBe(true);
     expect(current.instance_id).toBeDefined();
-    expect(current.config?.metadata?.["alchemy.checked-instance"]).toBe(
-      current.instance_id,
-    );
-    expect(current.config?.metadata?.["alchemy.predecessors"]).toBe(
-      witness.predecessor.id,
-    );
+    expect(current.config?.metadata?.["alchemy.checked-instance"]).toBe(current.instance_id);
+    expect(current.config?.metadata?.["alchemy.predecessors"]).toBe(witness.predecessor.id);
     expect(
-      current.config?.metadata?.["alchemy.image"]?.endsWith(
-        `@${witness.candidate.digest}`,
-      ),
+      current.config?.metadata?.["alchemy.image"]?.endsWith(`@${witness.candidate.digest}`),
     ).toBe(true);
     const row = yield* persistedRow(stack, witness.row.fqn);
     expect(row.instanceId).toBe(witness.row.instanceId);

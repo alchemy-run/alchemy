@@ -84,11 +84,9 @@ export default EntityResolutionTestFunction.make(
       storageDescriptor: {
         location: `s3://${FIXTURE_BUCKET_NAME}/input/`,
         inputFormat: "org.apache.hadoop.mapred.TextInputFormat",
-        outputFormat:
-          "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        outputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
         serdeInfo: {
-          serializationLibrary:
-            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          serializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
           parameters: { "field.delim": ",", "skip.header.line.count": "1" },
         },
         columns: [
@@ -106,128 +104,102 @@ export default EntityResolutionTestFunction.make(
         { fieldName: "name", type: "NAME", matchKey: "name" },
       ],
     });
-    const matchingWorkflow = yield* EntityResolution.MatchingWorkflow(
-      "ErBindingsMatching",
-      {
-        inputSourceConfig: [
-          { inputSourceARN: table.tableArn, schemaName: schema.schemaName },
-        ],
-        outputSourceConfig: [
-          {
-            outputS3Path: `s3://${FIXTURE_BUCKET_NAME}/matches/`,
-            output: [{ name: "id" }, { name: "email" }, { name: "name" }],
-          },
-        ],
-        resolutionTechniques: {
-          resolutionType: "RULE_MATCHING",
-          ruleBasedProperties: {
-            rules: [{ ruleName: "ByEmail", matchingKeys: ["email"] }],
-            attributeMatchingModel: "ONE_TO_ONE",
-          },
+    const matchingWorkflow = yield* EntityResolution.MatchingWorkflow("ErBindingsMatching", {
+      inputSourceConfig: [{ inputSourceARN: table.tableArn, schemaName: schema.schemaName }],
+      outputSourceConfig: [
+        {
+          outputS3Path: `s3://${FIXTURE_BUCKET_NAME}/matches/`,
+          output: [{ name: "id" }, { name: "email" }, { name: "name" }],
         },
-        roleArn: role.roleArn,
+      ],
+      resolutionTechniques: {
+        resolutionType: "RULE_MATCHING",
+        ruleBasedProperties: {
+          rules: [{ ruleName: "ByEmail", matchingKeys: ["email"] }],
+          attributeMatchingModel: "ONE_TO_ONE",
+        },
       },
-    );
+      roleArn: role.roleArn,
+    });
 
     // Rule-based ID mapping: SOURCE and TARGET namespaces over the same Glue
     // table, with the matching rules declared on the TARGET namespace.
-    const sourceNamespace = yield* EntityResolution.IdNamespace(
-      "ErBindingsSourceNs",
-      {
-        type: "SOURCE",
-        inputSourceConfig: [
-          { inputSourceARN: table.tableArn, schemaName: schema.schemaName },
-        ],
-        // The workflow-create validation requires the SOURCE namespace to
-        // declare its rule-based capabilities (rules themselves live on the
-        // TARGET namespace).
-        idMappingWorkflowProperties: [
-          {
-            idMappingType: "RULE_BASED",
-            ruleBasedProperties: {
-              ruleDefinitionTypes: ["TARGET"],
-              attributeMatchingModel: "ONE_TO_ONE",
-              recordMatchingModels: ["ONE_SOURCE_TO_ONE_TARGET"],
-            },
+    const sourceNamespace = yield* EntityResolution.IdNamespace("ErBindingsSourceNs", {
+      type: "SOURCE",
+      inputSourceConfig: [{ inputSourceARN: table.tableArn, schemaName: schema.schemaName }],
+      // The workflow-create validation requires the SOURCE namespace to
+      // declare its rule-based capabilities (rules themselves live on the
+      // TARGET namespace).
+      idMappingWorkflowProperties: [
+        {
+          idMappingType: "RULE_BASED",
+          ruleBasedProperties: {
+            ruleDefinitionTypes: ["TARGET"],
+            attributeMatchingModel: "ONE_TO_ONE",
+            recordMatchingModels: ["ONE_SOURCE_TO_ONE_TARGET"],
           },
-        ],
-        roleArn: role.roleArn,
-      },
-    );
+        },
+      ],
+      roleArn: role.roleArn,
+    });
     // The service requires TARGET namespace input sources to be matching
     // workflow ARNs (the target ids are the workflow's match IDs):
     // "Check that it follows the pattern:
     //  arn:(aws|...):entityresolution:...:matchingworkflow/{resource_name}".
-    const targetNamespace = yield* EntityResolution.IdNamespace(
-      "ErBindingsTargetNs",
-      {
-        type: "TARGET",
-        inputSourceConfig: [{ inputSourceARN: matchingWorkflow.workflowArn }],
-        idMappingWorkflowProperties: [
-          {
-            idMappingType: "RULE_BASED",
-            ruleBasedProperties: {
-              rules: [{ ruleName: "ByEmail", matchingKeys: ["email"] }],
-              ruleDefinitionTypes: ["TARGET"],
-              attributeMatchingModel: "ONE_TO_ONE",
-              recordMatchingModels: ["ONE_SOURCE_TO_ONE_TARGET"],
-            },
-          },
-        ],
-        roleArn: role.roleArn,
-      },
-    );
-    const idMappingWorkflow = yield* EntityResolution.IdMappingWorkflow(
-      "ErBindingsIdMapping",
-      {
-        inputSourceConfig: [
-          {
-            inputSourceARN: sourceNamespace.idNamespaceArn,
-            type: "SOURCE",
-          },
-          {
-            inputSourceARN: targetNamespace.idNamespaceArn,
-            type: "TARGET",
-          },
-        ],
-        idMappingTechniques: {
+    const targetNamespace = yield* EntityResolution.IdNamespace("ErBindingsTargetNs", {
+      type: "TARGET",
+      inputSourceConfig: [{ inputSourceARN: matchingWorkflow.workflowArn }],
+      idMappingWorkflowProperties: [
+        {
           idMappingType: "RULE_BASED",
           ruleBasedProperties: {
-            ruleDefinitionType: "TARGET",
+            rules: [{ ruleName: "ByEmail", matchingKeys: ["email"] }],
+            ruleDefinitionTypes: ["TARGET"],
             attributeMatchingModel: "ONE_TO_ONE",
-            recordMatchingModel: "ONE_SOURCE_TO_ONE_TARGET",
+            recordMatchingModels: ["ONE_SOURCE_TO_ONE_TARGET"],
           },
         },
-        outputSourceConfig: [
-          { outputS3Path: `s3://${FIXTURE_BUCKET_NAME}/idmapping/` },
-        ],
-        roleArn: role.roleArn,
+      ],
+      roleArn: role.roleArn,
+    });
+    const idMappingWorkflow = yield* EntityResolution.IdMappingWorkflow("ErBindingsIdMapping", {
+      inputSourceConfig: [
+        {
+          inputSourceARN: sourceNamespace.idNamespaceArn,
+          type: "SOURCE",
+        },
+        {
+          inputSourceARN: targetNamespace.idNamespaceArn,
+          type: "TARGET",
+        },
+      ],
+      idMappingTechniques: {
+        idMappingType: "RULE_BASED",
+        ruleBasedProperties: {
+          ruleDefinitionType: "TARGET",
+          attributeMatchingModel: "ONE_TO_ONE",
+          recordMatchingModel: "ONE_SOURCE_TO_ONE_TARGET",
+        },
       },
-    );
+      outputSourceConfig: [{ outputS3Path: `s3://${FIXTURE_BUCKET_NAME}/idmapping/` }],
+      roleArn: role.roleArn,
+    });
 
     // Used by the real-time routes: records reference the Glue table ARN.
     const tableArn = yield* table.tableArn;
 
     // --- matching workflow bindings ---
-    const startMatchingJob =
-      yield* EntityResolution.StartMatchingJob(matchingWorkflow);
-    const getMatchingJob =
-      yield* EntityResolution.GetMatchingJob(matchingWorkflow);
-    const listMatchingJobs =
-      yield* EntityResolution.ListMatchingJobs(matchingWorkflow);
-    const generateMatchId =
-      yield* EntityResolution.GenerateMatchId(matchingWorkflow);
+    const startMatchingJob = yield* EntityResolution.StartMatchingJob(matchingWorkflow);
+    const getMatchingJob = yield* EntityResolution.GetMatchingJob(matchingWorkflow);
+    const listMatchingJobs = yield* EntityResolution.ListMatchingJobs(matchingWorkflow);
+    const generateMatchId = yield* EntityResolution.GenerateMatchId(matchingWorkflow);
     const getMatchId = yield* EntityResolution.GetMatchId(matchingWorkflow);
-    const batchDeleteUniqueId =
-      yield* EntityResolution.BatchDeleteUniqueId(matchingWorkflow);
+    const batchDeleteUniqueId = yield* EntityResolution.BatchDeleteUniqueId(matchingWorkflow);
 
     // --- id mapping workflow bindings ---
-    const startIdMappingJob =
-      yield* EntityResolution.StartIdMappingJob(idMappingWorkflow);
-    const getIdMappingJob =
-      yield* EntityResolution.GetIdMappingJob(idMappingWorkflow);
-    const listIdMappingJobs =
-      yield* EntityResolution.ListIdMappingJobs(idMappingWorkflow);
+    const startIdMappingJob = yield* EntityResolution.StartIdMappingJob(idMappingWorkflow);
+    const getIdMappingJob = yield* EntityResolution.GetIdMappingJob(idMappingWorkflow);
+    const listIdMappingJobs = yield* EntityResolution.ListIdMappingJobs(idMappingWorkflow);
 
     const bound = {
       startMatchingJob,
@@ -269,17 +241,13 @@ export default EntityResolutionTestFunction.make(
         if (request.method === "GET" && pathname === "/jobs/not-found") {
           const matching = yield* getMatchingJob({ jobId: BOGUS_JOB_ID }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           const idMapping = yield* getIdMappingJob({
             jobId: BOGUS_JOB_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ matching, idMapping });
         }
@@ -299,15 +267,13 @@ export default EntityResolutionTestFunction.make(
             // A workflow that has never run a job may reject real-time
             // lookups — surface the typed rejection so the test can assert
             // on it (an IAM gap would still be a 500).
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) =>
-                Effect.succeed({
-                  result: e._tag as string,
-                  matchId: null,
-                  matchRule: null,
-                  message: e.message ?? null,
-                }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({
+                result: e._tag as string,
+                matchId: null,
+                matchRule: null,
+                message: e.message ?? null,
+              }),
             ),
           );
           return yield* HttpServerResponse.json(response);
@@ -345,13 +311,11 @@ export default EntityResolutionTestFunction.make(
             // Real-time generation requires the workflow family to support
             // it — surface the typed rejection instead of a 500 so the test
             // can assert on it.
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) =>
-                Effect.succeed({
-                  result: e._tag as string,
-                  message: e.message ?? null,
-                }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({
+                result: e._tag as string,
+                message: e.message ?? null,
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -374,8 +338,7 @@ export default EntityResolutionTestFunction.make(
                   status: outcome.success.status,
                   deleted: (outcome.success.deleted ?? []).length,
                   errors: (outcome.success.errors ?? []).length,
-                  disconnected: (outcome.success.disconnectedUniqueIds ?? [])
-                    .length,
+                  disconnected: (outcome.success.disconnectedUniqueIds ?? []).length,
                 }
               : {
                   result: outcome.failure._tag as string,

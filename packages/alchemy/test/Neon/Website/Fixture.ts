@@ -44,11 +44,7 @@ export const exampleRoot = Effect.fn(function* (slug: string) {
     prefix: `neon-website-${slug}-`,
   });
   for (const name of yield* fs.readDirectory(source)) {
-    if (
-      !buildDirectories.has(name) &&
-      !name.startsWith(".env") &&
-      name !== ".npmrc"
-    ) {
+    if (!buildDirectories.has(name) && !name.startsWith(".env") && name !== ".npmrc") {
       yield* fs.copy(path.join(source, name), path.join(root, name));
     }
   }
@@ -88,10 +84,7 @@ export const buildPortableExample = Effect.fn(function* (
   return {
     root,
     distDir: output.distDirectory!,
-    serverEntry: path.join(
-      output.distDirectory!,
-      output.serverModules![0]!.name,
-    ),
+    serverEntry: path.join(output.distDirectory!, output.serverModules![0]!.name),
     layout: slug === "nextjs" ? ("next" as const) : ("output" as const),
   };
 });
@@ -109,12 +102,7 @@ export const bodyContaining = Effect.fn(function* (url: string, text: string) {
   return body;
 });
 
-export const updatedBodyContaining = Effect.fn(function* (
-  url: string,
-  text: string,
-) {
-  const samples = yield* functionTextSamples(url, (body) =>
-    body.includes(text),
-  );
+export const updatedBodyContaining = Effect.fn(function* (url: string, text: string) {
+  const samples = yield* functionTextSamples(url, (body) => body.includes(text));
   for (const body of samples) expect(body).toContain(text);
 });

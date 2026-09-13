@@ -39,6 +39,4 @@ export interface GetSamplingRules extends Binding.Service<
     ) => Effect.Effect<xray.GetSamplingRulesResult, xray.GetSamplingRulesError>
   >
 > {}
-export const GetSamplingRules = Binding.Service<GetSamplingRules>(
-  "AWS.XRay.GetSamplingRules",
-);
+export const GetSamplingRules = Binding.Service<GetSamplingRules>("AWS.XRay.GetSamplingRules");

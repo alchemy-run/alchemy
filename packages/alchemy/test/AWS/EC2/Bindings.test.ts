@@ -9,23 +9,14 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Output from "@/Output";
 import * as Core from "@/Test/Core";
-import Ec2BindingsFunctionLive, {
-  Ec2BindingsFunction,
-} from "./fixtures/bindings-handler.ts";
+import Ec2BindingsFunctionLive, { Ec2BindingsFunction } from "./fixtures/bindings-handler.ts";
 import * as Test from "./VpcTest.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "Ec2Bindings",
-  "test/AWS/EC2/Bindings.test.ts",
-);
+const sharedStack = Core.scratchStack(testOptions, "Ec2Bindings", "test/AWS/EC2/Bindings.test.ts");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -64,9 +55,7 @@ const callRoute = (method: "GET" | "POST", path: string) =>
       Effect.flatMap((response) =>
         response.status === 200
           ? response.json
-          : Effect.fail(
-              new Error(`Route ${path} not ready: ${response.status}`),
-            ),
+          : Effect.fail(new Error(`Route ${path} not ready: ${response.status}`)),
       ),
       // A freshly deployed Function URL can briefly return 502 while the
       // Lambda execution environment is still initializing. Retry transport
@@ -193,9 +182,7 @@ describe("EC2 runtime bindings", () => {
         // A failed earlier run may have left the rule behind: authorize then
         // tolerates the duplicate, revoke always finds one to remove.
         const authorize = yield* callRoute("POST", "/authorize");
-        expect(["Success", "InvalidPermission.Duplicate"]).toContain(
-          authorize.tag,
-        );
+        expect(["Success", "InvalidPermission.Duplicate"]).toContain(authorize.tag);
         const revoke = yield* callRoute("POST", "/revoke");
         expect(revoke.tag).toEqual("Success");
       }),
@@ -219,9 +206,7 @@ describe("EC2 runtime bindings", () => {
             const state = result.Snapshots?.[0]?.State ?? "missing";
             if (state === "completed") return Effect.void;
             if (state === "error") {
-              return Effect.fail(
-                new Error(`Snapshot ${body.snapshotId} entered error state`),
-              );
+              return Effect.fail(new Error(`Snapshot ${body.snapshotId} entered error state`));
             }
             return Effect.fail(
               new SnapshotNotReady({
@@ -232,10 +217,7 @@ describe("EC2 runtime bindings", () => {
           }),
           Effect.retry({
             while: (error) => error instanceof SnapshotNotReady,
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(29),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(29)]),
           }),
         );
 
@@ -257,10 +239,7 @@ describe("EC2 runtime bindings", () => {
           Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error instanceof SnapshotStillVisible,
-            schedule: Schedule.max([
-              Schedule.fixed("1 second"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(10)]),
           }),
         );
       }),
@@ -271,22 +250,17 @@ describe("EC2 runtime bindings", () => {
     "consumeInstanceStateEvents created the EventBridge rule",
     (_stack) =>
       Effect.gen(function* () {
-        const ref = yield* AWS.EventBridge.Rule.ref(
-          "BindingsInstance-InstanceState",
-          {
-            stack: sharedStack.name,
-            stage: sharedStack.stage,
-          },
-        );
+        const ref = yield* AWS.EventBridge.Rule.ref("BindingsInstance-InstanceState", {
+          stack: sharedStack.name,
+          stage: sharedStack.stage,
+        });
         const { Name, EventBusName } = yield* Effect.all({
           Name: Output.evaluate(ref.ruleName, {}),
           EventBusName: Output.evaluate(ref.eventBusName, {}),
         }).pipe(Effect.provide(sharedStack.state));
         const rule = yield* eventbridge.describeRule({ Name, EventBusName });
         expect(rule?.EventPattern).toContain("aws.ec2");
-        expect(rule?.EventPattern).toContain(
-          "EC2 Instance State-change Notification",
-        );
+        expect(rule?.EventPattern).toContain("EC2 Instance State-change Notification");
       }),
     { timeout: 60_000 },
   );

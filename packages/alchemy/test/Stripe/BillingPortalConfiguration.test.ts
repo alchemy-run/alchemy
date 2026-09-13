@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -62,15 +59,10 @@ test.provider(
       expect(created.active).toEqual(true);
       expect(created.defaultReturnUrl).toEqual("https://example.com/account");
       expect(created.businessProfile.headline).toEqual("Manage your billing");
-      expect(created.businessProfile.privacyPolicyUrl).toEqual(
-        "https://example.com/privacy",
-      );
+      expect(created.businessProfile.privacyPolicyUrl).toEqual("https://example.com/privacy");
       expect(created.features.invoiceHistory.enabled).toEqual(true);
       expect(created.features.customerUpdate.enabled).toEqual(true);
-      expect(created.features.customerUpdate.allowedUpdates).toEqual([
-        "email",
-        "address",
-      ]);
+      expect(created.features.customerUpdate.allowedUpdates).toEqual(["email", "address"]);
       expect(created.metadata).toMatchObject({ env: "test" });
       expect(created.livemode).toEqual(false);
       expect(created.created).toEqual(expect.any(Number));
@@ -85,12 +77,8 @@ test.provider(
       expect(fetched.features.invoice_history.enabled).toEqual(true);
       expect(fetched.features.customer_update.enabled).toEqual(true);
       expect(fetched.metadata?.env).toEqual("test");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -121,13 +109,8 @@ test.provider(
       expect(updated.active).toEqual(true);
       expect(updated.defaultReturnUrl).toEqual("https://example.com/billing");
       expect(updated.businessProfile.headline).toEqual("Updated headline");
-      expect(updated.businessProfile.termsOfServiceUrl).toEqual(
-        "https://example.com/terms",
-      );
-      expect(updated.features.customerUpdate.allowedUpdates).toEqual([
-        "email",
-        "name",
-      ]);
+      expect(updated.businessProfile.termsOfServiceUrl).toEqual("https://example.com/terms");
+      expect(updated.features.customerUpdate.allowedUpdates).toEqual(["email", "name"]);
       expect(updated.features.paymentMethodUpdate.enabled).toEqual(true);
       expect(updated.metadata).toEqual({ env: "test", revision: "2" });
 
@@ -135,9 +118,7 @@ test.provider(
         configuration: updated.id,
       });
       expect(refetched.name).toEqual("Alchemy Customer Portal Updated");
-      expect(refetched.default_return_url).toEqual(
-        "https://example.com/billing",
-      );
+      expect(refetched.default_return_url).toEqual("https://example.com/billing");
       expect(refetched.features.payment_method_update.enabled).toEqual(true);
       expect(refetched.metadata?.env).toEqual("test");
       expect(refetched.metadata?.revision).toEqual("2");
@@ -169,13 +150,9 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Stripe.BillingPortalConfiguration,
-      );
+      const provider = yield* Provider.findProvider(Stripe.BillingPortalConfiguration);
       const all = yield* provider.list();
-      const found = all.find(
-        (configuration) => configuration.id === deployed.id,
-      );
+      const found = all.find((configuration) => configuration.id === deployed.id);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(deployed.name);
       expect(found?.features.invoiceHistory.enabled).toEqual(true);

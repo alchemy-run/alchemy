@@ -12,11 +12,7 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "staticsite-dev",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "staticsite-dev");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const htmlPage = (marker: string) => `<!doctype html>
@@ -49,10 +45,7 @@ describe("AWS.Website.StaticSite local", () => {
         });
 
         const marker = "aws-staticsite-dev-command-marker";
-        yield* fs.writeFileString(
-          path.join(cwd, "site", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "site", "index.html"), htmlPage(marker));
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
@@ -92,35 +85,24 @@ describe("AWS.Website.StaticSite local", () => {
         });
 
         // `dev.env` reached the spawned child process.
-        yield* expectUrlContains(
-          `${url}/__dev-env`,
-          "aws-staticsite-dev-env-marker",
-          {
-            timeout: "30 seconds",
-            label: "dev.command env passthrough",
-          },
-        );
+        yield* expectUrlContains(`${url}/__dev-env`, "aws-staticsite-dev-env-marker", {
+          timeout: "30 seconds",
+          label: "dev.command env passthrough",
+        });
 
         // ── Live edit: rewrite the content in place. The stack is NOT
         // re-applied — the external dev server reads from disk per request,
         // so the very next fetch must serve the new content ──────────────
         const editedMarker = "aws-staticsite-dev-command-marker-v2";
-        yield* fs.writeFileString(
-          path.join(cwd, "site", "index.html"),
-          htmlPage(editedMarker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "site", "index.html"), htmlPage(editedMarker));
         yield* expectUrlContains(`${url}/`, editedMarker, {
           timeout: "30 seconds",
           label: "dev.command index after live edit",
         });
         // `dev.env` still reaches the (unchanged, long-lived) child.
-        yield* expectUrlContains(
-          `${url}/__dev-env`,
-          "aws-staticsite-dev-env-marker",
-          {
-            label: "dev.command env passthrough after live edit",
-          },
-        );
+        yield* expectUrlContains(`${url}/__dev-env`, "aws-staticsite-dev-env-marker", {
+          label: "dev.command env passthrough after live edit",
+        });
 
         yield* stack.destroy();
       }),

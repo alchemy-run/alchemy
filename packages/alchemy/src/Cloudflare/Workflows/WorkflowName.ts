@@ -9,13 +9,12 @@ import { sha256 } from "../../Util/sha256.ts";
  *
  * @internal
  */
-export const asScriptNameOutput = (
-  scriptName: Input<string>,
-): Output.Output<string> =>
+export const asScriptNameOutput = (scriptName: Input<string>): Output.Output<string> =>
   Output.asOutput(
-    (Effect.isEffect(scriptName)
-      ? scriptName.pipe(Effect.orDie)
-      : scriptName) as string | Output.Output<string> | Effect.Effect<string>,
+    (Effect.isEffect(scriptName) ? scriptName.pipe(Effect.orDie) : scriptName) as
+      | string
+      | Output.Output<string>
+      | Effect.Effect<string>,
   );
 
 /**
@@ -24,13 +23,8 @@ export const asScriptNameOutput = (
  *
  * @internal
  */
-export const generateWorkflowName = Effect.fn(function* (
-  scriptName: string,
-  className: string,
-) {
-  const base = `${scriptName}-${className}`
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9-]/g, "-");
+export const generateWorkflowName = Effect.fn(function* (scriptName: string, className: string) {
+  const base = `${scriptName}-${className}`.toLowerCase().replaceAll(/[^a-z0-9-]/g, "-");
   const hash = yield* sha256(base);
   const suffix = `-${hash.slice(0, 8)}`;
   // Trim trailing dashes left by mid-name truncation so the result never
@@ -50,7 +44,5 @@ export const makeWorkflowName = (
   className: string,
 ): Output.Output<string> =>
   asScriptNameOutput(scriptName).pipe(
-    Output.mapEffect((scriptName) =>
-      generateWorkflowName(scriptName, className),
-    ),
+    Output.mapEffect((scriptName) => generateWorkflowName(scriptName, className)),
   );

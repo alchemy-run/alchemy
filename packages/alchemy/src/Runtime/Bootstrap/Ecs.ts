@@ -14,12 +14,7 @@ import * as Logger from "effect/Logger";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { BunHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackFromEnv,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /

@@ -48,10 +48,7 @@ export default HttpApiTestFunction.make(
 
         if (request.method === "POST" && pathname === "/items") {
           const body = (yield* request.json) as unknown;
-          return yield* HttpServerResponse.json(
-            { received: body },
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json({ received: body }, { status: 201 });
         }
 
         return yield* HttpServerResponse.json(

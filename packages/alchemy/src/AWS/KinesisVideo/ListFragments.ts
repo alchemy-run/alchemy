@@ -41,13 +41,8 @@ export interface ListFragments extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListFragmentsRequest,
-    ) => Effect.Effect<
-      kvam.ListFragmentsOutput,
-      kvam.ListFragmentsError | kv.GetDataEndpointError
-    >
+    ) => Effect.Effect<kvam.ListFragmentsOutput, kvam.ListFragmentsError | kv.GetDataEndpointError>
   >
 > {}
 
-export const ListFragments = Binding.Service<ListFragments>(
-  "AWS.KinesisVideo.ListFragments",
-);
+export const ListFragments = Binding.Service<ListFragments>("AWS.KinesisVideo.ListFragments");

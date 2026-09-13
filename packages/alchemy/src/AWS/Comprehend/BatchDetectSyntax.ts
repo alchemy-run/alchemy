@@ -32,10 +32,7 @@ export interface BatchDetectSyntax extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.BatchDetectSyntaxRequest,
-    ) => Effect.Effect<
-      comprehend.BatchDetectSyntaxResponse,
-      comprehend.BatchDetectSyntaxError
-    >
+    ) => Effect.Effect<comprehend.BatchDetectSyntaxResponse, comprehend.BatchDetectSyntaxError>
   >
 > {}
 export const BatchDetectSyntax = Binding.Service<BatchDetectSyntax>(

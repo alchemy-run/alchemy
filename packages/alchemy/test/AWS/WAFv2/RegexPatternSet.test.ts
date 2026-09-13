@@ -9,9 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-class RegexPatternSetStillExists extends Data.TaggedError(
-  "RegexPatternSetStillExists",
-)<{
+class RegexPatternSetStillExists extends Data.TaggedError("RegexPatternSetStillExists")<{
   readonly name: string;
 }> {}
 
@@ -43,10 +41,7 @@ test.provider(
       );
 
       expect(set.scope).toBe("REGIONAL");
-      expect([...set.regularExpressions].sort()).toEqual([
-        "\\.php$",
-        "^/wp-admin",
-      ]);
+      expect([...set.regularExpressions].sort()).toEqual(["\\.php$", "^/wp-admin"]);
 
       // out-of-band verification via distilled
       const created = yield* wafv2.getRegexPatternSet({
@@ -55,9 +50,7 @@ test.provider(
         Id: set.regexPatternSetId,
       });
       expect(
-        (created.RegexPatternSet?.RegularExpressionList ?? [])
-          .map((r) => r.RegexString)
-          .sort(),
+        (created.RegexPatternSet?.RegularExpressionList ?? []).map((r) => r.RegexString).sort(),
       ).toEqual(["\\.php$", "^/wp-admin"]);
       expect(created.RegexPatternSet?.Description).toBe("bad paths");
 
@@ -89,9 +82,7 @@ test.provider(
         Id: set.regexPatternSetId,
       });
       expect(
-        (afterUpdate.RegexPatternSet?.RegularExpressionList ?? []).map(
-          (r) => r.RegexString,
-        ),
+        (afterUpdate.RegexPatternSet?.RegularExpressionList ?? []).map((r) => r.RegexString),
       ).toEqual(["^/admin"]);
 
       yield* stack.destroy();

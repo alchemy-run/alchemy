@@ -26,14 +26,12 @@ export const FlushStageCacheHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/restapis/${stage.restApiId}/stages/${stage.stageName}/cache/data`,
         ],
       });
-      return Effect.fn(`AWS.ApiGateway.FlushStageCache(${stage.LogicalId})`)(
-        function* () {
-          return yield* flushStageCache({
-            restApiId: yield* RestApiId,
-            stageName: yield* StageName,
-          });
-        },
-      );
+      return Effect.fn(`AWS.ApiGateway.FlushStageCache(${stage.LogicalId})`)(function* () {
+        return yield* flushStageCache({
+          restApiId: yield* RestApiId,
+          stageName: yield* StageName,
+        });
+      });
     });
   }),
 );

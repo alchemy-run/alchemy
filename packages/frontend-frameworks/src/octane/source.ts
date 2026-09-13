@@ -152,11 +152,7 @@ export interface SourceProvider {
   ) => Effect.Effect<Partial<SourceHash>, SourceError, SourceServices>;
   readonly dev: (
     ctx: SourceDevContext,
-  ) => Effect.Effect<
-    SourceDevHandle,
-    SourceError,
-    SourceServices | Scope.Scope
-  >;
+  ) => Effect.Effect<SourceDevHandle, SourceError, SourceServices | Scope.Scope>;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -193,9 +189,7 @@ export interface OctaneSourceOptions {
 // ─────────────────────────────────────────────────────────────────────
 
 const sha256Hex = (input: string | Uint8Array): Effect.Effect<string> =>
-  Effect.sync(() =>
-    NodeCrypto.createHash("sha256").update(input).digest("hex"),
-  );
+  Effect.sync(() => NodeCrypto.createHash("sha256").update(input).digest("hex"));
 
 /** Recursively sort object keys so JSON.stringify is order-stable. */
 const stableValue = (value: unknown): unknown => {
@@ -278,14 +272,10 @@ const readGitIgnoreRules = (
   cwd: string,
 ): Effect.Effect<Array<string>, PlatformError> =>
   Effect.gen(function* () {
-    const rules = yield* fs
-      .readFileString(NodePath.join(cwd, ".gitignore"))
-      .pipe(
-        Effect.map((file) => file.split("\n")),
-        Effect.catchTag("PlatformError", () =>
-          Effect.succeed([] as Array<string>),
-        ),
-      );
+    const rules = yield* fs.readFileString(NodePath.join(cwd, ".gitignore")).pipe(
+      Effect.map((file) => file.split("\n")),
+      Effect.catchTag("PlatformError", () => Effect.succeed([] as Array<string>)),
+    );
     const parent = NodePath.dirname(cwd);
     if (parent === cwd || (yield* fs.exists(NodePath.join(cwd, ".git")))) {
       return rules;
@@ -354,9 +344,7 @@ const hashDirectory = Effect.fnUntraced(function* (
 const packageVersion = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const dir = NodePath.dirname(fileURLToPath(import.meta.url));
-  const content = yield* fs.readFileString(
-    NodePath.join(dir, "../../package.json"),
-  );
+  const content = yield* fs.readFileString(NodePath.join(dir, "../../package.json"));
   return (JSON.parse(content) as { version: string }).version;
 });
 
@@ -374,16 +362,10 @@ const hashOctaneInput = Effect.fnUntraced(function* (
   const version = yield* packageVersion;
   const hashWorkspace = (cwd: string, memo?: OctaneMemoOptions) =>
     hashDirectory(NodePath.resolve(rootDir, cwd), memo).pipe(
-      Effect.map(
-        (hash) =>
-          `${NodePath.relative(rootDir, NodePath.resolve(rootDir, cwd))}:${hash}`,
-      ),
+      Effect.map((hash) => `${NodePath.relative(rootDir, NodePath.resolve(rootDir, cwd))}:${hash}`),
     );
   const [root, ...workspaceHashes] = yield* Effect.all(
-    [
-      hashWorkspace(rootDir, options.memo),
-      ...Array.from(workspaces, (cwd) => hashWorkspace(cwd)),
-    ],
+    [hashWorkspace(rootDir, options.memo), ...Array.from(workspaces, (cwd) => hashWorkspace(cwd))],
     { concurrency: "unbounded" },
   );
   const hash = yield* sha256Stable({
@@ -416,9 +398,7 @@ const maybeReadString = (fs: FileSystem.FileSystem, file: string) =>
     .readFileString(file)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound"
-          ? Effect.succeed(undefined)
-          : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
       ),
     );
 
@@ -468,16 +448,11 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
         );
       }
       const hash = (yield* sha256Hex(content)).slice(0, 32);
-      return [
-        `/${name.replaceAll("\\", "/")}`,
-        { hash, size: content.byteLength },
-      ] as const;
+      return [`/${name.replaceAll("\\", "/")}`, { hash, size: content.byteLength }] as const;
     }),
     { concurrency: 16 },
   );
-  const manifest = Object.fromEntries(
-    [...entries].sort((a, b) => a[0].localeCompare(b[0])),
-  );
+  const manifest = Object.fromEntries([...entries].sort((a, b) => a[0].localeCompare(b[0])));
   const hash = yield* sha256Stable({ config, manifest, _headers, _redirects });
   return {
     directory,
@@ -493,19 +468,14 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
 // The provider
 // ─────────────────────────────────────────────────────────────────────
 
-const wrapFrameworkError = (error: {
-  readonly message: string;
-  readonly cause?: unknown;
-}) =>
+const wrapFrameworkError = (error: { readonly message: string; readonly cause?: unknown }) =>
   new SourceProviderError({
     provider: PROVIDER,
     message: error.message,
     cause: error.cause ?? error,
   });
 
-const assetsConfig = (
-  assets: SourceContext["assets"],
-): Record<string, unknown> | undefined => {
+const assetsConfig = (assets: SourceContext["assets"]): Record<string, unknown> | undefined => {
   if (assets === undefined || typeof assets === "string") {
     return undefined;
   }
@@ -539,9 +509,7 @@ export const buildInChild = (config: OctaneBuildChildConfig) =>
     return yield* framework.build({ root: config.rootDir });
   });
 
-export const makeOctaneSource = (
-  options: OctaneSourceOptions,
-): SourceProvider => {
+export const makeOctaneSource = (options: OctaneSourceOptions): SourceProvider => {
   const rootDir = NodePath.resolve(options.rootDir ?? process.cwd());
   const frameworkOptions = (ctx: SourceContext): OctaneOptions => ({
     root: rootDir,
@@ -566,10 +534,7 @@ export const makeOctaneSource = (
           compatibilityFlags: ctx.compatibility.flags,
         } satisfies OctaneBuildChildConfig,
       }).pipe(Effect.mapError(wrapFrameworkError));
-      if (
-        output.serverModules === undefined ||
-        output.serverModules.length === 0
-      ) {
+      if (output.serverModules === undefined || output.serverModules.length === 0) {
         return yield* Effect.fail(
           new SourceProviderError({
             provider: PROVIDER,
@@ -641,9 +606,7 @@ export const makeOctaneSource = (
  * and calls `make(descriptor.options)`.
  */
 const sourceModule = {
-  make: (
-    options: unknown,
-  ): Effect.Effect<SourceProvider, SourceProviderError> =>
+  make: (options: unknown): Effect.Effect<SourceProvider, SourceProviderError> =>
     Effect.succeed(makeOctaneSource((options ?? {}) as OctaneSourceOptions)),
 };
 

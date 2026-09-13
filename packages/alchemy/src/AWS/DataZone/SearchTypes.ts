@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Domain } from "./Domain.ts";
 
-export interface SearchTypesRequest extends Omit<
-  datazone.SearchTypesInput,
-  "domainIdentifier"
-> {}
+export interface SearchTypesRequest extends Omit<datazone.SearchTypesInput, "domainIdentifier"> {}
 
 /**
  * Runtime binding for `datazone:SearchTypes`.
@@ -37,6 +34,4 @@ export interface SearchTypes extends Binding.Service<
     ) => Effect.Effect<datazone.SearchTypesOutput, datazone.SearchTypesError>
   >
 > {}
-export const SearchTypes = Binding.Service<SearchTypes>(
-  "AWS.DataZone.SearchTypes",
-);
+export const SearchTypes = Binding.Service<SearchTypes>("AWS.DataZone.SearchTypes");

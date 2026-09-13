@@ -8,15 +8,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { zipFiles } from "@/Util/zip.ts";
 
-const layerV1Path = fileURLToPath(
-  new URL("./fixtures/layer-v1", import.meta.url),
-);
-const layerV2Path = fileURLToPath(
-  new URL("./fixtures/layer-v2", import.meta.url),
-);
-const timeoutHandlerPath = fileURLToPath(
-  new URL("./timeout-handler.ts", import.meta.url),
-);
+const layerV1Path = fileURLToPath(new URL("./fixtures/layer-v1", import.meta.url));
+const layerV2Path = fileURLToPath(new URL("./fixtures/layer-v2", import.meta.url));
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -66,10 +60,7 @@ test.provider(
       expect(v1.layerVersionArn).toBe(`${v1.layerArn}:${v1.version}`);
       expect(v1.compatibleRuntimes).toEqual(["nodejs22.x"]);
 
-      const cloudV1 = yield* getLayerVersionOrUndefined(
-        v1.layerName,
-        v1.version,
-      );
+      const cloudV1 = yield* getLayerVersionOrUndefined(v1.layerName, v1.version);
       expect(cloudV1).toBeDefined();
       expect(cloudV1!.LayerVersionArn).toBe(v1.layerVersionArn);
       expect(cloudV1!.Content?.CodeSha256).toBe(v1.codeSha256);
@@ -92,9 +83,7 @@ test.provider(
 
       // The superseded version is retired, so updates don't leak one
       // version per deploy.
-      expect(
-        yield* getLayerVersionOrUndefined(v1.layerName, v1.version),
-      ).toBeUndefined();
+      expect(yield* getLayerVersionOrUndefined(v1.layerName, v1.version)).toBeUndefined();
 
       // --- update (changed description alone also republishes) ---
       const described = yield* stack.deploy(
@@ -116,9 +105,9 @@ test.provider(
       );
       const functionName = attached.fn!.functionName;
 
-      expect(
-        (yield* getFunctionLayers(functionName)).map((layer) => layer.Arn),
-      ).toEqual([currentLayer.layerVersionArn]);
+      expect((yield* getFunctionLayers(functionName)).map((layer) => layer.Arn)).toEqual([
+        currentLayer.layerVersionArn,
+      ]);
 
       // --- detach ---
       yield* stack.deploy(
@@ -135,19 +124,14 @@ test.provider(
       const provider = yield* Provider.findProvider(AWS.Lambda.LayerVersion);
       const versions = yield* provider.list();
       expect(
-        versions.some(
-          (version) => version.layerVersionArn === currentLayer.layerVersionArn,
-        ),
+        versions.some((version) => version.layerVersionArn === currentLayer.layerVersionArn),
       ).toBe(true);
 
       // --- delete ---
       yield* stack.destroy();
 
       expect(
-        yield* getLayerVersionOrUndefined(
-          currentLayer.layerName,
-          currentLayer.version,
-        ),
+        yield* getLayerVersionOrUndefined(currentLayer.layerName, currentLayer.version),
       ).toBeUndefined();
     }).pipe(
       Effect.tap(() => stack.destroy()),
@@ -204,16 +188,12 @@ test.provider(
       // --- s3.bucket: cycle to the raw-name form ---
       const byName = yield* stack.deploy(s3Program(true));
       // Same bucket, expressed differently — must NOT republish.
-      expect(byName.layer.layerVersionArn).toBe(
-        byResource.layer.layerVersionArn,
-      );
+      expect(byName.layer.layerVersionArn).toBe(byResource.layer.layerVersionArn);
       expect(byName.layer.version).toBe(byResource.layer.version);
 
       // --- and back again ---
       const backToResource = yield* stack.deploy(s3Program(false));
-      expect(backToResource.layer.layerVersionArn).toBe(
-        byResource.layer.layerVersionArn,
-      );
+      expect(backToResource.layer.layerVersionArn).toBe(byResource.layer.layerVersionArn);
 
       // --- layers: both forms, cycled ---
       const fnProgram = (byArn: boolean) =>
@@ -236,25 +216,23 @@ test.provider(
 
       const withResource = yield* stack.deploy(fnProgram(false));
       const layerArn = backToResource.layer.layerVersionArn;
-      expect(
-        (yield* getFunctionLayers(withResource.fn.functionName)).map(
-          (l) => l.Arn,
-        ),
-      ).toEqual([layerArn]);
+      expect((yield* getFunctionLayers(withResource.fn.functionName)).map((l) => l.Arn)).toEqual([
+        layerArn,
+      ]);
 
       const withArn = yield* stack.deploy(fnProgram(true));
       // Cycling the reference form is a no-op, not a phantom update: same
       // function, same attached layer, no re-issued configuration call.
       expect(withArn.fn.functionName).toBe(withResource.fn.functionName);
-      expect(
-        (yield* getFunctionLayers(withArn.fn.functionName)).map((l) => l.Arn),
-      ).toEqual([layerArn]);
+      expect((yield* getFunctionLayers(withArn.fn.functionName)).map((l) => l.Arn)).toEqual([
+        layerArn,
+      ]);
 
       // ...and back to the resource form.
       const backToRef = yield* stack.deploy(fnProgram(false));
-      expect(
-        (yield* getFunctionLayers(backToRef.fn.functionName)).map((l) => l.Arn),
-      ).toEqual([layerArn]);
+      expect((yield* getFunctionLayers(backToRef.fn.functionName)).map((l) => l.Arn)).toEqual([
+        layerArn,
+      ]);
 
       yield* stack.destroy();
     }).pipe(
@@ -266,18 +244,11 @@ test.provider(
 
 const LAYER_KEY = "layers/from-s3.zip";
 
-const getLayerVersionOrUndefined = Effect.fn(function* (
-  layerName: string,
-  version: number,
-) {
+const getLayerVersionOrUndefined = Effect.fn(function* (layerName: string, version: number) {
   return yield* Lambda.getLayerVersion({
     LayerName: layerName,
     VersionNumber: version,
-  }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 const getFunctionLayers = Effect.fn(function* (functionName: string) {

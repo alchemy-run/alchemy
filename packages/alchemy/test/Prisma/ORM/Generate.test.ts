@@ -19,16 +19,12 @@ describe("Effect contract generation", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const fixtures = yield* path.fromFileUrl(
-          new URL("./fixtures", import.meta.url),
-        );
+        const fixtures = yield* path.fromFileUrl(new URL("./fixtures", import.meta.url));
         const directory = yield* fs.makeTempDirectoryScoped({
           directory: fixtures,
           prefix: "generate-",
         });
-        const source = yield* fs.readFileString(
-          path.join(fixtures, "psl/contract.psl"),
-        );
+        const source = yield* fs.readFileString(path.join(fixtures, "psl/contract.psl"));
         yield* fs.writeFileString(path.join(directory, "contract.psl"), source);
         const config = (client: boolean, schemas: boolean) =>
           `import { defineConfig } from "@prisma/orm-postgres/config";\nimport { definePrismaConfig } from "prisma/config";\nimport { withEffect } from "alchemy/Prisma/ORM/generator";\nexport default definePrismaConfig({ orm: withEffect(defineConfig({ contract: "./contract.psl", output: "./generated" }), { client: ${client}, schemas: ${schemas} }) });\n`;
@@ -43,19 +39,13 @@ describe("Effect contract generation", (it) => {
           );
         }
         const result = yield* generate(path.join(directory, "both.config.ts"));
-        const before = yield* Effect.forEach(result.files, (file) =>
-          fs.readFileString(file),
-        );
+        const before = yield* Effect.forEach(result.files, (file) => fs.readFileString(file));
         yield* generate(path.join(directory, "both.config.ts"));
-        expect(
-          yield* Effect.forEach(result.files, (file) =>
-            fs.readFileString(file),
-          ),
-        ).toEqual(before);
-        expect(result.files).toHaveLength(6);
-        const schemaUrl = yield* path.toFileUrl(
-          path.join(result.directory, "schemas.ts"),
+        expect(yield* Effect.forEach(result.files, (file) => fs.readFileString(file))).toEqual(
+          before,
         );
+        expect(result.files).toHaveLength(6);
+        const schemaUrl = yield* path.toFileUrl(path.join(result.directory, "schemas.ts"));
         const { schemas } = yield* Effect.promise(() => import(schemaUrl.href));
         expect(
           Schema.is(schemas.public.User)({
@@ -71,56 +61,30 @@ describe("Effect contract generation", (it) => {
             name: null,
           }),
         ).toBe(false);
-        const standalone = yield* fs.readFileString(
-          path.join(result.directory, "schemas.ts"),
-        );
+        const standalone = yield* fs.readFileString(path.join(result.directory, "schemas.ts"));
         expect(standalone).not.toContain('from "alchemy');
         expect(standalone).not.toContain("@prisma");
         yield* generate(path.join(directory, "schemas.config.ts"));
-        expect(yield* fs.exists(path.join(result.directory, "client.ts"))).toBe(
-          false,
+        expect(yield* fs.exists(path.join(result.directory, "client.ts"))).toBe(false);
+        expect(yield* fs.exists(path.join(result.directory, "runtime.ts"))).toBe(false);
+        expect(yield* fs.readFileString(path.join(result.directory, "index.ts"))).not.toContain(
+          "makeDatabase",
         );
-        expect(
-          yield* fs.exists(path.join(result.directory, "runtime.ts")),
-        ).toBe(false);
-        expect(
-          yield* fs.readFileString(path.join(result.directory, "index.ts")),
-        ).not.toContain("makeDatabase");
         yield* generate(path.join(directory, "client.config.ts"));
-        expect(
-          yield* fs.exists(path.join(result.directory, "schemas.ts")),
-        ).toBe(false);
-        expect(yield* fs.exists(path.join(result.directory, "client.ts"))).toBe(
-          true,
-        );
-        yield* fs.writeFileString(
-          path.join(result.directory, "schemas.ts"),
+        expect(yield* fs.exists(path.join(result.directory, "schemas.ts"))).toBe(false);
+        expect(yield* fs.exists(path.join(result.directory, "client.ts"))).toBe(true);
+        yield* fs.writeFileString(path.join(result.directory, "schemas.ts"), "// handwritten\n");
+        const refused = yield* generate(path.join(directory, "both.config.ts")).pipe(Effect.result);
+        expect(Result.isFailure(refused)).toBe(true);
+        expect(yield* fs.readFileString(path.join(result.directory, "schemas.ts"))).toBe(
           "// handwritten\n",
         );
-        const refused = yield* generate(
-          path.join(directory, "both.config.ts"),
-        ).pipe(Effect.result);
-        expect(Result.isFailure(refused)).toBe(true);
-        expect(
-          yield* fs.readFileString(path.join(result.directory, "schemas.ts")),
-        ).toBe("// handwritten\n");
         yield* fs.remove(path.join(result.directory, "schemas.ts"));
-        yield* fs.writeFileString(
-          path.join(directory, "contract.psl"),
-          "invalid contract",
-        );
-        const failed = yield* generate(
-          path.join(directory, "both.config.ts"),
-        ).pipe(Effect.result);
+        yield* fs.writeFileString(path.join(directory, "contract.psl"), "invalid contract");
+        const failed = yield* generate(path.join(directory, "both.config.ts")).pipe(Effect.result);
         expect(Result.isFailure(failed)).toBe(true);
-        expect(
-          yield* fs.readFileString(
-            path.join(result.directory, "contract.json"),
-          ),
-        ).toBe(
-          before[
-            result.files.indexOf(path.join(result.directory, "contract.json"))
-          ],
+        expect(yield* fs.readFileString(path.join(result.directory, "contract.json"))).toBe(
+          before[result.files.indexOf(path.join(result.directory, "contract.json"))],
         );
       }).pipe(Effect.scoped),
     { timeout: 120_000 },
@@ -132,9 +96,7 @@ describe("Effect contract generation", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const fixtures = yield* path.fromFileUrl(
-          new URL("./fixtures", import.meta.url),
-        );
+        const fixtures = yield* path.fromFileUrl(new URL("./fixtures", import.meta.url));
         const directory = yield* fs.makeTempDirectoryScoped({
           directory: fixtures,
           prefix: "watch-",
@@ -152,9 +114,7 @@ describe("Effect contract generation", (it) => {
           `import { field } from "alchemy/Prisma/ORM";\nexport const value = field.column({ codecId: "pg/${codec}@1", nativeType: "${codec}" });\n`;
         const fields = path.join(directory, "fields.ts");
         yield* fs.writeFileString(fields, fieldModule("text"));
-        const bin = yield* path.fromFileUrl(
-          new URL("../../../bin/cli.js", import.meta.url),
-        );
+        const bin = yield* path.fromFileUrl(new URL("../../../bin/cli.js", import.meta.url));
         const process = yield* ChildProcess.make(globalThis.process.execPath, [
           bin,
           "prisma",
@@ -190,9 +150,7 @@ describe("Effect contract generation", (it) => {
               until: Boolean,
               times: 10,
             }),
-            Effect.flatMap((ready) =>
-              Effect.sync(() => expect(ready, output).toBe(true)),
-            ),
+            Effect.flatMap((ready) => Effect.sync(() => expect(ready, output).toBe(true))),
           );
         yield* wait(() => output.includes("Watching"));
         const generated = path.join(directory, "generated/schemas.ts");
@@ -203,9 +161,7 @@ describe("Effect contract generation", (it) => {
               until: (text) => text.includes(expression),
               times: 10,
             }),
-            Effect.tap((text) =>
-              Effect.sync(() => expect(text).toContain(expression)),
-            ),
+            Effect.tap((text) => Effect.sync(() => expect(text).toContain(expression))),
           );
         yield* fs.writeFileString(fields, fieldModule("int4"));
         yield* waitForField('"value": Schema.Int');

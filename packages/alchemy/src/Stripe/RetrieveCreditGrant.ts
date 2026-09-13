@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { CreditGrant } from "./CreditGrant.ts";
 
-export interface RetrieveCreditGrantRequest extends Omit<
-  GetBillingCreditGrantRequest,
-  "id"
-> {}
+export interface RetrieveCreditGrantRequest extends Omit<GetBillingCreditGrantRequest, "id"> {}
 
 /**
  * Retrieve a bound Stripe Credit Grant over HTTP.
@@ -33,11 +30,7 @@ export interface RetrieveCreditGrant extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveCreditGrantRequest,
-    ) => Effect.Effect<
-      StripeCreditGrant,
-      GetBillingCreditGrantError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeCreditGrant, GetBillingCreditGrantError, RuntimeContext>
   >
 > {}
 

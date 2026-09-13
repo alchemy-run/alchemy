@@ -4,11 +4,7 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
 import type { Secret } from "./Secret.ts";
-import {
-  type SecretAuth,
-  makeHttpSecretBinding,
-  unwrapSecretValue,
-} from "./SecretHttp.ts";
+import { type SecretAuth, makeHttpSecretBinding, unwrapSecretValue } from "./SecretHttp.ts";
 import { WriteSecret, type WriteSecretClient } from "./WriteSecret.ts";
 
 /**
@@ -35,10 +31,7 @@ export const WriteSecretHttp = Layer.effect(
       makeClient: secretWriteClient,
     }),
   ),
-).pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(CredentialsFromAmbientOrEnv),
-);
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromAmbientOrEnv));
 
 /** Build the write client over an injectable auth and App name. */
 export const secretWriteClient = (

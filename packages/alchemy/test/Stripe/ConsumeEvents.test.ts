@@ -16,10 +16,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 const { executeWhenReady, getWhenReady } = Test;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "StripeEventSourceTestStack",
@@ -49,9 +46,7 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
 
     // Ride out binding cold-start: the Stripe CreateCustomer token may not
     // be visible on the first request after a fresh deploy.
-    const created = yield* executeWhenReady(
-      HttpClientRequest.post(`${base}/customers`),
-    );
+    const created = yield* executeWhenReady(HttpClientRequest.post(`${base}/customers`));
     expect(created.status).toBe(201);
     const body = (yield* created.json) as { id: string };
     expect(body.id).toMatch(/^cus_/);
@@ -60,9 +55,7 @@ test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
     // reads are eventually consistent, so poll up to ~3 minutes, absorbing
     // transient transport errors during edge propagation.
     const id = yield* Effect.gen(function* () {
-      const res = yield* HttpClient.execute(
-        HttpClientRequest.get(`${base}/last/${body.id}`),
-      );
+      const res = yield* HttpClient.execute(HttpClientRequest.get(`${base}/last/${body.id}`));
       if (res.status !== 200) return null;
       const json = (yield* res.json) as { id: string | null };
       return json.id;

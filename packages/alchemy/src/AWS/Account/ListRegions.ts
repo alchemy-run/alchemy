@@ -36,6 +36,4 @@ export interface ListRegions extends Binding.Service<
     ) => Effect.Effect<account.ListRegionsResponse, account.ListRegionsError>
   >
 > {}
-export const ListRegions = Binding.Service<ListRegions>(
-  "AWS.Account.ListRegions",
-);
+export const ListRegions = Binding.Service<ListRegions>("AWS.Account.ListRegions");

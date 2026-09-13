@@ -210,11 +210,7 @@ export const ServerProvider = () =>
       const describe = Effect.fn(function* (serverId: string) {
         const response = yield* transfer
           .describeServer({ ServerId: serverId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.Server;
       });
 
@@ -228,10 +224,7 @@ export const ServerProvider = () =>
       // Servers transition through STARTING before ONLINE; updateServer and
       // deleteServer require a settled state. Budget ~7 minutes (10s x 42).
       const waitUntilSettled = Effect.fn(function* (serverId: string) {
-        const settlePolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(42),
-        ]);
+        const settlePolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(42)]);
         return yield* describe(serverId).pipe(
           Effect.flatMap((server) => {
             if (
@@ -239,9 +232,7 @@ export const ServerProvider = () =>
               (server.State === "STARTING" || server.State === "STOPPING")
             ) {
               return Effect.fail(
-                new Error(
-                  `Transfer server '${serverId}' still settling (state: ${server.State})`,
-                ),
+                new Error(`Transfer server '${serverId}' still settling (state: ${server.State})`),
               );
             }
             return Effect.succeed(server);
@@ -252,17 +243,14 @@ export const ServerProvider = () =>
 
       const toAttrs = Effect.fn(function* (server: transfer.DescribedServer) {
         if (!server.ServerId) {
-          return yield* Effect.fail(
-            new Error("Transfer server is missing its ServerId"),
-          );
+          return yield* Effect.fail(new Error("Transfer server is missing its ServerId"));
         }
         return {
           serverId: server.ServerId,
           arn: server.Arn,
           endpointType: server.EndpointType ?? "PUBLIC",
           domain: server.Domain ?? "S3",
-          identityProviderType:
-            server.IdentityProviderType ?? "SERVICE_MANAGED",
+          identityProviderType: server.IdentityProviderType ?? "SERVICE_MANAGED",
           protocols: [...(server.Protocols ?? [])],
           state: server.State,
           tags: yield* readTags(server.Arn),
@@ -291,9 +279,7 @@ export const ServerProvider = () =>
           const server = yield* describe(output.serverId);
           if (!server?.ServerId) return undefined;
           const attrs = yield* toAttrs(server);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -355,9 +341,7 @@ export const ServerProvider = () =>
           observed = yield* waitUntilSettled(serverId!);
           if (!observed?.ServerId || !observed.Arn) {
             return yield* Effect.fail(
-              new Error(
-                `Transfer server '${serverId}' not found after reconcile`,
-              ),
+              new Error(`Transfer server '${serverId}' not found after reconcile`),
             );
           }
 
@@ -379,9 +363,7 @@ export const ServerProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* transfer
             .deleteServer({ ServerId: output.serverId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
@@ -389,9 +371,7 @@ export const ServerProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.Servers ?? []).filter(
-                  (server) => server.ServerId !== undefined,
-                ),
+                (page.Servers ?? []).filter((server) => server.ServerId !== undefined),
               ),
             ),
             Effect.flatMap(

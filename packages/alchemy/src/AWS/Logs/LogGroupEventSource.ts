@@ -162,7 +162,5 @@ export class LogGroupEventSource extends Context.Service<
 export type LogGroupEventSourceService = <Req = never>(
   logGroup: LogGroup,
   props: LogGroupEventSourceProps,
-  process: (
-    events: Stream.Stream<LogEventRecord>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<LogEventRecord>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

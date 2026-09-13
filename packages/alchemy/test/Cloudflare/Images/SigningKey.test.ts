@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The Images signing-keys endpoints are gated behind a higher Images
 // entitlement than variants: on the testing account, `GET
@@ -26,25 +23,18 @@ const logLevel = Effect.provideService(
 const keysEntitled = !!process.env.CLOUDFLARE_TEST_IMAGES_KEYS;
 
 const listKeyNames = (accountId: string) =>
-  images
-    .listV1Keys({ accountId })
-    .pipe(Effect.map((r) => (r.keys ?? []).map((k) => k.name)));
+  images.listV1Keys({ accountId }).pipe(Effect.map((r) => (r.keys ?? []).map((k) => k.name)));
 
 // Poll the key list until the named key disappears — list reads are
 // eventually consistent after a DELETE.
 const expectGone = (accountId: string, name: string) =>
   listKeyNames(accountId).pipe(
     Effect.flatMap((names) =>
-      names.includes(name)
-        ? Effect.fail({ _tag: "KeyNotDeleted" } as const)
-        : Effect.void,
+      names.includes(name) ? Effect.fail({ _tag: "KeyNotDeleted" } as const) : Effect.void,
     ),
     Effect.retry({
       while: (e) => e._tag === "KeyNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 

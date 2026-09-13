@@ -19,21 +19,11 @@ import {
   Workflows,
 } from "./bindings/index.ts";
 import * as Docker from "./Docker.ts";
-import {
-  Globals,
-  Internet,
-  Loopback,
-  LoopbackServer,
-  Storage,
-} from "./globals/index.ts";
+import { Globals, Internet, Loopback, LoopbackServer, Storage } from "./globals/index.ts";
 import * as Paths from "./internal/Paths.ts";
 import * as WorkerProxy from "./proxy/WorkerProxy.ts";
 import { Registry, RegistryProxy } from "./registry/index.ts";
-import {
-  Access,
-  RemoteBindings,
-  RemoteWorker,
-} from "./remote-bindings/index.ts";
+import { Access, RemoteBindings, RemoteWorker } from "./remote-bindings/index.ts";
 import * as Runtime from "./Runtime.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
@@ -53,9 +43,7 @@ export interface StorageConfig {
 export const layerRemoteBindings = ({ accountId }: ApiConfig) =>
   RemoteBindings.RemoteBindingsLive.pipe(
     Layer.provide(
-      RemoteWorker.layer(
-        Effect.isEffect(accountId) ? accountId : Effect.succeed(accountId),
-      ),
+      RemoteWorker.layer(Effect.isEffect(accountId) ? accountId : Effect.succeed(accountId)),
     ),
     Layer.provide(Access.layer),
   );

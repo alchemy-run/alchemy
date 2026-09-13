@@ -8,9 +8,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import IoTEventSourceFunctionLive, {
-  IoTEventSourceFunction,
-} from "./iot-event-source-handler.ts";
+import IoTEventSourceFunctionLive, { IoTEventSourceFunction } from "./iot-event-source-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,16 +20,12 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
         yield* stack.destroy();
 
         const fn = yield* stack.deploy(
-          IoTEventSourceFunction.pipe(
-            Effect.provide(IoTEventSourceFunctionLive),
-          ),
+          IoTEventSourceFunction.pipe(Effect.provide(IoTEventSourceFunctionLive)),
         );
         const functionUrl = fn.functionUrl!.replace(/\/+$/, "");
 
         // Ride out cold-start / URL propagation until /ready reports the queue.
-        const { resultQueueUrl } = yield* HttpClient.get(
-          `${functionUrl}/ready`,
-        ).pipe(
+        const { resultQueueUrl } = yield* HttpClient.get(`${functionUrl}/ready`).pipe(
           // Bound each fetch attempt so a transient Function URL DNS/socket
           // stall reaches the retry schedule instead of consuming the whole
           // test timeout.
@@ -48,10 +42,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
               : Effect.fail(new FunctionNotReady("no result queue")),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
           }),
         );
 
@@ -72,10 +63,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           ),
           Effect.retry({
             while: (e) => e._tag === "FunctionNotReady",
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
           }),
         );
 
@@ -88,9 +76,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
             MaxNumberOfMessages: 10,
             WaitTimeSeconds: 2,
           });
-          const match = (result.Messages ?? []).find((message) =>
-            message.Body?.includes(marker),
-          );
+          const match = (result.Messages ?? []).find((message) => message.Body?.includes(marker));
           if (!match?.ReceiptHandle) {
             // Republish in case the earlier publish predated rule/permission
             // readiness.
@@ -109,10 +95,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
 
@@ -127,10 +110,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           Effect.retry({
             while: (e) => e._tag === "ResourceStillExists",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
           }),
         );
         // SQS DeleteQueue propagation is documented at up to ~60s.
@@ -142,10 +122,7 @@ describe.sequential("AWS.IoT.TopicRuleEventSource", () => {
           Effect.catchTag("QueueDoesNotExist", () => Effect.void),
           Effect.retry({
             while: (e) => e._tag === "ResourceStillExists",
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
           }),
         );
       }),

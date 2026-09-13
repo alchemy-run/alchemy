@@ -52,7 +52,6 @@ export interface ChangeMessageVisibilityBatch extends Binding.Service<
   >
 > {}
 
-export const ChangeMessageVisibilityBatch =
-  Binding.Service<ChangeMessageVisibilityBatch>(
-    "AWS.SQS.ChangeMessageVisibilityBatch",
-  );
+export const ChangeMessageVisibilityBatch = Binding.Service<ChangeMessageVisibilityBatch>(
+  "AWS.SQS.ChangeMessageVisibilityBatch",
+);

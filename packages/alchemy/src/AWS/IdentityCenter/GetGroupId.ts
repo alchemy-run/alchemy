@@ -37,12 +37,7 @@ export interface GetGroupId extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.GetGroupIdRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.GetGroupIdResponse,
-      identitystore.GetGroupIdError
-    >
+    ) => Effect.Effect<identitystore.GetGroupIdResponse, identitystore.GetGroupIdError>
   >
 > {}
-export const GetGroupId = Binding.Service<GetGroupId>(
-  "AWS.IdentityCenter.GetGroupId",
-);
+export const GetGroupId = Binding.Service<GetGroupId>("AWS.IdentityCenter.GetGroupId");

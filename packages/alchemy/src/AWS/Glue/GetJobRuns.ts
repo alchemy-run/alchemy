@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface GetJobRunsRequest extends Omit<
-  glue.GetJobRunsRequest,
-  "JobName"
-> {}
+export interface GetJobRunsRequest extends Omit<glue.GetJobRunsRequest, "JobName"> {}
 
 /**
  * Runtime binding for `glue:GetJobRuns`.
@@ -36,9 +33,7 @@ export interface GetJobRuns extends Binding.Service<
   (
     job: Job,
   ) => Effect.Effect<
-    (
-      request?: GetJobRunsRequest,
-    ) => Effect.Effect<glue.GetJobRunsResponse, glue.GetJobRunsError>
+    (request?: GetJobRunsRequest) => Effect.Effect<glue.GetJobRunsResponse, glue.GetJobRunsError>
   >
 > {}
 

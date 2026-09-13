@@ -125,9 +125,7 @@ export const PermissionProvider = () =>
                       ? [policy.Statement]
                       : [];
                   return statements
-                    .filter(
-                      (s): s is { Sid: string } => typeof s.Sid === "string",
-                    )
+                    .filter((s): s is { Sid: string } => typeof s.Sid === "string")
                     .map((s): PermissionAttrs => ({
                       statementId: s.Sid,
                       eventBusName: busName,
@@ -151,20 +149,14 @@ export const PermissionProvider = () =>
             return { action: "replace" } as const;
           }
 
-          if (
-            (olds.eventBusName ?? "default") !==
-            (news.eventBusName ?? "default")
-          ) {
+          if ((olds.eventBusName ?? "default") !== (news.eventBusName ?? "default")) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const statementId =
-            output?.statementId ?? (yield* toStatementId(id, news));
-          const eventBusName =
-            output?.eventBusName ?? news.eventBusName ?? "default";
-          const eventBusParam =
-            eventBusName !== "default" ? eventBusName : undefined;
+          const statementId = output?.statementId ?? (yield* toStatementId(id, news));
+          const eventBusName = output?.eventBusName ?? news.eventBusName ?? "default";
+          const eventBusParam = eventBusName !== "default" ? eventBusName : undefined;
 
           // Observe + Ensure for an existence-only resource: there is no
           // server-side `describePermission` for a single statement, so we
@@ -177,9 +169,7 @@ export const PermissionProvider = () =>
               EventBusName: eventBusParam,
               StatementId: statementId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           yield* eventbridge.putPermission({
             EventBusName: eventBusParam,
@@ -199,15 +189,10 @@ export const PermissionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* eventbridge
             .removePermission({
-              EventBusName:
-                output.eventBusName !== "default"
-                  ? output.eventBusName
-                  : undefined,
+              EventBusName: output.eventBusName !== "default" ? output.eventBusName : undefined,
               StatementId: output.statementId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

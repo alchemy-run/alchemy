@@ -31,18 +31,14 @@ export default MailManagerTestFunction.make(
       tags: { fixture: "mailmanager-bindings" },
     });
 
-    const registerMember =
-      yield* MailManager.RegisterMemberToAddressList(blockList);
-    const deregisterMember =
-      yield* MailManager.DeregisterMemberFromAddressList(blockList);
+    const registerMember = yield* MailManager.RegisterMemberToAddressList(blockList);
+    const deregisterMember = yield* MailManager.DeregisterMemberFromAddressList(blockList);
     const getMember = yield* MailManager.GetMemberOfAddressList(blockList);
     const listMembers = yield* MailManager.ListMembersOfAddressList(blockList);
-    const listImportJobs =
-      yield* MailManager.ListAddressListImportJobs(blockList);
+    const listImportJobs = yield* MailManager.ListAddressListImportJobs(blockList);
     const startSearch = yield* MailManager.StartArchiveSearch(archive);
     const getSearch = yield* MailManager.GetArchiveSearch(archive);
-    const getSearchResults =
-      yield* MailManager.GetArchiveSearchResults(archive);
+    const getSearchResults = yield* MailManager.GetArchiveSearchResults(archive);
     const listSearches = yield* MailManager.ListArchiveSearches(archive);
     const listExports = yield* MailManager.ListArchiveExports(archive);
 
@@ -84,9 +80,7 @@ export default MailManagerTestFunction.make(
             Address: address,
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({
             registered: member.CreatedTimestamp !== undefined,

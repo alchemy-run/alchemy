@@ -5,11 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isInstance } from "../EC2/Instance.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
-import {
-  Standby,
-  type EnterStandbyRequest,
-  type ExitStandbyRequest,
-} from "./Standby.ts";
+import { Standby, type EnterStandbyRequest, type ExitStandbyRequest } from "./Standby.ts";
 
 // Bespoke (not the shared scaffold): a multi-operation client over
 // `enterStandby` + `exitStandby` behind one IAM grant.
@@ -36,22 +32,22 @@ export const StandbyHttp = Layer.effect(
         }
       }
       return {
-        enter: Effect.fn(`AWS.AutoScaling.EnterStandby(${group.LogicalId})`)(
-          function* (request: EnterStandbyRequest) {
-            return yield* enter({
-              ...request,
-              AutoScalingGroupName: yield* AutoScalingGroupName,
-            });
-          },
-        ),
-        exit: Effect.fn(`AWS.AutoScaling.ExitStandby(${group.LogicalId})`)(
-          function* (request: ExitStandbyRequest) {
-            return yield* exit({
-              ...request,
-              AutoScalingGroupName: yield* AutoScalingGroupName,
-            });
-          },
-        ),
+        enter: Effect.fn(`AWS.AutoScaling.EnterStandby(${group.LogicalId})`)(function* (
+          request: EnterStandbyRequest,
+        ) {
+          return yield* enter({
+            ...request,
+            AutoScalingGroupName: yield* AutoScalingGroupName,
+          });
+        }),
+        exit: Effect.fn(`AWS.AutoScaling.ExitStandby(${group.LogicalId})`)(function* (
+          request: ExitStandbyRequest,
+        ) {
+          return yield* exit({
+            ...request,
+            AutoScalingGroupName: yield* AutoScalingGroupName,
+          });
+        }),
       };
     });
   }),

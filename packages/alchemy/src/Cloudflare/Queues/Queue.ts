@@ -122,8 +122,7 @@ export const ProviderLive = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.queueName ?? (yield* createQueueName(id, olds.name));
+      const oldName = output?.queueName ?? (yield* createQueueName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -140,9 +139,7 @@ export const ProviderLive = () =>
       // Observe — re-fetch the cached queue; fall back to a name scan
       // when the cached id is gone (out-of-band delete or partial
       // state-persistence failure).
-      let observed:
-        | { queueId?: string | null; queueName?: string | null }
-        | undefined;
+      let observed: { queueId?: string | null; queueName?: string | null } | undefined;
       // A `dev:` id (a mis-stamped legacy local row) is not a real queue id —
       // skip the lookup (Cloudflare rejects it as a malformed parameter) and
       // fall through to the name scan.
@@ -153,9 +150,7 @@ export const ProviderLive = () =>
             queueId: output.queueId,
           })
           .pipe(
-            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
           );
       }
       if (!observed) {
@@ -216,17 +211,11 @@ export const ProviderLive = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "QueueInUseByEventNotification",
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
           }),
           Effect.retry({
             while: (e) => e._tag === "QueueInUseByWorkerBinding",
-            schedule: Schedule.max([
-              Schedule.spaced("2 seconds"),
-              Schedule.recurs(6),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(6)]),
           }),
           Effect.catchTag("QueueNotFound", () => Effect.void),
         );
@@ -240,10 +229,7 @@ export const ProviderLive = () =>
         // a script from outside this stack+stage keeps the typed failure.
         Effect.catchTag("QueueInUseByWorkerBinding", (cause) =>
           Effect.gen(function* () {
-            const removed = yield* deleteOwnedProducerScripts(
-              output.accountId,
-              output.queueId,
-            );
+            const removed = yield* deleteOwnedProducerScripts(output.accountId, output.queueId);
             if (removed === 0) return yield* Effect.fail(cause);
             return yield* attempt;
           }),
@@ -284,9 +270,7 @@ export const ProviderLive = () =>
               queueName: queue.queueName!,
               accountId: output.accountId,
             })),
-            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
           );
       }
       const queueName = yield* createQueueName(id, olds?.name);
@@ -323,24 +307,15 @@ const createQueueName = (id: string, name: string | undefined) =>
  * pre-stamping dev run that rewrote the worker's row as local). Scripts
  * without our ownership tags are left alone.
  */
-const deleteOwnedProducerScripts = Effect.fn(function* (
-  accountId: string,
-  queueId: string,
-) {
+const deleteOwnedProducerScripts = Effect.fn(function* (accountId: string, queueId: string) {
   const stack = yield* Stack;
   const queue = yield* queues
     .getQueue({ accountId, queueId })
-    .pipe(
-      Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)));
   const producerScripts = Array.from(
     new Set(
       (queue?.producers ?? []).flatMap((producer) =>
-        producer.type === "worker" &&
-        "scriptName" in producer &&
-        producer.scriptName
+        producer.type === "worker" && "scriptName" in producer && producer.scriptName
           ? [producer.scriptName]
           : [],
       ),
@@ -351,15 +326,10 @@ const deleteOwnedProducerScripts = Effect.fn(function* (
     const settings = yield* workers
       .getScriptScriptAndVersionSetting({ accountId, scriptName })
       .pipe(
-        Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.succeed(undefined)),
       );
     const tags = new Set(settings?.tags ?? []);
-    if (
-      !tags.has(`alchemy:stack:${stack.name}`) ||
-      !tags.has(`alchemy:stage:${stack.stage}`)
-    ) {
+    if (!tags.has(`alchemy:stack:${stack.name}`) || !tags.has(`alchemy:stage:${stack.stage}`)) {
       continue;
     }
     yield* Effect.logWarning(
@@ -373,9 +343,7 @@ const deleteOwnedProducerScripts = Effect.fn(function* (
       // delete recovery.
       Effect.catchTag("QueueConsumerConflict", () =>
         detachQueueConsumersOfScript(accountId, scriptName).pipe(
-          Effect.andThen(
-            workers.deleteScript({ accountId, scriptName, force: true }),
-          ),
+          Effect.andThen(workers.deleteScript({ accountId, scriptName, force: true })),
         ),
       ),
       Effect.catchTag("WorkerNotFound", () => Effect.void),
@@ -432,10 +400,9 @@ export const ProviderLocal = () =>
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.queueId) return undefined;
-          return MutableHashMap.get(
-            localRuntimeState.queues,
-            output.queueId,
-          ).pipe(Option.getOrUndefined);
+          return MutableHashMap.get(localRuntimeState.queues, output.queueId).pipe(
+            Option.getOrUndefined,
+          );
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -444,9 +411,7 @@ export const ProviderLocal = () =>
             // the worker binding would treat it as an `Alchemy.remote()`
             // queue and fail on the missing producer shim.
             queueId:
-              output?.queueId && !isLiveId(output.queueId)
-                ? output.queueId
-                : generateLocalId(),
+              output?.queueId && !isLiveId(output.queueId) ? output.queueId : generateLocalId(),
             queueName: yield* createQueueName(id, news.name),
             accountId: output?.accountId ?? accountId,
           };
@@ -467,15 +432,9 @@ export const ProviderLocal = () =>
               .pipe(
                 Effect.retry({
                   while: (e) => e._tag === "QueueInUseByEventNotification",
-                  schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
-                    Schedule.recurs(8),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
                 }),
-                Effect.catchTag(
-                  ["QueueNotFound", "InvalidRoute"],
-                  () => Effect.void,
-                ),
+                Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.void),
               );
           }
         }),

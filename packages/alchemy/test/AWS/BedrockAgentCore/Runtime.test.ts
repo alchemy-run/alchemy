@@ -11,38 +11,29 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getAgentRuntime on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        control.getAgentRuntime({
-          agentRuntimeId: "alchemy_nonexistent_probe-0000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getAgentRuntime on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      control.getAgentRuntime({
+        agentRuntimeId: "alchemy_nonexistent_probe-0000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertRuntimeGone = (agentRuntimeId: string) =>
   Effect.gen(function* () {
     const status = yield* control.getAgentRuntime({ agentRuntimeId }).pipe(
       Effect.map((r) => r.status as string),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("GONE" as string),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as string)),
     );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`runtime still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`runtime still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -51,9 +42,7 @@ const assertRuntimeGone = (agentRuntimeId: string) =>
 // AWS_TEST_AGENTCORE=1 and provide the image via AWS_TEST_AGENTCORE_IMAGE
 // (an ECR image URI in the same account/region, e.g. built from the
 // AgentCore starter toolkit).
-test.provider.skipIf(
-  !process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AGENTCORE_IMAGE,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AGENTCORE_IMAGE)(
   "create container-backed agent runtime, verify, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -72,9 +61,7 @@ test.provider.skipIf(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
           });
           const runtime = yield* Runtime("TestAgent", {
             agentRuntimeArtifact: {

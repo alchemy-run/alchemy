@@ -14,12 +14,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { durationToDays, unwrapRedactedString } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  applyRedshiftTagDelta,
-  redshiftArn,
-  sameStringSet,
-  toTagRecord,
-} from "./internal.ts";
+import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
 
 /**
  * Creating a provisioned Redshift cluster requires either a
@@ -301,9 +296,7 @@ const retryWhileClusterTransitioning = <A, E extends { _tag: string }, R>(
  * typically completes in 5-10). Same explicit-annotation rationale as
  * {@link retryWhileClusterTransitioning}.
  */
-const retryUntilSettled = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const retryUntilSettled = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]),
   });
@@ -320,11 +313,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         const response = yield* redshift
           .describeClusters({ ClusterIdentifier: identifier })
-          .pipe(
-            Effect.catchTag("ClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.Clusters?.[0];
       });
 
@@ -333,9 +322,7 @@ export const ClusterProvider = () =>
           readCluster(identifier).pipe(
             Effect.flatMap((cluster) => {
               if (cluster === undefined) {
-                return Effect.fail(
-                  new Error(`Cluster '${identifier}' not found`),
-                );
+                return Effect.fail(new Error(`Cluster '${identifier}' not found`));
               }
               if (cluster.ClusterStatus !== "available") {
                 return Effect.fail(
@@ -376,18 +363,11 @@ export const ClusterProvider = () =>
       const toAttrs = Effect.fn(function* (cluster: redshift.Cluster) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!cluster.ClusterIdentifier) {
-          return yield* Effect.fail(
-            new Error("Cluster is missing its identifier"),
-          );
+          return yield* Effect.fail(new Error("Cluster is missing its identifier"));
         }
         return {
           clusterIdentifier: cluster.ClusterIdentifier,
-          clusterArn: redshiftArn(
-            region,
-            accountId,
-            "cluster",
-            cluster.ClusterIdentifier,
-          ),
+          clusterArn: redshiftArn(region, accountId, "cluster", cluster.ClusterIdentifier),
           clusterNamespaceArn: cluster.ClusterNamespaceArn,
           clusterStatus: cluster.ClusterStatus ?? "available",
           nodeType: cluster.NodeType ?? DEFAULT_NODE_TYPE,
@@ -437,28 +417,21 @@ export const ClusterProvider = () =>
           if ((n.port ?? undefined) !== (o.port ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.availabilityZone ?? undefined) !==
-            (o.availabilityZone ?? undefined)
-          ) {
+          if ((n.availabilityZone ?? undefined) !== (o.availabilityZone ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const identifier =
-            output?.clusterIdentifier ?? (yield* toName(id, olds ?? {}));
+          const identifier = output?.clusterIdentifier ?? (yield* toName(id, olds ?? {}));
           const cluster = yield* readCluster(identifier);
           if (cluster === undefined) return undefined;
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const identifier =
-            output?.clusterIdentifier ?? (yield* toName(id, news));
+          const identifier = output?.clusterIdentifier ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredNodes = news.numberOfNodes ?? 1;
@@ -484,9 +457,7 @@ export const ClusterProvider = () =>
                 ClusterType: clusterType,
                 NumberOfNodes: desiredNodes > 1 ? desiredNodes : undefined,
                 MasterUsername: news.masterUsername ?? DEFAULT_MASTER_USERNAME,
-                MasterUserPassword: news.manageMasterPassword
-                  ? undefined
-                  : news.masterUserPassword,
+                MasterUserPassword: news.manageMasterPassword ? undefined : news.masterUserPassword,
                 ManageMasterPassword: news.manageMasterPassword,
                 DBName: news.dbName ?? DEFAULT_DB_NAME,
                 ClusterSubnetGroupName: news.clusterSubnetGroupName,
@@ -509,11 +480,7 @@ export const ClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ClusterAlreadyExistsFault", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.succeed(undefined)));
           }
 
           // Provisioning and in-flight modifications both surface as a
@@ -537,9 +504,7 @@ export const ClusterProvider = () =>
             update.ClusterType = clusterType;
             mutated = true;
           }
-          const observedSecurityGroups = (
-            observed.VpcSecurityGroups ?? []
-          ).flatMap((group) =>
+          const observedSecurityGroups = (observed.VpcSecurityGroups ?? []).flatMap((group) =>
             group.VpcSecurityGroupId ? [group.VpcSecurityGroupId] : [],
           );
           if (
@@ -552,8 +517,7 @@ export const ClusterProvider = () =>
           if (
             news.clusterParameterGroupName !== undefined &&
             !(observed.ClusterParameterGroups ?? []).some(
-              (group) =>
-                group.ParameterGroupName === news.clusterParameterGroupName,
+              (group) => group.ParameterGroupName === news.clusterParameterGroupName,
             )
           ) {
             update.ClusterParameterGroupName = news.clusterParameterGroupName;
@@ -566,32 +530,23 @@ export const ClusterProvider = () =>
             update.PubliclyAccessible = news.publiclyAccessible;
             mutated = true;
           }
-          if (
-            news.encrypted !== undefined &&
-            news.encrypted !== observed.Encrypted
-          ) {
+          if (news.encrypted !== undefined && news.encrypted !== observed.Encrypted) {
             update.Encrypted = news.encrypted;
             update.KmsKeyId = news.kmsKeyId;
             mutated = true;
-          } else if (
-            news.kmsKeyId !== undefined &&
-            news.kmsKeyId !== observed.KmsKeyId
-          ) {
+          } else if (news.kmsKeyId !== undefined && news.kmsKeyId !== observed.KmsKeyId) {
             update.Encrypted = news.encrypted ?? true;
             update.KmsKeyId = news.kmsKeyId;
             mutated = true;
           }
           if (
             news.preferredMaintenanceWindow !== undefined &&
-            news.preferredMaintenanceWindow !==
-              observed.PreferredMaintenanceWindow
+            news.preferredMaintenanceWindow !== observed.PreferredMaintenanceWindow
           ) {
             update.PreferredMaintenanceWindow = news.preferredMaintenanceWindow;
             mutated = true;
           }
-          const desiredRetentionDays = durationToDays(
-            news.automatedSnapshotRetentionPeriod,
-          );
+          const desiredRetentionDays = durationToDays(news.automatedSnapshotRetentionPeriod);
           if (
             desiredRetentionDays !== undefined &&
             desiredRetentionDays !== observed.AutomatedSnapshotRetentionPeriod
@@ -634,9 +589,7 @@ export const ClusterProvider = () =>
           }
 
           if (mutated) {
-            yield* retryWhileClusterTransitioning(
-              redshift.modifyCluster(update),
-            );
+            yield* retryWhileClusterTransitioning(redshift.modifyCluster(update));
             observed = yield* waitForAvailable(identifier);
           }
 
@@ -644,10 +597,7 @@ export const ClusterProvider = () =>
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "cluster", identifier);
-          const { removed, upsert } = diffTags(
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          const { removed, upsert } = diffTags(toTagRecord(observed.Tags), desiredTags);
           yield* applyRedshiftTagDelta({ arn, upsert, removed });
 
           yield* session.note(arn);
@@ -660,23 +610,15 @@ export const ClusterProvider = () =>
           // A cluster mid-create/modify rejects deletion with
           // InvalidClusterStateFault — wait (bounded) for it to settle
           // first. A cluster already deleting (or gone) is success.
-          yield* waitUntilSettled(identifier).pipe(
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+          yield* waitUntilSettled(identifier).pipe(Effect.catch(() => Effect.succeed(undefined)));
           yield* retryWhileClusterTransitioning(
             redshift
               .deleteCluster({
                 ClusterIdentifier: identifier,
                 SkipFinalClusterSnapshot: true,
               })
-              .pipe(
-                Effect.catchTag("ClusterNotFoundFault", () =>
-                  Effect.succeed(undefined),
-                ),
-              ),
-          ).pipe(
-            Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
-          );
+              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined))),
+          ).pipe(Effect.catchTag("InvalidClusterStateFault", () => Effect.void));
         }),
 
         list: () =>
@@ -686,9 +628,7 @@ export const ClusterProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.Clusters ?? []).filter(
-                  (cluster) => cluster.ClusterIdentifier !== undefined,
-                ),
+                (page.Clusters ?? []).filter((cluster) => cluster.ClusterIdentifier !== undefined),
               ),
             ),
             Effect.flatMap(

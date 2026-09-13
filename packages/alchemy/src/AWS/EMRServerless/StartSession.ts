@@ -8,10 +8,7 @@ import type { Application } from "./Application.ts";
  * `applicationId` is injected from the bound {@link Application}; the
  * idempotency `clientToken` is auto-generated when omitted.
  */
-export type StartSessionInput = Omit<
-  emr.StartSessionRequest,
-  "applicationId" | "clientToken"
-> & {
+export type StartSessionInput = Omit<emr.StartSessionRequest, "applicationId" | "clientToken"> & {
   /**
    * Idempotency token deduplicating retried submissions.
    * @default a generated UUID per call
@@ -46,11 +43,7 @@ export interface StartSession extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: StartSessionInput,
-    ) => Effect.Effect<emr.StartSessionResponse, emr.StartSessionError>
+    (request: StartSessionInput) => Effect.Effect<emr.StartSessionResponse, emr.StartSessionError>
   >
 > {}
-export const StartSession = Binding.Service<StartSession>(
-  "AWS.EMRServerless.StartSession",
-);
+export const StartSession = Binding.Service<StartSession>("AWS.EMRServerless.StartSession");

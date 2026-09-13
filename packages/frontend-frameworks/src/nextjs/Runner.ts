@@ -9,9 +9,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
-export class RunnerError extends Data.TaggedError<"RunnerError">(
-  "RunnerError",
-)<{
+export class RunnerError extends Data.TaggedError<"RunnerError">("RunnerError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -54,10 +52,7 @@ export const resolveConfigPath = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const candidate = path.resolve(
-    config.appDir,
-    config.configPath ?? "open-next.config.ts",
-  );
+  const candidate = path.resolve(config.appDir, config.configPath ?? "open-next.config.ts");
   if (yield* fs.exists(candidate)) {
     if ((yield* fs.stat(candidate)).type !== "File") {
       return yield* new RunnerError({
@@ -115,9 +110,7 @@ export const runOpenNextBuild = (
             ...config,
             configPath,
             generatedConfigPath:
-              configPath === undefined
-                ? path.join(directory, "open-next.config.mjs")
-                : undefined,
+              configPath === undefined ? path.join(directory, "open-next.config.mjs") : undefined,
             outputPath,
           }),
         ],
@@ -134,8 +127,7 @@ export const runOpenNextBuild = (
         Effect.mapError(
           (cause) =>
             new RunnerError({
-              message:
-                "Failed to spawn the OpenNext build runner (is `node` on PATH?)",
+              message: "Failed to spawn the OpenNext build runner (is `node` on PATH?)",
               cause,
             }),
         ),
@@ -143,10 +135,7 @@ export const runOpenNextBuild = (
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
         dest: NodeJS.WriteStream,
-      ) =>
-        Stream.runForEach(stream, (chunk) =>
-          Effect.sync(() => dest.write(chunk)),
-        );
+      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,
@@ -170,18 +159,13 @@ export const runOpenNextBuild = (
       }
       return yield* fs
         .readFileString(outputPath)
-        .pipe(
-          Effect.flatMap(
-            Schema.decodeUnknownEffect(Schema.fromJsonString(BuildPaths)),
-          ),
-        );
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(BuildPaths))));
     }).pipe(
       Effect.mapError((cause) =>
         cause instanceof RunnerError
           ? cause
           : new RunnerError({
-              message:
-                "Failed to prepare or read the OpenNext build configuration",
+              message: "Failed to prepare or read the OpenNext build configuration",
               cause,
             }),
       ),

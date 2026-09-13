@@ -65,7 +65,6 @@ export interface GetEventPredictionMetadata extends Binding.Service<
     >
   >
 > {}
-export const GetEventPredictionMetadata =
-  Binding.Service<GetEventPredictionMetadata>(
-    "AWS.FraudDetector.GetEventPredictionMetadata",
-  );
+export const GetEventPredictionMetadata = Binding.Service<GetEventPredictionMetadata>(
+  "AWS.FraudDetector.GetEventPredictionMetadata",
+);

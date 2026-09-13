@@ -50,16 +50,12 @@ export const makeOrganizationsHttpBinding = <I, A, E, R>(options: {
               Resource: ["*"],
             },
           ];
-          yield* host.bind`Allow(${host}, AWS.Organizations.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Organizations.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.Organizations.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.Organizations.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

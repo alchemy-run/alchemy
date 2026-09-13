@@ -25,9 +25,7 @@ describe("AWS.Timestream.DbInstance", () => {
         const error = yield* influxdb
           .getDbInstance({ identifier: "alchemy-timestream-does-not-exist" })
           .pipe(Effect.flip);
-        expect(["ValidationException", "ResourceNotFoundException"]).toContain(
-          error._tag,
-        );
+        expect(["ValidationException", "ResourceNotFoundException"]).toContain(error._tag);
       }),
     { timeout: 60_000 },
   );
@@ -73,23 +71,15 @@ describe("AWS.Timestream.DbInstance", () => {
         yield* stack.destroy();
 
         yield* Effect.gen(function* () {
-          const gone = yield* influxdb
-            .getDbInstance({ identifier: instance.id })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
-            );
-          if (!gone)
-            return yield* Effect.fail({ _tag: "StillExists" as const });
+          const gone = yield* influxdb.getDbInstance({ identifier: instance.id }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+          );
+          if (!gone) return yield* Effect.fail({ _tag: "StillExists" as const });
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.max([
-              Schedule.spaced("20 seconds"),
-              Schedule.recurs(90),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(90)]),
           }),
         );
       }),

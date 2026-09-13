@@ -22,10 +22,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // an opaque `RpcClientDefect`; see Test/Http.ts.
 const clientLayer = Test.rpcClientLayer;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AiGatewayChatPersistenceRpcStack",

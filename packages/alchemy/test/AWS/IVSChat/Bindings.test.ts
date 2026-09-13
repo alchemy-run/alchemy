@@ -9,18 +9,13 @@ import WebSocket from "ws";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import IVSChatTestFunctionLive, {
-  IVSChatTestFunction,
-} from "./fixtures/handler.ts";
+import IVSChatTestFunctionLive, { IVSChatTestFunction } from "./fixtures/handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "IVSChatBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]);
 
 let baseUrl: string;
 
@@ -39,28 +34,21 @@ const post = (path: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe("IVSChat Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "IVSChat test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("IVSChat test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("IVSChat test setup: deploying fixture");
@@ -74,9 +62,7 @@ describe("IVSChat Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `IVSChat test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`IVSChat test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -84,9 +70,7 @@ describe("IVSChat Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `IVSChat test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`IVSChat test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -101,9 +85,7 @@ describe("IVSChat Bindings", () => {
       "mints a redacted chat token honoring sessionDuration",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* post("/token").pipe(
-            Effect.flatMap((r) => r.json),
-          )) as {
+          const response = (yield* post("/token").pipe(Effect.flatMap((r) => r.json))) as {
             tokenLength: number;
             tokenIsRedacted: boolean;
             tokenExpirationTime?: string;
@@ -119,8 +101,7 @@ describe("IVSChat Bindings", () => {
           // sessionDuration: "30 minutes" must reach the wire as
           // sessionDurationInMinutes: 30 (the API default is 60).
           const sessionMinutes =
-            (new Date(response.sessionExpirationTime!).getTime() - Date.now()) /
-            60_000;
+            (new Date(response.sessionExpirationTime!).getTime() - Date.now()) / 60_000;
           expect(sessionMinutes).toBeGreaterThan(20);
           expect(sessionMinutes).toBeLessThan(40);
         }),
@@ -133,9 +114,7 @@ describe("IVSChat Bindings", () => {
       "broadcasts an application event to the room",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* post("/send-event").pipe(
-            Effect.flatMap((r) => r.json),
-          )) as {
+          const response = (yield* post("/send-event").pipe(Effect.flatMap((r) => r.json))) as {
             id?: string;
           };
 
@@ -151,9 +130,7 @@ describe("IVSChat Bindings", () => {
       "broadcasts a DELETEMESSAGE moderation event",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* post("/delete-message").pipe(
-            Effect.flatMap((r) => r.json),
-          )) as {
+          const response = (yield* post("/delete-message").pipe(Effect.flatMap((r) => r.json))) as {
             deleted?: string;
           };
 
@@ -227,9 +204,7 @@ describe("IVSChat Bindings", () => {
           settle(Effect.fail(new WsFailure({ reason: String(error) }))),
         );
         socket.on("close", (code) =>
-          settle(
-            Effect.fail(new WsFailure({ reason: `closed early (${code})` })),
-          ),
+          settle(Effect.fail(new WsFailure({ reason: `closed early (${code})` }))),
         );
       }).pipe(
         Effect.timeout("15 seconds"),
@@ -239,9 +214,7 @@ describe("IVSChat Bindings", () => {
       );
 
     const wsInfo = Effect.gen(function* () {
-      const info = (yield* post("/ws-info").pipe(
-        Effect.flatMap((r) => r.json),
-      )) as {
+      const info = (yield* post("/ws-info").pipe(Effect.flatMap((r) => r.json))) as {
         token?: string;
         endpoint?: string;
         roomArn?: string;
@@ -260,9 +233,7 @@ describe("IVSChat Bindings", () => {
           // its messageReviewHandler (set through the binding contract).
           const room = yield* ivschat.getRoom({ identifier: roomArn });
           expect(room.messageReviewHandler?.uri).toContain(":function:");
-          expect(room.messageReviewHandler?.fallbackResult ?? "ALLOW").toBe(
-            "ALLOW",
-          );
+          expect(room.messageReviewHandler?.fallbackResult ?? "ALLOW").toBe("ALLOW");
         }),
       { timeout: 120_000 },
     );
@@ -276,15 +247,8 @@ describe("IVSChat Bindings", () => {
           // delivers the ORIGINAL content — treat that as retryable.
           const frame = yield* Effect.gen(function* () {
             const { token, endpoint } = yield* wsInfo;
-            const received = yield* wsSendMessage(
-              endpoint,
-              token,
-              "hello moderators",
-            );
-            if (
-              received.Type !== "MESSAGE" ||
-              !received.Content?.includes("[reviewed]")
-            ) {
+            const received = yield* wsSendMessage(endpoint, token, "hello moderators");
+            if (received.Type !== "MESSAGE" || !received.Content?.includes("[reviewed]")) {
               return yield* Effect.fail(
                 new WsFailure({
                   reason: `not yet reviewed: ${JSON.stringify(received)}`,
@@ -299,10 +263,7 @@ describe("IVSChat Bindings", () => {
               ),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("2 seconds"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(5)]),
             }),
           );
 
@@ -318,11 +279,7 @@ describe("IVSChat Bindings", () => {
         Effect.gen(function* () {
           const frame = yield* Effect.gen(function* () {
             const { token, endpoint } = yield* wsInfo;
-            const received = yield* wsSendMessage(
-              endpoint,
-              token,
-              "please deny-me now",
-            );
+            const received = yield* wsSendMessage(endpoint, token, "please deny-me now");
             if (received.Type !== "ERROR") {
               return yield* Effect.fail(
                 new WsFailure({
@@ -338,10 +295,7 @@ describe("IVSChat Bindings", () => {
               ),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("2 seconds"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(5)]),
             }),
           );
 

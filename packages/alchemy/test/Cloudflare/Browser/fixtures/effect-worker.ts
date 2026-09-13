@@ -9,9 +9,7 @@ const TARGET_URL = "https://example.com";
 const byteLength = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
   stream.pipe(
     Stream.runCollect,
-    Effect.map((chunks) =>
-      Array.from(chunks).reduce((total, chunk) => total + chunk.length, 0),
-    ),
+    Effect.map((chunks) => Array.from(chunks).reduce((total, chunk) => total + chunk.length, 0)),
   );
 
 export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffectWorker>()(
@@ -30,26 +28,20 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
         switch (path) {
           // JSON quick actions resolve to their parsed payload directly.
           case "/content": {
-            const content = yield* browser
-              .content({ url: TARGET_URL })
-              .pipe(Effect.orDie);
+            const content = yield* browser.content({ url: TARGET_URL }).pipe(Effect.orDie);
             return yield* HttpServerResponse.json({
               title: content.meta.title,
               contentLength: content.result.length,
             });
           }
           case "/markdown": {
-            const markdown = yield* browser
-              .markdown({ url: TARGET_URL })
-              .pipe(Effect.orDie);
+            const markdown = yield* browser.markdown({ url: TARGET_URL }).pipe(Effect.orDie);
             return yield* HttpServerResponse.json({
               markdownLength: markdown.result.length,
             });
           }
           case "/links": {
-            const links = yield* browser
-              .links({ url: TARGET_URL })
-              .pipe(Effect.orDie);
+            const links = yield* browser.links({ url: TARGET_URL }).pipe(Effect.orDie);
             return yield* HttpServerResponse.json({
               linkCount: links.result.length,
             });
@@ -63,9 +55,7 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
             });
           }
           case "/snapshot": {
-            const snapshot = yield* browser
-              .snapshot({ url: TARGET_URL })
-              .pipe(Effect.orDie);
+            const snapshot = yield* browser.snapshot({ url: TARGET_URL }).pipe(Effect.orDie);
             return yield* HttpServerResponse.json({
               title: snapshot.meta.title,
               screenshotLength: snapshot.result.screenshot?.length ?? 0,
@@ -84,15 +74,13 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
           }
           // Binary actions stream bytes; drain the stream to count them.
           case "/screenshot": {
-            const bytes = yield* byteLength(
-              browser.screenshot({ url: TARGET_URL }),
-            ).pipe(Effect.orDie);
+            const bytes = yield* byteLength(browser.screenshot({ url: TARGET_URL })).pipe(
+              Effect.orDie,
+            );
             return yield* HttpServerResponse.json({ bytes });
           }
           case "/pdf": {
-            const bytes = yield* byteLength(
-              browser.pdf({ url: TARGET_URL }),
-            ).pipe(Effect.orDie);
+            const bytes = yield* byteLength(browser.pdf({ url: TARGET_URL })).pipe(Effect.orDie);
             return yield* HttpServerResponse.json({ bytes });
           }
           // Generic `quickAction` passthrough.
@@ -111,8 +99,7 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
               binding.quickAction("content", { url: TARGET_URL }),
             ).pipe(Effect.orDie);
             const body = yield* Effect.promise(
-              () =>
-                res.json() as Promise<Cloudflare.Workers.BrowserContentResult>,
+              () => res.json() as Promise<Cloudflare.Workers.BrowserContentResult>,
             );
             return yield* HttpServerResponse.json({ title: body.meta.title });
           }

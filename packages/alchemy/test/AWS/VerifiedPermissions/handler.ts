@@ -136,16 +136,11 @@ export default VerifiedPermissionsTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json({
-            tag: Result.isFailure(result)
-              ? result.failure._tag
-              : "unexpected-success",
+            tag: Result.isFailure(result) ? result.failure._tag : "unexpected-success",
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

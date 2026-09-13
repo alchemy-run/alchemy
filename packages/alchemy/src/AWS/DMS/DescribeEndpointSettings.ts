@@ -30,12 +30,10 @@ export interface DescribeEndpointSettings extends Binding.Service<
   () => Effect.Effect<
     (
       request: dms.DescribeEndpointSettingsMessage,
-    ) => Effect.Effect<
-      dms.DescribeEndpointSettingsResponse,
-      dms.DescribeEndpointSettingsError
-    >
+    ) => Effect.Effect<dms.DescribeEndpointSettingsResponse, dms.DescribeEndpointSettingsError>
   >
 > {}
 
-export const DescribeEndpointSettings =
-  Binding.Service<DescribeEndpointSettings>("AWS.DMS.DescribeEndpointSettings");
+export const DescribeEndpointSettings = Binding.Service<DescribeEndpointSettings>(
+  "AWS.DMS.DescribeEndpointSettings",
+);

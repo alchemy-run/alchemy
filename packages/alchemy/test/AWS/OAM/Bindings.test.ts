@@ -20,10 +20,7 @@ afterAll(serviceLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -42,26 +39,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // AWS enforces ONE OAM sink per account per region, so this file must never
 // overlap with Sink.test.ts (which deploys its own sink). The single-fork
@@ -84,9 +74,7 @@ describe.sequential("OAM Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `OAM test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`OAM test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -94,9 +82,7 @@ describe.sequential("OAM Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `OAM test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`OAM test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -116,21 +102,19 @@ describe.sequential("OAM Bindings", () => {
   });
 
   describe("ListAttachedLinks", () => {
-    test.provider(
-      "lists the bound sink's attached links (injected sink ARN)",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Same-account links are rejected by OAM, so the fixture's sink has
-          // no attached links — an empty Items list proves both the
-          // oam:ListAttachedLinks grant on the sink ARN and the
-          // SinkIdentifier injection.
-          const response = (yield* getJson("/attached-links")) as {
-            count: number;
-            linkArns: string[];
-          };
-          expect(response.count).toBe(0);
-          expect(response.linkArns).toEqual([]);
-        }),
+    test.provider("lists the bound sink's attached links (injected sink ARN)", (_stack) =>
+      Effect.gen(function* () {
+        // Same-account links are rejected by OAM, so the fixture's sink has
+        // no attached links — an empty Items list proves both the
+        // oam:ListAttachedLinks grant on the sink ARN and the
+        // SinkIdentifier injection.
+        const response = (yield* getJson("/attached-links")) as {
+          count: number;
+          linkArns: string[];
+        };
+        expect(response.count).toBe(0);
+        expect(response.linkArns).toEqual([]);
+      }),
     );
   });
 });

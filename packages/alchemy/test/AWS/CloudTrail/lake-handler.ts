@@ -22,9 +22,7 @@ const tagOr = <A, E extends { _tag: string }, R>(
 ) =>
   Effect.result(effect).pipe(
     Effect.map((result) =>
-      Result.isSuccess(result)
-        ? onSuccess(result.success)
-        : { errorTag: result.failure._tag },
+      Result.isSuccess(result) ? onSuccess(result.success) : { errorTag: result.failure._tag },
     ),
   );
 

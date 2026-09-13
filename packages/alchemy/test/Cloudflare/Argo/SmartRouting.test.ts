@@ -10,13 +10,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Argo Smart Routing is a paid, usage-billed add-on. On the testing
 // account's zone every GET/PATCH of `/argo/smart_routing` fails with
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -138,9 +132,7 @@ describe.sequential("SmartRouting", () => {
   // entry must be present.
   test.provider("list enumerates Argo-entitled zones", (stack) =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Argo.SmartRouting,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Argo.SmartRouting);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);

@@ -42,7 +42,6 @@ export interface GetRightsizingRecommendation extends Binding.Service<
   >
 > {}
 
-export const GetRightsizingRecommendation =
-  Binding.Service<GetRightsizingRecommendation>(
-    "AWS.CostExplorer.GetRightsizingRecommendation",
-  );
+export const GetRightsizingRecommendation = Binding.Service<GetRightsizingRecommendation>(
+  "AWS.CostExplorer.GetRightsizingRecommendation",
+);

@@ -194,9 +194,7 @@ export const TokenConfiguration = Resource<TokenConfiguration>(TypeId);
 /**
  * Returns true if the given value is a TokenConfiguration resource.
  */
-export const isTokenConfiguration = (
-  value: unknown,
-): value is TokenConfiguration =>
+export const isTokenConfiguration = (value: unknown): value is TokenConfiguration =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TokenConfigurationProvider = () =>
@@ -213,14 +211,10 @@ export const TokenConfigurationProvider = () =>
         (zone) =>
           tokenValidation.listConfigurations.items({ zoneId: zone.id }).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).map((c) => toAttributes(c, zone.id)),
-            ),
+            Effect.map((chunk) => Array.from(chunk).map((c) => toAttributes(c, zone.id))),
             // JWT validation is entitlement-gated and freshly minted tokens
             // can briefly 403 — skip zones we can't enumerate.
-            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -345,9 +339,7 @@ type ObservedConfiguration = tokenValidation.GetConfigurationResponse;
 const getConfiguration = (zoneId: string, configId: string) =>
   tokenValidation.getConfiguration({ zoneId, configId }).pipe(
     Effect.map((c): ObservedConfiguration | undefined => c),
-    Effect.catchTag("TokenConfigurationNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("TokenConfigurationNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -385,10 +377,7 @@ const sameKeys = (
 ) => {
   const observedIds = observed.map((key) => keyIdentity(key as JwkKey)).sort();
   const desiredIds = desired.map(keyIdentity).sort();
-  return (
-    observedIds.length === desiredIds.length &&
-    observedIds.join(" ") === desiredIds.join(" ")
-  );
+  return observedIds.length === desiredIds.length && observedIds.join(" ") === desiredIds.join(" ");
 };
 
 const toAttributes = (

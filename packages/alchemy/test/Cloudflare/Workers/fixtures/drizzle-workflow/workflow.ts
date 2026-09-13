@@ -47,10 +47,7 @@ export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow
       const rows = yield* Cloudflare.Workflows.task(
         "select-widget",
         Effect.gen(function* () {
-          return yield* db
-            .select()
-            .from(Widgets)
-            .where(eq(Widgets.id, input.id));
+          return yield* db.select().from(Widgets).where(eq(Widgets.id, input.id));
         }).pipe(Effect.orDie),
       );
 

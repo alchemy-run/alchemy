@@ -46,9 +46,7 @@ export default DAXSlowTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"],
     });
     const cluster = yield* DAX.Cluster("Cache", {
       nodeType: "dax.t3.small",
@@ -62,10 +60,8 @@ export default DAXSlowTestFunction.make(
     const connect = yield* DAX.ConnectReadWrite(cluster);
     const rebootNode = yield* DAX.RebootNode(cluster);
     const describeClusters = yield* DAX.DescribeClusters();
-    const increaseReplicationFactor =
-      yield* DAX.IncreaseReplicationFactor(cluster);
-    const decreaseReplicationFactor =
-      yield* DAX.DecreaseReplicationFactor(cluster);
+    const increaseReplicationFactor = yield* DAX.IncreaseReplicationFactor(cluster);
+    const decreaseReplicationFactor = yield* DAX.DecreaseReplicationFactor(cluster);
 
     return {
       fetch: Effect.gen(function* () {
@@ -94,9 +90,7 @@ export default DAXSlowTestFunction.make(
             );
           }
           const result = yield* rebootNode({ NodeId: nodeId });
-          const node = (result.Cluster?.Nodes ?? []).find(
-            (n) => n.NodeId === nodeId,
-          );
+          const node = (result.Cluster?.Nodes ?? []).find((n) => n.NodeId === nodeId);
           return yield* HttpServerResponse.json({
             nodeStatus: node?.NodeStatus,
           });
@@ -112,9 +106,8 @@ export default DAXSlowTestFunction.make(
             NewReplicationFactor: 1,
           }).pipe(
             Effect.map(() => "Increased"),
-            Effect.catchTag(
-              ["InvalidParameterValueException", "InvalidClusterStateFault"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidParameterValueException", "InvalidClusterStateFault"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const decreaseTag = yield* decreaseReplicationFactor({
@@ -122,9 +115,8 @@ export default DAXSlowTestFunction.make(
             NewReplicationFactor: 0,
           }).pipe(
             Effect.map(() => "Decreased"),
-            Effect.catchTag(
-              ["InvalidParameterValueException", "InvalidClusterStateFault"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidParameterValueException", "InvalidClusterStateFault"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ increaseTag, decreaseTag });

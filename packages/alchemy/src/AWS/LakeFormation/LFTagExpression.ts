@@ -57,9 +57,7 @@ export interface LFTagExpression extends Resource<
   Providers
 > {}
 
-const toExpressionPairs = (
-  expression: readonly lf.LFTag[] | undefined,
-): LFTagPairSpec[] =>
+const toExpressionPairs = (expression: readonly lf.LFTag[] | undefined): LFTagPairSpec[] =>
   (expression ?? []).map((e) => ({
     tagKey: e.TagKey,
     tagValues: [...e.TagValues].sort(),
@@ -101,25 +99,16 @@ const normalize = (expression: LFTagPairSpec[]): LFTagPairSpec[] =>
  *
  * @resource
  */
-export const LFTagExpression = Resource<LFTagExpression>(
-  "AWS.LakeFormation.LFTagExpression",
-);
+export const LFTagExpression = Resource<LFTagExpression>("AWS.LakeFormation.LFTagExpression");
 
 export const LFTagExpressionProvider = () =>
   Provider.effect(
     LFTagExpression,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        name: string,
-        catalogId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, catalogId: string | undefined) {
         return yield* lf
           .getLFTagExpression({ Name: name, CatalogId: catalogId })
-          .pipe(
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return LFTagExpression.Provider.of({
@@ -128,9 +117,7 @@ export const LFTagExpressionProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            const pages = yield* lf.listLFTagExpressions
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listLFTagExpressions.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.LFTagExpressions ?? [])
               .filter((e) => e.Name !== undefined)
@@ -187,14 +174,10 @@ export const LFTagExpressionProvider = () =>
             found = yield* observe(news.name, news.catalogId);
           } else {
             // 3. SYNC — diff observed description/expression against desired.
-            const observedExpression = normalize(
-              toExpressionPairs(found.Expression),
-            );
+            const observedExpression = normalize(toExpressionPairs(found.Expression));
             const descriptionDrift =
-              news.description !== undefined &&
-              news.description !== found.Description;
-            const expressionDrift =
-              JSON.stringify(observedExpression) !== JSON.stringify(desired);
+              news.description !== undefined && news.description !== found.Description;
+            const expressionDrift = JSON.stringify(observedExpression) !== JSON.stringify(desired);
             if (descriptionDrift || expressionDrift) {
               yield* lf.updateLFTagExpression({
                 Name: news.name,
@@ -221,9 +204,7 @@ export const LFTagExpressionProvider = () =>
               Name: output.name,
               CatalogId: output.catalogId,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.void));
         }),
       });
     }),

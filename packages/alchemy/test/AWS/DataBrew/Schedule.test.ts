@@ -10,11 +10,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getSchedule = (name: string) =>
   databrew
     .describeSchedule({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const withSchedule = (cronExpression: string) =>
   Effect.gen(function* () {
@@ -32,9 +28,7 @@ test.provider(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(withSchedule("cron(0 3 * * ? *)"));
-      expect(created.schedule.scheduleArn).toContain(
-        `:schedule/${created.schedule.scheduleName}`,
-      );
+      expect(created.schedule.scheduleArn).toContain(`:schedule/${created.schedule.scheduleName}`);
 
       // out-of-band verification
       const observed = yield* getSchedule(created.schedule.scheduleName);

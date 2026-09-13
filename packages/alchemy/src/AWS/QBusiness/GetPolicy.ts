@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `GetPolicy` request with `applicationId` injected from the bound application.
  */
-export interface GetPolicyRequest extends Omit<
-  qbusiness.GetPolicyRequest,
-  "applicationId"
-> {}
+export interface GetPolicyRequest extends Omit<qbusiness.GetPolicyRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `GetPolicy` operation (IAM action

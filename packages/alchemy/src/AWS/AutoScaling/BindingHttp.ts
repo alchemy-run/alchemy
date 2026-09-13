@@ -49,10 +49,7 @@ export const makeGroupHttpBinding = <I extends object, A, E, R>(options: {
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource:
-                  options.resource === "*"
-                    ? ["*"]
-                    : [group.autoScalingGroupArn],
+                Resource: options.resource === "*" ? ["*"] : [group.autoScalingGroupArn],
               },
             ],
           });

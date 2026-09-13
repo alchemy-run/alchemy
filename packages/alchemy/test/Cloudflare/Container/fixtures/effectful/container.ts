@@ -15,9 +15,7 @@ export class MyContainer extends Cloudflare.Container<
     /** The value a `Binding.Service` injected into the container's env. */
     boundEnv: () => Effect.Effect<string | undefined, never, RuntimeContext>;
     /** Read an object's text body from R2 (or `null` when absent). */
-    readObject: (
-      key: string,
-    ) => Effect.Effect<string | null, never, RuntimeContext>;
+    readObject: (key: string) => Effect.Effect<string | null, never, RuntimeContext>;
   }
 >()("EffectfulContainer") {}
 
@@ -35,9 +33,7 @@ export default MyContainer.make(
     // FIRST registration site (the container layer builds before the stack
     // body), so the DO's later undecorated native-binding site inherits the
     // pin and both paths converge on the same live bucket.
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage).pipe(
-      Alchemy.remote(),
-    );
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage).pipe(Alchemy.remote());
 
     // A capability whose only deploy-time contribution is an env var. A
     // container has no workerd bindings, so this is the channel every
@@ -46,9 +42,7 @@ export default MyContainer.make(
 
     const read = (key: string) =>
       bucket.get(key).pipe(
-        Effect.flatMap((object) =>
-          object ? object.text() : Effect.succeed(null),
-        ),
+        Effect.flatMap((object) => (object ? object.text() : Effect.succeed(null))),
         Effect.orDie,
       );
 
@@ -73,9 +67,5 @@ export default MyContainer.make(
         return HttpServerResponse.text("hello from effectful container");
       }),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(Cloudflare.R2.ReadWriteBucketHttp, ProbeEnvBinding),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.R2.ReadWriteBucketHttp, ProbeEnvBinding))),
 );

@@ -9,12 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
-import {
-  ActiveReceiptRuleSet,
-  EmailIdentity,
-  ReceiptRule,
-  ReceiptRuleSet,
-} from "@/AWS/SES";
+import { ActiveReceiptRuleSet, EmailIdentity, ReceiptRule, ReceiptRuleSet } from "@/AWS/SES";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
@@ -35,8 +30,7 @@ const { test } = Test.make({
 //   AWS_TEST_SES_RECEIVING=1 bun run test test/AWS/SES/Receiving.smoke.test.ts --profile testing
 const GATED = !process.env.AWS_TEST_SES_RECEIVING;
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 // SES receiving is regional; the testing profile deploys to us-west-2 (one of
 // the receiving-supported regions).
 const region = process.env.AWS_TEST_SES_RECEIVING_REGION ?? "us-west-2";
@@ -50,9 +44,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -84,22 +76,16 @@ test.provider.skipIf(GATED)(
               emailIdentity: domain,
             });
             const dkim = (index: number) =>
-              Output.all(identity.dkimTokens).pipe(
-                Output.map(([tokens]) => tokens[index]!),
-              );
+              Output.all(identity.dkimTokens).pipe(Output.map(([tokens]) => tokens[index]!));
             // DNS records carry no ownership tags, so adopt-by-name is the
             // standing-zone convention (see DnsRecord.test.ts) — it also
             // converges over records orphaned by an interrupted run.
             for (const index of [0, 1, 2]) {
               yield* Cloudflare.DNS.Record(`Dkim${index}`, {
                 zoneId,
-                name: dkim(index).pipe(
-                  Output.map((token) => `${token}._domainkey.${domain}`),
-                ),
+                name: dkim(index).pipe(Output.map((token) => `${token}._domainkey.${domain}`)),
                 type: "CNAME",
-                content: dkim(index).pipe(
-                  Output.map((token) => `${token}.dkim.amazonses.com`),
-                ),
+                content: dkim(index).pipe(Output.map((token) => `${token}.dkim.amazonses.com`)),
                 ttl: 60,
               }).pipe(adopt(true));
             }
@@ -159,16 +145,13 @@ test.provider.skipIf(GATED)(
 
         // Wait for Easy DKIM detection (SES polls the published CNAMEs;
         // typically 1-3 minutes with Cloudflare's fast propagation).
-        const verified = yield* sesv2
-          .getEmailIdentity({ EmailIdentity: domain })
-          .pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("10 seconds"),
-              until: (identity): boolean =>
-                identity.DkimAttributes?.Status === "SUCCESS",
-              times: 48,
-            }),
-          );
+        const verified = yield* sesv2.getEmailIdentity({ EmailIdentity: domain }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 seconds"),
+            until: (identity): boolean => identity.DkimAttributes?.Status === "SUCCESS",
+            times: 48,
+          }),
+        );
         expect(verified.DkimAttributes?.Status).toBe("SUCCESS");
 
         // The first delivery attempt can hard-bounce while SES inbound is
@@ -196,11 +179,7 @@ test.provider.skipIf(GATED)(
           for (const key of keys) {
             const raw = yield* s3
               .getObject({ Bucket: bucketName, Key: key })
-              .pipe(
-                Effect.flatMap((object) =>
-                  Stream.mkString(Stream.decodeText(object.Body!)),
-                ),
-              );
+              .pipe(Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))));
             if (raw.includes(`Subject: ${SUBJECT_MARKER}`)) return raw;
           }
           return undefined;
@@ -227,10 +206,7 @@ test.provider.skipIf(GATED)(
             .pipe(
               Effect.retry({
                 while: (error) => error._tag === "MessageRejected",
-                schedule: Schedule.max([
-                  Schedule.spaced("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
               }),
             );
           return yield* findMarked.pipe(
@@ -258,14 +234,10 @@ test.provider.skipIf(GATED)(
         Effect.ensuring(
           Effect.all([
             captured
-              ? ses
-                  .setActiveReceiptRuleSet({ RuleSetName: captured })
-                  .pipe(Effect.ignore)
+              ? ses.setActiveReceiptRuleSet({ RuleSetName: captured }).pipe(Effect.ignore)
               : Effect.void,
             // Leave the account suppression list the way we found it.
-            sesv2
-              .deleteSuppressedDestination({ EmailAddress: recipient })
-              .pipe(Effect.ignore),
+            sesv2.deleteSuppressedDestination({ EmailAddress: recipient }).pipe(Effect.ignore),
           ]),
         ),
       );

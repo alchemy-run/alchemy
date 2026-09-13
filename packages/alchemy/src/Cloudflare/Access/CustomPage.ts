@@ -88,8 +88,7 @@ export type CustomPage = Resource<
 export const CustomPage = Resource<CustomPage>("Cloudflare.Access.CustomPage");
 
 export const isCustomPage = (value: unknown): value is CustomPage =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.CustomPage";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.CustomPage";
 
 export const CustomPageProvider = () =>
   Provider.succeed(CustomPage, {
@@ -131,11 +130,7 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(
-            Effect.catchTag("AccessCustomPageNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
         if (direct && direct.uid) {
           return toAttrs(direct, acct);
         }
@@ -145,11 +140,7 @@ export const CustomPageProvider = () =>
       if (!existing || !existing.uid) return undefined;
       const full = yield* zeroTrust
         .getAccessCustomPage({ accountId: acct, customPageId: existing.uid })
-        .pipe(
-          Effect.catchTag("AccessCustomPageNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       if (!full || !full.uid) return undefined;
       return toAttrs(full, acct);
     }),
@@ -167,22 +158,14 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(
-            Effect.catchTag("AccessCustomPageNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed || !observed.uid) {
         const byName = yield* findPageByName(acct, name);
         if (byName?.uid) {
           observed = yield* zeroTrust
             .getAccessCustomPage({ accountId: acct, customPageId: byName.uid })
-            .pipe(
-              Effect.catchTag("AccessCustomPageNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
         }
       }
 
@@ -206,9 +189,7 @@ export const CustomPageProvider = () =>
             ),
           );
         if (!created.uid) {
-          return yield* Effect.fail(
-            new Error("CustomPage: created page missing uid"),
-          );
+          return yield* Effect.fail(new Error("CustomPage: created page missing uid"));
         }
         return toAttrs({ ...created, type: news.type }, acct);
       }

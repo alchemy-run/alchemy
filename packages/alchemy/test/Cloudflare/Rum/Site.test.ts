@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = "alchemy-test-2.us";
 
@@ -39,10 +36,7 @@ const expectGone = (accountId: string, siteTag: string) =>
     Effect.catchTag("SiteNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SiteNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -119,59 +113,55 @@ test.provider("update mutable props in place (same siteTag)", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider(
-  "zone (orange-clouded) site with autoInstall, replaced on identity flip",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const zone = yield* findZoneByName({ accountId, name: zoneName });
-      if (!zone) {
-        return yield* Effect.die(
-          new Error(`zone "${zoneName}" not found in account`),
-        );
-      }
+test.provider("zone (orange-clouded) site with autoInstall, replaced on identity flip", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const zone = yield* findZoneByName({ accountId, name: zoneName });
+    if (!zone) {
+      return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
+    }
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const zoneSite = yield* stack.deploy(
-        Cloudflare.Rum.Site("FlipSite", {
-          zoneTag: zone.id,
-          autoInstall: true,
-        }),
-      );
+    const zoneSite = yield* stack.deploy(
+      Cloudflare.Rum.Site("FlipSite", {
+        zoneTag: zone.id,
+        autoInstall: true,
+      }),
+    );
 
-      expect(zoneSite.siteTag).toBeTruthy();
-      expect(zoneSite.zoneTag).toEqual(zone.id);
-      expect(zoneSite.autoInstall).toEqual(true);
-      // Zone-based sites get an implicit ruleset.
-      expect(zoneSite.rulesetId).toBeTruthy();
+    expect(zoneSite.siteTag).toBeTruthy();
+    expect(zoneSite.zoneTag).toEqual(zone.id);
+    expect(zoneSite.autoInstall).toEqual(true);
+    // Zone-based sites get an implicit ruleset.
+    expect(zoneSite.rulesetId).toBeTruthy();
 
-      // Toggle autoInstall in place — same site.
-      const toggled = yield* stack.deploy(
-        Cloudflare.Rum.Site("FlipSite", {
-          zoneTag: zone.id,
-          autoInstall: false,
-        }),
-      );
-      expect(toggled.siteTag).toEqual(zoneSite.siteTag);
-      expect(toggled.autoInstall).toEqual(false);
+    // Toggle autoInstall in place — same site.
+    const toggled = yield* stack.deploy(
+      Cloudflare.Rum.Site("FlipSite", {
+        zoneTag: zone.id,
+        autoInstall: false,
+      }),
+    );
+    expect(toggled.siteTag).toEqual(zoneSite.siteTag);
+    expect(toggled.autoInstall).toEqual(false);
 
-      // Switching to host-based measurement changes the identity model —
-      // the site must be replaced (new siteTag) and the old one deleted.
-      const replaced = yield* stack.deploy(
-        Cloudflare.Rum.Site("FlipSite", {
-          host: `flip.${zoneName}`,
-        }),
-      );
-      expect(replaced.siteTag).not.toEqual(zoneSite.siteTag);
-      expect(replaced.host).toEqual(`flip.${zoneName}`);
+    // Switching to host-based measurement changes the identity model —
+    // the site must be replaced (new siteTag) and the old one deleted.
+    const replaced = yield* stack.deploy(
+      Cloudflare.Rum.Site("FlipSite", {
+        host: `flip.${zoneName}`,
+      }),
+    );
+    expect(replaced.siteTag).not.toEqual(zoneSite.siteTag);
+    expect(replaced.host).toEqual(`flip.${zoneName}`);
 
-      yield* expectGone(accountId, zoneSite.siteTag);
+    yield* expectGone(accountId, zoneSite.siteTag);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      yield* expectGone(accountId, replaced.siteTag);
-    }).pipe(logLevel),
+    yield* expectGone(accountId, replaced.siteTag);
+  }).pipe(logLevel),
 );
 
 test.provider("list enumerates the deployed RUM site", (stack) =>

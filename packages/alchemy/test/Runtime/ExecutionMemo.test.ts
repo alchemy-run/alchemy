@@ -14,51 +14,49 @@ interface Pool {
 }
 
 describe("makeExecutionMemo", () => {
-  it.effect(
-    "builds at most once per execution scope and releases at scope close",
-    () =>
-      Effect.gen(function* () {
-        let builds = 0;
-        const released: number[] = [];
-        const accessor = yield* makeExecutionMemo(
-          Effect.acquireRelease(
-            Effect.sync((): Pool => ({ id: ++builds })),
-            (pool) =>
-              Effect.sync(() => {
-                released.push(pool.id);
-              }),
-          ),
-        );
+  it.effect("builds at most once per execution scope and releases at scope close", () =>
+    Effect.gen(function* () {
+      let builds = 0;
+      const released: number[] = [];
+      const accessor = yield* makeExecutionMemo(
+        Effect.acquireRelease(
+          Effect.sync((): Pool => ({ id: ++builds })),
+          (pool) =>
+            Effect.sync(() => {
+              released.push(pool.id);
+            }),
+        ),
+      );
 
-        // Two accesses inside the same execution scope share one build.
-        const scopeA = yield* Scope.make();
-        const a1 = yield* accessor.pipe(Scope.provide(scopeA));
-        const a2 = yield* accessor.pipe(Scope.provide(scopeA));
-        expect(builds).toBe(1);
-        expect(a2).toBe(a1);
-        expect(released).toEqual([]);
+      // Two accesses inside the same execution scope share one build.
+      const scopeA = yield* Scope.make();
+      const a1 = yield* accessor.pipe(Scope.provide(scopeA));
+      const a2 = yield* accessor.pipe(Scope.provide(scopeA));
+      expect(builds).toBe(1);
+      expect(a2).toBe(a1);
+      expect(released).toEqual([]);
 
-        // A different execution scope builds its own instance.
-        const scopeB = yield* Scope.make();
-        const b1 = yield* accessor.pipe(Scope.provide(scopeB));
-        expect(builds).toBe(2);
-        expect(b1).not.toBe(a1);
+      // A different execution scope builds its own instance.
+      const scopeB = yield* Scope.make();
+      const b1 = yield* accessor.pipe(Scope.provide(scopeB));
+      expect(builds).toBe(2);
+      expect(b1).not.toBe(a1);
 
-        // Release finalizers fire when — and only when — the owning
-        // execution scope closes.
-        yield* Scope.close(scopeA, Exit.void);
-        expect(released).toEqual([1]);
-        yield* Scope.close(scopeB, Exit.void);
-        expect(released).toEqual([1, 2]);
+      // Release finalizers fire when — and only when — the owning
+      // execution scope closes.
+      yield* Scope.close(scopeA, Exit.void);
+      expect(released).toEqual([1]);
+      yield* Scope.close(scopeB, Exit.void);
+      expect(released).toEqual([1, 2]);
 
-        // A fresh access on a fresh scope rebuilds (nothing is cached
-        // across executions).
-        const scopeC = yield* Scope.make();
-        yield* accessor.pipe(Scope.provide(scopeC));
-        expect(builds).toBe(3);
-        yield* Scope.close(scopeC, Exit.void);
-        expect(released).toEqual([1, 2, 3]);
-      }),
+      // A fresh access on a fresh scope rebuilds (nothing is cached
+      // across executions).
+      const scopeC = yield* Scope.make();
+      yield* accessor.pipe(Scope.provide(scopeC));
+      expect(builds).toBe(3);
+      yield* Scope.close(scopeC, Exit.void);
+      expect(released).toEqual([1, 2, 3]);
+    }),
   );
 
   it.effect("concurrent first accesses join a single build", () =>
@@ -68,9 +66,7 @@ describe("makeExecutionMemo", () => {
         Effect.acquireRelease(
           // Asynchronous acquire so the second fiber arrives while the
           // first build is still in flight.
-          Effect.sleep("10 millis").pipe(
-            Effect.map((): Pool => ({ id: ++builds })),
-          ),
+          Effect.sleep("10 millis").pipe(Effect.map((): Pool => ({ id: ++builds }))),
           () => Effect.void,
         ),
       );
@@ -110,46 +106,42 @@ describe("makeExecutionMemo", () => {
     }),
   );
 
-  it.effect(
-    "Layer.build inside the memo ties layer finalizers to the execution scope",
-    () =>
-      Effect.gen(function* () {
-        class Db extends Context.Service<Db, { readonly id: number }>()(
-          "ExecutionMemoTest/Db",
-        ) {}
+  it.effect("Layer.build inside the memo ties layer finalizers to the execution scope", () =>
+    Effect.gen(function* () {
+      class Db extends Context.Service<Db, { readonly id: number }>()("ExecutionMemoTest/Db") {}
 
-        let builds = 0;
-        let releases = 0;
-        const dbLayer = Layer.effect(
-          Db,
-          Effect.acquireRelease(
-            Effect.sync(() => ({ id: ++builds })),
-            () =>
-              Effect.sync(() => {
-                releases++;
-              }),
-          ),
-        );
+      let builds = 0;
+      let releases = 0;
+      const dbLayer = Layer.effect(
+        Db,
+        Effect.acquireRelease(
+          Effect.sync(() => ({ id: ++builds })),
+          () =>
+            Effect.sync(() => {
+              releases++;
+            }),
+        ),
+      );
 
-        // The Drizzle.Postgres shape: build a Layer against the ambient
-        // execution scope so its release fires when the event settles.
-        const accessor = yield* makeExecutionMemo(
-          Effect.gen(function* () {
-            const ctx = yield* Layer.build(dbLayer);
-            return Context.get(ctx, Db);
-          }),
-        );
+      // The Drizzle.Postgres shape: build a Layer against the ambient
+      // execution scope so its release fires when the event settles.
+      const accessor = yield* makeExecutionMemo(
+        Effect.gen(function* () {
+          const ctx = yield* Layer.build(dbLayer);
+          return Context.get(ctx, Db);
+        }),
+      );
 
-        const scope = yield* Scope.make();
-        const d1 = yield* accessor.pipe(Scope.provide(scope));
-        const d2 = yield* accessor.pipe(Scope.provide(scope));
-        expect(builds).toBe(1);
-        expect(d2).toBe(d1);
-        expect(releases).toBe(0);
+      const scope = yield* Scope.make();
+      const d1 = yield* accessor.pipe(Scope.provide(scope));
+      const d2 = yield* accessor.pipe(Scope.provide(scope));
+      expect(builds).toBe(1);
+      expect(d2).toBe(d1);
+      expect(releases).toBe(0);
 
-        yield* Scope.close(scope, Exit.void);
-        expect(releases).toBe(1);
-      }),
+      yield* Scope.close(scope, Exit.void);
+      expect(releases).toBe(1);
+    }),
   );
 
   it.effect("build errors are surfaced and not poisoned across scopes", () =>
@@ -158,9 +150,7 @@ describe("makeExecutionMemo", () => {
       const accessor = yield* makeExecutionMemo(
         Effect.suspend(() => {
           attempts++;
-          return attempts === 1
-            ? Effect.fail("boom" as const)
-            : Effect.succeed(attempts);
+          return attempts === 1 ? Effect.fail("boom" as const) : Effect.succeed(attempts);
         }),
       );
 

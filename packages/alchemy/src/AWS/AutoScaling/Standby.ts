@@ -28,20 +28,14 @@ export interface StandbyClient {
    */
   enter: (
     request: EnterStandbyRequest,
-  ) => Effect.Effect<
-    autoscaling.EnterStandbyAnswer,
-    autoscaling.EnterStandbyError
-  >;
+  ) => Effect.Effect<autoscaling.EnterStandbyAnswer, autoscaling.EnterStandbyError>;
   /**
    * Move standby instances back into service; the desired capacity is
    * incremented accordingly.
    */
   exit: (
     request: ExitStandbyRequest,
-  ) => Effect.Effect<
-    autoscaling.ExitStandbyAnswer,
-    autoscaling.ExitStandbyError
-  >;
+  ) => Effect.Effect<autoscaling.ExitStandbyAnswer, autoscaling.ExitStandbyError>;
 }
 
 /**

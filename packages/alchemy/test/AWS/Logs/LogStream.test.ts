@@ -10,20 +10,11 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const describeLogStream = Effect.fn(function* (
-  logGroupName: string,
-  logStreamName: string,
-) {
+const describeLogStream = Effect.fn(function* (logGroupName: string, logStreamName: string) {
   const described = yield* logs
     .describeLogStreams({ logGroupName, logStreamNamePrefix: logStreamName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed({ logStreams: [] }),
-      ),
-    );
-  return (described.logStreams ?? []).find(
-    (stream) => stream.logStreamName === logStreamName,
-  );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ logStreams: [] })));
+  return (described.logStreams ?? []).find((stream) => stream.logStreamName === logStreamName);
 });
 
 class LogStreamStillExists extends Data.TaggedError("LogStreamStillExists")<{
@@ -33,9 +24,7 @@ class LogStreamStillExists extends Data.TaggedError("LogStreamStillExists")<{
 const assertLogStreamDeleted = (logGroupName: string, logStreamName: string) =>
   describeLogStream(logGroupName, logStreamName).pipe(
     Effect.flatMap((stream) =>
-      stream === undefined
-        ? Effect.void
-        : Effect.fail(new LogStreamStillExists({ logStreamName })),
+      stream === undefined ? Effect.void : Effect.fail(new LogStreamStillExists({ logStreamName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "LogStreamStillExists",
@@ -64,9 +53,7 @@ test.provider(
       expect(created.logStreamArn).toContain(":log-group:");
 
       // out-of-band verification via distilled
-      expect(
-        yield* describeLogStream(created.logGroupName, created.logStreamName),
-      ).toBeDefined();
+      expect(yield* describeLogStream(created.logGroupName, created.logStreamName)).toBeDefined();
 
       // no-op deploy keeps the same stream
       const noop = yield* stack.deploy(
@@ -94,19 +81,11 @@ test.provider(
         }),
       );
       expect(replaced.logStreamName).toBe("alchemy-test-audit-stream-renamed");
-      expect(
-        yield* describeLogStream(replaced.logGroupName, replaced.logStreamName),
-      ).toBeDefined();
-      yield* assertLogStreamDeleted(
-        created.logGroupName,
-        created.logStreamName,
-      );
+      expect(yield* describeLogStream(replaced.logGroupName, replaced.logStreamName)).toBeDefined();
+      yield* assertLogStreamDeleted(created.logGroupName, created.logStreamName);
 
       yield* stack.destroy();
-      yield* assertLogStreamDeleted(
-        replaced.logGroupName,
-        replaced.logStreamName,
-      );
+      yield* assertLogStreamDeleted(replaced.logGroupName, replaced.logStreamName);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { timeout: 120_000 },
 );

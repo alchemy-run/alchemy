@@ -71,8 +71,9 @@ export interface ScraperLoggingConfiguration extends Resource<
  *
  * @resource
  */
-export const ScraperLoggingConfiguration =
-  Resource<ScraperLoggingConfiguration>("AWS.AMP.ScraperLoggingConfiguration");
+export const ScraperLoggingConfiguration = Resource<ScraperLoggingConfiguration>(
+  "AWS.AMP.ScraperLoggingConfiguration",
+);
 
 export const ScraperLoggingConfigurationProvider = () =>
   Provider.effect(
@@ -82,16 +83,10 @@ export const ScraperLoggingConfigurationProvider = () =>
       const describe = Effect.fn(function* (scraperId: string) {
         return yield* amp
           .describeScraperLoggingConfiguration({ scraperId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const toAttrs = (
-        config: amp.DescribeScraperLoggingConfigurationResponse,
-      ) => ({
+      const toAttrs = (config: amp.DescribeScraperLoggingConfigurationResponse) => ({
         scraperId: config.scraperId,
         logGroupArn: config.loggingDestination.cloudWatchLogs.logGroupArn,
         status: config.status.statusCode,
@@ -110,9 +105,7 @@ export const ScraperLoggingConfigurationProvider = () =>
               type: component.type,
               options: Object.fromEntries(
                 Object.entries(component.config?.options ?? {})
-                  .filter(
-                    (kv): kv is [string, string] => typeof kv[1] === "string",
-                  )
+                  .filter((kv): kv is [string, string] => typeof kv[1] === "string")
                   .sort(([a], [b]) => a.localeCompare(b)),
               ),
             }))
@@ -124,10 +117,7 @@ export const ScraperLoggingConfigurationProvider = () =>
       ): amp.ScraperComponent[] | undefined =>
         components?.map((component) => ({
           type: component.type,
-          config:
-            component.options !== undefined
-              ? { options: component.options }
-              : undefined,
+          config: component.options !== undefined ? { options: component.options } : undefined,
         }));
 
       return {
@@ -163,8 +153,7 @@ export const ScraperLoggingConfigurationProvider = () =>
           // when the destination or components drift.
           const drifts =
             observed === undefined ||
-            observed.loggingDestination.cloudWatchLogs.logGroupArn !==
-              desiredArn ||
+            observed.loggingDestination.cloudWatchLogs.logGroupArn !== desiredArn ||
             (desiredComponents !== undefined &&
               canonicalComponents(desiredComponents) !==
                 canonicalComponents(observed.scraperComponents));
@@ -183,27 +172,19 @@ export const ScraperLoggingConfigurationProvider = () =>
                 // transitioning — retry conflicts briefly.
                 Effect.retry({
                   while: (e) => e._tag === "ConflictException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("6 seconds"),
-                    Schedule.recurs(15),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(15)]),
                 }),
               );
           }
 
           // Bounded best-effort wait toward ACTIVE — a still-transitioning
           // configuration converges on a later reconcile.
-          const fresh = yield* amp
-            .describeScraperLoggingConfiguration({ scraperId })
-            .pipe(
-              Effect.repeat({
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-                until: (c): boolean => c.status.statusCode === "ACTIVE",
-              }),
-            );
+          const fresh = yield* amp.describeScraperLoggingConfiguration({ scraperId }).pipe(
+            Effect.repeat({
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+              until: (c): boolean => c.status.statusCode === "ACTIVE",
+            }),
+          );
           yield* session.note(scraperId);
           return toAttrs(fresh);
         }),
@@ -217,10 +198,7 @@ export const ScraperLoggingConfigurationProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
               }),
             );
         }),

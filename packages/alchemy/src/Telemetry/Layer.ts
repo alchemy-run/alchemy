@@ -14,9 +14,7 @@ const LOGS_URL = "https://otel.alchemy.run/v1/logs";
 
 const SERVICE_NAME = "alchemy-cli";
 
-const buildOtlpLayer = (
-  attrs: Record<string, unknown>,
-): Layer.Layer<never, never, never> => {
+const buildOtlpLayer = (attrs: Record<string, unknown>): Layer.Layer<never, never, never> => {
   const resource = {
     serviceName: SERVICE_NAME,
     serviceVersion: packageJson.version,

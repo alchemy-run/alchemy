@@ -6,9 +6,7 @@ const config = useRuntimeConfig();
 const binding = useState("test-binding", () => {
   if (import.meta.server) {
     const event = useRequestEvent();
-    const env = event?.context.cloudflare?.env as
-      | Record<string, unknown>
-      | undefined;
+    const env = event?.context.cloudflare?.env as Record<string, unknown> | undefined;
     return typeof env?.TEST_BINDING === "string" ? env.TEST_BINDING : "missing";
   }
   return "missing";

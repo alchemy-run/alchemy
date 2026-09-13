@@ -122,25 +122,13 @@ export default PaymentCryptographyTestFunction.make(
     const decryptData = yield* PaymentCryptography.DecryptData(dataKey);
     const generateMac = yield* PaymentCryptography.GenerateMac(macKey);
     const verifyMac = yield* PaymentCryptography.VerifyMac(macKey);
-    const reEncryptData = yield* PaymentCryptography.ReEncryptData(
-      bdk,
-      dataKey,
-    );
-    const generateCardValidationData =
-      yield* PaymentCryptography.GenerateCardValidationData(cvk);
-    const verifyCardValidationData =
-      yield* PaymentCryptography.VerifyCardValidationData(cvk);
-    const generatePinData = yield* PaymentCryptography.GeneratePinData(
-      pvk,
-      pek,
-    );
+    const reEncryptData = yield* PaymentCryptography.ReEncryptData(bdk, dataKey);
+    const generateCardValidationData = yield* PaymentCryptography.GenerateCardValidationData(cvk);
+    const verifyCardValidationData = yield* PaymentCryptography.VerifyCardValidationData(cvk);
+    const generatePinData = yield* PaymentCryptography.GeneratePinData(pvk, pek);
     const verifyPinData = yield* PaymentCryptography.VerifyPinData(pvk, pek);
-    const translatePinData = yield* PaymentCryptography.TranslatePinData(
-      pek,
-      pek2,
-    );
-    const getPublicKeyCertificate =
-      yield* PaymentCryptography.GetPublicKeyCertificate(signKey);
+    const translatePinData = yield* PaymentCryptography.TranslatePinData(pek, pek2);
+    const getPublicKeyCertificate = yield* PaymentCryptography.GetPublicKeyCertificate(signKey);
 
     return {
       fetch: Effect.gen(function* () {
@@ -340,10 +328,7 @@ export default PaymentCryptographyTestFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

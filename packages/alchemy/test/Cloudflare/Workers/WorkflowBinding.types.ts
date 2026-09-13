@@ -10,9 +10,7 @@ import type { AsyncWorkflowWorker } from "./fixtures/workflow-async/stack.ts";
 
 type Assert<T extends true> = T;
 type Equals<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 class ApplicationError extends Data.TaggedError("ApplicationError")<{
   reason: string;
@@ -29,9 +27,7 @@ type _TaskRetainsApplicationError = Assert<
 const recoveredTask = fallibleTask.pipe(
   Effect.catchTag("ApplicationError", (error) => Effect.succeed(error.reason)),
 );
-type _RecoveryRemovesApplicationError = Assert<
-  Equals<Effect.Error<typeof recoveredTask>, never>
->;
+type _RecoveryRemovesApplicationError = Assert<Equals<Effect.Error<typeof recoveredTask>, never>>;
 const fallibleBody = Effect.fn(function* (_input: { id: string }) {
   return yield* fallibleTask;
 });
@@ -60,9 +56,7 @@ const program = Effect.gen(function* () {
       MY_WORKFLOW: Cloudflare.Workflow<{ value: string }>("Greeting", {
         className: "MyWorkflow",
       }),
-      EFFECT_WORKFLOW: Effect.succeed(
-        Cloudflare.Workflow<{ count: number }>("Count"),
-      ),
+      EFFECT_WORKFLOW: Effect.succeed(Cloudflare.Workflow<{ count: number }>("Count")),
       GREETING: "hello",
       CONFIG: Config.succeed("configured"),
       SECRET: Config.succeed(Redacted.make("secret")),
@@ -76,21 +70,14 @@ const program = Effect.gen(function* () {
 type DeclaredWorker = Effect.Success<typeof program>;
 type DeclaredEnv = DeclaredWorker["env"];
 type MyWorkflow = DeclaredEnv["MY_WORKFLOW"];
-type _WorkflowNameIsOutput = Assert<
-  Equals<MyWorkflow["workflowName"], Output.Output<string>>
->;
-type _ScriptNameIsOutput = Assert<
-  Equals<MyWorkflow["scriptName"], Output.Output<string>>
->;
+type _WorkflowNameIsOutput = Assert<Equals<MyWorkflow["workflowName"], Output.Output<string>>>;
+type _ScriptNameIsOutput = Assert<Equals<MyWorkflow["scriptName"], Output.Output<string>>>;
 type _ClassNameIsString = Assert<Equals<MyWorkflow["className"], string>>;
 type _ParamsArePreserved = Assert<
   Equals<Exclude<MyWorkflow["Params"], undefined>, { value: string }>
 >;
 type _EffectWorkflowParams = Assert<
-  Equals<
-    Exclude<DeclaredEnv["EFFECT_WORKFLOW"]["Params"], undefined>,
-    { count: number }
-  >
+  Equals<Exclude<DeclaredEnv["EFFECT_WORKFLOW"]["Params"], undefined>, { count: number }>
 >;
 type _Literal = Assert<Equals<DeclaredEnv["GREETING"], "hello">>;
 type _Config = Assert<Equals<DeclaredEnv["CONFIG"], string>>;
@@ -100,23 +87,14 @@ type _OutputStaysDeferred = Assert<
   DeclaredEnv["OUTPUT"] extends Output.Output<string> ? true : false
 >;
 type _Assets = Assert<Equals<DeclaredEnv["ASSETS"], Cloudflare.Assets>>;
-type _ContainerStaysDeclaration = Assert<
-  Equals<DeclaredEnv["CONTAINER"], typeof container>
->;
+type _ContainerStaysDeclaration = Assert<Equals<DeclaredEnv["CONTAINER"], typeof container>>;
 
 type Env = Cloudflare.InferEnv<typeof program>;
 type _DeclaredEnvRuntimeWorkflow = Assert<
-  Equals<
-    Cloudflare.InferEnv<DeclaredEnv>["MY_WORKFLOW"],
-    Workflow<{ value: string }>
-  >
+  Equals<Cloudflare.InferEnv<DeclaredEnv>["MY_WORKFLOW"], Workflow<{ value: string }>>
 >;
-type _RuntimeWorkflow = Assert<
-  Equals<Env["MY_WORKFLOW"], Workflow<{ value: string }>>
->;
-type _RuntimeEffectWorkflow = Assert<
-  Equals<Env["EFFECT_WORKFLOW"], Workflow<{ count: number }>>
->;
+type _RuntimeWorkflow = Assert<Equals<Env["MY_WORKFLOW"], Workflow<{ value: string }>>>;
+type _RuntimeEffectWorkflow = Assert<Equals<Env["EFFECT_WORKFLOW"], Workflow<{ count: number }>>>;
 type _RuntimeConfig = Assert<Equals<Env["CONFIG"], string>>;
 type _RuntimeSecret = Assert<Equals<Env["SECRET"], string>>;
 type _RuntimeEffect = Assert<Equals<Env["EFFECT"], number>>;
@@ -131,17 +109,10 @@ type ClassWorker = Effect.Success<typeof AsyncWorkflowWorker>;
 type ClassEnv = Cloudflare.InferEnv<typeof AsyncWorkflowWorker>;
 type InstanceEnv = Cloudflare.InferEnv<AsyncWorkflowWorker>;
 type _ClassOutput = Assert<
-  Equals<
-    ClassWorker["env"]["MY_WORKFLOW"]["workflowName"],
-    Output.Output<string>
-  >
+  Equals<ClassWorker["env"]["MY_WORKFLOW"]["workflowName"], Output.Output<string>>
 >;
-type _ClassRuntimeWorkflow = Assert<
-  Equals<ClassEnv["MY_WORKFLOW"], Workflow<{ value: string }>>
->;
-type _ClassInstanceWorkflow = Assert<
-  Equals<InstanceEnv["MY_WORKFLOW"], ClassEnv["MY_WORKFLOW"]>
->;
+type _ClassRuntimeWorkflow = Assert<Equals<ClassEnv["MY_WORKFLOW"], Workflow<{ value: string }>>>;
+type _ClassInstanceWorkflow = Assert<Equals<InstanceEnv["MY_WORKFLOW"], ClassEnv["MY_WORKFLOW"]>>;
 type _ClassAssets = Assert<Equals<ClassEnv["ASSETS"], Service>>;
 
 const effectPropsWorker = Cloudflare.Worker(
@@ -158,12 +129,8 @@ type _EffectPropsOutput = Assert<
   >
 >;
 
-type _ExternalWorkerIsAWorker = Assert<
-  DeclaredWorker extends Cloudflare.Worker ? true : false
->;
-type _BaseWorkerHasNoEnv = Assert<
-  Equals<Extract<"env", keyof Cloudflare.Worker>, never>
->;
+type _ExternalWorkerIsAWorker = Assert<DeclaredWorker extends Cloudflare.Worker ? true : false>;
+type _BaseWorkerHasNoEnv = Assert<Equals<Extract<"env", keyof Cloudflare.Worker>, never>>;
 
 const referencedWorker = Cloudflare.Worker.ref("Worker");
 type _ReferenceHasNoEnv = Assert<
@@ -235,10 +202,7 @@ type _SubscriptionResult = Assert<
   Equals<Effect.Success<typeof subscription>, Cloudflare.Queues.Subscription>
 >;
 type _SubscriptionPropsStayNormalized = Assert<
-  Equals<
-    Cloudflare.Queues.Subscription["Props"]["source"],
-    Cloudflare.Queues.SubscriptionSource
-  >
+  Equals<Cloudflare.Queues.Subscription["Props"]["source"], Cloudflare.Queues.SubscriptionSource>
 >;
 type _SubscriptionResourceClass = Assert<
   typeof Cloudflare.Queues.Subscription extends ResourceClass<Cloudflare.Queues.Subscription>
@@ -257,25 +221,14 @@ const referencedWorkflow = Cloudflare.Workflow.ref("Greeting", {
   stage: "production",
 });
 type _WorkflowRefSignature = Assert<
-  Equals<
-    typeof Cloudflare.Workflow.ref,
-    typeof Cloudflare.Workflows.WorkflowResource.ref
-  >
+  Equals<typeof Cloudflare.Workflow.ref, typeof Cloudflare.Workflows.WorkflowResource.ref>
 >;
 type _WorkflowRefResult = Assert<
-  Equals<
-    Effect.Success<typeof referencedWorkflow>,
-    Cloudflare.Workflows.WorkflowResource
-  >
+  Equals<Effect.Success<typeof referencedWorkflow>, Cloudflare.Workflows.WorkflowResource>
 >;
-type _WorkflowRefRequirements = Assert<
-  Equals<Effect.Services<typeof referencedWorkflow>, never>
->;
+type _WorkflowRefRequirements = Assert<Equals<Effect.Services<typeof referencedWorkflow>, never>>;
 type _WorkflowRefNameIsOutput = Assert<
-  Equals<
-    Effect.Success<typeof referencedWorkflow>["workflowName"],
-    Output.Output<string, never>
-  >
+  Equals<Effect.Success<typeof referencedWorkflow>["workflowName"], Output.Output<string, never>>
 >;
 type _WorkflowHandleIsNotASource = Assert<
   Equals<
@@ -329,10 +282,7 @@ export const subscriptionConstructors = Effect.gen(function* () {
     yield* Cloudflare.Queues.Subscription.Self;
     return props;
   });
-  const effectSubscription = Cloudflare.Queues.Subscription(
-    "EffectEvents",
-    effectProps,
-  );
+  const effectSubscription = Cloudflare.Queues.Subscription("EffectEvents", effectProps);
   type _EffectPropsRequirements = Assert<
     Equals<
       Effect.Services<typeof effectSubscription>,
@@ -341,18 +291,10 @@ export const subscriptionConstructors = Effect.gen(function* () {
   >;
   const Subscription = yield* Cloudflare.Queues.Subscription;
   const yieldedSubscription = Subscription("YieldedEvents", props);
-  type _YieldedRequirements = Assert<
-    Equals<Effect.Services<typeof yieldedSubscription>, never>
-  >;
-  const yieldedEffectSubscription = Subscription(
-    "YieldedEffectEvents",
-    effectProps,
-  );
+  type _YieldedRequirements = Assert<Equals<Effect.Services<typeof yieldedSubscription>, never>>;
+  const yieldedEffectSubscription = Subscription("YieldedEffectEvents", effectProps);
   type _YieldedEffectRequirements = Assert<
-    Equals<
-      Effect.Services<typeof yieldedEffectSubscription>,
-      Effect.Services<typeof effectProps>
-    >
+    Equals<Effect.Services<typeof yieldedEffectSubscription>, Effect.Services<typeof effectProps>>
   >;
   const Extended = Cloudflare.Queues.Subscription({ description: "events" });
   type _MethodExtension = Assert<Equals<typeof Extended.description, "events">>;

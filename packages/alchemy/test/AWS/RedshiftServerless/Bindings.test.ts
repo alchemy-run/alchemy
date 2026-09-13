@@ -5,9 +5,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import RedshiftQueryFunctionLive, {
-  RedshiftQueryFunction,
-} from "./fixtures/query-handler";
+import RedshiftQueryFunctionLive, { RedshiftQueryFunction } from "./fixtures/query-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -33,9 +31,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("RedshiftData Bindings", () => {
 
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
-      yield* Effect.logInfo(
-        `RedshiftData test setup: function URL ready (${functionUrl})`,
-      );
+      yield* Effect.logInfo(`RedshiftData test setup: function URL ready (${functionUrl})`);
     }),
     // namespace (~1 min) + workgroup create (~2-5 min) + Lambda deploy.
     { timeout: 900_000 },
@@ -55,10 +51,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("RedshiftData Bindings", () => {
                 : Effect.fail(new Error(`query returned ${res.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((res) => res.json),
           );

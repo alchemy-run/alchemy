@@ -9,9 +9,7 @@ describe("module resolution", async () => {
     inputOptions: {
       resolve: {
         alias: {
-          "@alias/test": path.resolve(
-            "test/fixtures/module-resolution/aliasing.ts",
-          ),
+          "@alias/test": path.resolve("test/fixtures/module-resolution/aliasing.ts"),
         },
       },
     },
@@ -22,14 +20,10 @@ describe("module resolution", async () => {
       compatibilityDate: "2025-07-01",
     });
 
-    expect(
-      await miniflare.fetchJson<{ packageMessage: string }>("/package-export"),
-    ).toEqual({
+    expect(await miniflare.fetchJson<{ packageMessage: string }>("/package-export")).toEqual({
       packageMessage: "package export",
     });
-    expect(
-      await miniflare.fetchJson<{ featureMessage: string }>("/package-subpath"),
-    ).toEqual({
+    expect(await miniflare.fetchJson<{ featureMessage: string }>("/package-subpath")).toEqual({
       featureMessage: "package subpath",
     });
   });
@@ -39,11 +33,7 @@ describe("module resolution", async () => {
       compatibilityDate: "2025-07-01",
     });
 
-    expect(
-      await miniflare.fetchJson<{ legacyMessage: string }>(
-        "/package-main-fields",
-      ),
-    ).toEqual({
+    expect(await miniflare.fetchJson<{ legacyMessage: string }>("/package-main-fields")).toEqual({
       legacyMessage: "browser field",
     });
   });
@@ -53,14 +43,10 @@ describe("module resolution", async () => {
       compatibilityDate: "2025-07-01",
     });
 
-    expect(
-      await miniflare.fetchJson<{ helloWorldExt: string }>("/require-ext"),
-    ).toEqual({
+    expect(await miniflare.fetchJson<{ helloWorldExt: string }>("/require-ext")).toEqual({
       helloWorldExt: "hello (.js) world (.cjs)",
     });
-    expect(
-      await miniflare.fetchJson<{ helloWorldNoExt: string }>("/require-no-ext"),
-    ).toEqual({
+    expect(await miniflare.fetchJson<{ helloWorldNoExt: string }>("/require-no-ext")).toEqual({
       helloWorldNoExt: "hello (.js) world (.cjs)",
     });
   });

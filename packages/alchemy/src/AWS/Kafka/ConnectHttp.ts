@@ -2,11 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  groupArnGlob,
-  topicArnGlob,
-  transactionalIdArnGlob,
-} from "./BindingHttp.ts";
+import { groupArnGlob, topicArnGlob, transactionalIdArnGlob } from "./BindingHttp.ts";
 import { connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
@@ -45,9 +41,7 @@ export const KAFKA_WRITE_TOPIC_ACTIONS = [
 ] as const;
 
 /** Cluster-level producer actions (idempotent producers). */
-export const KAFKA_WRITE_CLUSTER_ACTIONS = [
-  "kafka-cluster:WriteDataIdempotently",
-] as const;
+export const KAFKA_WRITE_CLUSTER_ACTIONS = ["kafka-cluster:WriteDataIdempotently"] as const;
 
 /** Transactional-id actions (transactional producers). */
 export const KAFKA_WRITE_TRANSACTION_ACTIONS = [
@@ -105,9 +99,7 @@ export const makeKafkaConnectHttpBinding = (options: {
                     {
                       Effect: "Allow" as const,
                       Action: [...options.groupActions],
-                      Resource: [
-                        cluster.clusterArn.pipe(Output.map(groupArnGlob)),
-                      ],
+                      Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
                     },
                   ]
                 : []),
@@ -116,11 +108,7 @@ export const makeKafkaConnectHttpBinding = (options: {
                     {
                       Effect: "Allow" as const,
                       Action: [...options.transactionActions],
-                      Resource: [
-                        cluster.clusterArn.pipe(
-                          Output.map(transactionalIdArnGlob),
-                        ),
-                      ],
+                      Resource: [cluster.clusterArn.pipe(Output.map(transactionalIdArnGlob))],
                     },
                   ]
                 : []),

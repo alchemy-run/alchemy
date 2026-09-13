@@ -30,12 +30,7 @@ export interface GetSubject extends Binding.Service<
   () => Effect.Effect<
     (
       request: rolesanywhere.ScalarSubjectRequest,
-    ) => Effect.Effect<
-      rolesanywhere.SubjectDetailResponse,
-      rolesanywhere.GetSubjectError
-    >
+    ) => Effect.Effect<rolesanywhere.SubjectDetailResponse, rolesanywhere.GetSubjectError>
   >
 > {}
-export const GetSubject = Binding.Service<GetSubject>(
-  "AWS.RolesAnywhere.GetSubject",
-);
+export const GetSubject = Binding.Service<GetSubject>("AWS.RolesAnywhere.GetSubject");

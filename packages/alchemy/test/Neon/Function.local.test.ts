@@ -18,21 +18,22 @@ test.provider(
         stack.deploy(
           Function("LocalApi", {
             branch: { projectId: "local-project", branchId: "local-branch" },
-            main: new URL("./fixtures/function-native.ts", import.meta.url)
-              .href,
+            main: new URL("./fixtures/function-native.ts", import.meta.url).href,
             env: { FUNCTION_TEST_VALUE: value },
           }),
         );
       const first = yield* deploy("one");
       expect(first.functionId).toMatch(/^dev:/);
       const client = yield* HttpClient.HttpClient;
-      expect(yield* (yield* client.get(`${first.url}/env`)).json).toMatchObject(
-        { value: "one", hasAccountKey: false },
-      );
+      expect(yield* (yield* client.get(`${first.url}/env`)).json).toMatchObject({
+        value: "one",
+        hasAccountKey: false,
+      });
       const second = yield* deploy("two");
-      expect(
-        yield* (yield* client.get(`${second.url}/env`)).json,
-      ).toMatchObject({ value: "two", hasAccountKey: false });
+      expect(yield* (yield* client.get(`${second.url}/env`)).json).toMatchObject({
+        value: "two",
+        hasAccountKey: false,
+      });
       yield* stack.destroy();
       expect(
         yield* client.get(second.url).pipe(

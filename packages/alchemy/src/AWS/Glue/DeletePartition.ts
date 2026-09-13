@@ -43,6 +43,4 @@ export interface DeletePartition extends Binding.Service<
   >
 > {}
 
-export const DeletePartition = Binding.Service<DeletePartition>(
-  "AWS.Glue.DeletePartition",
-);
+export const DeletePartition = Binding.Service<DeletePartition>("AWS.Glue.DeletePartition");

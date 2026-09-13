@@ -17,10 +17,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AutoScalingBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,11 +35,7 @@ interface RouteResult {
 // Routes whose EXPECTED outcome is a scoped denial pass
 // `retryDenied: false` (they run after routes that already proved the
 // policy propagated).
-const callRoute = (
-  method: "GET" | "POST",
-  path: string,
-  options: { retryDenied?: boolean } = {},
-) =>
+const callRoute = (method: "GET" | "POST", path: string, options: { retryDenied?: boolean } = {}) =>
   Effect.gen(function* () {
     const request =
       method === "GET"
@@ -52,9 +45,7 @@ const callRoute = (
       Effect.flatMap((response) =>
         response.status === 200
           ? response.json
-          : Effect.fail(
-              new Error(`Route ${path} not ready: ${response.status}`),
-            ),
+          : Effect.fail(new Error(`Route ${path} not ready: ${response.status}`)),
       ),
       // `json` is the untyped `Json` union; RouteResult's optional props
       // (`string | undefined`) aren't Json-assignable, so the intentional
@@ -239,9 +230,7 @@ describe("AutoScaling runtime bindings", () => {
         };
         // A refresh on the empty fleet completes (or is already in progress
         // from a previous run) — never an authorization failure.
-        expect(["Success", "InstanceRefreshInProgressFault"]).toContain(
-          body.startTag,
-        );
+        expect(["Success", "InstanceRefreshInProgressFault"]).toContain(body.startTag);
         expect(body.describeOk).toBe(true);
         expect(body.describeCount).toBeGreaterThanOrEqual(1);
         expect(body.cancelTag).toEqual("Success");

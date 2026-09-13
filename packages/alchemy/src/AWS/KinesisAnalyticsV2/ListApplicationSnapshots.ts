@@ -30,13 +30,9 @@ export interface ListApplicationSnapshots extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListApplicationSnapshotsRequest,
-    ) => Effect.Effect<
-      SVC.ListApplicationSnapshotsResponse,
-      SVC.ListApplicationSnapshotsError
-    >
+    ) => Effect.Effect<SVC.ListApplicationSnapshotsResponse, SVC.ListApplicationSnapshotsError>
   >
 > {}
-export const ListApplicationSnapshots =
-  Binding.Service<ListApplicationSnapshots>(
-    "AWS.KinesisAnalyticsV2.ListApplicationSnapshots",
-  );
+export const ListApplicationSnapshots = Binding.Service<ListApplicationSnapshots>(
+  "AWS.KinesisAnalyticsV2.ListApplicationSnapshots",
+);

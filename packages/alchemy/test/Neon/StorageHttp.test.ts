@@ -32,21 +32,14 @@ const verify = Effect.fn(function* (url: string, bucket: BucketAttributes) {
     hasAccountKey: false,
   });
   const client = yield* bucketStorageClient(bucket);
-  const bytes = yield* storageBodyBytes(
-    (yield* client.get("external.txt"))?.Body,
-  );
-  expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe(
-    "external roundtrip",
-  );
+  const bytes = yield* storageBodyBytes((yield* client.get("external.txt"))?.Body);
+  expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe("external roundtrip");
   const scope = { project_id: bucket.projectId, branch_id: bucket.branchId };
   const credentials = (yield* SDK.listCredentials(scope)).credentials.filter(
-    (credential) =>
-      credential.branch_id === bucket.branchId && !credential.revoked_at,
+    (credential) => credential.branch_id === bucket.branchId && !credential.revoked_at,
   );
   expect(
-    credentials
-      .map((credential) => credential.scopes)
-      .sort((a, b) => a.length - b.length),
+    credentials.map((credential) => credential.scopes).sort((a, b) => a.length - b.length),
   ).toEqual([
     ["storage:read"],
     ["storage:read", "storage:write"],
@@ -78,8 +71,7 @@ workerTest.provider(
       })).credentials;
       expect(
         remaining.some(
-          (credential) =>
-            tokens.includes(credential.token_id) && !credential.revoked_at,
+          (credential) => tokens.includes(credential.token_id) && !credential.revoked_at,
         ),
       ).toBe(false);
       yield* stack.destroy();
@@ -106,8 +98,7 @@ lambdaTest.provider(
       })).credentials;
       expect(
         remaining.some(
-          (credential) =>
-            tokens.includes(credential.token_id) && !credential.revoked_at,
+          (credential) => tokens.includes(credential.token_id) && !credential.revoked_at,
         ),
       ).toBe(false);
       yield* stack.destroy();

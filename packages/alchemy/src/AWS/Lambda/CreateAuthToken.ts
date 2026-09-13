@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
-export interface CreateAuthTokenRequest
-  extends microvms.CreateMicrovmAuthTokenRequest {}
+export interface CreateAuthTokenRequest extends microvms.CreateMicrovmAuthTokenRequest {}
 
 /**
  * Runtime binding for `CreateMicrovmAuthToken`.
@@ -39,6 +38,4 @@ export interface CreateAuthToken extends Binding.Service<
     >
   >
 > {}
-export const CreateAuthToken = Binding.Service<CreateAuthToken>(
-  "AWS.Lambda.CreateAuthToken",
-);
+export const CreateAuthToken = Binding.Service<CreateAuthToken>("AWS.Lambda.CreateAuthToken");

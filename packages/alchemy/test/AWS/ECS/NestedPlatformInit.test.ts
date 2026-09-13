@@ -28,10 +28,7 @@ let baseUrl: string;
 // Fresh workers/Lambda URLs take a few seconds to start serving 200s; a
 // sandbox that OOMs at init keeps returning 5xx until the readiness budget is
 // exhausted, which fails the suite loudly.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]);
 
 describe.sequential("ECS Nested Platform Init", () => {
   beforeAll(
@@ -39,9 +36,7 @@ describe.sequential("ECS Nested Platform Init", () => {
       yield* Effect.logInfo("nested-platform setup: destroying previous stack");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "nested-platform setup: deploying nested-Task Lambda",
-      );
+      yield* Effect.logInfo("nested-platform setup: deploying nested-Task Lambda");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* NestedEcsReproFunction;
@@ -51,9 +46,7 @@ describe.sequential("ECS Nested Platform Init", () => {
       expect(functionUrl).toBeTruthy();
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
-      yield* Effect.logInfo(
-        `nested-platform setup: probing readiness at ${baseUrl}`,
-      );
+      yield* Effect.logInfo(`nested-platform setup: probing readiness at ${baseUrl}`);
       yield* HttpClient.get(baseUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -61,9 +54,7 @@ describe.sequential("ECS Nested Platform Init", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `nested-platform setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`nested-platform setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );

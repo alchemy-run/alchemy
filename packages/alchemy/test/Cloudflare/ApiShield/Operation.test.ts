@@ -14,13 +14,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test endpoints. Each test owns a disjoint path so reruns
 // and parallel runs never collide (never derive identity from Date.now()).
@@ -32,9 +28,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -44,27 +38,22 @@ const resolveZoneId = Effect.gen(function* () {
 // the test's own out-of-band calls by retrying the typed `Forbidden` error.
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const findOperation = (
-  zoneId: string,
-  tuple: { method: string; host: string; endpoint: string },
-) =>
-  apiGateway.listOperations
-    .items({ zoneId, host: [tuple.host], method: [tuple.method] })
-    .pipe(
-      Stream.filter(
-        (op) =>
-          op.method === tuple.method &&
-          op.host === tuple.host &&
-          op.endpoint === normalizeEndpoint(tuple.endpoint),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenRetrySchedule,
-        times: 8,
-      }),
-    );
+const findOperation = (zoneId: string, tuple: { method: string; host: string; endpoint: string }) =>
+  apiGateway.listOperations.items({ zoneId, host: [tuple.host], method: [tuple.method] }).pipe(
+    Stream.filter(
+      (op) =>
+        op.method === tuple.method &&
+        op.host === tuple.host &&
+        op.endpoint === normalizeEndpoint(tuple.endpoint),
+    ),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)[0]),
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
 
 const getOperation = (zoneId: string, operationId: string) =>
   apiGateway.getOperation({ zoneId, operationId }).pipe(
@@ -83,75 +72,71 @@ const purgeOperation = (
   findOperation(zoneId, tuple).pipe(
     Effect.flatMap((op) =>
       op
-        ? apiGateway
-            .deleteOperation({ zoneId, operationId: op.operationId })
-            .pipe(
-              Effect.catchTag("OperationNotFound", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "Forbidden",
-                schedule: forbiddenRetrySchedule,
-                times: 8,
-              }),
-            )
+        ? apiGateway.deleteOperation({ zoneId, operationId: op.operationId }).pipe(
+            Effect.catchTag("OperationNotFound", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: forbiddenRetrySchedule,
+              times: 8,
+            }),
+          )
         : Effect.void,
     ),
   );
 
-test.provider(
-  "create, no-op redeploy, destroy an API Shield operation",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
-      const tuple = {
-        method: "GET",
-        host: zoneName,
-        endpoint: ENDPOINT_DEFAULT,
-      };
+test.provider("create, no-op redeploy, destroy an API Shield operation", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+    const tuple = {
+      method: "GET",
+      host: zoneName,
+      endpoint: ENDPOINT_DEFAULT,
+    };
 
-      yield* stack.destroy();
-      yield* purgeOperation(zoneId, tuple);
+    yield* stack.destroy();
+    yield* purgeOperation(zoneId, tuple);
 
-      const op = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ApiShield.Operation("DefaultOp", {
-            zoneId,
-            method: "GET",
-            host: zoneName,
-            endpoint: ENDPOINT_DEFAULT,
-          }).pipe(adopt(true));
-        }),
-      );
+    const op = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.ApiShield.Operation("DefaultOp", {
+          zoneId,
+          method: "GET",
+          host: zoneName,
+          endpoint: ENDPOINT_DEFAULT,
+        }).pipe(adopt(true));
+      }),
+    );
 
-      expect(op.operationId).toBeDefined();
-      expect(op.zoneId).toEqual(zoneId);
-      expect(op.method).toEqual("GET");
-      expect(op.host).toEqual(zoneName);
-      // Cloudflare normalizes `{thingId}` to `{var1}`.
-      expect(op.endpoint).toEqual("/alchemy-apishield/default/{var1}");
+    expect(op.operationId).toBeDefined();
+    expect(op.zoneId).toEqual(zoneId);
+    expect(op.method).toEqual("GET");
+    expect(op.host).toEqual(zoneName);
+    // Cloudflare normalizes `{thingId}` to `{var1}`.
+    expect(op.endpoint).toEqual("/alchemy-apishield/default/{var1}");
 
-      const live = yield* getOperation(zoneId, op.operationId);
-      expect(live.operationId).toEqual(op.operationId);
-      expect(live.endpoint).toEqual("/alchemy-apishield/default/{var1}");
+    const live = yield* getOperation(zoneId, op.operationId);
+    expect(live.operationId).toEqual(op.operationId);
+    expect(live.endpoint).toEqual("/alchemy-apishield/default/{var1}");
 
-      // No-op redeploy of the same (raw) endpoint converges on the same
-      // physical operation — the normalized forms match.
-      const redeployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ApiShield.Operation("DefaultOp", {
-            zoneId,
-            method: "GET",
-            host: zoneName,
-            endpoint: ENDPOINT_DEFAULT,
-          }).pipe(adopt(true));
-        }),
-      );
-      expect(redeployed.operationId).toEqual(op.operationId);
+    // No-op redeploy of the same (raw) endpoint converges on the same
+    // physical operation — the normalized forms match.
+    const redeployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.ApiShield.Operation("DefaultOp", {
+          zoneId,
+          method: "GET",
+          host: zoneName,
+          endpoint: ENDPOINT_DEFAULT,
+        }).pipe(adopt(true));
+      }),
+    );
+    expect(redeployed.operationId).toEqual(op.operationId);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const gone = yield* findOperation(zoneId, tuple);
-      expect(gone).toBeUndefined();
-    }).pipe(logLevel),
+    const gone = yield* findOperation(zoneId, tuple);
+    expect(gone).toBeUndefined();
+  }).pipe(logLevel),
 );
 
 test.provider("changing the method triggers replacement", (stack) =>
@@ -229,9 +214,7 @@ test.provider("list enumerates the deployed API Shield operation", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.ApiShield.Operation,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.ApiShield.Operation);
     const all = yield* provider.list();
 
     // The deployed operation appears in the exhaustively-paginated,

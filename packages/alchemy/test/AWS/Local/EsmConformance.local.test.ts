@@ -35,11 +35,7 @@ import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
 import { zipCode } from "@/Util/zip.ts";
-import {
-  dockerAvailable,
-  FLOCI_ENDPOINT,
-  rawS3GetObject,
-} from "./fixtures/raw.ts";
+import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -195,10 +191,7 @@ test.provider.skipIf(!dockerAvailable)(
 
       // Bounded poll: floci's ESM poller must deliver the message to the
       // containerized function, whose S3 write-back proves consumption.
-      const consumed = yield* rawS3GetObject(
-        base.bucket.bucketName,
-        MARKER_KEY,
-      ).pipe(
+      const consumed = yield* rawS3GetObject(base.bucket.bucketName, MARKER_KEY).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
           until: (res): boolean => res.status === 200,

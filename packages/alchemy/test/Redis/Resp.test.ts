@@ -66,9 +66,7 @@ describe("encodeCommand", () => {
 
   test("bulk length is bytes, not JS string length", () => {
     const encoded = encodeCommand("SET", ["k", "😀"]);
-    expect(encoded).toEqual(
-      bytes("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$4\r\n😀\r\n"),
-    );
+    expect(encoded).toEqual(bytes("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$4\r\n😀\r\n"));
   });
 
   test("binary args are length-prefixed without scanning", () => {
@@ -134,9 +132,7 @@ describe("RESP2 decode", () => {
       4,
       "foobar",
     ]);
-    const nested = asReply(
-      "*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Foo\r\n-Bar\r\n",
-    );
+    const nested = asReply("*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Foo\r\n-Bar\r\n");
     expect(Array.isArray(nested)).toBe(true);
     const [first, second] = nested as Reply[];
     expect(first).toEqual([1, 2, 3]);
@@ -148,11 +144,7 @@ describe("RESP2 decode", () => {
   });
 
   test("null element in array", () => {
-    expect(asReply("*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n")).toEqual([
-      "foo",
-      null,
-      "bar",
-    ]);
+    expect(asReply("*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n")).toEqual(["foo", null, "bar"]);
   });
 
   test("round-trip encodeReply", () => {
@@ -212,9 +204,7 @@ describe("RESP3 decode", () => {
   });
 
   test("streamed string", () => {
-    expect(
-      asReply("$?\r\n;5\r\nHello\r\n;1\r\n \r\n;5\r\nworld\r\n;0\r\n"),
-    ).toBe("Hello world");
+    expect(asReply("$?\r\n;5\r\nHello\r\n;1\r\n \r\n;5\r\nworld\r\n;0\r\n")).toBe("Hello world");
   });
 
   test("streamed array", () => {

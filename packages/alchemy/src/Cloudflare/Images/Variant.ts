@@ -82,13 +82,7 @@ export interface VariantAttributes {
   neverRequireSignedURLs: boolean;
 }
 
-export type Variant = Resource<
-  TypeId,
-  VariantProps,
-  VariantAttributes,
-  never,
-  Providers
->;
+export type Variant = Resource<TypeId, VariantProps, VariantAttributes, never, Providers>;
 
 /**
  * A Cloudflare Images variant — a named resizing preset (e.g. `thumbnail`,
@@ -176,18 +170,14 @@ export const VariantProvider = () =>
         Effect.map((all) => all.filter((name) => name !== "public")),
         // Accounts without the Cloudflare Images entitlement reject the route
         // (code 5403) — there is nothing to enumerate.
-        Effect.catchTag("ImagesAccessNotEnabled", () =>
-          Effect.succeed<string[]>([]),
-        ),
+        Effect.catchTag("ImagesAccessNotEnabled", () => Effect.succeed<string[]>([])),
       );
 
       const rows = yield* Effect.forEach(
         names,
         (name) =>
           getVariant(accountId, name).pipe(
-            Effect.map((variant) =>
-              variant ? toAttributes(variant, accountId) : undefined,
-            ),
+            Effect.map((variant) => (variant ? toAttributes(variant, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
@@ -225,10 +215,7 @@ export const VariantProvider = () =>
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const acct =
-        output?.accountId ??
-        (olds?.accountId as string | undefined) ??
-        accountId;
+      const acct = output?.accountId ?? (olds?.accountId as string | undefined) ?? accountId;
       const name = output?.variantName ?? olds?.name ?? id;
 
       const observed = yield* getVariant(acct, name);
@@ -263,9 +250,7 @@ export const VariantProvider = () =>
           })
           .pipe(
             Effect.map((created) => created.variant ?? undefined),
-            Effect.catchTag("VariantAlreadyExists", () =>
-              getVariant(acct, name),
-            ),
+            Effect.catchTag("VariantAlreadyExists", () => getVariant(acct, name)),
           );
       }
       if (!observed) {
@@ -322,10 +307,7 @@ export const VariantProvider = () =>
       // Bounded — if it never clears we stop polling and proceed.
       yield* getVariant(output.accountId, output.variantName).pipe(
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(12),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(12)]),
           until: (observed) => observed === undefined,
         }),
       );
@@ -375,10 +357,7 @@ const desiredOptions = (news: VariantProps) => ({
   metadata: news.metadata ?? ("none" as const),
 });
 
-const toAttributes = (
-  variant: ObservedVariant,
-  accountId: string,
-): VariantAttributes => ({
+const toAttributes = (variant: ObservedVariant, accountId: string): VariantAttributes => ({
   variantName: variant.id,
   accountId,
   // Distilled widens generated string enums to open unions (`string & {}`).

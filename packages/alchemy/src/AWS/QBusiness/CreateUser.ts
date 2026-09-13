@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `CreateUser` request with `applicationId` injected from the bound application.
  */
-export interface CreateUserRequest extends Omit<
-  qbusiness.CreateUserRequest,
-  "applicationId"
-> {}
+export interface CreateUserRequest extends Omit<qbusiness.CreateUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `CreateUser` operation (IAM action
@@ -45,6 +42,4 @@ export interface CreateUser extends Binding.Service<
     ) => Effect.Effect<qbusiness.CreateUserResponse, qbusiness.CreateUserError>
   >
 > {}
-export const CreateUser = Binding.Service<CreateUser>(
-  "AWS.QBusiness.CreateUser",
-);
+export const CreateUser = Binding.Service<CreateUser>("AWS.QBusiness.CreateUser");

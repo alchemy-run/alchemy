@@ -30,10 +30,7 @@ describe("QBusiness binding operations (typed-error probes)", () => {
   const NOT_FOUND = ["ResourceNotFoundException"] as const;
   // Operations whose body preconditions may be validated before the
   // application lookup surface either tag.
-  const NOT_FOUND_OR_INVALID = [
-    "ResourceNotFoundException",
-    "ValidationException",
-  ] as const;
+  const NOT_FOUND_OR_INVALID = ["ResourceNotFoundException", "ValidationException"] as const;
   // Chat operations may reject on licensing/authorization before resolving
   // the application.
   const CHAT_TAGS = [
@@ -85,51 +82,43 @@ describe("QBusiness binding operations (typed-error probes)", () => {
     }),
   );
 
-  test.provider(
-    "getChatControlsConfiguration yields a typed not-found error",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          qbusiness.getChatControlsConfiguration({
-            applicationId: NONEXISTENT,
-          }),
-        );
-        expectTag(error, NOT_FOUND);
-      }),
+  test.provider("getChatControlsConfiguration yields a typed not-found error", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        qbusiness.getChatControlsConfiguration({
+          applicationId: NONEXISTENT,
+        }),
+      );
+      expectTag(error, NOT_FOUND);
+    }),
   );
 
-  test.provider(
-    "updateChatControlsConfiguration yields a typed not-found error",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          qbusiness.updateChatControlsConfiguration({
-            applicationId: NONEXISTENT,
-            responseScope: "ENTERPRISE_CONTENT_ONLY",
-          }),
-        );
-        expectTag(error, NOT_FOUND);
-      }),
+  test.provider("updateChatControlsConfiguration yields a typed not-found error", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        qbusiness.updateChatControlsConfiguration({
+          applicationId: NONEXISTENT,
+          responseScope: "ENTERPRISE_CONTENT_ONLY",
+        }),
+      );
+      expectTag(error, NOT_FOUND);
+    }),
   );
 
-  test.provider(
-    "deleteChatControlsConfiguration yields a typed not-found error",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          qbusiness.deleteChatControlsConfiguration({
-            applicationId: NONEXISTENT,
-          }),
-        );
-        expectTag(error, NOT_FOUND);
-      }),
+  test.provider("deleteChatControlsConfiguration yields a typed not-found error", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        qbusiness.deleteChatControlsConfiguration({
+          applicationId: NONEXISTENT,
+        }),
+      );
+      expectTag(error, NOT_FOUND);
+    }),
   );
 
   test.provider("listConversations yields a typed not-found error", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        qbusiness.listConversations({ applicationId: NONEXISTENT }),
-      );
+      const error = yield* Effect.flip(qbusiness.listConversations({ applicationId: NONEXISTENT }));
       expectTag(error, NOT_FOUND);
     }),
   );
@@ -160,9 +149,7 @@ describe("QBusiness binding operations (typed-error probes)", () => {
 
   test.provider("listAttachments yields a typed not-found error", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        qbusiness.listAttachments({ applicationId: NONEXISTENT }),
-      );
+      const error = yield* Effect.flip(qbusiness.listAttachments({ applicationId: NONEXISTENT }));
       expectTag(error, NOT_FOUND);
     }),
   );
@@ -244,9 +231,7 @@ describe("QBusiness binding operations (typed-error probes)", () => {
 
   test.provider("getPolicy yields a typed not-found error", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        qbusiness.getPolicy({ applicationId: NONEXISTENT }),
-      );
+      const error = yield* Effect.flip(qbusiness.getPolicy({ applicationId: NONEXISTENT }));
       expectTag(error, NOT_FOUND);
     }),
   );
@@ -492,18 +477,16 @@ describe("QBusiness binding operations (typed-error probes)", () => {
     }),
   );
 
-  test.provider(
-    "createAnonymousWebExperienceUrl yields a typed not-found error",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          qbusiness.createAnonymousWebExperienceUrl({
-            applicationId: NONEXISTENT,
-            webExperienceId: NONEXISTENT,
-          }),
-        );
-        expectTag(error, NOT_FOUND);
-      }),
+  test.provider("createAnonymousWebExperienceUrl yields a typed not-found error", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        qbusiness.createAnonymousWebExperienceUrl({
+          applicationId: NONEXISTENT,
+          webExperienceId: NONEXISTENT,
+        }),
+      );
+      expectTag(error, NOT_FOUND);
+    }),
   );
 });
 
@@ -536,16 +519,11 @@ test.provider.skipIf(!process.env.AWS_TEST_QBUSINESS)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -579,8 +557,7 @@ test.provider.skipIf(!process.env.AWS_TEST_QBUSINESS)(
           Effect.map((r) => (r as { statuses?: string[] }).statuses ?? []),
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
-            until: (s): boolean =>
-              s.includes("INDEXED") || s.includes("FAILED"),
+            until: (s): boolean => s.includes("INDEXED") || s.includes("FAILED"),
             times: 30,
           }),
         );

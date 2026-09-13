@@ -51,6 +51,4 @@ export interface GetPolicies extends Binding.Service<
   "AWS.VerifiedPermissions.GetPolicies",
   <S extends PolicyStore>(store: S) => Effect.Effect<GetPoliciesClient>
 > {}
-export const GetPolicies = Binding.Service<GetPolicies>(
-  "AWS.VerifiedPermissions.GetPolicies",
-);
+export const GetPolicies = Binding.Service<GetPolicies>("AWS.VerifiedPermissions.GetPolicies");

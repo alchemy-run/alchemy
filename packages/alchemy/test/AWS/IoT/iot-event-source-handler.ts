@@ -22,10 +22,9 @@ export class IoTEventSourceFunction extends AWS.Lambda.Function<AWS.Lambda.Funct
   "IoTEventSourceFunction",
 ) {}
 
-export class ResultQueue extends Context.Service<
-  ResultQueue,
-  { result: AWS.SQS.Queue }
->()("IoTResultQueue") {}
+export class ResultQueue extends Context.Service<ResultQueue, { result: AWS.SQS.Queue }>()(
+  "IoTResultQueue",
+) {}
 
 export const ResultQueueLive = Layer.effect(
   ResultQueue,
@@ -85,11 +84,7 @@ export default IoTEventSourceFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(
-          AWS.Lambda.TopicRuleEventSource,
-          AWS.SQS.QueueSinkHttp,
-          AWS.IoT.PublishHttp,
-        ),
+        Layer.mergeAll(AWS.Lambda.TopicRuleEventSource, AWS.SQS.QueueSinkHttp, AWS.IoT.PublishHttp),
         Layer.mergeAll(AWS.SQS.SendMessageBatchHttp, ResultQueueLive),
       ),
     ),

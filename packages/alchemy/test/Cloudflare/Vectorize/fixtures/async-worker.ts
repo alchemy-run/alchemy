@@ -60,9 +60,7 @@ export default {
       return Response.json({
         count: mine.length,
         ids: mine.map((m) => m.id),
-        kinds: mine.map(
-          (m) => (m.metadata as { kind?: string } | undefined)?.kind,
-        ),
+        kinds: mine.map((m) => (m.metadata as { kind?: string } | undefined)?.kind),
       });
     }
 

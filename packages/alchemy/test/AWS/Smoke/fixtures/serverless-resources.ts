@@ -52,22 +52,19 @@ export const ServerlessResourcesLive = Layer.effect(
     });
     const jobsQueue = yield* AWS.SQS.Queue("SmokeJobsQueue");
     const resultsQueue = yield* AWS.SQS.Queue("SmokeResultsQueue");
-    const machine = yield* AWS.StepFunctions.StateMachine(
-      "SmokeExpressMachine",
-      {
-        type: "EXPRESS",
-        definition: {
-          StartAt: "Compute",
-          States: {
-            Compute: {
-              Type: "Pass",
-              Parameters: { "echo.$": "$", computed: true },
-              End: true,
-            },
+    const machine = yield* AWS.StepFunctions.StateMachine("SmokeExpressMachine", {
+      type: "EXPRESS",
+      definition: {
+        StartAt: "Compute",
+        States: {
+          Compute: {
+            Type: "Pass",
+            Parameters: { "echo.$": "$", computed: true },
+            End: true,
           },
         },
       },
-    );
+    });
     return { pool, client, table, bucket, jobsQueue, resultsQueue, machine };
   }),
 );

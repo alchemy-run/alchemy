@@ -18,18 +18,14 @@ const findRule = (ruleName: string) =>
     Effect.map((record) => Option.getOrUndefined(record)?.SamplingRule),
   );
 
-class SamplingRuleStillExists extends Data.TaggedError(
-  "SamplingRuleStillExists",
-)<{
+class SamplingRuleStillExists extends Data.TaggedError("SamplingRuleStillExists")<{
   readonly ruleName: string;
 }> {}
 
 const assertRuleDeleted = (ruleName: string) =>
   findRule(ruleName).pipe(
     Effect.flatMap((rule) =>
-      rule === undefined
-        ? Effect.void
-        : Effect.fail(new SamplingRuleStillExists({ ruleName })),
+      rule === undefined ? Effect.void : Effect.fail(new SamplingRuleStillExists({ ruleName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "SamplingRuleStillExists",
@@ -67,11 +63,7 @@ test.provider(
       expect(created?.ServiceType).toBe("*");
       const tags = yield* xray
         .listTagsForResource({ ResourceARN: rule.ruleArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestRule");
 
@@ -100,11 +92,7 @@ test.provider(
       expect(afterUpdate?.Attributes).toEqual({ tier: "premium" });
       const updatedTags = yield* xray
         .listTagsForResource({ ResourceARN: rule.ruleArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.Extra).toBe("1");
 
       // remove a tag — converges via untagResource
@@ -123,11 +111,7 @@ test.provider(
       );
       const afterTagRemoval = yield* xray
         .listTagsForResource({ ResourceARN: rule.ruleArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(afterTagRemoval.Extra).toBeUndefined();
       expect(afterTagRemoval.Environment).toBe("test");
 

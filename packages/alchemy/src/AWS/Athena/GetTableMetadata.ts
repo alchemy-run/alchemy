@@ -34,13 +34,8 @@ export interface GetTableMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<athena.GetTableMetadataInput, "CatalogName">,
-    ) => Effect.Effect<
-      athena.GetTableMetadataOutput,
-      athena.GetTableMetadataError
-    >
+    ) => Effect.Effect<athena.GetTableMetadataOutput, athena.GetTableMetadataError>
   >
 > {}
 
-export const GetTableMetadata = Binding.Service<GetTableMetadata>(
-  "AWS.Athena.GetTableMetadata",
-);
+export const GetTableMetadata = Binding.Service<GetTableMetadata>("AWS.Athena.GetTableMetadata");

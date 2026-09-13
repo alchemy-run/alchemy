@@ -24,9 +24,7 @@ test.provider(
 
 const observeRetention = config.describeRetentionConfigurations({}).pipe(
   Effect.map((r) => (r.RetentionConfigurations ?? []).at(0)),
-  Effect.catchTag("NoSuchRetentionConfigurationException", () =>
-    Effect.succeed(undefined),
-  ),
+  Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.succeed(undefined)),
 );
 
 // The retention configuration is an account-region singleton AWS always

@@ -30,48 +30,32 @@ export default SocialMessagingBindingsFunction.make(
   Effect.gen(function* () {
     // Adopts the console-linked WABA (see LinkedWhatsAppBusinessAccount
     // docs) — stack.destroy() disassociates it, requiring console re-signup.
-    const account = yield* SocialMessaging.LinkedWhatsAppBusinessAccount(
-      "BindingsWaba",
-      {
-        accountId: WABA_ID,
-      },
-    );
+    const account = yield* SocialMessaging.LinkedWhatsAppBusinessAccount("BindingsWaba", {
+      accountId: WABA_ID,
+    });
 
     const sendMessage = yield* SocialMessaging.SendWhatsAppMessage(account);
     const postMedia = yield* SocialMessaging.PostWhatsAppMessageMedia(account);
     const getMedia = yield* SocialMessaging.GetWhatsAppMessageMedia(account);
-    const deleteMedia =
-      yield* SocialMessaging.DeleteWhatsAppMessageMedia(account);
+    const deleteMedia = yield* SocialMessaging.DeleteWhatsAppMessageMedia(account);
     const getPhoneNumber =
-      yield* SocialMessaging.GetLinkedWhatsAppBusinessAccountPhoneNumber(
-        account,
-      );
-    const createTemplate =
-      yield* SocialMessaging.CreateWhatsAppMessageTemplate(account);
+      yield* SocialMessaging.GetLinkedWhatsAppBusinessAccountPhoneNumber(account);
+    const createTemplate = yield* SocialMessaging.CreateWhatsAppMessageTemplate(account);
     const createFromLibrary =
       yield* SocialMessaging.CreateWhatsAppMessageTemplateFromLibrary(account);
-    const uploadTemplateMedia =
-      yield* SocialMessaging.CreateWhatsAppMessageTemplateMedia(account);
-    const getTemplate =
-      yield* SocialMessaging.GetWhatsAppMessageTemplate(account);
-    const listTemplates =
-      yield* SocialMessaging.ListWhatsAppMessageTemplates(account);
-    const browseLibrary =
-      yield* SocialMessaging.ListWhatsAppTemplateLibrary(account);
-    const updateTemplate =
-      yield* SocialMessaging.UpdateWhatsAppMessageTemplate(account);
-    const deleteTemplate =
-      yield* SocialMessaging.DeleteWhatsAppMessageTemplate(account);
+    const uploadTemplateMedia = yield* SocialMessaging.CreateWhatsAppMessageTemplateMedia(account);
+    const getTemplate = yield* SocialMessaging.GetWhatsAppMessageTemplate(account);
+    const listTemplates = yield* SocialMessaging.ListWhatsAppMessageTemplates(account);
+    const browseLibrary = yield* SocialMessaging.ListWhatsAppTemplateLibrary(account);
+    const updateTemplate = yield* SocialMessaging.UpdateWhatsAppMessageTemplate(account);
+    const deleteTemplate = yield* SocialMessaging.DeleteWhatsAppMessageTemplate(account);
     const createFlow = yield* SocialMessaging.CreateWhatsAppFlow(account);
     const getFlow = yield* SocialMessaging.GetWhatsAppFlow(account);
-    const getFlowPreview =
-      yield* SocialMessaging.GetWhatsAppFlowPreview(account);
+    const getFlowPreview = yield* SocialMessaging.GetWhatsAppFlowPreview(account);
     const listFlows = yield* SocialMessaging.ListWhatsAppFlows(account);
-    const listFlowAssets =
-      yield* SocialMessaging.ListWhatsAppFlowAssets(account);
+    const listFlowAssets = yield* SocialMessaging.ListWhatsAppFlowAssets(account);
     const updateFlow = yield* SocialMessaging.UpdateWhatsAppFlow(account);
-    const updateFlowAssets =
-      yield* SocialMessaging.UpdateWhatsAppFlowAssets(account);
+    const updateFlowAssets = yield* SocialMessaging.UpdateWhatsAppFlowAssets(account);
     const publishFlow = yield* SocialMessaging.PublishWhatsAppFlow(account);
     const deprecateFlow = yield* SocialMessaging.DeprecateWhatsAppFlow(account);
     const deleteFlow = yield* SocialMessaging.DeleteWhatsAppFlow(account);
@@ -143,18 +127,14 @@ export default SocialMessagingBindingsFunction.make(
         if (request.method === "GET" && pathname === "/phone/typed-not-found") {
           const typed = yield* getPhoneNumber({ id: BOGUS_PHONE_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParametersException"],
-              () => Effect.succeed(true),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParametersException"], () =>
+              Effect.succeed(true),
             ),
           );
           return yield* HttpServerResponse.json({ typed });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/template/typed-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/template/typed-not-found") {
           const typed = yield* getTemplate({ metaTemplateId: "0" }).pipe(
             Effect.map(() => false),
             Effect.catchTag(
@@ -188,10 +168,7 @@ export default SocialMessagingBindingsFunction.make(
           return yield* HttpServerResponse.json({ typed });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/media/typed-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/media/typed-not-found") {
           const get = yield* getMedia({
             mediaId: BOGUS_MEDIA_ID,
             originationPhoneNumberId: BOGUS_PHONE_ID,

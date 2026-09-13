@@ -28,12 +28,8 @@ export interface ListLFTags extends Binding.Service<
   ListLFTags,
   "AWS.LakeFormation.ListLFTags",
   () => Effect.Effect<
-    (
-      request?: ListLFTagsRequest,
-    ) => Effect.Effect<lf.ListLFTagsResponse, lf.ListLFTagsError>
+    (request?: ListLFTagsRequest) => Effect.Effect<lf.ListLFTagsResponse, lf.ListLFTagsError>
   >
 > {}
 
-export const ListLFTags = Binding.Service<ListLFTags>(
-  "AWS.LakeFormation.ListLFTags",
-);
+export const ListLFTags = Binding.Service<ListLFTags>("AWS.LakeFormation.ListLFTags");

@@ -55,9 +55,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
     yield* fs.makeDirectory(lockPath, { recursive: true });
     yield* fs.writeFileString(path.join(lockPath, "owner"), "foreign-owner");
     if (options?.ageMillis !== undefined) {
-      const stamp = new Date(
-        (yield* Clock.currentTimeMillis) - options.ageMillis,
-      );
+      const stamp = new Date((yield* Clock.currentTimeMillis) - options.ageMillis);
       yield* fs.utimes(lockPath, stamp, stamp);
     }
   });
@@ -81,25 +79,23 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       }),
   );
 
-  it.effect(
-    "creates the lock directory while held and removes it on release",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const key = "lock-test-lifecycle";
-        const lockPath = yield* lockPathOf(key);
-        const seen = yield* withLock(
-          key,
-          Effect.all({
-            lock: fs.exists(lockPath),
-            owner: fs
-              .readFileString(`${lockPath}/owner`)
-              .pipe(Effect.map((owner) => owner.length > 0)),
-          }),
-        );
-        expect(seen).toEqual({ lock: true, owner: true });
-        expect(yield* fs.exists(lockPath)).toBe(false);
-      }),
+  it.effect("creates the lock directory while held and removes it on release", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const key = "lock-test-lifecycle";
+      const lockPath = yield* lockPathOf(key);
+      const seen = yield* withLock(
+        key,
+        Effect.all({
+          lock: fs.exists(lockPath),
+          owner: fs
+            .readFileString(`${lockPath}/owner`)
+            .pipe(Effect.map((owner) => owner.length > 0)),
+        }),
+      );
+      expect(seen).toEqual({ lock: true, owner: true });
+      expect(yield* fs.exists(lockPath)).toBe(false);
+    }),
   );
 
   it.effect("serialises same-key critical sections in-process", () =>
@@ -136,10 +132,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       ).pipe(Effect.forkScoped);
 
       yield* Deferred.await(firstEntered);
-      const secondRan = yield* withLock(
-        "lock-test-independent-b",
-        Effect.succeed(true),
-      );
+      const secondRan = yield* withLock("lock-test-independent-b", Effect.succeed(true));
       expect(secondRan).toBe(true);
 
       yield* Deferred.succeed(releaseFirst, undefined);
@@ -154,14 +147,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const key = `lock-test-process-${crypto.randomUUID()}`;
         const lockPath = yield* lockPathOf(key);
-        const child = spawn(
-          process.execPath,
-          ["test/Auth/fixtures/lock-holder.ts", key],
-          {
-            cwd: resolve(import.meta.dir, "../.."),
-            stdio: ["ignore", "pipe", "inherit"],
-          },
-        );
+        const child = spawn(process.execPath, ["test/Auth/fixtures/lock-holder.ts", key], {
+          cwd: resolve(import.meta.dir, "../.."),
+          stdio: ["ignore", "pipe", "inherit"],
+        });
 
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
@@ -288,9 +277,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       assert(Exit.isFailure(exit));
       expect(String(exit.cause)).toMatch(/Timed out waiting/);
       // A fresh (non-stale) foreign lock must survive our failed attempt.
-      expect(yield* fs.readFileString(`${lockPath}/owner`)).toBe(
-        "foreign-owner",
-      );
+      expect(yield* fs.readFileString(`${lockPath}/owner`)).toBe("foreign-owner");
       yield* removeLock(lockPath);
     }),
   );
@@ -317,10 +304,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       const key = "lock-test-wait-for-release";
       const lockPath = yield* lockPathOf(key);
       yield* plantForeignLock(lockPath);
-      yield* removeLock(lockPath).pipe(
-        Effect.delay("300 millis"),
-        Effect.forkScoped,
-      );
+      yield* removeLock(lockPath).pipe(Effect.delay("300 millis"), Effect.forkScoped);
       const result = yield* withLock(key, Effect.succeed("ran"), {
         timeout: "5 seconds",
       });
@@ -334,9 +318,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       const key = "lock-test-compromised-release";
       const lockPath = yield* lockPathOf(key);
       const release = yield* Deferred.make<void>();
-      const fiber = yield* withLock(key, Deferred.await(release)).pipe(
-        Effect.forkScoped,
-      );
+      const fiber = yield* withLock(key, Deferred.await(release)).pipe(Effect.forkScoped);
       yield* fs.exists(lockPath).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("25 millis"),
@@ -349,9 +331,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.await(fiber);
       // Release must leave the usurper's lock in place.
-      expect(yield* fs.readFileString(`${lockPath}/owner`)).toBe(
-        "foreign-owner",
-      );
+      expect(yield* fs.readFileString(`${lockPath}/owner`)).toBe("foreign-owner");
       yield* removeLock(lockPath);
     }),
   );
@@ -364,9 +344,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
         const key = "lock-test-heartbeat";
         const lockPath = yield* lockPathOf(key);
         const release = yield* Deferred.make<void>();
-        const fiber = yield* withLock(key, Deferred.await(release)).pipe(
-          Effect.forkScoped,
-        );
+        const fiber = yield* withLock(key, Deferred.await(release)).pipe(Effect.forkScoped);
         yield* fs.exists(lockPath).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("25 millis"),
@@ -380,10 +358,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
         yield* fs.utimes(lockPath, before, before);
         const refreshed = yield* fs.stat(lockPath).pipe(
           Effect.map((info) =>
-            Option.exists(
-              info.mtime,
-              (mtime) => mtime.getTime() > before.getTime() + 20_000,
-            ),
+            Option.exists(info.mtime, (mtime) => mtime.getTime() > before.getTime() + 20_000),
           ),
           Effect.repeat({
             schedule: Schedule.spaced("500 millis"),

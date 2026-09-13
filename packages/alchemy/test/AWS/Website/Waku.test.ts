@@ -20,13 +20,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "waku-app");
 // workspace's hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "tsconfig.json",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "src", "public"];
 
 // Skipped under the floci runner: in dev the composite deploys only the
 // framework dev server (no Lambda/S3/CloudFront), so this test's live
@@ -61,20 +55,14 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Waku", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "WAKU_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "WAKU_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "WAKU_AWS_PAGE_MARKER", {
@@ -83,24 +71,16 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Waku", () => {
         });
         // API route (waku's `_api` pattern, `_api` prefix stripped) through
         // the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/echo?echo=roundtrip`,
-          "WAKU_AWS_API_MARKER",
-          {
-            label: "API route",
-          },
-        );
+        yield* expectUrlContains(`${url}/echo?echo=roundtrip`, "WAKU_AWS_API_MARKER", {
+          label: "API route",
+        });
         yield* expectUrlContains(`${url}/echo?echo=roundtrip`, "roundtrip", {
           label: "API route query echo",
         });
         // Public file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "waku-aws-robots-marker",
-          {
-            label: "public asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "waku-aws-robots-marker", {
+          label: "public asset from S3",
+        });
         // SSG page (waku prerendered it into dist/public/about/index.html at
         // build time; the edge router's postfix lookup serves it from S3 at
         // the extensionless URL waku links to).
@@ -126,9 +106,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

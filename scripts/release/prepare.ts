@@ -16,18 +16,14 @@ const packages = (
       .filter((entry) => entry.isDirectory())
       .map(async (entry) => {
         const dir = `packages/${entry.name}`;
-        const manifest = JSON.parse(
-          await readFile(path.join(root, dir, "package.json"), "utf8"),
-        );
+        const manifest = JSON.parse(await readFile(path.join(root, dir, "package.json"), "utf8"));
         return manifest.private === true ? undefined : { dir, manifest };
       }),
   )
 ).filter((pkg) => pkg !== undefined);
 
 async function versions(name: string): Promise<Array<string>> {
-  const response = await fetch(
-    `https://registry.npmjs.org/${encodeURIComponent(name)}`,
-  );
+  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
   if (!response.ok) return [];
   const json = (await response.json()) as {
     versions?: Record<string, unknown>;
@@ -69,8 +65,7 @@ if (spec === "" || prerelease) {
             .quiet()
         : undefined;
     const complete = maximum > 0 && maxima.every((value) => value === maximum);
-    const next =
-      complete && remoteTag?.exitCode === 0 ? maximum + 1 : maximum || 1;
+    const next = complete && remoteTag?.exitCode === 0 ? maximum + 1 : maximum || 1;
     version = `2.0.0-${channel}.${next}`;
   }
 } else if (/^\d+\.\d+\.\d+$/.test(spec)) {
@@ -82,22 +77,14 @@ if (spec === "" || prerelease) {
     .filter((candidate) => /^\d+\.\d+\.\d+$/.test(candidate))
     .sort(compare)
     .at(-1);
-  if (!stable)
-    throw new Error(
-      "Cannot calculate a stable bump without a published stable version",
-    );
-  let [major, minor, patch] = stable.split(".").map(Number) as [
-    number,
-    number,
-    number,
-  ];
+  if (!stable) throw new Error("Cannot calculate a stable bump without a published stable version");
+  let [major, minor, patch] = stable.split(".").map(Number) as [number, number, number];
   if (spec === "major") [major, minor, patch] = [major + 1, 0, 0];
   if (spec === "minor") [minor, patch] = [minor + 1, 0];
   if (spec === "patch") patch += 1;
   version = `${major}.${minor}.${patch}`;
 } else {
-  if (!/^[A-Za-z][A-Za-z0-9.-]*$/.test(spec))
-    throw new Error(`Invalid release spec: ${spec}`);
+  if (!/^[A-Za-z][A-Za-z0-9.-]*$/.test(spec)) throw new Error(`Invalid release spec: ${spec}`);
   channel = "tag";
   version = `0.0.0-${spec}`;
 }

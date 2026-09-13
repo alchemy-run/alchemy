@@ -46,13 +46,7 @@ const main = Effect.gen(function* () {
 const services = RuntimeServices.layerRuntime({
   api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! },
 }).pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      Credentials.fromEnv(),
-      NodeServices.layer,
-      FetchHttpClient.layer,
-    ),
-  ),
+  Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
 );
 
 await main.pipe(Effect.provide(services), Effect.scoped, Effect.runPromise);

@@ -10,11 +10,7 @@ import * as Effect from "effect/Effect";
  */
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import {
-  dockerAvailable,
-  rawAwsJson,
-  regionOfArn,
-} from "../Local/fixtures/raw.ts";
+import { dockerAvailable, rawAwsJson, regionOfArn } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 

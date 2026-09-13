@@ -24,9 +24,7 @@ import { isRailwayHost } from "./MountVolume.ts";
  *
  * NOT exported from `index.ts`.
  */
-export class RailwayS3CredentialsMissing extends Data.TaggedError(
-  "Railway.S3CredentialsMissing",
-)<{
+export class RailwayS3CredentialsMissing extends Data.TaggedError("Railway.S3CredentialsMissing")<{
   name: string;
 }> {}
 
@@ -56,16 +54,12 @@ const readValue = (value: unknown): Effect.Effect<string | undefined> =>
 
 const scopeFromResource = (bucket: Bucket) =>
   Effect.gen(function* () {
-    const bucketName =
-      (yield* readValue(bucket.s3BucketName)) ??
-      (yield* readValue(bucket.name));
+    const bucketName = (yield* readValue(bucket.s3BucketName)) ?? (yield* readValue(bucket.name));
     const accessKeyId = yield* readValue(bucket.accessKeyId);
     const secretAccessKey = yield* readValue(bucket.secretAccessKey);
     const endpoint = yield* readValue(bucket.endpoint);
     const region =
-      (yield* readValue(bucket.s3Region)) ??
-      (yield* readValue(bucket.region)) ??
-      "auto";
+      (yield* readValue(bucket.s3Region)) ?? (yield* readValue(bucket.region)) ?? "auto";
     if (
       bucketName === undefined ||
       accessKeyId === undefined ||
@@ -94,9 +88,7 @@ const scopeFromEnv = Effect.gen(function* () {
   const endpoint = yield* Config.String("AWS_ENDPOINT_URL_S3").pipe(
     Config.orElse(() => Config.String("AWS_ENDPOINT_URL")),
   );
-  const region = yield* Config.String("AWS_REGION").pipe(
-    Config.withDefault("auto"),
-  );
+  const region = yield* Config.String("AWS_REGION").pipe(Config.withDefault("auto"));
   return {
     bucketName,
     accessKeyId,
@@ -126,15 +118,9 @@ const authorizeS3 = <A, E>(
     ),
   ) as Effect.Effect<A, E, RuntimeContext>;
 
-export const makeRailwayS3Binding = <
-  I extends { Bucket?: string },
-  A,
-  E,
->(options: {
+export const makeRailwayS3Binding = <I extends { Bucket?: string }, A, E>(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  operation: (input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
 }) =>
   Effect.succeed(
     Effect.fn(function* (bucket: Bucket) {

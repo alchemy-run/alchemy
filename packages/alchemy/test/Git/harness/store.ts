@@ -10,13 +10,7 @@ import * as Stream from "effect/Stream";
 import type { BlobBody, BlobMeta, BlobStoreShape } from "@/Git/BlobStore.ts";
 import { BlobStoreError } from "@/Git/BlobStore.ts";
 import { StoreError } from "@/Git/Protocol/Store.ts";
-import {
-  chunk,
-  MAX_IN_PARAMS,
-  placeholders,
-  REPO_DDL,
-  type SqlClient,
-} from "@/Git/Store/Sql.ts";
+import { chunk, MAX_IN_PARAMS, placeholders, REPO_DDL, type SqlClient } from "@/Git/Store/Sql.ts";
 
 type Value = string | number | ArrayBuffer | Uint8Array | null;
 
@@ -57,15 +51,13 @@ export const makeTestSqlClient = (): SqlClient & { readonly db: Database } => {
       rows = stmt.all(...bindings.map(bind)) as Array<Record<string, unknown>>;
     } else {
       // `run` reports `changes`, which is what the DO cursor's rowsWritten is.
-      rowsWritten = (stmt.run(...bindings.map(bind)) as { changes: number })
-        .changes;
+      rowsWritten = (stmt.run(...bindings.map(bind)) as { changes: number }).changes;
     }
     const out = rows.map(normalize);
     return {
       toArray: () => out,
       one: () => {
-        if (out.length !== 1)
-          throw new Error(`expected 1 row, got ${out.length}`);
+        if (out.length !== 1) throw new Error(`expected 1 row, got ${out.length}`);
         return out[0];
       },
       raw: () => out.map((r) => Object.values(r)),
@@ -99,8 +91,7 @@ export const makeTestSqlClient = (): SqlClient & { readonly db: Database } => {
       allWith(query, bindings as Array<Value>).pipe(
         Effect.map((rows) => (rows.length > 0 ? rows[0] : undefined)),
       ) as never,
-    run: (query, ...bindings) =>
-      allWith(query, bindings as Array<Value>).pipe(Effect.asVoid),
+    run: (query, ...bindings) => allWith(query, bindings as Array<Value>).pipe(Effect.asVoid),
     inChunks: (makeQuery, items, options) =>
       Effect.gen(function* () {
         const prefix = options?.prefix ?? [];
@@ -161,9 +152,7 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
     Effect.suspend(() => {
       const stored = uploads.get(uploadId);
       if (stored === undefined) {
-        return Effect.fail(
-          new BlobStoreError({ reason: `no upload ${uploadId}` }),
-        );
+        return Effect.fail(new BlobStoreError({ reason: `no upload ${uploadId}` }));
       }
       stored.set(partNumber, Uint8Array.from(part));
       return Effect.succeed({ partNumber, etag: `etag-${partNumber}` });
@@ -185,10 +174,7 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
         if (whole === undefined) return null;
         if (range === undefined) return body(whole);
         return body(
-          whole.subarray(
-            range.offset,
-            Math.min(range.offset + range.length, whole.length),
-          ),
+          whole.subarray(range.offset, Math.min(range.offset + range.length, whole.length)),
         );
       }),
     put: (key, data) =>
@@ -198,9 +184,7 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
           return;
         }
         const parts = Array.from(
-          yield* Stream.runCollect(
-            data as Stream.Stream<Uint8Array, BlobStoreError>,
-          ),
+          yield* Stream.runCollect(data as Stream.Stream<Uint8Array, BlobStoreError>),
         );
         const total = parts.reduce((n, p) => n + p.length, 0);
         const out = new Uint8Array(total);
@@ -227,17 +211,13 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
             Effect.suspend(() => {
               const stored = uploads.get(uploadId);
               if (stored === undefined) {
-                return Effect.fail(
-                  new BlobStoreError({ reason: `no upload ${uploadId}` }),
-                );
+                return Effect.fail(new BlobStoreError({ reason: `no upload ${uploadId}` }));
               }
               // R2's rule, checked as R2 checks it: every part but the
               // last (in the list as given) must be the same size.
               const listed = parts.map((p) => stored.get(p.partNumber));
               if (listed.some((p) => p === undefined)) {
-                return Effect.fail(
-                  new BlobStoreError({ reason: "complete: unknown part" }),
-                );
+                return Effect.fail(new BlobStoreError({ reason: "complete: unknown part" }));
               }
               const sizes = listed.map((p) => p!.length);
               for (let i = 0; i < sizes.length - 1; i++) {
@@ -266,8 +246,7 @@ export const makeMemoryBlobStore = (): MemoryBlobStore => {
           }),
         };
       }),
-    uploadPart: (_key, uploadId, partNumber, part) =>
-      putPart(uploadId, partNumber, part),
+    uploadPart: (_key, uploadId, partNumber, part) => putPart(uploadId, partNumber, part),
     delete: (keys) =>
       Effect.sync(() => {
         for (const key of typeof keys === "string" ? [keys] : keys) {

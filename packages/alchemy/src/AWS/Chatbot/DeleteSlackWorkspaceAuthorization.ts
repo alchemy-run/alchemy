@@ -33,7 +33,6 @@ export interface DeleteSlackWorkspaceAuthorization extends Binding.Service<
   >
 > {}
 
-export const DeleteSlackWorkspaceAuthorization =
-  Binding.Service<DeleteSlackWorkspaceAuthorization>(
-    "AWS.Chatbot.DeleteSlackWorkspaceAuthorization",
-  );
+export const DeleteSlackWorkspaceAuthorization = Binding.Service<DeleteSlackWorkspaceAuthorization>(
+  "AWS.Chatbot.DeleteSlackWorkspaceAuthorization",
+);

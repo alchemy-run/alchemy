@@ -63,14 +63,10 @@ const handler = Effect.gen(function* () {
         Stream.mapEffect((index) =>
           Effect.sleep("60 millis").pipe(
             Effect.andThen(useDependency),
-            Effect.andThen(
-              event(index === 15 ? "chunk last" : `chunk ${index}`),
-            ),
+            Effect.andThen(event(index === 15 ? "chunk last" : `chunk ${index}`)),
             Effect.andThen(
               Effect.sync(() =>
-                new TextEncoder().encode(
-                  String(index).padStart(2, "0").repeat(8192),
-                ),
+                new TextEncoder().encode(String(index).padStart(2, "0").repeat(8192)),
               ),
             ),
           ),
@@ -117,9 +113,7 @@ const worker = (name: string, mode: string) =>
     );
     const workScope = yield* Scope.make();
     yield* Effect.addFinalizer((exit) =>
-      Scope.close(workScope, exit).pipe(
-        Effect.andThen(event(`${name} work scope closed`)),
-      ),
+      Scope.close(workScope, exit).pipe(Effect.andThen(event(`${name} work scope closed`))),
     );
     const pollScope = yield* Scope.make();
     yield* Effect.addFinalizer((exit) => Scope.close(pollScope, exit));
@@ -185,11 +179,7 @@ const worker = (name: string, mode: string) =>
     const requestedExit = name === "worker1" ? process.env.RUN_EXIT : undefined;
     if (mode === "normal" || requestedExit === "normal") return;
     if (mode === "error-delay") yield* Effect.sleep("600 millis");
-    if (
-      mode === "error" ||
-      mode === "error-delay" ||
-      requestedExit === "error"
-    ) {
+    if (mode === "error" || mode === "error-delay" || requestedExit === "error") {
       return yield* Effect.die(new Error("worker failed"));
     }
     yield* Effect.never;
@@ -206,11 +196,7 @@ const httpProgram = Effect.gen(function* () {
 const entrypoint = Effect.gen(function* () {
   yield* Effect.addFinalizer(() =>
     event("instance finalizing").pipe(
-      Effect.andThen(
-        process.env.HANG_FINALIZER === "1"
-          ? Effect.never
-          : Effect.sleep("40 millis"),
-      ),
+      Effect.andThen(process.env.HANG_FINALIZER === "1" ? Effect.never : Effect.sleep("40 millis")),
       Effect.andThen(
         Effect.sync(() => {
           dependencyOpen = false;
@@ -226,11 +212,8 @@ const entrypoint = Effect.gen(function* () {
   );
   if (process.env.WORKERS) {
     const first = worker("worker1", process.env.WORKER_MODE ?? "drain");
-    yield* host.run(
-      process.env.NESTED_WORKER === "1" ? Effect.scoped(first) : first,
-    );
-    if (process.env.WORKERS === "2")
-      yield* host.run(worker("worker2", "drain"));
+    yield* host.run(process.env.NESTED_WORKER === "1" ? Effect.scoped(first) : first);
+    if (process.env.WORKERS === "2") yield* host.run(worker("worker2", "drain"));
   }
   if (process.env.RUN_ONLY !== "1") yield* host.run(httpProgram);
   return { RuntimeContext: host };

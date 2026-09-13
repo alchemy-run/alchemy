@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -200,9 +194,7 @@ describe.sequential("UniversalSsl", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Ssl.UniversalSsl,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Ssl.UniversalSsl);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

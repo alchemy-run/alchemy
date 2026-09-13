@@ -16,9 +16,7 @@ import { VirtualField, VirtualFieldProvider } from "./VirtualField.ts";
 
 export { Credentials } from "@distilled.cloud/axiom/Credentials";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Axiom",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Axiom") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

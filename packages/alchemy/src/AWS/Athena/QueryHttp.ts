@@ -7,12 +7,7 @@ import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Bucket } from "../S3/Bucket.ts";
-import {
-  AthenaQueryFailed,
-  Query,
-  type QueryResult,
-  type RunQueryRequest,
-} from "./Query.ts";
+import { AthenaQueryFailed, Query, type QueryResult, type RunQueryRequest } from "./Query.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
 // The workgroup ARN is `arn:aws:athena:{region}:{account}:workgroup/{name}` —
@@ -43,56 +38,50 @@ export const QueryHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Athena.Query(${workGroup}, ${resultsBucket}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "athena:StartQueryExecution",
-                    "athena:GetQueryExecution",
-                    "athena:GetQueryResults",
-                    "athena:StopQueryExecution",
-                  ],
-                  Resource: [workGroup.workGroupArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: ["s3:GetBucketLocation", "s3:ListBucket"],
-                  Resource: [resultsBucket.bucketArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "s3:GetObject",
-                    "s3:PutObject",
-                    "s3:AbortMultipartUpload",
-                  ],
-                  Resource: [Output.interpolate`${resultsBucket.bucketArn}/*`],
-                },
-                {
-                  // Athena resolves table metadata through the Glue Data
-                  // Catalog on the caller's behalf — reads are required for any
-                  // query over a Glue-backed table. Scoped to the workgroup's
-                  // account/region catalog (derived from its ARN).
-                  Effect: "Allow",
-                  Action: [
-                    "glue:GetDatabase",
-                    "glue:GetDatabases",
-                    "glue:GetTable",
-                    "glue:GetTables",
-                    "glue:GetPartition",
-                    "glue:GetPartitions",
-                  ],
-                  Resource: [
-                    glueCatalogArn(workGroup.workGroupArn),
-                    glueDatabaseArn(workGroup.workGroupArn),
-                    glueTableArn(workGroup.workGroupArn),
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Athena.Query(${workGroup}, ${resultsBucket}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "athena:StartQueryExecution",
+                  "athena:GetQueryExecution",
+                  "athena:GetQueryResults",
+                  "athena:StopQueryExecution",
+                ],
+                Resource: [workGroup.workGroupArn],
+              },
+              {
+                Effect: "Allow",
+                Action: ["s3:GetBucketLocation", "s3:ListBucket"],
+                Resource: [resultsBucket.bucketArn],
+              },
+              {
+                Effect: "Allow",
+                Action: ["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload"],
+                Resource: [Output.interpolate`${resultsBucket.bucketArn}/*`],
+              },
+              {
+                // Athena resolves table metadata through the Glue Data
+                // Catalog on the caller's behalf — reads are required for any
+                // query over a Glue-backed table. Scoped to the workgroup's
+                // account/region catalog (derived from its ARN).
+                Effect: "Allow",
+                Action: [
+                  "glue:GetDatabase",
+                  "glue:GetDatabases",
+                  "glue:GetTable",
+                  "glue:GetTables",
+                  "glue:GetPartition",
+                  "glue:GetPartitions",
+                ],
+                Resource: [
+                  glueCatalogArn(workGroup.workGroupArn),
+                  glueDatabaseArn(workGroup.workGroupArn),
+                  glueTableArn(workGroup.workGroupArn),
+                ],
+              },
+            ],
+          });
         }
       }
       return Effect.fn(`AWS.Athena.Query(${workGroup.LogicalId})`)(function* (
@@ -124,17 +113,13 @@ export const QueryHttp = Layer.effect(
         const state = exec?.Status?.State ?? "FAILED";
         const reason = exec?.Status?.StateChangeReason;
         if (state !== "SUCCEEDED") {
-          return yield* Effect.fail(
-            new AthenaQueryFailed({ queryExecutionId, state, reason }),
-          );
+          return yield* Effect.fail(new AthenaQueryFailed({ queryExecutionId, state, reason }));
         }
 
         const results = yield* getQueryResults({
           QueryExecutionId: queryExecutionId,
         });
-        const columns = (
-          results.ResultSet?.ResultSetMetadata?.ColumnInfo ?? []
-        ).map((c) => c.Name);
+        const columns = (results.ResultSet?.ResultSetMetadata?.ColumnInfo ?? []).map((c) => c.Name);
         const rows = (results.ResultSet?.Rows ?? []).map((row) =>
           (row.Data ?? []).map((d) => d.VarCharValue ?? ""),
         );

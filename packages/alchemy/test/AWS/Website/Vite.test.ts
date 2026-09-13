@@ -20,16 +20,8 @@ const runLive = !process.env.FAST;
 // (emulator-backed) variant.
 const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
-const viteFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "vite-app",
-);
-const staticFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "static-site",
-);
+const viteFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "vite-app");
+const staticFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "static-site");
 
 // Clone under the alchemy package so `vite` resolves from the workspace's
 // hoisted node_modules (the fixture has no node_modules).
@@ -49,13 +41,7 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Vite", () => {
         const rootDir = yield* cloneFixture(viteFixtureDir, {
           prefix: "alchemy-vite-aws-live-",
           tempRoot,
-          entries: [
-            ".gitignore",
-            "package.json",
-            "index.html",
-            "src",
-            "public",
-          ],
+          entries: [".gitignore", "package.json", "index.html", "src", "public"],
         });
 
         const deployed = yield* stack.deploy(
@@ -85,13 +71,9 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Vite", () => {
           label: "public asset",
         });
         // SPA fallback (the composite's default): misses serve the shell.
-        yield* expectUrlContains(
-          `${url}/missing/client/route`,
-          "VITE_AWS_PAGE_MARKER",
-          {
-            label: "spa fallback",
-          },
-        );
+        yield* expectUrlContains(`${url}/missing/client/route`, "VITE_AWS_PAGE_MARKER", {
+          label: "spa fallback",
+        });
 
         yield* stack.destroy();
       }),

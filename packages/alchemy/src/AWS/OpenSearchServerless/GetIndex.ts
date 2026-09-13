@@ -33,6 +33,4 @@ export interface GetIndex extends Binding.Service<
     ) => Effect.Effect<aoss.GetIndexResponse, aoss.GetIndexError>
   >
 > {}
-export const GetIndex = Binding.Service<GetIndex>(
-  "AWS.OpenSearchServerless.GetIndex",
-);
+export const GetIndex = Binding.Service<GetIndex>("AWS.OpenSearchServerless.GetIndex");

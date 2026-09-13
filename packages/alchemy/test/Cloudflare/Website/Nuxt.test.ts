@@ -15,17 +15,11 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 
@@ -64,19 +58,12 @@ const nuxtProps = (rootDir: string) => ({
 
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
-const waitForNamespaceToBeDeleted = Effect.fn(function* (
-  namespaceId: string,
-  accountId: string,
-) {
+const waitForNamespaceToBeDeleted = Effect.fn(function* (namespaceId: string, accountId: string) {
   yield* kv.getNamespace({ accountId, namespaceId }).pipe(
     Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
     Effect.retry({
-      while: (e): e is NamespaceStillExists =>
-        e instanceof NamespaceStillExists,
-      schedule: Schedule.min([
-        Schedule.exponential(250),
-        Schedule.spaced("2 seconds"),
-      ]),
+      while: (e): e is NamespaceStillExists => e instanceof NamespaceStillExists,
+      schedule: Schedule.min([Schedule.exponential(250), Schedule.spaced("2 seconds")]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -96,10 +83,7 @@ const readNamespaceValue = Effect.fn(function* (options: {
   const res = yield* kv.getNamespaceValue(options).pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "KeyNotFound",
-      schedule: Schedule.min([
-        Schedule.exponential("1 second"),
-        Schedule.spaced("3 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("3 seconds")]),
       times: 8,
     }),
   );
@@ -165,14 +149,10 @@ describe.concurrent("Nuxt", () => {
 
         // The fixture's own nuxt.config.ts loaded natively — its
         // `runtimeConfig.public.fixtureMarker` renders on the page.
-        yield* expectUrlContains(
-          `${site1.url!}/`,
-          "config:nuxt-user-config-loaded",
-          {
-            timeout: "60 seconds",
-            label: "user nuxt.config.ts applied",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/`, "config:nuxt-user-config-loaded", {
+          timeout: "60 seconds",
+          label: "user nuxt.config.ts applied",
+        });
 
         // API route: reads the binding + waitUntil from the runtime contract.
         const hello = yield* fetchJsonReady<{
@@ -227,14 +207,10 @@ describe.concurrent("Nuxt", () => {
         });
 
         // Route-rule prerendered page, served from assets.
-        yield* expectUrlContains(
-          `${site1.url!}/prerendered`,
-          "this-page-is-prerendered",
-          {
-            timeout: "60 seconds",
-            label: "prerendered page",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/prerendered`, "this-page-is-prerendered", {
+          timeout: "60 seconds",
+          label: "prerendered page",
+        });
 
         // ── deploy 2: no changes ⇒ the rebuild-free input hash matches and
         // the deploy short-circuits without building ─────────────────────────
@@ -324,19 +300,11 @@ describe.concurrent("Nuxt", () => {
         // The DO namespace is bound and state increments ACROSS requests —
         // instance identity on the deployed worker, through the custom entry.
         // (POST increments, GET reads — see server/api/counter.ts.)
-        const first = yield* postJsonReady<{ count: number }>(
-          `${site.url!}/api/counter`,
-          {},
-        );
-        const second = yield* postJsonReady<{ count: number }>(
-          `${site.url!}/api/counter`,
-          {},
-        );
+        const first = yield* postJsonReady<{ count: number }>(`${site.url!}/api/counter`, {});
+        const second = yield* postJsonReady<{ count: number }>(`${site.url!}/api/counter`, {});
         expect(second.count).toBe(first.count + 1);
 
-        const read = yield* fetchJsonReady<{ count: number }>(
-          `${site.url!}/api/counter`,
-        );
+        const read = yield* fetchJsonReady<{ count: number }>(`${site.url!}/api/counter`);
         expect(read.count).toBe(second.count);
 
         // Wrapping nitro's handler keeps every framework route working:
@@ -364,14 +332,10 @@ describe.concurrent("Nuxt", () => {
           timeout: "60 seconds",
           label: "static asset with custom entry",
         });
-        yield* expectUrlContains(
-          `${site.url!}/prerendered`,
-          "this-page-is-prerendered",
-          {
-            timeout: "60 seconds",
-            label: "prerendered page with custom entry",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/prerendered`, "this-page-is-prerendered", {
+          timeout: "60 seconds",
+          label: "prerendered page with custom entry",
+        });
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
@@ -389,11 +353,7 @@ describe.concurrent("Nuxt", () => {
   // contract; only page rendering moves to the client.
   // ─────────────────────────────────────────────────────────────────────
 
-  const spaFixtureDir = pathe.resolve(
-    import.meta.dirname,
-    "fixtures",
-    "nuxt-spa-app",
-  );
+  const spaFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-spa-app");
 
   const SPA_SHELL_MARKER = "nuxt-spa-shell";
 
@@ -408,14 +368,7 @@ describe.concurrent("Nuxt", () => {
         const rootDir = yield* cloneFixture(spaFixtureDir, {
           prefix: "alchemy-nuxt-spa-",
           tempRoot,
-          entries: [
-            ".gitignore",
-            "package.json",
-            "nuxt.config.ts",
-            "app",
-            "server",
-            "public",
-          ],
+          entries: [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"],
         });
 
         const bindingMarker = "nuxt-spa-binding-marker";
@@ -426,13 +379,7 @@ describe.concurrent("Nuxt", () => {
               rootDir,
               workersDev: { enabled: true, previewsEnabled: true },
               memo: {
-                include: [
-                  "app/**",
-                  "server/**",
-                  "public/**",
-                  "nuxt.config.ts",
-                  "package.json",
-                ],
+                include: ["app/**", "server/**", "public/**", "nuxt.config.ts", "package.json"],
               },
               env: {
                 TEST_BINDING: bindingMarker,
@@ -447,26 +394,18 @@ describe.concurrent("Nuxt", () => {
         // (a) `/` serves the app shell: the `app.head` meta marker is in
         // the raw HTML, while the page markup (which only ever renders in
         // the browser under `ssr: false`) is absent.
-        const homeBody = yield* expectUrlContains(
-          `${site.url!}/`,
-          SPA_SHELL_MARKER,
-          {
-            timeout: "120 seconds",
-            label: "SPA shell at /",
-          },
-        );
+        const homeBody = yield* expectUrlContains(`${site.url!}/`, SPA_SHELL_MARKER, {
+          timeout: "120 seconds",
+          label: "SPA shell at /",
+        });
         expect(homeBody).not.toContain("NUXT_SPA_PAGE_MARKER");
 
         // (b) A hard GET to a client route serves the shell too — the
         // client router owns the route; its markup never appears in HTML.
-        const deepBody = yield* expectUrlContains(
-          `${site.url!}/deep`,
-          SPA_SHELL_MARKER,
-          {
-            timeout: "60 seconds",
-            label: "deep link serves SPA shell",
-          },
-        );
+        const deepBody = yield* expectUrlContains(`${site.url!}/deep`, SPA_SHELL_MARKER, {
+          timeout: "60 seconds",
+          label: "deep link serves SPA shell",
+        });
         expect(deepBody).not.toContain("NUXT_SPA_DEEP_MARKER");
 
         // (c) Nitro keeps `server/api` routes executing in the worker,
@@ -517,10 +456,7 @@ const fetchJsonReady = <T>(url: string) =>
         // Capped interval, ~90s total budget: fresh workers.dev subdomains and
         // DO namespaces can take over a minute to start serving under
         // concurrent deploys.
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
@@ -528,9 +464,7 @@ const fetchJsonReady = <T>(url: string) =>
 
 /** POST a JSON body to `url` until it answers 200 with a JSON body. */
 const postJsonReady = <T>(url: string, body: unknown) =>
-  HttpClient.execute(
-    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-  ).pipe(
+  HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.flatMap(res.text, (responseBody) =>
@@ -543,10 +477,7 @@ const postJsonReady = <T>(url: string, body: unknown) =>
     ),
     Effect.retry({
       // Capped interval, ~90s total budget (workers.dev / DO propagation).
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("2 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
       times: 45,
     }),
   );
@@ -566,10 +497,7 @@ const putJsonReady = <T>(url: string) =>
     ),
     Effect.retry({
       // Capped interval, ~90s total budget (workers.dev / DO propagation).
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("2 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
       times: 45,
     }),
   );

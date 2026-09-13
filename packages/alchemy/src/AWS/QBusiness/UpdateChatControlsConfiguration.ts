@@ -45,7 +45,6 @@ export interface UpdateChatControlsConfiguration extends Binding.Service<
     >
   >
 > {}
-export const UpdateChatControlsConfiguration =
-  Binding.Service<UpdateChatControlsConfiguration>(
-    "AWS.QBusiness.UpdateChatControlsConfiguration",
-  );
+export const UpdateChatControlsConfiguration = Binding.Service<UpdateChatControlsConfiguration>(
+  "AWS.QBusiness.UpdateChatControlsConfiguration",
+);

@@ -60,10 +60,7 @@ const CVE_REQUEST_TAGS = [
   "LimitExceededException",
 ];
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -80,19 +77,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -113,9 +105,7 @@ describe("SES Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/health`;
 
-      yield* Effect.logInfo(
-        `SES test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`SES test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -123,9 +113,7 @@ describe("SES Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `SES test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`SES test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -145,9 +133,7 @@ describe("SES Bindings", () => {
             : Effect.succeed(body),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `SES test setup: send not authorized yet (${String(error)})`,
-          ),
+          Effect.logWarning(`SES test setup: send not authorized yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -180,31 +166,25 @@ describe("SES Bindings", () => {
           // paused. Still a typed SES error through the binding (not IAM
           // AccessDenied / an unknown tag) — the binding is wired. The
           // sandbox MessageRejected path is what we get when sending is on.
-          expect(["MessageRejected", "SendingPausedException"]).toContain(
-            response.error,
-          );
+          expect(["MessageRejected", "SendingPausedException"]).toContain(response.error);
           if (response.error === "MessageRejected") {
             expect(response.message).toContain("not verified");
           }
         }),
     );
 
-    test.provider(
-      "sandbox: templated send is rejected with the same typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/send-template?from=${encodeURIComponent(UNVERIFIED_FROM)}`,
-            ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            messageId?: string;
-            error?: string;
-          };
-          expect(["MessageRejected", "SendingPausedException"]).toContain(
-            response.error,
-          );
-        }),
+    test.provider("sandbox: templated send is rejected with the same typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.post(
+            `${baseUrl}/send-template?from=${encodeURIComponent(UNVERIFIED_FROM)}`,
+          ),
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          messageId?: string;
+          error?: string;
+        };
+        expect(["MessageRejected", "SendingPausedException"]).toContain(response.error);
+      }),
     );
 
     test.provider(
@@ -229,9 +209,7 @@ describe("SES Bindings", () => {
           // Same sandbox rejection as the config-set path — crucially NOT
           // AccessDenied, which is what a missing/misscoped policy looks like.
           expect(response.error).not.toBe("AccessDeniedException");
-          expect(["MessageRejected", "SendingPausedException"]).toContain(
-            response.error,
-          );
+          expect(["MessageRejected", "SendingPausedException"]).toContain(response.error);
           if (response.error === "MessageRejected") {
             expect(response.message).toContain("not verified");
           }
@@ -255,9 +233,7 @@ describe("SES Bindings", () => {
       "a sender outside the bound identity is denied by the scoped IAM policy",
       (_stack) =>
         Effect.gen(function* () {
-          const outsider = encodeURIComponent(
-            "sender@not-the-bound-domain.test",
-          );
+          const outsider = encodeURIComponent("sender@not-the-bound-domain.test");
           const response = (yield* send(
             HttpClientRequest.post(`${baseUrl}/send-simple?from=${outsider}`),
           ).pipe(Effect.flatMap((r) => r.json))) as {
@@ -267,9 +243,7 @@ describe("SES Bindings", () => {
 
           // SendingPaused is evaluated before IAM on a paused account —
           // still typed, still not a successful send.
-          expect(["AccessDeniedException", "SendingPausedException"]).toContain(
-            response.error,
-          );
+          expect(["AccessDeniedException", "SendingPausedException"]).toContain(response.error);
           expect(response.messageId).toBeUndefined();
         }),
     );
@@ -303,28 +277,26 @@ describe("SES Bindings", () => {
   });
 
   describe("RenderEmailTemplate", () => {
-    test.provider(
-      "renders the bound template server-side with personalization data",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/render-template`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            rendered?: string;
-            error?: string;
-          };
-          expect(response.error).toBeUndefined();
-          expect(response.rendered).toContain("Hello, Ada!");
-        }),
+    test.provider("renders the bound template server-side with personalization data", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(HttpClientRequest.post(`${baseUrl}/render-template`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as {
+          rendered?: string;
+          error?: string;
+        };
+        expect(response.error).toBeUndefined();
+        expect(response.rendered).toContain("Hello, Ada!");
+      }),
     );
   });
 
   describe("GetAccount", () => {
     test.provider("reads the account's sending status and quota", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/account`),
-        ).pipe(Effect.flatMap((r) => r.json))) as {
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/account`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as {
           sendingEnabled?: boolean;
           productionAccess?: boolean;
           max24HourSend?: number;
@@ -375,9 +347,9 @@ describe("SES Bindings", () => {
           }
 
           // list — the read plane works even in the sandbox.
-          const list = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/suppressed-list`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const list = (yield* send(HttpClientRequest.get(`${baseUrl}/suppressed-list`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             emails?: string[];
             error?: string;
           };
@@ -407,10 +379,7 @@ describe("SES Bindings", () => {
             HttpClientRequest.get(`${baseUrl}/suppressed?email=${email}`),
           ).pipe(
             Effect.flatMap((r) => r.json),
-            Effect.map(
-              (body) =>
-                body as { email?: string; reason?: string; error?: string },
-            ),
+            Effect.map((body) => body as { email?: string; reason?: string; error?: string }),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (body): boolean => body.reason === "BOUNCE",
@@ -421,15 +390,12 @@ describe("SES Bindings", () => {
           expect(got.reason).toBe("BOUNCE");
 
           // list — filtered by reason, contains the address.
-          const list = yield* send(
-            HttpClientRequest.get(`${baseUrl}/suppressed-list`),
-          ).pipe(
+          const list = yield* send(HttpClientRequest.get(`${baseUrl}/suppressed-list`)).pipe(
             Effect.flatMap((r) => r.json),
             Effect.map((body) => body as { emails?: string[]; error?: string }),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
-              until: (body): boolean =>
-                (body.emails ?? []).includes(SUPPRESSED_ADDRESS),
+              until: (body): boolean => (body.emails ?? []).includes(SUPPRESSED_ADDRESS),
               times: 10,
             }),
           );
@@ -467,9 +433,9 @@ describe("SES Bindings", () => {
       "bouncing a non-existent message surfaces a typed SES error through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/send-bounce`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/send-bounce`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             messageId?: string;
             error?: string;
           };
@@ -517,34 +483,28 @@ describe("SES Bindings", () => {
       const query = template
         ? `?email=${email}&template=${encodeURIComponent(template)}`
         : `?email=${email}`;
-      return send(
-        HttpClientRequest.post(`${baseUrl}/send-custom-verification${query}`),
-      ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
-        { messageId?: string; error?: string; message?: string },
-        any,
-        any
-      >;
+      return send(HttpClientRequest.post(`${baseUrl}/send-custom-verification${query}`)).pipe(
+        Effect.flatMap((r) => r.json),
+      ) as Effect.Effect<{ messageId?: string; error?: string; message?: string }, any, any>;
     };
 
-    test.provider(
-      "an unknown template surfaces a typed SES error through the binding",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* sendCustomVerification();
+    test.provider("an unknown template surfaces a typed SES error through the binding", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* sendCustomVerification();
 
-          // The fixture declares no template — SES rejects
-          // CreateCustomVerificationEmailTemplate unless its sender is already
-          // verified, which a bare account has none of. So the request names a
-          // template that does not resolve and SES answers with a typed error.
-          //
-          // The tag must be one SES raises about the REQUEST. AccessDenied
-          // would mean the binding failed to attach
-          // ses:SendCustomVerificationEmail — the regression this test exists
-          // to catch — so it is asserted against explicitly.
-          expect(response.error).not.toBe("AccessDeniedException");
-          expect(CVE_REQUEST_TAGS).toContain(response.error);
-          expect(response.messageId).toBeUndefined();
-        }),
+        // The fixture declares no template — SES rejects
+        // CreateCustomVerificationEmailTemplate unless its sender is already
+        // verified, which a bare account has none of. So the request names a
+        // template that does not resolve and SES answers with a typed error.
+        //
+        // The tag must be one SES raises about the REQUEST. AccessDenied
+        // would mean the binding failed to attach
+        // ses:SendCustomVerificationEmail — the regression this test exists
+        // to catch — so it is asserted against explicitly.
+        expect(response.error).not.toBe("AccessDeniedException");
+        expect(CVE_REQUEST_TAGS).toContain(response.error);
+        expect(response.messageId).toBeUndefined();
+      }),
     );
 
     // The real send goes through a SECOND binding, scoped by reference to the
@@ -589,21 +549,19 @@ describe("SES Bindings", () => {
         any
       >;
 
-    test.provider(
-      "a well-formed but unknown message id is rejected with a typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* insights();
+    test.provider("a well-formed but unknown message id is rejected with a typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* insights();
 
-          // No real send backs the fabricated MessageId, so SES rejects it —
-          // NotFoundException, or BadRequestException when VDM is disabled on
-          // the account. AccessDenied would mean ses:GetMessageInsights never
-          // reached the role.
-          expect(response.error).not.toBe("AccessDeniedException");
-          expect(REQUEST_TAGS).toContain(response.error);
-          expect(response.messageId).toBeUndefined();
-          if (VDM_ENABLED) expect(response.error).toBe("NotFoundException");
-        }),
+        // No real send backs the fabricated MessageId, so SES rejects it —
+        // NotFoundException, or BadRequestException when VDM is disabled on
+        // the account. AccessDenied would mean ses:GetMessageInsights never
+        // reached the role.
+        expect(response.error).not.toBe("AccessDeniedException");
+        expect(REQUEST_TAGS).toContain(response.error);
+        expect(response.messageId).toBeUndefined();
+        if (VDM_ENABLED) expect(response.error).toBe("NotFoundException");
+      }),
     );
 
     test.provider.skipIf(!VDM_ENABLED)(
@@ -627,32 +585,28 @@ describe("SES Bindings", () => {
   describe("BatchGetMetricData", () => {
     const metricData = (partialDay = false) =>
       send(
-        HttpClientRequest.post(
-          `${baseUrl}/metric-data${partialDay ? "?partialDay=1" : ""}`,
-        ),
+        HttpClientRequest.post(`${baseUrl}/metric-data${partialDay ? "?partialDay=1" : ""}`),
       ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
         { results?: number; error?: string },
         any,
         any
       >;
 
-    test.provider(
-      "a midnight-aligned window reaches SES through the binding",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* metricData();
+    test.provider("a midnight-aligned window reaches SES through the binding", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* metricData();
 
-          // With VDM enabled SES returns a (possibly empty) Results array;
-          // without it the account is rejected with BadRequestException. Both
-          // prove the IAM action and payload marshalling are wired — but
-          // neither may be an authorization failure.
-          expect(response.error).not.toBe("AccessDeniedException");
-          if (response.error === undefined) {
-            expect(typeof response.results).toBe("number");
-          } else {
-            expect(REQUEST_TAGS).toContain(response.error);
-          }
-        }),
+        // With VDM enabled SES returns a (possibly empty) Results array;
+        // without it the account is rejected with BadRequestException. Both
+        // prove the IAM action and payload marshalling are wired — but
+        // neither may be an authorization failure.
+        expect(response.error).not.toBe("AccessDeniedException");
+        if (response.error === undefined) {
+          expect(typeof response.results).toBe("number");
+        } else {
+          expect(REQUEST_TAGS).toContain(response.error);
+        }
+      }),
     );
 
     test.provider.skipIf(!VDM_ENABLED)(
@@ -712,18 +666,14 @@ describe("SES Bindings", () => {
         }),
     );
 
-    test.provider(
-      "a domain the account does not own is rejected with a typed tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* domainStatistics(
-            "not-our-domain.alchemy-test.example.com",
-          );
+    test.provider("a domain the account does not own is rejected with a typed tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* domainStatistics("not-our-domain.alchemy-test.example.com");
 
-          expect(response.error).not.toBe("AccessDeniedException");
-          expect(REQUEST_TAGS).toContain(response.error);
-          expect(response.days).toBeUndefined();
-        }),
+        expect(response.error).not.toBe("AccessDeniedException");
+        expect(REQUEST_TAGS).toContain(response.error);
+        expect(response.days).toBeUndefined();
+      }),
     );
   });
 
@@ -745,15 +695,13 @@ describe("SES Bindings", () => {
     // BlacklistReport exactly like a well-formed IP the account does not own,
     // so a "malformed input" test here would assert the same thing as the
     // success test. One unconditional test is the honest coverage.
-    test.provider(
-      "returns a blacklist report for the requested IPs",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* blacklistReports();
+    test.provider("returns a blacklist report for the requested IPs", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* blacklistReports();
 
-          expect(response.error).toBeUndefined();
-          expect(Array.isArray(response.ips)).toBe(true);
-        }),
+        expect(response.error).toBeUndefined();
+        expect(Array.isArray(response.ips)).toBe(true);
+      }),
     );
   });
 });

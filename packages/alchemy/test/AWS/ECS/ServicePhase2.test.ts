@@ -67,9 +67,7 @@ test.provider.skipIf(!!process.env.FAST)(
           ],
         })
         .pipe(
-          Effect.map((r) =>
-            (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-          ),
+          Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))),
         );
 
       const deployed = yield* stack.deploy(
@@ -141,9 +139,7 @@ test.provider.skipIf(!!process.env.FAST)(
         client
           .get(`${deployed.url}${path}`)
           .pipe(
-            Effect.flatMap((res) =>
-              Effect.map(res.text, (body) => ({ status: res.status, body })),
-            ),
+            Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
           );
       const awaitRoute = (path: string, predicate: (body: string) => boolean) =>
         fetchRoute(path).pipe(
@@ -157,9 +153,7 @@ test.provider.skipIf(!!process.env.FAST)(
         );
 
       yield* awaitRoute("/health", (body) => body.includes("ok"));
-      const secretsBody = yield* awaitRoute("/secrets", (body) =>
-        body.includes("true"),
-      );
+      const secretsBody = yield* awaitRoute("/secrets", (body) => body.includes("true"));
       const seen = JSON.parse(secretsBody) as {
         param: boolean;
         secret: boolean;
@@ -212,12 +206,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(requestPolicy?.TargetValue).toBe(500);
       // ResourceLabel = app/{lb-name}/{lb-id}/targetgroup/{tg-name}/{tg-id}.
       const expectedLabel = `${deployed.loadBalancerArn.slice(
-        deployed.loadBalancerArn.indexOf("loadbalancer/") +
-          "loadbalancer/".length,
+        deployed.loadBalancerArn.indexOf("loadbalancer/") + "loadbalancer/".length,
       )}/${deployed.targetGroupArn.slice(deployed.targetGroupArn.indexOf("targetgroup/"))}`;
-      expect(requestPolicy?.PredefinedMetricSpecification?.ResourceLabel).toBe(
-        expectedLabel,
-      );
+      expect(requestPolicy?.PredefinedMetricSpecification?.ResourceLabel).toBe(expectedLabel);
 
       // ── logging.retention on the auto-created log group ───────────────
       const logGroups = yield* logs.describeLogGroups({
@@ -243,9 +234,7 @@ test.provider.skipIf(!!process.env.FAST)(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(lbGone).toBe(true);
 

@@ -14,49 +14,42 @@ const { test } = Test.make({ providers: AWS.providers() });
 // for an unreachable/unauthorized connector — the exact failure mode the
 // gated lifecycle hits without credentials.
 
-test.provider(
-  "createConnectorProfile with an unreachable connector fails with a typed error",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        appflow.createConnectorProfile({
-          connectorProfileName: "alchemy-test-appflow-cp-probe",
-          connectorType: "Salesforce",
-          connectionMode: "Public",
-          connectorProfileConfig: {
-            connectorProfileProperties: {
-              Salesforce: {
-                instanceUrl: "https://invalid-example.my.salesforce.com",
-              },
-            },
-            connectorProfileCredentials: {
-              Salesforce: {
-                accessToken: "bogus-access-token",
-                refreshToken: "bogus-refresh-token",
-              },
+test.provider("createConnectorProfile with an unreachable connector fails with a typed error", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      appflow.createConnectorProfile({
+        connectorProfileName: "alchemy-test-appflow-cp-probe",
+        connectorType: "Salesforce",
+        connectionMode: "Public",
+        connectorProfileConfig: {
+          connectorProfileProperties: {
+            Salesforce: {
+              instanceUrl: "https://invalid-example.my.salesforce.com",
             },
           },
-        }),
-      );
-      // ConnectorServerException (unreachable host) is the observed tag;
-      // ConnectorAuthenticationException covers a reachable-but-unauthorized
-      // vendor. Both are typed via the distilled patch for this operation.
-      expect([
-        "ConnectorServerException",
-        "ConnectorAuthenticationException",
-      ]).toContain(error._tag);
-    }),
+          connectorProfileCredentials: {
+            Salesforce: {
+              accessToken: "bogus-access-token",
+              refreshToken: "bogus-refresh-token",
+            },
+          },
+        },
+      }),
+    );
+    // ConnectorServerException (unreachable host) is the observed tag;
+    // ConnectorAuthenticationException covers a reachable-but-unauthorized
+    // vendor. Both are typed via the distilled patch for this operation.
+    expect(["ConnectorServerException", "ConnectorAuthenticationException"]).toContain(error._tag);
+  }),
 );
 
-test.provider(
-  "describeConnectorProfiles returns an empty list for an unknown name",
-  () =>
-    Effect.gen(function* () {
-      const response = yield* appflow.describeConnectorProfiles({
-        connectorProfileNames: ["alchemy-test-appflow-cp-missing"],
-      });
-      expect(response.connectorProfileDetails ?? []).toHaveLength(0);
-    }),
+test.provider("describeConnectorProfiles returns an empty list for an unknown name", () =>
+  Effect.gen(function* () {
+    const response = yield* appflow.describeConnectorProfiles({
+      connectorProfileNames: ["alchemy-test-appflow-cp-missing"],
+    });
+    expect(response.connectorProfileDetails ?? []).toHaveLength(0);
+  }),
 );
 
 // Full lifecycle requires real vendor credentials (human-in-the-loop OAuth
@@ -89,9 +82,7 @@ test.provider.skipIf(!process.env.AWS_TEST_APPFLOW_CONNECTOR)(
         },
       };
 
-      const created = yield* stack.deploy(
-        ConnectorProfile("Salesforce", props),
-      );
+      const created = yield* stack.deploy(ConnectorProfile("Salesforce", props));
       expect(created.connectorProfileName).toBe("alchemy-test-appflow-cp");
       expect(created.connectorProfileArn).toContain(":appflow:");
       expect(created.connectorType).toBe("Salesforce");

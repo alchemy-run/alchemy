@@ -34,9 +34,7 @@ const zeroSslEab = Effect.runSync(
     ZeroSsl.zerossl
       .generateEabCredentials({})
       .pipe(
-        Effect.provide(
-          Layer.mergeAll(ZeroSsl.CredentialsFromEnv, FetchHttpClient.layer),
-        ),
+        Effect.provide(Layer.mergeAll(ZeroSsl.CredentialsFromEnv, FetchHttpClient.layer)),
         Effect.orDie,
       ),
   ),
@@ -49,12 +47,8 @@ const zeroSslEab = Effect.runSync(
 export const ZeroSSLAccount = ACME.Account("ZeroSSL", {
   ca: ACME.ZeroSSL,
   eab: {
-    keyId: Output.fromEffect(
-      zeroSslEab.pipe(Effect.map((eab) => eab.eab_kid!)),
-    ),
-    hmacKey: Output.fromEffect(
-      zeroSslEab.pipe(Effect.map((eab) => eab.eab_hmac_key!)),
-    ),
+    keyId: Output.fromEffect(zeroSslEab.pipe(Effect.map((eab) => eab.eab_kid!))),
+    hmacKey: Output.fromEffect(zeroSslEab.pipe(Effect.map((eab) => eab.eab_hmac_key!))),
   },
   termsOfServiceAgreed: true,
 });

@@ -31,7 +31,6 @@ export interface ListMicrovmImageVersions extends Binding.Service<
     >
   >
 > {}
-export const ListMicrovmImageVersions =
-  Binding.Service<ListMicrovmImageVersions>(
-    "AWS.Lambda.ListMicrovmImageVersions",
-  );
+export const ListMicrovmImageVersions = Binding.Service<ListMicrovmImageVersions>(
+  "AWS.Lambda.ListMicrovmImageVersions",
+);

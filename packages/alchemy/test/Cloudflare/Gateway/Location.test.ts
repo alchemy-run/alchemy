@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -33,10 +30,7 @@ const expectGone = (accountId: string, locationId: string) =>
     Effect.catchTag("GatewayLocationNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LocationNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -128,15 +122,13 @@ test.provider("recreates after out-of-band delete", (stack) =>
       }),
     );
 
-    yield* zeroTrust
-      .deleteGatewayLocation({ accountId, locationId: location.locationId })
-      .pipe(
-        Effect.retry({
-          while: (e) => e._tag === "Forbidden",
-          schedule: Schedule.exponential("500 millis"),
-          times: 8,
-        }),
-      );
+    yield* zeroTrust.deleteGatewayLocation({ accountId, locationId: location.locationId }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "Forbidden",
+        schedule: Schedule.exponential("500 millis"),
+        times: 8,
+      }),
+    );
 
     // Change a prop to force reconcile — it must observe the location as
     // missing and recreate it instead of failing on a 404.

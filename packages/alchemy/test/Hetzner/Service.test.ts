@@ -12,10 +12,7 @@ import Worker from "./fixtures/worker.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -67,9 +64,7 @@ test.provider.skipIf(!hasHetznerCreds)(
 
       const body = yield* HttpClient.get(deployed.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),

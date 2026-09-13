@@ -36,12 +36,39 @@ const defaultStack: StackShape = {
 };
 
 describe("Local.RpcProvider.effect", () => {
-  it.effect(
-    "provides default Stack, Stage, and InstanceId to lifecycle effects",
-    () =>
-      Effect.gen(function* () {
-        const [capture, result] = yield* useProvider((provider) =>
-          provider.reconcile({
+  it.effect("provides default Stack, Stage, and InstanceId to lifecycle effects", () =>
+    Effect.gen(function* () {
+      const [capture, result] = yield* useProvider((provider) =>
+        provider.reconcile({
+          id: "r",
+          fqn: "r",
+          instanceId: "inst-from-arg",
+          news: {},
+          olds: undefined,
+          output: undefined,
+          session: undefined as any,
+          bindings: [],
+        }),
+      );
+      expect(result).toMatchObject({ ok: true });
+      expect(capture.stack).toBe(defaultStack);
+      expect(capture.stage).toBe(defaultStack.stage);
+      expect(capture.instanceId).toBe("inst-from-arg");
+    }),
+  );
+
+  it.effect("does not override Stack, Stage, or InstanceId when already provided", () =>
+    Effect.gen(function* () {
+      const overrideStack: StackShape = {
+        name: "override-stack",
+        stage: "ignored-stage-on-stack",
+        resources: {},
+        bindings: {},
+        actions: {},
+      };
+      const [capture] = yield* useProvider((provider) =>
+        provider
+          .reconcile({
             id: "r",
             fqn: "r",
             instanceId: "inst-from-arg",
@@ -50,48 +77,17 @@ describe("Local.RpcProvider.effect", () => {
             output: undefined,
             session: undefined as any,
             bindings: [],
-          }),
-        );
-        expect(result).toMatchObject({ ok: true });
-        expect(capture.stack).toBe(defaultStack);
-        expect(capture.stage).toBe(defaultStack.stage);
-        expect(capture.instanceId).toBe("inst-from-arg");
-      }),
-  );
-
-  it.effect(
-    "does not override Stack, Stage, or InstanceId when already provided",
-    () =>
-      Effect.gen(function* () {
-        const overrideStack: StackShape = {
-          name: "override-stack",
-          stage: "ignored-stage-on-stack",
-          resources: {},
-          bindings: {},
-          actions: {},
-        };
-        const [capture] = yield* useProvider((provider) =>
-          provider
-            .reconcile({
-              id: "r",
-              fqn: "r",
-              instanceId: "inst-from-arg",
-              news: {},
-              olds: undefined,
-              output: undefined,
-              session: undefined as any,
-              bindings: [],
-            })
-            .pipe(
-              Effect.provideService(Stack, overrideStack),
-              Effect.provideService(Stage, "override-stage"),
-              Effect.provideService(InstanceId, "override-instance-id"),
-            ),
-        );
-        expect(capture.stack).toBe(overrideStack);
-        expect(capture.stage).toBe("override-stage");
-        expect(capture.instanceId).toBe("override-instance-id");
-      }),
+          })
+          .pipe(
+            Effect.provideService(Stack, overrideStack),
+            Effect.provideService(Stage, "override-stage"),
+            Effect.provideService(InstanceId, "override-instance-id"),
+          ),
+      );
+      expect(capture.stack).toBe(overrideStack);
+      expect(capture.stage).toBe("override-stage");
+      expect(capture.instanceId).toBe("override-instance-id");
+    }),
   );
 
   it.effect("provides defaults to Stream-returning lifecycle methods", () =>
@@ -183,9 +179,7 @@ describe("Local.RpcProvider.effect", () => {
   );
 });
 
-const artifact = Effect.sync(() => crypto.randomUUID()).pipe(
-  Artifacts.cached("artifact"),
-);
+const artifact = Effect.sync(() => crypto.randomUUID()).pipe(Artifacts.cached("artifact"));
 
 const TestResourceProvider = (capture: Capture) =>
   RpcProvider.effect(

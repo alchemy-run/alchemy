@@ -14,10 +14,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ISSUING_ENABLED = process.env.STRIPE_TEST_ISSUING === "1";
 
@@ -43,9 +40,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* GetIssuingPersonalizationDesigns({ limit: 1 }).pipe(
-        Effect.result,
-      );
+      const result = yield* GetIssuingPersonalizationDesigns({ limit: 1 }).pipe(Effect.result);
 
       if (Result.isFailure(result)) {
         // Unentitled — distilled must fail with a typed tag, never
@@ -54,9 +49,7 @@ test.provider(
         // Please visit https://dashboard.stripe.com/issuing/overview to get
         // started."
         expect(result.failure._tag).not.toEqual("UnknownStripeError");
-        expect(["InvalidRequestError", "Forbidden"]).toContain(
-          result.failure._tag,
-        );
+        expect(["InvalidRequestError", "Forbidden"]).toContain(result.failure._tag);
         if (result.failure._tag === "InvalidRequestError") {
           expect(result.failure.message).toContain("not set up to use Issuing");
         }
@@ -98,9 +91,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(created.metadata).toMatchObject({ line: "test" });
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
-      expect(["active", "inactive", "rejected", "review"]).toContain(
-        created.status,
-      );
+      expect(["active", "inactive", "rejected", "review"]).toContain(created.status);
 
       const fetched = yield* GetIssuingPersonalizationDesign({
         personalization_design: created.id,
@@ -113,12 +104,8 @@ test.provider.skipIf(!ISSUING_ENABLED)(
           : fetched.physical_bundle.id,
       ).toEqual(physicalBundle);
       expect(fetched.metadata?.line).toEqual("test");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -150,11 +137,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       // No delete/archive API — destroy is a no-op and the design remains.
       const residue = yield* GetIssuingPersonalizationDesign({
         personalization_design: created.id,
-      }).pipe(
-        Effect.catchIf(isMissingStripeResource, () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      }).pipe(Effect.catchIf(isMissingStripeResource, () => Effect.succeed(undefined)));
       expect(residue).toBeDefined();
       expect(residue?.id).toEqual(created.id);
     }).pipe(logLevel),
@@ -181,9 +164,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Stripe.IssuingPersonalizationDesign,
-      );
+      const provider = yield* Provider.findProvider(Stripe.IssuingPersonalizationDesign);
       const all = yield* provider.list();
       const found = all.find((design) => design.id === deployed.id);
       expect(found).toBeDefined();

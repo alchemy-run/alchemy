@@ -53,9 +53,7 @@ export const readDrizzleDirRecords = (dir: string) =>
       names.sort((a, b) => a.localeCompare(b));
       const records: MigrationRecord[] = [];
       for (const name of names) {
-        const sql = yield* fs.readFileString(
-          path.join(dir, name, "migration.sql"),
-        );
+        const sql = yield* fs.readFileString(path.join(dir, name, "migration.sql"));
         records.push({
           name,
           hash: yield* sha256(sql),

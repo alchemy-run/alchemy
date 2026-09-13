@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { DeliveryStream } from "./DeliveryStream.ts";
 
-export interface PutRecordRequest extends Omit<
-  Firehose.PutRecordInput,
-  "DeliveryStreamName"
-> {}
+export interface PutRecordRequest extends Omit<Firehose.PutRecordInput, "DeliveryStreamName"> {}
 
 /**
  * Writes a single data record into a Firehose delivery stream.
@@ -39,9 +36,7 @@ export interface PutRecord extends Binding.Service<
   (
     deliveryStream: DeliveryStream,
   ) => Effect.Effect<
-    (
-      request: PutRecordRequest,
-    ) => Effect.Effect<Firehose.PutRecordOutput, Firehose.PutRecordError>
+    (request: PutRecordRequest) => Effect.Effect<Firehose.PutRecordOutput, Firehose.PutRecordError>
   >
 > {}
 

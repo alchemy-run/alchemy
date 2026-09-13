@@ -46,14 +46,10 @@ export const JobNotificationsSNS = Layer.effect(
               }),
           }).pipe(
             Effect.flatMap((payload) =>
-              Effect.logInfo(
-                `Job notification received: ${payload.type} (${payload.job.id})`,
-              ),
+              Effect.logInfo(`Job notification received: ${payload.type} (${payload.job.id})`),
             ),
             // Keep the example resilient to malformed demo messages.
-            Effect.catchTag("NotifyJobError", (error) =>
-              Effect.logWarning(error.message),
-            ),
+            Effect.catchTag("NotifyJobError", (error) => Effect.logWarning(error.message)),
           ),
         ),
         Stream.runDrain,
@@ -82,8 +78,4 @@ export const JobNotificationsSNS = Layer.effect(
       notifyJobCreated,
     });
   }),
-).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishHttp),
-  ),
-);
+).pipe(Layer.provideMerge(Layer.mergeAll(AWS.Lambda.TopicEventSource, AWS.SNS.PublishHttp)));

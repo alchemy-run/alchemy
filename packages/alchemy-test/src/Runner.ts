@@ -85,14 +85,9 @@ const ANSI_RE =
 const stripAnsi = (text: string): string => text.replace(ANSI_RE, "");
 
 const formatArg = (value: unknown): string =>
-  stripAnsi(
-    typeof value === "string"
-      ? value
-      : inspect(value, { depth: 4, colors: false }),
-  );
+  stripAnsi(typeof value === "string" ? value : inspect(value, { depth: 4, colors: false }));
 
-const formatArgs = (args: ReadonlyArray<unknown>): string =>
-  args.map(formatArg).join(" ");
+const formatArgs = (args: ReadonlyArray<unknown>): string => args.map(formatArg).join(" ");
 
 const bufferingConsole = (logs: Array<LogEntry>): ConsoleModule.Console => {
   const push = (level: string, args: ReadonlyArray<unknown>) => {
@@ -121,9 +116,7 @@ const bufferingConsole = (logs: Array<LogEntry>): ConsoleModule.Console => {
     },
     timeEnd: (label) => {
       const start = times.get(label ?? "default");
-      push("info", [
-        `${label ?? "default"}: ${start === undefined ? "?" : Date.now() - start}ms`,
-      ]);
+      push("info", [`${label ?? "default"}: ${start === undefined ? "?" : Date.now() - start}ms`]);
     },
     timeLog: (label, ...args) => push("info", [label, ...args]),
     trace: (...args) => push("debug", args),
@@ -142,16 +135,12 @@ const withCapture =
             // `Effect.log("a", "b")` delivers the message as an array —
             // unwrap it so buffered output reads exactly like console output
             // instead of `[ 'a', 'b' ]`.
-            const parts = Array.isArray(options.message)
-              ? options.message
-              : [options.message];
+            const parts = Array.isArray(options.message) ? options.message : [options.message];
             logs.push({
               level: options.logLevel,
               message:
                 parts.map(formatArg).join(" ") +
-                (options.cause.reasons.length === 0
-                  ? ""
-                  : `\n${Cause.pretty(options.cause)}`),
+                (options.cause.reasons.length === 0 ? "" : `\n${Cause.pretty(options.cause)}`),
               time: options.date,
             });
           }),
@@ -172,9 +161,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   const path = yield* Path.Path;
   const files: Array<string> = [];
 
-  const walk: (
-    dir: string,
-  ) => Effect.Effect<void, unknown, FileSystem.FileSystem> = Effect.fn(
+  const walk: (dir: string) => Effect.Effect<void, unknown, FileSystem.FileSystem> = Effect.fn(
     function* (dir: string) {
       const entries = yield* fs.readDirectory(dir);
       entries.sort();
@@ -198,9 +185,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   const nameFilters: Array<string> = [];
   for (const p of options.paths) {
     const abs = path.isAbsolute(p) ? p : path.resolve(options.root, p);
-    const exists = yield* fs
-      .exists(abs)
-      .pipe(Effect.orElseSucceed(() => false));
+    const exists = yield* fs.exists(abs).pipe(Effect.orElseSucceed(() => false));
     if (exists) {
       roots.push(abs);
     } else {
@@ -221,9 +206,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   const excludeSubstrings: Array<string> = [];
   for (const e of options.exclude ?? []) {
     const abs = path.isAbsolute(e) ? e : path.resolve(options.root, e);
-    const exists = yield* fs
-      .exists(abs)
-      .pipe(Effect.orElseSucceed(() => false));
+    const exists = yield* fs.exists(abs).pipe(Effect.orElseSucceed(() => false));
     if (exists) {
       excludePrefixes.push(abs);
     } else {
@@ -242,11 +225,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   for (const abs of roots) {
     const stat = yield* fs
       .stat(abs)
-      .pipe(
-        Effect.mapError(
-          () => new Error(`alchemy-test: path not found: ${abs}`),
-        ),
-      );
+      .pipe(Effect.mapError(() => new Error(`alchemy-test: path not found: ${abs}`)));
     if (stat.type === "Directory") {
       yield* walk(abs);
     } else {
@@ -263,8 +242,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   }
   if (excludePrefixes.length > 0 || excludeSubstrings.length > 0) {
     unique = unique.filter(
-      (file) =>
-        exemptRoots.some((root) => isWithin(file, root)) || !isExcluded(file),
+      (file) => exemptRoots.some((root) => isWithin(file, root)) || !isExcluded(file),
     );
   }
   return unique.sort();
@@ -280,10 +258,7 @@ export interface CollectedFile {
   readonly error?: string | undefined;
 }
 
-const collectFile = (
-  absolute: string,
-  relative: string,
-): Effect.Effect<CollectedFile> =>
+const collectFile = (absolute: string, relative: string): Effect.Effect<CollectedFile> =>
   Effect.promise(async (): Promise<CollectedFile> => {
     try {
       const suite = await Registry.collect(relative, async () => {
@@ -298,10 +273,7 @@ const collectFile = (
       return {
         file: relative,
         suite: undefined,
-        error:
-          error instanceof Error
-            ? (error.stack ?? error.message)
-            : String(error),
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       };
     }
   });
@@ -381,10 +353,7 @@ const isSkipped = (test: TestCase): "skip" | "todo" | undefined => {
   return undefined;
 };
 
-const hookChain = (
-  test: TestCase,
-  kind: "beforeEach" | "afterEach",
-): Array<Hook> => {
+const hookChain = (test: TestCase, kind: "beforeEach" | "afterEach"): Array<Hook> => {
   const chain: Array<Array<Hook>> = [];
   let suite: Suite | undefined = test.parent;
   while (suite !== undefined) {
@@ -410,14 +379,11 @@ const runHooks = (
 
 const prettyCause = (cause: Cause.Cause<unknown>): string => {
   const rendered = Cause.pretty(cause);
-  return stripAnsi(
-    rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered,
-  );
+  return stripAnsi(rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered);
 };
 
 const wasInterrupted = (exit: Exit.Exit<unknown, unknown>): boolean =>
-  Exit.isFailure(exit) &&
-  exit.cause.reasons.some((reason) => reason._tag === "Interrupt");
+  Exit.isFailure(exit) && exit.cause.reasons.some((reason) => reason._tag === "Interrupt");
 
 interface TestAttempt {
   readonly beforeEach: Exit.Exit<void, unknown>;
@@ -430,30 +396,19 @@ const attemptNeedsRetry = (
   expectsFailure: boolean | undefined,
 ): boolean => {
   if (Exit.isFailure(exit)) return !wasInterrupted(exit);
-  if (
-    Exit.isFailure(exit.value.beforeEach) ||
-    Exit.isFailure(exit.value.afterEach)
-  ) {
+  if (Exit.isFailure(exit.value.beforeEach) || Exit.isFailure(exit.value.afterEach)) {
     return true;
   }
-  return (
-    !expectsFailure &&
-    exit.value.body !== undefined &&
-    Exit.isFailure(exit.value.body)
-  );
+  return !expectsFailure && exit.value.body !== undefined && Exit.isFailure(exit.value.body);
 };
 
 const hookError = (attempt: TestAttempt): string | undefined => {
   const errors: Array<string> = [];
   if (Exit.isFailure(attempt.beforeEach)) {
-    errors.push(
-      `beforeEach hook failed:\n${prettyCause(attempt.beforeEach.cause)}`,
-    );
+    errors.push(`beforeEach hook failed:\n${prettyCause(attempt.beforeEach.cause)}`);
   }
   if (Exit.isFailure(attempt.afterEach)) {
-    errors.push(
-      `afterEach hook failed:\n${prettyCause(attempt.afterEach.cause)}`,
-    );
+    errors.push(`afterEach hook failed:\n${prettyCause(attempt.afterEach.cause)}`);
   }
   return errors.length === 0 ? undefined : errors.join("\n\n");
 };
@@ -483,9 +438,7 @@ const runBodyWithTimeout = Effect.fn(function* (
   const fiber = yield* Effect.forkDetach(Effect.suspend(body), {
     startImmediately: true,
   });
-  const awaited = yield* Fiber.await(fiber).pipe(
-    Effect.timeoutOption(Duration.millis(timeoutMs)),
-  );
+  const awaited = yield* Fiber.await(fiber).pipe(Effect.timeoutOption(Duration.millis(timeoutMs)));
   if (Option.isSome(awaited)) return awaited.value;
   // Fire-and-forget interrupt: `Fiber.interrupt` AWAITS settlement, which a
   // hung finalizer never provides. Fire it, then give teardown a bounded
@@ -581,10 +534,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   });
 
   let exit = yield* runAttempt();
-  while (
-    attemptNeedsRetry(exit, test.fails) &&
-    retries < (test.retry ?? ctx.options.retry)
-  ) {
+  while (attemptNeedsRetry(exit, test.fails) && retries < (test.retry ?? ctx.options.retry)) {
     retries++;
     // Clear IN PLACE — TestStart handed this array's reference out.
     logs.length = 0;
@@ -617,10 +567,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
       status = "pass";
     } else {
       status = "fail";
-      error =
-        bodyExit === undefined
-          ? "test body did not run"
-          : prettyCause(bodyExit.cause);
+      error = bodyExit === undefined ? "test body did not run" : prettyCause(bodyExit.cause);
     }
   }
 
@@ -631,11 +578,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
 });
 
 /** Fail every (non-skipped) test in a subtree without running it. */
-const failSubtree = Effect.fn(function* (
-  suite: Suite,
-  ctx: ExecContext,
-  error: string,
-) {
+const failSubtree = Effect.fn(function* (suite: Suite, ctx: ExecContext, error: string) {
   const tests: Array<TestCase> = [];
   const collect = (s: Suite) => {
     for (const child of s.children) {
@@ -663,57 +606,53 @@ const failSubtree = Effect.fn(function* (
   }
 });
 
-const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
-  Effect.fn(function* (suite: Suite, ctx: ExecContext) {
-    const runnable = suite.children.filter((child) =>
-      child.type === "test"
-        ? included(child, ctx)
-        : suiteHasIncludedTests(child, ctx),
-    );
-    if (runnable.length === 0) return;
+const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> = Effect.fn(function* (
+  suite: Suite,
+  ctx: ExecContext,
+) {
+  const runnable = suite.children.filter((child) =>
+    child.type === "test" ? included(child, ctx) : suiteHasIncludedTests(child, ctx),
+  );
+  if (runnable.length === 0) return;
 
-    // If every included test below is skipped (e.g. describe.skip), report
-    // them without running any hooks.
-    if (!suiteHasRunnableTests(suite, ctx)) {
-      yield* Effect.forEach(
-        runnable,
-        (child) =>
-          child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
-        { discard: true },
-      );
-      return;
-    }
-
-    // beforeAll — captured into the file-level log buffer. Emits hook events
-    // so the TUI can show "setting up" instead of an unexplained queue.
-    if (suite.beforeAll.length > 0) {
-      yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
-      // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
-      // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
-      // slot so unrelated files can still run concurrently.
-      const exit = yield* ctx.lock
-        .withPermits(hookPermits(suite.beforeAll))(
-          runHooks(suite.beforeAll, ctx.options.timeout),
-        )
-        .pipe(withCapture(ctx.fileLogs), Effect.exit);
-      yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
-      if (Exit.isFailure(exit)) {
-        yield* failSubtree(suite, ctx, prettyCause(exit.cause));
-        yield* runAfterAll(suite, ctx);
-        return;
-      }
-    }
-
-    const sequential = suite.sequential || ctx.options.sequential;
+  // If every included test below is skipped (e.g. describe.skip), report
+  // them without running any hooks.
+  if (!suiteHasRunnableTests(suite, ctx)) {
     yield* Effect.forEach(
       runnable,
-      (child) =>
-        child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
-      { concurrency: sequential ? 1 : "unbounded", discard: true },
+      (child) => (child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx)),
+      { discard: true },
     );
+    return;
+  }
 
-    yield* runAfterAll(suite, ctx);
-  });
+  // beforeAll — captured into the file-level log buffer. Emits hook events
+  // so the TUI can show "setting up" instead of an unexplained queue.
+  if (suite.beforeAll.length > 0) {
+    yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
+    // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
+    // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
+    // slot so unrelated files can still run concurrently.
+    const exit = yield* ctx.lock
+      .withPermits(hookPermits(suite.beforeAll))(runHooks(suite.beforeAll, ctx.options.timeout))
+      .pipe(withCapture(ctx.fileLogs), Effect.exit);
+    yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
+    if (Exit.isFailure(exit)) {
+      yield* failSubtree(suite, ctx, prettyCause(exit.cause));
+      yield* runAfterAll(suite, ctx);
+      return;
+    }
+  }
+
+  const sequential = suite.sequential || ctx.options.sequential;
+  yield* Effect.forEach(
+    runnable,
+    (child) => (child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx)),
+    { concurrency: sequential ? 1 : "unbounded", discard: true },
+  );
+
+  yield* runAfterAll(suite, ctx);
+});
 
 const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   if (suite.afterAll.length === 0) return;
@@ -749,8 +688,7 @@ const suiteHasIncludedTests = (
 ): boolean => {
   for (const child of suite.children) {
     if (child.type === "test" && included(child, ctx)) return true;
-    if (child.type === "suite" && suiteHasIncludedTests(child, ctx))
-      return true;
+    if (child.type === "suite" && suiteHasIncludedTests(child, ctx)) return true;
   }
   return false;
 };
@@ -761,15 +699,10 @@ const suiteHasRunnableTests = (
   ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
   for (const child of suite.children) {
-    if (
-      child.type === "test" &&
-      included(child, ctx) &&
-      isSkipped(child) === undefined
-    ) {
+    if (child.type === "test" && included(child, ctx) && isSkipped(child) === undefined) {
       return true;
     }
-    if (child.type === "suite" && suiteHasRunnableTests(child, ctx))
-      return true;
+    if (child.type === "suite" && suiteHasRunnableTests(child, ctx)) return true;
   }
   return false;
 };
@@ -807,22 +740,16 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // dynamic imports. The shared dependency graph is deduped by the module
   // cache, so a modest bound keeps nearly all of the speedup.
   const collectConcurrency =
-    options.concurrency === "unbounded"
-      ? 32
-      : Math.min(options.concurrency, 32);
+    options.concurrency === "unbounded" ? 32 : Math.min(options.concurrency, 32);
   // collectFile never fails — import errors are captured on the result.
   const collected = yield* Effect.forEach(
     absoluteFiles.map((absolute, i) => [absolute, relative[i]!] as const),
     ([absolute, rel]) =>
-      collectFile(absolute, rel).pipe(
-        Effect.tap(() => emit({ _tag: "FileCollected", file: rel })),
-      ),
+      collectFile(absolute, rel).pipe(Effect.tap(() => emit({ _tag: "FileCollected", file: rel }))),
     { concurrency: collectConcurrency },
   );
 
-  const onlyMode = collected.some(
-    (c) => c.suite !== undefined && containsOnly(c.suite),
-  );
+  const onlyMode = collected.some((c) => c.suite !== undefined && containsOnly(c.suite));
 
   // Announce the full test list before execution starts (drives the TUI).
   const allMetas: Array<TestMeta> = [];
@@ -883,9 +810,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // captured into this buffer over the (potentially very long) life of a
   // deploy/destroy hook; teeing each entry into the run log keeps the log
   // live instead of silent-until-FileEnd (which reads as a deadlocked run).
-  const liveHookLogBuffer = (
-    tee: (entry: LogEntry) => void,
-  ): Array<LogEntry> => {
+  const liveHookLogBuffer = (tee: (entry: LogEntry) => void): Array<LogEntry> => {
     const buffer: Array<LogEntry> = [];
     const push = Array.prototype.push.bind(buffer);
     buffer.push = (...entries: Array<LogEntry>) => {
@@ -896,9 +821,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
   };
 
   const runFile = Effect.fn(function* (c: CollectedFile) {
-    const fileLogs = liveHookLogBuffer((entry) =>
-      fileLog.appendHookLine(c.file, entry),
-    );
+    const fileLogs = liveHookLogBuffer((entry) => fileLog.appendHookLine(c.file, entry));
     const fileErrors: Array<string> = [];
     // Shares the LIVE hook-log buffer so the TUI can tail deploys.
     yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });

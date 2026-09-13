@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const describeTarget = (
-  resourceId: string,
-  scalableDimension: aas.ScalableDimension,
-) =>
+const describeTarget = (resourceId: string, scalableDimension: aas.ScalableDimension) =>
   aas
     .describeScalableTargets({
       ServiceNamespace: "dynamodb",
@@ -23,17 +20,12 @@ const describeTarget = (
     .pipe(
       Effect.map((res) =>
         res.ScalableTargets?.find(
-          (t) =>
-            t.ResourceId === resourceId &&
-            t.ScalableDimension === scalableDimension,
+          (t) => t.ResourceId === resourceId && t.ScalableDimension === scalableDimension,
         ),
       ),
     );
 
-const waitUntilTargetGone = (
-  resourceId: string,
-  scalableDimension: aas.ScalableDimension,
-) =>
+const waitUntilTargetGone = (resourceId: string, scalableDimension: aas.ScalableDimension) =>
   describeTarget(resourceId, scalableDimension).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),

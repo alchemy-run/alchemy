@@ -22,11 +22,7 @@ import {
 import { hashImports, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import {
-  generateLocalId,
-  LOCAL_PROVIDERS_URL,
-  localRuntimeServices,
-} from "../LocalRuntime.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL, localRuntimeServices } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
@@ -37,13 +33,7 @@ export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
-export type PrimaryLocationHint =
-  | "wnam"
-  | "enam"
-  | "weur"
-  | "eeur"
-  | "apac"
-  | "oc";
+export type PrimaryLocationHint = "wnam" | "enam" | "weur" | "eeur" | "apac" | "oc";
 
 export type CloneSource = Database | { databaseId: string } | { name: string };
 
@@ -283,14 +273,12 @@ export const ProviderLive = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
+      const oldName = output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
       const name = news.name ?? oldName;
-      const oldJurisdiction =
-        output?.jurisdiction ?? olds.jurisdiction ?? "default";
+      const oldJurisdiction = output?.jurisdiction ?? olds.jurisdiction ?? "default";
       if (
         oldName !== name ||
         oldJurisdiction !== (news.jurisdiction ?? "default") ||
@@ -300,9 +288,7 @@ export const ProviderLive = () =>
         return { action: "replace" } as const;
       }
       const oldReplicationMode =
-        output?.readReplication?.mode ??
-        olds.readReplication?.mode ??
-        "disabled";
+        output?.readReplication?.mode ?? olds.readReplication?.mode ?? "disabled";
       const newReplicationMode = news.readReplication?.mode ?? "disabled";
       if (oldReplicationMode !== newReplicationMode) {
         return { action: "update" } as const;
@@ -331,8 +317,7 @@ export const ProviderLive = () =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
               .filter(
-                (db): db is (typeof page.result)[number] & { uuid: string } =>
-                  db.uuid != null,
+                (db): db is (typeof page.result)[number] & { uuid: string } => db.uuid != null,
               )
               .map((db) => ({
                 databaseId: db.uuid,
@@ -372,9 +357,7 @@ export const ProviderLive = () =>
               migrationsHashes: output.migrationsHashes,
               importHashes: output.importHashes,
             })),
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)),
           );
       }
       const name = yield* createDatabaseName(id, olds?.name);
@@ -422,20 +405,14 @@ export const ProviderLive = () =>
             accountId: acct,
             databaseId: output.databaseId,
           })
-          .pipe(
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed) {
-        observed = yield* d1.listDatabases
-          .items({ accountId: acct, name })
-          .pipe(
-            Stream.filter((db) => db.name === name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-          );
+        observed = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(
+          Stream.filter((db) => db.name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -455,13 +432,11 @@ export const ProviderLive = () =>
           .pipe(
             Effect.catchTag("InvalidProperty", () =>
               Effect.gen(function* () {
-                const match = yield* d1.listDatabases
-                  .items({ accountId: acct, name })
-                  .pipe(
-                    Stream.filter((db) => db.name === name),
-                    Stream.runHead,
-                    Effect.map(Option.getOrUndefined),
-                  );
+                const match = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(
+                  Stream.filter((db) => db.name === name),
+                  Stream.runHead,
+                  Effect.map(Option.getOrUndefined),
+                );
                 if (match) {
                   return match;
                 }
@@ -482,8 +457,7 @@ export const ProviderLive = () =>
       // database resource itself. Always patch with the desired mode
       // so adoption converges drifted state.
       const desiredReplicationMode = news.readReplication?.mode ?? "disabled";
-      const observedReplicationMode =
-        observed?.readReplication?.mode ?? "disabled";
+      const observedReplicationMode = observed?.readReplication?.mode ?? "disabled";
       if (
         isFirstCreation
           ? desiredReplicationMode !== "disabled"
@@ -523,9 +497,7 @@ export const ProviderLive = () =>
               Effect.gen(function* () {
                 const queryDb = yield* d1.queryDatabase;
                 yield* apply(
-                  makeD1MigrationExecutor((sql) =>
-                    queryDb({ accountId: acct, databaseId, sql }),
-                  ),
+                  makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, sql })),
                 );
               }),
           })
@@ -598,9 +570,7 @@ export const ProviderLocal = () =>
       // the HTTP client are resolved once at layer build and closed over —
       // lifecycle effects run with the engine's call-time context, which
       // doesn't include them.
-      const runtimeContext = yield* Effect.context<
-        RuntimeServices | HttpClient.HttpClient
-      >();
+      const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
 
       return {
         stables: ["accountId"],
@@ -617,10 +587,7 @@ export const ProviderLocal = () =>
             return { action: "update" } as const;
           }
           if (news.importFiles?.length) {
-            const newHashes = yield* hashImports(
-              news.importFiles,
-              yield* rootDir,
-            );
+            const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
             if (!recordsEqual(newHashes, output.importHashes ?? {})) {
               return { action: "update" } as const;
             }
@@ -654,12 +621,11 @@ export const ProviderLocal = () =>
           // SQL, executed through the same gateway. Files whose hash matches
           // previously-imported state are skipped (mirroring `runImports`).
           const importHashes: Record<string, string> = {
-            ...(output?.importHashes ?? {}),
+            ...output?.importHashes,
           };
           if (news.importFiles?.length) {
             const importRootDir = yield* rootDir;
-            const pending: Array<{ path: string; sql: string; hash: string }> =
-              [];
+            const pending: Array<{ path: string; sql: string; hash: string }> = [];
             for (const filePath of news.importFiles) {
               const file = yield* readSqlFile(importRootDir, filePath);
               if (importHashes[filePath] === file.hash) continue;
@@ -737,15 +703,11 @@ const resolveCloneSource = (source: CloneSource, accountId: string) =>
         Effect.map(Option.getOrUndefined),
       );
       if (!match?.uuid) {
-        return yield* Effect.die(
-          `Source database "${name}" not found for cloning`,
-        );
+        return yield* Effect.die(`Source database "${name}" not found for cloning`);
       }
       return match.uuid;
     }
-    return yield* Effect.die(
-      "Invalid clone source: must provide databaseId or name",
-    );
+    return yield* Effect.die("Invalid clone source: must provide databaseId or name");
   });
 
 /**

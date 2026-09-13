@@ -42,9 +42,7 @@ test.provider(
         project_id: deployed.branch.projectId,
         branch_id: deployed.branch.branchId,
       };
-      const credentials = (yield* SDK.listCredentials(
-        request,
-      )).credentials.filter(
+      const credentials = (yield* SDK.listCredentials(request)).credentials.filter(
         (item) =>
           item.principal_type === "user" &&
           item.branch_id === deployed.branch.branchId &&
@@ -54,9 +52,7 @@ test.provider(
       expect(credentials[0].scopes).toContain("ai_gateway:invoke");
       expect(credentials[0].scopes).not.toContain("storage:write");
       yield* stack.deploy(application(false));
-      const remaining = (yield* SDK.listCredentials(
-        request,
-      )).credentials.filter(
+      const remaining = (yield* SDK.listCredentials(request)).credentials.filter(
         (item) => item.token_id === credentials[0].token_id && !item.revoked_at,
       );
       expect(remaining).toHaveLength(0);

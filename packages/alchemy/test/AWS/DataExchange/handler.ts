@@ -51,10 +51,8 @@ export default DataExchangeTestFunction.make(
 
     // Data-set-scoped bindings.
     const getDataSet = yield* DataExchange.GetDataSet(dataSet);
-    const listDataSetRevisions =
-      yield* DataExchange.ListDataSetRevisions(dataSet);
-    const sendDataSetNotification =
-      yield* DataExchange.SendDataSetNotification(dataSet);
+    const listDataSetRevisions = yield* DataExchange.ListDataSetRevisions(dataSet);
+    const sendDataSetNotification = yield* DataExchange.SendDataSetNotification(dataSet);
     // Revision-scoped bindings.
     const getRevision = yield* DataExchange.GetRevision(revision);
     const listRevisionAssets = yield* DataExchange.ListRevisionAssets(revision);
@@ -157,8 +155,7 @@ export default DataExchangeTestFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             error: result._tag === "Failure" ? result.failure._tag : undefined,
-            message:
-              result._tag === "Failure" ? String(result.failure) : undefined,
+            message: result._tag === "Failure" ? String(result.failure) : undefined,
           });
         }
 
@@ -187,19 +184,14 @@ export default DataExchangeTestFunction.make(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (j): boolean =>
-                  j.State === "COMPLETED" ||
-                  j.State === "ERROR" ||
-                  j.State === "CANCELLED",
+                  j.State === "COMPLETED" || j.State === "ERROR" || j.State === "CANCELLED",
                 times: 40,
               }),
             );
 
             const { Assets } = yield* listRevisionAssets();
             const assetId = (Assets ?? [])[0]?.Id;
-            const asset =
-              assetId !== undefined
-                ? yield* getAsset({ AssetId: assetId })
-                : undefined;
+            const asset = assetId !== undefined ? yield* getAsset({ AssetId: assetId }) : undefined;
             return {
               jobState: done.State,
               jobErrors: done.Errors,

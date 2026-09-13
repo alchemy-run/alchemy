@@ -58,12 +58,7 @@ export interface BatchWriteRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchWriteRecordRequest,
-    ) => Effect.Effect<
-      featurestore.BatchWriteRecordResponse,
-      featurestore.BatchWriteRecordError
-    >
+    ) => Effect.Effect<featurestore.BatchWriteRecordResponse, featurestore.BatchWriteRecordError>
   >
 > {}
-export const BatchWriteRecord = Binding.Service<BatchWriteRecord>(
-  "AWS.SageMaker.BatchWriteRecord",
-);
+export const BatchWriteRecord = Binding.Service<BatchWriteRecord>("AWS.SageMaker.BatchWriteRecord");

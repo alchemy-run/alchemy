@@ -46,9 +46,7 @@ export function createConfigPlugin(config: AstroCloudflareConfig): vite.Plugin {
       },
       handler() {
         return [
-          ...Object.entries(config).map(
-            ([k, v]) => `export const ${k} = ${JSON.stringify(v)};`,
-          ),
+          ...Object.entries(config).map(([k, v]) => `export const ${k} = ${JSON.stringify(v)};`),
           `export const isPrerender = ${this.environment?.name === "prerender"};`,
         ].join("\n");
       },

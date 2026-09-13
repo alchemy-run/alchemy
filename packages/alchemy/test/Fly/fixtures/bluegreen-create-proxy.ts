@@ -35,9 +35,7 @@ export const dropCompletedCreate = Effect.fn(function* (appName: string) {
         request.url !== route ||
         request.headers.authorization !== authorization
       ) {
-        yield* Effect.sync(() =>
-          NodeHttpServerRequest.toIncomingMessage(request).socket.destroy(),
-        );
+        yield* Effect.sync(() => NodeHttpServerRequest.toIncomingMessage(request).socket.destroy());
         return HttpServerResponse.empty();
       }
       const body = yield* request.text;
@@ -52,9 +50,7 @@ export const dropCompletedCreate = Effect.fn(function* (appName: string) {
       yield* Ref.set(completedStatus, response.status);
       if (response.status >= 200 && response.status < 300) {
         // Drop the actual completed response, not a synthesized API failure.
-        yield* Effect.sync(() =>
-          NodeHttpServerRequest.toIncomingMessage(request).socket.destroy(),
-        );
+        yield* Effect.sync(() => NodeHttpServerRequest.toIncomingMessage(request).socket.destroy());
         return HttpServerResponse.empty();
       }
       return HttpServerResponse.text(actualBody, {

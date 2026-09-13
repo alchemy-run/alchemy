@@ -93,13 +93,7 @@ export interface AddressMapAttributes {
   modifiedAt: string | undefined;
 }
 
-export type AddressMap = Resource<
-  TypeId,
-  AddressMapProps,
-  AddressMapAttributes,
-  never,
-  Providers
->;
+export type AddressMap = Resource<TypeId, AddressMapProps, AddressMapAttributes, never, Providers>;
 
 /**
  * A Cloudflare Address Map — assigns account-owned or Cloudflare-assigned
@@ -152,13 +146,7 @@ export const isAddressMap = (value: unknown): value is AddressMap =>
 
 export const AddressMapProvider = () =>
   Provider.succeed(AddressMap, {
-    stables: [
-      "addressMapId",
-      "accountId",
-      "canDelete",
-      "canModifyIps",
-      "createdAt",
-    ],
+    stables: ["addressMapId", "accountId", "canDelete", "canModifyIps", "createdAt"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -177,15 +165,11 @@ export const AddressMapProvider = () =>
         ids,
         (addressMapId) =>
           getMap(accountId, addressMapId).pipe(
-            Effect.map((observed) =>
-              observed ? toAttributes(observed, accountId) : undefined,
-            ),
+            Effect.map((observed) => (observed ? toAttributes(observed, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is AddressMapAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is AddressMapAttributes => row !== undefined);
     }),
 
     read: Effect.fn(function* ({ output }) {
@@ -203,9 +187,7 @@ export const AddressMapProvider = () =>
 
       // 1. Observe — the map id cached on `output` is a hint, not a
       //    guarantee: a missing map falls through to create.
-      let observed = output?.addressMapId
-        ? yield* getMap(acct, output.addressMapId)
-        : undefined;
+      let observed = output?.addressMapId ? yield* getMap(acct, output.addressMapId) : undefined;
 
       // 2. Ensure — create with the full desired body (ips + memberships
       //    are accepted inline on create). `defaultSni` is patch-only and
@@ -219,16 +201,12 @@ export const AddressMapProvider = () =>
           memberships: desiredMemberships(news),
         });
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an Address Map id"),
-          );
+          return yield* Effect.fail(new Error("Cloudflare did not return an Address Map id"));
         }
         // Re-observe so every sync step diffs against authoritative state.
         observed = yield* getMap(accountId, created.id);
         if (!observed) {
-          return yield* Effect.fail(
-            new Error("Address Map disappeared right after creation"),
-          );
+          return yield* Effect.fail(new Error("Address Map disappeared right after creation"));
         }
       }
 
@@ -239,8 +217,7 @@ export const AddressMapProvider = () =>
       const scalarDirty =
         (news.description ?? "") !== (observed.description ?? "") ||
         (news.enabled ?? false) !== (observed.enabled ?? false) ||
-        (news.defaultSni !== undefined &&
-          news.defaultSni !== (observed.defaultSni ?? undefined));
+        (news.defaultSni !== undefined && news.defaultSni !== (observed.defaultSni ?? undefined));
       if (scalarDirty) {
         yield* addressing.patchAddressMap({
           accountId: acct,
@@ -253,9 +230,7 @@ export const AddressMapProvider = () =>
 
       // 3b. Sync IPs — diff observed cloud IPs against desired, apply
       //     only the per-IP delta.
-      const observedIps = (observed.ips ?? []).flatMap((ip) =>
-        ip.ip ? [ip.ip] : [],
-      );
+      const observedIps = (observed.ips ?? []).flatMap((ip) => (ip.ip ? [ip.ip] : []));
       const wantedIps = desiredIps(news);
       for (const ip of wantedIps) {
         if (!observedIps.includes(ip)) {
@@ -321,9 +296,7 @@ export const AddressMapProvider = () =>
       //    converged cloud state.
       const final = yield* getMap(acct, addressMapId);
       if (!final) {
-        return yield* Effect.fail(
-          new Error("Address Map disappeared during reconcile"),
-        );
+        return yield* Effect.fail(new Error("Address Map disappeared during reconcile"));
       }
       return toAttributes(final, acct);
     }),
@@ -347,13 +320,10 @@ export const AddressMapProvider = () =>
 const getMap = (accountId: string, addressMapId: string) =>
   addressing
     .getAddressMap({ accountId, addressMapId })
-    .pipe(
-      Effect.catchTag("AddressMapNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.succeed(undefined)));
 
 /** Desired IPs — inputs have been resolved to concrete strings by Plan. */
-const desiredIps = (news: AddressMapProps): string[] =>
-  (news.ips ?? []).map((ip) => ip as string);
+const desiredIps = (news: AddressMapProps): string[] => (news.ips ?? []).map((ip) => ip as string);
 
 /** Desired memberships with inputs resolved to concrete strings. */
 const desiredMemberships = (
@@ -378,18 +348,16 @@ const narrowMemberships = (
     | null
     | undefined,
 ): { identifier: string; kind: "zone" | "account" }[] =>
-  (memberships ?? []).flatMap(
-    (m): { identifier: string; kind: "zone" | "account" }[] => {
-      if (!m.identifier) return [];
-      if (m.kind === "zone") {
-        return [{ identifier: m.identifier, kind: "zone" }];
-      }
-      if (m.kind === "account") {
-        return [{ identifier: m.identifier, kind: "account" }];
-      }
-      return [];
-    },
-  );
+  (memberships ?? []).flatMap((m): { identifier: string; kind: "zone" | "account" }[] => {
+    if (!m.identifier) return [];
+    if (m.kind === "zone") {
+      return [{ identifier: m.identifier, kind: "zone" }];
+    }
+    if (m.kind === "account") {
+      return [{ identifier: m.identifier, kind: "account" }];
+    }
+    return [];
+  });
 
 const toAttributes = (
   map: addressing.GetAddressMapResponse,

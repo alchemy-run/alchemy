@@ -9,9 +9,7 @@ import * as Rbin from "@/AWS/Rbin";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class RbinTestFunction extends Lambda.Function<Lambda.Function>()(
-  "RbinTestFunction",
-) {}
+export class RbinTestFunction extends Lambda.Function<Lambda.Function>()("RbinTestFunction") {}
 
 export default RbinTestFunction.make(
   {

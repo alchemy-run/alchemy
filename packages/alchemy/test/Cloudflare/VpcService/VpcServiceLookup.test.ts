@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const asyncWorkerScript = `export default {
   async fetch() {
@@ -48,8 +45,7 @@ const readVpcBindings = (scriptName: string) =>
       scriptName,
     });
     return (settings.bindings ?? []).filter(
-      (b): b is Extract<typeof b, { type: "vpc_service" }> =>
-        b.type === "vpc_service",
+      (b): b is Extract<typeof b, { type: "vpc_service" }> => b.type === "vpc_service",
     );
   });
 
@@ -97,15 +93,9 @@ test.provider(
       expect(byName.httpPort).toEqual(svc.httpPort);
 
       const vpc = yield* readVpcBindings(worker.workerName);
-      expect(vpc.find((b) => b.name === "SVC_MANAGED")?.serviceId).toEqual(
-        svc.serviceId,
-      );
-      expect(vpc.find((b) => b.name === "SVC_BY_ID")?.serviceId).toEqual(
-        svc.serviceId,
-      );
-      expect(vpc.find((b) => b.name === "SVC_BY_NAME")?.serviceId).toEqual(
-        svc.serviceId,
-      );
+      expect(vpc.find((b) => b.name === "SVC_MANAGED")?.serviceId).toEqual(svc.serviceId);
+      expect(vpc.find((b) => b.name === "SVC_BY_ID")?.serviceId).toEqual(svc.serviceId);
+      expect(vpc.find((b) => b.name === "SVC_BY_NAME")?.serviceId).toEqual(svc.serviceId);
 
       yield* stack.destroy();
     }).pipe(logLevel),

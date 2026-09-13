@@ -128,9 +128,8 @@ export default KafkaTestFunction.make(
                 Effect.catchTag("NotFoundException", () => Effect.void),
               ),
             ),
-            Effect.catchTag(
-              ["BadRequestException", "TopicExistsException"],
-              (e) => Effect.succeed({ created: false, error: e._tag }),
+            Effect.catchTag(["BadRequestException", "TopicExistsException"], (e) =>
+              Effect.succeed({ created: false, error: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(outcome);

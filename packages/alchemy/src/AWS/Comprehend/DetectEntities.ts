@@ -33,12 +33,7 @@ export interface DetectEntities extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectEntitiesRequest,
-    ) => Effect.Effect<
-      comprehend.DetectEntitiesResponse,
-      comprehend.DetectEntitiesError
-    >
+    ) => Effect.Effect<comprehend.DetectEntitiesResponse, comprehend.DetectEntitiesError>
   >
 > {}
-export const DetectEntities = Binding.Service<DetectEntities>(
-  "AWS.Comprehend.DetectEntities",
-);
+export const DetectEntities = Binding.Service<DetectEntities>("AWS.Comprehend.DetectEntities");

@@ -34,6 +34,4 @@ export interface RebootDBInstance extends Binding.Service<
     ) => Effect.Effect<rds.RebootDBInstanceResult, rds.RebootDBInstanceError>
   >
 > {}
-export const RebootDBInstance = Binding.Service<RebootDBInstance>(
-  "AWS.RDS.RebootDBInstance",
-);
+export const RebootDBInstance = Binding.Service<RebootDBInstance>("AWS.RDS.RebootDBInstance");

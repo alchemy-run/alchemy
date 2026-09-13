@@ -22,24 +22,17 @@ const INTERACTIONS_SCHEMA = JSON.stringify({
   version: "1.0",
 });
 
-class DatasetGroupStillExists extends Data.TaggedError(
-  "DatasetGroupStillExists",
-)<{
+class DatasetGroupStillExists extends Data.TaggedError("DatasetGroupStillExists")<{
   readonly arn: string;
 }> {}
 
 const assertDatasetGroupDeleted = (arn: string) =>
   personalize.describeDatasetGroup({ datasetGroupArn: arn }).pipe(
     Effect.flatMap(() => Effect.fail(new DatasetGroupStillExists({ arn }))),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "DatasetGroupStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -48,22 +41,16 @@ const assertDatasetGroupDeleted = (arn: string) =>
 // resources (solutions, campaigns) take ~an hour of paid training — they are
 // intentionally NOT implemented; only the cheap definition resources below
 // have a live lifecycle.
-test.provider(
-  "describeDatasetGroup on a nonexistent ARN fails with a typed error",
-  () =>
-    Effect.gen(function* () {
-      const region = yield* yield* AWS.Region;
-      const error = yield* Effect.flip(
-        personalize.describeDatasetGroup({
-          datasetGroupArn: `arn:aws:personalize:${region}:000000000000:dataset-group/does-not-exist`,
-        }),
-      );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
-    }),
+test.provider("describeDatasetGroup on a nonexistent ARN fails with a typed error", () =>
+  Effect.gen(function* () {
+    const region = yield* yield* AWS.Region;
+    const error = yield* Effect.flip(
+      personalize.describeDatasetGroup({
+        datasetGroupArn: `arn:aws:personalize:${region}:000000000000:dataset-group/does-not-exist`,
+      }),
+    );
+    expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(true);
+  }),
 );
 
 // Personalize schemas, dataset groups, datasets, and event trackers are
@@ -114,9 +101,7 @@ test.provider(
       const describedSchema = yield* personalize.describeSchema({
         schemaArn: created.schema.schemaArn,
       });
-      expect(JSON.parse(describedSchema.schema!.schema!)).toEqual(
-        JSON.parse(INTERACTIONS_SCHEMA),
-      );
+      expect(JSON.parse(describedSchema.schema!.schema!)).toEqual(JSON.parse(INTERACTIONS_SCHEMA));
 
       const describedGroup = yield* personalize.describeDatasetGroup({
         datasetGroupArn: created.group.datasetGroupArn,
@@ -132,9 +117,7 @@ test.provider(
         datasetArn: created.dataset.datasetArn,
       });
       expect(describedDataset.dataset?.datasetType).toBe("INTERACTIONS");
-      expect(describedDataset.dataset?.schemaArn).toBe(
-        created.schema.schemaArn,
-      );
+      expect(describedDataset.dataset?.schemaArn).toBe(created.schema.schemaArn);
 
       expect(created.tracker.eventTrackerArn).toContain(":event-tracker/");
       expect(created.tracker.status).toBe("ACTIVE");
@@ -142,12 +125,8 @@ test.provider(
       const describedTracker = yield* personalize.describeEventTracker({
         eventTrackerArn: created.tracker.eventTrackerArn,
       });
-      expect(describedTracker.eventTracker?.trackingId).toBe(
-        created.tracker.trackingId,
-      );
-      expect(describedTracker.eventTracker?.datasetGroupArn).toBe(
-        created.group.datasetGroupArn,
-      );
+      expect(describedTracker.eventTracker?.trackingId).toBe(created.tracker.trackingId);
+      expect(describedTracker.eventTracker?.datasetGroupArn).toBe(created.group.datasetGroupArn);
 
       // Update: change the dataset group's tags in place.
       const updated = yield* stack.deploy(
@@ -174,9 +153,7 @@ test.provider(
       // Stable identifiers are preserved across the update.
       expect(updated.group.datasetGroupArn).toBe(created.group.datasetGroupArn);
       expect(updated.dataset.datasetArn).toBe(created.dataset.datasetArn);
-      expect(updated.tracker.eventTrackerArn).toBe(
-        created.tracker.eventTrackerArn,
-      );
+      expect(updated.tracker.eventTrackerArn).toBe(created.tracker.eventTrackerArn);
       expect(updated.tracker.trackingId).toBe(created.tracker.trackingId);
 
       const updatedTags = yield* personalize.listTagsForResource({

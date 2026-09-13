@@ -35,10 +35,7 @@ export interface DescribeComponent extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<greengrassv2.DescribeComponentRequest, "arn">,
-    ) => Effect.Effect<
-      greengrassv2.DescribeComponentResponse,
-      greengrassv2.DescribeComponentError
-    >
+    ) => Effect.Effect<greengrassv2.DescribeComponentResponse, greengrassv2.DescribeComponentError>
   >
 > {}
 export const DescribeComponent = Binding.Service<DescribeComponent>(

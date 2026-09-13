@@ -29,10 +29,7 @@ const assertGone = (identifier: string) =>
         : Effect.fail(new Error(`subnet group '${identifier}' still exists`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -120,12 +117,8 @@ test.provider(
       );
 
       // Same subnet group (in-place modify).
-      expect(updated.replicationSubnetGroupIdentifier).toBe(
-        group.replicationSubnetGroupIdentifier,
-      );
-      const observed2 = yield* findGroup(
-        group.replicationSubnetGroupIdentifier,
-      );
+      expect(updated.replicationSubnetGroupIdentifier).toBe(group.replicationSubnetGroupIdentifier);
+      const observed2 = yield* findGroup(group.replicationSubnetGroupIdentifier);
       const observedSubnetIds = (observed2?.Subnets ?? [])
         .map((s) => s.SubnetIdentifier)
         .filter((s): s is string => typeof s === "string");

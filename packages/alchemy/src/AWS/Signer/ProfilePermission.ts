@@ -92,9 +92,7 @@ export interface ProfilePermission extends Resource<
  *
  * @resource
  */
-export const ProfilePermission = Resource<ProfilePermission>(
-  "AWS.Signer.ProfilePermission",
-);
+export const ProfilePermission = Resource<ProfilePermission>("AWS.Signer.ProfilePermission");
 
 /**
  * The profile policy is capped at 20 statements, but the list API still
@@ -109,17 +107,15 @@ const listAllPermissions = Effect.fn(function* (profileName: string) {
   let revisionId: string | undefined;
   let nextToken: string | undefined;
   do {
-    const page = yield* signer
-      .listProfilePermissions({ profileName, nextToken })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed({
-            permissions: [] as signer.Permission[],
-            revisionId: undefined,
-            nextToken: undefined,
-          } as signer.ListProfilePermissionsResponse),
-        ),
-      );
+    const page = yield* signer.listProfilePermissions({ profileName, nextToken }).pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed({
+          permissions: [] as signer.Permission[],
+          revisionId: undefined,
+          nextToken: undefined,
+        } as signer.ListProfilePermissionsResponse),
+      ),
+    );
     permissions.push(...(page.permissions ?? []));
     revisionId = page.revisionId ?? revisionId;
     nextToken = page.nextToken;
@@ -193,12 +189,9 @@ export const ProfilePermissionProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const profileName = output?.profileName ?? olds?.profileName;
           if (profileName === undefined) return undefined;
-          const statementId =
-            output?.statementId ?? (yield* createStatementId(id, olds ?? {}));
+          const statementId = output?.statementId ?? (yield* createStatementId(id, olds ?? {}));
           const { permissions } = yield* listAllPermissions(profileName);
-          const statement = permissions.find(
-            (p) => p.statementId === statementId,
-          );
+          const statement = permissions.find((p) => p.statementId === statementId);
           if (statement === undefined) return undefined;
           return { profileName, statementId };
         }),
@@ -211,27 +204,19 @@ export const ProfilePermissionProvider = () =>
           // and the profile is the policy's host — either change replaces.
           // action/principal/profileVersion converge in reconcile via
           // remove + re-add under the same statement id.
-          if (
-            news.profileName !== olds.profileName ||
-            oldStatementId !== newStatementId
-          ) {
+          if (news.profileName !== olds.profileName || oldStatementId !== newStatementId) {
             return { action: "replace" } as const;
           }
           return undefined;
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const statementId =
-            output?.statementId ?? (yield* createStatementId(id, news));
+          const statementId = output?.statementId ?? (yield* createStatementId(id, news));
 
           yield* Effect.gen(function* () {
             // OBSERVE — the profile's policy is authoritative.
-            const { permissions, revisionId } = yield* listAllPermissions(
-              news.profileName,
-            );
-            const existing = permissions.find(
-              (p) => p.statementId === statementId,
-            );
+            const { permissions, revisionId } = yield* listAllPermissions(news.profileName);
+            const existing = permissions.find((p) => p.statementId === statementId);
 
             // SYNC — statements have no update API. If the existing statement
             // differs from the desired one, remove it (revision-checked) and
@@ -240,8 +225,7 @@ export const ProfilePermissionProvider = () =>
               const matches =
                 existing.action === news.action &&
                 existing.principal === news.principal &&
-                (existing.profileVersion ?? undefined) ===
-                  (news.profileVersion ?? undefined);
+                (existing.profileVersion ?? undefined) === (news.profileVersion ?? undefined);
               if (matches) return;
               yield* signer
                 .removeProfilePermission({
@@ -251,10 +235,7 @@ export const ProfilePermissionProvider = () =>
                 })
                 .pipe(
                   // Already removed by a concurrent writer — proceed to add.
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
                 );
             }
 
@@ -277,12 +258,8 @@ export const ProfilePermissionProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.gen(function* () {
-            const { permissions, revisionId } = yield* listAllPermissions(
-              output.profileName,
-            );
-            const existing = permissions.find(
-              (p) => p.statementId === output.statementId,
-            );
+            const { permissions, revisionId } = yield* listAllPermissions(output.profileName);
+            const existing = permissions.find((p) => p.statementId === output.statementId);
             if (existing === undefined || revisionId === undefined) return;
             yield* signer
               .removeProfilePermission({
@@ -290,9 +267,7 @@ export const ProfilePermissionProvider = () =>
                 statementId: output.statementId,
                 revisionId,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }).pipe(Effect.retry(conflictRetry));
         }),
       });

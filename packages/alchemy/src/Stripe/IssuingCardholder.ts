@@ -1,7 +1,4 @@
-import {
-  withRequestOptions,
-  type StripeOpError,
-} from "@distilled.cloud/stripe";
+import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetIssuingCardholders,
   GetIssuingCardholder,
@@ -414,9 +411,7 @@ export type IssuingCardholder = Resource<
  *
  * @resource
  */
-export const IssuingCardholder = Resource<IssuingCardholder>(
-  "Stripe.IssuingCardholder",
-);
+export const IssuingCardholder = Resource<IssuingCardholder>("Stripe.IssuingCardholder");
 
 export class IssuingCardholderNotResolved extends Data.TaggedError(
   "Stripe.IssuingCardholderNotResolved",
@@ -450,13 +445,9 @@ const toWireBilling = (
     city: billing.address.city,
     country: billing.address.country,
     line1: billing.address.line1,
-    ...(billing.address.line2 !== undefined
-      ? { line2: billing.address.line2 }
-      : {}),
+    ...(billing.address.line2 !== undefined ? { line2: billing.address.line2 } : {}),
     postal_code: billing.address.postalCode,
-    ...(billing.address.state !== undefined
-      ? { state: billing.address.state }
-      : {}),
+    ...(billing.address.state !== undefined ? { state: billing.address.state } : {}),
   },
 });
 
@@ -482,33 +473,27 @@ const fromObservedSpendingControls = (
     interval: limit.interval,
   }));
   const mapped: IssuingCardholderSpendingControls = {
-    ...(controls.allowed_card_presences !== null &&
-    controls.allowed_card_presences !== undefined
+    ...(controls.allowed_card_presences !== null && controls.allowed_card_presences !== undefined
       ? { allowedCardPresences: [...controls.allowed_card_presences] }
       : {}),
-    ...(controls.allowed_categories !== null &&
-    controls.allowed_categories !== undefined
+    ...(controls.allowed_categories !== null && controls.allowed_categories !== undefined
       ? { allowedCategories: [...controls.allowed_categories] }
       : {}),
     ...(controls.allowed_merchant_countries !== null &&
     controls.allowed_merchant_countries !== undefined
       ? { allowedMerchantCountries: [...controls.allowed_merchant_countries] }
       : {}),
-    ...(controls.blocked_card_presences !== null &&
-    controls.blocked_card_presences !== undefined
+    ...(controls.blocked_card_presences !== null && controls.blocked_card_presences !== undefined
       ? { blockedCardPresences: [...controls.blocked_card_presences] }
       : {}),
-    ...(controls.blocked_categories !== null &&
-    controls.blocked_categories !== undefined
+    ...(controls.blocked_categories !== null && controls.blocked_categories !== undefined
       ? { blockedCategories: [...controls.blocked_categories] }
       : {}),
     ...(controls.blocked_merchant_countries !== null &&
     controls.blocked_merchant_countries !== undefined
       ? { blockedMerchantCountries: [...controls.blocked_merchant_countries] }
       : {}),
-    ...(spendingLimits !== undefined && spendingLimits !== null
-      ? { spendingLimits }
-      : {}),
+    ...(spendingLimits !== undefined && spendingLimits !== null ? { spendingLimits } : {}),
     ...(controls.spending_limits_currency
       ? { spendingLimitsCurrency: controls.spending_limits_currency }
       : {}),
@@ -541,9 +526,7 @@ const toWireSpendingControls = (
     ? {
         spending_limits: controls.spendingLimits.map((limit) => ({
           amount: limit.amount,
-          ...(limit.categories !== undefined
-            ? { categories: limit.categories }
-            : {}),
+          ...(limit.categories !== undefined ? { categories: limit.categories } : {}),
           interval: limit.interval,
         })),
       }
@@ -562,12 +545,8 @@ const toWireCompany = (
 const toWireIndividual = (
   individual: IssuingCardholderIndividual,
 ): CreateIssuingCardholderRequestIndividual => ({
-  ...(individual.firstName !== undefined
-    ? { first_name: individual.firstName }
-    : {}),
-  ...(individual.lastName !== undefined
-    ? { last_name: individual.lastName }
-    : {}),
+  ...(individual.firstName !== undefined ? { first_name: individual.firstName } : {}),
+  ...(individual.lastName !== undefined ? { last_name: individual.lastName } : {}),
   ...(individual.dob !== undefined
     ? {
         dob: {
@@ -579,9 +558,7 @@ const toWireIndividual = (
     : {}),
 });
 
-const toAttrs = (
-  cardholder: StripeIssuingCardholder,
-): IssuingCardholderAttributes => ({
+const toAttrs = (cardholder: StripeIssuingCardholder): IssuingCardholderAttributes => ({
   id: cardholder.id,
   name: cardholder.name,
   type: cardholder.type,
@@ -589,8 +566,7 @@ const toAttrs = (
   email: cardholder.email ?? undefined,
   phoneNumber: cardholder.phone_number ?? undefined,
   preferredLocales:
-    cardholder.preferred_locales === null ||
-    cardholder.preferred_locales === undefined
+    cardholder.preferred_locales === null || cardholder.preferred_locales === undefined
       ? undefined
       : [...cardholder.preferred_locales],
   status: cardholder.status,
@@ -602,8 +578,7 @@ const toAttrs = (
   requirements: {
     disabledReason: cardholder.requirements.disabled_reason ?? undefined,
     pastDue:
-      cardholder.requirements.past_due === null ||
-      cardholder.requirements.past_due === undefined
+      cardholder.requirements.past_due === null || cardholder.requirements.past_due === undefined
         ? undefined
         : [...cardholder.requirements.past_due],
   },
@@ -682,10 +657,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -734,9 +706,7 @@ export const IssuingCardholderProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -788,20 +758,14 @@ export const IssuingCardholderProvider = () =>
           metadata,
           ...(desiredEmail.length > 0 ? { email: desiredEmail } : {}),
           ...(desiredPhone.length > 0 ? { phone_number: desiredPhone } : {}),
-          ...(desiredLocales.length > 0
-            ? { preferred_locales: desiredLocales }
-            : {}),
-          ...(news.company !== undefined
-            ? { company: toWireCompany(news.company) }
-            : {}),
+          ...(desiredLocales.length > 0 ? { preferred_locales: desiredLocales } : {}),
+          ...(news.company !== undefined ? { company: toWireCompany(news.company) } : {}),
           ...(news.individual !== undefined
             ? { individual: toWireIndividual(news.individual) }
             : {}),
           ...(news.spendingControls !== undefined
             ? {
-                spending_controls: toWireSpendingControls(
-                  news.spendingControls,
-                ),
+                spending_controls: toWireSpendingControls(news.spendingControls),
               }
             : {}),
         }).pipe(
@@ -818,18 +782,13 @@ export const IssuingCardholderProvider = () =>
       const observedMetadata = tagRecord(current.metadata);
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
-      const billingChanged = !deepEqual(
-        fromObservedBilling(current.billing),
-        news.billing,
-        { stripNullish: true },
-      );
+      const billingChanged = !deepEqual(fromObservedBilling(current.billing), news.billing, {
+        stripNullish: true,
+      });
       const emailChanged = (current.email ?? "") !== desiredEmail;
       const phoneChanged = (current.phone_number ?? "") !== desiredPhone;
       const statusChanged = current.status !== desiredStatus;
-      const localesChanged = !arrayEquals(
-        current.preferred_locales ?? [],
-        desiredLocales,
-      );
+      const localesChanged = !arrayEquals(current.preferred_locales ?? [], desiredLocales);
       const individualChanged =
         news.individual !== undefined &&
         !deepEqual(
@@ -842,15 +801,12 @@ export const IssuingCardholderProvider = () =>
           { stripNullish: true },
         );
       const companyChanged =
-        news.company?.taxId !== undefined &&
-        current.company?.tax_id_provided !== true;
+        news.company?.taxId !== undefined && current.company?.tax_id_provided !== true;
       const spendingControlsChanged =
         news.spendingControls !== undefined &&
-        !deepEqual(
-          fromObservedSpendingControls(current.spending_controls),
-          news.spendingControls,
-          { stripNullish: true },
-        );
+        !deepEqual(fromObservedSpendingControls(current.spending_controls), news.spendingControls, {
+          stripNullish: true,
+        });
 
       if (
         !billingChanged &&
@@ -885,9 +841,7 @@ export const IssuingCardholderProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

@@ -18,9 +18,7 @@ import cloudflare_workers from "./cloudflare_workers.ts";
 
 type SpanOptions = Parameters<Tracer.Tracer["span"]>[0];
 type RunInContext = ReturnType<typeof AsyncLocalStorage.snapshot>;
-type CloudflareSpan = ReturnType<
-  (typeof import("cloudflare:workers"))["tracing"]["startSpan"]
->;
+type CloudflareSpan = ReturnType<(typeof import("cloudflare:workers"))["tracing"]["startSpan"]>;
 
 class Span extends Tracer.NativeSpan {
   constructor(
@@ -40,11 +38,7 @@ class Span extends Tracer.NativeSpan {
 
   override attribute(key: string, value: unknown): void {
     super.attribute(key, value);
-    if (
-      Predicate.isString(value) ||
-      Predicate.isNumber(value) ||
-      Predicate.isBoolean(value)
-    ) {
+    if (Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)) {
       this.cloudflareSpan?.setAttribute(key, value);
     }
   }
@@ -104,9 +98,7 @@ export const layer: Layer.Layer<never> = Layer.effect(
         );
       },
       context(primitive, fiber) {
-        return contextFor(fiber.cache.span)(() =>
-          primitive["~effect/Effect/evaluate"](fiber),
-        );
+        return contextFor(fiber.cache.span)(() => primitive["~effect/Effect/evaluate"](fiber));
       },
     });
   }),

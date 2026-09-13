@@ -30,17 +30,13 @@ export interface DescribeManagedRuleGroup extends Binding.Service<
   () => Effect.Effect<
     (
       request: WAFV2.DescribeManagedRuleGroupRequest,
-    ) => Effect.Effect<
-      WAFV2.DescribeManagedRuleGroupResponse,
-      WAFV2.DescribeManagedRuleGroupError
-    >
+    ) => Effect.Effect<WAFV2.DescribeManagedRuleGroupResponse, WAFV2.DescribeManagedRuleGroupError>
   >
 > {}
 
-export const DescribeManagedRuleGroup =
-  Binding.Service<DescribeManagedRuleGroup>(
-    "AWS.WAFv2.DescribeManagedRuleGroup",
-  );
+export const DescribeManagedRuleGroup = Binding.Service<DescribeManagedRuleGroup>(
+  "AWS.WAFv2.DescribeManagedRuleGroup",
+);
 
 /**
  * Runtime binding for `wafv2:ListAvailableManagedRuleGroups` — list the
@@ -76,10 +72,9 @@ export interface ListAvailableManagedRuleGroups extends Binding.Service<
   >
 > {}
 
-export const ListAvailableManagedRuleGroups =
-  Binding.Service<ListAvailableManagedRuleGroups>(
-    "AWS.WAFv2.ListAvailableManagedRuleGroups",
-  );
+export const ListAvailableManagedRuleGroups = Binding.Service<ListAvailableManagedRuleGroups>(
+  "AWS.WAFv2.ListAvailableManagedRuleGroups",
+);
 
 /**
  * Runtime binding for `wafv2:ListAvailableManagedRuleGroupVersions` — list
@@ -154,10 +149,9 @@ export interface DescribeAllManagedProducts extends Binding.Service<
   >
 > {}
 
-export const DescribeAllManagedProducts =
-  Binding.Service<DescribeAllManagedProducts>(
-    "AWS.WAFv2.DescribeAllManagedProducts",
-  );
+export const DescribeAllManagedProducts = Binding.Service<DescribeAllManagedProducts>(
+  "AWS.WAFv2.DescribeAllManagedProducts",
+);
 
 /**
  * Runtime binding for `wafv2:DescribeManagedProductsByVendor` — read the
@@ -193,7 +187,6 @@ export interface DescribeManagedProductsByVendor extends Binding.Service<
   >
 > {}
 
-export const DescribeManagedProductsByVendor =
-  Binding.Service<DescribeManagedProductsByVendor>(
-    "AWS.WAFv2.DescribeManagedProductsByVendor",
-  );
+export const DescribeManagedProductsByVendor = Binding.Service<DescribeManagedProductsByVendor>(
+  "AWS.WAFv2.DescribeManagedProductsByVendor",
+);

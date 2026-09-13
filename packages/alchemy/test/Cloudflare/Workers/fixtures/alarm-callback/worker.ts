@@ -31,9 +31,7 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           return yield* HttpServerResponse.json(yield* object.snapshot());
         }
         if (request.method === "GET" && operation === "legacy") {
-          return yield* HttpServerResponse.json(
-            yield* legacyObjects.getByName(id).snapshot(),
-          );
+          return yield* HttpServerResponse.json(yield* legacyObjects.getByName(id).snapshot());
         }
         if (request.method !== "POST") {
           return HttpServerResponse.text("Method Not Allowed", { status: 405 });
@@ -70,49 +68,29 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           case "bookkeeping":
             return yield* HttpServerResponse.json(yield* object.bookkeeping());
           case "cancel-bookkeeping":
-            return yield* HttpServerResponse.json(
-              yield* object.cancelBookkeeping(),
-            );
+            return yield* HttpServerResponse.json(yield* object.cancelBookkeeping());
           case "bookkeeping-rollback":
-            return yield* HttpServerResponse.json(
-              yield* object.failedBookkeeping(true),
-            );
+            return yield* HttpServerResponse.json(yield* object.failedBookkeeping(true));
           case "bookkeeping-failure":
-            return yield* HttpServerResponse.json(
-              yield* object.failedBookkeeping(false),
-            );
+            return yield* HttpServerResponse.json(yield* object.failedBookkeeping(false));
           case "alarm-observations":
-            return yield* HttpServerResponse.json(
-              yield* object.alarmObservations(),
-            );
+            return yield* HttpServerResponse.json(yield* object.alarmObservations());
           case "timing":
             return yield* HttpServerResponse.json(yield* object.timing());
           case "atomic":
             return yield* HttpServerResponse.json(yield* object.atomic());
           case "transactional-registration":
-            return yield* HttpServerResponse.json(
-              yield* object.transactionalRegistration(),
-            );
+            return yield* HttpServerResponse.json(yield* object.transactionalRegistration());
           case "sibling-transaction":
-            return yield* HttpServerResponse.json(
-              yield* object.siblingTransaction(),
-            );
+            return yield* HttpServerResponse.json(yield* object.siblingTransaction());
           case "rollback-explicit":
-            return yield* HttpServerResponse.json(
-              yield* object.rollbackExplicit(),
-            );
+            return yield* HttpServerResponse.json(yield* object.rollbackExplicit());
           case "rollback-typed":
-            return yield* HttpServerResponse.json(
-              yield* object.rollbackTyped(),
-            );
+            return yield* HttpServerResponse.json(yield* object.rollbackTyped());
           case "rollback-defect":
-            return yield* HttpServerResponse.json(
-              yield* object.rollbackDefect(),
-            );
+            return yield* HttpServerResponse.json(yield* object.rollbackDefect());
           case "rollback-interrupt":
-            return yield* HttpServerResponse.json(
-              yield* object.rollbackInterrupt(),
-            );
+            return yield* HttpServerResponse.json(yield* object.rollbackInterrupt());
           case "retry":
             yield* object.retry();
             break;
@@ -135,9 +113,7 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           case "optional":
             return yield* HttpServerResponse.json(yield* object.optional());
           case "release-pending":
-            return yield* HttpServerResponse.json(
-              yield* object.releasePending(),
-            );
+            return yield* HttpServerResponse.json(yield* object.releasePending());
           case "enable-optional":
             yield* object.enableOptional();
             break;

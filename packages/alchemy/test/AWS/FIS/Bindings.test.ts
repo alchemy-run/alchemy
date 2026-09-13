@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "FISBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -39,31 +36,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("FIS Bindings", () => {
   beforeAll(
@@ -83,9 +71,7 @@ describe.sequential("FIS Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `FIS test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`FIS test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -93,9 +79,7 @@ describe.sequential("FIS Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `FIS test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`FIS test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -146,9 +130,7 @@ describe.sequential("FIS Bindings", () => {
             status: string;
           };
           expect(started.id).toMatch(/^EXP/);
-          expect(["pending", "initiating", "running"]).toContain(
-            started.status,
-          );
+          expect(["pending", "initiating", "running"]).toContain(started.status);
 
           // read it back and see it in the template-scoped listing.
           const read = (yield* getJson(`/experiment?id=${started.id}`)) as {
@@ -159,17 +141,13 @@ describe.sequential("FIS Bindings", () => {
           expect(read.id).toBe(started.id);
           expect(read.templateId).toBe(template.id);
 
-          const listing = (yield* getJson(
-            `/experiments?templateId=${template.id}`,
-          )) as {
+          const listing = (yield* getJson(`/experiments?templateId=${template.id}`)) as {
             ids: string[];
           };
           expect(listing.ids).toContain(started.id);
 
           // the wait-only experiment has no targets to resolve.
-          const resolved = (yield* getJson(
-            `/resolved-targets?id=${started.id}`,
-          )) as {
+          const resolved = (yield* getJson(`/resolved-targets?id=${started.id}`)) as {
             count: number;
           };
           expect(resolved.count).toBe(0);
@@ -201,9 +179,7 @@ describe.sequential("FIS Bindings", () => {
   describe("GetTargetResourceType + ListTargetResourceTypes", () => {
     test.provider("reads the aws:ec2:instance target resource type", (_stack) =>
       Effect.gen(function* () {
-        const type = (yield* getJson(
-          "/target-resource-type?type=aws:ec2:instance",
-        )) as {
+        const type = (yield* getJson("/target-resource-type?type=aws:ec2:instance")) as {
           resourceType: string;
         };
         expect(type.resourceType).toBe("aws:ec2:instance");
@@ -232,18 +208,16 @@ describe.sequential("FIS Bindings", () => {
   });
 
   describe("consumeExperimentEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeExperimentEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeExperimentEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

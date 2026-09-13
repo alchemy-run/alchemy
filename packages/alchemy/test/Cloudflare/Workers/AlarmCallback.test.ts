@@ -34,16 +34,13 @@ const requestJson = <T>(
     );
     const fresh = new URL(url);
     fresh.searchParams.set("cb", yield* Effect.sync(() => String(Date.now())));
-    const response = yield* method === "POST"
-      ? client.post(fresh.href)
-      : client.get(fresh.href);
+    const response = yield* method === "POST" ? client.post(fresh.href) : client.get(fresh.href);
     const body = yield* response.text;
     if (response.status !== 200) {
       const message = `${method} ${url}: HTTP ${response.status}: ${body}`;
       if (
         response.status === 404 ||
-        (response.status >= 500 &&
-          (method === "GET" || body.includes("<title>Script not found |")))
+        (response.status >= 500 && (method === "GET" || body.includes("<title>Script not found |")))
       ) {
         return yield* Effect.fail(
           Object.assign(new Test.WorkerNotReady({ status: response.status }), {
@@ -96,18 +93,12 @@ const poll = <T>(
     Effect.flatMap((snapshot) =>
       until(snapshot)
         ? Effect.succeed(snapshot)
-        : Effect.fail(
-            new Error(
-              `Alarm polling exhausted for ${url}: ${JSON.stringify(snapshot)}`,
-            ),
-          ),
+        : Effect.fail(new Error(`Alarm polling exhausted for ${url}: ${JSON.stringify(snapshot)}`)),
     ),
   );
 
 const deliveries = (snapshot: Snapshot) =>
-  snapshot.deliveries
-    .map(({ callback, value }) => `${callback}:${value}`)
-    .sort();
+  snapshot.deliveries.map(({ callback, value }) => `${callback}:${value}`).sort();
 
 const drained = (count: number) => (snapshot: Snapshot) =>
   snapshot.deliveries.length === count && snapshot.alarm === null;
@@ -134,11 +125,7 @@ describe.concurrent.each([
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
       yield* Effect.all([
-        requestJson<Snapshot>(
-          `${output.url}/readiness/snapshot`,
-          "GET",
-          "4 seconds",
-        ),
+        requestJson<Snapshot>(`${output.url}/readiness/snapshot`, "GET", "4 seconds"),
         requestJson(`${output.url}/readiness/legacy`, "GET", "4 seconds"),
       ]).pipe(
         Effect.retry({
@@ -182,10 +169,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const base = `${url}/late-registration`;
-      const rejected = yield* json<RegistrationResult>(
-        `${base}/late-registration`,
-        "POST",
-      );
+      const rejected = yield* json<RegistrationResult>(`${base}/late-registration`, "POST");
       expect(rejected.failure?.tag).toBe("CallbackError");
       expect(rejected.failure?.callback).toBe("late");
       expect(rejected.failure?.message).toContain("instance initialization");
@@ -260,19 +244,11 @@ describe.concurrent.each([
       `${explicit ? "explicit rollback" : "native reconciliation failure"} discards deferred bookkeeping and retries schema initialization`,
       Effect.gen(function* () {
         const { url } = yield* stack;
-        const operation = explicit
-          ? "bookkeeping-rollback"
-          : "bookkeeping-failure";
+        const operation = explicit ? "bookkeeping-rollback" : "bookkeeping-failure";
         const base = `${url}/${operation}`;
-        const result = yield* json<FailedBatchResult>(
-          `${base}/${operation}`,
-          "POST",
-        );
+        const result = yield* json<FailedBatchResult>(`${base}/${operation}`, "POST");
         if (explicit) expect(result.failure).toBeNull();
-        else
-          expect(result.failure).toContain(
-            "no such table: alchemy_alarm_callbacks",
-          );
+        else expect(result.failure).toContain("no such table: alchemy_alarm_callbacks");
         expect(result.rolledBack.counts).toEqual({
           schemaChecks: 1,
           reconciliations: explicit ? 0 : 1,
@@ -302,19 +278,11 @@ describe.concurrent.each([
     "preserves getAlarm observations and explicit native alarm write ordering in transactions",
     Effect.gen(function* () {
       const { url } = yield* stack;
-      const { at, observations, committed } =
-        yield* json<AlarmObservationResult>(
-          `${url}/alarm-observations/alarm-observations`,
-          "POST",
-        );
-      expect(observations).toEqual([
-        at,
-        null,
-        at + 1_000,
-        at + 2_000,
-        null,
-        null,
-      ]);
+      const { at, observations, committed } = yield* json<AlarmObservationResult>(
+        `${url}/alarm-observations/alarm-observations`,
+        "POST",
+      );
+      expect(observations).toEqual([at, null, at + 1_000, at + 2_000, null, null]);
       expect(committed).toBe(at + 3_000);
     }),
     { timeout: 90_000 },
@@ -326,10 +294,7 @@ describe.concurrent.each([
       const { url } = yield* stack;
       const initial = yield* json<Snapshot>(`${url}/timing/timing`, "POST");
       expect(initial.alarm).not.toBeNull();
-      const result = yield* poll<Snapshot>(
-        `${url}/timing/snapshot`,
-        drained(5),
-      );
+      const result = yield* poll<Snapshot>(`${url}/timing/snapshot`, drained(5));
       expect(deliveries(result)).toEqual([
         "archive:checkpoint",
         "archive:date",
@@ -356,10 +321,7 @@ describe.concurrent.each([
       expect(initial.snapshot.application).toBe("committed");
       expect(initial.snapshot.rows).toEqual([{ value: "committed" }]);
       expect(initial.snapshot.alarm).not.toBeNull();
-      const result = yield* poll<Snapshot>(
-        `${url}/atomic/snapshot`,
-        drained(1),
-      );
+      const result = yield* poll<Snapshot>(`${url}/atomic/snapshot`, drained(1));
       expect(result.deliveries).toEqual([
         {
           callback: "archive",
@@ -378,10 +340,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const base = `${url}/transactional-registration`;
-      const initial = yield* json<Snapshot>(
-        `${base}/transactional-registration`,
-        "POST",
-      );
+      const initial = yield* json<Snapshot>(`${base}/transactional-registration`, "POST");
       expect(initial.pendingJobs).toHaveLength(1);
       expect(initial.pendingJobs[0]?.callback).toBe("transactional-init");
       expect(initial.alarm).not.toBeNull();
@@ -426,10 +385,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       const base = `${url}/rollback-explicit`;
-      const result = yield* json<ExplicitRollbackResult>(
-        `${base}/rollback-explicit`,
-        "POST",
-      );
+      const result = yield* json<ExplicitRollbackResult>(`${base}/rollback-explicit`, "POST");
       expect(result.repeatedRollbackSucceeded).toBe(true);
       expect(result.operations.map(({ operation }) => operation)).toEqual([
         "put",
@@ -466,10 +422,7 @@ describe.concurrent.each([
       Effect.gen(function* () {
         const { url } = yield* stack;
         const base = `${url}/rollback-${kind}`;
-        const result = yield* json<RollbackResult>(
-          `${base}/rollback-${kind}`,
-          "POST",
-        );
+        const result = yield* json<RollbackResult>(`${base}/rollback-${kind}`, "POST");
         expect(result.failure).toBe(failure);
         expect(result.cleanupWaited).toBe(true);
         expect(result.alarmBefore).not.toBeNull();
@@ -477,10 +430,7 @@ describe.concurrent.each([
         assertRollback(result.snapshot);
         const after = yield* poll<Snapshot>(`${base}/snapshot`, drained(2));
         assertRollback(after);
-        expect(deliveries(after)).toEqual([
-          "archive:checkpoint",
-          "archive:kept",
-        ]);
+        expect(deliveries(after)).toEqual(["archive:checkpoint", "archive:kept"]);
         expect(after.alarm).toBeNull();
       }),
       { timeout: 90_000 },
@@ -509,14 +459,8 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* json(`${url}/replacement/replace`, "POST");
-      const result = yield* poll<Snapshot>(
-        `${url}/replacement/snapshot`,
-        drained(2),
-      );
-      expect(deliveries(result)).toEqual([
-        "archive:replace-first",
-        "archive:replace-second",
-      ]);
+      const result = yield* poll<Snapshot>(`${url}/replacement/snapshot`, drained(2));
+      expect(deliveries(result)).toEqual(["archive:replace-first", "archive:replace-second"]);
       expect(result.alarm).toBeNull();
     }),
     { timeout: 90_000 },
@@ -536,14 +480,9 @@ describe.concurrent.each([
       expect(first.id).not.toBe(second.id);
       // Pending jobs must survive a delayed abort.
       yield* Effect.sleep("5 seconds");
-      const aborted = yield* json<{ aborted: boolean }>(
-        `${url}/reset-first/abort`,
-        "POST",
-      );
+      const aborted = yield* json<{ aborted: boolean }>(`${url}/reset-first/abort`, "POST");
       expect(aborted.aborted).toBe(true);
-      const reconstructed = yield* json<Snapshot>(
-        `${url}/reset-first/snapshot`,
-      );
+      const reconstructed = yield* json<Snapshot>(`${url}/reset-first/snapshot`);
       expect(reconstructed.boots).toBeGreaterThan(first.boots);
       expect(reconstructed.pendingJobs).toEqual(first.pendingJobs);
       expect(reconstructed.deliveries).toEqual([]);
@@ -577,18 +516,12 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* json(`${url}/recovery/recovery`, "POST");
-      const result = yield* poll<Snapshot>(
-        `${url}/recovery/snapshot`,
-        drained(1),
-        "4 seconds",
-      );
+      const result = yield* poll<Snapshot>(`${url}/recovery/snapshot`, drained(1), "4 seconds");
       yield* Effect.logInfo("Alarm crash recovery snapshot", result);
       expect(deliveries(result)).toEqual(["crash:recovered"]);
       expect(result.pendingJobs).toEqual([]);
       expect(result.attempts).toHaveLength(2);
-      expect(result.attempts[1]!.boots).toBeGreaterThan(
-        result.attempts[0]!.boots,
-      );
+      expect(result.attempts[1]!.boots).toBeGreaterThan(result.attempts[0]!.boots);
       for (const attempt of result.attempts) {
         expect(attempt.recovery).not.toBeNull();
         expect(attempt.recovery!).toBeGreaterThan(attempt.now);
@@ -619,9 +552,7 @@ describe.concurrent.each([
       expect(deliveries(recovered)).toEqual(["crash:recovered"]);
       expect(recovered.pendingJobs).toEqual([]);
       expect(recovered.attempts).toHaveLength(2);
-      expect(recovered.attempts[1]!.boots).toBeGreaterThan(
-        recovered.attempts[0]!.boots,
-      );
+      expect(recovered.attempts[1]!.boots).toBeGreaterThan(recovered.attempts[0]!.boots);
     }),
     { timeout: 90_000 },
   );
@@ -633,18 +564,14 @@ describe.concurrent.each([
       const initial = yield* json<Snapshot>(`${url}/unknown/optional`, "POST");
       expect(initial.alarm).not.toBeNull();
       yield* Effect.sleep("5 seconds");
-      expect(
-        (yield* json<{ aborted: boolean }>(`${url}/unknown/abort`, "POST"))
-          .aborted,
-      ).toBe(true);
+      expect((yield* json<{ aborted: boolean }>(`${url}/unknown/abort`, "POST")).aborted).toBe(
+        true,
+      );
       const reconstructed = yield* json<Snapshot>(`${url}/unknown/snapshot`);
       expect(reconstructed.boots).toBeGreaterThan(initial.boots);
       expect(reconstructed.pendingJobs).toEqual(initial.pendingJobs);
       expect(reconstructed.deliveries).toEqual([]);
-      const released = yield* json<Snapshot>(
-        `${url}/unknown/release-pending`,
-        "POST",
-      );
+      const released = yield* json<Snapshot>(`${url}/unknown/release-pending`, "POST");
       const pending = yield* poll<Snapshot>(
         `${url}/unknown/snapshot`,
         (value) => value.alarm !== null && value.alarm > released.alarm!,
@@ -660,15 +587,10 @@ describe.concurrent.each([
         })),
       );
       yield* json(`${url}/unknown/enable-optional`, "POST");
-      expect(
-        (yield* json<{ aborted: boolean }>(`${url}/unknown/abort`, "POST"))
-          .aborted,
-      ).toBe(true);
-      const restored = yield* poll<Snapshot>(
-        `${url}/unknown/snapshot`,
-        drained(1),
-        "4 seconds",
+      expect((yield* json<{ aborted: boolean }>(`${url}/unknown/abort`, "POST")).aborted).toBe(
+        true,
       );
+      const restored = yield* poll<Snapshot>(`${url}/unknown/snapshot`, drained(1), "4 seconds");
       expect(deliveries(restored)).toEqual(["optional:retained"]);
       expect(restored.boots).toBeGreaterThan(pending.boots);
       expect(restored.alarm).toBeNull();
@@ -681,10 +603,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* json(`${url}/batch/batch`, "POST");
-      const result = yield* poll<Snapshot>(
-        `${url}/batch/snapshot`,
-        drained(105),
-      );
+      const result = yield* poll<Snapshot>(`${url}/batch/snapshot`, drained(105));
       expect(deliveries(result)).toEqual(
         Array.from({ length: 105 }, (_, i) => `archive:batch-${i}`).sort(),
       );
@@ -705,10 +624,7 @@ describe.concurrent.each([
         alarm: number | null;
       }>(
         `${url}/legacy/legacy`,
-        (value) =>
-          value.registered !== null &&
-          value.legacy.length === 1 &&
-          value.alarm === null,
+        (value) => value.registered !== null && value.legacy.length === 1 && value.alarm === null,
       );
       expect(result.registered).toBe("registered");
       expect(result.legacy).toHaveLength(1);

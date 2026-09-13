@@ -33,9 +33,7 @@ test.provider.skipIf(!!process.env.FAST)(
           ],
         })
         .pipe(
-          Effect.map((r) =>
-            (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-          ),
+          Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))),
         );
 
       const deployed = yield* stack.deploy(
@@ -43,13 +41,10 @@ test.provider.skipIf(!!process.env.FAST)(
           const cluster = yield* Cluster("ConfigCluster", {
             clusterName: "alchemy-test-ecs-phase2-config",
           });
-          const namespace = yield* AWS.CloudMap.PrivateDnsNamespace(
-            "ConfigNamespace",
-            {
-              name: "phase2-config.alchemy-test.internal",
-              vpc: net.vpcId,
-            },
-          );
+          const namespace = yield* AWS.CloudMap.PrivateDnsNamespace("ConfigNamespace", {
+            name: "phase2-config.alchemy-test.internal",
+            vpc: net.vpcId,
+          });
           const fileSystem = yield* AWS.EFS.FileSystem("ConfigFs", {});
           const service = yield* Service("ConfigSvc", {
             cluster,
@@ -84,15 +79,12 @@ test.provider.skipIf(!!process.env.FAST)(
         cluster: deployed.clusterArn,
         services: [deployed.serviceName],
       });
-      const registryArn =
-        services.services?.[0]?.serviceRegistries?.[0]?.registryArn;
+      const registryArn = services.services?.[0]?.serviceRegistries?.[0]?.registryArn;
       expect(registryArn).toContain(":servicediscovery:");
       const cloudMapServiceId = registryArn!.split("/").pop()!;
       const cloudMapService = yield* sd.getService({ Id: cloudMapServiceId });
       expect(cloudMapService.Service?.NamespaceId).toBe(deployed.namespaceId);
-      expect(
-        cloudMapService.Service?.DnsConfig?.DnsRecords?.map((r) => r.Type),
-      ).toEqual(["A"]);
+      expect(cloudMapService.Service?.DnsConfig?.DnsRecords?.map((r) => r.Type)).toEqual(["A"]);
 
       // ── volumes + healthCheck sugar on the task definition ────────────
       const described = yield* ecs.describeTaskDefinition({
@@ -100,9 +92,7 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       const volume = described.taskDefinition?.volumes?.[0];
       expect(volume?.name).toBe("efs-0");
-      expect(volume?.efsVolumeConfiguration?.fileSystemId).toBe(
-        deployed.fileSystemId,
-      );
+      expect(volume?.efsVolumeConfiguration?.fileSystemId).toBe(deployed.fileSystemId);
       expect(volume?.efsVolumeConfiguration?.transitEncryption).toBe("ENABLED");
       const container = described.taskDefinition?.containerDefinitions?.[0];
       const mountPoint = container?.mountPoints?.[0];
@@ -124,12 +114,10 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(cloudMapGone).toBe(true);
 
-      const namespaceGone = yield* sd
-        .getNamespace({ Id: deployed.namespaceId })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
-        );
+      const namespaceGone = yield* sd.getNamespace({ Id: deployed.namespaceId }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
+      );
       expect(namespaceGone).toBe(true);
     }),
   { timeout: 600_000 },

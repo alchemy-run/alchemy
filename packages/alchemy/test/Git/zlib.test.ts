@@ -24,9 +24,7 @@ describe("inflateEntry", () => {
     pack.set(za, 0);
     pack.set(zb, za.length);
     pack.set([9, 9, 9], za.length + zb.length);
-    const first = await Effect.runPromise(
-      inflateEntry(pack, 0, { expectedSize: a.length }),
-    );
+    const first = await Effect.runPromise(inflateEntry(pack, 0, { expectedSize: a.length }));
     expect(first.bytesConsumed).toBe(za.length);
     expect(Array.from(first.content)).toEqual(Array.from(a));
     const second = await Effect.runPromise(
@@ -43,9 +41,7 @@ describe("inflateEntry", () => {
     buf.set(za, 0);
     // The fast paths refuse (output != expectedSize) and the streaming path
     // answers; either way the caller gets the real span and content.
-    const out = await Effect.runPromise(
-      inflateEntry(buf, 0, { expectedSize: a.length + 1 }),
-    );
+    const out = await Effect.runPromise(inflateEntry(buf, 0, { expectedSize: a.length + 1 }));
     expect(out.bytesConsumed).toBe(za.length);
     expect(out.content.length).toBe(a.length);
   });
@@ -53,15 +49,12 @@ describe("inflateEntry", () => {
   test("an incompressible 1 MiB entry round-trips (multi-chunk output)", async () => {
     const big = new Uint8Array(1 << 20);
     crypto.getRandomValues(big.subarray(0, 65536));
-    for (let at = 65536; at < big.length; at += 65536)
-      big.copyWithin(at, 0, 65536);
+    for (let at = 65536; at < big.length; at += 65536) big.copyWithin(at, 0, 65536);
     for (let i = 0; i < big.length; i += 4099) big[i] ^= 0x5a;
     const z = new Uint8Array(zlib.deflateSync(big));
     const buf = new Uint8Array(z.length + 2);
     buf.set(z, 0);
-    const out = await Effect.runPromise(
-      inflateEntry(buf, 0, { expectedSize: big.length }),
-    );
+    const out = await Effect.runPromise(inflateEntry(buf, 0, { expectedSize: big.length }));
     expect(out.bytesConsumed).toBe(z.length);
     expect(out.content.length).toBe(big.length);
     expect(out.content[4099]).toBe(big[4099]);

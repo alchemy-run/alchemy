@@ -9,11 +9,7 @@ import * as Nuke from "../../Nuke.ts";
 import type { ProviderMode } from "../../ProviderMode.ts";
 import type { ApplyStatus } from "../../Report.ts";
 import { Progress, withSpanEvents } from "../Progress.ts";
-import {
-  buildStackProviders,
-  DEFAULT_ENTRYPOINT,
-  type Target,
-} from "../Session.ts";
+import { buildStackProviders, DEFAULT_ENTRYPOINT, type Target } from "../Session.ts";
 
 export interface ScanInput extends Target {
   readonly mode: ProviderMode;
@@ -48,9 +44,7 @@ export interface ExecuteInput {
 export type NukeResult = Nuke.Result;
 
 /** Enumerate everything the stack's registered providers can see. */
-export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
-  input: ScanInput,
-) {
+export const scan = Effect.fn("Alchemist.nuke.scan")(function* (input: ScanInput) {
   const report = withSpanEvents(yield* Progress);
   const debug = yield* Config.String("DEBUG").pipe(
     Config.withDefault(""),
@@ -74,8 +68,7 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
     concurrency: input.concurrency,
     timeoutSeconds: input.providerTimeoutSeconds,
     onScan: (total) => report({ _tag: "nuke.scan.started", total }),
-    onProviderStarted: (provider) =>
-      report({ _tag: "nuke.scan.provider.started", provider }),
+    onProviderStarted: (provider) => report({ _tag: "nuke.scan.provider.started", provider }),
     onProvider: (provider, count, error) =>
       report({
         _tag: "nuke.scan.provider.completed",
@@ -91,18 +84,10 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
  * Permanently delete the selected resources. Each confirmed deletion is
  * reported through {@link Progress} as `NukeResourceDeleted`.
  */
-export const execute = Effect.fn("Alchemist.nuke.execute")(function* (
-  input: ExecuteInput,
-) {
+export const execute = Effect.fn("Alchemist.nuke.execute")(function* (input: ExecuteInput) {
   const report = withSpanEvents(yield* Progress);
-  const keys = new Map(
-    input.resources.map((resource, index) => [resource, `nuke/${index}`]),
-  );
-  const status = (
-    resource: Nuke.Target,
-    status: ApplyStatus,
-    message?: string,
-  ) =>
+  const keys = new Map(input.resources.map((resource, index) => [resource, `nuke/${index}`]));
+  const status = (resource: Nuke.Target, status: ApplyStatus, message?: string) =>
     report({
       _tag: "apply.resource.status",
       fqn: keys.get(resource)!,

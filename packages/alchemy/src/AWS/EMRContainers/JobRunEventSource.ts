@@ -103,9 +103,7 @@ export const consumeJobRunEvents = <StreamReq = never, Req = never>(
               ...(props.virtualClusterIds !== undefined
                 ? { virtualClusterId: [...props.virtualClusterIds] }
                 : {}),
-              ...(props.states !== undefined
-                ? { state: [...props.states] }
-                : {}),
+              ...(props.states !== undefined ? { state: [...props.states] } : {}),
             },
           }
         : {}),

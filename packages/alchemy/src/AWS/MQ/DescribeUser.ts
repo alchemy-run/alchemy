@@ -32,6 +32,4 @@ export interface DescribeUser extends Binding.Service<
     ) => Effect.Effect<mq.DescribeUserResponse, mq.DescribeUserError>
   >
 > {}
-export const DescribeUser = Binding.Service<DescribeUser>(
-  "AWS.MQ.DescribeUser",
-);
+export const DescribeUser = Binding.Service<DescribeUser>("AWS.MQ.DescribeUser");

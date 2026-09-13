@@ -34,7 +34,6 @@ export interface GetClusterSessionCredentials extends Binding.Service<
     >
   >
 > {}
-export const GetClusterSessionCredentials =
-  Binding.Service<GetClusterSessionCredentials>(
-    "AWS.EMR.GetClusterSessionCredentials",
-  );
+export const GetClusterSessionCredentials = Binding.Service<GetClusterSessionCredentials>(
+  "AWS.EMR.GetClusterSessionCredentials",
+);

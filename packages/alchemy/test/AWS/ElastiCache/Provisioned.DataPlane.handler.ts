@@ -13,10 +13,7 @@ export class ProvisionedCacheDataPlaneFunction extends AWS.Lambda.Function<AWS.L
   "ProvisionedCacheDataPlaneFunction",
 ) {}
 
-const valkeyRoundtrip = (
-  info: AWS.ElastiCache.ReplicationGroupConnectionInfo,
-  value: string,
-) =>
+const valkeyRoundtrip = (info: AWS.ElastiCache.ReplicationGroupConnectionInfo, value: string) =>
   Effect.tryPromise({
     try: async () => {
       const client = new Valkey({
@@ -37,10 +34,7 @@ const valkeyRoundtrip = (
     catch: (cause) => new Error(`Valkey roundtrip failed: ${String(cause)}`),
   });
 
-const memcachedRoundtrip = (
-  endpoint: { address: string; port: number },
-  value: string,
-) =>
+const memcachedRoundtrip = (endpoint: { address: string; port: number }, value: string) =>
   Effect.tryPromise({
     try: () =>
       new Promise<string>((resolve, reject) => {
@@ -79,13 +73,10 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
   }),
   Effect.gen(function* () {
     const net = yield* getProvisionedNetwork;
-    const lambdaSecurityGroup = yield* AWS.EC2.SecurityGroup(
-      "LambdaSecurityGroup",
-      {
-        vpcId: net.vpcId,
-        description: "Provisioned ElastiCache data-plane test Lambda",
-      },
-    );
+    const lambdaSecurityGroup = yield* AWS.EC2.SecurityGroup("LambdaSecurityGroup", {
+      vpcId: net.vpcId,
+      description: "Provisioned ElastiCache data-plane test Lambda",
+    });
     yield* AWS.EC2.SecurityGroupRule("ValkeyIngress", {
       groupId: net.securityGroupId,
       type: "ingress",
@@ -117,20 +108,14 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
       securityGroupIds: [net.securityGroupId],
       numCacheNodes: 1,
     });
-    const valkeyConnection = yield* AWS.ElastiCache.ConnectReplicationGroup(
-      valkey,
-      {
-        subnetIds: net.privateSubnetIds,
-        securityGroupIds: [lambdaSecurityGroup.groupId],
-      },
-    );
-    const memcachedConnection = yield* AWS.ElastiCache.ConnectCacheCluster(
-      memcached,
-      {
-        subnetIds: net.privateSubnetIds,
-        securityGroupIds: [lambdaSecurityGroup.groupId],
-      },
-    );
+    const valkeyConnection = yield* AWS.ElastiCache.ConnectReplicationGroup(valkey, {
+      subnetIds: net.privateSubnetIds,
+      securityGroupIds: [lambdaSecurityGroup.groupId],
+    });
+    const memcachedConnection = yield* AWS.ElastiCache.ConnectCacheCluster(memcached, {
+      subnetIds: net.privateSubnetIds,
+      securityGroupIds: [lambdaSecurityGroup.groupId],
+    });
 
     return {
       fetch: Effect.gen(function* () {
@@ -138,10 +123,7 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
         const url = new URL(request.originalUrl);
         const value = url.searchParams.get("value") ?? "hello-provisioned";
         if (request.method === "GET" && url.pathname === "/connection") {
-          const [valkey, memcached] = yield* Effect.all([
-            valkeyConnection,
-            memcachedConnection,
-          ]);
+          const [valkey, memcached] = yield* Effect.all([valkeyConnection, memcachedConnection]);
           return yield* HttpServerResponse.json({ valkey, memcached });
         }
         if (request.method === "GET" && url.pathname === "/valkey") {
@@ -153,23 +135,15 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
           const info = yield* memcachedConnection;
           const endpoint = info.endpoints[0];
           if (endpoint === undefined) {
-            return yield* Effect.fail(
-              new Error("Memcached endpoint is unavailable"),
-            );
+            return yield* Effect.fail(new Error("Memcached endpoint is unavailable"));
           }
           const read = yield* memcachedRoundtrip(endpoint, value);
           return yield* HttpServerResponse.json({ value: read });
         }
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

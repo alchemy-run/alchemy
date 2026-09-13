@@ -41,10 +41,7 @@ const request = () =>
     new Request("http://test/alice/demo.git/git-receive-pack", {
       method: "POST",
       body: Buffer.from(
-        concatBytes([
-          pktText(`${zero} ${oid} refs/heads/main\0report-status atomic`),
-          flushPkt,
-        ]),
+        concatBytes([pktText(`${zero} ${oid} refs/heads/main\0report-status atomic`), flushPkt]),
       ),
     }),
   );
@@ -125,9 +122,7 @@ describe("Git operations and native HTTP middleware", () => {
         const { engine, calls } = yield* fixture;
         const pack = new Uint8Array(
           yield* Effect.promise(() =>
-            Bun.file(
-              new URL("./fixtures/packs/empty.pack", import.meta.url),
-            ).arrayBuffer(),
+            Bun.file(new URL("./fixtures/packs/empty.pack", import.meta.url)).arrayBuffer(),
           ),
         );
         const input = yield* Git.Push.fromStream(
@@ -142,19 +137,14 @@ describe("Git operations and native HTTP middleware", () => {
         );
         expect(calls.commit).toBe(1);
         const invalid = yield* Effect.result(
-          Git.Push.fromStream(
-            [{ ref: "bad ref", oldOid: zero, newOid: oid }],
-            Stream.empty,
-          ),
+          Git.Push.fromStream([{ ref: "bad ref", oldOid: zero, newOid: oid }], Stream.empty),
         );
         expect(Result.isFailure(invalid)).toBe(true);
         const truncated = yield* Git.Push.fromStream(
           [{ ref: "refs/heads/main", oldOid: zero, newOid: oid }],
           Stream.make(new Uint8Array([0x50, 0x41, 0x43, 0x4b])),
         );
-        const failure = yield* Effect.result(
-          engine.preparePush(meta, truncated),
-        );
+        const failure = yield* Effect.result(engine.preparePush(meta, truncated));
         expect(failure).toMatchObject({
           _tag: "Failure",
           failure: { _tag: "StoreError", reason: "truncated pack header" },
@@ -173,10 +163,7 @@ describe("Git operations and native HTTP middleware", () => {
             headers: { "content-encoding": "gzip" },
             body: gzipSync(
               Buffer.from(
-                concatBytes([
-                  pktText(`${zero} ${oid} refs/heads/main\0report-status`),
-                  flushPkt,
-                ]),
+                concatBytes([pktText(`${zero} ${oid} refs/heads/main\0report-status`), flushPkt]),
               ),
             ),
           }),
@@ -208,169 +195,137 @@ describe("Git operations and native HTTP middleware", () => {
         Effect.gen(function* () {
           const push = yield* GitHttp.ReceivePack.decode(request());
           if (push._tag !== "Push") return yield* Effect.die("expected push");
-          return GitHttp.ReceivePack.reject(
-            push,
-            "database branch is protected",
-          );
+          return GitHttp.ReceivePack.reject(push, "database branch is protected");
         }),
       );
-      const text = yield* Effect.promise(() =>
-        HttpServerResponse.toWeb(response).text(),
-      );
+      const text = yield* Effect.promise(() => HttpServerResponse.toWeb(response).text());
       expect(text).toContain("ng refs/heads/main database branch is protected");
       expect(calls.begin).toBe(0);
     }).pipe(Effect.provide(RuntimeContext.phantom)),
   );
 
-  it.effect(
-    "stages, reads objects, aborts on exit, and rejects an escaped transaction",
-    () =>
-      Effect.gen(function* () {
-        const { engine, calls } = yield* fixture;
-        const prepared = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const push = yield* GitHttp.ReceivePack.decode(request());
-            if (push._tag !== "Push") return yield* Effect.die("expected push");
-            const prepared = yield* engine.preparePush(meta, push.input);
-            expect((yield* prepared.readObject(oid))?.type).toBe(1);
-            expect(calls.commit).toBe(0);
-            return prepared;
-          }),
-        );
-        expect(calls.abort).toBe(1);
-        expect(
-          Result.isFailure(yield* Effect.result(engine.commitPush(prepared))),
-        ).toBe(true);
-        expect(
-          Result.isFailure(yield* Effect.result(prepared.readObject(oid))),
-        ).toBe(true);
-        expect(calls.commit).toBe(0);
-      }).pipe(Effect.provide(RuntimeContext.phantom)),
-  );
-
-  it.effect(
-    "commits once, retains committed data, and rejects a second prepare",
-    () =>
-      Effect.gen(function* () {
-        const { engine, calls } = yield* fixture;
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const push = yield* GitHttp.ReceivePack.decode(request());
-            if (push._tag !== "Push") return yield* Effect.die("expected push");
-            const prepared = yield* engine.preparePush(meta, push.input);
-            expect(
-              Result.isFailure(
-                yield* Effect.result(engine.preparePush(meta, push.input)),
-              ),
-            ).toBe(true);
-            yield* engine.commitPush(prepared);
-            expect(
-              Result.isFailure(
-                yield* Effect.result(engine.commitPush(prepared)),
-              ),
-            ).toBe(true);
-          }),
-        );
-        expect(calls.commit).toBe(1);
-        expect(calls.abort).toBe(0);
-      }).pipe(Effect.provide(RuntimeContext.phantom)),
-  );
-
-  it.effect(
-    "pins ref creation and both merge tips to the inspected state",
-    () =>
-      Effect.scoped(
+  it.effect("stages, reads objects, aborts on exit, and rejects an escaped transaction", () =>
+    Effect.gen(function* () {
+      const { engine, calls } = yield* fixture;
+      const prepared = yield* Effect.scoped(
         Effect.gen(function* () {
-          const { engine, calls } = yield* fixture;
-          const ref = yield* engine.prepareRefUpdate(meta, {
-            ref: "refs/heads/main",
-            newOid: oid,
-            expectedOid: null,
-          });
-          expect(ref.updates[0]?.oldOid).toBe(zero);
-          yield* ref.commit;
-          expect(calls.update).toEqual({
-            name: "refs/heads/main",
-            newOid: oid,
-            expectedOid: null,
-          });
-          expect(Result.isFailure(yield* Effect.result(ref.commit))).toBe(true);
-          const merge = yield* engine.prepareMerge(meta, { number: 1 });
-          yield* merge.commit;
-          expect(calls.merge).toMatchObject({
-            expectedBaseOid: oid,
-            expectedHeadOid: "b".repeat(40),
-          });
+          const push = yield* GitHttp.ReceivePack.decode(request());
+          if (push._tag !== "Push") return yield* Effect.die("expected push");
+          const prepared = yield* engine.preparePush(meta, push.input);
+          expect((yield* prepared.readObject(oid))?.type).toBe(1);
+          expect(calls.commit).toBe(0);
+          return prepared;
         }),
-      ).pipe(Effect.provide(RuntimeContext.phantom)),
+      );
+      expect(calls.abort).toBe(1);
+      expect(Result.isFailure(yield* Effect.result(engine.commitPush(prepared)))).toBe(true);
+      expect(Result.isFailure(yield* Effect.result(prepared.readObject(oid)))).toBe(true);
+      expect(calls.commit).toBe(0);
+    }).pipe(Effect.provide(RuntimeContext.phantom)),
   );
 
-  it.effect(
-    "raw API handlers retain middleware user and database dependencies",
-    () =>
+  it.effect("commits once, retains committed data, and rejects a second prepare", () =>
+    Effect.gen(function* () {
+      const { engine, calls } = yield* fixture;
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const push = yield* GitHttp.ReceivePack.decode(request());
+          if (push._tag !== "Push") return yield* Effect.die("expected push");
+          const prepared = yield* engine.preparePush(meta, push.input);
+          expect(Result.isFailure(yield* Effect.result(engine.preparePush(meta, push.input)))).toBe(
+            true,
+          );
+          yield* engine.commitPush(prepared);
+          expect(Result.isFailure(yield* Effect.result(engine.commitPush(prepared)))).toBe(true);
+        }),
+      );
+      expect(calls.commit).toBe(1);
+      expect(calls.abort).toBe(0);
+    }).pipe(Effect.provide(RuntimeContext.phantom)),
+  );
+
+  it.effect("pins ref creation and both merge tips to the inspected state", () =>
+    Effect.scoped(
       Effect.gen(function* () {
-        class User extends Context.Service<User, { id: string }>()(
-          "test/push/User",
-        ) {}
-        class Database extends Context.Service<
-          Database,
-          { mayWrite: (user: string, ref: string) => Effect.Effect<boolean> }
-        >()("test/push/Database") {}
-        class Authentication extends HttpApiMiddleware.Service<
-          Authentication,
-          { provides: User }
-        >()("test/push/Auth") {}
-        class Api extends HttpApi.make("custom")
-          .add(HttpApiGroup.make("git").add(GitHttp.ReceivePack.endpoint))
-          .middleware(Authentication) {}
-        const seen: Array<string> = [];
-        const routes = HttpApiBuilder.layer(Api).pipe(
-          Layer.provide(
-            HttpApiBuilder.group(Api, "git", (h) =>
-              Effect.gen(function* () {
-                const db = yield* Database;
-                return h.handleRaw("receivePack", ({ request }) =>
-                  Effect.scoped(
-                    Effect.gen(function* () {
-                      const user = yield* User;
-                      const push = yield* GitHttp.ReceivePack.decode(
-                        request,
-                      ).pipe(Effect.orDie);
-                      if (push._tag === "Probe")
-                        return GitHttp.ReceivePack.probeResponse();
-                      yield* db.mayWrite(user.id, push.updates[0]!.ref);
-                      return GitHttp.ReceivePack.reject(
-                        push,
-                        "denied by database",
-                      );
-                    }),
-                  ),
-                );
-              }),
-            ),
-          ),
-          Layer.provide(
-            Layer.succeed(Authentication, (effect) =>
-              Effect.provideService(effect, User, { id: "alice" }),
-            ),
-          ),
-          Layer.provide(
-            Layer.succeed(Database, {
-              mayWrite: (user, ref) =>
-                Effect.sync(() => {
-                  seen.push(`${user}:${ref}`);
-                  return false;
-                }),
+        const { engine, calls } = yield* fixture;
+        const ref = yield* engine.prepareRefUpdate(meta, {
+          ref: "refs/heads/main",
+          newOid: oid,
+          expectedOid: null,
+        });
+        expect(ref.updates[0]?.oldOid).toBe(zero);
+        yield* ref.commit;
+        expect(calls.update).toEqual({
+          name: "refs/heads/main",
+          newOid: oid,
+          expectedOid: null,
+        });
+        expect(Result.isFailure(yield* Effect.result(ref.commit))).toBe(true);
+        const merge = yield* engine.prepareMerge(meta, { number: 1 });
+        yield* merge.commit;
+        expect(calls.merge).toMatchObject({
+          expectedBaseOid: oid,
+          expectedHeadOid: "b".repeat(40),
+        });
+      }),
+    ).pipe(Effect.provide(RuntimeContext.phantom)),
+  );
+
+  it.effect("raw API handlers retain middleware user and database dependencies", () =>
+    Effect.gen(function* () {
+      class User extends Context.Service<User, { id: string }>()("test/push/User") {}
+      class Database extends Context.Service<
+        Database,
+        { mayWrite: (user: string, ref: string) => Effect.Effect<boolean> }
+      >()("test/push/Database") {}
+      class Authentication extends HttpApiMiddleware.Service<Authentication, { provides: User }>()(
+        "test/push/Auth",
+      ) {}
+      class Api extends HttpApi.make("custom")
+        .add(HttpApiGroup.make("git").add(GitHttp.ReceivePack.endpoint))
+        .middleware(Authentication) {}
+      const seen: Array<string> = [];
+      const routes = HttpApiBuilder.layer(Api).pipe(
+        Layer.provide(
+          HttpApiBuilder.group(Api, "git", (h) =>
+            Effect.gen(function* () {
+              const db = yield* Database;
+              return h.handleRaw("receivePack", ({ request }) =>
+                Effect.scoped(
+                  Effect.gen(function* () {
+                    const user = yield* User;
+                    const push = yield* GitHttp.ReceivePack.decode(request).pipe(Effect.orDie);
+                    if (push._tag === "Probe") return GitHttp.ReceivePack.probeResponse();
+                    yield* db.mayWrite(user.id, push.updates[0]!.ref);
+                    return GitHttp.ReceivePack.reject(push, "denied by database");
+                  }),
+                ),
+              );
             }),
           ),
-          Layer.provide(Http.Platform),
-        );
-        const fetch = yield* HttpRouter.toHttpEffect(routes);
-        const response = yield* fetch.pipe(
-          Effect.provideService(HttpServerRequest.HttpServerRequest, request()),
-        );
-        expect(response.status).toBe(200);
-        expect(seen).toEqual(["alice:refs/heads/main"]);
-      }).pipe(Effect.provide(RuntimeContext.phantom)),
+        ),
+        Layer.provide(
+          Layer.succeed(Authentication, (effect) =>
+            Effect.provideService(effect, User, { id: "alice" }),
+          ),
+        ),
+        Layer.provide(
+          Layer.succeed(Database, {
+            mayWrite: (user, ref) =>
+              Effect.sync(() => {
+                seen.push(`${user}:${ref}`);
+                return false;
+              }),
+          }),
+        ),
+        Layer.provide(Http.Platform),
+      );
+      const fetch = yield* HttpRouter.toHttpEffect(routes);
+      const response = yield* fetch.pipe(
+        Effect.provideService(HttpServerRequest.HttpServerRequest, request()),
+      );
+      expect(response.status).toBe(200);
+      expect(seen).toEqual(["alice:refs/heads/main"]);
+    }).pipe(Effect.provide(RuntimeContext.phantom)),
   );
 });

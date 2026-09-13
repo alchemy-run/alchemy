@@ -15,13 +15,8 @@ export default class ProducerWorker extends Cloudflare.Worker<ProducerWorker>()(
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         if (url.pathname === "/send") {
-          yield* queue
-            .send({ text: url.searchParams.get("text") ?? "hello" })
-            .pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { sent: true },
-            { status: 202 },
-          );
+          yield* queue.send({ text: url.searchParams.get("text") ?? "hello" }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ sent: true }, { status: 202 });
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),

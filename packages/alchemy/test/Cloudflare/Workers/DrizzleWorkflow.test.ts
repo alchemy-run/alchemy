@@ -15,10 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -52,31 +49,26 @@ const runToCompletion = (baseUrl: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady =>
           e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-        schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(15)]),
       }),
     );
     const { instanceId } = (yield* startRes.json) as { instanceId: string };
     expect(instanceId).toBeTypeOf("string");
 
-    const last = yield* client
-      .get(`${baseUrl}/workflow/status/${instanceId}`)
-      .pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.succeed(res)
-            : Effect.fail(new WorkerNotReady({ status: res.status })),
-        ),
-        Effect.flatMap((res) => res.json),
-        Effect.map((json) => json as unknown as WorkflowStatus),
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (s) => s.status === "complete" || s.status === "errored",
-          times: 30,
-        }),
-      );
+    const last = yield* client.get(`${baseUrl}/workflow/status/${instanceId}`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new WorkerNotReady({ status: res.status })),
+      ),
+      Effect.flatMap((res) => res.json),
+      Effect.map((json) => json as unknown as WorkflowStatus),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s.status === "complete" || s.status === "errored",
+        times: 30,
+      }),
+    );
     if (last.status !== "complete") {
       return yield* Effect.fail(
         new Error(`workflow ${last.status}: ${JSON.stringify(last.error)}`),
@@ -141,10 +133,7 @@ test(
           ),
           Effect.retry({
             while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
           }),
         );
         return (yield* res.json) as { rowCount: number };

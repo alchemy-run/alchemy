@@ -34,7 +34,6 @@ export interface ListSNOMEDCTInferenceJobs extends Binding.Service<
     >
   >
 > {}
-export const ListSNOMEDCTInferenceJobs =
-  Binding.Service<ListSNOMEDCTInferenceJobs>(
-    "AWS.ComprehendMedical.ListSNOMEDCTInferenceJobs",
-  );
+export const ListSNOMEDCTInferenceJobs = Binding.Service<ListSNOMEDCTInferenceJobs>(
+  "AWS.ComprehendMedical.ListSNOMEDCTInferenceJobs",
+);

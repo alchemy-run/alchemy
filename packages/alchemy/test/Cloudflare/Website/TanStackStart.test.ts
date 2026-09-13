@@ -12,22 +12,13 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "tanstack-dev-bindings-fixture",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "tanstack-dev-bindings-fixture");
 
 // Vite project roots must stay reachable via a sane relative path from the
 // process cwd (see Vite.test.ts) — clone under the package's own `.tmp/`.
@@ -53,13 +44,7 @@ describe.concurrent("TanStack Start", () => {
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-tanstack-live-",
           tempRoot,
-          entries: [
-            "alchemy.run.ts",
-            "package.json",
-            "tsconfig.json",
-            "vite.config.ts",
-            "src",
-          ],
+          entries: ["alchemy.run.ts", "package.json", "tsconfig.json", "vite.config.ts", "src"],
         });
         const memoInclude = [
           "src/**",
@@ -139,9 +124,7 @@ describe.concurrent("TanStack Start", () => {
   );
 });
 
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
-);
+const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
 
 const fetchJsonReady = <T>(url: string) =>
   Effect.gen(function* () {
@@ -159,10 +142,7 @@ const fetchJsonReady = <T>(url: string) =>
       ),
       Effect.retry({
         // Capped interval, ~90s total budget (workers.dev / DO propagation).
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
@@ -171,9 +151,7 @@ const fetchJsonReady = <T>(url: string) =>
 const putTextJsonReady = <T>(url: string, body: string) =>
   Effect.gen(function* () {
     return yield* HttpClient.execute(
-      HttpClientRequest.put(url).pipe(
-        HttpClientRequest.bodyText(body, "text/plain"),
-      ),
+      HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText(body, "text/plain")),
     ).pipe(
       Effect.flatMap((res) =>
         res.status === 200
@@ -187,10 +165,7 @@ const putTextJsonReady = <T>(url: string, body: string) =>
       ),
       Effect.retry({
         // Capped interval, ~90s total budget (workers.dev / DO propagation).
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
@@ -223,9 +198,7 @@ const expectClientScriptServes = (siteUrl: string) =>
       const body = yield* assetRes.text;
       if (!contentType.includes("javascript") || body.includes("<html")) {
         return yield* Effect.fail(
-          new Error(
-            `asset ${match[1]} did not serve as JS: ${contentType} ${body.slice(0, 120)}`,
-          ),
+          new Error(`asset ${match[1]} did not serve as JS: ${contentType} ${body.slice(0, 120)}`),
         );
       }
     }).pipe(
@@ -239,10 +212,7 @@ const expectClientScriptServes = (siteUrl: string) =>
     );
   });
 
-const waitForBucketToBeDeleted = Effect.fn(function* (
-  bucketName: string,
-  accountId: string,
-) {
+const waitForBucketToBeDeleted = Effect.fn(function* (bucketName: string, accountId: string) {
   yield* r2
     .getBucket({
       accountId,
@@ -253,10 +223,7 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
       Effect.retry({
         while: (e): e is BucketStillExists => e instanceof BucketStillExists,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("200 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("200 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(20),
         ]),
       }),

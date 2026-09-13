@@ -166,36 +166,24 @@ export const ProductProvider = () =>
         id: string,
         props: Pick<ProductProps, "productName">,
       ) {
-        return (
-          props.productName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.productName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       // Observe by ID (typed NotFound → undefined), falling back to a
       // name lookup when state was lost.
-      const observe = Effect.fn(function* (
-        selector: { Id: string } | { Name: string },
-      ) {
+      const observe = Effect.fn(function* (selector: { Id: string } | { Name: string }) {
         return yield* servicecatalog
           .describeProductAsAdmin(selector)
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const toAttributes = (
-        described: servicecatalog.DescribeProductAsAdminOutput,
-      ) => {
+      const toAttributes = (described: servicecatalog.DescribeProductAsAdminOutput) => {
         const summary = described.ProductViewDetail?.ProductViewSummary;
         return {
           productId: summary?.ProductId ?? "",
           productArn: described.ProductViewDetail?.ProductARN ?? "",
           productName: summary?.Name ?? "",
-          provisioningArtifactId:
-            described.ProvisioningArtifactSummaries?.[0]?.Id ?? "",
+          provisioningArtifactId: described.ProvisioningArtifactSummaries?.[0]?.Id ?? "",
         };
       };
 
@@ -203,16 +191,12 @@ export const ProductProvider = () =>
         stables: ["productId", "productArn"],
         list: () =>
           Effect.gen(function* () {
-            const details = yield* servicecatalog.searchProductsAsAdmin
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.ProductViewDetails ?? [],
-                  ),
-                ),
-              );
+            const details = yield* servicecatalog.searchProductsAsAdmin.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.ProductViewDetails ?? []),
+              ),
+            );
             const items = yield* Effect.forEach(
               details,
               (d) => {
@@ -226,26 +210,19 @@ export const ProductProvider = () =>
                 }
                 // Hydrate the artifact ID; a product can vanish between
                 // enumeration and hydration, so tolerate NotFound per item.
-                return servicecatalog
-                  .listProvisioningArtifacts({ ProductId: productId })
-                  .pipe(
-                    Effect.map((r) => ({
-                      productId,
-                      productArn: d.ProductARN!,
-                      productName: d.ProductViewSummary!.Name!,
-                      provisioningArtifactId:
-                        r.ProvisioningArtifactDetails?.[0]?.Id ?? "",
-                    })),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
-                  );
+                return servicecatalog.listProvisioningArtifacts({ ProductId: productId }).pipe(
+                  Effect.map((r) => ({
+                    productId,
+                    productArn: d.ProductARN!,
+                    productName: d.ProductViewSummary!.Name!,
+                    provisioningArtifactId: r.ProvisioningArtifactDetails?.[0]?.Id ?? "",
+                  })),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                );
               },
               { concurrency: 5 },
             );
-            return items.filter(
-              (item): item is Product["Attributes"] => item !== undefined,
-            );
+            return items.filter((item): item is Product["Attributes"] => item !== undefined);
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const described = output?.productId
@@ -255,18 +232,13 @@ export const ProductProvider = () =>
             return undefined;
           }
           const attrs = toAttributes(described);
-          return (yield* hasAlchemyTags(id, tagRecord(described.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagRecord(described.Tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           // The initial provisioning artifact's template and the product
           // type are immutable — changing either replaces the product.
-          if (
-            olds.provisioningArtifact?.templateUrl !==
-            news.provisioningArtifact.templateUrl
-          ) {
+          if (olds.provisioningArtifact?.templateUrl !== news.provisioningArtifact.templateUrl) {
             return { action: "replace" } as const;
           }
           if (
@@ -277,13 +249,7 @@ export const ProductProvider = () =>
           }
           // everything else is an in-place update
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          instanceId,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
           const productName = yield* createName(id, news);
           const productType = news.productType ?? "CLOUD_FORMATION_TEMPLATE";
           const internalTags = yield* createInternalTags(id);
@@ -293,9 +259,7 @@ export const ProductProvider = () =>
           };
 
           // 1. OBSERVE — by cached ID, falling back to the deterministic name.
-          let described = output?.productId
-            ? yield* observe({ Id: output.productId })
-            : undefined;
+          let described = output?.productId ? yield* observe({ Id: output.productId }) : undefined;
           if (!described?.ProductViewDetail?.ProductViewSummary?.ProductId) {
             described = yield* observe({ Name: productName });
           }
@@ -316,15 +280,11 @@ export const ProductProvider = () =>
               ProvisioningArtifactParameters: {
                 Name: news.provisioningArtifact.name ?? "v1",
                 Description: news.provisioningArtifact.description,
-                Type:
-                  productType === "MARKETPLACE"
-                    ? "MARKETPLACE_AMI"
-                    : productType,
+                Type: productType === "MARKETPLACE" ? "MARKETPLACE_AMI" : productType,
                 Info: {
                   LoadTemplateFromURL: news.provisioningArtifact.templateUrl,
                 },
-                DisableTemplateValidation:
-                  news.provisioningArtifact.disableTemplateValidation,
+                DisableTemplateValidation: news.provisioningArtifact.disableTemplateValidation,
               },
               IdempotencyToken: idempotencyToken(instanceId),
             });
@@ -351,16 +311,10 @@ export const ProductProvider = () =>
           } = {};
           if (summary.Name !== productName) changes.Name = productName;
           if (summary.Owner !== news.owner) changes.Owner = news.owner;
-          if (
-            news.description !== undefined &&
-            summary.ShortDescription !== news.description
-          ) {
+          if (news.description !== undefined && summary.ShortDescription !== news.description) {
             changes.Description = news.description;
           }
-          if (
-            news.distributor !== undefined &&
-            summary.Distributor !== news.distributor
-          ) {
+          if (news.distributor !== undefined && summary.Distributor !== news.distributor) {
             changes.Distributor = news.distributor;
           }
           if (
@@ -369,23 +323,13 @@ export const ProductProvider = () =>
           ) {
             changes.SupportDescription = news.supportDescription;
           }
-          if (
-            news.supportEmail !== undefined &&
-            summary.SupportEmail !== news.supportEmail
-          ) {
+          if (news.supportEmail !== undefined && summary.SupportEmail !== news.supportEmail) {
             changes.SupportEmail = news.supportEmail;
           }
-          if (
-            news.supportUrl !== undefined &&
-            summary.SupportUrl !== news.supportUrl
-          ) {
+          if (news.supportUrl !== undefined && summary.SupportUrl !== news.supportUrl) {
             changes.SupportUrl = news.supportUrl;
           }
-          if (
-            Object.keys(changes).length > 0 ||
-            upsert.length > 0 ||
-            removed.length > 0
-          ) {
+          if (Object.keys(changes).length > 0 || upsert.length > 0 || removed.length > 0) {
             yield* servicecatalog.updateProduct({
               Id: productId,
               ...changes,
@@ -397,8 +341,7 @@ export const ProductProvider = () =>
           // 3b. SYNC the provisioning artifact's mutable fields (name and
           // description; the template itself is immutable → replacement).
           const artifact = described!.ProvisioningArtifactSummaries?.[0];
-          const provisioningArtifactId =
-            output?.provisioningArtifactId ?? artifact?.Id ?? "";
+          const provisioningArtifactId = output?.provisioningArtifactId ?? artifact?.Id ?? "";
           const desiredArtifactName = news.provisioningArtifact.name ?? "v1";
           if (
             artifact?.Id !== undefined &&
@@ -427,9 +370,7 @@ export const ProductProvider = () =>
           // ResourceInUseException; the disassociation settles asynchronously.
           yield* retryWhileResourceInUse(
             servicecatalog.deleteProduct({ Id: output.productId }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

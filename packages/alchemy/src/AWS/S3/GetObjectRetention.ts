@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface GetObjectRetentionRequest extends Omit<
-  S3.GetObjectRetentionRequest,
-  "Bucket"
-> {}
+export interface GetObjectRetentionRequest extends Omit<S3.GetObjectRetentionRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:GetObjectRetention`.
@@ -37,6 +34,4 @@ export interface GetObjectRetention extends Binding.Service<
     ) => Effect.Effect<S3.GetObjectRetentionOutput, S3.GetObjectRetentionError>
   >
 > {}
-export const GetObjectRetention = Binding.Service<GetObjectRetention>(
-  "AWS.S3.GetObjectRetention",
-);
+export const GetObjectRetention = Binding.Service<GetObjectRetention>("AWS.S3.GetObjectRetention");

@@ -20,10 +20,7 @@ const assertZoneGone = (id: string) =>
     Effect.catchTag("NoSuchHostedZone", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -186,9 +183,7 @@ test.provider(
       // zone would otherwise leak — a fresh zone only holds its SOA/NS records
       // so it deletes cleanly; on the happy path it's already gone (ignored).
       yield* Effect.addFinalizer(() =>
-        route53
-          .deleteHostedZone({ Id: normalizeId(created.id) })
-          .pipe(Effect.ignore),
+        route53.deleteHostedZone({ Id: normalizeId(created.id) }).pipe(Effect.ignore),
       );
 
       // Rewrite the zone's persisted row into the wedged shape an interrupted
@@ -198,14 +193,11 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.Route53.HostedZone",
+          isResourceState(r.row) && r.row.resourceType === "AWS.Route53.HostedZone",
       );
       if (!wedged) {
         return yield* Effect.die(

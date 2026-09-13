@@ -106,11 +106,7 @@ export default VectorsTestFunction.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        S3Vectors.VectorsHttp,
-        S3Vectors.VectorsReadHttp,
-        S3Vectors.VectorsWriteHttp,
-      ),
+      Layer.mergeAll(S3Vectors.VectorsHttp, S3Vectors.VectorsReadHttp, S3Vectors.VectorsWriteHttp),
     ),
   ),
 );

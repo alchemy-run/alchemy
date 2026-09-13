@@ -69,9 +69,7 @@ describe("Workflows binding", () => {
           Layer.provide(Paths.PathsLive),
           Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
-          Layer.provideMerge(
-            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
-          ),
+          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
         );
 
         const runStorageExit = Effect.fn(
@@ -80,12 +78,8 @@ describe("Workflows binding", () => {
               name: "workflows-persist-test",
               compatibilityDate: "2024-11-20",
               compatibilityFlags: [],
-              modules: [
-                { name: "main.js", type: "ESModule", content: WORKFLOW_SCRIPT },
-              ],
-              workflows: [
-                { workflowName: "MY_WORKFLOW", className: "MyWorkflow" },
-              ],
+              modules: [{ name: "main.js", type: "ESModule", content: WORKFLOW_SCRIPT }],
+              workflows: [{ workflowName: "MY_WORKFLOW", className: "MyWorkflow" }],
               bindings: [
                 Workflows.local({
                   binding: "MY_WORKFLOW",
@@ -111,8 +105,7 @@ describe("Workflows binding", () => {
               }),
             );
           },
-          (self) =>
-            self.pipe(Effect.provide(rumtimeLayerTempDir), Effect.scoped),
+          (self) => self.pipe(Effect.provide(rumtimeLayerTempDir), Effect.scoped),
         );
 
         const first = yield* runStorageExit();
@@ -192,9 +185,7 @@ const startLifecycleWorker = () =>
     compatibilityDate: "2026-03-09",
     compatibilityFlags: [],
     modules: [{ name: "main.js", type: "ESModule", content: LIFECYCLE_SCRIPT }],
-    workflows: [
-      { workflowName: "LIFECYCLE_WORKFLOW", className: "LifecycleWorkflow" },
-    ],
+    workflows: [{ workflowName: "LIFECYCLE_WORKFLOW", className: "LifecycleWorkflow" }],
     bindings: [
       Workflows.local({
         binding: "LIFECYCLE_WORKFLOW",
@@ -245,146 +236,133 @@ export default {
 // nothing advances the virtual clock). The workflow engine's `pause`/`restart`
 // flow relies on a real timer firing in `workerd` for the in-flight step, and
 // we observe it from Node by polling on the real clock.
-layer(localRuntimeLayer, { excludeTestServices: true })(
-  "Workflows binding lifecycle",
-  (it) => {
-    it.effect("subscribes through the local workflow wrapper", () =>
+layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifecycle", (it) => {
+  it.effect("subscribes through the local workflow wrapper", () =>
+    Effect.gen(function* () {
+      const worker = yield* startLifecycleWorker();
+      const id = "subscription-test";
+      yield* worker.fetchJson(`/create?id=${id}`);
+      expect(yield* worker.fetchJson(`/subscribe?id=${id}`)).toMatchObject({
+        done: false,
+        value: { type: "workflow_queued", instanceId: id },
+      });
+    }),
+  );
+
+  it.effect(
+    "pause and resume a running workflow",
+    () =>
       Effect.gen(function* () {
         const worker = yield* startLifecycleWorker();
-        const id = "subscription-test";
-        yield* worker.fetchJson(`/create?id=${id}`);
-        expect(yield* worker.fetchJson(`/subscribe?id=${id}`)).toMatchObject({
-          done: false,
-          value: { type: "workflow_queued", instanceId: id },
-        });
+        const id = "pause-resume-test";
+
+        const createData = yield* worker.fetchJson<{ id: string }>(`/create?id=${id}`);
+        expect(createData.id).toBe(id);
+
+        yield* pollStepOutput(worker, id, "step-1-done");
+
+        const pauseData = yield* worker.fetchJson<InstanceStatus>(`/pause?id=${id}`);
+        expect(pauseData).toHaveProperty("status");
+
+        yield* pollStatus(worker, id, "paused");
+
+        const resumeData = yield* worker.fetchJson<InstanceStatus>(`/resume?id=${id}`);
+        expect(resumeData).toHaveProperty("status");
+
+        const final = yield* pollStatus(worker, id, "complete");
+        expect(final.output).toBe("workflow-complete");
       }),
-    );
+    { timeout: 30_000 },
+  );
 
-    it.effect(
-      "pause and resume a running workflow",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startLifecycleWorker();
-          const id = "pause-resume-test";
+  it.effect(
+    "terminate a running workflow",
+    () =>
+      Effect.gen(function* () {
+        const worker = yield* startLifecycleWorker();
+        const id = "terminate-test";
 
-          const createData = yield* worker.fetchJson<{ id: string }>(
-            `/create?id=${id}`,
-          );
-          expect(createData.id).toBe(id);
+        const createRes = yield* worker.fetch(`/create?id=${id}`);
+        expect(createRes.status).toBe(200);
 
-          yield* pollStepOutput(worker, id, "step-1-done");
+        yield* pollStepOutput(worker, id, "step-1-done");
 
-          const pauseData = yield* worker.fetchJson<InstanceStatus>(
-            `/pause?id=${id}`,
-          );
-          expect(pauseData).toHaveProperty("status");
+        const terminateData = yield* worker.fetchJson<InstanceStatus>(`/terminate?id=${id}`);
+        expect(terminateData).toHaveProperty("status");
 
-          yield* pollStatus(worker, id, "paused");
+        yield* pollStatus(worker, id, "terminated");
+      }),
+    { timeout: 30_000 },
+  );
 
-          const resumeData = yield* worker.fetchJson<InstanceStatus>(
-            `/resume?id=${id}`,
-          );
-          expect(resumeData).toHaveProperty("status");
+  it.effect(
+    "restart a running workflow",
+    () =>
+      Effect.gen(function* () {
+        const worker = yield* startLifecycleWorker();
+        const id = "restart-test";
 
-          const final = yield* pollStatus(worker, id, "complete");
-          expect(final.output).toBe("workflow-complete");
-        }),
-      { timeout: 30_000 },
-    );
+        yield* worker.fetch(`/create?id=${id}`);
 
-    it.effect(
-      "terminate a running workflow",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startLifecycleWorker();
-          const id = "terminate-test";
+        yield* pollStepOutput(worker, id, "step-1-done");
 
-          const createRes = yield* worker.fetch(`/create?id=${id}`);
-          expect(createRes.status).toBe(200);
+        const restartData = yield* worker.fetchJson<InstanceStatus>(`/restart?id=${id}`);
+        expect(restartData).toHaveProperty("status");
 
-          yield* pollStepOutput(worker, id, "step-1-done");
+        const final = yield* pollStatus(worker, id, "complete");
+        expect(final.output).toBe("workflow-complete");
+      }),
+    { timeout: 30_000 },
+  );
 
-          const terminateData = yield* worker.fetchJson<InstanceStatus>(
-            `/terminate?id=${id}`,
-          );
-          expect(terminateData).toHaveProperty("status");
+  // Regression: a worker that owns more than one workflow must start. Each
+  // owned workflow contributes a `workflows:<name>` Engine service plus a
+  // *shared* `workflows:storage` service that must be created only once.
+  it.effect(
+    "a worker can own two workflows without duplicating workflows:storage",
+    () =>
+      Effect.gen(function* () {
+        const worker = yield* startTestWorker({
+          name: "workflows-multi-test",
+          compatibilityDate: "2026-03-09",
+          compatibilityFlags: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: TWO_WORKFLOWS_SCRIPT,
+            },
+          ],
+          workflows: [
+            { workflowName: "ALPHA_WORKFLOW", className: "AlphaWorkflow" },
+            { workflowName: "BETA_WORKFLOW", className: "BetaWorkflow" },
+          ],
+          bindings: [
+            Workflows.local({
+              binding: "ALPHA_WORKFLOW",
+              workflowName: "ALPHA_WORKFLOW",
+              className: "AlphaWorkflow",
+            }),
+            Workflows.local({
+              binding: "BETA_WORKFLOW",
+              workflowName: "BETA_WORKFLOW",
+              className: "BetaWorkflow",
+            }),
+          ],
+        });
 
-          yield* pollStatus(worker, id, "terminated");
-        }),
-      { timeout: 30_000 },
-    );
+        const createRes = yield* worker.fetch(`/create`);
+        expect(createRes.status).toBe(200);
 
-    it.effect(
-      "restart a running workflow",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startLifecycleWorker();
-          const id = "restart-test";
+        const alpha = yield* pollStatus(worker, "alpha", "complete");
+        expect(alpha.output).toBe("alpha-output");
 
-          yield* worker.fetch(`/create?id=${id}`);
-
-          yield* pollStepOutput(worker, id, "step-1-done");
-
-          const restartData = yield* worker.fetchJson<InstanceStatus>(
-            `/restart?id=${id}`,
-          );
-          expect(restartData).toHaveProperty("status");
-
-          const final = yield* pollStatus(worker, id, "complete");
-          expect(final.output).toBe("workflow-complete");
-        }),
-      { timeout: 30_000 },
-    );
-
-    // Regression: a worker that owns more than one workflow must start. Each
-    // owned workflow contributes a `workflows:<name>` Engine service plus a
-    // *shared* `workflows:storage` service that must be created only once.
-    it.effect(
-      "a worker can own two workflows without duplicating workflows:storage",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startTestWorker({
-            name: "workflows-multi-test",
-            compatibilityDate: "2026-03-09",
-            compatibilityFlags: [],
-            modules: [
-              {
-                name: "main.js",
-                type: "ESModule",
-                content: TWO_WORKFLOWS_SCRIPT,
-              },
-            ],
-            workflows: [
-              { workflowName: "ALPHA_WORKFLOW", className: "AlphaWorkflow" },
-              { workflowName: "BETA_WORKFLOW", className: "BetaWorkflow" },
-            ],
-            bindings: [
-              Workflows.local({
-                binding: "ALPHA_WORKFLOW",
-                workflowName: "ALPHA_WORKFLOW",
-                className: "AlphaWorkflow",
-              }),
-              Workflows.local({
-                binding: "BETA_WORKFLOW",
-                workflowName: "BETA_WORKFLOW",
-                className: "BetaWorkflow",
-              }),
-            ],
-          });
-
-          const createRes = yield* worker.fetch(`/create`);
-          expect(createRes.status).toBe(200);
-
-          const alpha = yield* pollStatus(worker, "alpha", "complete");
-          expect(alpha.output).toBe("alpha-output");
-
-          const beta = yield* pollStatus(worker, "beta", "complete");
-          expect(beta.output).toBe("beta-output");
-        }),
-      { timeout: 30_000 },
-    );
-  },
-);
+        const beta = yield* pollStatus(worker, "beta", "complete");
+        expect(beta.output).toBe("beta-output");
+      }),
+    { timeout: 30_000 },
+  );
+});
 
 // Cross-instance test: a workflow defined by one `Runtime` (the owner) is
 // invoked from a workflow binding declared in a *different* `Runtime` (the
@@ -449,9 +427,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
                 content: CROSS_INSTANCE_OWNER_SCRIPT,
               },
             ],
-            workflows: [
-              { workflowName: "CROSS_WORKFLOW", className: "CrossWorkflow" },
-            ],
+            workflows: [{ workflowName: "CROSS_WORKFLOW", className: "CrossWorkflow" }],
             bindings: [],
           });
 
@@ -500,16 +476,8 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
   },
 );
 
-const pollStatus = (
-  worker: TestWorker,
-  id: string,
-  expected: InstanceStatus["status"],
-) =>
-  poll<InstanceStatus>(
-    worker,
-    `/status?id=${id}`,
-    (json) => json.status === expected,
-  );
+const pollStatus = (worker: TestWorker, id: string, expected: InstanceStatus["status"]) =>
+  poll<InstanceStatus>(worker, `/status?id=${id}`, (json) => json.status === expected);
 
 const pollStepOutput = (worker: TestWorker, id: string, expected: string) =>
   poll<{ __LOCAL_DEV_STEP_OUTPUTS?: ReadonlyArray<string> }>(

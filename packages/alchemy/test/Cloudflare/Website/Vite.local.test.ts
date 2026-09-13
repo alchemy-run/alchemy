@@ -18,25 +18,14 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const queueFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "vite-queue-fixture",
-);
+const queueFixtureDir = pathe.resolve(import.meta.dirname, "vite-queue-fixture");
 const cronFixtureDir = pathe.resolve(import.meta.dirname, "vite-cron-fixture");
 // Keep the temp clone under the workspace so Vite can express the project
 // root relative to cwd (see the note on `tempRoot` in Vite.test.ts).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "index.html",
-  "package.json",
-  "vite.config.ts",
-  "worker.ts",
-];
+const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "worker.ts"];
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -54,10 +43,7 @@ const getJsonReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(15),
         ]),
       }),
@@ -118,15 +104,13 @@ test.provider(
 
       // `send()` resolves (pre-fix it hung forever against the registry's
       // drop stub)...
-      const sent = (yield* getJsonReady(
-        `${deployed.site.url}/api/send?text=vite-queue-hello`,
-      ).pipe(Effect.timeout("60 seconds"))) as { sent: string };
+      const sent = (yield* getJsonReady(`${deployed.site.url}/api/send?text=vite-queue-hello`).pipe(
+        Effect.timeout("60 seconds"),
+      )) as { sent: string };
       expect(sent.sent).toBe("vite-queue-hello");
 
       // ...and the broker delivers to the fixture's queue() handler.
-      const received = yield* getJsonReady(
-        `${deployed.site.url}/api/received`,
-      ).pipe(
+      const received = yield* getJsonReady(`${deployed.site.url}/api/received`).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
@@ -172,12 +156,8 @@ test.provider(
         }),
       );
 
-      const scheduledCount = yield* getJsonReady(
-        `${site.url}/api/scheduled`,
-      ).pipe(
-        Effect.map(
-          (body) => (body as { scheduledCount: number }).scheduledCount,
-        ),
+      const scheduledCount = yield* getJsonReady(`${site.url}/api/scheduled`).pipe(
+        Effect.map((body) => (body as { scheduledCount: number }).scheduledCount),
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
           until: (count) => count > 0,

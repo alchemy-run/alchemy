@@ -43,13 +43,8 @@ export interface DescribeBudget extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeBudgetRequest,
-    ) => Effect.Effect<
-      budgets.DescribeBudgetResponse,
-      budgets.DescribeBudgetError
-    >
+    ) => Effect.Effect<budgets.DescribeBudgetResponse, budgets.DescribeBudgetError>
   >
 > {}
 
-export const DescribeBudget = Binding.Service<DescribeBudget>(
-  "AWS.Budgets.DescribeBudget",
-);
+export const DescribeBudget = Binding.Service<DescribeBudget>("AWS.Budgets.DescribeBudget");

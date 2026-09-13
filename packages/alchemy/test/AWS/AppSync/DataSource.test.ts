@@ -80,9 +80,9 @@ test.provider(
       // least-privilege access to the table.
       expect(out.ddbRoleName).toBeTruthy();
       const role = yield* iam.getRole({ RoleName: out.ddbRoleName! });
-      expect(
-        decodeURIComponent(role.Role.AssumeRolePolicyDocument ?? ""),
-      ).toContain("appsync.amazonaws.com");
+      expect(decodeURIComponent(role.Role.AssumeRolePolicyDocument ?? "")).toContain(
+        "appsync.amazonaws.com",
+      );
       const policy = yield* iam.getRolePolicy({
         RoleName: out.ddbRoleName!,
         PolicyName: `${out.ddbRoleName}-policy`,

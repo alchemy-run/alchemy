@@ -36,12 +36,7 @@ export type FlagConditionOperator =
  * Value a flat condition compares against — a scalar, a JSON object, or a
  * list (for `in` / `not_in`).
  */
-export type FlagConditionValue =
-  | string
-  | number
-  | boolean
-  | { [key: string]: unknown }
-  | unknown[];
+export type FlagConditionValue = string | number | boolean | { [key: string]: unknown } | unknown[];
 
 export type FlagCondition =
   | {
@@ -208,13 +203,7 @@ export type FlagAttributes = {
   updatedBy: string | undefined;
 };
 
-export type Flag = Resource<
-  TypeId,
-  FlagProps,
-  FlagAttributes,
-  never,
-  Providers
->;
+export type Flag = Resource<TypeId, FlagProps, FlagAttributes, never, Providers>;
 
 /**
  * A feature flag in a Cloudflare Flagship app.
@@ -333,11 +322,7 @@ export const FlagProvider = () =>
       }
       // The key is the flag's identity within the app.
       const oldKey = output?.key ?? olds?.key;
-      if (
-        typeof oldKey === "string" &&
-        typeof news.key === "string" &&
-        oldKey !== news.key
-      ) {
+      if (typeof oldKey === "string" && typeof news.key === "string" && oldKey !== news.key) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -368,11 +353,7 @@ export const FlagProvider = () =>
 
       // Observe — flag identity is (appId, key); a missing flag falls
       // through and we recreate.
-      const observed = yield* getFlag(
-        output?.accountId ?? accountId,
-        appId,
-        key,
-      );
+      const observed = yield* getFlag(output?.accountId ?? accountId, appId, key);
 
       if (!observed) {
         // Ensure — greenfield (or out-of-band delete). A concurrent create
@@ -386,11 +367,7 @@ export const FlagProvider = () =>
             ...desired,
             type: news.type,
           })
-          .pipe(
-            Effect.catchTag("FlagshipFlagAlreadyExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("FlagshipFlagAlreadyExists", () => Effect.succeed(undefined)));
         if (created) {
           return toAttributes(created, accountId, appId);
         }
@@ -435,12 +412,7 @@ export const FlagProvider = () =>
         })
         // A missing flag or a missing parent app both mean it's already
         // gone.
-        .pipe(
-          Effect.catchTag(
-            ["FlagshipFlagNotFound", "FlagshipAppNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["FlagshipFlagNotFound", "FlagshipAppNotFound"], () => Effect.void));
     }),
     // Flags are sub-resources keyed by (accountId, appId, key). There is no
     // account-wide flag enumeration, so enumerate every Flagship app first,
@@ -449,9 +421,7 @@ export const FlagProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const apps = yield* flagship.listApps.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
       );
       const rows = yield* Effect.forEach(
         apps,
@@ -460,16 +430,12 @@ export const FlagProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((flag) =>
-                  toAttributes(flag, accountId, app.id),
-                ),
+                (page.result ?? []).map((flag) => toAttributes(flag, accountId, app.id)),
               ),
             ),
             // The parent app can be deleted between enumeration and the
             // per-app flag list; treat a gone app as having no flags.
-            Effect.catchTag("FlagshipAppNotFound", () =>
-              Effect.succeed<FlagAttributes[]>([]),
-            ),
+            Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed<FlagAttributes[]>([])),
           ),
         { concurrency: 10 },
       );
@@ -508,9 +474,7 @@ const normalizeRules = (rules: readonly WireRule[] | FlagRule[]): FlagRule[] =>
       ? {
           rollout: {
             percentage: rule.rollout.percentage,
-            ...(rule.rollout.attribute != null
-              ? { attribute: rule.rollout.attribute }
-              : {}),
+            ...(rule.rollout.attribute != null ? { attribute: rule.rollout.attribute } : {}),
           },
         }
       : {}),

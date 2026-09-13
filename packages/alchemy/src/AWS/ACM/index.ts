@@ -1,7 +1,4 @@
-export {
-  AccountConfiguration,
-  AccountConfigurationProvider,
-} from "./AccountConfiguration.ts";
+export { AccountConfiguration, AccountConfigurationProvider } from "./AccountConfiguration.ts";
 export { Certificate, CertificateProvider } from "./Certificate.ts";
 export * from "./DescribeCertificate.ts";
 export * from "./DescribeCertificateHttp.ts";

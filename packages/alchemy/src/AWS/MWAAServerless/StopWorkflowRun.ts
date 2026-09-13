@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link StopWorkflowRun} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type StopWorkflowRunInput = Omit<
-  mwaa.StopWorkflowRunRequest,
-  "WorkflowArn"
->;
+export type StopWorkflowRunInput = Omit<mwaa.StopWorkflowRunRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:StopWorkflowRun`.

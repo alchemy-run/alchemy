@@ -30,28 +30,21 @@ const assertReportGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* findReport(name);
     if (found) {
-      return yield* Effect.fail(
-        new Error(`report definition '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`report definition '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
 // Ungated probe: proves auth + response schema against the live us-east-1
 // CUR endpoint on every CI pass at near-zero cost.
-test.provider(
-  "describeReportDefinitions lists report definitions (auth + schema probe)",
-  () =>
-    Effect.gen(function* () {
-      const response = yield* pin(cur.describeReportDefinitions({}));
-      expect(Array.isArray(response.ReportDefinitions ?? [])).toBe(true);
-    }),
+test.provider("describeReportDefinitions lists report definitions (auth + schema probe)", () =>
+  Effect.gen(function* () {
+    const response = yield* pin(cur.describeReportDefinitions({}));
+    expect(Array.isArray(response.ReportDefinitions ?? [])).toBe(true);
+  }),
 );
 
 const REPORT_NAME = "alchemy-test-cur-report";
@@ -144,9 +137,7 @@ test.provider(
       expect(observed?.AdditionalSchemaElements).toContain("RESOURCES");
 
       // Tags: user tag + alchemy internal tags.
-      const tags = yield* pin(
-        cur.listTagsForResource({ ReportName: REPORT_NAME }),
-      );
+      const tags = yield* pin(cur.listTagsForResource({ ReportName: REPORT_NAME }));
       expect(tags.Tags).toContainEqual({ Key: "fixture", Value: "cur-report" });
       expect(tags.Tags?.some((t) => t.Key.startsWith("alchemy:"))).toBe(true);
 

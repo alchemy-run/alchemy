@@ -7,8 +7,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * The vinext-on-Node framework module (vinext's Vite build +
  * `startProdServer`). Not the Cloudflare Worker source.
  */
-export const VINEXT_NODE_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vinext/node";
+export const VINEXT_NODE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/node";
 
 export interface VinextProps extends FrameworkSiteProps {
   /**

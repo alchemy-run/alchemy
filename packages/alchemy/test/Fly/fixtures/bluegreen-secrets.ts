@@ -39,9 +39,7 @@ export class BoundSecrets extends Fly.Service<BoundSecrets>()(
   Effect.gen(function* () {
     const token = yield* Config.Redacted("ACCEPTANCE_BOUND_SECRET");
     const slot = yield* Config.String("ACCEPTANCE_CACHE");
-    const cache = yield* Fly.ReadWriteRedis(
-      slot === "one" ? CacheOne : CacheTwo,
-    );
+    const cache = yield* Fly.ReadWriteRedis(slot === "one" ? CacheOne : CacheTwo);
     const version = Redacted.value(token).endsWith("-one") ? "one" : "two";
     return {
       fetch: Effect.gen(function* () {

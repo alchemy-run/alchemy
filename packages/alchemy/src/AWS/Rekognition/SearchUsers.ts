@@ -33,12 +33,7 @@ export interface SearchUsers extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.SearchUsersRequest,
-    ) => Effect.Effect<
-      rekognition.SearchUsersResponse,
-      rekognition.SearchUsersError
-    >
+    ) => Effect.Effect<rekognition.SearchUsersResponse, rekognition.SearchUsersError>
   >
 > {}
-export const SearchUsers = Binding.Service<SearchUsers>(
-  "AWS.Rekognition.SearchUsers",
-);
+export const SearchUsers = Binding.Service<SearchUsers>("AWS.Rekognition.SearchUsers");

@@ -32,9 +32,7 @@ describe("AWS.IAM.AccessKey", () => {
       const provider = yield* Provider.findProvider(AccessKey);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (entry) => entry.accessKeyId === deployed.key.accessKeyId,
-      );
+      const found = all.find((entry) => entry.accessKeyId === deployed.key.accessKeyId);
       expect(found).toBeDefined();
       expect(found?.userName).toBe(deployed.user.userName);
       expect(found?.secretAccessKey).toBeUndefined();

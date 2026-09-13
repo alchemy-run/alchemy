@@ -113,9 +113,7 @@ for (const scenario of scenarios) {
                   checks: { ready: { type: "tcp", port: 3000 } },
                 });
                 yield* service.bind("BucketAttachment", {
-                  bucket: scenario.attachment
-                    ? { name: missingName }
-                    : undefined,
+                  bucket: scenario.attachment ? { name: missingName } : undefined,
                   env: { BUCKET_NAME: missingName, ...scenario.env },
                 });
                 return service;
@@ -140,17 +138,14 @@ for (const scenario of scenarios) {
               );
           });
           expect(mutations).toEqual([]);
-          expect(
-            yield* machines.listMachines({ app_name: app.appName }),
-          ).toEqual([]);
+          expect(yield* machines.listMachines({ app_name: app.appName })).toEqual([]);
           expect(
             yield* Effect.sync(() =>
               requests
                 .slice(offset)
                 .some(
                   (request) =>
-                    request.method === "GET" &&
-                    request.path === `/v1/apps/${app.appName}/machines`,
+                    request.method === "GET" && request.path === `/v1/apps/${app.appName}/machines`,
                 ),
             ),
           ).toBe(true);
@@ -162,10 +157,7 @@ for (const scenario of scenarios) {
   );
 }
 
-const credential = (
-  value: Redacted.Redacted<string> | undefined,
-  field: string,
-) =>
+const credential = (value: Redacted.Redacted<string> | undefined, field: string) =>
   value === undefined
     ? Effect.fail(new Error(`Real Tigris bucket did not return ${field}`))
     : Effect.sync(() => Redacted.value(value));
@@ -185,18 +177,9 @@ test.provider(
       yield* Effect.gen(function* () {
         const env = {
           BUCKET_NAME: created.bucket.name,
-          AWS_ACCESS_KEY_ID: yield* credential(
-            created.bucket.accessKeyId,
-            "access key",
-          ),
-          AWS_SECRET_ACCESS_KEY: yield* credential(
-            created.bucket.secretAccessKey,
-            "secret key",
-          ),
-          AWS_ENDPOINT_URL_S3: yield* credential(
-            created.bucket.endpoint,
-            "endpoint",
-          ),
+          AWS_ACCESS_KEY_ID: yield* credential(created.bucket.accessKeyId, "access key"),
+          AWS_SECRET_ACCESS_KEY: yield* credential(created.bucket.secretAccessKey, "secret key"),
+          AWS_ENDPOINT_URL_S3: yield* credential(created.bucket.endpoint, "endpoint"),
         };
         const floor = yield* attachBucketSecrets(
           created.app.appName,
@@ -204,18 +187,12 @@ test.provider(
           env,
         );
         expect(floor).toEqual(expect.any(Number));
-        const fromEnvFloor = yield* attachBucketSecrets(
-          created.app.appName,
-          [],
-          env,
-        );
+        const fromEnvFloor = yield* attachBucketSecrets(created.app.appName, [], env);
         expect(fromEnvFloor).toEqual(expect.any(Number));
         if (floor !== undefined && fromEnvFloor !== undefined) {
           expect(fromEnvFloor).toBeGreaterThanOrEqual(floor);
         }
-        const names = (yield* secretMetadata(created.app.appName)).map(
-          (secret) => secret.name,
-        );
+        const names = (yield* secretMetadata(created.app.appName)).map((secret) => secret.name);
         for (const name of [...Object.keys(env), "AWS_ENDPOINT_URL"]) {
           expect(names).toContain(name);
         }
@@ -226,13 +203,9 @@ test.provider(
             ).length,
         );
         const beforeNoop = yield* appRequestCount;
-        expect(
-          yield* attachBucketSecrets(created.app.appName, [], {}),
-        ).toBeUndefined();
+        expect(yield* attachBucketSecrets(created.app.appName, [], {})).toBeUndefined();
         expect(yield* appRequestCount).toBe(beforeNoop);
-        expect(
-          yield* machines.listMachines({ app_name: created.app.appName }),
-        ).toEqual([]);
+        expect(yield* machines.listMachines({ app_name: created.app.appName })).toEqual([]);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
       yield* assertAppGone(created.app.appName);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
@@ -266,9 +239,7 @@ test.provider(
       ];
       for (const env of environments) {
         const offset = yield* Effect.sync(() => requests.length);
-        expect(
-          yield* attachBucketSecrets(app.appName, [], env),
-        ).toBeUndefined();
+        expect(yield* attachBucketSecrets(app.appName, [], env)).toBeUndefined();
         const service = yield* stack.deploy(
           Effect.gen(function* () {
             const site = yield* Fly.App("Site");
@@ -291,16 +262,13 @@ test.provider(
         const observed = yield* Effect.sync(() =>
           requests
             .slice(offset)
-            .filter((request) =>
-              request.path.startsWith(`/v1/apps/${app.appName}/`),
-            ),
+            .filter((request) => request.path.startsWith(`/v1/apps/${app.appName}/`)),
         );
         expect(
           observed.some(
             (request) =>
               request.method === "GET" &&
-              request.path ===
-                `/v1/apps/${app.appName}/machines/${service.machineId}`,
+              request.path === `/v1/apps/${app.appName}/machines/${service.machineId}`,
           ),
         ).toBe(true);
         expect(

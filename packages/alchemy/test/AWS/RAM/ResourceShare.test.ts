@@ -11,19 +11,14 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A well-known AWS documentation placeholder account ID; not assigned to any
 // real account, so sharing to it is inert but exercises the PRINCIPAL path.
 const EXTERNAL_PRINCIPAL = "123456789012";
 
 class ShareStillLive extends Data.TaggedError("ShareStillLive") {}
-class PrincipalStillAssociated extends Data.TaggedError(
-  "PrincipalStillAssociated",
-) {}
+class PrincipalStillAssociated extends Data.TaggedError("PrincipalStillAssociated") {}
 
 const readShare = Effect.fn(function* (arn: string) {
   const shares = yield* ram
@@ -33,10 +28,7 @@ const readShare = Effect.fn(function* (arn: string) {
       Effect.catchTag("UnknownResourceException", () => Effect.succeed([])),
     );
   return shares.find(
-    (s) =>
-      s.resourceShareArn === arn &&
-      s.status !== "DELETING" &&
-      s.status !== "DELETED",
+    (s) => s.resourceShareArn === arn && s.status !== "DELETING" && s.status !== "DELETED",
   );
 });
 
@@ -57,9 +49,7 @@ const readPrincipals = Effect.fn(function* (arn: string) {
 
 const assertDeleted = Effect.fn(function* (arn: string) {
   yield* readShare(arn).pipe(
-    Effect.flatMap((s) =>
-      s === undefined ? Effect.void : Effect.fail(new ShareStillLive()),
-    ),
+    Effect.flatMap((s) => (s === undefined ? Effect.void : Effect.fail(new ShareStillLive()))),
     Effect.retry({
       while: (e) => e instanceof ShareStillLive,
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(15)]),
@@ -67,10 +57,7 @@ const assertDeleted = Effect.fn(function* (arn: string) {
   );
 });
 
-const shareStack = (props: {
-  principals?: string[];
-  tags?: Record<string, string>;
-}) =>
+const shareStack = (props: { principals?: string[]; tags?: Record<string, string> }) =>
   Effect.gen(function* () {
     const share = yield* ResourceShare("TestShare", {
       allowExternalPrincipals: true,
@@ -102,9 +89,7 @@ test.provider(
       const live = yield* readShare(arn);
       expect(live?.resourceShareArn).toEqual(arn);
       expect(live?.allowExternalPrincipals).toBe(true);
-      expect(
-        live?.tags?.some((t) => t.key === "team" && t.value === "platform"),
-      ).toBe(true);
+      expect(live?.tags?.some((t) => t.key === "team" && t.value === "platform")).toBe(true);
       expect(live?.tags?.some((t) => t.key === "alchemy::id")).toBe(true);
 
       // 3. Out-of-band: the PRINCIPAL association exists (may still be
@@ -114,10 +99,7 @@ test.provider(
         expect(principals).toContain(EXTERNAL_PRINCIPAL);
       }).pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
 
@@ -132,9 +114,7 @@ test.provider(
 
       // 5. Out-of-band: new tag present, principal disassociated.
       const live2 = yield* readShare(arn);
-      expect(
-        live2?.tags?.some((t) => t.key === "env" && t.value === "prod"),
-      ).toBe(true);
+      expect(live2?.tags?.some((t) => t.key === "env" && t.value === "prod")).toBe(true);
 
       yield* readPrincipals(arn).pipe(
         Effect.flatMap((principals) =>
@@ -144,10 +124,7 @@ test.provider(
         ),
         Effect.retry({
           while: (e) => e instanceof PrincipalStillAssociated,
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(12),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(12)]),
         }),
       );
 
@@ -168,9 +145,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(ResourceShare);
       const all = yield* provider.list();
-      expect(
-        all.some((x) => x.resourceShareArn === share.resourceShareArn),
-      ).toBe(true);
+      expect(all.some((x) => x.resourceShareArn === share.resourceShareArn)).toBe(true);
 
       yield* stack.destroy();
       yield* assertDeleted(share.resourceShareArn);

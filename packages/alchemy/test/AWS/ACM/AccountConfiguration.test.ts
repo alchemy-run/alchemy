@@ -17,9 +17,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const getDays = withUsEast1(
   acm
     .getAccountConfiguration({})
-    .pipe(
-      Effect.map((response) => response.ExpiryEvents?.DaysBeforeExpiry ?? 45),
-    ),
+    .pipe(Effect.map((response) => response.ExpiryEvents?.DaysBeforeExpiry ?? 45)),
 );
 
 // PutAccountConfiguration is heavily rate-limited and may report a typed
@@ -33,12 +31,8 @@ const putDays = (days: number, tokenSeed: string) =>
       })
       .pipe(
         Effect.retry({
-          while: (e): boolean =>
-            e._tag === "ConflictException" || e._tag === "ThrottlingException",
-          schedule: Schedule.max([
-            Schedule.exponential("1 second"),
-            Schedule.recurs(8),
-          ]),
+          while: (e): boolean => e._tag === "ConflictException" || e._tag === "ThrottlingException",
+          schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
         }),
       ),
   );

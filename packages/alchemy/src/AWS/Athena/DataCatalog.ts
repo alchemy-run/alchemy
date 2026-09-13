@@ -9,8 +9,7 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type DataCatalogArn =
-  `arn:aws:athena:${RegionID}:${AccountID}:datacatalog/${string}`;
+export type DataCatalogArn = `arn:aws:athena:${RegionID}:${AccountID}:datacatalog/${string}`;
 
 export interface DataCatalogProps {
   /**
@@ -106,9 +105,7 @@ const observedTagsOf = (tags: readonly athena.Tag[] | undefined) =>
 
 const paramsOf = (params: { [key: string]: string | undefined } | undefined) =>
   Object.fromEntries(
-    Object.entries(params ?? {}).flatMap((e) =>
-      typeof e[1] === "string" ? [[e[0], e[1]]] : [],
-    ),
+    Object.entries(params ?? {}).flatMap((e) => (typeof e[1] === "string" ? [[e[0], e[1]]] : [])),
   ) as Record<string, string>;
 
 export const DataCatalogProvider = () =>
@@ -120,9 +117,7 @@ export const DataCatalogProvider = () =>
         // reports even existing catalogs as not-found, so scope to `primary`.
         athena.getDataCatalog({ Name: name, WorkGroup: "primary" }).pipe(
           Effect.map((res) => res.DataCatalog),
-          Effect.catchTag("DataCatalogNotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("DataCatalogNotFound", () => Effect.succeed(undefined)),
         );
 
       const fetchTags = (arn: string) =>
@@ -149,8 +144,7 @@ export const DataCatalogProvider = () =>
           if (!name) return undefined;
           const dc = yield* getOne(name);
           if (!dc) return undefined;
-          const arn =
-            `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
           return {
             name,
             dataCatalogArn: arn,
@@ -163,9 +157,7 @@ export const DataCatalogProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* athena.listDataCatalogs
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* athena.listDataCatalogs.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.DataCatalogsSummary ?? [])
               .flatMap((dc) =>
@@ -187,8 +179,7 @@ export const DataCatalogProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = news.name ?? output?.name!;
-          const arn =
-            `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredParams = news.parameters ?? {};
@@ -217,9 +208,7 @@ export const DataCatalogProvider = () =>
             const paramsDrift = Object.entries(desiredParams).some(
               ([k, v]) => observedParams[k] !== v,
             );
-            const descDrift =
-              news.description !== undefined &&
-              dc.Description !== news.description;
+            const descDrift = news.description !== undefined && dc.Description !== news.description;
             if (paramsDrift || descDrift) {
               yield* athena.updateDataCatalog({
                 Name: name,

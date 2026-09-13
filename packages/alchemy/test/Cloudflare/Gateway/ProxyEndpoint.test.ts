@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -34,55 +31,50 @@ const expectGone = (accountId: string, proxyEndpointId: string) =>
     Effect.catchTag("ProxyEndpointNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "EndpointNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
-test.provider(
-  "create, update, and destroy an identity-kind proxy endpoint",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("create, update, and destroy an identity-kind proxy endpoint", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const endpoint = yield* stack.deploy(
-        Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
-          name: "alchemy-zt-proxy-identity",
-          kind: "identity",
-        }),
-      );
+    const endpoint = yield* stack.deploy(
+      Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
+        name: "alchemy-zt-proxy-identity",
+        kind: "identity",
+      }),
+    );
 
-      expect(endpoint.proxyEndpointId).toBeTruthy();
-      expect(endpoint.accountId).toEqual(accountId);
-      expect(endpoint.kind).toEqual("identity");
-      // Cloudflare assigns a stable PAC/proxy subdomain.
-      expect(endpoint.subdomain).toBeTruthy();
+    expect(endpoint.proxyEndpointId).toBeTruthy();
+    expect(endpoint.accountId).toEqual(accountId);
+    expect(endpoint.kind).toEqual("identity");
+    // Cloudflare assigns a stable PAC/proxy subdomain.
+    expect(endpoint.subdomain).toBeTruthy();
 
-      const live = yield* getEndpoint(accountId, endpoint.proxyEndpointId);
-      expect(live.name).toEqual("alchemy-zt-proxy-identity");
-      expect(live.subdomain).toEqual(endpoint.subdomain);
+    const live = yield* getEndpoint(accountId, endpoint.proxyEndpointId);
+    expect(live.name).toEqual("alchemy-zt-proxy-identity");
+    expect(live.subdomain).toEqual(endpoint.subdomain);
 
-      // Rename in place — same id, same subdomain.
-      const updated = yield* stack.deploy(
-        Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
-          name: "alchemy-zt-proxy-identity-v2",
-          kind: "identity",
-        }),
-      );
-      expect(updated.proxyEndpointId).toEqual(endpoint.proxyEndpointId);
-      expect(updated.subdomain).toEqual(endpoint.subdomain);
-      expect(updated.name).toEqual("alchemy-zt-proxy-identity-v2");
+    // Rename in place — same id, same subdomain.
+    const updated = yield* stack.deploy(
+      Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
+        name: "alchemy-zt-proxy-identity-v2",
+        kind: "identity",
+      }),
+    );
+    expect(updated.proxyEndpointId).toEqual(endpoint.proxyEndpointId);
+    expect(updated.subdomain).toEqual(endpoint.subdomain);
+    expect(updated.name).toEqual("alchemy-zt-proxy-identity-v2");
 
-      const liveAfter = yield* getEndpoint(accountId, endpoint.proxyEndpointId);
-      expect(liveAfter.name).toEqual("alchemy-zt-proxy-identity-v2");
+    const liveAfter = yield* getEndpoint(accountId, endpoint.proxyEndpointId);
+    expect(liveAfter.name).toEqual("alchemy-zt-proxy-identity-v2");
 
-      yield* stack.destroy();
-      yield* expectGone(accountId, endpoint.proxyEndpointId);
-    }).pipe(logLevel),
+    yield* stack.destroy();
+    yield* expectGone(accountId, endpoint.proxyEndpointId);
+  }).pipe(logLevel),
 );
 
 // IP-based proxy endpoints are an Enterprise entitlement. On the testing
@@ -138,13 +130,11 @@ test.provider("list enumerates the deployed proxy endpoint", (stack) =>
     // Self-heal: remove any same-named endpoint left orphaned in the cloud by a
     // previously-interrupted run so the deploy below doesn't trip the
     // "OwnedBySomeoneElse" adoption guard.
-    const orphans = yield* zeroTrust.listGatewayProxyEndpoints
-      .items({ accountId })
-      .pipe(
-        Stream.filter((e) => e.name === "alchemy-zt-proxy-list"),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    const orphans = yield* zeroTrust.listGatewayProxyEndpoints.items({ accountId }).pipe(
+      Stream.filter((e) => e.name === "alchemy-zt-proxy-list"),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
     yield* Effect.forEach(orphans, (o) =>
       zeroTrust
         .deleteGatewayProxyEndpoint({ accountId, proxyEndpointId: o.id ?? "" })
@@ -160,14 +150,10 @@ test.provider("list enumerates the deployed proxy endpoint", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Gateway.ProxyEndpoint,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Gateway.ProxyEndpoint);
     const all = yield* provider.list();
 
-    const match = all.find(
-      (x) => x.proxyEndpointId === endpoint.proxyEndpointId,
-    );
+    const match = all.find((x) => x.proxyEndpointId === endpoint.proxyEndpointId);
     expect(match).toBeDefined();
     expect(match?.accountId).toEqual(accountId);
     expect(match?.name).toEqual("alchemy-zt-proxy-list");

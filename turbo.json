@@ -1,11 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "cacheDir": ".turbo/cache",
-  "globalDependencies": [
-    "bun.lock",
-    "tsconfig.base.json",
-    "tsconfig.cloudflare.json"
-  ],
+  "globalDependencies": ["bun.lock", "tsconfig.base.json", "tsconfig.cloudflare.json"],
   "ui": "tui",
   "tasks": {
     "build": {

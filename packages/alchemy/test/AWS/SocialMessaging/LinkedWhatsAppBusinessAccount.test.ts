@@ -13,14 +13,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 // The ungated probes below prove the distilled error union carries the typed
 // tags the provider's read/reconcile/delete paths depend on, in every CI run.
 
-test.provider(
-  "listLinkedWhatsAppBusinessAccounts succeeds (no onboarding required)",
-  () =>
-    Effect.gen(function* () {
-      const response =
-        yield* socialmessaging.listLinkedWhatsAppBusinessAccounts({});
-      expect(Array.isArray(response.linkedAccounts ?? [])).toBe(true);
-    }),
+test.provider("listLinkedWhatsAppBusinessAccounts succeeds (no onboarding required)", () =>
+  Effect.gen(function* () {
+    const response = yield* socialmessaging.listLinkedWhatsAppBusinessAccounts({});
+    expect(Array.isArray(response.linkedAccounts ?? [])).toBe(true);
+  }),
 );
 
 test.provider(
@@ -56,8 +53,7 @@ test.provider(
 // to run. NOTE: the final stack.destroy() disassociates the WABA from the
 // AWS account; re-running afterwards requires redoing the console signup.
 test.provider.skipIf(
-  !process.env.AWS_TEST_SOCIALMESSAGING ||
-    !process.env.AWS_TEST_SOCIALMESSAGING_WABA_ID,
+  !process.env.AWS_TEST_SOCIALMESSAGING || !process.env.AWS_TEST_SOCIALMESSAGING_WABA_ID,
 )(
   "adopt linked WABA, sync tags + event destinations, destroy",
   (stack) =>

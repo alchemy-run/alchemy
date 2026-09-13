@@ -6,12 +6,8 @@ import { forms } from "./forms/index.ts";
 
 export const features = Effect.gen(function* () {
   yield* Events;
-  const enableAI = yield* Config.String("NEON_EXAMPLE_AI").pipe(
-    Config.withDefault("false"),
-  );
-  const enableForms = yield* Config.String("NEON_EXAMPLE_FORMS").pipe(
-    Config.withDefault("false"),
-  );
+  const enableAI = yield* Config.String("NEON_EXAMPLE_AI").pipe(Config.withDefault("false"));
+  const enableForms = yield* Config.String("NEON_EXAMPLE_FORMS").pipe(Config.withDefault("false"));
   return {
     ai: enableAI === "true" ? yield* ai : undefined,
     forms: enableForms === "true" ? yield* forms : undefined,

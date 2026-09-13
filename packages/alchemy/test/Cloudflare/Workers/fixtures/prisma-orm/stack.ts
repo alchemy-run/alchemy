@@ -16,11 +16,7 @@ import PrismaOrmWorker from "./worker.ts";
 export default Alchemy.Stack(
   "PrismaOrmStack",
   {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      Neon.providers(),
-      Prisma.providers(),
-    ),
+    providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers(), Prisma.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {

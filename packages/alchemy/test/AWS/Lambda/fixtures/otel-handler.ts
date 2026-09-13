@@ -16,9 +16,7 @@ import * as Telemetry from "@/Telemetry.ts";
  * `GET /work` runs a child span and a log so the test can assert traces AND
  * logs arrive at the collector after the invocation scope flushes.
  */
-export class OtelTestFunction extends Lambda.Function<Lambda.Function>()(
-  "OtelTelemetryFunction",
-) {}
+export class OtelTestFunction extends Lambda.Function<Lambda.Function>()("OtelTelemetryFunction") {}
 
 export const OtelTestFunctionLive = OtelTestFunction.make(
   {
@@ -45,9 +43,7 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
         // polls this route until it reports 200 before asserting on
         // exported telemetry.
         if (url.pathname === "/probe") {
-          const endpoint = yield* Config.String("COLLECTOR_URL").pipe(
-            Effect.orDie,
-          );
+          const endpoint = yield* Config.String("COLLECTOR_URL").pipe(Effect.orDie);
           const result = yield* Effect.tryPromise(() =>
             fetch(`${endpoint}/v1/probe`, {
               method: "POST",
@@ -56,11 +52,7 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
               status: r.status,
               body: (await r.text()).slice(0, 200),
             })),
-          ).pipe(
-            Effect.catchCause((cause) =>
-              Effect.succeed({ status: -1, body: String(cause) }),
-            ),
-          );
+          ).pipe(Effect.catchCause((cause) => Effect.succeed({ status: -1, body: String(cause) })));
           return yield* HttpServerResponse.json(result);
         }
         return HttpServerResponse.text("otel-lambda-ok");

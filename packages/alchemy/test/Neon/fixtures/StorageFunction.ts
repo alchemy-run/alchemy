@@ -9,11 +9,7 @@ import { ReadWriteBucket } from "@/Neon/ReadWriteBucket";
 import { ReadWriteBucketHttp } from "@/Neon/ReadWriteBucketHttp";
 import { WriteObject } from "@/Neon/WriteObject";
 import { WriteObjectHttp } from "@/Neon/WriteObjectHttp";
-import {
-  StorageBranch,
-  StorageBucket,
-  StorageSettings,
-} from "./StorageResources.ts";
+import { StorageBranch, StorageBucket, StorageSettings } from "./StorageResources.ts";
 
 export default class StorageFunction extends NeonFunction<StorageFunction>()(
   "StorageFunction",
@@ -58,11 +54,9 @@ export default class StorageFunction extends NeonFunction<StorageFunction>()(
           );
         }
         if (request.url === "/invalid") {
-          yield* files.put(
-            "settings.json",
-            '{"theme":"dark","pageSize":"bad"}',
-            { ContentType: "application/json" },
-          );
+          yield* files.put("settings.json", '{"theme":"dark","pageSize":"bad"}', {
+            ContentType: "application/json",
+          });
           return yield* settings.get().pipe(
             Effect.as(HttpServerResponse.text("accepted", { status: 500 })),
             Effect.catchTag("ObjectDecodeError", () =>
@@ -73,15 +67,9 @@ export default class StorageFunction extends NeonFunction<StorageFunction>()(
         return yield* HttpServerResponse.json(yield* settings.get());
       }).pipe(
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Storage request failed", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Storage request failed", { status: 500 })),
         ),
       ),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(ReadWriteBucketHttp, ReadObjectHttp, WriteObjectHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(ReadWriteBucketHttp, ReadObjectHttp, WriteObjectHttp))),
 ) {}

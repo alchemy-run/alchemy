@@ -47,7 +47,6 @@ export interface DescribeFlowExecutionRecords extends Binding.Service<
   >
 > {}
 
-export const DescribeFlowExecutionRecords =
-  Binding.Service<DescribeFlowExecutionRecords>(
-    "AWS.AppFlow.DescribeFlowExecutionRecords",
-  );
+export const DescribeFlowExecutionRecords = Binding.Service<DescribeFlowExecutionRecords>(
+  "AWS.AppFlow.DescribeFlowExecutionRecords",
+);

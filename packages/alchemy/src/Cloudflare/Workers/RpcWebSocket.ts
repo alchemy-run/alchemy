@@ -41,10 +41,7 @@ export interface Transport {
     message: string | ArrayBuffer,
   ) => Effect.Effect<void>;
   readonly webSocketClose: (socket: WebSocket) => Effect.Effect<void>;
-  readonly webSocketError: (
-    socket: WebSocket,
-    error: unknown,
-  ) => Effect.Effect<void>;
+  readonly webSocketError: (socket: WebSocket, error: unknown) => Effect.Effect<void>;
 }
 
 /**
@@ -106,21 +103,15 @@ export const make: Effect.Effect<
       !stopped &&
       heartbeat !== undefined &&
       byId.size > 0 &&
-      !Array.from(byId.values()).some(
-        (connection) => connection.pending.size > 0,
-      );
+      !Array.from(byId.values()).some((connection) => connection.pending.size > 0);
     if (enabled === heartbeatEnabled) return Effect.void;
-    return inRuntime(
-      state.setWebSocketAutoResponse(enabled ? heartbeat : undefined),
-    ).pipe(
+    return inRuntime(state.setWebSocketAutoResponse(enabled ? heartbeat : undefined)).pipe(
       Effect.tap(() =>
         Effect.sync(() => {
           heartbeatEnabled = enabled;
         }),
       ),
-      Effect.catchCause(() =>
-        inRuntime(state.abort("Unable to update RPC WebSocket heartbeat")),
-      ),
+      Effect.catchCause(() => inRuntime(state.abort("Unable to update RPC WebSocket heartbeat"))),
     );
   });
   yield* syncHeartbeat;
@@ -163,9 +154,7 @@ export const make: Effect.Effect<
 
   const close = (socket: WebSocket, code = 1012, reason = restartReason) =>
     socket.close(code, reason).pipe(
-      Effect.catchCause(() =>
-        inRuntime(state.abort("Unable to close RPC WebSocket")),
-      ),
+      Effect.catchCause(() => inRuntime(state.abort("Unable to close RPC WebSocket"))),
       Effect.ensuring(unregister(socket)),
       Effect.uninterruptible,
     );
@@ -186,9 +175,7 @@ export const make: Effect.Effect<
 
   for (const socket of yield* inRuntime(state.getWebSockets(socketTag))) {
     yield* Effect.gen(function* () {
-      const attachment = yield* Effect.sync(() =>
-        socket.deserializeAttachment<unknown>(),
-      );
+      const attachment = yield* Effect.sync(() => socket.deserializeAttachment<unknown>());
       if (!isAttachment(attachment)) return yield* close(socket);
       const metadata = attachment[attachmentKey];
       if (
@@ -200,24 +187,17 @@ export const make: Effect.Effect<
       ) {
         return yield* close(socket);
       }
-      const connection = yield* Effect.sync(() =>
-        register(socket, metadata.clientId),
-      );
+      const connection = yield* Effect.sync(() => register(socket, metadata.clientId));
       yield* persist(connection);
     }).pipe(Effect.catchCause(() => close(socket)));
   }
   restoring = false;
   yield* syncHeartbeat;
 
-  const send = (
-    connection: Connection,
-    response: RpcMessage.FromServerEncoded,
-  ) =>
+  const send = (connection: Connection, response: RpcMessage.FromServerEncoded) =>
     Effect.gen(function* () {
       if (!byId.has(connection.id)) return;
-      const encoded = yield* Effect.sync(() =>
-        connection.parser.encode(response),
-      );
+      const encoded = yield* Effect.sync(() => connection.parser.encode(response));
       // Buffered responses cannot be recovered after hibernation.
       if (encoded === undefined) return yield* close(connection.socket);
       yield* connection.socket.send(encoded);
@@ -227,10 +207,7 @@ export const make: Effect.Effect<
         if (connection.pending.size === 0) yield* connection.idle.open;
         yield* syncHeartbeat;
       }
-      if (
-        response._tag === "Defect" ||
-        response._tag === "ClientProtocolError"
-      ) {
+      if (response._tag === "Defect" || response._tag === "ClientProtocolError") {
         yield* close(connection.socket);
       }
     }).pipe(
@@ -243,9 +220,7 @@ export const make: Effect.Effect<
       Effect.acquireUseRelease(
         Effect.sync(() => {
           if (receive !== undefined || stopped) {
-            throw new Error(
-              "RPC WebSocket protocol is already running or stopped",
-            );
+            throw new Error("RPC WebSocket protocol is already running or stopped");
           }
           receive = write;
         }),
@@ -265,16 +240,12 @@ export const make: Effect.Effect<
     send: (id, response) =>
       Effect.suspend(() => {
         const connection = byId.get(id);
-        return connection === undefined
-          ? Effect.void
-          : send(connection, response);
+        return connection === undefined ? Effect.void : send(connection, response);
       }),
     end: (id) =>
       Effect.suspend(() => {
         const connection = byId.get(id);
-        return connection === undefined
-          ? Effect.void
-          : close(connection.socket, 1000, "");
+        return connection === undefined ? Effect.void : close(connection.socket, 1000, "");
       }),
     clientIds: Effect.sync(() => new Set(byId.keys())),
     initialMessage: Effect.succeedNone,
@@ -287,10 +258,7 @@ export const make: Effect.Effect<
 
   const fetch: HttpEffect = Effect.gen(function* () {
     const request = yield* HttpServerRequest;
-    if (
-      request.method !== "GET" ||
-      request.headers.upgrade?.toLowerCase() !== "websocket"
-    ) {
+    if (request.method !== "GET" || request.headers.upgrade?.toLowerCase() !== "websocket") {
       return HttpServerResponse.empty({
         status: 426,
         headers: { Upgrade: "websocket" },
@@ -310,9 +278,7 @@ export const make: Effect.Effect<
       return yield* Effect.sync(() =>
         HttpServerResponse.setBody(
           HttpServerResponse.empty({ status: 101 }),
-          HttpBody.raw(
-            new native.Response(null, { status: 101, webSocket: pair[0] }),
-          ),
+          HttpBody.raw(new native.Response(null, { status: 101, webSocket: pair[0] })),
         ),
       );
     }).pipe(
@@ -330,12 +296,9 @@ export const make: Effect.Effect<
       if (closed.has(socket.ws)) return;
       yield* ready.await;
       const connection = bySocket.get(socket.ws);
-      if (connection === undefined || receive === undefined)
-        return yield* close(socket);
+      if (connection === undefined || receive === undefined) return yield* close(socket);
       const messages = yield* Effect.sync(() =>
-        connection.parser.decode(
-          typeof message === "string" ? message : new Uint8Array(message),
-        ),
+        connection.parser.decode(typeof message === "string" ? message : new Uint8Array(message)),
       );
       // The serializer owns the envelopes; RpcServer validates payloads and schemas.
       const requests = messages as ReadonlyArray<RpcMessage.FromClientEncoded>;

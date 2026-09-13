@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface DescribeKeyRequest extends Omit<
-  kms.DescribeKeyRequest,
-  "KeyId"
-> {}
+export interface DescribeKeyRequest extends Omit<kms.DescribeKeyRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:DescribeKey`.
@@ -34,9 +31,7 @@ export interface DescribeKey extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request?: DescribeKeyRequest,
-    ) => Effect.Effect<kms.DescribeKeyResponse, kms.DescribeKeyError>
+    (request?: DescribeKeyRequest) => Effect.Effect<kms.DescribeKeyResponse, kms.DescribeKeyError>
   >
 > {}
 

@@ -19,10 +19,7 @@ const resource = {
 } as ResourceState;
 
 const state = () =>
-  inMemoryState(
-    { app: { dev: { resource } } },
-    { app: { dev: { url: "https://example.com" } } },
-  );
+  inMemoryState({ app: { dev: { resource } } }, { app: { dev: { url: "https://example.com" } } });
 
 describe("State tree", () => {
   it.effect("queries state as structured data", () =>

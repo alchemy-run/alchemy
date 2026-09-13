@@ -127,9 +127,7 @@ export type EntitlementsFeature = Resource<
  *
  * @resource
  */
-export const EntitlementsFeature = Resource<EntitlementsFeature>(
-  "Stripe.EntitlementsFeature",
-);
+export const EntitlementsFeature = Resource<EntitlementsFeature>("Stripe.EntitlementsFeature");
 
 type EntitlementsFeatureAttributes = EntitlementsFeature["Attributes"];
 
@@ -139,18 +137,10 @@ const userMetadata = (
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
-const toLookupKey = (
-  id: string,
-  lookupKey: string | undefined,
-  existing?: string,
-) =>
+const toLookupKey = (id: string, lookupKey: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       lookupKey ??
@@ -163,9 +153,7 @@ const toLookupKey = (
     );
   });
 
-const toAttrs = (
-  feature: StripeEntitlementsFeature,
-): EntitlementsFeatureAttributes => ({
+const toAttrs = (feature: StripeEntitlementsFeature): EntitlementsFeatureAttributes => ({
   id: feature.id,
   lookupKey: feature.lookup_key,
   name: feature.name,
@@ -287,9 +275,7 @@ export const EntitlementsFeatureProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -306,11 +292,7 @@ export const EntitlementsFeatureProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const lookupKey = yield* toLookupKey(
-        id,
-        news.lookupKey,
-        output?.lookupKey,
-      );
+      const lookupKey = yield* toLookupKey(id, news.lookupKey, output?.lookupKey);
       const name = yield* toName(id, news.name, output?.name);
       const metadata = yield* desiredMetadata(id, news.metadata);
       const desiredActive = news.active ?? true;
@@ -362,9 +344,7 @@ export const EntitlementsFeatureProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

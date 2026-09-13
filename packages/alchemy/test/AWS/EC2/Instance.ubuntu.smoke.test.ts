@@ -56,9 +56,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
-              : Effect.fail(
-                  new Error(`${path} temporarily returned ${res.status}`),
-                ),
+              : Effect.fail(new Error(`${path} temporarily returned ${res.status}`)),
           ),
           Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
         );

@@ -33,10 +33,7 @@ export interface ClassifyDocument extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.ClassifyDocumentRequest,
-    ) => Effect.Effect<
-      comprehend.ClassifyDocumentResponse,
-      comprehend.ClassifyDocumentError
-    >
+    ) => Effect.Effect<comprehend.ClassifyDocumentResponse, comprehend.ClassifyDocumentError>
   >
 > {}
 export const ClassifyDocument = Binding.Service<ClassifyDocument>(

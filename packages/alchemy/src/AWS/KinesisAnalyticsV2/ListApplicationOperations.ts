@@ -32,13 +32,9 @@ export interface ListApplicationOperations extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListApplicationOperationsRequest,
-    ) => Effect.Effect<
-      SVC.ListApplicationOperationsResponse,
-      SVC.ListApplicationOperationsError
-    >
+    ) => Effect.Effect<SVC.ListApplicationOperationsResponse, SVC.ListApplicationOperationsError>
   >
 > {}
-export const ListApplicationOperations =
-  Binding.Service<ListApplicationOperations>(
-    "AWS.KinesisAnalyticsV2.ListApplicationOperations",
-  );
+export const ListApplicationOperations = Binding.Service<ListApplicationOperations>(
+  "AWS.KinesisAnalyticsV2.ListApplicationOperations",
+);

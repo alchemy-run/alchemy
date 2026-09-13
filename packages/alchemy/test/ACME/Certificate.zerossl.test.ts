@@ -20,11 +20,9 @@ const { test } = Test.make({
 
 const enabled =
   process.env.ACME_TEST_ZEROSSL === "1" &&
-  (process.env.ZERO_SSL_KEY !== undefined ||
-    process.env.ZEROSSL_ACCESS_KEY !== undefined);
+  (process.env.ZERO_SSL_KEY !== undefined || process.env.ZEROSSL_ACCESS_KEY !== undefined);
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const NAME = `alchemy-acme-zerossl.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
@@ -38,11 +36,7 @@ const resolveZoneId = Effect.gen(function* () {
 
 const mintEab = ZeroSsl.zerossl
   .generateEabCredentials({})
-  .pipe(
-    Effect.provide(
-      Layer.mergeAll(ZeroSsl.CredentialsFromEnv, FetchHttpClient.layer),
-    ),
-  );
+  .pipe(Effect.provide(Layer.mergeAll(ZeroSsl.CredentialsFromEnv, FetchHttpClient.layer)));
 
 test.provider.skipIf(!enabled)(
   "issues from ZeroSSL with EAB credentials over Cloudflare DNS-01",

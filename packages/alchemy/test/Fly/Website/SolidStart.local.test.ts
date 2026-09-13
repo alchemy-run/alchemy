@@ -17,18 +17,9 @@ const { test } = Test.make({ providers: Fly.providers(), dev: true });
  */
 const runDevSsr = process.env.ALCHEMY_TEST_SOLIDSTART_DEV_SSR === "1";
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/solidstart-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/solidstart-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 describe("Fly.Website.SolidStart local", () => {
   test.provider(
@@ -95,13 +86,9 @@ describe("Fly.Website.SolidStart local", () => {
           "SOLIDSTART_AWS_API_MARKER",
           { label: "api route (dev)" },
         );
-        yield* expectUrlContains(
-          `${origin}/prerendered`,
-          "SOLIDSTART_AWS_PRERENDERED_MARKER",
-          {
-            label: "extra route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${origin}/prerendered`, "SOLIDSTART_AWS_PRERENDERED_MARKER", {
+          label: "extra route (dev)",
+        });
 
         yield* stack.destroy();
       }),

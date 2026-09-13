@@ -7,17 +7,12 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
-import {
-  PresignGetObject,
-  type PresignGetObjectRequest,
-} from "./PresignGetObject.ts";
+import { PresignGetObject, type PresignGetObjectRequest } from "./PresignGetObject.ts";
 
 export const PresignGetObjectHttp = Layer.effect(
   PresignGetObject,
   Effect.gen(function* () {
-    const services = yield* Effect.context<
-      Credentials.Credentials | Region.Region
-    >();
+    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
 
     return Effect.fn(function* (bucket: Bucket) {
       const BucketName = yield* bucket.bucketName;
@@ -35,19 +30,19 @@ export const PresignGetObjectHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(`AWS.S3.PresignGetObject(${bucket.LogicalId})`)(
-        function* (request: PresignGetObjectRequest) {
-          const bucketName = yield* BucketName;
-          return yield* Presign.presignS3Url({
-            method: "GET",
-            bucket: bucketName,
-            key: request.key,
-            versionId: request.versionId,
-            expiresIn: request.expiresIn,
-            responseContentType: request.contentType,
-          }).pipe(Effect.provideContext(services));
-        },
-      );
+      return Effect.fn(`AWS.S3.PresignGetObject(${bucket.LogicalId})`)(function* (
+        request: PresignGetObjectRequest,
+      ) {
+        const bucketName = yield* BucketName;
+        return yield* Presign.presignS3Url({
+          method: "GET",
+          bucket: bucketName,
+          key: request.key,
+          versionId: request.versionId,
+          expiresIn: request.expiresIn,
+          responseContentType: request.contentType,
+        }).pipe(Effect.provideContext(services));
+      });
     });
   }),
 );

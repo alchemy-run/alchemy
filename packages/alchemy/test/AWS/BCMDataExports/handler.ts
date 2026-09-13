@@ -39,16 +39,10 @@ export default BCMDataExportsTestFunction.make(
           Sid: "EnableAWSDataExportsToWriteToS3AndCheckPolicy",
           Effect: "Allow",
           Principal: {
-            Service: [
-              "billingreports.amazonaws.com",
-              "bcm-data-exports.amazonaws.com",
-            ],
+            Service: ["billingreports.amazonaws.com", "bcm-data-exports.amazonaws.com"],
           },
           Action: ["s3:PutObject", "s3:GetBucketPolicy"],
-          Resource: [
-            `arn:aws:s3:::${bucketName}`,
-            `arn:aws:s3:::${bucketName}/*`,
-          ],
+          Resource: [`arn:aws:s3:::${bucketName}`, `arn:aws:s3:::${bucketName}/*`],
         },
       ],
     });
@@ -109,9 +103,7 @@ export default BCMDataExportsTestFunction.make(
           const result = yield* getExport();
           return yield* HttpServerResponse.json({
             name: result.Export?.Name ?? null,
-            prefix:
-              result.Export?.DestinationConfigurations.S3Destination.S3Prefix ??
-              null,
+            prefix: result.Export?.DestinationConfigurations.S3Destination.S3Prefix ?? null,
             frequency: result.Export?.RefreshCadence.Frequency ?? null,
           });
         }
@@ -139,9 +131,8 @@ export default BCMDataExportsTestFunction.make(
             ExecutionId: NONEXISTENT_EXECUTION_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });

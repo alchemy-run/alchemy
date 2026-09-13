@@ -43,10 +43,7 @@ export interface PutDataProtectionPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutDataProtectionPolicyRequest,
-    ) => Effect.Effect<
-      sns.PutDataProtectionPolicyResponse,
-      sns.PutDataProtectionPolicyError
-    >
+    ) => Effect.Effect<sns.PutDataProtectionPolicyResponse, sns.PutDataProtectionPolicyError>
   >
 > {}
 export const PutDataProtectionPolicy = Binding.Service<PutDataProtectionPolicy>(

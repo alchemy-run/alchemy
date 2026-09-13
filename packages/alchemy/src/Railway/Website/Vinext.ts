@@ -8,12 +8,10 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
  * The vinext Node framework module (it is its own deploy target — not
  * the Cloudflare Worker source).
  */
-export const VINEXT_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vinext/node";
+export const VINEXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/node";
 
 /** The Node container deploy target for the vinext build. */
-export const VINEXT_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vinext/node";
+export const VINEXT_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/node";
 
 export interface VinextProps extends FrameworkSiteProps {
   /**

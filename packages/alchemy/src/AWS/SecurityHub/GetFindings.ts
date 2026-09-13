@@ -30,12 +30,7 @@ export interface GetFindings extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.GetFindingsRequest,
-    ) => Effect.Effect<
-      securityhub.GetFindingsResponse,
-      securityhub.GetFindingsError
-    >
+    ) => Effect.Effect<securityhub.GetFindingsResponse, securityhub.GetFindingsError>
   >
 > {}
-export const GetFindings = Binding.Service<GetFindings>(
-  "AWS.SecurityHub.GetFindings",
-);
+export const GetFindings = Binding.Service<GetFindings>("AWS.SecurityHub.GetFindings");

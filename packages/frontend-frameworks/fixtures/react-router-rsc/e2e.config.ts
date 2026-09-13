@@ -3,10 +3,7 @@ import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 
 export default Options.make({
   vite: {
-    main: path.resolve(
-      import.meta.dirname,
-      "react-router-vite/entry.worker.tsx",
-    ),
+    main: path.resolve(import.meta.dirname, "react-router-vite/entry.worker.tsx"),
     compatibilityDate: "2026-03-10",
     compatibilityFlags: ["nodejs_compat"],
     viteEnvironments: { entry: "rsc", children: ["ssr"] },

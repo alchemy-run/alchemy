@@ -22,22 +22,18 @@ export const GetTelemetryRuleHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ObservabilityAdmin.GetTelemetryRule(${rule}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["observabilityadmin:GetTelemetryRule"],
-                  Resource: [rule.ruleArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ObservabilityAdmin.GetTelemetryRule(${rule}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["observabilityadmin:GetTelemetryRule"],
+                Resource: [rule.ruleArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.ObservabilityAdmin.GetTelemetryRule(${rule.LogicalId})`,
-      )(function* () {
+      return Effect.fn(`AWS.ObservabilityAdmin.GetTelemetryRule(${rule.LogicalId})`)(function* () {
         return yield* getTelemetryRule({
           RuleIdentifier: yield* RuleIdentifier,
         });

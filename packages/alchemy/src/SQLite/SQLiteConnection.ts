@@ -12,9 +12,7 @@ export interface SQLiteConnection {
   /**
    * Prepare a SQL statement for execution.
    */
-  prepare<R = unknown>(
-    sql: string,
-  ): Effect.Effect<SQLiteStatement<R>, SQLiteErrorType>;
+  prepare<R = unknown>(sql: string): Effect.Effect<SQLiteStatement<R>, SQLiteErrorType>;
 
   /**
    * Execute raw SQL statements (e.g., for DDL operations).

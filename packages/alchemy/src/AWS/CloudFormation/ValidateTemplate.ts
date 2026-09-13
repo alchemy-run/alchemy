@@ -29,10 +29,7 @@ export interface ValidateTemplate extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudformation.ValidateTemplateInput,
-    ) => Effect.Effect<
-      cloudformation.ValidateTemplateOutput,
-      cloudformation.ValidateTemplateError
-    >
+    ) => Effect.Effect<cloudformation.ValidateTemplateOutput, cloudformation.ValidateTemplateError>
   >
 > {}
 export const ValidateTemplate = Binding.Service<ValidateTemplate>(

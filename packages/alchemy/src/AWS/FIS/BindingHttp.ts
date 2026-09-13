@@ -66,10 +66,7 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
                     ? [
                         // arn:…:experiment-template/EXT… → arn:…:experiment/*
                         template.arn.pipe(
-                          Output.map(
-                            (arn) =>
-                              `${arn.slice(0, arn.lastIndexOf(":"))}:experiment/*`,
-                          ),
+                          Output.map((arn) => `${arn.slice(0, arn.lastIndexOf(":"))}:experiment/*`),
                         ),
                       ]
                     : []),

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
 
-export interface GetReadSetRequest extends Omit<
-  omics.GetReadSetRequest,
-  "sequenceStoreId"
-> {}
+export interface GetReadSetRequest extends Omit<omics.GetReadSetRequest, "sequenceStoreId"> {}
 
 /**
  * Runtime binding for `omics:GetReadSet`.
@@ -32,9 +29,7 @@ export interface GetReadSet extends Binding.Service<
   (
     store: SequenceStore,
   ) => Effect.Effect<
-    (
-      request?: GetReadSetRequest,
-    ) => Effect.Effect<omics.GetReadSetResponse, omics.GetReadSetError>
+    (request?: GetReadSetRequest) => Effect.Effect<omics.GetReadSetResponse, omics.GetReadSetError>
   >
 > {}
 

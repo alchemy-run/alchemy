@@ -26,9 +26,7 @@ export class HelmError extends Data.TaggedError("HelmError")<{
   readonly cause?: unknown;
 }> {}
 
-const HelmBin = Config.String("HELM_BIN").pipe(
-  Effect.orElseSucceed(() => "helm"),
-);
+const HelmBin = Config.String("HELM_BIN").pipe(Effect.orElseSucceed(() => "helm"));
 
 export interface RenderHelmChartOptions {
   /**
@@ -62,9 +60,7 @@ export interface RenderHelmChartOptions {
  * error). Helm lifecycle hooks are excluded from the result (see
  * {@link isHelmHook}).
  */
-export const renderHelmChart = Effect.fn(function* (
-  options: RenderHelmChartOptions,
-) {
+export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOptions) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -166,10 +162,7 @@ export const parseRenderedManifests = (
     // Strip only that exact leading preamble; chart output remains subject to
     // the same strict Kubernetes object validation below.
     const manifests = chart.startsWith("oci://")
-      ? rendered.replace(
-          /^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/,
-          "",
-        )
+      ? rendered.replace(/^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/, "")
       : rendered;
     const documents = yield* Effect.try({
       try: () => YAML.parseAllDocuments(manifests),
@@ -194,10 +187,7 @@ export const parseRenderedManifests = (
         );
       }
       const object = value as Partial<KubernetesObjectDefinition>;
-      if (
-        typeof object.apiVersion !== "string" ||
-        typeof object.kind !== "string"
-      ) {
+      if (typeof object.apiVersion !== "string" || typeof object.kind !== "string") {
         return yield* Effect.fail(
           new HelmError({
             message: `Chart '${chart}' rendered an object without apiVersion/kind: ${JSON.stringify(value).slice(0, 200)}`,

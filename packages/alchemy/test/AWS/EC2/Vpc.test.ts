@@ -11,10 +11,7 @@ import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update, delete vpc",
@@ -118,8 +115,8 @@ const expectVpcAttribute = Effect.fn(function* (props: {
   }).pipe(
     Effect.tap(Effect.logDebug),
     Effect.flatMap((result: any) =>
-      result[`${props.Attribute[0].toUpperCase()}${props.Attribute.slice(1)}`]
-        ?.Value === props.Value
+      result[`${props.Attribute[0].toUpperCase()}${props.Attribute.slice(1)}`]?.Value ===
+      props.Value
         ? Effect.succeed(result)
         : Effect.fail(new VpcAttributeStale()),
     ),

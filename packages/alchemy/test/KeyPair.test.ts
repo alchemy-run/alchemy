@@ -12,10 +12,7 @@ const { test } = Test.make({
   state: inMemoryState(),
 });
 
-const assertPemKeyPair = (attrs: {
-  privateKey: Redacted.Redacted<string>;
-  publicKey: string;
-}) => {
+const assertPemKeyPair = (attrs: { privateKey: Redacted.Redacted<string>; publicKey: string }) => {
   const priv = Redacted.value(attrs.privateKey);
   expect(priv).toMatch(/^-----BEGIN PRIVATE KEY-----/);
   expect(priv).toMatch(/-----END PRIVATE KEY-----/);
@@ -78,9 +75,7 @@ describe("Alchemy.KeyPair", () => {
       const first = yield* stack.deploy(program);
       const second = yield* stack.deploy(program);
 
-      expect(Redacted.value(second.privateKey)).toBe(
-        Redacted.value(first.privateKey),
-      );
+      expect(Redacted.value(second.privateKey)).toBe(Redacted.value(first.privateKey));
       expect(second.publicKey).toBe(first.publicKey);
     }),
   );

@@ -74,11 +74,7 @@ export const ConditionalForwarder = Resource<ConditionalForwarder>(
 // The directory transiently rejects forwarder mutations while its domain
 // controllers are busy (DirectoryUnavailableException); bounded retry
 // through that window.
-const retryWhileDirectoryUnavailable = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryWhileDirectoryUnavailable = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -90,20 +86,13 @@ export const ConditionalForwarderProvider = () =>
   Provider.effect(
     ConditionalForwarder,
     Effect.gen(function* () {
-      const readForwarder = Effect.fn(function* (
-        directoryId: string,
-        remoteDomainName: string,
-      ) {
+      const readForwarder = Effect.fn(function* (directoryId: string, remoteDomainName: string) {
         const response = yield* ds
           .describeConditionalForwarders({
             DirectoryId: directoryId,
             RemoteDomainNames: [remoteDomainName],
           })
-          .pipe(
-            Effect.catchTag("EntityDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
         return response?.ConditionalForwarders?.find(
           (forwarder) => forwarder.RemoteDomainName === remoteDomainName,
         );
@@ -136,8 +125,7 @@ export const ConditionalForwarderProvider = () =>
 
         read: Effect.fn(function* ({ olds, output }) {
           const directoryId = output?.directoryId ?? olds?.directoryId;
-          const remoteDomainName =
-            output?.remoteDomainName ?? olds?.remoteDomainName;
+          const remoteDomainName = output?.remoteDomainName ?? olds?.remoteDomainName;
           if (directoryId === undefined || remoteDomainName === undefined) {
             return undefined;
           }
@@ -150,10 +138,7 @@ export const ConditionalForwarderProvider = () =>
           const props = news!;
 
           // 1. Observe — cloud state is authoritative.
-          let observed = yield* readForwarder(
-            props.directoryId,
-            props.remoteDomainName,
-          );
+          let observed = yield* readForwarder(props.directoryId, props.remoteDomainName);
 
           // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
@@ -165,15 +150,9 @@ export const ConditionalForwarderProvider = () =>
               })
               .pipe(
                 retryWhileDirectoryUnavailable,
-                Effect.catchTag(
-                  "EntityAlreadyExistsException",
-                  () => Effect.void,
-                ),
+                Effect.catchTag("EntityAlreadyExistsException", () => Effect.void),
               );
-            observed = yield* readForwarder(
-              props.directoryId,
-              props.remoteDomainName,
-            );
+            observed = yield* readForwarder(props.directoryId, props.remoteDomainName);
           }
 
           // 3. Sync — update the DNS addresses only when observed state
@@ -186,10 +165,7 @@ export const ConditionalForwarderProvider = () =>
                 DnsIpAddrs: props.dnsIpAddrs,
               })
               .pipe(retryWhileDirectoryUnavailable);
-            observed = yield* readForwarder(
-              props.directoryId,
-              props.remoteDomainName,
-            );
+            observed = yield* readForwarder(props.directoryId, props.remoteDomainName);
           }
           if (observed === undefined) {
             return yield* Effect.fail(

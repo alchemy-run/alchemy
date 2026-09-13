@@ -35,7 +35,6 @@ export interface InviteAccountToOrganization extends Binding.Service<
     >
   >
 > {}
-export const InviteAccountToOrganization =
-  Binding.Service<InviteAccountToOrganization>(
-    "AWS.Organizations.InviteAccountToOrganization",
-  );
+export const InviteAccountToOrganization = Binding.Service<InviteAccountToOrganization>(
+  "AWS.Organizations.InviteAccountToOrganization",
+);

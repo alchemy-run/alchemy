@@ -17,11 +17,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const readinessSchedule = Schedule.max([
   Schedule.exponential(500).pipe(
     Schedule.modifyDelay(({ duration: d }) =>
-      Effect.succeed(
-        Duration.isGreaterThan(d, Duration.seconds(10))
-          ? Duration.seconds(10)
-          : d,
-      ),
+      Effect.succeed(Duration.isGreaterThan(d, Duration.seconds(10)) ? Duration.seconds(10) : d),
     ),
   ),
   Schedule.recurs(20),

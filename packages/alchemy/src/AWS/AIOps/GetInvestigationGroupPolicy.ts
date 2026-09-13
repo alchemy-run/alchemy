@@ -43,7 +43,6 @@ export interface GetInvestigationGroupPolicy extends Binding.Service<
     >
   >
 > {}
-export const GetInvestigationGroupPolicy =
-  Binding.Service<GetInvestigationGroupPolicy>(
-    "AWS.AIOps.GetInvestigationGroupPolicy",
-  );
+export const GetInvestigationGroupPolicy = Binding.Service<GetInvestigationGroupPolicy>(
+  "AWS.AIOps.GetInvestigationGroupPolicy",
+);

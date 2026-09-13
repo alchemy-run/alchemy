@@ -15,42 +15,36 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probes: prove the distilled error union carries the
 // tags this provider's read/delete paths depend on. Run in every CI pass at
 // near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "listReplicationSets succeeds whether or not Incident Manager is onboarded",
-  () =>
-    Effect.gen(function* () {
-      const listed = yield* incidents.listReplicationSets({});
-      expect(Array.isArray(listed.replicationSetArns)).toBe(true);
-    }),
+test.provider("listReplicationSets succeeds whether or not Incident Manager is onboarded", () =>
+  Effect.gen(function* () {
+    const listed = yield* incidents.listReplicationSets({});
+    expect(Array.isArray(listed.replicationSetArns)).toBe(true);
+  }),
 );
 
-test.provider(
-  "getReplicationSet on a nonexistent arn fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment.current;
-      const error = yield* Effect.flip(
-        incidents.getReplicationSet({
-          arn: `arn:aws:ssm-incidents::${accountId}:replication-set/00000000-0000-4000-8000-000000000000`,
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getReplicationSet on a nonexistent arn fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const { accountId } = yield* AWSEnvironment.current;
+    const error = yield* Effect.flip(
+      incidents.getReplicationSet({
+        arn: `arn:aws:ssm-incidents::${accountId}:replication-set/00000000-0000-4000-8000-000000000000`,
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
-test.provider(
-  "getResponsePlan on a nonexistent arn fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment.current;
-      // Response plan ARNs are region-less (they live in the replication set).
-      const error = yield* Effect.flip(
-        incidents.getResponsePlan({
-          arn: `arn:aws:ssm-incidents::${accountId}:response-plan/alchemy-nonexistent-probe`,
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getResponsePlan on a nonexistent arn fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const { accountId } = yield* AWSEnvironment.current;
+    // Response plan ARNs are region-less (they live in the replication set).
+    const error = yield* Effect.flip(
+      incidents.getResponsePlan({
+        arn: `arn:aws:ssm-incidents::${accountId}:response-plan/alchemy-nonexistent-probe`,
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // The replication set is the account/region singleton that ONBOARDS Incident
@@ -90,24 +84,16 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       yield* incidents.getReplicationSet({ arn: onboarded.success.arn }).pipe(
         Effect.map((r) => r.replicationSet.status),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
           until: (status) => status !== "CREATING" && status !== "UPDATING",
         }),
       );
       yield* incidents.deleteReplicationSet({ arn: onboarded.success.arn });
       yield* incidents.getReplicationSet({ arn: onboarded.success.arn }).pipe(
         Effect.map((r) => r.replicationSet.status),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
         Effect.repeat({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
           until: (status) => status === "GONE",
         }),
       );
@@ -209,9 +195,7 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // lifted automatically, and Incident Manager is offboarded. The
       // provider's delete waits until the set is fully gone.
       yield* stack.destroy();
-      const planError = yield* Effect.flip(
-        incidents.getResponsePlan({ arn: plan.arn }),
-      );
+      const planError = yield* Effect.flip(incidents.getResponsePlan({ arn: plan.arn }));
       expect(planError._tag).toBe("ResourceNotFoundException");
       const after = yield* incidents.listReplicationSets({});
       expect(after.replicationSetArns).toHaveLength(0);

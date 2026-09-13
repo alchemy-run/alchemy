@@ -137,11 +137,7 @@ export interface AIClient {
     model: Name,
     inputs: AiModels[Name]["inputs"],
     options?: AiOptions,
-  ): Effect.Effect<
-    AiModels[Name]["postProcessedOutputs"],
-    WorkersAIError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<AiModels[Name]["postProcessedOutputs"], WorkersAIError, RuntimeContext>;
   /**
    * List Workers AI models from the catalog, optionally filtered.
    */

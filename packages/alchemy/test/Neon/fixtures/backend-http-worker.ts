@@ -5,12 +5,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 import * as Neon from "@/Neon";
-import {
-  backendAuth,
-  backendBranch,
-  backendDataApi,
-  backendGateway,
-} from "./backend-resources.ts";
+import { backendAuth, backendBranch, backendDataApi, backendGateway } from "./backend-resources.ts";
 
 const bindings = Layer.mergeAll(
   Neon.ConnectAuthHttp,
@@ -42,9 +37,7 @@ export default class BackendHttpWorker extends Cloudflare.Worker<BackendHttpWork
           dataUrl: yield* data.baseUrl,
           aiUrl: yield* ai.baseUrl,
           hasToken: Redacted.value(yield* ai.token).length > 0,
-          sharedToken:
-            Redacted.value(yield* ai.token) ===
-            Redacted.value(yield* shared.token),
+          sharedToken: Redacted.value(yield* ai.token) === Redacted.value(yield* shared.token),
         });
       }),
     };

@@ -188,9 +188,7 @@ export const ResourceGroupProvider = () =>
       // 3. Sync — diff observed name/scope against desired; the update is
       //    a PUT, so send the full body, but skip the call on a no-op.
       const observedScope = parseScope(observed.scope);
-      const dirty =
-        (observed.name ?? "") !== name ||
-        !sameScope(observedScope, desiredScope);
+      const dirty = (observed.name ?? "") !== name || !sameScope(observedScope, desiredScope);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -270,9 +268,7 @@ const findByName = (accountId: string, name: string) =>
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk)
-        .filter(
-          (g): g is ObservedResourceGroup & { name: string } => g.name === name,
-        )
+        .filter((g): g is ObservedResourceGroup & { name: string } => g.name === name)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),
@@ -295,16 +291,11 @@ const resolveScope = (scope: ResourceGroupScopeInput): ResourceGroupScope => ({
  * resource group.
  */
 const parseScope = (scope: unknown): ResourceGroupScope => {
-  const key =
-    Predicate.hasProperty(scope, "key") && typeof scope.key === "string"
-      ? scope.key
-      : "";
+  const key = Predicate.hasProperty(scope, "key") && typeof scope.key === "string" ? scope.key : "";
   const objects =
     Predicate.hasProperty(scope, "objects") && Array.isArray(scope.objects)
       ? scope.objects.flatMap((o: unknown) =>
-          Predicate.hasProperty(o, "key") && typeof o.key === "string"
-            ? [{ key: o.key }]
-            : [],
+          Predicate.hasProperty(o, "key") && typeof o.key === "string" ? [{ key: o.key }] : [],
         )
       : [];
   return { key, objects };

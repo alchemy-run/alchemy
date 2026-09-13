@@ -13,15 +13,13 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probe: proves the distilled emr error union carries the
 // StudioNotFound tag this provider's read/delete paths depend on (EMR
 // overloads InvalidRequestException with "Studio does not exist.").
-test.provider(
-  "describeStudio on a nonexistent id fails with StudioNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        emr.describeStudio({ StudioId: "es-AAAAAAAAAAAAAAAAAAAAAAAAA" }),
-      );
-      expect(error._tag).toBe("StudioNotFound");
-    }),
+test.provider("describeStudio on a nonexistent id fails with StudioNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      emr.describeStudio({ StudioId: "es-AAAAAAAAAAAAAAAAAAAAAAAAA" }),
+    );
+    expect(error._tag).toBe("StudioNotFound");
+  }),
 );
 
 // Resolve a subnet of the account's default VPC.
@@ -74,10 +72,7 @@ test.provider(
                       // the default S3 location (incl. GetEncryptionConfiguration).
                       Effect: "Allow",
                       Action: ["s3:*"],
-                      Resource: [
-                        bucket.bucketArn,
-                        Output.interpolate`${bucket.bucketArn}/*`,
-                      ],
+                      Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
                     },
                     {
                       Effect: "Allow",
@@ -152,10 +147,7 @@ test.provider(
 
       // Update — description and default S3 location sync in place (same
       // StudioId, no replacement).
-      const { studio: updated } = yield* deploy(
-        "alchemy test studio v2",
-        "studio-v2",
-      );
+      const { studio: updated } = yield* deploy("alchemy test studio v2", "studio-v2");
       expect(updated.studioId).toBe(studio.studioId);
       const afterUpdate = yield* emr.describeStudio({
         StudioId: studio.studioId,
@@ -165,9 +157,7 @@ test.provider(
 
       // Destroy — verify gone out of band.
       yield* stack.destroy();
-      const afterDestroy = yield* Effect.flip(
-        emr.describeStudio({ StudioId: studio.studioId }),
-      );
+      const afterDestroy = yield* Effect.flip(emr.describeStudio({ StudioId: studio.studioId }));
       expect(afterDestroy._tag).toBe("StudioNotFound");
     }),
   { timeout: 300_000 },

@@ -45,9 +45,7 @@ export default {
         }));
 
         return yield* (
-          viaEntrypoint
-            ? worker.getEntrypoint().fetch(request)
-            : worker.fetch(request)
+          viaEntrypoint ? worker.getEntrypoint().fetch(request) : worker.fetch(request)
         ).pipe(Effect.orDie);
       }),
     };

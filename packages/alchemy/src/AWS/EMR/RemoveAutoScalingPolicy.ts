@@ -23,10 +23,7 @@ export interface RemoveAutoScalingPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.RemoveAutoScalingPolicyInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.RemoveAutoScalingPolicyOutput,
-      SVC.RemoveAutoScalingPolicyError
-    >
+    ) => Effect.Effect<SVC.RemoveAutoScalingPolicyOutput, SVC.RemoveAutoScalingPolicyError>
   >
 > {}
 export const RemoveAutoScalingPolicy = Binding.Service<RemoveAutoScalingPolicy>(

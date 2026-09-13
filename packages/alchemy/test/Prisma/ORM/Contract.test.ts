@@ -42,10 +42,7 @@ model Post {
 
 // Making \`name\` required forces a data transform on existing rows, which
 // Prisma renders as unfilled placeholder(...) closures.
-const PLACEHOLDER_CONTRACT_SOURCE = CONTRACT_SOURCE.replace(
-  "name  String?",
-  "name  String",
-);
+const PLACEHOLDER_CONTRACT_SOURCE = CONTRACT_SOURCE.replace("name  String?", "name  String");
 
 const TS_CONFIG_SOURCE = `
 import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
@@ -92,10 +89,7 @@ const stageWorkspace = (contractSource: string) =>
       directory: tempParent,
       prefix: "alchemy-prisma-contract-test-",
     });
-    yield* fs.writeFileString(
-      path.join(root, "prisma.config.ts"),
-      CONFIG_SOURCE,
-    );
+    yield* fs.writeFileString(path.join(root, "prisma.config.ts"), CONFIG_SOURCE);
     const contractPath = path.join(root, "contract.prisma");
     yield* fs.writeFileString(contractPath, contractSource);
     return {
@@ -137,34 +131,28 @@ const getStatus = Effect.fn(function* (fqn: string) {
   return s?.status;
 });
 
-test.provider(
-  "initial deploy emits the contract and plans the first migration",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const ws = yield* stageWorkspace(CONTRACT_SOURCE);
+test.provider("initial deploy emits the contract and plans the first migration", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const ws = yield* stageWorkspace(CONTRACT_SOURCE);
 
-      const contract = yield* stack.deploy(
-        Prisma.Contract("app-contract", { config: ws.configPath }),
-      );
+    const contract = yield* stack.deploy(
+      Prisma.Contract("app-contract", { config: ws.configPath }),
+    );
 
-      // Emitted artifacts land in the config's output dir.
-      expect(
-        yield* fs.exists(path.join(ws.root, "generated", "contract.json")),
-      ).toBe(true);
-      expect(
-        yield* fs.exists(path.join(ws.root, "generated", "contract.d.ts")),
-      ).toBe(true);
+    // Emitted artifacts land in the config's output dir.
+    expect(yield* fs.exists(path.join(ws.root, "generated", "contract.json"))).toBe(true);
+    expect(yield* fs.exists(path.join(ws.root, "generated", "contract.d.ts"))).toBe(true);
 
-      // One migration package planned from the empty contract to the head.
-      const dirs = yield* readPackageDirs(ws.migrationsDir);
-      expect(dirs).toHaveLength(1);
-      const meta = yield* readPackageMeta(ws.migrationsDir, dirs[0]!);
-      expect(meta.from).toBeNull();
-      expect(meta.to).toEqual(contract.contractHash);
-      expect(contract.migrations).toEqual(dirs);
-    }),
+    // One migration package planned from the empty contract to the head.
+    const dirs = yield* readPackageDirs(ws.migrationsDir);
+    expect(dirs).toHaveLength(1);
+    const meta = yield* readPackageMeta(ws.migrationsDir, dirs[0]!);
+    expect(meta.from).toBeNull();
+    expect(meta.to).toEqual(contract.contractHash);
+    expect(contract.migrations).toEqual(dirs);
+  }),
 );
 
 test.provider(
@@ -173,14 +161,10 @@ test.provider(
     Effect.gen(function* () {
       const ws = yield* stageWorkspace(CONTRACT_SOURCE);
 
-      yield* stack.deploy(
-        Prisma.Contract("app-contract", { config: ws.configPath }),
-      );
+      yield* stack.deploy(Prisma.Contract("app-contract", { config: ws.configPath }));
       expect(yield* getStatus("app-contract")).toEqual("created");
 
-      yield* stack.deploy(
-        Prisma.Contract("app-contract", { config: ws.configPath }),
-      );
+      yield* stack.deploy(Prisma.Contract("app-contract", { config: ws.configPath }));
       expect(yield* getStatus("app-contract")).toEqual("created");
 
       // No duplicate package was planned (`migration plan` without an
@@ -189,76 +173,56 @@ test.provider(
     }),
 );
 
-test.provider(
-  "deploy after a real contract change updates the resource",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const ws = yield* stageWorkspace(CONTRACT_SOURCE);
+test.provider("deploy after a real contract change updates the resource", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const ws = yield* stageWorkspace(CONTRACT_SOURCE);
 
-      const initial = yield* stack.deploy(
-        Prisma.Contract("app-contract", { config: ws.configPath }),
-      );
-      const [initialDir] = yield* readPackageDirs(ws.migrationsDir);
+    const initial = yield* stack.deploy(Prisma.Contract("app-contract", { config: ws.configPath }));
+    const [initialDir] = yield* readPackageDirs(ws.migrationsDir);
 
-      yield* fs.writeFileString(ws.contractPath, DRIFTED_CONTRACT_SOURCE);
-      yield* Effect.sleep("1 second");
+    yield* fs.writeFileString(ws.contractPath, DRIFTED_CONTRACT_SOURCE);
+    yield* Effect.sleep("1 second");
 
-      const drifted = yield* stack.deploy(
-        Prisma.Contract("app-contract", { config: ws.configPath }),
-      );
+    const drifted = yield* stack.deploy(Prisma.Contract("app-contract", { config: ws.configPath }));
 
-      expect(yield* getStatus("app-contract")).toEqual("updated");
-      expect(drifted.contractHash).not.toEqual(initial.contractHash);
+    expect(yield* getStatus("app-contract")).toEqual("updated");
+    expect(drifted.contractHash).not.toEqual(initial.contractHash);
 
-      // The new package chains from the previous head.
-      const dirs = yield* readPackageDirs(ws.migrationsDir);
-      expect(dirs).toHaveLength(2);
-      const initialMeta = yield* readPackageMeta(ws.migrationsDir, initialDir!);
-      const newDir = dirs.find((dir) => dir !== initialDir);
-      const newMeta = yield* readPackageMeta(ws.migrationsDir, newDir!);
-      expect(newMeta.from).toEqual(initialMeta.to);
-      expect(newMeta.to).toEqual(drifted.contractHash);
-    }),
+    // The new package chains from the previous head.
+    const dirs = yield* readPackageDirs(ws.migrationsDir);
+    expect(dirs).toHaveLength(2);
+    const initialMeta = yield* readPackageMeta(ws.migrationsDir, initialDir!);
+    const newDir = dirs.find((dir) => dir !== initialDir);
+    const newMeta = yield* readPackageMeta(ws.migrationsDir, newDir!);
+    expect(newMeta.from).toEqual(initialMeta.to);
+    expect(newMeta.to).toEqual(drifted.contractHash);
+  }),
 );
 
-test.provider(
-  "TypeScript-authored contracts emit, plan, and get resolvable types",
-  (stack) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const ws = yield* stageWorkspace(CONTRACT_SOURCE);
-      // Swap in the TS-authored form of the same workspace.
-      yield* fs.remove(ws.contractPath);
-      yield* fs.writeFileString(
-        path.join(ws.root, "prisma.config.ts"),
-        TS_CONFIG_SOURCE,
-      );
-      yield* fs.writeFileString(
-        path.join(ws.root, "contract.ts"),
-        TS_CONTRACT_SOURCE,
-      );
+test.provider("TypeScript-authored contracts emit, plan, and get resolvable types", (stack) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const ws = yield* stageWorkspace(CONTRACT_SOURCE);
+    // Swap in the TS-authored form of the same workspace.
+    yield* fs.remove(ws.contractPath);
+    yield* fs.writeFileString(path.join(ws.root, "prisma.config.ts"), TS_CONFIG_SOURCE);
+    yield* fs.writeFileString(path.join(ws.root, "contract.ts"), TS_CONTRACT_SOURCE);
 
-      const contract = yield* stack.deploy(
-        Prisma.Contract("ts-contract", { config: ws.configPath }),
-      );
+    const contract = yield* stack.deploy(Prisma.Contract("ts-contract", { config: ws.configPath }));
 
-      const dirs = yield* readPackageDirs(ws.migrationsDir);
-      expect(dirs).toHaveLength(1);
-      expect((yield* readPackageMeta(ws.migrationsDir, dirs[0]!)).to).toEqual(
-        contract.contractHash,
-      );
+    const dirs = yield* readPackageDirs(ws.migrationsDir);
+    expect(dirs).toHaveLength(1);
+    expect((yield* readPackageMeta(ws.migrationsDir, dirs[0]!)).to).toEqual(contract.contractHash);
 
-      // The CLI emits unpublished @internal/* specifiers for TS-authored
-      // contracts; the resource must rewrite them to the public subpaths or
-      // the emitted types cannot resolve in a user project.
-      const dts = yield* fs.readFileString(
-        path.join(ws.root, "generated", "contract.d.ts"),
-      );
-      expect(dts).not.toContain("@internal/");
-      expect(dts).toContain("@prisma/orm-postgres/");
-    }),
+    // The CLI emits unpublished @internal/* specifiers for TS-authored
+    // contracts; the resource must rewrite them to the public subpaths or
+    // the emitted types cannot resolve in a user project.
+    const dts = yield* fs.readFileString(path.join(ws.root, "generated", "contract.d.ts"));
+    expect(dts).not.toContain("@internal/");
+    expect(dts).toContain("@prisma/orm-postgres/");
+  }),
 );
 
 test.provider("list returns [] (non-listable local build artifact)", (stack) =>
@@ -280,9 +244,7 @@ test.provider(
       const fs = yield* FileSystem.FileSystem;
       const ws = yield* stageWorkspace(CONTRACT_SOURCE);
 
-      yield* stack.deploy(
-        Prisma.Contract("app-contract", { config: ws.configPath }),
-      );
+      yield* stack.deploy(Prisma.Contract("app-contract", { config: ws.configPath }));
 
       // name String? -> String needs a backfill for existing NULL rows; the
       // planned SQL runs against a real database later in the same deploy,
@@ -291,9 +253,7 @@ test.provider(
       yield* Effect.sleep("1 second");
 
       const result = yield* Effect.result(
-        stack.deploy(
-          Prisma.Contract("app-contract", { config: ws.configPath }),
-        ),
+        stack.deploy(Prisma.Contract("app-contract", { config: ws.configPath })),
       );
 
       expect(Result.isFailure(result)).toBe(true);

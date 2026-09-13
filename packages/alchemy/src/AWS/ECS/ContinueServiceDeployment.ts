@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Service } from "./Service.ts";
 
-export interface ContinueServiceDeploymentRequest
-  extends ECS.ContinueServiceDeploymentRequest {}
+export interface ContinueServiceDeploymentRequest extends ECS.ContinueServiceDeploymentRequest {}
 
 /**
  * Runtime binding for `ecs:ContinueServiceDeployment`.
@@ -37,13 +36,9 @@ export interface ContinueServiceDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ContinueServiceDeploymentRequest,
-    ) => Effect.Effect<
-      ECS.ContinueServiceDeploymentResponse,
-      ECS.ContinueServiceDeploymentError
-    >
+    ) => Effect.Effect<ECS.ContinueServiceDeploymentResponse, ECS.ContinueServiceDeploymentError>
   >
 > {}
-export const ContinueServiceDeployment =
-  Binding.Service<ContinueServiceDeployment>(
-    "AWS.ECS.ContinueServiceDeployment",
-  );
+export const ContinueServiceDeployment = Binding.Service<ContinueServiceDeployment>(
+  "AWS.ECS.ContinueServiceDeployment",
+);

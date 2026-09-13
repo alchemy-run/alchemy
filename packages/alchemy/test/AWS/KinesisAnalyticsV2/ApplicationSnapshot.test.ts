@@ -54,9 +54,7 @@ describe.skipIf(gated)("AWS.KinesisAnalyticsV2.ApplicationSnapshot", () => {
 
         expect(deployed.app.applicationStatus).toEqual("RUNNING");
         expect(deployed.snapshot.snapshotStatus).toEqual("READY");
-        expect(deployed.snapshot.applicationName).toEqual(
-          deployed.app.applicationName,
-        );
+        expect(deployed.snapshot.applicationName).toEqual(deployed.app.applicationName);
 
         // Out-of-band verification via distilled.
         const described = yield* analytics.describeApplicationSnapshot({

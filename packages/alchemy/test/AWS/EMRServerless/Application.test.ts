@@ -20,9 +20,7 @@ const RELEASE_LABEL = "emr-7.5.0";
 // not-found tag the read/observe/delete paths depend on.
 test.provider("typed error semantics on a nonexistent application", () =>
   Effect.gen(function* () {
-    const error = yield* Effect.flip(
-      emr.getApplication({ applicationId: "00abcdefabcdef01" }),
-    );
+    const error = yield* Effect.flip(emr.getApplication({ applicationId: "00abcdefabcdef01" }));
     expect(error._tag).toBe("ResourceNotFoundException");
   }),
 );
@@ -67,17 +65,13 @@ test.provider(
         applicationId: created.applicationId,
       });
       expect(observed.application.state).toBe("CREATED");
-      expect(
-        observed.application.autoStopConfiguration?.idleTimeoutMinutes,
-      ).toBe(15);
+      expect(observed.application.autoStopConfiguration?.idleTimeoutMinutes).toBe(15);
       expect(observed.application.tags?.purpose).toBe("alchemy-test");
 
       // The provider's list() enumerates it.
       const provider = yield* Provider.findProvider(Application);
       const all = yield* provider.list();
-      expect(all.some((a) => a.applicationId === created.applicationId)).toBe(
-        true,
-      );
+      expect(all.some((a) => a.applicationId === created.applicationId)).toBe(true);
 
       // No-op redeploy: same application, no replacement.
       const noop = yield* deployApp(15);
@@ -89,9 +83,7 @@ test.provider(
       const afterUpdate = yield* emr.getApplication({
         applicationId: created.applicationId,
       });
-      expect(
-        afterUpdate.application.autoStopConfiguration?.idleTimeoutMinutes,
-      ).toBe(5);
+      expect(afterUpdate.application.autoStopConfiguration?.idleTimeoutMinutes).toBe(5);
 
       // Destroy and verify deletion out-of-band (deleted applications either
       // disappear or briefly linger as TERMINATED).
@@ -163,9 +155,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
             until: (run) =>
-              run.state === "SUCCESS" ||
-              run.state === "FAILED" ||
-              run.state === "CANCELLED",
+              run.state === "SUCCESS" || run.state === "FAILED" || run.state === "CANCELLED",
             times: 48,
           }),
         );
@@ -184,20 +174,13 @@ const assertApplicationGone = (applicationId: string) =>
   Effect.gen(function* () {
     const state = yield* emr.getApplication({ applicationId }).pipe(
       Effect.map((response) => response.application.state),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone"),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone")),
     );
     if (state !== "gone" && state !== "TERMINATED") {
-      return yield* Effect.fail(
-        new Error(`application ${applicationId} still exists (${state})`),
-      );
+      return yield* Effect.fail(new Error(`application ${applicationId} still exists (${state})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );

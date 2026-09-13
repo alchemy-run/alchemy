@@ -8,10 +8,7 @@ import * as Stream from "effect/Stream";
 import { LanguageModel, Tool, Toolkit } from "effect/unstable/ai";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import {
-  makeLanguageModel,
-  type LanguageModelOptions,
-} from "@/Neon/LanguageModel.ts";
+import { makeLanguageModel, type LanguageModelOptions } from "@/Neon/LanguageModel.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const secret = "nt_live_SECRET_SENTINEL";
@@ -30,20 +27,13 @@ const completion = (message: unknown, finish = "stop", usage?: unknown) => ({
   choices: [{ message, finish_reason: finish }],
   usage,
 });
-const chunk = (
-  delta: unknown,
-  finish: string | null = null,
-  usage?: unknown,
-) => ({
+const chunk = (delta: unknown, finish: string | null = null, usage?: unknown) => ({
   choices: [{ index: 0, delta, finish_reason: finish }],
   usage,
 });
 const sse = (...events: Array<unknown>) =>
   events
-    .map(
-      (value) =>
-        `data: ${typeof value === "string" ? value : JSON.stringify(value)}\n\n`,
-    )
+    .map((value) => `data: ${typeof value === "string" ? value : JSON.stringify(value)}\n\n`)
     .join("");
 
 const harness = (
@@ -57,8 +47,7 @@ const harness = (
   }> = [];
   const http = HttpClient.make((request) =>
     Effect.sync(() => {
-      if (request.body._tag !== "Uint8Array")
-        throw new Error("Expected a JSON request");
+      if (request.body._tag !== "Uint8Array") throw new Error("Expected a JSON request");
       requests.push({
         url: request.url,
         authorization: request.headers.authorization,
@@ -147,65 +136,57 @@ test.effect("content blocks and absent usage are not fabricated as zero", () =>
   }),
 );
 
-test.effect(
-  "schema output sends strict JSON Schema and decodes the object",
-  () =>
-    Effect.gen(function* () {
-      const { layer, requests } = harness(() =>
-        Response.json(completion({ content: '{"greeting":"Hello"}' })),
-      );
-      const response = yield* LanguageModel.generateObject({
-        prompt: "Greet",
-        objectName: "Greeting",
-        schema: Schema.Struct({ greeting: Schema.String }),
-      }).pipe(Effect.provide(layer));
-      expect(response.value).toEqual({ greeting: "Hello" });
-      expect(requests[0]?.body).toMatchObject({
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "Greeting",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["greeting"],
-            },
+test.effect("schema output sends strict JSON Schema and decodes the object", () =>
+  Effect.gen(function* () {
+    const { layer, requests } = harness(() =>
+      Response.json(completion({ content: '{"greeting":"Hello"}' })),
+    );
+    const response = yield* LanguageModel.generateObject({
+      prompt: "Greet",
+      objectName: "Greeting",
+      schema: Schema.Struct({ greeting: Schema.String }),
+    }).pipe(Effect.provide(layer));
+    expect(response.value).toEqual({ greeting: "Hello" });
+    expect(requests[0]?.body).toMatchObject({
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "Greeting",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["greeting"],
           },
         },
-      });
-    }),
+      },
+    });
+  }),
 );
 
-test.effect(
-  "function tools execute and forced choice uses the OpenAI wire shape",
-  () =>
-    Effect.gen(function* () {
-      const { layer, requests } = harness(() =>
-        Response.json(
-          completion({ content: null, tool_calls: [toolCall] }, "tool_calls"),
-        ),
-      );
-      const response = yield* LanguageModel.generateText({
-        prompt: "Add two and three",
-        toolkit: Tools,
-        toolChoice: { tool: "sum" },
-      }).pipe(Effect.provide(layer), Effect.provide(tools));
-      expect(response.toolCalls[0]?.params).toEqual({ a: 2, b: 3 });
-      expect(response.toolResults[0]?.result).toBe(5);
-      expect(response.finishReason).toBe("tool-calls");
-      expect(requests[0]?.body).toMatchObject({
-        tool_choice: { type: "function", function: { name: "sum" } },
-        tools: [{ type: "function", function: { name: "sum" } }],
-      });
-    }),
+test.effect("function tools execute and forced choice uses the OpenAI wire shape", () =>
+  Effect.gen(function* () {
+    const { layer, requests } = harness(() =>
+      Response.json(completion({ content: null, tool_calls: [toolCall] }, "tool_calls")),
+    );
+    const response = yield* LanguageModel.generateText({
+      prompt: "Add two and three",
+      toolkit: Tools,
+      toolChoice: { tool: "sum" },
+    }).pipe(Effect.provide(layer), Effect.provide(tools));
+    expect(response.toolCalls[0]?.params).toEqual({ a: 2, b: 3 });
+    expect(response.toolResults[0]?.result).toBe(5);
+    expect(response.finishReason).toBe("tool-calls");
+    expect(requests[0]?.body).toMatchObject({
+      tool_choice: { type: "function", function: { name: "sum" } },
+      tools: [{ type: "function", function: { name: "sum" } }],
+    });
+  }),
 );
 
 test.effect("prompt round-trips assistant calls and tool results", () =>
   Effect.gen(function* () {
-    const { layer, requests } = harness(() =>
-      Response.json(completion({ content: "Five" })),
-    );
+    const { layer, requests } = harness(() => Response.json(completion({ content: "Five" })));
     yield* LanguageModel.generateText({
       prompt: [
         { role: "system", content: "Calculate" },
@@ -272,9 +253,7 @@ test.effect("SSE emits text ordering, late usage and one finish", () =>
       "text-end",
       "finish",
     ]);
-    expect(
-      parts.find((part) => part.type === "finish")?.usage.inputTokens.total,
-    ).toBe(4);
+    expect(parts.find((part) => part.type === "finish")?.usage.inputTokens.total).toBe(4);
     expect(requests[0]?.body).toMatchObject({
       stream: true,
       stream_options: { include_usage: true },
@@ -282,65 +261,57 @@ test.effect("SSE emits text ordering, late usage and one finish", () =>
   }),
 );
 
-test.effect(
-  "interleaved streamed tools append fragments and execute once per call",
-  () =>
-    Effect.gen(function* () {
-      const { layer } = harness(
-        () =>
-          new Response(
-            sse(
-              chunk({
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: "one",
-                    type: "function",
-                    function: { name: "sum", arguments: '{"a":2,' },
-                  },
-                  {
-                    index: 1,
-                    id: "two",
-                    type: "function",
-                    function: { name: "sum", arguments: '{"a":4,' },
-                  },
-                ],
-              }),
-              chunk({
-                tool_calls: [
-                  { index: 1, function: { arguments: '"b":5}' } },
-                  { index: 0, function: { arguments: '"b":3}' } },
-                ],
-              }),
-              chunk({}, "tool_calls"),
-              "[DONE]",
-            ),
+test.effect("interleaved streamed tools append fragments and execute once per call", () =>
+  Effect.gen(function* () {
+    const { layer } = harness(
+      () =>
+        new Response(
+          sse(
+            chunk({
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "one",
+                  type: "function",
+                  function: { name: "sum", arguments: '{"a":2,' },
+                },
+                {
+                  index: 1,
+                  id: "two",
+                  type: "function",
+                  function: { name: "sum", arguments: '{"a":4,' },
+                },
+              ],
+            }),
+            chunk({
+              tool_calls: [
+                { index: 1, function: { arguments: '"b":5}' } },
+                { index: 0, function: { arguments: '"b":3}' } },
+              ],
+            }),
+            chunk({}, "tool_calls"),
+            "[DONE]",
           ),
-      );
-      const parts = yield* LanguageModel.streamText({
-        prompt: "Add",
-        toolkit: Tools,
-        toolChoice: "required",
-      }).pipe(Stream.provide(layer), Stream.provide(tools), Stream.runCollect);
-      expect(
-        parts
-          .filter((part) => part.type === "tool-call")
-          .map((part) => part.params),
-      ).toEqual([
-        { a: 2, b: 3 },
-        { a: 4, b: 5 },
-      ]);
-      expect(
-        parts
-          .filter((part) => part.type === "tool-result")
-          .map((part) => part.result)
-          .sort(),
-      ).toEqual([5, 9]);
-      expect(
-        parts.filter((part) => part.type === "tool-params-start"),
-      ).toHaveLength(2);
-      expect(parts.filter((part) => part.type === "finish")).toHaveLength(1);
-    }),
+        ),
+    );
+    const parts = yield* LanguageModel.streamText({
+      prompt: "Add",
+      toolkit: Tools,
+      toolChoice: "required",
+    }).pipe(Stream.provide(layer), Stream.provide(tools), Stream.runCollect);
+    expect(parts.filter((part) => part.type === "tool-call").map((part) => part.params)).toEqual([
+      { a: 2, b: 3 },
+      { a: 4, b: 5 },
+    ]);
+    expect(
+      parts
+        .filter((part) => part.type === "tool-result")
+        .map((part) => part.result)
+        .sort(),
+    ).toEqual([5, 9]);
+    expect(parts.filter((part) => part.type === "tool-params-start")).toHaveLength(2);
+    expect(parts.filter((part) => part.type === "finish")).toHaveLength(1);
+  }),
 );
 
 for (const [name, body] of [
@@ -348,28 +319,20 @@ for (const [name, body] of [
   ["premature EOF", sse(chunk({ content: "partial" }))],
   ["missing DONE", sse(chunk({ content: "partial" }, "stop"))],
   ["empty stream", ""],
-  [
-    "invalid schema",
-    sse({ choices: [{ delta: { content: 42 }, index: 0 }] }, "[DONE]"),
-  ],
-  [
-    "error event",
-    'event: error\ndata: {"error":{"message":"nt_live_SECRET_SENTINEL"}}\n\n',
-  ],
+  ["invalid schema", sse({ choices: [{ delta: { content: 42 }, index: 0 }] }, "[DONE]")],
+  ["error event", 'event: error\ndata: {"error":{"message":"nt_live_SECRET_SENTINEL"}}\n\n'],
 ] as const) {
-  test.effect(
-    `stream rejects ${name} without disclosing upstream payload`,
-    () =>
-      Effect.gen(function* () {
-        const { layer } = harness(() => new Response(body));
-        const result = yield* LanguageModel.streamText({ prompt: "Hi" }).pipe(
-          Stream.provide(layer),
-          Stream.runCollect,
-          Effect.result,
-        );
-        expect(Result.isFailure(result)).toBe(true);
-        expect(JSON.stringify(result)).not.toContain(secret);
-      }),
+  test.effect(`stream rejects ${name} without disclosing upstream payload`, () =>
+    Effect.gen(function* () {
+      const { layer } = harness(() => new Response(body));
+      const result = yield* LanguageModel.streamText({ prompt: "Hi" }).pipe(
+        Stream.provide(layer),
+        Stream.runCollect,
+        Effect.result,
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      expect(JSON.stringify(result)).not.toContain(secret);
+    }),
   );
 }
 
@@ -382,78 +345,12 @@ for (const [status, code, tag] of [
   [502, undefined, "InternalProviderError"],
   [400, undefined, "InvalidRequestError"],
 ] as const) {
-  test.effect(
-    `HTTP ${status} ${code ?? ""} maps to ${tag} and scrubs secrets`,
-    () =>
-      Effect.gen(function* () {
-        const { layer } = harness(() =>
-          Response.json(
-            { error: { code, message: `Bearer ${secret}` } },
-            { status, headers: { "retry-after": "2" } },
-          ),
-        );
-        const result = yield* LanguageModel.generateText({ prompt: "Hi" }).pipe(
-          Effect.provide(layer),
-          Effect.result,
-        );
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result))
-          expect(result.failure.reason._tag).toBe(tag);
-        expect(JSON.stringify(result)).not.toContain(secret);
-      }),
-  );
-}
-
-test.effect(
-  "malformed tool JSON fails rather than executing a partial tool",
-  () =>
+  test.effect(`HTTP ${status} ${code ?? ""} maps to ${tag} and scrubs secrets`, () =>
     Effect.gen(function* () {
       const { layer } = harness(() =>
         Response.json(
-          completion(
-            {
-              tool_calls: [
-                {
-                  ...toolCall,
-                  function: { ...toolCall.function, arguments: "{" },
-                },
-              ],
-            },
-            "tool_calls",
-          ),
-        ),
-      );
-      const result = yield* LanguageModel.generateText({
-        prompt: "Hi",
-        toolkit: Tools,
-      }).pipe(Effect.provide(layer), Effect.provide(tools), Effect.result);
-      expect(Result.isFailure(result)).toBe(true);
-    }),
-);
-
-test.effect(
-  "invalid JSON schema responses fail Effect's structured-output validation",
-  () =>
-    Effect.gen(function* () {
-      const { layer } = harness(() =>
-        Response.json(completion({ content: '{"greeting":42}' })),
-      );
-      const result = yield* LanguageModel.generateObject({
-        prompt: "Greet",
-        schema: Schema.Struct({ greeting: Schema.String }),
-      }).pipe(Effect.provide(layer), Effect.result);
-      expect(Result.isFailure(result)).toBe(true);
-    }),
-);
-
-test.effect(
-  "disabled-account rejection is non-retryable quota exhaustion, not a bad token",
-  () =>
-    Effect.gen(function* () {
-      const { layer } = harness(() =>
-        Response.json(
-          { error: { message: "ai gateway not enabled for account" } },
-          { status: 403 },
+          { error: { code, message: `Bearer ${secret}` } },
+          { status, headers: { "retry-after": "2" } },
         ),
       );
       const result = yield* LanguageModel.generateText({ prompt: "Hi" }).pipe(
@@ -461,11 +358,63 @@ test.effect(
         Effect.result,
       );
       expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure.reason._tag).toBe("QuotaExhaustedError");
-        expect(result.failure.reason.isRetryable).toBe(false);
-      }
+      if (Result.isFailure(result)) expect(result.failure.reason._tag).toBe(tag);
+      expect(JSON.stringify(result)).not.toContain(secret);
     }),
+  );
+}
+
+test.effect("malformed tool JSON fails rather than executing a partial tool", () =>
+  Effect.gen(function* () {
+    const { layer } = harness(() =>
+      Response.json(
+        completion(
+          {
+            tool_calls: [
+              {
+                ...toolCall,
+                function: { ...toolCall.function, arguments: "{" },
+              },
+            ],
+          },
+          "tool_calls",
+        ),
+      ),
+    );
+    const result = yield* LanguageModel.generateText({
+      prompt: "Hi",
+      toolkit: Tools,
+    }).pipe(Effect.provide(layer), Effect.provide(tools), Effect.result);
+    expect(Result.isFailure(result)).toBe(true);
+  }),
+);
+
+test.effect("invalid JSON schema responses fail Effect's structured-output validation", () =>
+  Effect.gen(function* () {
+    const { layer } = harness(() => Response.json(completion({ content: '{"greeting":42}' })));
+    const result = yield* LanguageModel.generateObject({
+      prompt: "Greet",
+      schema: Schema.Struct({ greeting: Schema.String }),
+    }).pipe(Effect.provide(layer), Effect.result);
+    expect(Result.isFailure(result)).toBe(true);
+  }),
+);
+
+test.effect("disabled-account rejection is non-retryable quota exhaustion, not a bad token", () =>
+  Effect.gen(function* () {
+    const { layer } = harness(() =>
+      Response.json({ error: { message: "ai gateway not enabled for account" } }, { status: 403 }),
+    );
+    const result = yield* LanguageModel.generateText({ prompt: "Hi" }).pipe(
+      Effect.provide(layer),
+      Effect.result,
+    );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure.reason._tag).toBe("QuotaExhaustedError");
+      expect(result.failure.reason.isRetryable).toBe(false);
+    }
+  }),
 );
 
 test.effect("fragmented UTF-8 SSE chunks preserve multibyte text", () =>
@@ -478,8 +427,7 @@ test.effect("fragmented UTF-8 SSE chunks preserve multibyte text", () =>
               const bytes = new TextEncoder().encode(
                 sse(chunk({ content: "héllo 🌍" }, "stop"), "[DONE]"),
               );
-              for (const byte of bytes)
-                controller.enqueue(new Uint8Array([byte]));
+              for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
               controller.close();
             },
           }),
@@ -530,9 +478,7 @@ test.effect("truncated streamed tools never run a handler", () =>
 
 test.effect("image inputs preserve order while audio fails before HTTP", () =>
   Effect.gen(function* () {
-    const { layer, requests } = harness(() =>
-      Response.json(completion({ content: "Image" })),
-    );
+    const { layer, requests } = harness(() => Response.json(completion({ content: "Image" })));
     yield* LanguageModel.generateText({
       prompt: [
         {
@@ -577,31 +523,27 @@ test.effect("image inputs preserve order while audio fails before HTTP", () =>
   }),
 );
 
-test.effect(
-  "downstream cancellation closes the HTTP stream without waiting for DONE",
-  () =>
-    Effect.gen(function* () {
-      let cancelled = false;
-      const { layer } = harness(
-        () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                controller.enqueue(
-                  new TextEncoder().encode(sse(chunk({ content: "Hello" }))),
-                );
-              },
-              cancel() {
-                cancelled = true;
-              },
-            }),
-          ),
-      );
-      yield* LanguageModel.streamText({ prompt: "Hi" }).pipe(
-        Stream.provide(layer),
-        Stream.take(1),
-        Stream.runDrain,
-      );
-      expect(cancelled).toBe(true);
-    }),
+test.effect("downstream cancellation closes the HTTP stream without waiting for DONE", () =>
+  Effect.gen(function* () {
+    let cancelled = false;
+    const { layer } = harness(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(sse(chunk({ content: "Hello" }))));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+    );
+    yield* LanguageModel.streamText({ prompt: "Hi" }).pipe(
+      Stream.provide(layer),
+      Stream.take(1),
+      Stream.runDrain,
+    );
+    expect(cancelled).toBe(true);
+  }),
 );

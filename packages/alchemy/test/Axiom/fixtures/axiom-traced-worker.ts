@@ -42,9 +42,7 @@ export default class AxiomTracedWorker extends Cloudflare.Worker<AxiomTracedWork
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         if (url.pathname === "/work") {
-          yield* Effect.log("axiom-work-log").pipe(
-            Effect.withSpan("axiom.child-span"),
-          );
+          yield* Effect.log("axiom-work-log").pipe(Effect.withSpan("axiom.child-span"));
           return yield* HttpServerResponse.json({ marker: "axiom-did-work" });
         }
         return HttpServerResponse.text("axiom-ok");

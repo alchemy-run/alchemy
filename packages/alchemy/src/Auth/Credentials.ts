@@ -36,10 +36,7 @@ export interface CredentialsStoreService {
     schema: Schema.Codec<A, E>,
     credentials: A,
   ) => Effect.Effect<void, AuthError>;
-  readonly delete: (
-    profile: string,
-    provider: string,
-  ) => Effect.Effect<void, AuthError>;
+  readonly delete: (profile: string, provider: string) => Effect.Effect<void, AuthError>;
   /**
    * Recursively remove the `~/.alchemy/credentials/{profile}` directory
    * containing all per-provider secrets for `profile`. No-op if it doesn't exist.
@@ -47,27 +44,20 @@ export interface CredentialsStoreService {
   readonly deleteProfile: (profile: string) => Effect.Effect<void, AuthError>;
 }
 
-export class CredentialsStore extends Context.Service<
-  CredentialsStore,
-  CredentialsStoreService
->()("Alchemy::CredentialsStore") {}
+export class CredentialsStore extends Context.Service<CredentialsStore, CredentialsStoreService>()(
+  "Alchemy::CredentialsStore",
+) {}
 
 export const CredentialsStoreLive = Layer.effect(
   CredentialsStore,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
-    const read = <A, E>(
-      profile: string,
-      provider: string,
-      schema: Schema.Codec<A, E>,
-    ) =>
+    const read = <A, E>(profile: string, provider: string, schema: Schema.Codec<A, E>) =>
       Effect.gen(function* () {
         const filePath = yield* validateCredentialPath(profile, provider);
         const data = yield* fs.readFileString(filePath).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
           Effect.mapError(
             (cause) =>
               new AuthError({
@@ -77,9 +67,9 @@ export const CredentialsStoreLive = Layer.effect(
           ),
         );
         if (data === undefined) return undefined;
-        const json = yield* Schema.decodeUnknownEffect(
-          Schema.fromJsonString(Schema.Unknown),
-        )(data).pipe(
+        const json = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
+          data,
+        ).pipe(
           Effect.mapError(
             (cause) =>
               new AuthError({
@@ -125,12 +115,7 @@ export const CredentialsStoreLive = Layer.effect(
           const directory = path.dirname(filePath);
           yield* fs.makeDirectory(directory, { recursive: true });
           yield* fs.chmod(directory, 0o700);
-          yield* writeFileAtomic(
-            fs,
-            filePath,
-            JSON.stringify(encoded, null, 2),
-            0o600,
-          );
+          yield* writeFileAtomic(fs, filePath, JSON.stringify(encoded, null, 2), 0o600);
         }).pipe(
           Effect.mapError(
             (cause) =>
@@ -142,10 +127,7 @@ export const CredentialsStoreLive = Layer.effect(
         );
       });
 
-    const remove_ = (
-      profile: string,
-      provider: string,
-    ): Effect.Effect<void, AuthError> =>
+    const remove_ = (profile: string, provider: string): Effect.Effect<void, AuthError> =>
       validateCredentialPath(profile, provider).pipe(
         Effect.flatMap((filePath) =>
           fs.remove(filePath).pipe(
@@ -164,22 +146,18 @@ export const CredentialsStoreLive = Layer.effect(
     const deleteProfile = (profile: string) =>
       Effect.gen(function* () {
         yield* validateProfileName(profile).pipe(
+          Effect.mapError((cause) => new AuthError({ message: cause.message, cause })),
+        );
+        yield* fs.remove(profileCredentialsDirPath(profile), { recursive: true }).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
           Effect.mapError(
-            (cause) => new AuthError({ message: cause.message, cause }),
+            (cause) =>
+              new AuthError({
+                message: `Could not delete credentials for profile '${profile}'.`,
+                cause,
+              }),
           ),
         );
-        yield* fs
-          .remove(profileCredentialsDirPath(profile), { recursive: true })
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-            Effect.mapError(
-              (cause) =>
-                new AuthError({
-                  message: `Could not delete credentials for profile '${profile}'.`,
-                  cause,
-                }),
-            ),
-          );
       });
 
     return {
@@ -196,9 +174,7 @@ const CREDENTIAL_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const validateCredentialPath = (profile: string, provider: string) =>
   Effect.gen(function* () {
     yield* validateProfileName(profile).pipe(
-      Effect.mapError(
-        (cause) => new AuthError({ message: cause.message, cause }),
-      ),
+      Effect.mapError((cause) => new AuthError({ message: cause.message, cause })),
     );
     if (!CREDENTIAL_KEY_PATTERN.test(provider)) {
       return yield* new AuthError({
@@ -208,10 +184,7 @@ const validateCredentialPath = (profile: string, provider: string) =>
     return credentialsFilePath(profile, provider);
   });
 
-export function displayRedacted(
-  r: Redacted.Redacted<string>,
-  visibleChars = 4,
-): string {
+export function displayRedacted(r: Redacted.Redacted<string>, visibleChars = 4): string {
   const raw = Redacted.value(r);
   if (raw.length <= visibleChars) return "****";
   return `${raw.slice(0, visibleChars)}****`;

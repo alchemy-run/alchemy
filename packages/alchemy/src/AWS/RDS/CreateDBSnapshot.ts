@@ -37,6 +37,4 @@ export interface CreateDBSnapshot extends Binding.Service<
     ) => Effect.Effect<rds.CreateDBSnapshotResult, rds.CreateDBSnapshotError>
   >
 > {}
-export const CreateDBSnapshot = Binding.Service<CreateDBSnapshot>(
-  "AWS.RDS.CreateDBSnapshot",
-);
+export const CreateDBSnapshot = Binding.Service<CreateDBSnapshot>("AWS.RDS.CreateDBSnapshot");

@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import type {
-  IdentityProviderAttributes,
-  IdentityProviderType,
-} from "./IdentityProvider.ts";
+import type { IdentityProviderAttributes, IdentityProviderType } from "./IdentityProvider.ts";
 
 // Shared observation scaffolding for the IdentityProvider resource provider
 // and the GetIdentityProvider data source. NOT exported from `index.ts`.
@@ -33,8 +30,7 @@ export interface ObservedIdp {
  */
 export const isSingletonType = (
   type: IdentityProviderType | undefined,
-): type is "onetimepin" | "cloudflare" =>
-  type === "onetimepin" || type === "cloudflare";
+): type is "onetimepin" | "cloudflare" => type === "onetimepin" || type === "cloudflare";
 
 /**
  * Read an identity provider by id, mapping "gone"
@@ -42,19 +38,13 @@ export const isSingletonType = (
  * `access.api.error.not_found`) to `undefined`. Zone-level when `zoneId`
  * is set, account-level otherwise.
  */
-export const getIdp = (
-  zoneId: string | undefined,
-  accountId: string,
-  identityProviderId: string,
-) =>
+export const getIdp = (zoneId: string | undefined, accountId: string, identityProviderId: string) =>
   (zoneId !== undefined
     ? zeroTrust.getIdentityProviderForZone({ zoneId, identityProviderId })
     : zeroTrust.getIdentityProviderForAccount({ accountId, identityProviderId })
   ).pipe(
     Effect.map((idp): ObservedIdp | undefined => idp as ObservedIdp),
-    Effect.catchTag("AccessIdentityProviderNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -72,20 +62,15 @@ export const findFirst = (
     Stream.filter(predicate),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.map(
-      (idp): ObservedIdp | undefined => idp as ObservedIdp | undefined,
-    ),
+    Effect.map((idp): ObservedIdp | undefined => idp as ObservedIdp | undefined),
   );
 
 /**
  * Find an identity provider by exact name within the scope. Names are
  * not unique on Cloudflare's side; pick the first match.
  */
-export const findByName = (
-  zoneId: string | undefined,
-  accountId: string,
-  name: string,
-) => findFirst(zoneId, accountId, (idp) => idp.name === name);
+export const findByName = (zoneId: string | undefined, accountId: string, name: string) =>
+  findFirst(zoneId, accountId, (idp) => idp.name === name);
 
 /**
  * Find an identity provider by type within the scope — the identity of
@@ -112,8 +97,6 @@ export const toAttributes = (
   scimBaseUrl: idp.scimConfig?.scimBaseUrl ?? undefined,
   // The SCIM secret is returned once when SCIM is enabled; afterwards the
   // API masks it — carry the prior value forward.
-  scimSecret: idp.scimConfig?.secret
-    ? Redacted.make(idp.scimConfig.secret)
-    : priorSecret,
+  scimSecret: idp.scimConfig?.secret ? Redacted.make(idp.scimConfig.secret) : priorSecret,
   scimEnabled: idp.scimConfig?.enabled ?? false,
 });

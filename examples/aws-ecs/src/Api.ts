@@ -3,12 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import {
-  OrdersCluster,
-  OrdersIngress,
-  OrdersNetwork,
-  OrdersTable,
-} from "./infra.ts";
+import { OrdersCluster, OrdersIngress, OrdersNetwork, OrdersTable } from "./infra.ts";
 import SeedTask from "./SeedTask.ts";
 
 /**
@@ -114,17 +109,12 @@ export default Api.make(
             Key: { pk: { S: `order#${match[1]}` } },
           });
           if (!result.Item) {
-            return yield* HttpServerResponse.json(
-              { error: "not found" },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
           }
           return yield* HttpServerResponse.json({
             id: match[1],
             customer: result.Item.customer?.S,
-            total: result.Item.total?.N
-              ? Number(result.Item.total.N)
-              : undefined,
+            total: result.Item.total?.N ? Number(result.Item.total.N) : undefined,
           });
         }
 
@@ -161,11 +151,7 @@ export default Api.make(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        AWS.DynamoDB.ScanHttp,
-        AWS.DynamoDB.GetItemHttp,
-        AWS.ECS.RunTaskHttp,
-      ),
+      Layer.mergeAll(AWS.DynamoDB.ScanHttp, AWS.DynamoDB.GetItemHttp, AWS.ECS.RunTaskHttp),
     ),
   ),
 );

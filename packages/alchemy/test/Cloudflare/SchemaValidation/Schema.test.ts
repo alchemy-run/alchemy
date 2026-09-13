@@ -13,21 +13,15 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -36,9 +30,7 @@ const readFixture = (name: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    return yield* fs.readFileString(
-      path.join(import.meta.dirname, "fixtures", name),
-    );
+    return yield* fs.readFileString(path.join(import.meta.dirname, "fixtures", name));
   });
 
 // The scoped API token the test harness mints propagates eventually-
@@ -65,14 +57,11 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
-            "TestSchema",
-            {
-              zoneId,
-              source: v1,
-              validationEnabled: false,
-            },
-          );
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema("TestSchema", {
+            zoneId,
+            source: v1,
+            validationEnabled: false,
+          });
         }),
       );
 
@@ -89,14 +78,11 @@ test.provider(
       // Enabling (false → true) is the one in-place update.
       const enabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
-            "TestSchema",
-            {
-              zoneId,
-              source: v1,
-              validationEnabled: true,
-            },
-          );
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema("TestSchema", {
+            zoneId,
+            source: v1,
+            validationEnabled: true,
+          });
         }),
       );
       expect(enabled.schemaId).toEqual(created.schemaId);
@@ -110,14 +96,11 @@ test.provider(
       // schema (new id, old one deleted).
       const disabled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
-            "TestSchema",
-            {
-              zoneId,
-              source: v1,
-              validationEnabled: false,
-            },
-          );
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema("TestSchema", {
+            zoneId,
+            source: v1,
+            validationEnabled: false,
+          });
         }),
       );
       expect(disabled.schemaId).not.toEqual(created.schemaId);
@@ -132,13 +115,10 @@ test.provider(
       // schema (new id) and deletes the old one.
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
-            "TestSchema",
-            {
-              zoneId,
-              source: v2,
-            },
-          );
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema("TestSchema", {
+            zoneId,
+            source: v2,
+          });
         }),
       );
       expect(replaced.schemaId).not.toEqual(disabled.schemaId);
@@ -173,14 +153,11 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema(
-            "ListSchema",
-            {
-              zoneId,
-              source: v1,
-              validationEnabled: false,
-            },
-          );
+          return yield* Cloudflare.SchemaValidation.SchemaValidationSchema("ListSchema", {
+            zoneId,
+            source: v1,
+            validationEnabled: false,
+          });
         }),
       );
 
@@ -189,11 +166,7 @@ test.provider(
       );
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (s) => s.schemaId === deployed.schemaId && s.zoneId === zoneId,
-        ),
-      ).toBe(true);
+      expect(all.some((s) => s.schemaId === deployed.schemaId && s.zoneId === zoneId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

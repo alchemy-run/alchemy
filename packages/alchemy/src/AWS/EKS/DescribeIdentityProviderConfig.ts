@@ -40,7 +40,6 @@ export interface DescribeIdentityProviderConfig extends Binding.Service<
     >
   >
 > {}
-export const DescribeIdentityProviderConfig =
-  Binding.Service<DescribeIdentityProviderConfig>(
-    "AWS.EKS.DescribeIdentityProviderConfig",
-  );
+export const DescribeIdentityProviderConfig = Binding.Service<DescribeIdentityProviderConfig>(
+  "AWS.EKS.DescribeIdentityProviderConfig",
+);

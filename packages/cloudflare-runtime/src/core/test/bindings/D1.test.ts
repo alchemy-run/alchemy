@@ -38,11 +38,7 @@ import * as Runtime from "../../Runtime.ts";
 import * as RuntimeServices from "../../RuntimeServices.ts";
 import * as Workerd from "../../workerd/Workerd.ts";
 import type { TestWorker } from "../helpers/runtime.ts";
-import {
-  localRuntimeLayer,
-  makeTempDirectory,
-  startTestWorker,
-} from "../helpers/runtime.ts";
+import { localRuntimeLayer, makeTempDirectory, startTestWorker } from "../helpers/runtime.ts";
 
 // -----------------------------------------------------------------------------
 // Test worker: exposes the D1 bindings over HTTP
@@ -161,9 +157,7 @@ class TestD1Database {
     return new TestD1PreparedStatement(this, sql);
   }
 
-  batch<T = unknown>(
-    statements: Array<TestD1PreparedStatement>,
-  ): Promise<Array<D1Result<T>>> {
+  batch<T = unknown>(statements: Array<TestD1PreparedStatement>): Promise<Array<D1Result<T>>> {
     return this.send({
       method: "batch",
       statements: statements.map((s) => s.toJSON()),
@@ -221,11 +215,7 @@ class TestD1PreparedStatement {
 // Shared test worker and schema
 // -----------------------------------------------------------------------------
 
-const SCHEMA = (
-  tableColours: string,
-  tableKitchenSink: string,
-  tablePalettes: string,
-) => `
+const SCHEMA = (tableColours: string, tableKitchenSink: string, tablePalettes: string) => `
 CREATE TABLE ${tableColours} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, rgb INTEGER NOT NULL);
 CREATE TABLE ${tableKitchenSink} (id INTEGER PRIMARY KEY, int INTEGER, real REAL, text TEXT, blob BLOB);
 CREATE TABLE ${tablePalettes} (id INTEGER PRIMARY KEY, name TEXT NOT NULL, colour_id INTEGER NOT NULL, FOREIGN KEY (colour_id) REFERENCES ${tableColours}(id));
@@ -261,9 +251,7 @@ function throwCause<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
-class D1TestWorker extends Context.Service<D1TestWorker, TestWorker>()(
-  "test/D1TestWorker",
-) {}
+class D1TestWorker extends Context.Service<D1TestWorker, TestWorker>()("test/D1TestWorker") {}
 
 const D1TestWorkerLive = Layer.effect(
   D1TestWorker,
@@ -293,41 +281,31 @@ interface D1TestContext {
   tablePalettes: string;
 }
 
-const setup: Effect.Effect<D1TestContext, never, D1TestWorker> = Effect.gen(
-  function* () {
-    const worker = yield* D1TestWorker;
-    // Namespace tables so tests accessing the same database don't have races
-    // from table collisions
-    const ns = `${Date.now()}_${Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)}`;
-    const tableColours = `colours_${ns}`;
-    const tableKitchenSink = `kitchen_sink_${ns}`;
-    const tablePalettes = `palettes_${ns}`;
-    const db = new TestD1Database(worker.baseUrl, "DB");
-    yield* Effect.promise(() =>
-      db.exec(SCHEMA(tableColours, tableKitchenSink, tablePalettes)),
-    );
-    return { db, tableColours, tableKitchenSink, tablePalettes };
-  },
-);
+const setup: Effect.Effect<D1TestContext, never, D1TestWorker> = Effect.gen(function* () {
+  const worker = yield* D1TestWorker;
+  // Namespace tables so tests accessing the same database don't have races
+  // from table collisions
+  const ns = `${Date.now()}_${Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)}`;
+  const tableColours = `colours_${ns}`;
+  const tableKitchenSink = `kitchen_sink_${ns}`;
+  const tablePalettes = `palettes_${ns}`;
+  const db = new TestD1Database(worker.baseUrl, "DB");
+  yield* Effect.promise(() => db.exec(SCHEMA(tableColours, tableKitchenSink, tablePalettes)));
+  return { db, tableColours, tableKitchenSink, tablePalettes };
+});
 
 // -----------------------------------------------------------------------------
 // Tests
 // -----------------------------------------------------------------------------
 
-const D1TestLayer = D1TestWorkerLive.pipe(
-  Layer.provideMerge(localRuntimeLayer),
-);
+const D1TestLayer = D1TestWorkerLive.pipe(Layer.provideMerge(localRuntimeLayer));
 
 layer(D1TestLayer)("D1 binding", (it) => {
   const d1Test = (name: string, fn: (ctx: D1TestContext) => Promise<void>) =>
-    it.effect(name, () =>
-      setup.pipe(Effect.flatMap((ctx) => Effect.promise(() => fn(ctx)))),
-    );
+    it.effect(name, () => setup.pipe(Effect.flatMap((ctx) => Effect.promise(() => fn(ctx)))));
 
   d1Test("D1Database: batch", async ({ db, tableColours }) => {
-    const insert = db.prepare(
-      `INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?)`,
-    );
+    const insert = db.prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?)`);
     const batchResults = await db.batch<Pick<ColourRow, "name">>([
       insert.bind(4, "yellow", 0xffff00),
       db.prepare(`SELECT name FROM ${tableColours}`),
@@ -345,9 +323,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
     expect(batchResults[1].results).toEqual(expectedResults);
 
     // Check error mid-batch rolls-back entire batch
-    const badInsert = db.prepare(
-      `PUT IN ${tableColours} (id, name, rgb) VALUES (?, ?, ?)`,
-    );
+    const badInsert = db.prepare(`PUT IN ${tableColours} (id, name, rgb) VALUES (?, ?, ?)`);
     await expect(
       throwCause(
         db.batch([
@@ -365,9 +341,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
 
   d1Test("D1Database: exec", async ({ db, tableColours }) => {
     // Check with single statement
-    let execResult = await db.exec(
-      `UPDATE ${tableColours} SET name = 'Red' WHERE name = 'red'`,
-    );
+    let execResult = await db.exec(`UPDATE ${tableColours} SET name = 'Red' WHERE name = 'red'`);
     expect(execResult.count).toBe(1);
     expect(execResult.duration >= 0).toBe(true);
     let result = await db
@@ -384,75 +358,55 @@ layer(D1TestLayer)("D1 binding", (it) => {
     expect(execResult.count).toBe(2);
     expect(execResult.duration >= 0).toBe(true);
     result = await db.prepare(`SELECT name FROM ${tableColours}`).all();
-    expect(result.results).toEqual([
-      { name: "Red" },
-      { name: "Green" },
-      { name: "Blue" },
-    ]);
+    expect(result.results).toEqual([{ name: "Red" }, { name: "Green" }, { name: "Blue" }]);
   });
 
-  d1Test(
-    "D1PreparedStatement: bind",
-    async ({ db, tableColours, tableKitchenSink }) => {
-      // Check with all parameter types. (Upstream uses a `3.141` literal, which
-      // trips the `approx-constant` lint rule.)
-      // oxlint-disable-next-line approx-constant
-      const real = 3.141;
-      const blob = utf8Encode("Walshy");
-      const blobArray = Array.from(blob);
-      await db
-        .prepare(
-          `INSERT INTO ${tableKitchenSink} (id, int, real, text, blob) VALUES (?, ?, ?, ?, ?)`,
-        )
-        // Preserve `Uint8Array` type through JSON serialisation
-        .bind(1, 42, real, "🙈", blobArray)
-        .run();
-      let result = await db
-        .prepare(`SELECT * FROM ${tableKitchenSink}`)
-        .all<KitchenSinkRow>();
-      expect(result.results).toEqual([
-        { id: 1, int: 42, real, text: "🙈", blob: blobArray },
-      ]);
+  d1Test("D1PreparedStatement: bind", async ({ db, tableColours, tableKitchenSink }) => {
+    // Check with all parameter types. (Upstream uses a `3.141` literal, which
+    // trips the `approx-constant` lint rule.)
+    // oxlint-disable-next-line approx-constant
+    const real = 3.141;
+    const blob = utf8Encode("Walshy");
+    const blobArray = Array.from(blob);
+    await db
+      .prepare(`INSERT INTO ${tableKitchenSink} (id, int, real, text, blob) VALUES (?, ?, ?, ?, ?)`)
+      // Preserve `Uint8Array` type through JSON serialisation
+      .bind(1, 42, real, "🙈", blobArray)
+      .run();
+    let result = await db.prepare(`SELECT * FROM ${tableKitchenSink}`).all<KitchenSinkRow>();
+    expect(result.results).toEqual([{ id: 1, int: 42, real, text: "🙈", blob: blobArray }]);
 
-      // Check with null values
-      await db
-        .prepare(`UPDATE ${tableKitchenSink} SET blob = ?`)
-        .bind(null)
-        .run();
-      result = await db.prepare(`SELECT * FROM ${tableKitchenSink}`).all();
-      expect(result.results).toEqual([
-        { id: 1, int: 42, real, text: "🙈", blob: null },
-      ]);
+    // Check with null values
+    await db.prepare(`UPDATE ${tableKitchenSink} SET blob = ?`).bind(null).run();
+    result = await db.prepare(`SELECT * FROM ${tableKitchenSink}`).all();
+    expect(result.results).toEqual([{ id: 1, int: 42, real, text: "🙈", blob: null }]);
 
-      // Check with multiple statements
-      const colourResultsPromise = db
-        .prepare(
-          `SELECT * FROM ${tableColours} WHERE name = ?; SELECT * FROM ${tableColours} WHERE id = ?;`,
-        )
-        .bind("green")
-        .all<ColourRow>();
+    // Check with multiple statements
+    const colourResultsPromise = db
+      .prepare(
+        `SELECT * FROM ${tableColours} WHERE name = ?; SELECT * FROM ${tableColours} WHERE id = ?;`,
+      )
+      .bind("green")
+      .all<ColourRow>();
 
-      // workerd changed the error message here. Miniflare's tests should pass
-      // with either version of workerd
-      await expect(throwCause(colourResultsPromise)).rejects.toThrow(
-        /A prepared SQL statement must contain only one statement|When executing multiple SQL statements in a single call, only the last statement can have parameters./,
-      );
+    // workerd changed the error message here. Miniflare's tests should pass
+    // with either version of workerd
+    await expect(throwCause(colourResultsPromise)).rejects.toThrow(
+      /A prepared SQL statement must contain only one statement|When executing multiple SQL statements in a single call, only the last statement can have parameters./,
+    );
 
-      // Check with numbered parameters (execute and query)
-      // https://github.com/cloudflare/miniflare/issues/504
-      await db
-        .prepare(
-          `INSERT INTO ${tableColours} (id, name, rgb) VALUES (?3, ?1, ?2)`,
-        )
-        .bind("yellow", 0xffff00, 4)
-        .run();
-      const colourResult = await db
-        .prepare(`SELECT * FROM ${tableColours} WHERE id = ?1`)
-        .bind(4)
-        .first<ColourRow>();
-      expect(colourResult).toEqual({ id: 4, name: "yellow", rgb: 0xffff00 });
-    },
-  );
+    // Check with numbered parameters (execute and query)
+    // https://github.com/cloudflare/miniflare/issues/504
+    await db
+      .prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (?3, ?1, ?2)`)
+      .bind("yellow", 0xffff00, 4)
+      .run();
+    const colourResult = await db
+      .prepare(`SELECT * FROM ${tableColours} WHERE id = ?1`)
+      .bind(4)
+      .first<ColourRow>();
+    expect(colourResult).toEqual({ id: 4, name: "yellow", rgb: 0xffff00 });
+  });
 
   // Lots of strange edge cases here...
 
@@ -479,9 +433,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
     } catch (e) {
       expect(e).toBeInstanceOf(Error);
       expect(
-        /A prepared SQL statement must contain only one statement/.test(
-          (e as Error).message,
-        ),
+        /A prepared SQL statement must contain only one statement/.test((e as Error).message),
       ).toBeTruthy();
     }
 
@@ -498,118 +450,109 @@ layer(D1TestLayer)("D1 binding", (it) => {
     expect(id).toBe(4);
   });
 
-  d1Test(
-    "D1PreparedStatement: run",
-    async ({ db, tableColours, tableKitchenSink }) => {
-      // Check with read statement
-      let result = await db.prepare(`SELECT * FROM ${tableColours}`).run();
-      expect(result.meta.duration >= 0).toBe(true);
+  d1Test("D1PreparedStatement: run", async ({ db, tableColours, tableKitchenSink }) => {
+    // Check with read statement
+    let result = await db.prepare(`SELECT * FROM ${tableColours}`).run();
+    expect(result.meta.duration >= 0).toBe(true);
+    expect(result).toEqual({
+      success: true,
+      results: [
+        { id: 1, name: "red", rgb: 16711680 },
+        { id: 2, name: "green", rgb: 65280 },
+        { id: 3, name: "blue", rgb: 255 },
+      ],
+      meta: {
+        changed_db: false,
+        changes: 0,
+        // Don't know duration, so just match on returned value asserted > 0
+        duration: result.meta.duration,
+        // Not an `INSERT`, so `last_row_id` non-deterministic
+        last_row_id: result.meta.last_row_id,
+        served_by: "miniflare.db",
+        size_after: result.meta.size_after,
+        rows_read: 3,
+        rows_written: 0,
+      },
+    });
+
+    // Check with read/write statement
+    result = await db
+      .prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?) RETURNING *`)
+      .bind(4, "yellow", 0xffff00)
+      .run();
+    expect(result.meta.duration >= 0).toBe(true);
+    expect(result).toEqual({
+      results: [{ id: 4, name: "yellow", rgb: 16776960 }],
+      success: true,
+      meta: {
+        changed_db: true,
+        changes: 1,
+        duration: result.meta.duration,
+        last_row_id: 4,
+        served_by: "miniflare.db",
+        size_after: result.meta.size_after,
+        rows_read: 2,
+        rows_written: 1,
+      },
+    });
+
+    // Check with multiple statements
+    const resultPromise = db
+      .prepare(
+        `INSERT INTO ${tableKitchenSink} (id) VALUES (1); INSERT INTO ${tableKitchenSink} (id) VALUES (2);`,
+      )
+      .run();
+
+    // workerd changed its behaviour from throwing to returning the last
+    // result. Miniflare's tests should pass with either version of workerd
+    try {
+      result = await resultPromise;
       expect(result).toEqual({
-        success: true,
-        results: [
-          { id: 1, name: "red", rgb: 16711680 },
-          { id: 2, name: "green", rgb: 65280 },
-          { id: 3, name: "blue", rgb: 255 },
-        ],
         meta: {
-          changed_db: false,
-          changes: 0,
-          // Don't know duration, so just match on returned value asserted > 0
+          changed_db: true,
+          changes: 2,
           duration: result.meta.duration,
-          // Not an `INSERT`, so `last_row_id` non-deterministic
           last_row_id: result.meta.last_row_id,
-          served_by: "miniflare.db",
-          size_after: result.meta.size_after,
-          rows_read: 3,
-          rows_written: 0,
-        },
-      });
-
-      // Check with read/write statement
-      result = await db
-        .prepare(
-          `INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?) RETURNING *`,
-        )
-        .bind(4, "yellow", 0xffff00)
-        .run();
-      expect(result.meta.duration >= 0).toBe(true);
-      expect(result).toEqual({
-        results: [{ id: 4, name: "yellow", rgb: 16776960 }],
-        success: true,
-        meta: {
-          changed_db: true,
-          changes: 1,
-          duration: result.meta.duration,
-          last_row_id: 4,
-          served_by: "miniflare.db",
-          size_after: result.meta.size_after,
-          rows_read: 2,
-          rows_written: 1,
-        },
-      });
-
-      // Check with multiple statements
-      const resultPromise = db
-        .prepare(
-          `INSERT INTO ${tableKitchenSink} (id) VALUES (1); INSERT INTO ${tableKitchenSink} (id) VALUES (2);`,
-        )
-        .run();
-
-      // workerd changed its behaviour from throwing to returning the last
-      // result. Miniflare's tests should pass with either version of workerd
-      try {
-        result = await resultPromise;
-        expect(result).toEqual({
-          meta: {
-            changed_db: true,
-            changes: 2,
-            duration: result.meta.duration,
-            last_row_id: result.meta.last_row_id,
-            rows_read: 1,
-            rows_written: 1,
-            served_by: "miniflare.db",
-            size_after: result.meta.size_after,
-          },
-          results: [],
-          success: true,
-        });
-      } catch (e) {
-        expect(e).toBeInstanceOf(Error);
-        expect(
-          /A prepared SQL statement must contain only one statement/.test(
-            (e as Error).message,
-          ),
-        ).toBeTruthy();
-      }
-
-      // Check with write statement
-      result = await db
-        .prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?)`)
-        .bind(5, "orange", 0xff8000)
-        .run();
-      expect(result.meta.duration >= 0).toBe(true);
-      expect(result).toEqual({
-        results: [],
-        success: true,
-        meta: {
-          changed_db: true,
-          changes: 1,
-          duration: result.meta.duration,
-          last_row_id: 5,
-          served_by: "miniflare.db",
-          size_after: result.meta.size_after,
           rows_read: 1,
           rows_written: 1,
+          served_by: "miniflare.db",
+          size_after: result.meta.size_after,
         },
+        results: [],
+        success: true,
       });
-    },
-  );
+    } catch (e) {
+      expect(e).toBeInstanceOf(Error);
+      expect(
+        /A prepared SQL statement must contain only one statement/.test((e as Error).message),
+      ).toBeTruthy();
+    }
+
+    // Check with write statement
+    result = await db
+      .prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?)`)
+      .bind(5, "orange", 0xff8000)
+      .run();
+    expect(result.meta.duration >= 0).toBe(true);
+    expect(result).toEqual({
+      results: [],
+      success: true,
+      meta: {
+        changed_db: true,
+        changes: 1,
+        duration: result.meta.duration,
+        last_row_id: 5,
+        served_by: "miniflare.db",
+        size_after: result.meta.size_after,
+        rows_read: 1,
+        rows_written: 1,
+      },
+    });
+  });
 
   d1Test("D1PreparedStatement: all", async ({ db, tableColours }) => {
     // Check with read statement
-    let result = await db
-      .prepare(`SELECT * FROM ${tableColours}`)
-      .all<ColourRow>();
+    let result = await db.prepare(`SELECT * FROM ${tableColours}`).all<ColourRow>();
     expect(result.meta.duration >= 0).toBe(true);
     expect(result).toEqual({
       results: [
@@ -658,9 +601,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
     } catch (e) {
       expect(e).toBeInstanceOf(Error);
       expect(
-        /A prepared SQL statement must contain only one statement/.test(
-          (e as Error).message,
-        ),
+        /A prepared SQL statement must contain only one statement/.test((e as Error).message),
       ).toBeTruthy();
     }
 
@@ -680,9 +621,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
 
     // Check with write statement that returns data
     result = await db
-      .prepare(
-        `INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?) RETURNING id`,
-      )
+      .prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (?, ?, ?) RETURNING id`)
       .bind(5, "orange", 0xff8000)
       .all();
     expect(result.results).toEqual([{ id: 5 }]);
@@ -693,9 +632,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
   d1Test("D1PreparedStatement: raw", async ({ db, tableColours }) => {
     // Check with read statement
     type RawColourRow = [/* id */ number, /* name */ string, /* rgb*/ number];
-    let results = await db
-      .prepare(`SELECT * FROM ${tableColours}`)
-      .raw<RawColourRow>();
+    let results = await db.prepare(`SELECT * FROM ${tableColours}`).raw<RawColourRow>();
     expect(results).toEqual([
       [1, "red", 0xff0000],
       [2, "green", 0x00ff00],
@@ -718,9 +655,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
     } catch (e) {
       expect(e).toBeInstanceOf(Error);
       expect(
-        /A prepared SQL statement must contain only one statement/.test(
-          (e as Error).message,
-        ),
+        /A prepared SQL statement must contain only one statement/.test((e as Error).message),
       ).toBeTruthy();
     }
 
@@ -741,9 +676,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
     await db.prepare(`CREATE TABLE cde (c INT, d INT, e INT);`).run();
     await db.prepare(`INSERT INTO abc VALUES (1,2,3),(4,5,6);`).run();
     await db.prepare(`INSERT INTO cde VALUES (7,8,9),(1,2,3);`).run();
-    const rawResults = await db
-      .prepare(`SELECT * FROM abc, cde;`)
-      .raw({ columnNames: true });
+    const rawResults = await db.prepare(`SELECT * FROM abc, cde;`).raw({ columnNames: true });
     expect(rawResults).toEqual([
       ["a", "b", "c", "c", "d", "e"],
       [1, 2, 3, 7, 8, 9],
@@ -771,9 +704,7 @@ layer(D1TestLayer)("D1 binding", (it) => {
     await db.exec(SCHEMA(tableColours, tableKitchenSink, tablePalettes));
 
     await db
-      .prepare(
-        `INSERT INTO ${tableColours} (id, name, rgb) VALUES (4, 'pink', 0xff00ff);`,
-      )
+      .prepare(`INSERT INTO ${tableColours} (id, name, rgb) VALUES (4, 'pink', 0xff00ff);`)
       .run();
     const result = await db
       .prepare(`SELECT name FROM ${tableColours} WHERE id = 4`)
@@ -874,26 +805,20 @@ async function fillDummyData(db: TestD1Database) {
   ];
 
   // Insert classroom data
-  const classroomStmt = db.prepare(
-    `INSERT INTO classrooms (id, capacity) VALUES (?, ?)`,
-  );
+  const classroomStmt = db.prepare(`INSERT INTO classrooms (id, capacity) VALUES (?, ?)`);
 
   for (const classroom of classroomData) {
     await classroomStmt.bind(classroom.id, classroom.capacity).run();
   }
 
   // Generate and insert student data with classroom references
-  const studentStmt = db.prepare(
-    `INSERT INTO students (id, name, classroom) VALUES (?, ?, ?)`,
-  );
+  const studentStmt = db.prepare(`INSERT INTO students (id, name, classroom) VALUES (?, ?, ?)`);
 
   // Create 2 students for each classroom
   for (let i = 0; i < 10; i++) {
     for (let j = 1; j <= 2; j++) {
       const studentId = i * 2 + j;
-      await studentStmt
-        .bind(studentId, `student_${studentId}`, `classroom_${i + 1}`)
-        .run();
+      await studentStmt.bind(studentId, `student_${studentId}`, `classroom_${i + 1}`).run();
     }
   }
 }
@@ -909,12 +834,8 @@ async function isDatabaseEqual(db: TestD1Database, db2: TestD1Database) {
     "SELECT * FROM sqlite_master WHERE type = 'table' AND (name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%')";
 
   // Check if schema (tables) in both databases is equal
-  const tablesFromMirror = (
-    await db2.prepare(selectSchemaSQL).all<{ name: string }>()
-  ).results;
-  const tablesFromOriginal = (
-    await db.prepare(selectSchemaSQL).all<{ name: string }>()
-  ).results;
+  const tablesFromMirror = (await db2.prepare(selectSchemaSQL).all<{ name: string }>()).results;
+  const tablesFromOriginal = (await db.prepare(selectSchemaSQL).all<{ name: string }>()).results;
   expect(tablesFromMirror).toEqual(tablesFromOriginal);
 
   // Check if data in each table is equal. We will use a simple
@@ -957,9 +878,7 @@ describe("D1 binding persistence", () => {
           Layer.provide(Paths.PathsLive),
           Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
-          Layer.provideMerge(
-            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
-          ),
+          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
         );
 
         const runAgainstStorage = Effect.fn(
@@ -968,30 +887,21 @@ describe("D1 binding persistence", () => {
               name: "d1-persist-test",
               compatibilityDate: "2026-03-10",
               compatibilityFlags: [],
-              modules: [
-                { name: "main.js", type: "ESModule", content: TEST_SCRIPT },
-              ],
+              modules: [{ name: "main.js", type: "ESModule", content: TEST_SCRIPT }],
               bindings: [D1.local({ binding: "DB", id: "db" })],
             });
-            yield* Effect.promise(() =>
-              run(new TestD1Database(worker.baseUrl, "DB")),
-            );
+            yield* Effect.promise(() => run(new TestD1Database(worker.baseUrl, "DB")));
           },
-          (self) =>
-            self.pipe(Effect.provide(runtimeLayerTempDir), Effect.scoped),
+          (self) => self.pipe(Effect.provide(runtimeLayerTempDir), Effect.scoped),
         );
 
         yield* runAgainstStorage(async (db) => {
           // Check execute respects persist
           await db.exec(SCHEMA("colours", "kitchen_sink", "palettes"));
           await db
-            .prepare(
-              `INSERT INTO colours (id, name, rgb) VALUES (4, 'purple', 0xff00ff);`,
-            )
+            .prepare(`INSERT INTO colours (id, name, rgb) VALUES (4, 'purple', 0xff00ff);`)
             .run();
-          const result = await db
-            .prepare(`SELECT name FROM colours WHERE id = 4`)
-            .first();
+          const result = await db.prepare(`SELECT name FROM colours WHERE id = 4`).first();
           expect(result).toEqual({ name: "purple" });
         });
 
@@ -1001,9 +911,7 @@ describe("D1 binding persistence", () => {
 
         // Check "restarting" keeps persisted data
         yield* runAgainstStorage(async (db) => {
-          const result = await db
-            .prepare(`SELECT name FROM colours WHERE id = 4`)
-            .first();
+          const result = await db.prepare(`SELECT name FROM colours WHERE id = 4`).first();
           expect(result).toEqual({ name: "purple" });
         });
       }).pipe(Effect.provide(NodeServices.layer)),

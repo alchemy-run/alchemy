@@ -5,11 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "../../Artifacts.ts";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "../../Artifacts.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
@@ -42,16 +38,11 @@ const readConfig = Effect.gen(function* () {
 const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* readConfig;
-    const credentials = Credentials.fromAuthProvider().pipe(
-      Layer.provide(CloudflareAuth),
-    );
+    const credentials = Credentials.fromAuthProvider().pipe(Layer.provide(CloudflareAuth));
     const runtimeContext = yield* layerRuntime({
       api: { accountId: config.accountId },
       storage: { directory: config.storageDirectory },
-    }).pipe(
-      Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)),
-      Layer.build,
-    );
+    }).pipe(Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)), Layer.build);
     // The non-runtime fields are consumed here; everything else in
     // `config.worker` is the runtime worker shape `viteDev` expects, so new
     // runtime fields flow through without being re-listed.
@@ -92,10 +83,7 @@ const program = Effect.scoped(
           // (which includes the per-run Artifacts cache the live provider
           // supplies); the dev child has no run-scoped cache, so hand the
           // module a fresh one.
-          Effect.provideService(
-            Artifacts,
-            makeScopedArtifacts(createArtifactStore(), source.fqn),
-          ),
+          Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), source.fqn)),
           Effect.flatMap((provider) =>
             provider.dev({
               id: source.id,
@@ -150,9 +138,7 @@ const program = Effect.scoped(
       return yield* Effect.die("Dev server child started without a local URL");
     }
     yield* Effect.sync(() => {
-      process.stdout.write(
-        `${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`,
-      );
+      process.stdout.write(`${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`);
     });
     return yield* Effect.never;
   }),
@@ -160,8 +146,6 @@ const program = Effect.scoped(
 
 runMain(
   program.pipe(
-    Effect.provide(
-      RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices)),
-    ),
+    Effect.provide(RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices))),
   ),
 );

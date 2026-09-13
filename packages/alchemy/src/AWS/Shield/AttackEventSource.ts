@@ -112,9 +112,7 @@ export const consumeAttackEvents = <StreamReq = never, Req = never>(
       detail: {
         service: [...(props.services ?? ["SHIELD"])],
         eventTypeCategory: ["issue"],
-        ...(props.eventTypeCodes !== undefined
-          ? { eventTypeCode: [...props.eventTypeCodes] }
-          : {}),
+        ...(props.eventTypeCodes !== undefined ? { eventTypeCode: [...props.eventTypeCodes] } : {}),
       },
     },
     { description: props.description, state: props.state },

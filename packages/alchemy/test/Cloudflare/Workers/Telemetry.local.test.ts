@@ -6,10 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import {
-  startDelayedOtlpCollector,
-  startOtlpCollector,
-} from "../Utils/OtlpCollector.ts";
+import { startDelayedOtlpCollector, startOtlpCollector } from "../Utils/OtlpCollector.ts";
 import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
@@ -19,9 +16,7 @@ const traceSpanNames = (body: string) => {
     resourceSpans: { scopeSpans: { spans: { name: string }[] }[] }[];
   };
   return payload.resourceSpans.flatMap((resource) =>
-    resource.scopeSpans.flatMap((scope) =>
-      scope.spans.map((span) => span.name),
-    ),
+    resource.scopeSpans.flatMap((scope) => scope.spans.map((span) => span.name)),
   );
 };
 
@@ -31,8 +26,7 @@ test.provider(
     Effect.gen(function* () {
       // Hold only Worker exports: the DO may flush in either foreground or background.
       const collector = yield* startOtlpCollector({
-        holdResponse: (body) =>
-          body.includes('"name":"otel-event-flush.worker"'),
+        holdResponse: (body) => body.includes('"name":"otel-event-flush.worker"'),
       });
       const currentConfig = yield* ConfigProvider.ConfigProvider;
       yield* stack.destroy();
@@ -56,9 +50,7 @@ test.provider(
         );
 
       if (deployment.url === undefined) {
-        return yield* Effect.die(
-          "OTLP event flush test Worker URL unavailable",
-        );
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
       }
       const client = yield* HttpClient.HttpClient;
       const response = yield* client.get(deployment.url);
@@ -98,9 +90,7 @@ test.provider(
       );
       expect(collector.completedRequests.value).toBe(4);
       expect(collector.requests).toHaveLength(4);
-      expect(
-        collector.requests.every((batch) => batch.completed && !batch.aborted),
-      ).toBe(true);
+      expect(collector.requests.every((batch) => batch.completed && !batch.aborted)).toBe(true);
       for (const [name, count] of [
         ["otel-event-flush.worker", 2],
         ["otel-event-flush.child", 1],
@@ -108,9 +98,7 @@ test.provider(
         ["http.server GET", 3],
       ] as const) {
         expect(
-          collector.requests.filter((batch) =>
-            batch.body.includes(`"name":"${name}"`),
-          ),
+          collector.requests.filter((batch) => batch.body.includes(`"name":"${name}"`)),
         ).toHaveLength(count);
       }
 
@@ -152,9 +140,7 @@ for (const scenario of [
             ),
           );
         if (deployment.url === undefined) {
-          return yield* Effect.fail(
-            new Error("OTLP deadline Worker URL unavailable"),
-          );
+          return yield* Effect.fail(new Error("OTLP deadline Worker URL unavailable"));
         }
         const client = yield* HttpClient.HttpClient;
         const startedAt = yield* Effect.sync(() => Date.now());
@@ -177,21 +163,15 @@ for (const scenario of [
           }),
         );
         if (rpcBatch === undefined) {
-          const response = yield* Fiber.join(responseFiber).pipe(
-            Effect.timeout("10 seconds"),
-          );
+          const response = yield* Fiber.join(responseFiber).pipe(Effect.timeout("10 seconds"));
           yield* Effect.logError("Missing DO RPC export", {
             scenario,
             response,
             batches: collector.requests,
           });
-          return yield* Effect.fail(
-            new Error("The collector never received the DO RPC batch"),
-          );
+          return yield* Effect.fail(new Error("The collector never received the DO RPC batch"));
         }
-        const response = yield* Fiber.join(responseFiber).pipe(
-          Effect.timeout("10 seconds"),
-        );
+        const response = yield* Fiber.join(responseFiber).pipe(Effect.timeout("10 seconds"));
         expect(response.status).toBe(200);
         expect(response.body).toBe("worker-saw:durable-object-rpc-ok");
         yield* Effect.sync(
@@ -208,12 +188,9 @@ for (const scenario of [
         yield* Effect.log("Native DO RPC exporter deadline", {
           scenario: scenario.name,
           workerResponseMillis: response.receivedAt - startedAt,
-          workerResponseAfterRpcReceiptMillis:
-            response.receivedAt - rpcBatch.receivedAt,
+          workerResponseAfterRpcReceiptMillis: response.receivedAt - rpcBatch.receivedAt,
           rpcSocketLifetimeMillis:
-            rpcBatch.closedAt === undefined
-              ? undefined
-              : rpcBatch.closedAt - rpcBatch.receivedAt,
+            rpcBatch.closedAt === undefined ? undefined : rpcBatch.closedAt - rpcBatch.receivedAt,
           batches: collector.requests.map((batch) => ({
             spans: traceSpanNames(batch.body),
             receivedAt: batch.receivedAt,
@@ -225,9 +202,7 @@ for (const scenario of [
         });
         expect(collector.requests).toHaveLength(2);
         const names = yield* Effect.sync(() =>
-          collector.requests
-            .flatMap((batch) => traceSpanNames(batch.body))
-            .sort(),
+          collector.requests.flatMap((batch) => traceSpanNames(batch.body)).sort(),
         );
         expect(names).toEqual([
           "http.server GET",
@@ -238,9 +213,7 @@ for (const scenario of [
         expect(response.receivedAt).toBeLessThan(rpcBatch.closedAt!);
         expect(rpcBatch.completed).toBe(scenario.delivered);
         expect(rpcBatch.aborted).toBe(!scenario.delivered);
-        expect(collector.completedRequests.value).toBe(
-          scenario.delivered ? 2 : 1,
-        );
+        expect(collector.completedRequests.value).toBe(scenario.delivered ? 2 : 1);
         const socketLifetime = rpcBatch.closedAt! - rpcBatch.receivedAt;
         if (scenario.delivered) {
           expect(rpcBatch.responseStartedAt).toBeTypeOf("number");
@@ -252,9 +225,7 @@ for (const scenario of [
           expect(socketLifetime).toBeGreaterThanOrEqual(2_500);
           expect(socketLifetime).toBeLessThan(4_000);
         }
-        const workerBatch = collector.requests.find(
-          (batch) => batch !== rpcBatch,
-        )!;
+        const workerBatch = collector.requests.find((batch) => batch !== rpcBatch)!;
         expect(workerBatch.completed).toBe(true);
         expect(workerBatch.aborted).toBe(false);
         yield* stack.destroy();

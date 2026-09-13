@@ -18,11 +18,7 @@ export interface LanguageModelClient {
   /** OpenAI-compatible base URL ending in /v1. */
   readonly chatBaseUrl: Effect.Effect<string, never, RuntimeContext>;
   /** Redacted credential with ai_gateway:invoke scope. */
-  readonly token: Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  readonly token: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
 }
 
 /** Configuration for Neon's OpenAI-compatible Chat Completions endpoint. */
@@ -95,11 +91,7 @@ export const makeLanguageModel = ({
   parameters,
 }: LanguageModelOptions & {
   readonly client: LanguageModelClient;
-}): Effect.Effect<
-  LanguageModel.LanguageModel,
-  never,
-  RuntimeContext | HttpClient.HttpClient
-> =>
+}): Effect.Effect<LanguageModel.LanguageModel, never, RuntimeContext | HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const baseUrl = yield* client.chatBaseUrl;
@@ -108,19 +100,11 @@ export const makeLanguageModel = ({
       Effect.gen(function* () {
         const body = yield* requestBody(options, model, parameters, stream);
         const request = yield* HttpClientRequest.bodyJson(body)(
-          HttpClientRequest.post(
-            `${baseUrl.replace(/\/$/, "")}/chat/completions`,
-          ).pipe(
+          HttpClientRequest.post(`${baseUrl.replace(/\/$/, "")}/chat/completions`).pipe(
             HttpClientRequest.bearerToken(token),
-            HttpClientRequest.accept(
-              stream ? "text/event-stream" : "application/json",
-            ),
+            HttpClientRequest.accept(stream ? "text/event-stream" : "application/json"),
           ),
-        ).pipe(
-          Effect.mapError(() =>
-            invalidRequest("Request is not JSON serializable"),
-          ),
-        );
+        ).pipe(Effect.mapError(() => invalidRequest("Request is not JSON serializable")));
         const response = yield* http.execute(request).pipe(
           Effect.mapError(() =>
             error(
@@ -164,11 +148,9 @@ export const makeLanguageModel = ({
           if (message.reasoning_content)
             parts.push({ type: "reasoning", text: message.reasoning_content });
           if (typeof message.content === "string") {
-            if (message.content)
-              parts.push({ type: "text", text: message.content });
+            if (message.content) parts.push({ type: "text", text: message.content });
           } else if (message.content) {
-            for (const block of message.content)
-              parts.push({ type: "text", text: block.text });
+            for (const block of message.content) parts.push({ type: "text", text: block.text });
           }
           for (const call of message.tool_calls ?? []) {
             parts.push({
@@ -205,45 +187,30 @@ const invalidOutput = (description: string) =>
   error(new AiError.InvalidOutputError({ description }));
 const invalidRequest = (description: string) =>
   error(new AiError.InvalidRequestError({ description }));
-const decode = <S extends Schema.ConstraintDecoder<unknown>>(
-  schema: S,
-  value: unknown,
-) =>
+const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(
-    Effect.mapError(() =>
-      invalidOutput("Invalid Chat Completions response shape"),
-    ),
+    Effect.mapError(() => invalidOutput("Invalid Chat Completions response shape")),
   );
 const parseArguments = (value: string) =>
-  Schema.decodeUnknownEffect(
-    Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
-  )(value).pipe(
-    Effect.mapError(() =>
-      invalidOutput("Invalid function-call JSON arguments"),
-    ),
-  );
+  Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+    value,
+  ).pipe(Effect.mapError(() => invalidOutput("Invalid function-call JSON arguments")));
 
 const TokenCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Usage = Schema.Struct({
   prompt_tokens: Schema.optional(TokenCount),
   completion_tokens: Schema.optional(TokenCount),
   prompt_tokens_details: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({ cached_tokens: Schema.optional(TokenCount) }),
-    ),
+    Schema.NullOr(Schema.Struct({ cached_tokens: Schema.optional(TokenCount) })),
   ),
   completion_tokens_details: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({ reasoning_tokens: Schema.optional(TokenCount) }),
-    ),
+    Schema.NullOr(Schema.Struct({ reasoning_tokens: Schema.optional(TokenCount) })),
   ),
 });
 const Content = Schema.NullOr(
   Schema.Union([
     Schema.String,
-    Schema.Array(
-      Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
-    ),
+    Schema.Array(Schema.Struct({ type: Schema.Literal("text"), text: Schema.String })),
   ]),
 );
 const Completion = Schema.Struct({
@@ -302,9 +269,7 @@ const Chunk = Schema.Struct({
 });
 const ErrorBody = Schema.Struct({
   error: Schema.Struct({
-    code: Schema.optional(
-      Schema.Union([Schema.String, Schema.Number, Schema.Null]),
-    ),
+    code: Schema.optional(Schema.Union([Schema.String, Schema.Number, Schema.Null])),
     message: Schema.optional(Schema.String),
   }),
 });
@@ -319,10 +284,7 @@ const httpError = (
       Effect.catch(() => Effect.succeed(undefined)),
     );
     const status = response.status;
-    if (
-      status === 403 &&
-      body?.error.message === "ai gateway not enabled for account"
-    )
+    if (status === 403 && body?.error.message === "ai gateway not enabled for account")
       return yield* error(new AiError.QuotaExhaustedError({}));
     if (status === 401 || status === 403)
       return yield* error(
@@ -357,9 +319,7 @@ const httpError = (
     );
   });
 
-const finishReason = (
-  reason: string | null | undefined,
-): Response.FinishReason => {
+const finishReason = (reason: string | null | undefined): Response.FinishReason => {
   switch (reason) {
     case "stop":
       return "stop";
@@ -384,17 +344,13 @@ const usage = (value: typeof Usage.Type | null | undefined) => {
   return new Response.Usage({
     inputTokens: {
       total: input,
-      uncached:
-        input === undefined ? undefined : Math.max(0, input - (cached ?? 0)),
+      uncached: input === undefined ? undefined : Math.max(0, input - (cached ?? 0)),
       cacheRead: cached,
       cacheWrite: undefined,
     },
     outputTokens: {
       total: output,
-      text:
-        output === undefined
-          ? undefined
-          : Math.max(0, output - (reasoning ?? 0)),
+      text: output === undefined ? undefined : Math.max(0, output - (reasoning ?? 0)),
       reasoning,
     },
   });
@@ -407,17 +363,10 @@ const requestBody = (
   stream: boolean,
 ) =>
   Effect.gen(function* () {
-    if (
-      parameters?.maxTokens !== undefined &&
-      parameters.maxCompletionTokens !== undefined
-    )
-      return yield* invalidRequest(
-        "Set maxTokens or maxCompletionTokens, not both",
-      );
+    if (parameters?.maxTokens !== undefined && parameters.maxCompletionTokens !== undefined)
+      return yield* invalidRequest("Set maxTokens or maxCompletionTokens, not both");
     if (options.tools.some(Tool.isProviderDefined))
-      return yield* invalidRequest(
-        "Provider-executed tools require a native provider API",
-      );
+      return yield* invalidRequest("Provider-executed tools require a native provider API");
     const messages: Array<Record<string, unknown>> = [];
     for (const message of options.prompt.content) {
       if (message.role === "system") {
@@ -425,18 +374,13 @@ const requestBody = (
       } else if (message.role === "user") {
         const content: Array<unknown> = [];
         for (const part of message.content) {
-          if (part.type === "text")
-            content.push({ type: "text", text: part.text });
-          else if (
-            part.type === "file" &&
-            part.mediaType.startsWith("image/")
-          ) {
+          if (part.type === "text") content.push({ type: "text", text: part.text });
+          else if (part.type === "file" && part.mediaType.startsWith("image/")) {
             const url = yield* Effect.sync(() => {
               if (part.data instanceof URL) return part.data.toString();
               if (part.data instanceof Uint8Array) {
                 let binary = "";
-                for (const byte of part.data)
-                  binary += String.fromCharCode(byte);
+                for (const byte of part.data) binary += String.fromCharCode(byte);
                 return `data:${part.mediaType};base64,${btoa(binary)}`;
               }
               return /^(data:|https?:)/.test(part.data)
@@ -444,10 +388,7 @@ const requestBody = (
                 : `data:${part.mediaType};base64,${part.data}`;
             });
             content.push({ type: "image_url", image_url: { url } });
-          } else
-            return yield* invalidRequest(
-              "Only text and image user inputs are supported",
-            );
+          } else return yield* invalidRequest("Only text and image user inputs are supported");
         }
         messages.push({ role: "user", content });
       } else if (message.role === "assistant") {
@@ -465,9 +406,7 @@ const requestBody = (
               },
             });
           else if (part.type !== "reasoning")
-            return yield* invalidRequest(
-              "Unsupported assistant content for Chat Completions",
-            );
+            return yield* invalidRequest("Unsupported assistant content for Chat Completions");
         }
         messages.push({
           role: "assistant",
@@ -477,16 +416,11 @@ const requestBody = (
       } else {
         for (const part of message.content) {
           if (part.type !== "tool-result")
-            return yield* invalidRequest(
-              "Unsupported tool message for Chat Completions",
-            );
+            return yield* invalidRequest("Unsupported tool message for Chat Completions");
           messages.push({
             role: "tool",
             tool_call_id: part.id,
-            content:
-              typeof part.result === "string"
-                ? part.result
-                : yield* stringify(part.result),
+            content: typeof part.result === "string" ? part.result : yield* stringify(part.result),
           });
         }
       }
@@ -506,8 +440,7 @@ const requestBody = (
             parameters: Tool.getJsonSchema(tool),
           },
         })),
-      catch: () =>
-        invalidRequest("Tool schema cannot be represented as JSON Schema"),
+      catch: () => invalidRequest("Tool schema cannot be represented as JSON Schema"),
     });
     const responseFormat = options.responseFormat;
     const jsonSchema =
@@ -517,8 +450,7 @@ const requestBody = (
             catch: () =>
               error(
                 new AiError.UnsupportedSchemaError({
-                  description:
-                    "Schema is not supported by OpenAI structured output",
+                  description: "Schema is not supported by OpenAI structured output",
                 }),
               ),
           })
@@ -544,10 +476,7 @@ const requestBody = (
             response_format: {
               type: "json_schema",
               json_schema: {
-                name:
-                  responseFormat.type === "json"
-                    ? responseFormat.objectName
-                    : "response",
+                name: responseFormat.type === "json" ? responseFormat.objectName : "response",
                 schema: jsonSchema,
                 strict: true,
               },
@@ -584,14 +513,10 @@ const completionStream = (
         { id: string; name: string; arguments: string; started: boolean }
       >();
       const chunks = response.stream.pipe(
-        Stream.mapError(() =>
-          invalidOutput("Chat Completions stream transport failed"),
-        ),
+        Stream.mapError(() => invalidOutput("Chat Completions stream transport failed")),
         Stream.decodeText(),
         Stream.pipeThroughChannel(Sse.decode<AiError.AiError, unknown>()),
-        Stream.mapError(() =>
-          invalidOutput("Invalid or interrupted SSE stream"),
-        ),
+        Stream.mapError(() => invalidOutput("Invalid or interrupted SSE stream")),
         Stream.takeUntil((event) => event.data === "[DONE]"),
         Stream.mapEffect((event) =>
           Effect.gen(function* () {
@@ -607,13 +532,9 @@ const completionStream = (
                   description: "Neon AI Gateway stream reported an error",
                 }),
               );
-            const chunk = yield* Schema.decodeUnknownEffect(
-              Schema.fromJsonString(Chunk),
-            )(event.data).pipe(
-              Effect.mapError(() =>
-                invalidOutput("Invalid Chat Completions stream chunk"),
-              ),
-            );
+            const chunk = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Chunk))(
+              event.data,
+            ).pipe(Effect.mapError(() => invalidOutput("Invalid Chat Completions stream chunk")));
             if (chunk.usage != null) tokenUsage = chunk.usage;
             for (const choice of chunk.choices) {
               if (choice.index !== 0) continue;
@@ -656,16 +577,12 @@ const completionStream = (
                 };
                 if (deltaCall.id) {
                   if (call.id && call.id !== deltaCall.id)
-                    return yield* invalidOutput(
-                      "Tool call ID changed within a stream",
-                    );
+                    return yield* invalidOutput("Tool call ID changed within a stream");
                   call.id = deltaCall.id;
                 }
                 if (deltaCall.function?.name) {
                   if (call.started && call.name !== deltaCall.function.name)
-                    return yield* invalidOutput(
-                      "Tool name changed within a stream",
-                    );
+                    return yield* invalidOutput("Tool name changed within a stream");
                   call.name = deltaCall.function.name;
                 }
                 const args = deltaCall.function?.arguments ?? "";
@@ -704,12 +621,10 @@ const completionStream = (
               "Chat Completions stream ended before its finish reason and [DONE]",
             );
           const parts: Array<Response.StreamPartEncoded> = [];
-          if (reasoningStarted)
-            parts.push({ type: "reasoning-end", id: "reasoning" });
+          if (reasoningStarted) parts.push({ type: "reasoning-end", id: "reasoning" });
           if (textStarted) parts.push({ type: "text-end", id: "text" });
           for (const call of calls.values()) {
-            if (!call.started)
-              return yield* invalidOutput("Incomplete streamed tool identity");
+            if (!call.started) return yield* invalidOutput("Incomplete streamed tool identity");
             parts.push({ type: "tool-params-end", id: call.id });
             if (reason !== "length" && reason !== "content_filter") {
               parts.push({

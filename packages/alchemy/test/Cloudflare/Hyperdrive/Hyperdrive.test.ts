@@ -15,10 +15,7 @@ const { test } = Test.make({
   providers: Layer.merge(Cloudflare.providers(), Neon.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 test.provider("create and delete hyperdrive with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
@@ -28,12 +25,9 @@ test.provider("create and delete hyperdrive with default props", (stack) =>
     const { db, hd } = yield* stack.deploy(
       Effect.gen(function* () {
         const db = yield* Neon.Project("DefaultProject");
-        const hd = yield* Cloudflare.Hyperdrive.Connection(
-          "DefaultHyperdrive",
-          {
-            origin: db.origin,
-          },
-        );
+        const hd = yield* Cloudflare.Hyperdrive.Connection("DefaultHyperdrive", {
+          origin: db.origin,
+        });
         return { db, hd };
       }),
     );
@@ -109,9 +103,7 @@ test.provider("list enumerates the deployed hyperdrive", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Hyperdrive.Connection,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Hyperdrive.Connection);
     const all = yield* provider.list();
 
     expect(all.some((x) => x.hyperdriveId === hd.hyperdriveId)).toBe(true);
@@ -120,10 +112,7 @@ test.provider("list enumerates the deployed hyperdrive", (stack) =>
   }).pipe(logLevel),
 );
 
-const waitForConfigToBeDeleted = Effect.fn(function* (
-  hyperdriveId: string,
-  accountId: string,
-) {
+const waitForConfigToBeDeleted = Effect.fn(function* (hyperdriveId: string, accountId: string) {
   yield* hyperdrive.getConfig({ accountId, hyperdriveId }).pipe(
     Effect.flatMap(() => Effect.fail(new ConfigStillExists())),
     Effect.retry({

@@ -31,10 +31,8 @@ export default SmsVoiceOptOutTestFunction.make(
     });
 
     const putOptedOut = yield* PinpointSMSVoiceV2.PutOptedOutNumber(optOuts);
-    const describeOptedOut =
-      yield* PinpointSMSVoiceV2.DescribeOptedOutNumbers(optOuts);
-    const deleteOptedOut =
-      yield* PinpointSMSVoiceV2.DeleteOptedOutNumber(optOuts);
+    const describeOptedOut = yield* PinpointSMSVoiceV2.DescribeOptedOutNumbers(optOuts);
+    const deleteOptedOut = yield* PinpointSMSVoiceV2.DeleteOptedOutNumber(optOuts);
     const carrierLookup = yield* PinpointSMSVoiceV2.CarrierLookup();
     const putFeedback = yield* PinpointSMSVoiceV2.PutMessageFeedback();
 

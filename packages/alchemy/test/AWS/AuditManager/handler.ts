@@ -35,18 +35,15 @@ export default AuditManagerTestFunction.make(
     const getAccountStatus = yield* AuditManager.GetAccountStatus();
     const getServicesInScope = yield* AuditManager.GetServicesInScope();
     const getInsights = yield* AuditManager.GetInsights();
-    const listControlDomainInsights =
-      yield* AuditManager.ListControlDomainInsights();
+    const listControlDomainInsights = yield* AuditManager.ListControlDomainInsights();
     const listControlInsightsByControlDomain =
       yield* AuditManager.ListControlInsightsByControlDomain();
     const getDelegations = yield* AuditManager.GetDelegations();
-    const getEvidenceFileUploadUrl =
-      yield* AuditManager.GetEvidenceFileUploadUrl();
+    const getEvidenceFileUploadUrl = yield* AuditManager.GetEvidenceFileUploadUrl();
     const listAssessmentReports = yield* AuditManager.ListAssessmentReports();
     const validateAssessmentReportIntegrity =
       yield* AuditManager.ValidateAssessmentReportIntegrity();
-    const listKeywordsForDataSource =
-      yield* AuditManager.ListKeywordsForDataSource();
+    const listKeywordsForDataSource = yield* AuditManager.ListKeywordsForDataSource();
     const listNotifications = yield* AuditManager.ListNotifications();
 
     const bound = {
@@ -91,9 +88,8 @@ export default AuditManagerTestFunction.make(
               ok: true as const,
               count: (r.serviceMetadata ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ValidationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ValidationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -112,10 +108,7 @@ export default AuditManagerTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/control-domain-insights"
-        ) {
+        if (request.method === "GET" && pathname === "/control-domain-insights") {
           const result = yield* listControlDomainInsights({
             maxResults: 20,
           }).pipe(
@@ -124,11 +117,7 @@ export default AuditManagerTestFunction.make(
               count: (r.controlDomainInsights ?? []).length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -144,11 +133,7 @@ export default AuditManagerTestFunction.make(
               count: (r.controlInsightsMetadata ?? []).length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -161,9 +146,8 @@ export default AuditManagerTestFunction.make(
               ok: true as const,
               count: (r.delegations ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ValidationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ValidationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -178,11 +162,7 @@ export default AuditManagerTestFunction.make(
               hasUrl: typeof r.uploadUrl === "string",
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ThrottlingException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "ThrottlingException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -195,9 +175,8 @@ export default AuditManagerTestFunction.make(
               ok: true as const,
               count: (r.assessmentReports ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ValidationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ValidationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -212,11 +191,7 @@ export default AuditManagerTestFunction.make(
               valid: r.signatureValid ?? false,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -231,9 +206,8 @@ export default AuditManagerTestFunction.make(
               ok: true as const,
               count: (r.keywords ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ValidationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ValidationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -245,9 +219,8 @@ export default AuditManagerTestFunction.make(
               ok: true as const,
               count: (r.notifications ?? []).length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "ValidationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ValidationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);

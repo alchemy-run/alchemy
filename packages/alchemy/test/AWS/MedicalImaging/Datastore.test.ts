@@ -11,18 +11,16 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on. Runs in every
 // CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "getDatastore on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        // well-formed (32 hex chars) but nonexistent datastore id
-        medicalimaging.getDatastore({
-          datastoreId: "00000000000000000000000000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getDatastore on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      // well-formed (32 hex chars) but nonexistent datastore id
+      medicalimaging.getDatastore({
+        datastoreId: "00000000000000000000000000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Deletion is async (DELETING → gone); poll bounded until the store no
@@ -30,26 +28,17 @@ test.provider(
 const assertDatastoreGone = (datastoreId: string) =>
   Effect.gen(function* () {
     const status = yield* medicalimaging.getDatastore({ datastoreId }).pipe(
-      Effect.map(
-        (r) => r.datastoreProperties.datastoreStatus as string | "gone",
-      ),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.map((r) => r.datastoreProperties.datastoreStatus as string | "gone"),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETED") {
       return yield* Effect.fail(
-        new Error(
-          `datastore '${datastoreId}' still exists (status: ${status})`,
-        ),
+        new Error(`datastore '${datastoreId}' still exists (status: ${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -82,9 +71,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
         datastoreId: datastore.datastoreId,
       });
       expect(observed.datastoreProperties.datastoreStatus).toBe("ACTIVE");
-      expect(observed.datastoreProperties.datastoreName).toBe(
-        datastore.datastoreName,
-      );
+      expect(observed.datastoreProperties.datastoreName).toBe(datastore.datastoreName);
 
       // Update path: tags are the only mutable aspect (HealthImaging has no
       // UpdateDatastore); the same physical store must be reused.

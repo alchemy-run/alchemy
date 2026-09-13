@@ -32,12 +32,7 @@ export interface DescribeEvents extends Binding.Service<
   () => Effect.Effect<
     (
       request?: memorydb.DescribeEventsRequest,
-    ) => Effect.Effect<
-      memorydb.DescribeEventsResponse,
-      memorydb.DescribeEventsError
-    >
+    ) => Effect.Effect<memorydb.DescribeEventsResponse, memorydb.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.MemoryDB.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.MemoryDB.DescribeEvents");

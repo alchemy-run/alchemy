@@ -31,9 +31,7 @@ export const ListDomainsHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn("AWS.SimpleDB.ListDomains")(function* (
-        request?: sdb.ListDomainsRequest,
-      ) {
+      return Effect.fn("AWS.SimpleDB.ListDomains")(function* (request?: sdb.ListDomainsRequest) {
         return yield* listDomains({ ...request });
       });
     });

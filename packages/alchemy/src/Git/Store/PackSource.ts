@@ -124,10 +124,7 @@ export const blobRandomAccess = (options: {
           const chunkStart = Math.max(offset, slab.start);
           const chunkEnd = Math.min(end, slab.start + slab.bytes.length);
           if (chunkEnd <= chunkStart) continue;
-          out.set(
-            slab.bytes.subarray(chunkStart - slab.start, chunkEnd - slab.start),
-            written,
-          );
+          out.set(slab.bytes.subarray(chunkStart - slab.start, chunkEnd - slab.start), written);
           written += chunkEnd - chunkStart;
         }
         return written === out.length ? out : out.subarray(0, written);
@@ -139,10 +136,7 @@ export const blobRandomAccess = (options: {
  * A view of `source` starting at `start` — used to address the pack that
  * follows the command section inside a spilled receive-pack body.
  */
-export const sliceRandomAccess = (
-  source: RandomAccess,
-  start: number,
-): RandomAccess => ({
+export const sliceRandomAccess = (source: RandomAccess, start: number): RandomAccess => ({
   size: source.size - start,
   read: (offset, length) => source.read(start + offset, length),
   readSync:
@@ -153,8 +147,5 @@ export const sliceRandomAccess = (
     source.awaitEnd === undefined
       ? undefined
       : source.awaitEnd.pipe(Effect.map((total) => total - start)),
-  release:
-    source.release === undefined
-      ? undefined
-      : (offset) => source.release!(start + offset),
+  release: source.release === undefined ? undefined : (offset) => source.release!(start + offset),
 });

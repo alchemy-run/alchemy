@@ -29,10 +29,7 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
         Effect.provide(
           RpcClient.layerProtocolHttp({ url: "http://localhost" }).pipe(
             Layer.provide(
-              Layer.succeed(
-                HttpClient.HttpClient,
-                Cloudflare.toHttpClient(rpcDO.getByName(id)),
-              ),
+              Layer.succeed(HttpClient.HttpClient, Cloudflare.toHttpClient(rpcDO.getByName(id))),
             ),
             Layer.provide(RpcSerialization.layerNdjson),
           ),
@@ -62,9 +59,7 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
           onError: (cause) => cause as never,
         }),
       Echo: ({ messages }) =>
-        Stream.fromIterable(
-          messages.map((message, index) => ({ index, message })),
-        ),
+        Stream.fromIterable(messages.map((message, index) => ({ index, message }))),
       PingDO: (payload) =>
         Effect.gen(function* () {
           const client = yield* makeDOClient();
@@ -88,9 +83,7 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
 
     return {
       fetch: RpcServer.toHttpEffect(WorkerRpcs).pipe(
-        Effect.provide(
-          Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson),
-        ),
+        Effect.provide(Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson)),
       ) as unknown as HttpEffect,
     };
   }),

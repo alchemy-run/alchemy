@@ -19,10 +19,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ELBv2Bindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -48,9 +45,7 @@ const callRoute = (method: "GET" | "POST", path: string) =>
       Effect.flatMap((response) =>
         response.status === 200
           ? response.json
-          : Effect.fail(
-              new Error(`Route ${path} not ready: ${response.status}`),
-            ),
+          : Effect.fail(new Error(`Route ${path} not ready: ${response.status}`)),
       ),
       Effect.map((json) => json as unknown as RouteResult),
       Effect.repeat({

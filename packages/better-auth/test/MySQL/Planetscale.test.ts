@@ -26,13 +26,10 @@ test.provider(
           const database = yield* Planetscale.MySQLDatabase("BetterAuthMySQL", {
             clusterSize: "PS_10",
           });
-          const password = yield* Planetscale.MySQLPassword(
-            "BetterAuthMySQLPassword",
-            {
-              database,
-              role: "admin",
-            },
-          );
+          const password = yield* Planetscale.MySQLPassword("BetterAuthMySQLPassword", {
+            database,
+            role: "admin",
+          });
           return { database, password };
         }),
       );

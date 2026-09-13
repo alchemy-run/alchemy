@@ -31,5 +31,4 @@ export const rpcEnvKeys = (logicalId: string) => ({
  * Child {@link makeRandom} for a Function/Service logical id. Generated
  * once, persisted in alchemy state, reused on later deploys.
  */
-export const mintRpcToken = (logicalId: string) =>
-  makeRandom(`${logicalId}RpcToken`);
+export const mintRpcToken = (logicalId: string) => makeRandom(`${logicalId}RpcToken`);

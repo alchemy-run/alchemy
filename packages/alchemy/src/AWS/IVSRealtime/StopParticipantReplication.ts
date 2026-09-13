@@ -44,7 +44,6 @@ export interface StopParticipantReplication extends Binding.Service<
     >
   >
 > {}
-export const StopParticipantReplication =
-  Binding.Service<StopParticipantReplication>(
-    "AWS.IVSRealtime.StopParticipantReplication",
-  );
+export const StopParticipantReplication = Binding.Service<StopParticipantReplication>(
+  "AWS.IVSRealtime.StopParticipantReplication",
+);

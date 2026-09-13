@@ -16,10 +16,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -81,9 +78,9 @@ test.provider(
       // Local dev URLs — proof no cloud call ran.
       expect(deployed.caller.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const greeting = yield* getReady(
-        `${deployed.caller.url}/greet?name=alice`,
-      ).pipe(Effect.flatMap((res) => res.text));
+      const greeting = yield* getReady(`${deployed.caller.url}/greet?name=alice`).pipe(
+        Effect.flatMap((res) => res.text),
+      );
       expect(greeting).toBe("hello alice from Api");
 
       const props = (yield* getReady(`${deployed.caller.url}/props`).pipe(

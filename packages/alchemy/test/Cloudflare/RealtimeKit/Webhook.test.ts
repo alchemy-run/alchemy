@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // RealtimeKit is beta / entitlement-gated — unentitled accounts get the
 // typed `Forbidden` (403) on every call. Probe and no-op when unentitled;
@@ -60,8 +57,7 @@ const expectGone = (accountId: string, appId: string, webhookId: string) =>
 const APP_NAME = "alchemy-rtk-test-app";
 const LIFECYCLE_WEBHOOK_NAME = "alchemy-rtk-test-webhook-lifecycle";
 const LIST_WEBHOOK_NAME = "alchemy-rtk-test-webhook-list";
-const LIFECYCLE_WEBHOOK_URL =
-  "https://example.com/alchemy-rtk-webhook-lifecycle";
+const LIFECYCLE_WEBHOOK_URL = "https://example.com/alchemy-rtk-webhook-lifecycle";
 const LIST_WEBHOOK_URL = "https://example.com/alchemy-rtk-webhook-list";
 
 test.provider(
@@ -70,9 +66,7 @@ test.provider(
     Effect.gen(function* () {
       const entitled = yield* probeEntitlement;
       if (!entitled) {
-        yield* Effect.logInfo(
-          "account is not RealtimeKit-entitled; skipping lifecycle",
-        );
+        yield* Effect.logInfo("account is not RealtimeKit-entitled; skipping lifecycle");
         return;
       }
 
@@ -99,10 +93,7 @@ test.provider(
       expect(v1.accountId).toEqual(accountId);
       expect(v1.name).toEqual(LIFECYCLE_WEBHOOK_NAME);
       expect(v1.url).toEqual(LIFECYCLE_WEBHOOK_URL);
-      expect([...v1.events].sort()).toEqual([
-        "meeting.ended",
-        "meeting.started",
-      ]);
+      expect([...v1.events].sort()).toEqual(["meeting.ended", "meeting.started"]);
       expect(v1.enabled).toBe(true);
 
       // Out-of-band verification via the distilled API.
@@ -170,15 +161,11 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.RealtimeKit.Webhook,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.RealtimeKit.Webhook);
 
       const entitled = yield* probeEntitlement;
       if (!entitled) {
-        yield* Effect.logInfo(
-          "account is not RealtimeKit-entitled; asserting empty list",
-        );
+        yield* Effect.logInfo("account is not RealtimeKit-entitled; asserting empty list");
         const empty = yield* provider.list();
         expect(empty).toEqual([]);
         yield* stack.destroy();

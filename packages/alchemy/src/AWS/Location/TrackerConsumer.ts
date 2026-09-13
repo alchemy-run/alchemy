@@ -60,29 +60,20 @@ export interface TrackerConsumer extends Resource<
  *
  * @resource
  */
-export const TrackerConsumer = Resource<TrackerConsumer>(
-  "AWS.Location.TrackerConsumer",
-);
+export const TrackerConsumer = Resource<TrackerConsumer>("AWS.Location.TrackerConsumer");
 
 export const TrackerConsumerProvider = () =>
   Provider.effect(
     TrackerConsumer,
     Effect.gen(function* () {
       /** Whether `consumerArn` is currently linked to `trackerName`. */
-      const observeAssociation = Effect.fn(function* (
-        trackerName: string,
-        consumerArn: string,
-      ) {
+      const observeAssociation = Effect.fn(function* (trackerName: string, consumerArn: string) {
         const consumerArns = yield* location.listTrackerConsumers
           .pages({ TrackerName: trackerName })
           .pipe(
             EffectStream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.ConsumerArns),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed([] as string[]),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.ConsumerArns)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
           );
         return consumerArns.includes(consumerArn);
       });
@@ -102,23 +93,19 @@ export const TrackerConsumerProvider = () =>
             const associations = yield* Effect.forEach(
               trackerNames,
               (trackerName) =>
-                location.listTrackerConsumers
-                  .pages({ TrackerName: trackerName })
-                  .pipe(
-                    EffectStream.runCollect,
-                    Effect.map((chunk) =>
-                      Array.from(chunk).flatMap((page) =>
-                        page.ConsumerArns.map((consumerArn) => ({
-                          trackerName,
-                          consumerArn,
-                        })),
-                      ),
-                    ),
-                    // Tracker deleted between the two list calls.
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed([]),
+                location.listTrackerConsumers.pages({ TrackerName: trackerName }).pipe(
+                  EffectStream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) =>
+                      page.ConsumerArns.map((consumerArn) => ({
+                        trackerName,
+                        consumerArn,
+                      })),
                     ),
                   ),
+                  // Tracker deleted between the two list calls.
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+                ),
               { concurrency: 5 },
             );
             return associations.flat();
@@ -132,18 +119,12 @@ export const TrackerConsumerProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          if (
-            olds.trackerName !== news.trackerName ||
-            olds.consumerArn !== news.consumerArn
-          ) {
+          if (olds.trackerName !== news.trackerName || olds.consumerArn !== news.consumerArn) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
-          const exists = yield* observeAssociation(
-            news.trackerName,
-            news.consumerArn,
-          );
+          const exists = yield* observeAssociation(news.trackerName, news.consumerArn);
           if (!exists) {
             yield* location
               .associateTrackerConsumer({
@@ -167,9 +148,7 @@ export const TrackerConsumerProvider = () =>
               TrackerName: output.trackerName,
               ConsumerArn: output.consumerArn,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

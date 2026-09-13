@@ -26,9 +26,7 @@ const Stack = Alchemy.Stack(
   Effect.gen(function* () {
     const api = yield* RuntimeFunction;
     const main = yield* Effect.sync(
-      () =>
-        new URL("./fixtures/function-native-lifecycle.ts", import.meta.url)
-          .href,
+      () => new URL("./fixtures/function-native-lifecycle.ts", import.meta.url).href,
     );
     const native = yield* Function("NativeLifecycle", {
       branch: { projectId: api.projectId, branchId: api.branchId },
@@ -74,9 +72,7 @@ const reportRuntimeLogs = Effect.gen(function* () {
     const lifecycle = yield* client
       .get(`${resource.url}diagnostics`)
       .pipe(Effect.flatMap((response) => response.json));
-    yield* Effect.logInfo(
-      JSON.stringify({ native: resource === native, lifecycle }),
-    );
+    yield* Effect.logInfo(JSON.stringify({ native: resource === native, lifecycle }));
     const lines = yield* FunctionLogs(resource, { limit: 1000 });
     yield* Effect.logInfo(
       JSON.stringify({
@@ -99,9 +95,7 @@ test(
     expect((yield* client.get(`${url}empty?id=empty`)).status).toBe(204);
     const parallel = yield* Effect.all(
       Array.from({ length: 4 }, (_, i) =>
-        client
-          .get(`${url}slow?id=parallel${i}`)
-          .pipe(Effect.flatMap((response) => response.text)),
+        client.get(`${url}slow?id=parallel${i}`).pipe(Effect.flatMap((response) => response.text)),
       ),
       { concurrency: 4 },
     );
@@ -130,9 +124,9 @@ test(
   Effect.gen(function* () {
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
-    expect(
-      yield* (yield* client.get(`${url}background?id=background-request`)).text,
-    ).toBe("scheduled");
+    expect(yield* (yield* client.get(`${url}background?id=background-request`)).text).toBe(
+      "scheduled",
+    );
     const completed = yield* client.get(`${url}finalized`).pipe(
       Effect.flatMap((response) => response.json),
       Effect.repeat({
@@ -142,10 +136,7 @@ test(
       }),
     );
     expect(completed).toMatchObject({
-      finalized: expect.arrayContaining([
-        "background-request",
-        "background-work",
-      ]),
+      finalized: expect.arrayContaining(["background-request", "background-work"]),
     });
   }),
   { timeout: 120_000 },
@@ -162,9 +153,7 @@ test.provider.skipIf(!!process.env.FAST)(
         [url, "websocket"],
       ]) {
         const echoed = yield* Effect.callback<string, Error>((resume) => {
-          const socket = new WebSocket(
-            `${target.replace(/^http/, "ws")}websocket?id=${id}`,
-          );
+          const socket = new WebSocket(`${target.replace(/^http/, "ws")}websocket?id=${id}`);
           let message: string | undefined;
           socket.addEventListener("open", () => socket.send("native-upgrade"));
           socket.addEventListener(
@@ -181,18 +170,13 @@ test.provider.skipIf(!!process.env.FAST)(
               resume(
                 message !== undefined && event.wasClean
                   ? Effect.succeed(message)
-                  : Effect.fail(
-                      new Error(
-                        `Neon WebSocket closed unexpectedly (${event.code})`,
-                      ),
-                    ),
+                  : Effect.fail(new Error(`Neon WebSocket closed unexpectedly (${event.code})`)),
               ),
             { once: true },
           );
           socket.addEventListener(
             "error",
-            () =>
-              resume(Effect.fail(new Error("Neon WebSocket handshake failed"))),
+            () => resume(Effect.fail(new Error("Neon WebSocket handshake failed"))),
             { once: true },
           );
           return Effect.sync(() => socket.close());
@@ -208,8 +192,7 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
         Effect.timeout("2 minutes"),
       );
-      const lifecycle = yield* (yield* client.get(`${native.url}diagnostics`))
-        .json;
+      const lifecycle = yield* (yield* client.get(`${native.url}diagnostics`)).json;
       yield* Effect.logInfo(JSON.stringify({ lifecycle }));
       expect(lifecycle).toEqual(
         expect.arrayContaining([{ id: "native-websocket", phase: "close" }]),
@@ -266,32 +249,25 @@ test.provider.skipIf(!!process.env.FAST)(
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
           until: (body) =>
-            ["cancelled-stream", "cancelled-sse"].every((id) =>
-              JSON.stringify(body).includes(id),
-            ),
+            ["cancelled-stream", "cancelled-sse"].every((id) => JSON.stringify(body).includes(id)),
         }),
         Effect.timeout("2 minutes"),
       );
-      const lifecycle = (yield* (yield* client.get(`${native.url}diagnostics`))
-        .json) as { id: string; phase: string }[];
+      const lifecycle = (yield* (yield* client.get(`${native.url}diagnostics`)).json) as {
+        id: string;
+        phase: string;
+      }[];
       yield* Effect.logInfo(JSON.stringify({ lifecycle }));
       for (const id of ["native-stream", "native-sse"]) {
-        expect(lifecycle).toEqual(
-          expect.arrayContaining([{ id, phase: "entered" }]),
-        );
+        expect(lifecycle).toEqual(expect.arrayContaining([{ id, phase: "entered" }]));
         expect(
           lifecycle.some(
-            (row) =>
-              row.id === id &&
-              (row.phase === "abort" || row.phase === "cancel"),
+            (row) => row.id === id && (row.phase === "abort" || row.phase === "cancel"),
           ),
         ).toBe(true);
       }
       expect(completed).toMatchObject({
-        finalized: expect.arrayContaining([
-          "cancelled-stream",
-          "cancelled-sse",
-        ]),
+        finalized: expect.arrayContaining(["cancelled-stream", "cancelled-sse"]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
   { timeout: 180_000 },

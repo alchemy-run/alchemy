@@ -67,9 +67,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBPROXY)(
       const provider = yield* Provider.findProvider(DBProxyEndpoint);
       const all = yield* provider.list();
 
-      expect(
-        all.some((e) => e.dbProxyEndpointName === endpoint.dbProxyEndpointName),
-      ).toBe(true);
+      expect(all.some((e) => e.dbProxyEndpointName === endpoint.dbProxyEndpointName)).toBe(true);
 
       yield* stack.destroy();
     }),

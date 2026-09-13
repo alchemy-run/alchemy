@@ -54,13 +54,7 @@ export interface PipelineAttributes {
   modifiedAt: string;
 }
 
-export type Pipeline = Resource<
-  TypeId,
-  PipelineProps,
-  PipelineAttributes,
-  never,
-  Providers
->;
+export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never, Providers>;
 
 /**
  * A Cloudflare SQL Pipeline — the transform of the Pipelines product. A
@@ -175,10 +169,7 @@ export const PipelineProvider = () =>
         // race an `PipelineAlreadyExists` against the dying pipeline.
         yield* getPipeline(accountId, observed.id).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
             until: (p) => p === undefined,
           }),
         );
@@ -192,24 +183,17 @@ export const PipelineProvider = () =>
       //    no sync step: the SQL is immutable, so changes arrive as
       //    replacements (diff).
       if (!observed) {
-        observed = yield* pipelines
-          .createV1Pipeline({ accountId, name, sql })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "TableNotFound",
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(6),
-              ]),
-            }),
-            Effect.catchTag("PipelineAlreadyExists", (error) =>
-              findPipelineByName(accountId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
-              ),
+        observed = yield* pipelines.createV1Pipeline({ accountId, name, sql }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "TableNotFound",
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
+          }),
+          Effect.catchTag("PipelineAlreadyExists", (error) =>
+            findPipelineByName(accountId, name).pipe(
+              Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
             ),
-          );
+          ),
+        );
       }
 
       return toAttributes(observed, accountId);
@@ -286,10 +270,7 @@ const findPipelineByName = (accountId: string, name: string) =>
     ),
   );
 
-const toAttributes = (
-  observed: ObservedPipeline,
-  accountId: string,
-): PipelineAttributes => ({
+const toAttributes = (observed: ObservedPipeline, accountId: string): PipelineAttributes => ({
   pipelineId: observed.id,
   accountId,
   name: observed.name,

@@ -166,9 +166,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               times: 20,
             }),
           );
-        yield* Effect.log(
-          `job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`,
-        );
+        yield* Effect.log(`job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`);
         if (
           finalRun?.JobRunState !== "SUCCEEDED" &&
           finalRun?.ErrorMessage?.includes("assume role permissions")

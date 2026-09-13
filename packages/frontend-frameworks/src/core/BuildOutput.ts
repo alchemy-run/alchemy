@@ -129,9 +129,7 @@ export const parseBuildOutput = (content: string): BuildOutput => {
     return module;
   });
   parsed.externalWorkspaces = new Set(
-    Array.isArray(parsed.externalWorkspaces)
-      ? (parsed.externalWorkspaces as Array<string>)
-      : [],
+    Array.isArray(parsed.externalWorkspaces) ? (parsed.externalWorkspaces as Array<string>) : [],
   );
   return parsed as BuildOutput;
 };

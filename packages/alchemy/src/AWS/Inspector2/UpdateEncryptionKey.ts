@@ -32,10 +32,7 @@ export interface UpdateEncryptionKey extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.UpdateEncryptionKeyRequest,
-    ) => Effect.Effect<
-      inspector2.UpdateEncryptionKeyResponse,
-      inspector2.UpdateEncryptionKeyError
-    >
+    ) => Effect.Effect<inspector2.UpdateEncryptionKeyResponse, inspector2.UpdateEncryptionKeyError>
   >
 > {}
 export const UpdateEncryptionKey = Binding.Service<UpdateEncryptionKey>(

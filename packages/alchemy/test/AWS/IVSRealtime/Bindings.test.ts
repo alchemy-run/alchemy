@@ -9,18 +9,13 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import IVSRealtimeTestFunctionLive, {
-  IVSRealtimeTestFunction,
-} from "./fixtures/handler.ts";
+import IVSRealtimeTestFunctionLive, { IVSRealtimeTestFunction } from "./fixtures/handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "IVSRealtimeBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -36,31 +31,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 /** Result of a probe route: success marker or the typed error tag. */
 interface Probe {
@@ -73,9 +59,7 @@ interface Probe {
 describe("IVSRealtime Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "IVSRealtime test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("IVSRealtime test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("IVSRealtime test setup: deploying fixture");
@@ -90,9 +74,7 @@ describe("IVSRealtime Bindings", () => {
       functionArn = attrs.functionArn;
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `IVSRealtime test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`IVSRealtime test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -100,9 +82,7 @@ describe("IVSRealtime Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `IVSRealtime test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`IVSRealtime test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -162,10 +142,7 @@ describe("IVSRealtime Bindings", () => {
       () =>
         Effect.gen(function* () {
           const response = (yield* getJson("/session-missing")) as Probe;
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
         }),
       { timeout: 120_000 },
     );
@@ -193,10 +170,7 @@ describe("IVSRealtime Bindings", () => {
       () =>
         Effect.gen(function* () {
           const response = (yield* getJson("/participant-missing")) as Probe;
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
         }),
       { timeout: 120_000 },
     );
@@ -241,10 +215,7 @@ describe("IVSRealtime Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson("/disconnect")) as Probe;
           if (response.tag !== undefined) {
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
+            expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
           } else {
             expect(response.ok).toBe(true);
           }
@@ -277,10 +248,7 @@ describe("IVSRealtime Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson("/replication-stop")) as Probe;
           if (response.tag !== undefined) {
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.tag);
+            expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
           } else {
             expect(response.ok).toBe(true);
           }
@@ -314,10 +282,7 @@ describe("IVSRealtime Bindings", () => {
           const response = (yield* getJson(
             `/composition-missing?arn=${encodeURIComponent(arn)}`,
           )) as Probe;
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
         }),
       { timeout: 120_000 },
     );
@@ -334,10 +299,7 @@ describe("IVSRealtime Bindings", () => {
           const response = (yield* postJson(
             `/composition-stop?arn=${encodeURIComponent(arn)}`,
           )) as Probe;
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(response.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.tag);
         }),
       { timeout: 120_000 },
     );

@@ -42,16 +42,13 @@ export default ForecastTestFunction.make(
     const queryForecast = yield* Forecast.QueryForecast();
     const queryWhatIfForecast = yield* Forecast.QueryWhatIfForecast();
     const createForecastExportJob = yield* Forecast.CreateForecastExportJob();
-    const describeForecastExportJob =
-      yield* Forecast.DescribeForecastExportJob();
+    const describeForecastExportJob = yield* Forecast.DescribeForecastExportJob();
     const createWhatIfAnalysis = yield* Forecast.CreateWhatIfAnalysis();
     const describeWhatIfAnalysis = yield* Forecast.DescribeWhatIfAnalysis();
     const createWhatIfForecast = yield* Forecast.CreateWhatIfForecast();
     const describeWhatIfForecast = yield* Forecast.DescribeWhatIfForecast();
-    const createWhatIfForecastExport =
-      yield* Forecast.CreateWhatIfForecastExport();
-    const describeWhatIfForecastExport =
-      yield* Forecast.DescribeWhatIfForecastExport();
+    const createWhatIfForecastExport = yield* Forecast.CreateWhatIfForecastExport();
+    const describeWhatIfForecastExport = yield* Forecast.DescribeWhatIfForecastExport();
     const deleteResourceTree = yield* Forecast.DeleteResourceTree();
 
     const bound = {
@@ -202,10 +199,7 @@ export default ForecastTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/whatif-analysis-create-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/whatif-analysis-create-probe") {
           const tag = yield* createWhatIfAnalysis({
             WhatIfAnalysisName: "alchemy_whatif_analysis_probe",
             ForecastArn: arn,
@@ -247,10 +241,7 @@ export default ForecastTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/whatif-export-create-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/whatif-export-create-probe") {
           const tag = yield* createWhatIfForecastExport({
             WhatIfForecastExportName: "alchemy_whatif_export_probe",
             WhatIfForecastArns: [arn],

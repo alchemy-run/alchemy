@@ -10,28 +10,20 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { loadInternalWorker } from "../internal/internal-worker.ts";
 const RemoteWorkerScript = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/remote-bindings/workers/remote.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/remote-bindings/workers/remote.worker"),
 };
 import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
 import type { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import { ApiError } from "../RuntimeError.shared.ts";
 import * as Access from "./Access.ts";
-import type {
-  RemoteWorkerConfig,
-  RemoteWorkerResult,
-} from "./RemoteWorkerConfig.shared.ts";
+import type { RemoteWorkerConfig, RemoteWorkerResult } from "./RemoteWorkerConfig.shared.ts";
 
 export class RemoteWorker extends Context.Service<
   RemoteWorker,
   {
     readonly deploy: (
       options: RemoteWorkerConfig,
-    ) => Effect.Effect<
-      RemoteWorkerResult,
-      ApiError | ConfigError | SystemError
-    >;
+    ) => Effect.Effect<RemoteWorkerResult, ApiError | ConfigError | SystemError>;
   }
 >()("cloudflare-runtime/remote-bindings/RemoteWorker") {}
 
@@ -49,8 +41,7 @@ export const make: (
   const http = yield* HttpClient.HttpClient;
   const access = yield* Access.Access;
 
-  const createSubdomainEdgePreviewSession =
-    yield* workers.createSubdomainEdgePreviewSession;
+  const createSubdomainEdgePreviewSession = yield* workers.createSubdomainEdgePreviewSession;
   const getSubdomain = yield* workers.getSubdomain;
   const createScriptEdgePreview = yield* workers.createScriptEdgePreview;
 
@@ -58,9 +49,7 @@ export const make: (
     sandboxApi(
       "PreviewSubdomain",
       `Failed to get the workers.dev subdomain for account ${accountId}.`,
-      accountId.pipe(
-        Effect.flatMap((accountId) => getSubdomain({ accountId })),
-      ),
+      accountId.pipe(Effect.flatMap((accountId) => getSubdomain({ accountId }))),
     ),
   );
 
@@ -108,18 +97,14 @@ export const make: (
     // binding set differs. Appended as a TRAILING comment so the module's
     // line numbers (stack traces) are untouched.
     const configSalt = yield* Effect.sync(() =>
-      NodeCrypto.createHash("sha256")
-        .update(JSON.stringify(options))
-        .digest("hex"),
+      NodeCrypto.createHash("sha256").update(JSON.stringify(options)).digest("hex"),
     );
     const files = yield* Effect.promise(RemoteWorkerScript.worker).pipe(
       Effect.map(({ modules }) =>
         Object.entries(modules).map(
           ([name, content], index) =>
             new File(
-              index === 0
-                ? [content, `\n// alchemy-remote-config:${configSalt}\n`]
-                : [content],
+              index === 0 ? [content, `\n// alchemy-remote-config:${configSalt}\n`] : [content],
               name,
               { type: "application/javascript+module" },
             ),
@@ -154,9 +139,7 @@ export const make: (
             ),
           ),
           AccountSubdomain.pipe(
-            Effect.map(
-              ({ subdomain }) => `${options.name}.${subdomain}.workers.dev`,
-            ),
+            Effect.map(({ subdomain }) => `${options.name}.${subdomain}.workers.dev`),
             Effect.flatMap(
               Effect.fn(function* (host) {
                 const headers = yield* access.getAccessHeaders(host);
@@ -177,11 +160,8 @@ export const make: (
 
 export const layer = (
   accountId: Effect.Effect<string>,
-): Layer.Layer<
-  RemoteWorker,
-  never,
-  Access.Access | Credentials | HttpClient.HttpClient
-> => Layer.effect(RemoteWorker, make(accountId));
+): Layer.Layer<RemoteWorker, never, Access.Access | Credentials | HttpClient.HttpClient> =>
+  Layer.effect(RemoteWorker, make(accountId));
 
 /**
  * Wrap a Cloudflare SDK call so that both typed failures and defects (the
@@ -201,11 +181,7 @@ const sandboxApi = <A, E, R>(
       const failure = Cause.findErrorOption(cause);
       const defect = Cause.findDefect(cause);
       const original: unknown =
-        failure._tag === "Some"
-          ? failure.value
-          : Result.isSuccess(defect)
-            ? defect.success
-            : cause;
+        failure._tag === "Some" ? failure.value : Result.isSuccess(defect) ? defect.success : cause;
       return Effect.fail(
         new ApiError({
           subtag,

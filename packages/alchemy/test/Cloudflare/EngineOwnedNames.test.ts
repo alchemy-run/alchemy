@@ -1,7 +1,4 @@
-import {
-  apiTokenCredentials,
-  Credentials,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -14,21 +11,12 @@ import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import { type Database, DatabaseProvider } from "@/Cloudflare/D1/Database.ts";
-import {
-  type Connection,
-  ConnectionProvider,
-} from "@/Cloudflare/Hyperdrive/Connection.ts";
-import {
-  type Namespace,
-  NamespaceProvider,
-} from "@/Cloudflare/KV/Namespace.ts";
+import { type Connection, ConnectionProvider } from "@/Cloudflare/Hyperdrive/Connection.ts";
+import { type Namespace, NamespaceProvider } from "@/Cloudflare/KV/Namespace.ts";
 import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
 import { type Queue, QueueProvider } from "@/Cloudflare/Queues/Queue.ts";
 import { type Bucket, BucketProvider } from "@/Cloudflare/R2/Bucket.ts";
-import {
-  type Index,
-  IndexProvider,
-} from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
+import { type Index, IndexProvider } from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import { Provider } from "@/Provider.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
@@ -80,10 +68,7 @@ const env = Layer.mergeAll(
   }),
   // The remaining layers only satisfy the provider layers' type-level
   // requirements (reconcile/read need clients); diff never touches them.
-  Layer.succeed(
-    Credentials,
-    Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
-  ),
+  Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
   Layer.sync(ArtifactStore, createArtifactStore),
   Layer.succeed(
     LocalRuntimeState,
@@ -97,12 +82,7 @@ const env = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const diffInput = <Olds, News, Output>(
-  id: string,
-  olds: Olds,
-  news: News,
-  output: Output,
-) => ({
+const diffInput = <Olds, News, Output>(id: string, olds: Olds, news: News, output: Output) => ({
   id,
   fqn: id,
   instanceId: "0123456789abcdef0123456789abcdef",
@@ -152,37 +132,30 @@ describe("engine-owned names: generator drift never replaces", () => {
     }).pipe(Effect.provide(DatabaseProvider()), Effect.provide(env)),
   );
 
-  it.effect(
-    "D1 Database: explicit name equal to deployed name does not replace",
-    () =>
-      Effect.gen(function* () {
-        const provider = yield* Provider<Database>("Cloudflare.D1Database");
-        const result = yield* provider.diff!(
-          diffInput(
-            "Db",
-            { name: DRIFTED },
-            { name: DRIFTED },
-            {
-              databaseId: "11111111-2222-3333-4444-555555555555",
-              databaseName: DRIFTED,
-              accountId: TEST_ACCOUNT,
-            },
-          ),
-        );
-        expect(result?.action).not.toBe("replace");
-      }).pipe(Effect.provide(DatabaseProvider()), Effect.provide(env)),
+  it.effect("D1 Database: explicit name equal to deployed name does not replace", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider<Database>("Cloudflare.D1Database");
+      const result = yield* provider.diff!(
+        diffInput(
+          "Db",
+          { name: DRIFTED },
+          { name: DRIFTED },
+          {
+            databaseId: "11111111-2222-3333-4444-555555555555",
+            databaseName: DRIFTED,
+            accountId: TEST_ACCOUNT,
+          },
+        ),
+      );
+      expect(result?.action).not.toBe("replace");
+    }).pipe(Effect.provide(DatabaseProvider()), Effect.provide(env)),
   );
 
   it.effect("R2 Bucket: drifted auto-generated name does not replace", () =>
     Effect.gen(function* () {
       const provider = yield* Provider<Bucket>("Cloudflare.R2.Bucket");
       const result = yield* provider.diff!(
-        diffInput(
-          "Files",
-          {},
-          {},
-          { bucketName: DRIFTED, accountId: TEST_ACCOUNT },
-        ),
+        diffInput("Files", {}, {}, { bucketName: DRIFTED, accountId: TEST_ACCOUNT }),
       );
       expect(result?.action).not.toBe("replace");
     }).pipe(Effect.provide(BucketProvider()), Effect.provide(env)),
@@ -222,21 +195,14 @@ describe("engine-owned names: generator drift never replaces", () => {
     }).pipe(Effect.provide(QueueProvider()), Effect.provide(env)),
   );
 
-  it.effect(
-    "Vectorize Index: drifted auto-generated name does not replace",
-    () =>
-      Effect.gen(function* () {
-        const provider = yield* Provider<Index>("Cloudflare.VectorizeIndex");
-        const result = yield* provider.diff!(
-          diffInput(
-            "Vectors",
-            {},
-            {},
-            { indexName: DRIFTED, accountId: TEST_ACCOUNT },
-          ),
-        );
-        expect(result?.action).not.toBe("replace");
-      }).pipe(Effect.provide(IndexProvider()), Effect.provide(env)),
+  it.effect("Vectorize Index: drifted auto-generated name does not replace", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider<Index>("Cloudflare.VectorizeIndex");
+      const result = yield* provider.diff!(
+        diffInput("Vectors", {}, {}, { indexName: DRIFTED, accountId: TEST_ACCOUNT }),
+      );
+      expect(result?.action).not.toBe("replace");
+    }).pipe(Effect.provide(IndexProvider()), Effect.provide(env)),
   );
 
   it.effect("KV Namespace: drifted auto-generated title does not rename", () =>
@@ -258,24 +224,22 @@ describe("engine-owned names: generator drift never replaces", () => {
     }).pipe(Effect.provide(NamespaceProvider()), Effect.provide(env)),
   );
 
-  it.effect(
-    "Hyperdrive Connection: drifted auto-generated name does not replace",
-    () =>
-      Effect.gen(function* () {
-        const provider = yield* Provider<Connection>("Cloudflare.Hyperdrive");
-        const result = yield* provider.diff!(
-          diffInput(
-            "Pg",
-            {},
-            {},
-            {
-              hyperdriveId: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
-              name: DRIFTED,
-              accountId: TEST_ACCOUNT,
-            },
-          ),
-        );
-        expect(result?.action).not.toBe("replace");
-      }).pipe(Effect.provide(ConnectionProvider()), Effect.provide(env)),
+  it.effect("Hyperdrive Connection: drifted auto-generated name does not replace", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider<Connection>("Cloudflare.Hyperdrive");
+      const result = yield* provider.diff!(
+        diffInput(
+          "Pg",
+          {},
+          {},
+          {
+            hyperdriveId: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+            name: DRIFTED,
+            accountId: TEST_ACCOUNT,
+          },
+        ),
+      );
+      expect(result?.action).not.toBe("replace");
+    }).pipe(Effect.provide(ConnectionProvider()), Effect.provide(env)),
   );
 });

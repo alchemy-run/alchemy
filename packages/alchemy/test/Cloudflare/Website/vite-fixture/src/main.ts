@@ -7,8 +7,7 @@
 // reaches the client bundle. Vite inlines the value via the `define`
 // hook at build time; the integration test fetches the deployed JS
 // asset and asserts the value is present.
-const marker = (import.meta.env as { VITE_TEST_MARKER?: string })
-  .VITE_TEST_MARKER;
+const marker = (import.meta.env as { VITE_TEST_MARKER?: string }).VITE_TEST_MARKER;
 const el = document.getElementById("app");
 if (el) {
   el.textContent = `${el.textContent} (hydrated, marker=${marker ?? ""})`;

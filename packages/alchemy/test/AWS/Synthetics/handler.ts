@@ -47,14 +47,10 @@ export default SyntheticsBindingsFunction.make(
 
     // Event source: subscribe the host to this canary's status/run events.
     // The deploy proves the EventBridge rule + invoke permission wiring.
-    yield* Synthetics.consumeCanaryEvents(
-      { canaryNames: [canary.canaryName] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `synthetics event: ${event["detail-type"]} for ${event.detail["canary-name"]}`,
-          ),
-        ),
+    yield* Synthetics.consumeCanaryEvents({ canaryNames: [canary.canaryName] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`synthetics event: ${event["detail-type"]} for ${event.detail["canary-name"]}`),
+      ),
     );
 
     const bound = {
@@ -84,9 +80,7 @@ export default SyntheticsBindingsFunction.make(
               tag: "ok",
               state: r.Canary?.Status?.State,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ tag: e._tag, state: undefined }),
-            ),
+            Effect.catch((e) => Effect.succeed({ tag: e._tag, state: undefined })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -97,9 +91,7 @@ export default SyntheticsBindingsFunction.make(
               tag: "ok",
               count: (r.CanaryRuns ?? []).length,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ tag: e._tag, count: undefined }),
-            ),
+            Effect.catch((e) => Effect.succeed({ tag: e._tag, count: undefined })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -111,9 +103,7 @@ export default SyntheticsBindingsFunction.make(
               tag: "ok",
               count: (r.CanariesLastRun ?? []).length,
             })),
-            Effect.catch((e) =>
-              Effect.succeed({ tag: e._tag, count: undefined }),
-            ),
+            Effect.catch((e) => Effect.succeed({ tag: e._tag, count: undefined })),
           );
           return yield* HttpServerResponse.json(result);
         }

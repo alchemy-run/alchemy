@@ -334,15 +334,10 @@ export const RulesetProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const octokit = yield* octokitFor(news.baseUrl);
 
-      let observed =
-        output === undefined
-          ? undefined
-          : yield* getRuleset(news, output.rulesetId);
+      let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
 
       const rules: NonNullable<
-        NonNullable<
-          Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]
-        >["rules"]
+        NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>["rules"]
       > = [];
 
       if (news.rules?.creation) {
@@ -374,10 +369,8 @@ export const RulesetProvider = () =>
               news.rules.pullRequest.requiredApprovingReviewCount ?? 0,
             dismiss_stale_reviews_on_push:
               news.rules.pullRequest.dismissStaleReviewsOnPush ?? false,
-            require_code_owner_review:
-              news.rules.pullRequest.requireCodeOwnerReview ?? false,
-            require_last_push_approval:
-              news.rules.pullRequest.requireLastPushApproval ?? false,
+            require_code_owner_review: news.rules.pullRequest.requireCodeOwnerReview ?? false,
+            require_last_push_approval: news.rules.pullRequest.requireLastPushApproval ?? false,
             required_review_thread_resolution:
               news.rules.pullRequest.requiredReviewThreadResolution ?? false,
           },
@@ -387,15 +380,12 @@ export const RulesetProvider = () =>
         rules.push({
           type: "required_status_checks",
           parameters: {
-            required_status_checks: news.rules.requiredStatusChecks.checks.map(
-              (check) => ({
-                context: check.context,
-                integration_id: check.integrationId,
-              }),
-            ),
+            required_status_checks: news.rules.requiredStatusChecks.checks.map((check) => ({
+              context: check.context,
+              integration_id: check.integrationId,
+            })),
             strict_required_status_checks_policy:
-              news.rules.requiredStatusChecks
-                .strictRequiredStatusChecksPolicy ?? false,
+              news.rules.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
           },
         });
       }

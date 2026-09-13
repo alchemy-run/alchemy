@@ -14,18 +14,14 @@ const configSetName = "alchemy-test-smsvoice-event-dest-cs";
 const getConfigSet = (name: string) =>
   smsvoice.describeConfigurationSets({ ConfigurationSetNames: [name] }).pipe(
     Effect.map((r) => r.ConfigurationSets?.[0]),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const assertConfigSetGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* getConfigSet(name);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`configuration set '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`configuration set '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -75,9 +71,7 @@ test.provider(
       // Create.
       const created = yield* stack.deploy(program(["ALL"]));
       expect(created.destination.configurationSetName).toBe(configSetName);
-      expect(created.destination.eventDestinationName).toBe(
-        "alchemy-test-smsvoice-event-dest",
-      );
+      expect(created.destination.eventDestinationName).toBe("alchemy-test-smsvoice-event-dest");
       expect(created.destination.enabled).toBe(true);
       expect(created.destination.matchingEventTypes).toEqual(["ALL"]);
 
@@ -92,9 +86,7 @@ test.provider(
 
       // No-op redeploy keeps the same destination.
       const noop = yield* stack.deploy(program(["ALL"]));
-      expect(noop.destination.configurationSetArn).toBe(
-        created.destination.configurationSetArn,
-      );
+      expect(noop.destination.configurationSetArn).toBe(created.destination.configurationSetArn);
 
       // Update in place — narrow the event types and disable delivery.
       const updated = yield* stack.deploy(program(["TEXT_ALL"], false));

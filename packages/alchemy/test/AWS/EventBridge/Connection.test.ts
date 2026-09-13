@@ -19,36 +19,27 @@ test.provider(
 
       // Create — the API key value is Redacted end-to-end; EventBridge
       // stores it in Secrets Manager.
-      const deployOnce = (options: {
-        description?: string;
-        rateLimit?: number;
-      }) =>
+      const deployOnce = (options: { description?: string; rateLimit?: number }) =>
         stack.deploy(
           Effect.gen(function* () {
-            const connection = yield* AWS.EventBridge.Connection(
-              "TestConnection",
-              {
-                name: CONNECTION_NAME,
-                description: options.description,
-                authorizationType: "API_KEY",
-                authParameters: {
-                  apiKeyAuthParameters: {
-                    apiKeyName: "x-api-key",
-                    apiKeyValue: Redacted.make("alchemy-test-secret-value"),
-                  },
+            const connection = yield* AWS.EventBridge.Connection("TestConnection", {
+              name: CONNECTION_NAME,
+              description: options.description,
+              authorizationType: "API_KEY",
+              authParameters: {
+                apiKeyAuthParameters: {
+                  apiKeyName: "x-api-key",
+                  apiKeyValue: Redacted.make("alchemy-test-secret-value"),
                 },
               },
-            );
-            const destination = yield* AWS.EventBridge.ApiDestination(
-              "TestDestination",
-              {
-                name: DESTINATION_NAME,
-                connectionArn: connection.connectionArn,
-                invocationEndpoint: "https://example.com/events",
-                httpMethod: "POST",
-                invocationRateLimitPerSecond: options.rateLimit,
-              },
-            );
+            });
+            const destination = yield* AWS.EventBridge.ApiDestination("TestDestination", {
+              name: DESTINATION_NAME,
+              connectionArn: connection.connectionArn,
+              invocationEndpoint: "https://example.com/events",
+              httpMethod: "POST",
+              invocationRateLimitPerSecond: options.rateLimit,
+            });
             return { connection, destination };
           }),
         );
@@ -68,28 +59,23 @@ test.provider(
       });
       expect(describedConnection.AuthorizationType).toBe("API_KEY");
       expect(describedConnection.SecretArn).toBeTruthy();
-      expect(
-        describedConnection.AuthParameters?.ApiKeyAuthParameters?.ApiKeyName,
-      ).toBe("x-api-key");
+      expect(describedConnection.AuthParameters?.ApiKeyAuthParameters?.ApiKeyName).toBe(
+        "x-api-key",
+      );
 
       const describedDestination = yield* eventbridge.describeApiDestination({
         Name: DESTINATION_NAME,
       });
-      expect(describedDestination.InvocationEndpoint).toBe(
-        "https://example.com/events",
-      );
+      expect(describedDestination.InvocationEndpoint).toBe("https://example.com/events");
       expect(describedDestination.InvocationRateLimitPerSecond).toBe(5);
 
       // Update — description and rate limit sync in place (no replace).
-      const { connection: updatedConnection, destination: updatedDestination } =
-        yield* deployOnce({
-          description: "updated connection",
-          rateLimit: 10,
-        });
+      const { connection: updatedConnection, destination: updatedDestination } = yield* deployOnce({
+        description: "updated connection",
+        rateLimit: 10,
+      });
       expect(updatedConnection.connectionArn).toBe(connection.connectionArn);
-      expect(updatedDestination.apiDestinationArn).toBe(
-        destination.apiDestinationArn,
-      );
+      expect(updatedDestination.apiDestinationArn).toBe(destination.apiDestinationArn);
 
       const afterUpdate = yield* eventbridge.describeConnection({
         Name: CONNECTION_NAME,
@@ -104,28 +90,22 @@ test.provider(
 
       // Typed wait-until-gone — connection deletion is asynchronous
       // (DELETING state), so poll until NotFound.
-      const gone = yield* eventbridge
-        .describeConnection({ Name: CONNECTION_NAME })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-          Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            until: (isGone): boolean => isGone,
-            times: 15,
-          }),
-        );
+      const gone = yield* eventbridge.describeConnection({ Name: CONNECTION_NAME }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (isGone): boolean => isGone,
+          times: 15,
+        }),
+      );
       expect(gone).toBe(true);
 
       const destinationGone = yield* eventbridge
         .describeApiDestination({ Name: DESTINATION_NAME })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(destinationGone).toBe(true);
     }),

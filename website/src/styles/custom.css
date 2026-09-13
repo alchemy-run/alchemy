@@ -75,9 +75,7 @@
   /* …offset the main column to match (Starlight derives the content inset
      from this var)… */
   [data-has-sidebar] .page {
-    --sl-content-inline-start: calc(
-      var(--sl-sidebar-width) + var(--alc-shell-gutter)
-    );
+    --sl-content-inline-start: calc(var(--sl-sidebar-width) + var(--alc-shell-gutter));
   }
   /* …and mirror the gutter on the right so the TOC pulls in too. */
   .main-frame {
@@ -94,9 +92,7 @@
 /* Pin Starlight's floating mobile hamburger to the first header row — it
    centers itself against the full --sl-nav-height, which is now two rows. */
 starlight-menu-button button {
-  top: calc(
-    (var(--alc-nav-row-height) - var(--sl-menu-button-size)) / 2
-  ) !important;
+  top: calc((var(--alc-nav-row-height) - var(--sl-menu-button-size)) / 2) !important;
 }
 
 /* The tab bar already links Docs and Blog on docs pages; the nav row's own
@@ -730,11 +726,7 @@ p:has(> .alc-btn) {
    content, so it never collides with the title or description. */
 .next-card--recommended {
   position: relative;
-  border-color: color-mix(
-    in srgb,
-    var(--alc-accent) 45%,
-    var(--alc-hairline-2)
-  );
+  border-color: color-mix(in srgb, var(--alc-accent) 45%, var(--alc-hairline-2));
 }
 .next-card--recommended::before {
   content: "Recommended";
@@ -1033,12 +1025,7 @@ header.header {
 #starlight__sidebar .top-level > li > details:not(:has(details)) > summary {
   pointer-events: none;
 }
-#starlight__sidebar
-  .top-level
-  > li
-  > details:not(:has(details))
-  > summary
-  .caret {
+#starlight__sidebar .top-level > li > details:not(:has(details)) > summary .caret {
   display: none;
 }
 

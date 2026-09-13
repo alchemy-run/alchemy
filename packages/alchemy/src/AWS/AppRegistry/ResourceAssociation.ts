@@ -108,10 +108,7 @@ const sameOptions = (
   desired: readonly string[],
 ): boolean => {
   const observedSet = new Set(observed ?? []);
-  return (
-    desired.length === observedSet.size &&
-    desired.every((option) => observedSet.has(option))
-  );
+  return desired.length === observedSet.size && desired.every((option) => observedSet.has(option));
 };
 
 export const ResourceAssociationProvider = () =>
@@ -121,11 +118,7 @@ export const ResourceAssociationProvider = () =>
       const observeApplication = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const observeAssociation = Effect.fn(function* (
@@ -135,21 +128,11 @@ export const ResourceAssociationProvider = () =>
       ) {
         return yield* appregistry
           .getAssociatedResource({ application, resourceType, resource })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return ResourceAssociation.Provider.of({
-        stables: [
-          "applicationId",
-          "applicationArn",
-          "resourceType",
-          "resourceName",
-          "resourceArn",
-        ],
+        stables: ["applicationId", "applicationArn", "resourceType", "resourceName", "resourceArn"],
         // The application/resource pair IS the association's identity —
         // changing either side replaces it. `options` is synced in place.
         diff: Effect.fn(function* ({ olds, news }) {
@@ -164,8 +147,7 @@ export const ResourceAssociationProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          const applicationSpecifier =
-            output?.applicationId ?? olds?.application;
+          const applicationSpecifier = output?.applicationId ?? olds?.application;
           const resourceType = output?.resourceType ?? olds?.resourceType;
           const resource = output?.resourceName ?? olds?.resource;
           if (
@@ -177,11 +159,7 @@ export const ResourceAssociationProvider = () =>
           }
           const application = yield* observeApplication(applicationSpecifier);
           if (application?.id === undefined) return undefined;
-          const association = yield* observeAssociation(
-            application.id,
-            resourceType,
-            resource,
-          );
+          const association = yield* observeAssociation(application.id, resourceType, resource);
           if (association?.resource?.arn === undefined) return undefined;
           // Associations cannot carry tags; existence under our application
           // is the ownership signal.
@@ -210,20 +188,13 @@ export const ResourceAssociationProvider = () =>
             })
             .pipe(Effect.catchTag("ConflictException", () => Effect.void));
 
-          let observed = yield* observeAssociation(
-            applicationId,
-            news.resourceType,
-            news.resource,
-          );
+          let observed = yield* observeAssociation(applicationId, news.resourceType, news.resource);
 
           // 2. ENSURE — associate when missing; tolerate a concurrent
           // associate race (ConflictException).
           if (observed?.resource === undefined) {
             yield* associate;
-          } else if (
-            news.options !== undefined &&
-            !sameOptions(observed.options, news.options)
-          ) {
+          } else if (news.options !== undefined && !sameOptions(observed.options, news.options)) {
             // 3. SYNC options — the API has no update; converge by
             // re-creating the association in place.
             yield* appregistry
@@ -232,9 +203,7 @@ export const ResourceAssociationProvider = () =>
                 resourceType: news.resourceType,
                 resource: news.resource,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             yield* associate;
           }
 
@@ -257,10 +226,7 @@ export const ResourceAssociationProvider = () =>
             ),
             Effect.retry({
               while: (e): boolean => e._tag === "ResourceAssociationNotVisible",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
             }),
           );
 
@@ -280,20 +246,14 @@ export const ResourceAssociationProvider = () =>
               resourceType: output.resourceType,
               resource: output.resourceName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
         list: () =>
           Effect.gen(function* () {
-            const applications = yield* appregistry.listApplications
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.applications ?? []),
-                ),
-              );
+            const applications = yield* appregistry.listApplications.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.applications ?? [])),
+            );
             const results: {
               applicationId: string;
               applicationArn: string;
@@ -307,9 +267,7 @@ export const ResourceAssociationProvider = () =>
                 .pages({ application: application.id })
                 .pipe(
                   Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.resources ?? []),
-                  ),
+                  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.resources ?? [])),
                 );
               for (const resource of resources) {
                 if (resource.arn === undefined || resource.name === undefined) {

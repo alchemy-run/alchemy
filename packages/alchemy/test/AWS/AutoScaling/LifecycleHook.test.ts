@@ -4,11 +4,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import {
-  AutoScalingGroup,
-  LaunchTemplate,
-  LifecycleHook,
-} from "@/AWS/AutoScaling";
+import { AutoScalingGroup, LaunchTemplate, LifecycleHook } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Test from "@/Test/Alchemy";
 import { getAutoScalingTestSubnetId } from "./TestNetwork.ts";
@@ -36,9 +32,7 @@ const describeHook = autoscaling
   } as any)
   .pipe(
     Effect.map((r) => r.LifecycleHooks?.[0]),
-    Effect.catchTag("AutoScalingGroupNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("AutoScalingGroupNotFound", () => Effect.succeed(undefined)),
   );
 
 test.provider(
@@ -86,9 +80,7 @@ test.provider(
       const created = yield* deployHook("300 seconds");
       expect(created.lifecycleHookName).toEqual(hookName);
       expect(created.autoScalingGroupName).toEqual(asgName);
-      expect(created.lifecycleTransition).toEqual(
-        "autoscaling:EC2_INSTANCE_TERMINATING",
-      );
+      expect(created.lifecycleTransition).toEqual("autoscaling:EC2_INSTANCE_TERMINATING");
       expect(created.heartbeatTimeout).toEqual(300);
       expect(created.defaultResult).toEqual("CONTINUE");
 

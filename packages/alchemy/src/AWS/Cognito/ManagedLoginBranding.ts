@@ -156,9 +156,7 @@ const canonicalAssets = (assets: cip.AssetType[] | undefined) =>
         asset.ColorMode,
         asset.Extension,
         asset.ResourceId ?? "",
-        asset.Bytes === undefined
-          ? ""
-          : Buffer.from(asset.Bytes).toString("base64"),
+        asset.Bytes === undefined ? "" : Buffer.from(asset.Bytes).toString("base64"),
       ].join(":"),
     )
     .sort()
@@ -170,8 +168,7 @@ const canonicalAssets = (assets: cip.AssetType[] | undefined) =>
  * settings/assets are declared.
  */
 const desiredUseProvidedValues = (news: ManagedLoginBrandingProps) =>
-  news.useCognitoProvidedValues ??
-  (news.settings === undefined && news.assets === undefined);
+  news.useCognitoProvidedValues ?? (news.settings === undefined && news.assets === undefined);
 
 /**
  * Bounded retry over the concurrent-modification window (branding updates
@@ -201,16 +198,11 @@ export const ManagedLoginBrandingProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.ManagedLoginBranding),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
-      const describeByClient = Effect.fn(function* (
-        userPoolId: string,
-        clientId: string,
-      ) {
+      const describeByClient = Effect.fn(function* (userPoolId: string, clientId: string) {
         return yield* cip
           .describeManagedLoginBrandingByClient({
             UserPoolId: userPoolId,
@@ -218,9 +210,7 @@ export const ManagedLoginBrandingProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.ManagedLoginBranding),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -253,10 +243,7 @@ export const ManagedLoginBrandingProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds?.userPoolId !== news?.userPoolId ||
-            olds?.clientId !== news?.clientId
-          ) {
+          if (olds?.userPoolId !== news?.userPoolId || olds?.clientId !== news?.clientId) {
             return { action: "replace" } as const;
           }
         }),
@@ -302,11 +289,9 @@ export const ManagedLoginBrandingProvider = () =>
           const drift =
             (observed?.UseCognitoProvidedValues ?? false) !== useProvided ||
             (news.settings !== undefined &&
-              JSON.stringify(news.settings) !==
-                JSON.stringify(observed?.Settings)) ||
+              JSON.stringify(news.settings) !== JSON.stringify(observed?.Settings)) ||
             (news.assets !== undefined &&
-              canonicalAssets(toWireAssets(news.assets)) !==
-                canonicalAssets(observed?.Assets));
+              canonicalAssets(toWireAssets(news.assets)) !== canonicalAssets(observed?.Assets));
           if (drift) {
             yield* cip
               .updateManagedLoginBranding({

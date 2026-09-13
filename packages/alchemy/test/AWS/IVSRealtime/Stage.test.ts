@@ -31,9 +31,7 @@ const assertStageGone = (arn: string) =>
   Effect.gen(function* () {
     const stage = yield* ivsrealtime.getStage({ arn }).pipe(
       Effect.map((r) => r.stage),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (stage !== undefined) {
       return yield* Effect.fail(new Error(`stage '${arn}' still exists`));

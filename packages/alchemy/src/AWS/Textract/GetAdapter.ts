@@ -27,10 +27,6 @@ export interface GetAdapter extends Binding.Service<
   "AWS.Textract.GetAdapter",
   <A extends Adapter>(
     adapter: A,
-  ) => Effect.Effect<
-    () => Effect.Effect<textract.GetAdapterResponse, textract.GetAdapterError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<textract.GetAdapterResponse, textract.GetAdapterError>>
 > {}
-export const GetAdapter = Binding.Service<GetAdapter>(
-  "AWS.Textract.GetAdapter",
-);
+export const GetAdapter = Binding.Service<GetAdapter>("AWS.Textract.GetAdapter");

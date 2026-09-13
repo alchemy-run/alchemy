@@ -54,21 +54,17 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
               Resource: ["*"],
             },
           ];
-          yield* host.bind`Allow(${host}, AWS.CostAndUsageReport.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.CostAndUsageReport.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.CostAndUsageReport.${options.capability}`)(
-        function* (request?: I) {
-          // The region must also be pinned at the call site: the yield-time
-          // snapshot is only a fallback — the calling fiber's ambient Region
-          // (the host Function's own region) wins over it.
-          return yield* pinCur(op((request ?? {}) as I));
-        },
-      );
+      return Effect.fn(`AWS.CostAndUsageReport.${options.capability}`)(function* (request?: I) {
+        // The region must also be pinned at the call site: the yield-time
+        // snapshot is only a fallback — the calling fiber's ambient Region
+        // (the host Function's own region) wins over it.
+        return yield* pinCur(op((request ?? {}) as I));
+      });
     });
   });
 
@@ -116,16 +112,16 @@ export const makeReportDefinitionHttpBinding = <
           );
         }
       }
-      return Effect.fn(
-        `AWS.CostAndUsageReport.${options.capability}(${report.LogicalId})`,
-      )(function* (request?: Omit<I, "ReportName">) {
-        // Call-site region pin — see makeCurHttpBinding above.
-        return yield* pinCur(
-          op({
-            ...request,
-            ReportName: yield* ReportName,
-          } as I),
-        );
-      });
+      return Effect.fn(`AWS.CostAndUsageReport.${options.capability}(${report.LogicalId})`)(
+        function* (request?: Omit<I, "ReportName">) {
+          // Call-site region pin — see makeCurHttpBinding above.
+          return yield* pinCur(
+            op({
+              ...request,
+              ReportName: yield* ReportName,
+            } as I),
+          );
+        },
+      );
     });
   });

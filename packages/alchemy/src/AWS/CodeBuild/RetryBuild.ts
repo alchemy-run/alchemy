@@ -23,11 +23,7 @@ export interface RetryBuild extends Binding.Service<
   <P extends Project>(
     project: P,
   ) => Effect.Effect<
-    (
-      request: SVC.RetryBuildInput,
-    ) => Effect.Effect<SVC.RetryBuildOutput, SVC.RetryBuildError>
+    (request: SVC.RetryBuildInput) => Effect.Effect<SVC.RetryBuildOutput, SVC.RetryBuildError>
   >
 > {}
-export const RetryBuild = Binding.Service<RetryBuild>(
-  "AWS.CodeBuild.RetryBuild",
-);
+export const RetryBuild = Binding.Service<RetryBuild>("AWS.CodeBuild.RetryBuild");

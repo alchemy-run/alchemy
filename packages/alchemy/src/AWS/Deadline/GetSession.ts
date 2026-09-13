@@ -33,6 +33,4 @@ export interface GetSession extends Binding.Service<
     ) => Effect.Effect<deadline.GetSessionResponse, deadline.GetSessionError>
   >
 > {}
-export const GetSession = Binding.Service<GetSession>(
-  "AWS.Deadline.GetSession",
-);
+export const GetSession = Binding.Service<GetSession>("AWS.Deadline.GetSession");

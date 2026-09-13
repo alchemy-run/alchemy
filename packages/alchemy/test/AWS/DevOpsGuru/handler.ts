@@ -42,14 +42,11 @@ export default DevOpsGuruTestFunction.make(
       describeAnomaly: yield* DevOpsGuru.DescribeAnomaly(),
       describeFeedback: yield* DevOpsGuru.DescribeFeedback(),
       describeInsight: yield* DevOpsGuru.DescribeInsight(),
-      describeOrganizationHealth:
-        yield* DevOpsGuru.DescribeOrganizationHealth(),
-      describeOrganizationOverview:
-        yield* DevOpsGuru.DescribeOrganizationOverview(),
+      describeOrganizationHealth: yield* DevOpsGuru.DescribeOrganizationHealth(),
+      describeOrganizationOverview: yield* DevOpsGuru.DescribeOrganizationOverview(),
       describeOrganizationResourceCollectionHealth:
         yield* DevOpsGuru.DescribeOrganizationResourceCollectionHealth(),
-      describeResourceCollectionHealth:
-        yield* DevOpsGuru.DescribeResourceCollectionHealth(),
+      describeResourceCollectionHealth: yield* DevOpsGuru.DescribeResourceCollectionHealth(),
       getCostEstimation: yield* DevOpsGuru.GetCostEstimation(),
       startCostEstimation: yield* DevOpsGuru.StartCostEstimation(),
       listAnomaliesForInsight: yield* DevOpsGuru.ListAnomaliesForInsight(),
@@ -61,8 +58,7 @@ export default DevOpsGuruTestFunction.make(
       listRecommendations: yield* DevOpsGuru.ListRecommendations(),
       putFeedback: yield* DevOpsGuru.PutFeedback(),
       searchInsights: yield* DevOpsGuru.SearchInsights(),
-      searchOrganizationInsights:
-        yield* DevOpsGuru.SearchOrganizationInsights(),
+      searchOrganizationInsights: yield* DevOpsGuru.SearchOrganizationInsights(),
       deleteInsight: yield* DevOpsGuru.DeleteInsight(),
     };
 
@@ -139,13 +135,8 @@ export default DevOpsGuruTestFunction.make(
         // resource collection configured; report zero coverage.
         if (request.method === "GET" && pathname === "/monitored") {
           const count = yield* bound.listMonitoredResources().pipe(
-            Effect.map(
-              ({ MonitoredResourceIdentifiers }) =>
-                MonitoredResourceIdentifiers.length,
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(0),
-            ),
+            Effect.map(({ MonitoredResourceIdentifiers }) => MonitoredResourceIdentifiers.length),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(0)),
           );
           return yield* HttpServerResponse.json({ count });
         }

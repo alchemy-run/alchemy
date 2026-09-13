@@ -16,17 +16,11 @@ import { encodeState, type ResourceState, reviveState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
 const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
@@ -61,10 +55,7 @@ describe.concurrent("StaticSite", () => {
 
         const site1 = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "FixSite",
-              staticSiteProps(cwd),
-            );
+            return yield* Cloudflare.Website.StaticSite("FixSite", staticSiteProps(cwd));
           }),
         );
 
@@ -85,10 +76,7 @@ describe.concurrent("StaticSite", () => {
 
         const site2 = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "FixSite",
-              staticSiteProps(cwd),
-            );
+            return yield* Cloudflare.Website.StaticSite("FixSite", staticSiteProps(cwd));
           }),
         );
 
@@ -197,17 +185,11 @@ describe.concurrent("StaticSite", () => {
         // Pin a deterministic marker so both deploys hash to the same
         // bytes regardless of timestamps.
         const marker = `staticsite-relocate-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwdA, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwdA, "src", "index.html"), htmlPage(marker));
 
         const site1 = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "RelocSite",
-              staticSiteProps(cwdA),
-            );
+            return yield* Cloudflare.Website.StaticSite("RelocSite", staticSiteProps(cwdA));
           }),
         );
         expect(site1.hash?.assets).toBeDefined();
@@ -226,17 +208,11 @@ describe.concurrent("StaticSite", () => {
           prefix: "alchemy-staticsite-relocate-b-",
           entries: ["src", "build.sh", ".gitignore"],
         });
-        yield* fs.writeFileString(
-          path.join(cwdB, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwdB, "src", "index.html"), htmlPage(marker));
 
         const site2 = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "RelocSite",
-              staticSiteProps(cwdB),
-            );
+            return yield* Cloudflare.Website.StaticSite("RelocSite", staticSiteProps(cwdB));
           }),
         );
 
@@ -277,10 +253,7 @@ describe.concurrent("StaticSite", () => {
           entries: ["src", "build.sh", ".gitignore"],
         });
         const marker = `staticsite-bundle-only-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
         // Use a temp worker entry so we can edit it between deploys to
         // shift `hash.bundle` without touching `src/`.
         const workerDir = yield* fs.makeTempDirectory({
@@ -299,13 +272,10 @@ describe.concurrent("StaticSite", () => {
         const deploy = () =>
           stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Website.StaticSite(
-                "BundleOnlyStaticSite",
-                {
-                  ...staticSiteProps(cwd),
-                  main: workerPath,
-                },
-              );
+              return yield* Cloudflare.Website.StaticSite("BundleOnlyStaticSite", {
+                ...staticSiteProps(cwd),
+                main: workerPath,
+              });
             }),
           );
 
@@ -348,10 +318,7 @@ describe.concurrent("StaticSite", () => {
           entries: ["src", "build.sh", ".gitignore"],
         });
         const marker = `staticsite-missing-output-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
         const outdir = path.join(cwd, "dist");
 
         const deploy = () =>
@@ -429,17 +396,13 @@ describe.concurrent("StaticSite", () => {
           stack: stk.name,
           stage: stk.stage,
           fqn,
-          value: JSON.parse(
-            JSON.stringify(encodeState(row)),
-            reviveState,
-          ) as ResourceState,
+          value: JSON.parse(JSON.stringify(encodeState(row)), reviveState) as ResourceState,
         });
       }),
     );
   });
 
-  const actionOf = (plan: Plan.Plan, fqn: string) =>
-    plan.resources[fqn]?.action;
+  const actionOf = (plan: Plan.Plan, fqn: string) => plan.resources[fqn]?.action;
 
   test.provider(
     "StaticSite: redeploying an unchanged site is a noop (#1056)",
@@ -458,17 +421,11 @@ describe.concurrent("StaticSite", () => {
           entries: ["src", "build.sh", ".gitignore"],
         });
         const marker = `staticsite-noop-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         const program = () =>
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "NoopSite",
-              staticSiteProps(cwd),
-            );
+            return yield* Cloudflare.Website.StaticSite("NoopSite", staticSiteProps(cwd));
           });
 
         const site = yield* stack.deploy(program());
@@ -512,10 +469,7 @@ describe.concurrent("StaticSite", () => {
           entries: ["src", "build.sh", ".gitignore"],
         });
         const marker = `staticsite-no-memo-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
@@ -571,10 +525,7 @@ describe.concurrent("StaticSite", () => {
           entries: ["src", "build.sh", ".gitignore"],
         });
         const marker = `staticsite-migrate-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         // Mirror `examples/.../Website__Build.json`: a pre-rename
         // `Build.Command` row at the build sub-resource's FQN, carrying the
@@ -604,10 +555,7 @@ describe.concurrent("StaticSite", () => {
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "MigSite",
-              staticSiteProps(cwd),
-            );
+            return yield* Cloudflare.Website.StaticSite("MigSite", staticSiteProps(cwd));
           }),
         );
 
@@ -661,10 +609,7 @@ describe.concurrent("StaticSite", () => {
           entries: ["src", "build.sh", ".gitignore"],
         });
         const marker = `staticsite-orphan-dev-${Date.now()}`;
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         // Mirror `examples/.../Website__Dev.json`: a pre-rename
         // `Build.DevServer` row left behind by an earlier `alchemy dev` run,
@@ -692,10 +637,7 @@ describe.concurrent("StaticSite", () => {
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "MigSite",
-              staticSiteProps(cwd),
-            );
+            return yield* Cloudflare.Website.StaticSite("MigSite", staticSiteProps(cwd));
           }),
         );
 
@@ -787,9 +729,7 @@ describe.concurrent("StaticSite", () => {
           }),
         );
 
-        const envFile = yield* fs.readFileString(
-          path.join(cwd, "dist", "env.txt"),
-        );
+        const envFile = yield* fs.readFileString(path.join(cwd, "dist", "env.txt"));
         expect(envFile).toContain("FROM_STRING=plain");
         expect(envFile).toContain("FROM_CONFIG=from-config");
         // Resolved Output<string> — the dep's outdir path, not garbage.
@@ -834,25 +774,14 @@ describe.concurrent("StaticSite", () => {
         // Deterministic marker: the shell content is the assertion target
         // for both the direct fetch and the deep-link fallback.
         const marker = "staticsite-spa-shell";
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
         // A sibling asset that must keep serving its own bytes, not the
         // shell, under SPA handling.
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "data.txt"),
-          "staticsite-spa-plain-asset",
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "data.txt"), "staticsite-spa-plain-asset");
         // Binary assets whose uploads must carry real content types
         // (avif/jpeg/webp/woff2 previously fell back to
         // application/octet-stream).
-        for (const name of [
-          "sample.avif",
-          "sample.jpg",
-          "sample.webp",
-          "sample.woff2",
-        ]) {
+        for (const name of ["sample.avif", "sample.jpg", "sample.webp", "sample.woff2"]) {
           yield* fs.writeFile(
             path.join(cwd, "src", name),
             new Uint8Array([0x00, 0x01, 0x02, 0x03]),
@@ -912,11 +841,7 @@ describe.concurrent("StaticSite", () => {
           ["sample.webp", "image/webp"],
           ["sample.woff2", "font/woff2"],
         ] as const) {
-          yield* expectUrlHeader(
-            `${site.url!}/${name}`,
-            "content-type",
-            contentType,
-          );
+          yield* expectUrlHeader(`${site.url!}/${name}`, "content-type", contentType);
         }
 
         yield* stack.destroy();
@@ -948,11 +873,7 @@ const htmlPage = (marker: string) => `<!doctype html>
  * from the response within the timeout. We drive this off the same
  * primitive by inverting the check at the call site.
  */
-const expectUrlAbsent = (
-  url: string,
-  marker: string,
-  options: { timeout?: Duration.Input },
-) =>
+const expectUrlAbsent = (url: string, marker: string, options: { timeout?: Duration.Input }) =>
   Effect.gen(function* () {
     yield* expectUrlContains(url, "<", { ...options, label: "page exists" });
     const u = new URL(url);

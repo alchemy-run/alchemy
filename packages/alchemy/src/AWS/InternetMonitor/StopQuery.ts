@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface StopQueryRequest extends Omit<
-  im.StopQueryInput,
-  "MonitorName"
-> {}
+export interface StopQueryRequest extends Omit<im.StopQueryInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:StopQuery` — cancel an in-progress
@@ -33,12 +30,8 @@ export interface StopQuery extends Binding.Service<
   (
     monitor: Monitor,
   ) => Effect.Effect<
-    (
-      request: StopQueryRequest,
-    ) => Effect.Effect<im.StopQueryOutput, im.StopQueryError>
+    (request: StopQueryRequest) => Effect.Effect<im.StopQueryOutput, im.StopQueryError>
   >
 > {}
 
-export const StopQuery = Binding.Service<StopQuery>(
-  "AWS.InternetMonitor.StopQuery",
-);
+export const StopQuery = Binding.Service<StopQuery>("AWS.InternetMonitor.StopQuery");

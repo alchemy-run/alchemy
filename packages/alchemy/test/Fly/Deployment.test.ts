@@ -15,10 +15,7 @@ it.effect("deployment defaults preserve existing behavior", () =>
     const rolling = yield* deploymentPolicy(undefined, undefined);
     expect(rolling.bluegreen).toBe(false);
     expect(rolling.shutdown).toBeUndefined();
-    const bluegreen = yield* deploymentPolicy(
-      { strategy: "bluegreen" },
-      undefined,
-    );
+    const bluegreen = yield* deploymentPolicy({ strategy: "bluegreen" }, undefined);
     expect(bluegreen.healthTimeoutMs).toBe(60_000);
     expect(bluegreen.shutdown).toEqual({
       signal: "SIGTERM",
@@ -28,24 +25,21 @@ it.effect("deployment defaults preserve existing behavior", () =>
   }),
 );
 
-it.effect(
-  "service intervals honor Fly's one-minute cap without capping named checks",
-  () =>
-    Effect.sync(() => {
-      for (const [requested, effective] of [
-        ["75s", "60s"],
-        ["1m15s", "60s"],
-        ["60s", "60s"],
-        ["59.999s", "59.999s"],
-      ] as const) {
-        const check = { type: "http" as const, port: 80, interval: requested };
-        expect(
-          toFlyService({ protocol: "tcp", internalPort: 80, checks: [check] })
-            .checks?.[0]?.interval,
-        ).toBe(effective);
-        expect(toFlyServiceCheck(check).interval).toBe(requested);
-      }
-    }),
+it.effect("service intervals honor Fly's one-minute cap without capping named checks", () =>
+  Effect.sync(() => {
+    for (const [requested, effective] of [
+      ["75s", "60s"],
+      ["1m15s", "60s"],
+      ["60s", "60s"],
+      ["59.999s", "59.999s"],
+    ] as const) {
+      const check = { type: "http" as const, port: 80, interval: requested };
+      expect(
+        toFlyService({ protocol: "tcp", internalPort: 80, checks: [check] }).checks?.[0]?.interval,
+      ).toBe(effective);
+      expect(toFlyServiceCheck(check).interval).toBe(requested);
+    }
+  }),
 );
 
 it.effect("check durations compare exactly at nanosecond precision", () =>
@@ -118,94 +112,73 @@ it.effect("exact duration parsing preserves shutdown policy validation", () =>
 for (const timeout of [0, -1, 300_001, Infinity, 0.1]) {
   it.effect(`rejects invalid shutdown duration ${timeout}`, () =>
     Effect.gen(function* () {
-      const error = yield* deploymentPolicy(undefined, { timeout }).pipe(
-        Effect.flip,
-      );
+      const error = yield* deploymentPolicy(undefined, { timeout }).pipe(Effect.flip);
       expect(error._tag).toBe("Fly.InvalidDeployment");
     }),
   );
 }
 
-it.effect(
-  "S10 S11 rejects unsupported bluegreen configuration before mutation",
-  () =>
-    Effect.gen(function* () {
-      const policy = yield* deploymentPolicy(
-        { strategy: "bluegreen" },
-        undefined,
-      );
-      const checks = { ready: { type: "http", port: 80, path: "/" } };
-      const cases: Array<[FlyMachineConfig, boolean, boolean]> = [
-        [{}, false, false],
-        [{ checks }, true, false],
-        [{ checks }, false, true],
-        [{ checks, auto_destroy: true }, false, false],
-        [{ checks, restart: { policy: "no" } }, false, false],
-        [{ checks, services: [{ ports: [{ port: 80 }] }] }, false, false],
-      ];
-      for (const [config, mounted, skip] of cases) {
-        const error = yield* validateDeployment(
-          policy,
-          config,
-          mounted,
-          skip,
-        ).pipe(Effect.flip);
-        expect(error._tag).toBe("Fly.InvalidDeployment");
-      }
-      const signal = yield* deploymentPolicy(
-        undefined,
-        { signal: "SIGQUIT" },
-        true,
-      ).pipe(Effect.flip);
-      expect(signal._tag).toBe("Fly.InvalidDeployment");
-    }),
+it.effect("S10 S11 rejects unsupported bluegreen configuration before mutation", () =>
+  Effect.gen(function* () {
+    const policy = yield* deploymentPolicy({ strategy: "bluegreen" }, undefined);
+    const checks = { ready: { type: "http", port: 80, path: "/" } };
+    const cases: Array<[FlyMachineConfig, boolean, boolean]> = [
+      [{}, false, false],
+      [{ checks }, true, false],
+      [{ checks }, false, true],
+      [{ checks, auto_destroy: true }, false, false],
+      [{ checks, restart: { policy: "no" } }, false, false],
+      [{ checks, services: [{ ports: [{ port: 80 }] }] }, false, false],
+    ];
+    for (const [config, mounted, skip] of cases) {
+      const error = yield* validateDeployment(policy, config, mounted, skip).pipe(Effect.flip);
+      expect(error._tag).toBe("Fly.InvalidDeployment");
+    }
+    const signal = yield* deploymentPolicy(undefined, { signal: "SIGQUIT" }, true).pipe(
+      Effect.flip,
+    );
+    expect(signal._tag).toBe("Fly.InvalidDeployment");
+  }),
 );
 
-it.effect(
-  "S06 R05 accepts the finite 300-second boundary without a live sleep",
-  () =>
-    Effect.gen(function* () {
-      const policy = yield* deploymentPolicy(
-        { strategy: "bluegreen", healthTimeout: 300_000 },
-        { timeout: 300_000 },
-      );
-      expect(policy.healthTimeoutMs).toBe(300_000);
-      expect(policy.shutdown?.timeoutMs).toBe(300_000);
-      for (const healthTimeout of [0, -1, 300_001, Infinity, NaN, 0.1]) {
-        const error = yield* deploymentPolicy(
-          { strategy: "bluegreen", healthTimeout },
-          undefined,
-        ).pipe(Effect.flip);
-        expect(error._tag).toBe("Fly.InvalidDeployment");
-      }
-    }),
+it.effect("S06 R05 accepts the finite 300-second boundary without a live sleep", () =>
+  Effect.gen(function* () {
+    const policy = yield* deploymentPolicy(
+      { strategy: "bluegreen", healthTimeout: 300_000 },
+      { timeout: 300_000 },
+    );
+    expect(policy.healthTimeoutMs).toBe(300_000);
+    expect(policy.shutdown?.timeoutMs).toBe(300_000);
+    for (const healthTimeout of [0, -1, 300_001, Infinity, NaN, 0.1]) {
+      const error = yield* deploymentPolicy(
+        { strategy: "bluegreen", healthTimeout },
+        undefined,
+      ).pipe(Effect.flip);
+      expect(error._tag).toBe("Fly.InvalidDeployment");
+    }
+  }),
 );
 
 for (const autostop of ["stop", "suspend"] as const) {
-  it.effect(
-    `S11 accepts ${autostop} instead of silently rejecting idle capacity`,
-    () =>
-      Effect.gen(function* () {
-        const policy = yield* deploymentPolicy(
-          { strategy: "bluegreen" },
-          undefined,
-        );
-        yield* validateDeployment(
-          policy,
-          {
-            services: [
-              {
-                internal_port: 80,
-                ports: [{ port: 80 }],
-                checks: [{ type: "http", port: 80, path: "/" }],
-                autostop,
-                autostart: true,
-                min_machines_running: 1,
-              },
-            ],
-          },
-          false,
-        );
-      }),
+  it.effect(`S11 accepts ${autostop} instead of silently rejecting idle capacity`, () =>
+    Effect.gen(function* () {
+      const policy = yield* deploymentPolicy({ strategy: "bluegreen" }, undefined);
+      yield* validateDeployment(
+        policy,
+        {
+          services: [
+            {
+              internal_port: 80,
+              ports: [{ port: 80 }],
+              checks: [{ type: "http", port: 80, path: "/" }],
+              autostop,
+              autostart: true,
+              min_machines_running: 1,
+            },
+          ],
+        },
+        false,
+      );
+    }),
   );
 }

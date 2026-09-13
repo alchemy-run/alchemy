@@ -114,13 +114,8 @@ export const RotationProvider = () =>
   Provider.effect(
     RotationResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 200 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 200 }));
       });
 
       const rotationArn = Effect.fn(function* (name: string) {
@@ -134,9 +129,8 @@ export const RotationProvider = () =>
           // ResourceNotFoundException or the "Invalid resource Arn"
           // ValidationException (typed as InvalidRotationArn) — both mean
           // "missing" to the reconciler.
-          Effect.catchTag(
-            ["ResourceNotFoundException", "InvalidRotationArn"],
-            () => Effect.succeed(undefined),
+          Effect.catchTag(["ResourceNotFoundException", "InvalidRotationArn"], () =>
+            Effect.succeed(undefined),
           ),
         );
 
@@ -156,9 +150,7 @@ export const RotationProvider = () =>
           Effect.catch(() => Effect.succeed<Record<string, string>>({})),
         );
 
-      const buildAttrs = (
-        rotation: contacts.GetRotationResult,
-      ): Rotation["Attributes"] => ({
+      const buildAttrs = (rotation: contacts.GetRotationResult): Rotation["Attributes"] => ({
         rotationArn: rotation.RotationArn,
         name: rotation.Name,
         startTime: rotation.StartTime.toISOString(),
@@ -203,8 +195,7 @@ export const RotationProvider = () =>
           const arn = output?.rotationArn ?? (yield* rotationArn(name));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredStart =
-            news.startTime !== undefined ? new Date(news.startTime) : undefined;
+          const desiredStart = news.startTime !== undefined ? new Date(news.startTime) : undefined;
 
           // 1. OBSERVE
           let rotation = yield* getRotation(arn);
@@ -288,12 +279,10 @@ export const RotationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* contacts
-            .deleteRotation({ RotationId: output.rotationArn })
-            .pipe(
-              Effect.asVoid,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* contacts.deleteRotation({ RotationId: output.rotationArn }).pipe(
+            Effect.asVoid,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

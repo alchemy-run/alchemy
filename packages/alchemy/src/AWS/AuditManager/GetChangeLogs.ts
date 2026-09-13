@@ -32,13 +32,8 @@ export interface GetChangeLogs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetChangeLogsRequest,
-    ) => Effect.Effect<
-      auditmanager.GetChangeLogsResponse,
-      auditmanager.GetChangeLogsError
-    >
+    ) => Effect.Effect<auditmanager.GetChangeLogsResponse, auditmanager.GetChangeLogsError>
   >
 > {}
 
-export const GetChangeLogs = Binding.Service<GetChangeLogs>(
-  "AWS.AuditManager.GetChangeLogs",
-);
+export const GetChangeLogs = Binding.Service<GetChangeLogs>("AWS.AuditManager.GetChangeLogs");

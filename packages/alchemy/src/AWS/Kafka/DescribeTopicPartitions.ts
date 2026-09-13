@@ -30,10 +30,7 @@ export interface DescribeTopicPartitions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<kafka.DescribeTopicPartitionsRequest, "ClusterArn">,
-    ) => Effect.Effect<
-      kafka.DescribeTopicPartitionsResponse,
-      kafka.DescribeTopicPartitionsError
-    >
+    ) => Effect.Effect<kafka.DescribeTopicPartitionsResponse, kafka.DescribeTopicPartitionsError>
   >
 > {}
 export const DescribeTopicPartitions = Binding.Service<DescribeTopicPartitions>(

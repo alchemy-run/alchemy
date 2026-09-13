@@ -44,10 +44,7 @@ export interface CreateWhatIfForecast extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.CreateWhatIfForecastRequest,
-    ) => Effect.Effect<
-      forecast.CreateWhatIfForecastResponse,
-      forecast.CreateWhatIfForecastError
-    >
+    ) => Effect.Effect<forecast.CreateWhatIfForecastResponse, forecast.CreateWhatIfForecastError>
   >
 > {}
 export const CreateWhatIfForecast = Binding.Service<CreateWhatIfForecast>(

@@ -98,27 +98,16 @@ export interface SlotType extends Resource<
  */
 export const SlotType = Resource<SlotType>("AWS.LexV2.SlotType");
 
-const createSlotTypeName = (
-  id: string,
-  props: { slotTypeName?: string | undefined },
-) =>
+const createSlotTypeName = (id: string, props: { slotTypeName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.slotTypeName) return props.slotTypeName;
     return toLexName(yield* createPhysicalName({ id, maxLength: 100 }));
   });
 
-const describeSlotType = Effect.fn(function* (
-  botId: string,
-  localeId: string,
-  slotTypeId: string,
-) {
+const describeSlotType = Effect.fn(function* (botId: string, localeId: string, slotTypeId: string) {
   return yield* lexm
     .describeSlotType({ botId, botVersion: "DRAFT", localeId, slotTypeId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 /** Find a slot type of the locale by exact name (used when state was lost). */
@@ -132,9 +121,7 @@ const findSlotTypeByName = Effect.fn(function* (
       botId,
       botVersion: "DRAFT",
       localeId,
-      filters: [
-        { name: "SlotTypeName", values: [slotTypeName], operator: "EQ" },
-      ],
+      filters: [{ name: "SlotTypeName", values: [slotTypeName], operator: "EQ" }],
     })
     .pipe(
       Stream.runCollect,
@@ -149,25 +136,19 @@ const findSlotTypeByName = Effect.fn(function* (
   return yield* describeSlotType(botId, localeId, summary.slotTypeId);
 });
 
-const toWireValues = (
-  values: SlotTypeValueSpec[] | undefined,
-): lexm.SlotTypeValue[] | undefined =>
+const toWireValues = (values: SlotTypeValueSpec[] | undefined): lexm.SlotTypeValue[] | undefined =>
   values?.map((value) => ({
     sampleValue: { value: value.value },
     synonyms: value.synonyms?.map((synonym) => ({ value: synonym })),
   }));
 
-const fromWireValues = (
-  values: readonly lexm.SlotTypeValue[] | undefined,
-): SlotTypeValueSpec[] =>
+const fromWireValues = (values: readonly lexm.SlotTypeValue[] | undefined): SlotTypeValueSpec[] =>
   (values ?? []).map((value) => ({
     value: value.sampleValue?.value ?? "",
     synonyms: value.synonyms?.map((synonym) => synonym.value),
   }));
 
-const attributesOf = (
-  slotType: lexm.DescribeSlotTypeResponse,
-): SlotType["Attributes"] => ({
+const attributesOf = (slotType: lexm.DescribeSlotTypeResponse): SlotType["Attributes"] => ({
   slotTypeId: slotType.slotTypeId!,
   slotTypeName: slotType.slotTypeName!,
   botId: slotType.botId!,
@@ -180,11 +161,8 @@ export const SlotTypeProvider = () =>
     SlotType,
     Effect.gen(function* () {
       /** The wire value-selection setting derived from the declared props. */
-      const desiredSelection = (
-        news: SlotTypeProps,
-      ): lexm.SlotValueSelectionSetting | undefined =>
-        news.resolutionStrategy !== undefined ||
-        news.slotTypeValues !== undefined
+      const desiredSelection = (news: SlotTypeProps): lexm.SlotValueSelectionSetting | undefined =>
+        news.resolutionStrategy !== undefined || news.slotTypeValues !== undefined
           ? { resolutionStrategy: news.resolutionStrategy ?? "OriginalValue" }
           : undefined;
 
@@ -224,18 +202,10 @@ export const SlotTypeProvider = () =>
           // 1. OBSERVE — output.slotTypeId is only a cache; fall back to name.
           let observed =
             output?.slotTypeId !== undefined
-              ? yield* describeSlotType(
-                  news.botId,
-                  news.localeId,
-                  output.slotTypeId,
-                )
+              ? yield* describeSlotType(news.botId, news.localeId, output.slotTypeId)
               : undefined;
           if (observed === undefined) {
-            observed = yield* findSlotTypeByName(
-              news.botId,
-              news.localeId,
-              slotTypeName,
-            );
+            observed = yield* findSlotTypeByName(news.botId, news.localeId, slotTypeName);
           }
 
           // 2. ENSURE — create when missing.
@@ -252,28 +222,20 @@ export const SlotTypeProvider = () =>
                 parentSlotTypeSignature: news.parentSlotTypeSignature,
               }),
             );
-            observed = yield* describeSlotType(
-              news.botId,
-              news.localeId,
-              created.slotTypeId!,
-            );
+            observed = yield* describeSlotType(news.botId, news.localeId, created.slotTypeId!);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `failed to read created Lex slot type ${slotTypeName}`,
-                ),
+                new Error(`failed to read created Lex slot type ${slotTypeName}`),
               );
             }
           } else if (
             // 3. SYNC — UpdateSlotType replaces the declared aspects; skip
             //    the call when nothing drifted.
             observed.slotTypeName !== slotTypeName ||
-            (observed.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (observed.description ?? undefined) !== (news.description ?? undefined) ||
             JSON.stringify(fromWireValues(observed.slotTypeValues)) !==
               JSON.stringify(desiredValues) ||
-            (observed.valueSelectionSetting?.resolutionStrategy ??
-              undefined) !==
+            (observed.valueSelectionSetting?.resolutionStrategy ?? undefined) !==
               (desiredSelection(news)?.resolutionStrategy ?? undefined)
           ) {
             yield* retryWhileConflict(
@@ -289,16 +251,10 @@ export const SlotTypeProvider = () =>
                 parentSlotTypeSignature: news.parentSlotTypeSignature,
               }),
             );
-            observed = yield* describeSlotType(
-              news.botId,
-              news.localeId,
-              observed.slotTypeId!,
-            );
+            observed = yield* describeSlotType(news.botId, news.localeId, observed.slotTypeId!);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `failed to read updated Lex slot type ${slotTypeName}`,
-                ),
+                new Error(`failed to read updated Lex slot type ${slotTypeName}`),
               );
             }
           }
@@ -318,9 +274,7 @@ export const SlotTypeProvider = () =>
               slotTypeId: output.slotTypeId,
               skipResourceInUseCheck: true,
             }),
-          ).pipe(
-            Effect.catchTag("PreconditionFailedException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("PreconditionFailedException", () => Effect.void));
         }),
       };
     }),

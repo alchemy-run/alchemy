@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Parameter } from "./Parameter.ts";
 
-export interface PutParameterRequest extends Omit<
-  SSM.PutParameterRequest,
-  "Name"
-> {}
+export interface PutParameterRequest extends Omit<SSM.PutParameterRequest, "Name"> {}
 
 /**
  * Runtime binding for `ssm:PutParameter`.
@@ -38,11 +35,7 @@ export interface PutParameter extends Binding.Service<
   <P extends Parameter>(
     parameter: P,
   ) => Effect.Effect<
-    (
-      request: PutParameterRequest,
-    ) => Effect.Effect<SSM.PutParameterResult, SSM.PutParameterError>
+    (request: PutParameterRequest) => Effect.Effect<SSM.PutParameterResult, SSM.PutParameterError>
   >
 > {}
-export const PutParameter = Binding.Service<PutParameter>(
-  "AWS.SSM.PutParameter",
-);
+export const PutParameter = Binding.Service<PutParameter>("AWS.SSM.PutParameter");

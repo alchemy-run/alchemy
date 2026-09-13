@@ -53,11 +53,9 @@ test.provider(
       const provider = yield* Provider.findProvider(TargetGroup);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (tg) => tg.targetGroupArn === deployed.targetGroup.targetGroupArn,
-        ),
-      ).toBe(true);
+      expect(all.some((tg) => tg.targetGroupArn === deployed.targetGroup.targetGroupArn)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
 
@@ -68,9 +66,7 @@ test.provider(
         })
         .pipe(
           Effect.map((r) => r.TargetGroups?.length ?? 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
     }),

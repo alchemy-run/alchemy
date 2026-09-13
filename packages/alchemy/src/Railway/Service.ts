@@ -2,12 +2,7 @@ import type * as railway from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "../Http.ts";
-import {
-  Platform,
-  type Main,
-  type MainRpc,
-  type PlatformProps,
-} from "../Platform.ts";
+import { Platform, type Main, type MainRpc, type PlatformProps } from "../Platform.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import {
@@ -318,10 +313,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
       inner(
         (options?.shape === undefined
           ? handler
-          : serveRailwayRpc(
-              options.shape,
-              handler as HttpEffect,
-            )) as typeof handler,
+          : serveRailwayRpc(options.shape, handler as HttpEffect)) as typeof handler,
         options,
       )) as ServiceRuntimeContext["serve"],
   });
@@ -563,30 +555,22 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *
  * @resource
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Railway.Service", {
-  createRuntimeContext: createServiceRuntimeContext,
-  transformProps: (id, props) =>
-    Effect.gen(function* () {
-      if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const project = Effect.isEffect(props.project)
-        ? yield* props.project as Effect.Effect<Project, never, Providers>
-        : props.project;
-      const environment =
-        props.environment === undefined
-          ? undefined
-          : Effect.isEffect(props.environment)
-            ? yield* props.environment as Effect.Effect<
-                ServiceEnvironment,
-                never,
-                Providers
-              >
-            : props.environment;
-      const rpcToken = yield* mintRpcToken(id);
-      return { ...props, project, environment, rpcToken };
-    }),
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Railway.Service", {
+    createRuntimeContext: createServiceRuntimeContext,
+    transformProps: (id, props) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const project = Effect.isEffect(props.project)
+          ? yield* props.project as Effect.Effect<Project, never, Providers>
+          : props.project;
+        const environment =
+          props.environment === undefined
+            ? undefined
+            : Effect.isEffect(props.environment)
+              ? yield* props.environment as Effect.Effect<ServiceEnvironment, never, Providers>
+              : props.environment;
+        const rpcToken = yield* mintRpcToken(id);
+        return { ...props, project, environment, rpcToken };
+      }),
+  });

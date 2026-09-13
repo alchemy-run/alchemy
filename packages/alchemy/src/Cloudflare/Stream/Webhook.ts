@@ -40,13 +40,7 @@ export type WebhookAttributes = {
   secret: Redacted.Redacted<string>;
 };
 
-export type Webhook = Resource<
-  TypeId,
-  WebhookProps,
-  WebhookAttributes,
-  never,
-  Providers
->;
+export type Webhook = Resource<TypeId, WebhookProps, WebhookAttributes, never, Providers>;
 
 /**
  * The Cloudflare Stream webhook — an **account-level singleton** that
@@ -134,10 +128,7 @@ export const WebhookProvider = () =>
       // Sync — PUT is a true upsert, so create and update are the same
       // call. Skip the API entirely when the observed URL already
       // matches the desired one.
-      if (
-        observed !== undefined &&
-        observed.notificationUrl === news.notificationUrl
-      ) {
+      if (observed !== undefined && observed.notificationUrl === news.notificationUrl) {
         return toAttributes(observed, acct);
       }
       const updated = yield* stream.putWebhook({

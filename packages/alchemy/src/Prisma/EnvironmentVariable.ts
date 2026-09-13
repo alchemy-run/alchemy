@@ -14,12 +14,7 @@ import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedEnvironmentVariable } from "./Internal/Observed.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
@@ -137,9 +132,7 @@ export interface EnvironmentVariable extends Resource<
  *
  * @resource
  */
-export const EnvironmentVariable = Resource<EnvironmentVariable>(
-  "Prisma.EnvironmentVariable",
-);
+export const EnvironmentVariable = Resource<EnvironmentVariable>("Prisma.EnvironmentVariable");
 
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const ENV_VALUE_MAX_BYTES = 8 * 1024;
@@ -155,23 +148,16 @@ const validateEnvironmentVariableKey = (key: string) =>
     }
   });
 
-const validateEnvironmentVariableWrite = (
-  key: string,
-  value: Redacted.Redacted<string>,
-) =>
+const validateEnvironmentVariableWrite = (key: string, value: Redacted.Redacted<string>) =>
   Effect.gen(function* () {
     yield* validateEnvironmentVariableKey(key);
     const raw = Redacted.value(value);
     if (raw.length === 0) {
       return yield* Effect.fail(
-        new Error(
-          `Prisma environment variable '${key}' value must be non-empty.`,
-        ),
+        new Error(`Prisma environment variable '${key}' value must be non-empty.`),
       );
     }
-    const byteLength = yield* Effect.sync(
-      () => new TextEncoder().encode(raw).byteLength,
-    );
+    const byteLength = yield* Effect.sync(() => new TextEncoder().encode(raw).byteLength);
     if (byteLength > ENV_VALUE_MAX_BYTES) {
       return yield* Effect.fail(
         new Error(
@@ -229,9 +215,7 @@ const findVariable = (
     limit: 100,
   }).pipe(
     Effect.flatMap((variables) => {
-      const matches = variables.filter(
-        (variable) => variable.branchId === (branchId ?? null),
-      );
+      const matches = variables.filter((variable) => variable.branchId === (branchId ?? null));
       return matches.length > 1
         ? Effect.fail(
             new Error(
@@ -316,8 +300,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.environmentVariableId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -352,12 +335,7 @@ const ProviderLive = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findVariable(
-                      projectId,
-                      olds.class,
-                      olds.key,
-                      olds.branchId,
-                    )
+                  ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
                   : undefined;
               });
           if (!variable) return undefined;
@@ -373,9 +351,7 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ news, output }) {
           if (news.branchId !== undefined && news.class !== "preview") {
             return yield* Effect.fail(
-              new Error(
-                'Prisma branch-scoped environment variables must use class: "preview".',
-              ),
+              new Error('Prisma branch-scoped environment variables must use class: "preview".'),
             );
           }
           yield* validateEnvironmentVariableWrite(news.key, news.value);
@@ -468,22 +444,18 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(
-    EnvironmentVariable,
-    ["environmentVariableId"],
-    ({ id, news }) => ({
-      environmentVariableId: devId("environment-variable", id),
-      projectId: attrOrString(news.project, "projectId"),
-      branchId: news.branchId ?? null,
-      class: news.class,
-      key: news.key,
-      value: news.value,
-      valueKid: devId("value-kid", id),
-      isManagedBySystem: false,
-      createdAt: DEV_TIMESTAMP,
-      updatedAt: DEV_TIMESTAMP,
-    }),
-  );
+  devProvider(EnvironmentVariable, ["environmentVariableId"], ({ id, news }) => ({
+    environmentVariableId: devId("environment-variable", id),
+    projectId: attrOrString(news.project, "projectId"),
+    branchId: news.branchId ?? null,
+    class: news.class,
+    key: news.key,
+    value: news.value,
+    valueKid: devId("value-kid", id),
+    isManagedBySystem: false,
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
 
 export const EnvironmentVariableProvider = () =>
   ProviderLayer.dual(EnvironmentVariable, {

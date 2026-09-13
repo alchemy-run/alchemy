@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // dominates the runtime (create ~5-15 min, destroy ~5-15 min).
 const runLive = !process.env.FAST;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "react-router-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "react-router-app");
 
 // Clone under the alchemy package so `@react-router/dev`, `react-router`,
 // `@react-router/node`, `isbot`, `react`, and `vite` resolve from the
@@ -68,20 +64,14 @@ describe.skipIf(!runLive)("AWS.Website.ReactRouter", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "REACT_ROUTER_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "REACT_ROUTER_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "REACT_ROUTER_AWS_PAGE_MARKER", {
@@ -89,36 +79,20 @@ describe.skipIf(!runLive)("AWS.Website.ReactRouter", () => {
           label: "SSR home page",
         });
         // The fixture's own vite.config.ts applied (its `define` marker).
-        yield* expectUrlContains(
-          `${url}/`,
-          "config:react-router-aws-user-config-loaded",
-          {
-            label: "user vite.config.ts applied",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "config:react-router-aws-user-config-loaded", {
+          label: "user vite.config.ts applied",
+        });
         // Resource route through the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "REACT_ROUTER_AWS_API_MARKER",
-          {
-            label: "resource route",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "roundtrip",
-          {
-            label: "resource route query echo",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "REACT_ROUTER_AWS_API_MARKER", {
+          label: "resource route",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+          label: "resource route query echo",
+        });
         // Public file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "react-router-aws-robots-marker",
-          {
-            label: "public asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "react-router-aws-robots-marker", {
+          label: "public asset from S3",
+        });
         // Client bundle from S3 — the SSR document modulepreloads it, so a
         // broken asset upload breaks hydration silently otherwise.
         yield* expectUrlContains(`${url}/`, "/assets/", {
@@ -167,9 +141,7 @@ describe.skipIf(!runLive)("AWS.Website.ReactRouter", () => {
         const url = deployed.router.url as string;
         // `https://{id}.cloudfront.net` live; the emulator serves the
         // router's edge on a local plain-HTTP port.
-        expect(url).toMatch(
-          runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
-        );
+        expect(url).toMatch(runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//);
 
         // SSR through the ROUTER's distribution (the site registered itself
         // in the router's KV store — no site-owned distribution).
@@ -182,38 +154,22 @@ describe.skipIf(!runLive)("AWS.Website.ReactRouter", () => {
         });
         // Lambda env applied on deploy, read from a route loader (parity
         // with the dev-server injection asserted in the local suite).
-        yield* expectUrlContains(
-          `${url}/`,
-          "env:react-router-aws-live-env-marker",
-          {
-            label: "server.environment on the Lambda",
-          },
-        );
+        yield* expectUrlContains(`${url}/`, "env:react-router-aws-live-env-marker", {
+          label: "server.environment on the Lambda",
+        });
         // The router's defaultTTL-0 cache policy must not cache SSR
         // responses: the resource route round-trips with distinct query
         // strings, which a day-long cached body would break.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=router-one`,
-          "router-one",
-          {
-            label: "resource route via router (query one)",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=router-two`,
-          "router-two",
-          {
-            label: "resource route via router (query two)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=router-one`, "router-one", {
+          label: "resource route via router (query one)",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=router-two`, "router-two", {
+          label: "resource route via router (query two)",
+        });
         // Static asset from S3 through the router's edge function.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "react-router-aws-robots-marker",
-          {
-            label: "public asset via router",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "react-router-aws-robots-marker", {
+          label: "public asset via router",
+        });
 
         const distributionId = deployed.router.distributionId as string;
 
@@ -233,9 +189,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

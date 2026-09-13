@@ -7,9 +7,7 @@ import * as CliKit from "../../../Cli/CliKit/index.ts";
 import { confirmOrDecline } from "../confirm.ts";
 import { isPromptCancellation } from "../errors.ts";
 
-export const profileTui = Effect.promise(
-  () => import("../../../Cli/components/view/Profile.tsx"),
-);
+export const profileTui = Effect.promise(() => import("../../../Cli/components/view/Profile.tsx"));
 
 export type EditAction = "add" | "reconfigure" | "remove";
 export interface EditOutcome {
@@ -37,9 +35,7 @@ export const showProfileFlow = Effect.fn(function* (options: {
         [
           `  ${provider.name} (${provider.method}) — ${provider.status}`,
           ...provider.details.map(({ key, value }) => `    ${key}: ${value}`),
-          ...(provider.diagnostic
-            ? [`    ${provider.diagnostic.message}`]
-            : []),
+          ...(provider.diagnostic ? [`    ${provider.diagnostic.message}`] : []),
         ].join("\n"),
       ),
     ].join("\n"),
@@ -55,14 +51,11 @@ export const renameProfileFlow = Effect.fn(function* (
     (yield* CliKit.accessors.prompt.text({
       message: `Rename profile '${name}' to`,
       placeholder: `${name}-new`,
-      validate: (value) =>
-        value.trim().length > 0 ? undefined : "Profile name is required",
+      validate: (value) => (value.trim().length > 0 ? undefined : "Profile name is required"),
     }))
   ).trim();
   yield* Profiles.rename({ name, newName });
-  yield* CliKit.accessors.output.success(
-    `Renamed profile '${name}' to '${newName}'.`,
-  );
+  yield* CliKit.accessors.output.success(`Renamed profile '${name}' to '${newName}'.`);
   return newName;
 });
 
@@ -79,9 +72,7 @@ export const deleteProfileFlow = Effect.fn(function* (options: {
     includeProviderStatus: false,
   }).pipe(Effect.option);
   if (Option.isNone(exists)) {
-    yield* Console.log(
-      `Profile ${options.name}: Not found. Nothing was deleted.`,
-    );
+    yield* Console.log(`Profile ${options.name}: Not found. Nothing was deleted.`);
     return false;
   }
   // Declining short-circuits with exit code 1; the boolean only reports the
@@ -93,9 +84,7 @@ export const deleteProfileFlow = Effect.fn(function* (options: {
     cancelLabel: "Cancel",
   });
   yield* Profiles.deleteProfile({ name: options.name });
-  yield* CliKit.accessors.output.success(
-    `Deleted profile '${options.name}' and its credentials.`,
-  );
+  yield* CliKit.accessors.output.success(`Deleted profile '${options.name}' and its credentials.`);
   return true;
 });
 
@@ -135,12 +124,8 @@ export const editProfileFlow = Effect.fn(function* (options: {
       entrypoint: options.main,
       envFile: Option.getOrUndefined(options.envFile),
     });
-    const connected = new Map(
-      profile.providers.map((item) => [item.name, item]),
-    );
-    const names = [
-      ...new Set([...connected.keys(), ...available.map(({ name }) => name)]),
-    ].sort();
+    const connected = new Map(profile.providers.map((item) => [item.name, item]));
+    const names = [...new Set([...connected.keys(), ...available.map(({ name }) => name)])].sort();
     const prompt = yield* CliKit.CliKit;
     const { editStateStyle } = yield* profileTui;
     const glyphs = CliKit.glyphsFor(prompt.terminal.unicode);
@@ -166,10 +151,7 @@ export const editProfileFlow = Effect.fn(function* (options: {
           }
         : {
             label: provider,
-            states: [
-              state("skip", null),
-              state("add", { provider, action: "add" }),
-            ],
+            states: [state("skip", null), state("add", { provider, action: "add" })],
           },
     );
     plan = (yield* prompt.prompt.cycle({
@@ -200,9 +182,10 @@ export const editProfileFlow = Effect.fn(function* (options: {
               options.configureInput === undefined
                 ? undefined
                 : Object.fromEntries(
-                    Object.entries(options.configureInput.values).map(
-                      ([key, value]) => [key, Redacted.make(value)],
-                    ),
+                    Object.entries(options.configureInput.values).map(([key, value]) => [
+                      key,
+                      Redacted.make(value),
+                    ]),
                   ),
           }).pipe(Effect.asVoid);
     const result = yield* Effect.result(run);

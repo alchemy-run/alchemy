@@ -29,10 +29,7 @@ const assertNamespaceDeleted = (namespaceId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "NamespaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -57,9 +54,7 @@ test.provider(
 
       expect(namespace.namespaceId).toBeDefined();
       expect(namespace.namespaceArn).toContain(":namespace/");
-      expect(namespace.namespaceName).toBe(
-        "alchemy-test-cloudmap-private.local",
-      );
+      expect(namespace.namespaceName).toBe("alchemy-test-cloudmap-private.local");
       // a private DNS namespace creates a Route 53 private hosted zone
       expect(namespace.hostedZoneId).toBeDefined();
 
@@ -70,11 +65,7 @@ test.provider(
       expect(created?.Properties?.DnsProperties?.SOA?.TTL).toBe(60);
       const tags = yield* sd
         .listTagsForResource({ ResourceARN: namespace.namespaceArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestPrivateNamespace");
 

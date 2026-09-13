@@ -65,9 +65,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
-              : Effect.fail(
-                  new Error(`${path} temporarily returned ${res.status}`),
-                ),
+              : Effect.fail(new Error(`${path} temporarily returned ${res.status}`)),
           ),
           // cloud-init/systemd can briefly restart the hosted process just
           // after the first successful health probe, especially while a full

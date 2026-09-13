@@ -44,10 +44,7 @@ export interface CreateWebLoginToken extends Binding.Service<
     environment: Environment,
     options?: AirflowRoleOptions,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mwaa.CreateWebLoginTokenResponse,
-      mwaa.CreateWebLoginTokenError
-    >
+    () => Effect.Effect<mwaa.CreateWebLoginTokenResponse, mwaa.CreateWebLoginTokenError>
   >
 > {}
 

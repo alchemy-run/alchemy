@@ -45,14 +45,8 @@ export default Ec2DevProbeFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            state:
-              result._tag === "Success"
-                ? result.success?.State?.Name
-                : undefined,
-            instanceId:
-              result._tag === "Success"
-                ? result.success?.InstanceId
-                : undefined,
+            state: result._tag === "Success" ? result.success?.State?.Name : undefined,
+            instanceId: result._tag === "Success" ? result.success?.InstanceId : undefined,
           });
         }
 
@@ -76,9 +70,5 @@ export default Ec2DevProbeFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(DescribeInstanceHttp, DescribeInstanceStatusHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(DescribeInstanceHttp, DescribeInstanceStatusHttp))),
 );

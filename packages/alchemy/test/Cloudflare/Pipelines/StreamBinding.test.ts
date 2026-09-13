@@ -14,10 +14,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const forbiddenBlips = {
   while: (e: { _tag: string }) => e._tag === "Forbidden",
@@ -45,18 +42,13 @@ const sendEvent = (url: string, nonce: string) =>
       res.status === 200
         ? res.json
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("5 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
         Schedule.recurs(30),
       ]),
     }),
@@ -123,9 +115,7 @@ test.provider(
         })
         .pipe(Effect.retry(forbiddenBlips));
 
-      const binding = (settings.bindings ?? []).find(
-        (b) => b.name === "EVENTS",
-      );
+      const binding = (settings.bindings ?? []).find((b) => b.name === "EVENTS");
 
       expect(binding).toMatchObject({
         type: "pipelines",

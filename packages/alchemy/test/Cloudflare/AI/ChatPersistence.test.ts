@@ -19,10 +19,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AiGatewayChatPersistenceStack",
@@ -68,9 +65,7 @@ test(
     const id = `fresh-${Date.now()}`;
 
     const res = yield* client
-      .get(
-        `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("Say the single word 'pong'.")}`,
-      )
+      .get(`${out.url}/chat?id=${id}&prompt=${encodeURIComponent("Say the single word 'pong'.")}`)
       .pipe(retryReady);
     expect(res.status).toBe(200);
 
@@ -92,9 +87,7 @@ test(
     const id = `memory-${Date.now()}`;
 
     const r1 = yield* client
-      .get(
-        `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`,
-      )
+      .get(`${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`)
       .pipe(retryReady);
     expect(r1.status).toBe(200);
     const b1 = (yield* r1.json) as { text: string; turns: number };
@@ -140,9 +133,7 @@ test(
     // its first turn also starts from an empty history (turns === 2),
     // proving the two threads don't share state.
     const rb = yield* client
-      .get(
-        `${out.url}/chat?id=${idB}&prompt=${encodeURIComponent("Say the single word 'pong'.")}`,
-      )
+      .get(`${out.url}/chat?id=${idB}&prompt=${encodeURIComponent("Say the single word 'pong'.")}`)
       .pipe(retryReady);
     expect(rb.status).toBe(200);
     expect(((yield* rb.json) as { turns: number }).turns).toBe(2);

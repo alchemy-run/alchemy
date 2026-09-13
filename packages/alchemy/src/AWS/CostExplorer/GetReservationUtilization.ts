@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetReservationUtilization}.
  */
-export interface GetReservationUtilizationRequest
-  extends ce.GetReservationUtilizationRequest {}
+export interface GetReservationUtilizationRequest extends ce.GetReservationUtilizationRequest {}
 
 /**
  * Runtime binding for `ce:GetReservationUtilization`.
@@ -35,14 +34,10 @@ export interface GetReservationUtilization extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetReservationUtilizationRequest,
-    ) => Effect.Effect<
-      ce.GetReservationUtilizationResponse,
-      ce.GetReservationUtilizationError
-    >
+    ) => Effect.Effect<ce.GetReservationUtilizationResponse, ce.GetReservationUtilizationError>
   >
 > {}
 
-export const GetReservationUtilization =
-  Binding.Service<GetReservationUtilization>(
-    "AWS.CostExplorer.GetReservationUtilization",
-  );
+export const GetReservationUtilization = Binding.Service<GetReservationUtilization>(
+  "AWS.CostExplorer.GetReservationUtilization",
+);

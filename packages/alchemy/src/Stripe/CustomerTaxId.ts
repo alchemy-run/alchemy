@@ -118,10 +118,7 @@ const customerIdOf = (customer: TaxIdCustomer | null): string | undefined => {
   return customer.id;
 };
 
-const toAttrs = (
-  customer: string,
-  taxId: StripeTaxId,
-): CustomerTaxIdAttributes => ({
+const toAttrs = (customer: string, taxId: StripeTaxId): CustomerTaxIdAttributes => ({
   id: taxId.id,
   customer: customerIdOf(taxId.customer) ?? customer,
   type: taxId.type,
@@ -140,9 +137,7 @@ const getById = (id: string, customer?: string) => {
       Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
     );
   }
-  return GetTaxIdsById({ id }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
-  );
+  return GetTaxIdsById({ id }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
 };
 
 const listTaxIds = Effect.fn(function* (customer: string) {
@@ -169,15 +164,9 @@ const listTaxIds = Effect.fn(function* (customer: string) {
   return taxIds;
 });
 
-const findByTypeValue = Effect.fn(function* (
-  customer: string,
-  type: string,
-  value: string,
-) {
+const findByTypeValue = Effect.fn(function* (customer: string, type: string, value: string) {
   const taxIds = yield* listTaxIds(customer);
-  const matches = taxIds.filter(
-    (taxId) => taxId.type === type && taxId.value === value,
-  );
+  const matches = taxIds.filter((taxId) => taxId.type === type && taxId.value === value);
   matches.sort((a, b) => b.created - a.created);
   return matches[0];
 });
@@ -205,8 +194,7 @@ const listAllCustomers = Effect.fn(function* () {
 const listAlchemyCustomers = Effect.fn(function* () {
   const customers = yield* listAllCustomers();
   return customers.filter(
-    (customer) =>
-      tagRecord(customer.metadata)[alchemyMetadataKeys.stack] !== undefined,
+    (customer) => tagRecord(customer.metadata)[alchemyMetadataKeys.stack] !== undefined,
   );
 });
 
@@ -220,11 +208,7 @@ const observe = Effect.fn(function* (input: {
     const byId = yield* getById(input.id, input.customer);
     if (byId !== undefined) return byId;
   }
-  if (
-    input.customer !== undefined &&
-    input.type !== undefined &&
-    input.value !== undefined
-  ) {
+  if (input.customer !== undefined && input.type !== undefined && input.value !== undefined) {
     return yield* findByTypeValue(input.customer, input.type, input.value);
   }
   return undefined;
@@ -265,14 +249,9 @@ export const CustomerTaxIdProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const customer =
-        output?.customer ??
-        (typeof olds?.customer === "string" ? olds.customer : undefined);
-      const type =
-        output?.type ??
-        (typeof olds?.type === "string" ? olds.type : undefined);
-      const value =
-        output?.value ??
-        (typeof olds?.value === "string" ? olds.value : undefined);
+        output?.customer ?? (typeof olds?.customer === "string" ? olds.customer : undefined);
+      const type = output?.type ?? (typeof olds?.type === "string" ? olds.type : undefined);
+      const value = output?.value ?? (typeof olds?.value === "string" ? olds.value : undefined);
       const existing = yield* observe({
         id: output?.id,
         customer,
@@ -291,9 +270,7 @@ export const CustomerTaxIdProvider = () =>
         customers,
         (customer) =>
           listTaxIds(customer.id).pipe(
-            Effect.map((taxIds) =>
-              taxIds.map((taxId) => toAttrs(customer.id, taxId)),
-            ),
+            Effect.map((taxIds) => taxIds.map((taxId) => toAttrs(customer.id, taxId))),
           ),
         { concurrency: LIST_CONCURRENCY },
       );
@@ -307,10 +284,7 @@ export const CustomerTaxIdProvider = () =>
         type: news.type,
         value: news.value,
       });
-      if (
-        current !== undefined &&
-        shouldReplace(news, toAttrs(news.customer, current))
-      ) {
+      if (current !== undefined && shouldReplace(news, toAttrs(news.customer, current))) {
         current = undefined;
       }
 

@@ -22,9 +22,7 @@ it.live.skipIf(!nodeSupportsDevMode)(
   () =>
     Effect.gen(function* () {
       const packageDir = fileURLToPath(new URL("../..", import.meta.url));
-      const exampleDir = fileURLToPath(
-        new URL("../../../../examples/aws-dev", import.meta.url),
-      );
+      const exampleDir = fileURLToPath(new URL("../../../../examples/aws-dev", import.meta.url));
       const runtimeTsx = fileURLToPath(
         new URL("../../src/Cli/components/view/Runtime.tsx", import.meta.url),
       );
@@ -43,13 +41,7 @@ it.live.skipIf(!nodeSupportsDevMode)(
       `;
       const handle = yield* ChildProcess.make(
         nodePath!,
-        [
-          "--import",
-          `${packageDir}/bin/register-dev-mode.js`,
-          "--input-type=module",
-          "-e",
-          script,
-        ],
+        ["--import", `${packageDir}/bin/register-dev-mode.js`, "--input-type=module", "-e", script],
         {
           cwd: exampleDir,
           env: {

@@ -12,12 +12,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { BunHttpServer } from "../../Http.ts";
 import { Stage } from "../../Stage.ts";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackConstant,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
 
 export interface PrismaBootstrapOptions {
   /** Port to serve on when the platform does not inject `PORT`. */
@@ -27,10 +22,7 @@ export interface PrismaBootstrapOptions {
 }
 
 /** Serve the bundled app with a Bun HTTP server on `PORT` (all interfaces). */
-export const bootstrap = (
-  entrypoint: unknown,
-  options: PrismaBootstrapOptions,
-): Promise<void> => {
+export const bootstrap = (entrypoint: unknown, options: PrismaBootstrapOptions): Promise<void> => {
   process.env.PORT ??= String(options.port);
 
   const platform = Layer.mergeAll(
@@ -59,9 +51,7 @@ export const bootstrap = (
             ),
           ),
         ),
-        Layer.provideMerge(
-          Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info"),
-        ),
+        Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
     ),
     Effect.scoped,

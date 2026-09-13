@@ -117,10 +117,7 @@ test.provider(
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
-    const resources = (
-      attachment: "id" | "gitName" | "omitted",
-      name?: string,
-    ) =>
+    const resources = (attachment: "id" | "gitName" | "omitted", name?: string) =>
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", {
           createDatabase: false,

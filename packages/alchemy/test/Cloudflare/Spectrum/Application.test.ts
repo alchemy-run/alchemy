@@ -15,13 +15,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Spectrum is plan-gated: the standard testing zone (Free plan) rejects
 // every protocol — even `tcp/22` — with Cloudflare code 13002 "The
@@ -34,9 +30,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -271,27 +265,23 @@ test.provider.skipIf(!entitledZoneId)(
 // not entitlement-gated — the standing test zone (no Spectrum) simply yields
 // no apps for that zone — so this read-only assertion runs unconditionally:
 // `list()` must resolve to a well-typed array without throwing.
-test.provider(
-  "list enumerates Spectrum applications across all zones",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("list enumerates Spectrum applications across all zones", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Spectrum.Application,
-      );
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(Cloudflare.Spectrum.Application);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      // Every hydrated item carries the full `read` Attributes shape.
-      for (const app of all) {
-        expect(typeof app.appId).toBe("string");
-        expect(typeof app.zoneId).toBe("string");
-        expect(typeof app.protocol).toBe("string");
-      }
+    expect(Array.isArray(all)).toBe(true);
+    // Every hydrated item carries the full `read` Attributes shape.
+    for (const app of all) {
+      expect(typeof app.appId).toBe("string");
+      expect(typeof app.zoneId).toBe("string");
+      expect(typeof app.protocol).toBe("string");
+    }
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Full deploy + list assertion: requires a Spectrum-entitled zone (create is
@@ -320,9 +310,7 @@ test.provider.skipIf(!entitledZoneId)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Spectrum.Application,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Spectrum.Application);
       const all = yield* provider.list();
 
       expect(all.some((a) => a.appId === app.appId)).toBe(true);
@@ -336,9 +324,7 @@ test.provider.skipIf(!entitledZoneId)(
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -347,7 +333,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

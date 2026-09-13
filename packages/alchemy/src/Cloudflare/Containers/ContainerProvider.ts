@@ -23,10 +23,7 @@ import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
-import type {
-  AnyContainerApplicationProps,
-  ContainerApplication,
-} from "./ContainerApplication.ts";
+import type { AnyContainerApplicationProps, ContainerApplication } from "./ContainerApplication.ts";
 import {
   buildFinalDockerfile,
   bundleContainerProgram,
@@ -83,11 +80,7 @@ const isTargetRegistryRef = (image: string, registryId: string) =>
  * `resolveImageName`. Custom registries are left untouched — the account
  * namespace rule is specific to Cloudflare's managed registry.
  */
-const normalizePrepushedRef = (
-  image: string,
-  registryId: string,
-  accountId: string,
-) => {
+const normalizePrepushedRef = (image: string, registryId: string, accountId: string) => {
   if (registryId !== "registry.cloudflare.com") return image;
   const rest = image.slice(registryId.length + 1);
   const first = rest.split("/")[0];
@@ -147,15 +140,11 @@ export const LiveContainerProvider = () =>
         );
       });
 
-      const findApplicationByNamespace = Effect.fn(function* (
-        namespaceId: string,
-      ) {
+      const findApplicationByNamespace = Effect.fn(function* (namespaceId: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         return yield* Containers.listContainerApplications({ accountId }).pipe(
-          Effect.map((apps) =>
-            apps.find((app) => app.durableObjects?.namespaceId === namespaceId),
-          ),
+          Effect.map((apps) => apps.find((app) => app.durableObjects?.namespaceId === namespaceId)),
         );
       });
 
@@ -239,9 +228,7 @@ export const LiveContainerProvider = () =>
         constraints: props.constraints ?? {},
       });
 
-      const applicationConfigurationHash = Effect.fn(
-        "applicationConfigurationHash",
-      )(function* (
+      const applicationConfigurationHash = Effect.fn("applicationConfigurationHash")(function* (
         scaling: ReturnType<typeof scalingDefaults>,
         affinities: ContainerApplication.Affinities | undefined,
         configuration: ContainerApplication.Configuration,
@@ -259,13 +246,12 @@ export const LiveContainerProvider = () =>
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const registryId = props.registryId ?? "registry.cloudflare.com";
-        const credentials =
-          yield* Containers.createContainerRegistryCredentials({
-            accountId,
-            registryId,
-            permissions,
-            expirationMinutes: 60,
-          });
+        const credentials = yield* Containers.createContainerRegistryCredentials({
+          accountId,
+          registryId,
+          permissions,
+          expirationMinutes: 60,
+        });
         const username = credentials.username ?? credentials.user;
         if (!username) {
           return yield* new ContainerRegistryError({
@@ -280,106 +266,100 @@ export const LiveContainerProvider = () =>
         };
       });
 
-      const resolveRegistryDigest = Effect.fn("resolveRegistryDigest")(
-        function* (
-          imageRef: string,
-          credentials: {
-            server: string;
-            username: string;
-            password: string | Redacted.Redacted<string>;
-          },
-        ) {
-          const embeddedDigest = digestFromImageRef(imageRef);
-          if (embeddedDigest !== undefined) return embeddedDigest;
-
-          const registryHost = credentials.server
-            .replace(/^https?:\/\//, "")
-            .replace(/\/$/, "");
-          if (!imageRef.startsWith(`${registryHost}/`)) {
-            return yield* new ContainerRegistryError({
-              reason: "ImageOutsideRegistry",
-              message: `Cannot resolve an image outside registry ${registryHost}`,
-              imageRef,
-            });
-          }
-          const repositoryAndTag = imageRef.slice(registryHost.length + 1);
-          const tagSeparator = repositoryAndTag.lastIndexOf(":");
-          if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
-            return yield* new ContainerRegistryError({
-              reason: "InvalidImageReference",
-              message: "Container image reference has no tag or digest",
-              imageRef,
-            });
-          }
-          const repository = repositoryAndTag.slice(0, tagSeparator);
-          const tag = repositoryAndTag.slice(tagSeparator + 1);
-          const manifestUrl = `https://${registryHost}/v2/${repository
-            .split("/")
-            .map(encodeURIComponent)
-            .join("/")}/manifests/${encodeURIComponent(tag)}`;
-          const request = HttpClientRequest.head(manifestUrl).pipe(
-            HttpClientRequest.basicAuth(
-              credentials.username,
-              credentials.password,
-            ),
-            HttpClientRequest.setHeader(
-              "Accept",
-              "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json",
-            ),
-          );
-          const response = yield* http.execute(request).pipe(
-            Effect.mapError(
-              () =>
-                new ContainerRegistryError({
-                  reason: "ManifestRequestFailed",
-                  message: "Failed to resolve the container registry digest",
-                  imageRef,
-                }),
-            ),
-          );
-          if (response.status === 404) {
-            return yield* new ContainerRegistryError({
-              reason: "ImageNotFound",
-              message: "Container image is not published",
-              imageRef,
-            });
-          }
-          if (response.status < 200 || response.status >= 300) {
-            return yield* new ContainerRegistryError({
-              reason: "ManifestRequestFailed",
-              message: `Container registry returned HTTP ${response.status}`,
-              imageRef,
-            });
-          }
-          return yield* Schema.decodeUnknownEffect(RegistryDigest)(
-            response.headers["docker-content-digest"],
-          ).pipe(
-            Effect.mapError(
-              (cause) =>
-                new ContainerRegistryError({
-                  reason: "InvalidManifestDigest",
-                  message: "Registry response did not include a valid digest",
-                  imageRef,
-                  cause,
-                }),
-            ),
-          );
+      const resolveRegistryDigest = Effect.fn("resolveRegistryDigest")(function* (
+        imageRef: string,
+        credentials: {
+          server: string;
+          username: string;
+          password: string | Redacted.Redacted<string>;
         },
-      );
+      ) {
+        const embeddedDigest = digestFromImageRef(imageRef);
+        if (embeddedDigest !== undefined) return embeddedDigest;
 
-      const resolvePublishedImageRef = Effect.fn("resolvePublishedImageRef")(
-        function* (props: AnyContainerApplicationProps, imageRef: string) {
-          let digest = digestFromImageRef(imageRef);
-          if (digest === undefined) {
-            const credentials = yield* registryCredentials(props, ["pull"]);
-            digest = yield* resolveRegistryDigest(imageRef, credentials);
-          }
-          return {
-            imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
-            digest,
-          };
-        },
-      );
+        const registryHost = credentials.server.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        if (!imageRef.startsWith(`${registryHost}/`)) {
+          return yield* new ContainerRegistryError({
+            reason: "ImageOutsideRegistry",
+            message: `Cannot resolve an image outside registry ${registryHost}`,
+            imageRef,
+          });
+        }
+        const repositoryAndTag = imageRef.slice(registryHost.length + 1);
+        const tagSeparator = repositoryAndTag.lastIndexOf(":");
+        if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
+          return yield* new ContainerRegistryError({
+            reason: "InvalidImageReference",
+            message: "Container image reference has no tag or digest",
+            imageRef,
+          });
+        }
+        const repository = repositoryAndTag.slice(0, tagSeparator);
+        const tag = repositoryAndTag.slice(tagSeparator + 1);
+        const manifestUrl = `https://${registryHost}/v2/${repository
+          .split("/")
+          .map(encodeURIComponent)
+          .join("/")}/manifests/${encodeURIComponent(tag)}`;
+        const request = HttpClientRequest.head(manifestUrl).pipe(
+          HttpClientRequest.basicAuth(credentials.username, credentials.password),
+          HttpClientRequest.setHeader(
+            "Accept",
+            "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json",
+          ),
+        );
+        const response = yield* http.execute(request).pipe(
+          Effect.mapError(
+            () =>
+              new ContainerRegistryError({
+                reason: "ManifestRequestFailed",
+                message: "Failed to resolve the container registry digest",
+                imageRef,
+              }),
+          ),
+        );
+        if (response.status === 404) {
+          return yield* new ContainerRegistryError({
+            reason: "ImageNotFound",
+            message: "Container image is not published",
+            imageRef,
+          });
+        }
+        if (response.status < 200 || response.status >= 300) {
+          return yield* new ContainerRegistryError({
+            reason: "ManifestRequestFailed",
+            message: `Container registry returned HTTP ${response.status}`,
+            imageRef,
+          });
+        }
+        return yield* Schema.decodeUnknownEffect(RegistryDigest)(
+          response.headers["docker-content-digest"],
+        ).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ContainerRegistryError({
+                reason: "InvalidManifestDigest",
+                message: "Registry response did not include a valid digest",
+                imageRef,
+                cause,
+              }),
+          ),
+        );
+      });
+
+      const resolvePublishedImageRef = Effect.fn("resolvePublishedImageRef")(function* (
+        props: AnyContainerApplicationProps,
+        imageRef: string,
+      ) {
+        let digest = digestFromImageRef(imageRef);
+        if (digest === undefined) {
+          const credentials = yield* registryCredentials(props, ["pull"]);
+          digest = yield* resolveRegistryDigest(imageRef, credentials);
+        }
+        return {
+          imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
+          digest,
+        };
+      });
 
       const computeImage = Effect.fn(function* (
         id: string,
@@ -389,9 +369,7 @@ export const LiveContainerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createApplicationName(id, props.name);
         const registryId = props.registryId ?? "registry.cloudflare.com";
-        const repositoryName = (
-          props.publish?.repository ?? name
-        ).toLowerCase();
+        const repositoryName = (props.publish?.repository ?? name).toLowerCase();
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
@@ -457,11 +435,7 @@ export const LiveContainerProvider = () =>
           // reference) — deploy the reference as-is and skip the docker
           // pull/tag/push round-trip entirely.
           if (isTargetRegistryRef(props.image, registryId)) {
-            const prepushedRef = normalizePrepushedRef(
-              props.image,
-              registryId,
-              accountId,
-            );
+            const prepushedRef = normalizePrepushedRef(props.image, registryId, accountId);
             return {
               build: { kind: "prepushed" as const, image: prepushedRef },
               imageRef: prepushedRef,
@@ -484,10 +458,7 @@ export const LiveContainerProvider = () =>
         // Variant 3a — inline Dockerfile content (`Dockerfile.inline`), no
         // build context. Materialize the content into a stable generated
         // context directory and build that.
-        if (
-          props.dockerfile !== undefined &&
-          isInlineDockerfile(props.dockerfile)
-        ) {
+        if (props.dockerfile !== undefined && isInlineDockerfile(props.dockerfile)) {
           const content = props.dockerfile.content;
           if (typeof content !== "string") {
             return yield* Effect.die(
@@ -496,8 +467,7 @@ export const LiveContainerProvider = () =>
               ),
             );
           }
-          const { context, dockerfile } =
-            yield* materializeInlineDockerfileContext(id, content);
+          const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content);
           const imageHash = (yield* sha256Object({
             dockerfile: content,
             imageName: props.publish?.repository?.toLowerCase(),
@@ -558,34 +528,23 @@ export const LiveContainerProvider = () =>
         if (build.kind === "prepushed") {
           // The reference already lives in the target registry — nothing to
           // pull, build, or push.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: using pre-pushed ${imageRef}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container image: using pre-pushed ${imageRef}`);
           return yield* resolvePublishedImageRef(props, imageRef);
         }
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
 
         if (build.kind !== "remote") {
-          const digest = yield* resolveRegistryDigest(
-            imageRef,
-            credentials,
-          ).pipe(
+          const digest = yield* resolveRegistryDigest(imageRef, credentials).pipe(
             Effect.catchTag("ContainerRegistryError", (error) =>
-              error.reason === "ImageNotFound"
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
+              error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
             ),
           );
           if (digest !== undefined) {
             const published = `${repositoryFromImageRef(imageRef)}@${digest}`;
-            yield* Effect.logInfo(
-              `Cloudflare Container image: registry cache hit ${published}`,
-            );
+            yield* Effect.logInfo(`Cloudflare Container image: registry cache hit ${published}`);
             if (session) {
-              yield* session.note(
-                `Reusing registry container image ${published}.`,
-              );
+              yield* session.note(`Reusing registry container image ${published}.`);
             }
             return { imageRef: published, digest };
           }
@@ -599,31 +558,23 @@ export const LiveContainerProvider = () =>
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
           // reference; nothing is built locally.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: pulling ${build.image}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container image: pulling ${build.image}`);
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
           yield* docker.image.pull(build.image, platform);
           yield* docker.image.tag(build.image, imageRef);
-          yield* Effect.logInfo(
-            `Cloudflare Container image: pushing ${imageRef}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
           if (session) {
             yield* session.note(`Pushing container image ${imageRef}...`);
           }
           // Push the same platform that was pulled. A containerd image store
           // may also hold a host-architecture variant under this tag.
-          yield* docker.image
-            .push(imageRef, credentials, platform)
-            .pipe(retryContainerPublication);
+          yield* docker.image.push(imageRef, credentials, platform).pipe(retryContainerPublication);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: building ${imageRef}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container image: building ${imageRef}`);
           if (session) {
             yield* session.note(`Building container image ${imageRef}...`);
           }
@@ -643,9 +594,7 @@ export const LiveContainerProvider = () =>
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: building ${imageRef}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container image: building ${imageRef}`);
           if (session) {
             yield* session.note(`Building container image ${imageRef}...`);
           }
@@ -746,8 +695,7 @@ export const LiveContainerProvider = () =>
           previousDigest:
             previousImageRef === undefined
               ? undefined
-              : (yield* resolvePublishedImageRef(props, previousImageRef))
-                  .digest,
+              : (yield* resolvePublishedImageRef(props, previousImageRef)).digest,
         };
       });
 
@@ -763,8 +711,7 @@ export const LiveContainerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         const strategy = rollout?.strategy ?? "immediate";
-        const stepPercentage =
-          strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
+        const stepPercentage = strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
 
         yield* retryForContainerApplicationReadiness(
           "rollout",
@@ -772,10 +719,7 @@ export const LiveContainerProvider = () =>
           Containers.createContainerApplicationRollout({
             accountId,
             applicationId,
-            description:
-              strategy === "immediate"
-                ? "Immediate update"
-                : "Progressive update",
+            description: strategy === "immediate" ? "Immediate update" : "Progressive update",
             strategy: "rolling",
             kind: rollout?.kind ?? "full_auto",
             stepPercentage,
@@ -842,9 +786,7 @@ export const LiveContainerProvider = () =>
           });
         }
 
-        yield* Effect.logInfo(
-          `Cloudflare Container create: creating application ${name}`,
-        );
+        yield* Effect.logInfo(`Cloudflare Container create: creating application ${name}`);
         yield* session.note(`Creating container application ${name}...`);
         const adoptExistingByName = Effect.gen(function* () {
           yield* Effect.logInfo(
@@ -879,9 +821,7 @@ export const LiveContainerProvider = () =>
           Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
             durableObjects
               ? Effect.gen(function* () {
-                  const existing = yield* findApplicationByNamespace(
-                    durableObjects.namespaceId,
-                  );
+                  const existing = yield* findApplicationByNamespace(durableObjects.namespaceId);
                   const recovery = resolveDurableObjectApplicationRecovery({
                     namespaceId: durableObjects.namespaceId,
                     expectedName: name,
@@ -913,21 +853,15 @@ export const LiveContainerProvider = () =>
                 ),
           ),
           Effect.catchIf(
-            (e) =>
-              "message" in (e as any) &&
-              String((e as any).message).includes("already exists"),
+            (e) => "message" in (e as any) && String((e as any).message).includes("already exists"),
             () => adoptExistingByName,
           ),
           Effect.tapError((error) =>
-            Effect.logError(
-              `Cloudflare Container create error: ${describeError(error)}`,
-            ),
+            Effect.logError(`Cloudflare Container create error: ${describeError(error)}`),
           ),
         );
 
-        return "applicationId" in application
-          ? application
-          : toAttributes(application);
+        return "applicationId" in application ? application : toAttributes(application);
       });
 
       const upsertApplication = Effect.fn(function* ({
@@ -950,15 +884,9 @@ export const LiveContainerProvider = () =>
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
-        yield* Effect.logInfo(
-          `Cloudflare Container update: preparing ${existing.applicationName}`,
-        );
+        yield* Effect.logInfo(`Cloudflare Container update: preparing ${existing.applicationName}`);
         const env = makeContainerEnv(news, accountId, bindings);
-        const { build, imageRef, imageHash, dev } = yield* computeImage(
-          id,
-          news,
-          env,
-        );
+        const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
         let deploymentImageRef = existing.configuration.image;
         let imageDigest = existing.hash?.digest;
         if (imageHash !== existing.hash?.image) {
@@ -968,25 +896,17 @@ export const LiveContainerProvider = () =>
             build,
             imageRef,
             imageHash,
-            existing.hash?.digest === undefined
-              ? existing.configuration.image
-              : undefined,
+            existing.hash?.digest === undefined ? existing.configuration.image : undefined,
             session,
           );
-          const existingDigest =
-            existing.hash?.digest ?? published.previousDigest;
+          const existingDigest = existing.hash?.digest ?? published.previousDigest;
           deploymentImageRef =
-            published.digest === existingDigest &&
-            news.publish?.repository === undefined
+            published.digest === existingDigest && news.publish?.repository === undefined
               ? existing.configuration.image
               : published.imageRef;
           imageDigest = published.digest;
         }
-        const configuration = desiredConfiguration(
-          news,
-          env,
-          deploymentImageRef,
-        );
+        const configuration = desiredConfiguration(news, env, deploymentImageRef);
         const scaling = scalingDefaults(news);
         const configurationHash = yield* applicationConfigurationHash(
           scaling,
@@ -997,9 +917,7 @@ export const LiveContainerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
-          yield* session.note(
-            `Container application ${existing.applicationName} is unchanged.`,
-          );
+          yield* session.note(`Container application ${existing.applicationName} is unchanged.`);
           return {
             ...existing,
             configuration,
@@ -1012,9 +930,7 @@ export const LiveContainerProvider = () =>
           };
         }
 
-        yield* session.note(
-          `Updating container application ${existing.applicationName}...`,
-        );
+        yield* session.note(`Updating container application ${existing.applicationName}...`);
         const application = yield* retryForContainerApplicationReadiness(
           "update",
           existing.applicationId,
@@ -1075,9 +991,7 @@ export const LiveContainerProvider = () =>
         };
       });
 
-      const getDurableObjects = (
-        bindings: ResourceBinding<ContainerApplication["Binding"]>[],
-      ) => {
+      const getDurableObjects = (bindings: ResourceBinding<ContainerApplication["Binding"]>[]) => {
         // A stale Worker namespace map can resolve a binding to an object
         // without an id. It does not request removing the live attachment.
         const dos = bindings.flatMap((b) =>
@@ -1086,8 +1000,7 @@ export const LiveContainerProvider = () =>
         // A single DO namespace may appear in multiple bindings (e.g. when
         // a Container is referenced by several resources). Dedupe by namespaceId.
         const uniqueDos = dos.filter(
-          (d, i, arr) =>
-            arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
+          (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
         );
         if (uniqueDos.length === 0) {
           return Effect.succeed(undefined);
@@ -1104,47 +1017,28 @@ export const LiveContainerProvider = () =>
 
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
-        diff: Effect.fn(function* ({
-          id,
-          olds = {},
-          news = {},
-          output,
-          newBindings,
-          oldBindings,
-        }) {
+        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
           if (!isResolved(news) || !isResolved(newBindings)) {
             return undefined;
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const oldName =
-            output?.applicationName ??
-            (yield* createApplicationName(id, olds.name));
+          const oldName = output?.applicationName ?? (yield* createApplicationName(id, olds.name));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
           const name = news.name ?? oldName;
 
-          if (
-            (output?.accountId ?? accountId) !== accountId ||
-            name !== oldName
-          ) {
+          if ((output?.accountId ?? accountId) !== accountId || name !== oldName) {
             return { action: "replace" } as const;
           }
 
-          const hasDurableObjects =
-            (yield* getDurableObjects(newBindings)) !== undefined;
+          const hasDurableObjects = (yield* getDurableObjects(newBindings)) !== undefined;
           const hasUnresolvedAttachment =
             !hasDurableObjects &&
-            newBindings.some(
-              (binding) => binding.data.durableObjects !== undefined,
-            );
-          const hadDurableObjects =
-            (yield* getDurableObjects(oldBindings)) !== undefined;
-          if (
-            !hasUnresolvedAttachment &&
-            hasDurableObjects !== hadDurableObjects
-          ) {
+            newBindings.some((binding) => binding.data.durableObjects !== undefined);
+          const hadDurableObjects = (yield* getDurableObjects(oldBindings)) !== undefined;
+          if (!hasUnresolvedAttachment && hasDurableObjects !== hadDurableObjects) {
             return { action: "replace" } as const;
           }
 
@@ -1163,11 +1057,7 @@ export const LiveContainerProvider = () =>
           const application = yield* Containers.getContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
-          }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)));
           if (
             application &&
             (application.id !== output.applicationId ||
@@ -1188,17 +1078,11 @@ export const LiveContainerProvider = () =>
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
           const name = yield* createApplicationName(id, news.name);
-          yield* Effect.logInfo(
-            `Cloudflare Container precreate: starting ${name}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
 
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId);
-          const { build, imageRef, imageHash, dev } = yield* computeImage(
-            id,
-            news,
-            env,
-          );
+          const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
           const published = yield* buildAndPushImage(
             id,
             news,
@@ -1208,11 +1092,7 @@ export const LiveContainerProvider = () =>
             undefined,
             session,
           );
-          const configuration = desiredConfiguration(
-            news,
-            env,
-            published.imageRef,
-          );
+          const configuration = desiredConfiguration(news, env, published.imageRef);
           const configurationHash = yield* applicationConfigurationHash(
             scalingDefaults(news),
             news.affinities,
@@ -1235,8 +1115,7 @@ export const LiveContainerProvider = () =>
             durableObjects: undefined,
             session: {
               ...session,
-              note: (message) =>
-                session.note(message.replace("Creating", "Pre-creating")),
+              note: (message) => session.note(message.replace("Creating", "Pre-creating")),
             },
           });
           return {
@@ -1249,27 +1128,15 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {},
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, bindings, output, session }) {
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts.
-          const name =
-            output?.applicationName ??
-            (yield* createApplicationName(id, news.name));
-          yield* Effect.logInfo(
-            `Cloudflare Container reconcile: starting ${name}`,
-          );
+          const name = output?.applicationName ?? (yield* createApplicationName(id, news.name));
+          yield* Effect.logInfo(`Cloudflare Container reconcile: starting ${name}`);
           const durableObjects = yield* getDurableObjects(bindings);
           const hasUnresolvedAttachment =
             durableObjects === undefined &&
-            bindings.some(
-              (binding) => binding.data.durableObjects !== undefined,
-            );
+            bindings.some((binding) => binding.data.durableObjects !== undefined);
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId, bindings);
 
@@ -1291,9 +1158,7 @@ export const LiveContainerProvider = () =>
                 ...toAttributes(app),
                 hash: output.hash,
               })),
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
             );
           }
           if (!existing) {
@@ -1318,21 +1183,14 @@ export const LiveContainerProvider = () =>
             (hasUnresolvedAttachment && recordedDurableObjects?.namespaceId
               ? recordedDurableObjects
               : undefined);
-          if (
-            hasUnresolvedAttachment &&
-            durableObjectsForRecovery === undefined
-          ) {
+          if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined) {
             return yield* Effect.fail(
               new Error(
                 `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
               ),
             );
           }
-          const { build, imageRef, imageHash, dev } = yield* computeImage(
-            id,
-            news,
-            env,
-          );
+          const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
 
           // Special case: precreate produced an application without the
           // durable object attachment, but the real reconcile now has one.
@@ -1346,9 +1204,7 @@ export const LiveContainerProvider = () =>
             !deepEqual(existing.durableObjects, durableObjects)
           ) {
             if (durableObjects) {
-              const owner = yield* findApplicationByNamespace(
-                durableObjects.namespaceId,
-              );
+              const owner = yield* findApplicationByNamespace(durableObjects.namespaceId);
               const recovery = resolveDurableObjectApplicationRecovery({
                 namespaceId: durableObjects.namespaceId,
                 expectedName: name,
@@ -1381,25 +1237,17 @@ export const LiveContainerProvider = () =>
                 build,
                 imageRef,
                 imageHash,
-                existing.hash?.digest === undefined
-                  ? existing.configuration.image
-                  : undefined,
+                existing.hash?.digest === undefined ? existing.configuration.image : undefined,
                 session,
               );
-              const existingDigest =
-                existing.hash?.digest ?? published.previousDigest;
+              const existingDigest = existing.hash?.digest ?? published.previousDigest;
               deploymentImageRef =
-                published.digest === existingDigest &&
-                news.publish?.repository === undefined
+                published.digest === existingDigest && news.publish?.repository === undefined
                   ? existing.configuration.image
                   : published.imageRef;
               imageDigest = published.digest;
             }
-            const configuration = desiredConfiguration(
-              news,
-              env,
-              deploymentImageRef,
-            );
+            const configuration = desiredConfiguration(news, env, deploymentImageRef);
             const configurationHash = yield* applicationConfigurationHash(
               scalingDefaults(news),
               news.affinities,
@@ -1414,12 +1262,7 @@ export const LiveContainerProvider = () =>
             yield* Containers.deleteContainerApplication({
               accountId: existing.accountId,
               applicationId: existing.applicationId,
-            }).pipe(
-              Effect.catchTag(
-                "ContainerApplicationNotFound",
-                () => Effect.void,
-              ),
-            );
+            }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
             // Wait out the eventually-consistent `list` so the recreate below
             // doesn't re-adopt the just-deleted application and then try to
             // update a now-gone id (see `waitForApplicationDeleted`).
@@ -1475,11 +1318,7 @@ export const LiveContainerProvider = () =>
             undefined,
             session,
           );
-          const configuration = desiredConfiguration(
-            news,
-            env,
-            published.imageRef,
-          );
+          const configuration = desiredConfiguration(news, env, published.imageRef);
           const configurationHash = yield* applicationConfigurationHash(
             scalingDefaults(news),
             news.affinities,
@@ -1508,27 +1347,19 @@ export const LiveContainerProvider = () =>
           // A `dev:` applicationId only exists locally — there is no live
           // application to delete on Cloudflare.
           if (!isLiveId(output.applicationId)) return;
-          yield* Effect.logInfo(
-            `Cloudflare Container delete: deleting ${output.applicationName}`,
-          );
+          yield* Effect.logInfo(`Cloudflare Container delete: deleting ${output.applicationName}`);
           yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
-          }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const readByName = (name: string) =>
             Effect.gen(function* () {
-              yield* Effect.logInfo(
-                `Cloudflare Container read: looking up ${name}`,
-              );
+              yield* Effect.logInfo(`Cloudflare Container read: looking up ${name}`);
               const existing = yield* findApplicationByName(name);
               if (!existing) {
-                yield* Effect.logInfo(
-                  `Cloudflare Container read: ${name} not found`,
-                );
+                yield* Effect.logInfo(`Cloudflare Container read: ${name} not found`);
                 return undefined;
               }
               return {
@@ -1549,9 +1380,7 @@ export const LiveContainerProvider = () =>
             return yield* readByName(output.applicationName);
           }
           if (output?.applicationId) {
-            yield* Effect.logInfo(
-              `Cloudflare Container read: checking ${output.applicationName}`,
-            );
+            yield* Effect.logInfo(`Cloudflare Container read: checking ${output.applicationName}`);
             attrs = yield* Containers.getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
@@ -1701,15 +1530,9 @@ const toAttributes = (
   constraints: normalizeNulls(
     application.constraints as ContainerApplication.Constraints | undefined,
   ),
-  affinities: normalizeNulls(
-    application.affinities as ContainerApplication.Affinities | undefined,
-  ),
-  configuration: normalizeNulls(
-    application.configuration as ContainerApplication.Configuration,
-  ),
-  durableObjects: normalizeNulls(application.durableObjects) as
-    | { namespaceId: string }
-    | undefined,
+  affinities: normalizeNulls(application.affinities as ContainerApplication.Affinities | undefined),
+  configuration: normalizeNulls(application.configuration as ContainerApplication.Configuration),
+  durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
   createdAt: application.createdAt,
   version: application.version,
   dev: undefined,

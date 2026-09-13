@@ -48,8 +48,7 @@ export const Group = Schema.String.pipe(
           .split(",")
           .map((attribute) => attribute.trim())
           .filter((attribute) => attribute.length > 0);
-        return match &&
-          attributes.every((attribute) => attribute === "Collapsed")
+        return match && attributes.every((attribute) => attribute === "Collapsed")
           ? Effect.succeed({
               name: match[1]!,
               pattern: match[3]!,
@@ -64,9 +63,7 @@ export const Group = Schema.String.pipe(
             );
       },
       encode: (group) =>
-        Effect.succeed(
-          `${group.name}${group.collapsed ? "[Collapsed]" : ""}=${group.pattern}`,
-        ),
+        Effect.succeed(`${group.name}${group.collapsed ? "[Collapsed]" : ""}=${group.pattern}`),
     }),
   ),
 );
@@ -86,9 +83,7 @@ export const DEPENDENCY_SECTIONS = [
   "optionalDependencies",
 ] as const;
 
-const DependencyMap = Schema.optionalKey(
-  Schema.Record(Schema.String, Schema.String),
-);
+const DependencyMap = Schema.optionalKey(Schema.Record(Schema.String, Schema.String));
 
 export const DependencySections = Schema.Struct({
   dependencies: DependencyMap,
@@ -167,8 +162,7 @@ export const selectPackages = (
     changedFiles.some((file) =>
       [...REBUILD_ALL_PATHS, ...rebuildAllPaths].some((pattern) =>
         pattern.endsWith("/**")
-          ? file === pattern.slice(0, -3) ||
-            file.startsWith(pattern.slice(0, -2))
+          ? file === pattern.slice(0, -3) || file.startsWith(pattern.slice(0, -2))
           : file === pattern,
       ),
     )
@@ -180,9 +174,7 @@ export const selectPackages = (
       .filter((pkg) =>
         changedFiles.some(
           (file) =>
-            file === pkg.dir ||
-            file.startsWith(`${pkg.dir}/`) ||
-            pkg.dir.startsWith(`${file}/`),
+            file === pkg.dir || file.startsWith(`${pkg.dir}/`) || pkg.dir.startsWith(`${file}/`),
         ),
       )
       .map((pkg) => pkg.name),
@@ -218,9 +210,7 @@ export const expandBraces = (pattern: string): string[] => {
     .split(",")
     .map((alternative) => alternative.trim())
     .filter((alternative) => alternative.length > 0)
-    .flatMap((alternative) =>
-      expandBraces(`${match[1]}${alternative}${match[3]}`),
-    );
+    .flatMap((alternative) => expandBraces(`${match[1]}${alternative}${match[3]}`));
 };
 
 /**
@@ -236,10 +226,7 @@ const expand = Effect.fn("expandGlob")(function* (cwd: string, glob: string) {
   return [...new Set(results)];
 });
 
-const expandPattern = Effect.fn("expandPattern")(function* (
-  cwd: string,
-  pattern: string,
-) {
+const expandPattern = Effect.fn("expandPattern")(function* (cwd: string, pattern: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   if (pattern.includes("**")) {
@@ -324,10 +311,7 @@ export class GitError extends Data.TaggedError("GitError")<{
 }
 
 /** Run `git` in `cwd` and return trimmed stdout. */
-export const git = Effect.fn("git")(function* (
-  cwd: string,
-  args: ReadonlyArray<string>,
-) {
+export const git = Effect.fn("git")(function* (cwd: string, args: ReadonlyArray<string>) {
   const { exitCode, stdout, stderr } = yield* exec(
     ChildProcess.make("git", [...args], { cwd, shell: false }),
   ).pipe(Effect.scoped);
@@ -338,8 +322,7 @@ export const git = Effect.fn("git")(function* (
 });
 
 /** Absolute path of the repository (or submodule) that owns `cwd`. */
-export const toplevel = (cwd: string) =>
-  git(cwd, ["rev-parse", "--show-toplevel"]);
+export const toplevel = (cwd: string) => git(cwd, ["rev-parse", "--show-toplevel"]);
 
 /** Full HEAD SHA of the repository that owns `cwd`. */
 const gitHead = (cwd: string) => git(cwd, ["rev-parse", "HEAD"]);
@@ -349,24 +332,17 @@ export class PackError extends Data.TaggedError("PackError")<{
   readonly message: string;
 }> {}
 
-const PnpmPackOutput = Schema.fromJsonString(
-  Schema.Struct({ filename: Schema.String }),
-);
+const PnpmPackOutput = Schema.fromJsonString(Schema.Struct({ filename: Schema.String }));
 
 /**
  * Rewrite every dependency on a package in `links` to that package's
  * tarball URL. Returns the rewritten manifest text and the rewrites made.
  */
-export const rewriteDependencies = (
-  manifestText: string,
-  links: ReadonlyMap<string, string>,
-) =>
+export const rewriteDependencies = (manifestText: string, links: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const manifest = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(
-        Schema.StructWithRest(DependencySections, [
-          Schema.Record(Schema.String, Schema.Unknown),
-        ]),
+        Schema.StructWithRest(DependencySections, [Schema.Record(Schema.String, Schema.Unknown)]),
       ),
     )(manifestText);
     // Preserve source key order after validation: it contributes to the tarball hash.
@@ -454,16 +430,12 @@ export const packPackage = Effect.fn("packPackage")(function* (options: {
 
   let rewrites: PackedTarball["rewrites"] = [];
   const normalized: Array<{ header: TarHeader; data: Uint8Array }> = [];
-  for (const entry of entries.sort((a, b) =>
-    a.header.name.localeCompare(b.header.name),
-  )) {
+  for (const entry of entries.sort((a, b) => a.header.name.localeCompare(b.header.name))) {
     let data = entry.data ?? new Uint8Array();
     if (entry.header.name === "package/package.json") {
       const text = yield* Effect.sync(() => new TextDecoder().decode(data));
       const result = yield* rewriteDependencies(text, options.links).pipe(
-        Effect.mapError(
-          (e) => new PackError({ dir: options.absDir, message: String(e) }),
-        ),
+        Effect.mapError((e) => new PackError({ dir: options.absDir, message: String(e) })),
       );
       rewrites = result.rewrites;
       data = yield* Effect.sync(() => new TextEncoder().encode(result.text));
@@ -502,10 +474,7 @@ const PullRequestEvent = Schema.fromJsonString(
 const pullRequest = Effect.gen(function* () {
   const event = yield* Config.option(Config.String("GITHUB_EVENT_NAME"));
   const eventPath = yield* Config.option(Config.String("GITHUB_EVENT_PATH"));
-  if (
-    Option.getOrUndefined(event) !== "pull_request" ||
-    Option.isNone(eventPath)
-  ) {
+  if (Option.getOrUndefined(event) !== "pull_request" || Option.isNone(eventPath)) {
     return undefined;
   }
   const fs = yield* FileSystem.FileSystem;
@@ -530,8 +499,7 @@ export interface PackOptions {
  * replaced by `+`, a character package names cannot contain, so `@a/b-c`
  * and `@a-b/c` get distinct files.
  */
-export const tarballFile = (name: string) =>
-  `${name.replace(/^@/, "").replace("/", "+")}.tgz`;
+export const tarballFile = (name: string) => `${name.replace(/^@/, "").replace("/", "+")}.tgz`;
 
 /**
  * Pack every discovered package into `out` with a manifest describing each
@@ -562,17 +530,13 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   for (const pkg of packages) {
     const manifest = yield* fs
       .readFileString(path.join(pkg.absDir, "package.json"))
-      .pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(Schema.fromJsonString(DependencySections)),
-        ),
-      );
+      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(DependencySections))));
     dependencies.set(
       pkg.name,
       new Set(
-        DEPENDENCY_SECTIONS.flatMap((section) =>
-          Object.keys(manifest[section] ?? {}),
-        ).filter((name) => name !== pkg.name && byName.has(name)),
+        DEPENDENCY_SECTIONS.flatMap((section) => Object.keys(manifest[section] ?? {})).filter(
+          (name) => name !== pkg.name && byName.has(name),
+        ),
       ),
     );
   }
@@ -614,11 +578,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   // subdirectory of the workspace: `--out .` would otherwise delete it.
   const outDir = path.resolve(options.cwd, options.out);
   const relative = path.relative(options.cwd, outDir);
-  if (
-    relative === "" ||
-    relative.startsWith("..") ||
-    path.isAbsolute(relative)
-  ) {
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
     return yield* new WorkspaceError({
       message: `--out must be a subdirectory of ${options.cwd}, got ${outDir}`,
     });
@@ -657,10 +617,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
       { concurrency: 4 },
     );
     for (const entry of packedLevel) {
-      links.set(
-        entry.name,
-        tarballUrl(options.registry, entry.name, entry.sha256),
-      );
+      links.set(entry.name, tarballUrl(options.registry, entry.name, entry.sha256));
       packedByName.set(entry.name, entry);
     }
   }
@@ -670,10 +627,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   // One entry per distinct group name, in the order the groups were given.
   const groups = [
     ...new Map(
-      options.groups.map((group) => [
-        group.name,
-        { name: group.name, collapsed: group.collapsed },
-      ]),
+      options.groups.map((group) => [group.name, { name: group.name, collapsed: group.collapsed }]),
     ).values(),
   ];
   const manifest: Manifest = {

@@ -6,12 +6,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Fly from "@/Fly";
 import type { Input } from "@/Input";
 import * as Redis from "@/Redis";
-import {
-  Cache,
-  LedgerSite,
-  scripts,
-  services,
-} from "./bluegreen-worker-shared.ts";
+import { Cache, LedgerSite, scripts, services } from "./bluegreen-worker-shared.ts";
 
 export class Ledger extends Fly.Service<Ledger>()("Ledger") {}
 export const ledgerLayer = (secretDigest?: Input<string | undefined>) =>
@@ -43,12 +38,8 @@ export const ledgerLayer = (secretDigest?: Input<string | undefined>) =>
             yield* cache.ping().pipe(Effect.orDie);
             return HttpServerResponse.text("ready");
           }
-          const token = yield* Config.Redacted("LEDGER_TOKEN").pipe(
-            Effect.orDie,
-          );
-          if (
-            request.headers.authorization !== `Bearer ${Redacted.value(token)}`
-          ) {
+          const token = yield* Config.Redacted("LEDGER_TOKEN").pipe(Effect.orDie);
+          if (request.headers.authorization !== `Bearer ${Redacted.value(token)}`) {
             return HttpServerResponse.empty({ status: 401 });
           }
           const body = (yield* request.json.pipe(Effect.orDie)) as {

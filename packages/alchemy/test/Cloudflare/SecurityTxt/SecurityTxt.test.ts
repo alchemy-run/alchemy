@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -62,51 +56,49 @@ const contact = ["mailto:security@alchemy.run"];
 const expires = "2030-01-01T00:00:00Z";
 
 describe.sequential("SecurityTxt", () => {
-  test.provider(
-    "creates a security.txt, verifies out-of-band, and deletes on destroy",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("creates a security.txt, verifies out-of-band, and deletes on destroy", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        yield* clearBaseline(zoneId);
+      yield* stack.destroy();
+      yield* clearBaseline(zoneId);
 
-        const created = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
-              zoneId,
-              contact,
-              expires,
-            });
-          }),
-        );
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
+            zoneId,
+            contact,
+            expires,
+          });
+        }),
+      );
 
-        expect(created.zoneId).toEqual(zoneId);
-        expect(created.enabled).toEqual(true);
-        expect(created.contact).toEqual(contact);
-        expect(created.expires).toEqual(expires);
-        expect(created.policy).toBeUndefined();
-        expect(created.preferredLanguages).toBeUndefined();
+      expect(created.zoneId).toEqual(zoneId);
+      expect(created.enabled).toEqual(true);
+      expect(created.contact).toEqual(contact);
+      expect(created.expires).toEqual(expires);
+      expect(created.policy).toBeUndefined();
+      expect(created.preferredLanguages).toBeUndefined();
 
-        // Out-of-band: the file exists with the configured fields.
-        const live = yield* getSecurityTxt(zoneId);
-        expect(typeof live).not.toEqual("string");
-        if (typeof live !== "string") {
-          expect(live.enabled).toEqual(true);
-          expect(live.contact).toEqual(contact);
-          expect(live.expires).toEqual(expires);
-        }
+      // Out-of-band: the file exists with the configured fields.
+      const live = yield* getSecurityTxt(zoneId);
+      expect(typeof live).not.toEqual("string");
+      if (typeof live !== "string") {
+        expect(live.enabled).toEqual(true);
+        expect(live.contact).toEqual(contact);
+        expect(live.expires).toEqual(expires);
+      }
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        // Destroy removed the file — Cloudflare reports the unconfigured
-        // state as an empty-string sentinel.
-        const gone = yield* getSecurityTxt(zoneId);
-        expect(gone).toEqual("");
+      // Destroy removed the file — Cloudflare reports the unconfigured
+      // state as an empty-string sentinel.
+      const gone = yield* getSecurityTxt(zoneId);
+      expect(gone).toEqual("");
 
-        // Destroying again is a no-op (idempotent delete).
-        yield* stack.destroy();
-      }).pipe(logLevel),
+      // Destroying again is a no-op (idempotent delete).
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 
   test.provider("updates mutable fields in place (full-replace PUT)", (stack) =>
@@ -171,51 +163,49 @@ describe.sequential("SecurityTxt", () => {
     }).pipe(logLevel),
   );
 
-  test.provider(
-    "disables the file without deleting it, then destroy removes it",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("disables the file without deleting it, then destroy removes it", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        yield* clearBaseline(zoneId);
+      yield* stack.destroy();
+      yield* clearBaseline(zoneId);
 
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
-              zoneId,
-              contact,
-              expires,
-            });
-          }),
-        );
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
+            zoneId,
+            contact,
+            expires,
+          });
+        }),
+      );
 
-        const disabled = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
-              zoneId,
-              enabled: false,
-              contact,
-              expires,
-            });
-          }),
-        );
+      const disabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SecurityTxt.SecurityTxt("SecurityTxt", {
+            zoneId,
+            enabled: false,
+            contact,
+            expires,
+          });
+        }),
+      );
 
-        // The configuration survives but the file is no longer served.
-        expect(disabled.enabled).toEqual(false);
-        expect(disabled.contact).toEqual(contact);
+      // The configuration survives but the file is no longer served.
+      expect(disabled.enabled).toEqual(false);
+      expect(disabled.contact).toEqual(contact);
 
-        const live = yield* getSecurityTxt(zoneId);
-        expect(typeof live).not.toEqual("string");
-        if (typeof live !== "string") {
-          expect(live.enabled).toEqual(false);
-        }
+      const live = yield* getSecurityTxt(zoneId);
+      expect(typeof live).not.toEqual("string");
+      if (typeof live !== "string") {
+        expect(live.enabled).toEqual(false);
+      }
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        const gone = yield* getSecurityTxt(zoneId);
-        expect(gone).toEqual("");
-      }).pipe(logLevel),
+      const gone = yield* getSecurityTxt(zoneId);
+      expect(gone).toEqual("");
+    }).pipe(logLevel),
   );
 
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -239,9 +229,7 @@ describe.sequential("SecurityTxt", () => {
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.SecurityTxt.SecurityTxt,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.SecurityTxt.SecurityTxt);
       // Ride out token eventual-consistency 403s on the per-zone reads.
       const all = yield* provider.list().pipe(
         Effect.retry({

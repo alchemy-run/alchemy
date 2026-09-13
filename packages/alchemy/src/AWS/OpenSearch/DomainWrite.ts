@@ -94,6 +94,4 @@ export interface DomainWrite extends Binding.Service<
   "AWS.OpenSearch.DomainWrite",
   (domain: Domain) => Effect.Effect<WriteDomainClient>
 > {}
-export const DomainWrite = Binding.Service<DomainWrite>(
-  "AWS.OpenSearch.DomainWrite",
-);
+export const DomainWrite = Binding.Service<DomainWrite>("AWS.OpenSearch.DomainWrite");

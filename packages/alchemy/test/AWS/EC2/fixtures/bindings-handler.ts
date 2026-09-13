@@ -51,9 +51,7 @@ type BindingError =
   | ec2.AuthorizeSecurityGroupIngressError
   | ec2.RevokeSecurityGroupIngressError;
 
-const authorizationResult = <A, E extends BindingError, R>(
-  operation: Effect.Effect<A, E, R>,
-) =>
+const authorizationResult = <A, E extends BindingError, R>(operation: Effect.Effect<A, E, R>) =>
   operation.pipe(
     Effect.retry({
       while: (error) => error._tag === "UnauthorizedOperation",
@@ -142,15 +140,10 @@ export default Ec2BindingsFunction.make(
 
     // Subscribe to instance stop/terminate transitions (creates the
     // EventBridge rule at deploy time).
-    yield* consumeInstanceStateEvents(
-      instance,
-      { states: ["stopped", "terminated"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `${event.detail["instance-id"]} is now ${event.detail.state}`,
-          ),
-        ),
+    yield* consumeInstanceStateEvents(instance, { states: ["stopped", "terminated"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`${event.detail["instance-id"]} is now ${event.detail.state}`),
+      ),
     );
 
     return {
@@ -167,10 +160,7 @@ export default Ec2BindingsFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            state:
-              result._tag === "Success"
-                ? result.success?.State?.Name
-                : undefined,
+            state: result._tag === "Success" ? result.success?.State?.Name : undefined,
           });
         }
 
@@ -201,16 +191,12 @@ export default Ec2BindingsFunction.make(
         // `PasswordData` surfaces as Redacted (never a raw string).
         if (request.method === "GET" && pathname === "/password") {
           const result = yield* getPasswordData().pipe(authorizationResult);
-          const passwordData =
-            result._tag === "Success" ? result.success.PasswordData : undefined;
+          const passwordData = result._tag === "Success" ? result.success.PasswordData : undefined;
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
             hasField: passwordData !== undefined,
-            redacted:
-              passwordData !== undefined
-                ? Redacted.isRedacted(passwordData)
-                : null,
+            redacted: passwordData !== undefined ? Redacted.isRedacted(passwordData) : null,
           });
         }
 
@@ -287,8 +273,7 @@ export default Ec2BindingsFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            snapshotId:
-              result._tag === "Success" ? result.success.SnapshotId : undefined,
+            snapshotId: result._tag === "Success" ? result.success.SnapshotId : undefined,
           });
         }
 

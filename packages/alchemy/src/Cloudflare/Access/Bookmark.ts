@@ -101,8 +101,7 @@ export type Bookmark = Resource<
 export const Bookmark = Resource<Bookmark>("Cloudflare.Access.Bookmark");
 
 export const isBookmark = (value: unknown): value is Bookmark =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Bookmark";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Bookmark";
 
 export const BookmarkProvider = () =>
   Provider.succeed(Bookmark, {
@@ -167,9 +166,7 @@ export const BookmarkProvider = () =>
             ),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Bookmark: created bookmark missing id"),
-          );
+          return yield* Effect.fail(new Error("Bookmark: created bookmark missing id"));
         }
         return toAttrs(created, acct);
       }
@@ -215,9 +212,7 @@ export const BookmarkProvider = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
-              .filter((b): b is ObservedBookmark & { id: string } =>
-                Predicate.isNotNullish(b.id),
-              )
+              .filter((b): b is ObservedBookmark & { id: string } => Predicate.isNotNullish(b.id))
               .map((b) => toAttrs(b, accountId)),
           ),
         ),
@@ -234,11 +229,7 @@ const createBookmarkName = (id: string, name: string | undefined) =>
 const getBookmark = (acct: string, bookmarkId: string) =>
   zeroTrust
     .getAccessBookmark({ accountId: acct, bookmarkId })
-    .pipe(
-      Effect.catchTag("AccessBookmarkNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.succeed(undefined)));
 
 const findBookmarkByName = (acct: string, name: string) =>
   zeroTrust.listAccessBookmarks.items({ accountId: acct }).pipe(

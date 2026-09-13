@@ -23,52 +23,42 @@ const { test } = Test.make({ providers: AWS.providers() });
 // lifecycle itself is account-wide and heavy, so it is gated below.
 // ---------------------------------------------------------------------------
 
-test.provider(
-  "getSubscriber on a nonexistent subscriber fails with a typed tag",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        securitylake.getSubscriber({
-          // valid UUID shape, never allocated
-          subscriberId: "00000000-0000-4000-8000-000000000000",
-        }),
-      );
-      // Onboarded accounts return ResourceNotFoundException; accounts that
-      // never enabled Security Lake reject every subscriber API with the
-      // (patched-in) UnauthorizedException wire error.
-      expect(["ResourceNotFoundException", "UnauthorizedException"]).toContain(
-        error._tag,
-      );
-    }),
+test.provider("getSubscriber on a nonexistent subscriber fails with a typed tag", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      securitylake.getSubscriber({
+        // valid UUID shape, never allocated
+        subscriberId: "00000000-0000-4000-8000-000000000000",
+      }),
+    );
+    // Onboarded accounts return ResourceNotFoundException; accounts that
+    // never enabled Security Lake reject every subscriber API with the
+    // (patched-in) UnauthorizedException wire error.
+    expect(["ResourceNotFoundException", "UnauthorizedException"]).toContain(error._tag);
+  }),
 );
 
-test.provider(
-  "listDataLakes returns data lakes or a typed not-onboarded rejection",
-  () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.result(securitylake.listDataLakes({}));
-      if (Result.isSuccess(result)) {
-        expect(Array.isArray(result.success.dataLakes ?? [])).toBe(true);
-      } else {
-        // Accounts that never onboarded Security Lake reject listDataLakes
-        // with AccessDeniedException.
-        expect(result.failure._tag).toBe("AccessDeniedException");
-      }
-    }),
+test.provider("listDataLakes returns data lakes or a typed not-onboarded rejection", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(securitylake.listDataLakes({}));
+    if (Result.isSuccess(result)) {
+      expect(Array.isArray(result.success.dataLakes ?? [])).toBe(true);
+    } else {
+      // Accounts that never onboarded Security Lake reject listDataLakes
+      // with AccessDeniedException.
+      expect(result.failure._tag).toBe("AccessDeniedException");
+    }
+  }),
 );
 
 test.provider(
   "getDataLakeExceptionSubscription returns the subscription or a typed rejection",
   () =>
     Effect.gen(function* () {
-      const result = yield* Effect.result(
-        securitylake.getDataLakeExceptionSubscription({}),
-      );
+      const result = yield* Effect.result(securitylake.getDataLakeExceptionSubscription({}));
       if (Result.isSuccess(result)) {
         // No subscription configured — every field is absent.
-        expect(typeof (result.success.notificationEndpoint ?? "")).toBe(
-          "string",
-        );
+        expect(typeof (result.success.notificationEndpoint ?? "")).toBe("string");
       } else {
         // Accounts that never onboarded Security Lake (or have no
         // subscription) reject with one of the typed tags the
@@ -202,9 +192,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
                   },
                 ],
               },
-              managedPolicyArns: [
-                "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole",
-              ],
+              managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"],
             });
             const custom = yield* CustomLogSource("CustomSource", {
               sourceName: "alchemy-securitylake-test-custom",
@@ -243,9 +231,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
       const observedSubscriber = yield* securitylake.getSubscriber({
         subscriberId: subscriber.subscriberId,
       });
-      expect(observedSubscriber.subscriber?.subscriberArn).toBe(
-        subscriber.subscriberArn,
-      );
+      expect(observedSubscriber.subscriber?.subscriberArn).toBe(subscriber.subscriberArn);
 
       // Update in place (subscriber description) + add the second wave of
       // resources (exception subscription, custom source, notification).
@@ -263,18 +249,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SECURITYLAKE)(
       expect(extras.notification.subscriberEndpoint).toBeDefined();
 
       // Out-of-band verification via distilled.
-      const exceptionSubscription =
-        yield* securitylake.getDataLakeExceptionSubscription({});
-      expect(exceptionSubscription.notificationEndpoint).toBe(
-        "securitylake-test@example.com",
-      );
+      const exceptionSubscription = yield* securitylake.getDataLakeExceptionSubscription({});
+      expect(exceptionSubscription.notificationEndpoint).toBe("securitylake-test@example.com");
       const logSources = yield* securitylake.listLogSources({});
       expect(
         (logSources.sources ?? []).some((entry) =>
           (entry.sources ?? []).some(
-            (source) =>
-              source.customLogSource?.sourceName ===
-              "alchemy-securitylake-test-custom",
+            (source) => source.customLogSource?.sourceName === "alchemy-securitylake-test-custom",
           ),
         ),
       ).toBe(true);

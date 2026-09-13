@@ -7,12 +7,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -161,19 +156,14 @@ export const App = Resource<App>("AWS.Amplify.App");
 // (e.g. a mass delete) can keep the bucket exhausted for most of a minute, so
 // spread bounded retries evenly across ~80s instead of front-loading an
 // exponential that spends its whole budget in the first few seconds.
-const amplifyWriteRetrySchedule = Schedule.max([
-  Schedule.spaced("8 seconds"),
-  Schedule.recurs(10),
-]);
+const amplifyWriteRetrySchedule = Schedule.max([Schedule.spaced("8 seconds"), Schedule.recurs(10)]);
 
 export const AppProvider = () =>
   Provider.effect(
     App,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string } = {}) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 100 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 100 });
 
       const observe = (appId: string) =>
         amplify.getApp({ appId }).pipe(
@@ -196,9 +186,7 @@ export const AppProvider = () =>
       const findOwnApp = Effect.fn(function* (id: string, name: string) {
         const apps = yield* amplify.listApps.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.apps ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.apps ?? [])),
         );
         for (const app of apps) {
           if (app.name !== name) continue;
@@ -279,8 +267,7 @@ export const AppProvider = () =>
               Effect.retry({
                 while: (e): boolean =>
                   e._tag === "TimeoutException" ||
-                  (e._tag === "BadRequestException" &&
-                    (e.message ?? "").includes("Rate exceeded")),
+                  (e._tag === "BadRequestException" && (e.message ?? "").includes("Rate exceeded")),
                 schedule: amplifyWriteRetrySchedule,
               }),
             );
@@ -325,9 +312,7 @@ export const AppProvider = () =>
           Effect.gen(function* () {
             const apps = yield* amplify.listApps.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.apps ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.apps ?? [])),
             );
             return apps.map((app) => ({
               appId: app.appId,
@@ -347,8 +332,7 @@ export const AppProvider = () =>
             Effect.retry({
               while: (e): boolean =>
                 e._tag === "TimeoutException" ||
-                (e._tag === "BadRequestException" &&
-                  (e.message ?? "").includes("Rate exceeded")),
+                (e._tag === "BadRequestException" && (e.message ?? "").includes("Rate exceeded")),
               schedule: amplifyWriteRetrySchedule,
             }),
             Effect.catchTag("NotFoundException", () => Effect.void),

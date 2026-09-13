@@ -38,6 +38,4 @@ export interface UpdateIndex extends Binding.Service<
     ) => Effect.Effect<aoss.UpdateIndexResponse, aoss.UpdateIndexError>
   >
 > {}
-export const UpdateIndex = Binding.Service<UpdateIndex>(
-  "AWS.OpenSearchServerless.UpdateIndex",
-);
+export const UpdateIndex = Binding.Service<UpdateIndex>("AWS.OpenSearchServerless.UpdateIndex");

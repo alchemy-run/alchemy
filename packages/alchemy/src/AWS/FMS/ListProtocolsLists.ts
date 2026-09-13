@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListProtocolsLists}.
  */
-export interface ListProtocolsListsRequest
-  extends fms.ListProtocolsListsRequest {}
+export interface ListProtocolsListsRequest extends fms.ListProtocolsListsRequest {}
 
 /**
  * Runtime binding for `fms:ListProtocolsLists`.
@@ -32,13 +31,8 @@ export interface ListProtocolsLists extends Binding.Service<
   () => Effect.Effect<
     (
       request: ListProtocolsListsRequest,
-    ) => Effect.Effect<
-      fms.ListProtocolsListsResponse,
-      fms.ListProtocolsListsError
-    >
+    ) => Effect.Effect<fms.ListProtocolsListsResponse, fms.ListProtocolsListsError>
   >
 > {}
 
-export const ListProtocolsLists = Binding.Service<ListProtocolsLists>(
-  "AWS.FMS.ListProtocolsLists",
-);
+export const ListProtocolsLists = Binding.Service<ListProtocolsLists>("AWS.FMS.ListProtocolsLists");

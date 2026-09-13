@@ -12,25 +12,13 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/astro-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/astro-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "astro.config.mjs",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "astro.config.mjs", "src", "public"];
 
 const waitUntilGone = (id: number) =>
   Services.servers.getServer({ id }).pipe(
@@ -60,12 +48,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           const site = yield* Hetzner.Website.Astro("Web", {
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "astro.config.mjs",
-              ],
+              include: ["src/**", "public/**", "package.json", "astro.config.mjs"],
             },
           });
           return { site };
@@ -82,21 +65,15 @@ test.provider.skipIf(!hasHetznerCreds)(
         timeout: "90 seconds",
         label: "astro ssr home",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "ASTRO_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "astro api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "ASTRO_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "astro api route",
+      });
 
       const client = yield* HttpClient.HttpClient;
       const health = yield* client.get(`${url!}/health`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`health returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),

@@ -21,10 +21,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(
   deploy(Stack).pipe(
@@ -52,9 +49,7 @@ interface WorkflowStatus {
 }
 
 const isTerminal = (status: WorkflowStatus) =>
-  status.status === "complete" ||
-  status.status === "errored" ||
-  status.status === "terminated";
+  status.status === "complete" || status.status === "errored" || status.status === "terminated";
 
 const waitForStatus = (
   client: HttpClient.HttpClient,
@@ -101,10 +96,7 @@ const runWorkflowToCompletion = (url: string) =>
       Effect.retry({
         // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
         // sleep after only six attempts and blow the test timeout.
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         times: 15,
       }),
     );
@@ -118,9 +110,7 @@ const runWorkflowToCompletion = (url: string) =>
     // its bindings are still propagating).
     if (lastStatus.status !== "complete") {
       return yield* Effect.fail(
-        new Error(
-          `workflow ${lastStatus.status}: ${JSON.stringify(lastStatus.error)}`,
-        ),
+        new Error(`workflow ${lastStatus.status}: ${JSON.stringify(lastStatus.error)}`),
       );
     }
     return lastStatus;
@@ -159,29 +149,24 @@ test(
     const client = yield* HttpClient.HttpClient;
 
     const { instanceId, lastStatus } = yield* Effect.gen(function* () {
-      const { instanceId } = yield* client
-        .post(`${url}/workflow/wait/world`)
-        .pipe(
-          Effect.flatMap((res) =>
-            res.status === 200
-              ? res.json.pipe(
-                  Effect.flatMap((body) => {
-                    const instanceId = (body as { instanceId?: unknown })
-                      .instanceId;
-                    return typeof instanceId === "string"
-                      ? Effect.succeed({ instanceId })
-                      : Effect.fail(
-                          new Error("Worker returned no workflow id"),
-                        );
-                  }),
-                )
-              : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-          ),
-          Effect.retry({
-            schedule: Schedule.exponential("500 millis"),
-            times: 15,
-          }),
-        );
+      const { instanceId } = yield* client.post(`${url}/workflow/wait/world`).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.json.pipe(
+                Effect.flatMap((body) => {
+                  const instanceId = (body as { instanceId?: unknown }).instanceId;
+                  return typeof instanceId === "string"
+                    ? Effect.succeed({ instanceId })
+                    : Effect.fail(new Error("Worker returned no workflow id"));
+                }),
+              )
+            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 15,
+        }),
+      );
 
       // Cloudflare reports an instance parked in `waitForEvent` as `running`
       // (`waiting` is reserved for sleeps), so the wait step itself is not
@@ -195,9 +180,7 @@ test(
       );
       if (runningStatus.status !== "running") {
         return yield* Effect.fail(
-          new Error(
-            `workflow ${runningStatus.status}: ${JSON.stringify(runningStatus.error)}`,
-          ),
+          new Error(`workflow ${runningStatus.status}: ${JSON.stringify(runningStatus.error)}`),
         );
       }
 
@@ -205,21 +188,11 @@ test(
       // be missed, so re-send until the workflow acknowledges it by reaching a
       // terminal status.
       const lastStatus = yield* Effect.gen(function* () {
-        const sendRes = yield* client.post(
-          `${url}/workflow/send/${instanceId}/external-ok`,
-        );
+        const sendRes = yield* client.post(`${url}/workflow/send/${instanceId}/external-ok`);
         if (sendRes.status !== 200) {
-          return yield* Effect.fail(
-            new Error(`sendEvent failed: ${sendRes.status}`),
-          );
+          return yield* Effect.fail(new Error(`sendEvent failed: ${sendRes.status}`));
         }
-        const status = yield* waitForStatus(
-          client,
-          url,
-          instanceId,
-          isTerminal,
-          5,
-        );
+        const status = yield* waitForStatus(client, url, instanceId, isTerminal, 5);
         return isTerminal(status)
           ? status
           : yield* Effect.fail(new Error(`workflow still ${status.status}`));
@@ -270,16 +243,12 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Workflows.WorkflowResource,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Workflows.WorkflowResource);
       const all = yield* provider.list();
 
       // Physical names are derived from the host Worker name (which carries
       // the stack-id-stage prefix), not the exported class name.
-      expect(
-        all.some((w) => w.workflowName.startsWith("workflowbindingstack-")),
-      ).toBe(true);
+      expect(all.some((w) => w.workflowName.startsWith("workflowbindingstack-"))).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -302,8 +271,7 @@ const readWorkflowName = (scriptName: string) =>
       scriptName,
     });
     const binding = (settings.bindings ?? []).find(
-      (b): b is Extract<typeof b, { type: "workflow" }> =>
-        b.type === "workflow",
+      (b): b is Extract<typeof b, { type: "workflow" }> => b.type === "workflow",
     );
     return binding === undefined
       ? yield* Effect.fail(new Error(`no workflow binding on '${scriptName}'`))
@@ -369,12 +337,9 @@ const waitForAppliedSchedules = (workflowName: string, expected: string[]) =>
     return (workflow.schedules ?? []).map((s) => s.cron);
   }).pipe(
     Effect.flatMap((crons) =>
-      crons.length === expected.length &&
-      crons.every((cron, index) => cron === expected[index])
+      crons.length === expected.length && crons.every((cron, index) => cron === expected[index])
         ? Effect.succeed(crons)
-        : Effect.fail(
-            new Error(`schedules not applied yet: ${JSON.stringify(crons)}`),
-          ),
+        : Effect.fail(new Error(`schedules not applied yet: ${JSON.stringify(crons)}`)),
     ),
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
   );
@@ -392,9 +357,7 @@ test.provider(
       );
 
       const workflowName = yield* readWorkflowName(deployed.worker.workerName);
-      const applied = yield* waitForAppliedSchedules(workflowName, [
-        YEARLY_CRON,
-      ]);
+      const applied = yield* waitForAppliedSchedules(workflowName, [YEARLY_CRON]);
       expect(applied).toEqual([YEARLY_CRON]);
 
       yield* scratch.destroy();

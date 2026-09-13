@@ -32,13 +32,8 @@ export interface GetMatchId extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<entityresolution.GetMatchIdInput, "workflowName">,
-    ) => Effect.Effect<
-      entityresolution.GetMatchIdOutput,
-      entityresolution.GetMatchIdError
-    >
+    ) => Effect.Effect<entityresolution.GetMatchIdOutput, entityresolution.GetMatchIdError>
   >
 > {}
 
-export const GetMatchId = Binding.Service<GetMatchId>(
-  "AWS.EntityResolution.GetMatchId",
-);
+export const GetMatchId = Binding.Service<GetMatchId>("AWS.EntityResolution.GetMatchId");

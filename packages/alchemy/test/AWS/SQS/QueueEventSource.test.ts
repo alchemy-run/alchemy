@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import QueueEventSourceFunctionLive, {
-  QueueEventSourceFunction,
-} from "./event-source-handler.ts";
+import QueueEventSourceFunctionLive, { QueueEventSourceFunction } from "./event-source-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,62 +19,45 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
         yield* stack.destroy();
 
         const fn = yield* stack.deploy(
-          QueueEventSourceFunction.pipe(
-            Effect.provide(QueueEventSourceFunctionLive),
-          ),
+          QueueEventSourceFunction.pipe(Effect.provide(QueueEventSourceFunctionLive)),
         );
 
         const functionUrl = fn.functionUrl!;
 
         // First request rides out cold-start / URL propagation; keep polling
         // until the fixture reports both queue identifiers.
-        const { sourceQueueUrl, sourceQueueArn, resultQueueUrl } =
-          yield* HttpClient.get(functionUrl).pipe(
-            Effect.timeout("4 seconds"),
-            Effect.mapError(
-              () => new FunctionNotReady("Function URL request timed out"),
-            ),
-            Effect.flatMap((response) =>
-              response.status === 200
-                ? (response.json as Effect.Effect<{
-                    sourceQueueUrl?: string;
-                    sourceQueueArn?: string;
-                    resultQueueUrl?: string;
-                  }>)
-                : Effect.fail(
-                    new FunctionNotReady(
-                      `Function not ready: ${response.status}`,
-                    ),
-                  ),
-            ),
-            Effect.flatMap((body) =>
-              body.sourceQueueUrl && body.sourceQueueArn && body.resultQueueUrl
-                ? Effect.succeed(
-                    body as {
-                      sourceQueueUrl: string;
-                      sourceQueueArn: string;
-                      resultQueueUrl: string;
-                    },
-                  )
-                : Effect.fail(
-                    new FunctionNotReady(
-                      "Function returned empty queue identifiers",
-                    ),
-                  ),
-            ),
-            Effect.retry({
-              schedule: Schedule.max([
-                Schedule.fixed("4 seconds"),
-                Schedule.recurs(10),
-              ]),
-            }),
-          );
+        const { sourceQueueUrl, sourceQueueArn, resultQueueUrl } = yield* HttpClient.get(
+          functionUrl,
+        ).pipe(
+          Effect.timeout("4 seconds"),
+          Effect.mapError(() => new FunctionNotReady("Function URL request timed out")),
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? (response.json as Effect.Effect<{
+                  sourceQueueUrl?: string;
+                  sourceQueueArn?: string;
+                  resultQueueUrl?: string;
+                }>)
+              : Effect.fail(new FunctionNotReady(`Function not ready: ${response.status}`)),
+          ),
+          Effect.flatMap((body) =>
+            body.sourceQueueUrl && body.sourceQueueArn && body.resultQueueUrl
+              ? Effect.succeed(
+                  body as {
+                    sourceQueueUrl: string;
+                    sourceQueueArn: string;
+                    resultQueueUrl: string;
+                  },
+                )
+              : Effect.fail(new FunctionNotReady("Function returned empty queue identifiers")),
+          ),
+          Effect.retry({
+            schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(10)]),
+          }),
+        );
 
         // The event-source mapping activates asynchronously after deploy.
-        const mapping = yield* waitForEventSourceMappingEnabled(
-          fn.functionName,
-          sourceQueueArn,
-        );
+        const mapping = yield* waitForEventSourceMappingEnabled(fn.functionName, sourceQueueArn);
         expect(mapping.State).toEqual("Enabled");
 
         // Send a message to the source queue out-of-band; the Lambda handler
@@ -95,9 +76,7 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
             MaxNumberOfMessages: 10,
             WaitTimeSeconds: 2,
           });
-          const match = (result.Messages ?? []).find(
-            (message) => message.Body === messageBody,
-          );
+          const match = (result.Messages ?? []).find((message) => message.Body === messageBody);
           if (!match?.ReceiptHandle) {
             return yield* Effect.fail(new MessageNotDelivered());
           }
@@ -109,10 +88,7 @@ describe.sequential("AWS.SQS.QueueEventSource", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
 
@@ -145,10 +121,7 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
     }),
     Effect.retry({
       while: (error) => error._tag === "EventSourceMappingNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
     }),
   );
 });
@@ -166,18 +139,13 @@ const assertQueueDeleted = Effect.fn(function* (queueUrl: string) {
       // SQS DeleteQueue propagation is documented at ~60s; poll on a fixed
       // cadence with a bounded budget.
       while: (e) => e._tag === "QueueStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("QueueDoesNotExist", () => Effect.void),
   );
 });
 
-class EventSourceMappingNotReady extends Data.TaggedError(
-  "EventSourceMappingNotReady",
-) {}
+class EventSourceMappingNotReady extends Data.TaggedError("EventSourceMappingNotReady") {}
 
 class MessageNotDelivered extends Data.TaggedError("MessageNotDelivered") {}
 

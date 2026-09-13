@@ -29,12 +29,7 @@ export interface ListSubjects extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rolesanywhere.ListSubjectsRequest,
-    ) => Effect.Effect<
-      rolesanywhere.ListSubjectsResponse,
-      rolesanywhere.ListSubjectsError
-    >
+    ) => Effect.Effect<rolesanywhere.ListSubjectsResponse, rolesanywhere.ListSubjectsError>
   >
 > {}
-export const ListSubjects = Binding.Service<ListSubjects>(
-  "AWS.RolesAnywhere.ListSubjects",
-);
+export const ListSubjects = Binding.Service<ListSubjects>("AWS.RolesAnywhere.ListSubjects");

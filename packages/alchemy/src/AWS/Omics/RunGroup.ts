@@ -98,10 +98,7 @@ export const RunGroupProvider = () =>
   Provider.effect(
     RunGroup,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 96 }));
       });
 
@@ -121,11 +118,7 @@ export const RunGroupProvider = () =>
           if (output?.runGroupId === undefined) return undefined;
           const found = yield* omics
             .getRunGroup({ id: output.runGroupId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (found === undefined || found.id === undefined) return undefined;
           const attrs = {
             runGroupId: found.id,
@@ -153,9 +146,7 @@ export const RunGroupProvider = () =>
               : yield* omics
                   .getRunGroup({ id: output.runGroupId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
 
           // ENSURE — create if missing. `requestId` is a client idempotency
@@ -191,10 +182,7 @@ export const RunGroupProvider = () =>
             if (news.maxRuns !== undefined && news.maxRuns !== group.maxRuns) {
               patch.maxRuns = news.maxRuns;
             }
-            if (
-              maxDurationMinutes !== undefined &&
-              maxDurationMinutes !== group.maxDuration
-            ) {
+            if (maxDurationMinutes !== undefined && maxDurationMinutes !== group.maxDuration) {
               patch.maxDuration = maxDurationMinutes;
             }
             if (news.maxGpus !== undefined && news.maxGpus !== group.maxGpus) {
@@ -219,9 +207,7 @@ export const RunGroupProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* omics
             .deleteRunGroup({ id: output.runGroupId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

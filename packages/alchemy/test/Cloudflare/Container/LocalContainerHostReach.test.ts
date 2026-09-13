@@ -21,10 +21,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // First request has to wait for the local runtime to `docker build` the image
 // and boot the container, so give it plenty of room.
@@ -51,9 +48,7 @@ const hostServer = Effect.acquireRelease(
     // host-gateway reaches 127.0.0.1. Native Linux cannot SYN the
     // bridge IP (UFW INPUT); the sidecar unix-socket-tunnels this
     // port into the container netns instead.
-    server.listen(HOST_PROBE_PORT, "127.0.0.1", () =>
-      resume(Effect.succeed(server)),
-    );
+    server.listen(HOST_PROBE_PORT, "127.0.0.1", () => resume(Effect.succeed(server)));
     server.on("error", (err) => resume(Effect.die(err)));
   }),
   (server) =>
@@ -85,9 +80,7 @@ describe("local container reaches host services", () => {
       const get = (path: string) =>
         client.get(new URL(path, url)).pipe(
           Effect.flatMap((r) =>
-            r.status !== 200
-              ? Effect.fail(new Error(`not ready: ${r.status}`))
-              : r.text,
+            r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
           ),
           Effect.timeout("30 seconds"),
           Effect.retry({ schedule: readinessSchedule, times: 30 }),

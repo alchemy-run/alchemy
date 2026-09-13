@@ -8,10 +8,7 @@ import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import HealthLakeTestFunctionLive, {
-  HealthLakeTestFunction,
-  IMPORT_PREFIX,
-} from "./handler";
+import HealthLakeTestFunctionLive, { HealthLakeTestFunction, IMPORT_PREFIX } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test } = Test.make(testOptions);
@@ -85,55 +82,51 @@ describe("HealthLake job operations (typed-error probes)", () => {
       }),
   );
 
-  test.provider(
-    "startFHIRExportJob on a nonexistent datastore fails with a typed tag",
-    () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* AWSEnvironment.current;
-        const error = yield* Effect.flip(
-          healthlake.startFHIRExportJob({
-            DatastoreId: NONEXISTENT_DATASTORE,
-            DataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
-            OutputDataConfig: {
-              S3Configuration: {
-                S3Uri: "s3://alchemy-probe-nonexistent/export/",
-                KmsKeyId: `arn:aws:kms:us-east-1:${accountId}:key/00000000-0000-0000-0000-000000000000`,
-              },
+  test.provider("startFHIRExportJob on a nonexistent datastore fails with a typed tag", () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* AWSEnvironment.current;
+      const error = yield* Effect.flip(
+        healthlake.startFHIRExportJob({
+          DatastoreId: NONEXISTENT_DATASTORE,
+          DataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
+          OutputDataConfig: {
+            S3Configuration: {
+              S3Uri: "s3://alchemy-probe-nonexistent/export/",
+              KmsKeyId: `arn:aws:kms:us-east-1:${accountId}:key/00000000-0000-0000-0000-000000000000`,
             },
-          }),
-        );
-        expect([
-          "ResourceNotFoundException",
-          "ValidationException",
-          "AccessDeniedException",
-        ]).toContain(error._tag);
-      }),
+          },
+        }),
+      );
+      expect([
+        "ResourceNotFoundException",
+        "ValidationException",
+        "AccessDeniedException",
+      ]).toContain(error._tag);
+    }),
   );
 
-  test.provider(
-    "startFHIRImportJob on a nonexistent datastore fails with a typed tag",
-    () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* AWSEnvironment.current;
-        const error = yield* Effect.flip(
-          healthlake.startFHIRImportJob({
-            DatastoreId: NONEXISTENT_DATASTORE,
-            DataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
-            InputDataConfig: { S3Uri: "s3://alchemy-probe-nonexistent/in/" },
-            JobOutputDataConfig: {
-              S3Configuration: {
-                S3Uri: "s3://alchemy-probe-nonexistent/out/",
-                KmsKeyId: `arn:aws:kms:us-east-1:${accountId}:key/00000000-0000-0000-0000-000000000000`,
-              },
+  test.provider("startFHIRImportJob on a nonexistent datastore fails with a typed tag", () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* AWSEnvironment.current;
+      const error = yield* Effect.flip(
+        healthlake.startFHIRImportJob({
+          DatastoreId: NONEXISTENT_DATASTORE,
+          DataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
+          InputDataConfig: { S3Uri: "s3://alchemy-probe-nonexistent/in/" },
+          JobOutputDataConfig: {
+            S3Configuration: {
+              S3Uri: "s3://alchemy-probe-nonexistent/out/",
+              KmsKeyId: `arn:aws:kms:us-east-1:${accountId}:key/00000000-0000-0000-0000-000000000000`,
             },
-          }),
-        );
-        expect([
-          "ResourceNotFoundException",
-          "ValidationException",
-          "AccessDeniedException",
-        ]).toContain(error._tag);
-      }),
+          },
+        }),
+      );
+      expect([
+        "ResourceNotFoundException",
+        "ValidationException",
+        "AccessDeniedException",
+      ]).toContain(error._tag);
+    }),
   );
 });
 
@@ -174,16 +167,11 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -213,9 +201,7 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
         expect(importJob.status).toBe("SUBMITTED");
 
         // DescribeFHIRImportJob — the job is observable immediately.
-        const describedImport = (yield* getJson(
-          `/describe-import?jobId=${importJob.jobId}`,
-        )) as {
+        const describedImport = (yield* getJson(`/describe-import?jobId=${importJob.jobId}`)) as {
           status?: string;
           errorTag?: string;
         };
@@ -233,9 +219,7 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
           Effect.repeat({
             schedule: Schedule.spaced("15 seconds"),
             until: (status): boolean =>
-              status !== "SUBMITTED" &&
-              status !== "QUEUED" &&
-              status !== "IN_PROGRESS",
+              status !== "SUBMITTED" && status !== "QUEUED" && status !== "IN_PROGRESS",
             times: 60,
           }),
         );
@@ -250,9 +234,7 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
         expect(exportJob.jobId).toBeTruthy();
         expect(exportJob.status).toBe("SUBMITTED");
 
-        const describedExport = (yield* getJson(
-          `/describe-export?jobId=${exportJob.jobId}`,
-        )) as {
+        const describedExport = (yield* getJson(`/describe-export?jobId=${exportJob.jobId}`)) as {
           status?: string;
           errorTag?: string;
         };
@@ -269,9 +251,7 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
           Effect.repeat({
             schedule: Schedule.spaced("15 seconds"),
             until: (status): boolean =>
-              status !== "SUBMITTED" &&
-              status !== "QUEUED" &&
-              status !== "IN_PROGRESS",
+              status !== "SUBMITTED" && status !== "QUEUED" && status !== "IN_PROGRESS",
             times: 60,
           }),
         );

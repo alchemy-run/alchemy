@@ -57,12 +57,7 @@ export interface TransactGetItems extends Binding.Service<
   ) => Effect.Effect<
     (
       request: TransactGetItemsRequest,
-    ) => Effect.Effect<
-      DynamoDB.TransactGetItemsOutput,
-      DynamoDB.TransactGetItemsError
-    >
+    ) => Effect.Effect<DynamoDB.TransactGetItemsOutput, DynamoDB.TransactGetItemsError>
   >
 > {}
-export const TransactGetItems = Binding.Service<TransactGetItems>(
-  "AWS.DynamoDB.TransactGetItems",
-);
+export const TransactGetItems = Binding.Service<TransactGetItems>("AWS.DynamoDB.TransactGetItems");

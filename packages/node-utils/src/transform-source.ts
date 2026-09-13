@@ -2,23 +2,12 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveTsconfig } from "rolldown/experimental";
-import {
-  parseSync,
-  transformSync,
-  TsconfigCache,
-  type TransformOptions,
-} from "rolldown/utils";
+import { parseSync, transformSync, TsconfigCache, type TransformOptions } from "rolldown/utils";
 import type { OxcLoaderOptions } from "./register-oxc.ts";
 import { resolveCacheDirectory, TransformCache } from "./transform-cache.ts";
 
 /** Extensions Oxc transpiles; everything else is JavaScript Node can run. */
-export const transformExtensions = new Set([
-  ".ts",
-  ".tsx",
-  ".mts",
-  ".cts",
-  ".jsx",
-]);
+export const transformExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".jsx"]);
 
 export type ModuleFormat = "module" | "commonjs";
 
@@ -27,9 +16,7 @@ export type ModuleFormat = "module" | "commonjs";
  * extension and the nearest `package.json#type`; `*-typescript` variants are
  * its TypeScript-aware spellings and mean the same thing.
  */
-const nodeFormat = (
-  format: string | null | undefined,
-): ModuleFormat | undefined => {
+const nodeFormat = (format: string | null | undefined): ModuleFormat | undefined => {
   switch (format) {
     case "module":
     case "module-typescript":
@@ -106,7 +93,7 @@ const fileSourceMapComment = (mapFile: string) =>
  * loads the module pay for it.
  */
 const withoutSourcesContent = ({
-  sourcesContent: _,
+  sourcesContent: _sourcesContent,
   ...map
 }: NonNullable<ReturnType<typeof transformSync>["map"]>) => map;
 
@@ -123,8 +110,7 @@ export class SourceTransformer {
   constructor(options: OxcLoaderOptions) {
     this.#options = options;
     const directory = resolveCacheDirectory(options.cache);
-    this.#cache =
-      directory === undefined ? undefined : new TransformCache(directory);
+    this.#cache = directory === undefined ? undefined : new TransformCache(directory);
   }
 
   /**
@@ -137,11 +123,7 @@ export class SourceTransformer {
    * same cache `transformSync` uses with the `extends` chain already
    * merged, so editing any tsconfig in the chain is a new key.
    */
-  #cacheKey(
-    filePath: string,
-    options: TransformOptions,
-    format: ModuleFormat,
-  ): string | undefined {
+  #cacheKey(filePath: string, options: TransformOptions, format: ModuleFormat): string | undefined {
     if (this.#cache === undefined) return undefined;
     let stat: { size: bigint; mtimeNs: bigint };
     try {
@@ -174,10 +156,7 @@ export class SourceTransformer {
    * JavaScript that needs no work. `format` is what Node's `load` hook was
    * told; it decides `sourceType` and the format handed back.
    */
-  transform(
-    filePath: string,
-    format: string | null | undefined,
-  ): TransformedSource | undefined {
+  transform(filePath: string, format: string | null | undefined): TransformedSource | undefined {
     const extension = path.extname(filePath);
     if (!transformExtensions.has(extension)) return undefined;
 
@@ -208,8 +187,7 @@ export class SourceTransformer {
     if (
       moduleFormat === "commonjs" &&
       extension !== ".cts" &&
-      parseSync(filePath, source, { lang, sourceType: "unambiguous" }).module
-        .hasModuleSyntax
+      parseSync(filePath, source, { lang, sourceType: "unambiguous" }).module.hasModuleSyntax
     ) {
       moduleFormat = "module";
     }

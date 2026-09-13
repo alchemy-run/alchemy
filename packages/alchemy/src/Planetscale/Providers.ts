@@ -8,14 +8,8 @@ import * as Credentials from "./Credentials.ts";
 import { MySQLBranch, MySQLBranchProvider } from "./MySQL/MySQLBranch.ts";
 import { MySQLDatabase, MySQLDatabaseProvider } from "./MySQL/MySQLDatabase.ts";
 import { MySQLPassword, MySQLPasswordProvider } from "./MySQL/MySQLPassword.ts";
-import {
-  PostgresBranch,
-  PostgresBranchProvider,
-} from "./Postgres/PostgresBranch.ts";
-import {
-  PostgresDatabase,
-  PostgresDatabaseProvider,
-} from "./Postgres/PostgresDatabase.ts";
+import { PostgresBranch, PostgresBranchProvider } from "./Postgres/PostgresBranch.ts";
+import { PostgresDatabase, PostgresDatabaseProvider } from "./Postgres/PostgresDatabase.ts";
 import {
   PostgresDefaultRole,
   PostgresDefaultRoleProvider,
@@ -26,9 +20,7 @@ import { PostgresRole, PostgresRoleProvider } from "./Postgres/PostgresRole.ts";
  * Service tag bundling all PlanetScale providers + auth + credentials. Use
  * `Planetscale.providers()` to materialize the full layer.
  */
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Planetscale",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Planetscale") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

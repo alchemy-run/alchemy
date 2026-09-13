@@ -23,9 +23,7 @@ for (const key of [
         [],
       ).pipe(
         Effect.as(false),
-        Effect.catchTag("FunctionConfigurationError", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("FunctionConfigurationError", () => Effect.succeed(true)),
       );
       expect(rejected).toBe(true);
     }),
@@ -44,20 +42,13 @@ test.effect("unwraps redacted application values only at deployment", () =>
     ).toEqual({ APP_TOKEN: "test-token" });
   }),
 );
-for (const slug of [
-  "contains-hyphen",
-  "Uppercase",
-  "morethan20characterslong",
-  "",
-]) {
+for (const slug of ["contains-hyphen", "Uppercase", "morethan20characterslong", ""]) {
   test.effect(`rejects invalid explicit slug ${JSON.stringify(slug)}`, () =>
     Effect.gen(function* () {
       expect(
         yield* functionSlug("Api", slug).pipe(
           Effect.as(false),
-          Effect.catchTag("FunctionConfigurationError", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("FunctionConfigurationError", () => Effect.succeed(true)),
         ),
       ).toBe(true);
     }),

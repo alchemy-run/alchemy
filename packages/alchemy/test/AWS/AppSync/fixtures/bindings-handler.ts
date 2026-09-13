@@ -111,9 +111,7 @@ export default AppSyncBindingsFunction.make(
               : {
                   flushed: false,
                   reason: outcome.failure._tag,
-                  message: String(
-                    (outcome.failure as { message?: string }).message ?? "",
-                  ),
+                  message: String((outcome.failure as { message?: string }).message ?? ""),
                 },
           );
         }
@@ -121,9 +119,7 @@ export default AppSyncBindingsFunction.make(
         if (request.method === "GET" && pathname === "/schema") {
           // The introspected schema arrives as a streaming body.
           const response = yield* getSchema({ format: "SDL" });
-          const sdl = yield* Stream.mkString(
-            Stream.decodeText(response.schema!),
-          );
+          const sdl = yield* Stream.mkString(Stream.decodeText(response.schema!));
           return yield* HttpServerResponse.json({ sdl });
         }
 

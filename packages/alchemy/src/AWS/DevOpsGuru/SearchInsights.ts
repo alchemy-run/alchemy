@@ -35,12 +35,7 @@ export interface SearchInsights extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.SearchInsightsRequest,
-    ) => Effect.Effect<
-      devopsguru.SearchInsightsResponse,
-      devopsguru.SearchInsightsError
-    >
+    ) => Effect.Effect<devopsguru.SearchInsightsResponse, devopsguru.SearchInsightsError>
   >
 > {}
-export const SearchInsights = Binding.Service<SearchInsights>(
-  "AWS.DevOpsGuru.SearchInsights",
-);
+export const SearchInsights = Binding.Service<SearchInsights>("AWS.DevOpsGuru.SearchInsights");

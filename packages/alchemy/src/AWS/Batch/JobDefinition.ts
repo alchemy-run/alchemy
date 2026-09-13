@@ -13,19 +13,11 @@ import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  Platform,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { Platform, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -35,12 +27,7 @@ import {
   type ServerHost,
 } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
@@ -59,15 +46,11 @@ export type JobDefinitionArn =
  * low-level container form (`image` + `executionRoleArn`) or the
  * Effect-native form (`main`).
  */
-export class JobDefinitionConfigError extends Data.TaggedError(
-  "JobDefinitionConfigError",
-)<{
+export class JobDefinitionConfigError extends Data.TaggedError("JobDefinitionConfigError")<{
   readonly message: string;
 }> {}
 
-class JobDefinitionStillVisible extends Data.TaggedError(
-  "JobDefinitionStillVisible",
-)<{
+class JobDefinitionStillVisible extends Data.TaggedError("JobDefinitionStillVisible")<{
   readonly family: string;
   readonly service: "Batch" | "ECS";
   readonly arns: readonly string[];
@@ -236,11 +219,7 @@ export interface JobDefinition extends Resource<
   Providers
 > {}
 
-export type JobDefinitionServices =
-  | Credentials
-  | Region
-  | ServerHost
-  | AWSEnvironment;
+export type JobDefinitionServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 /**
  * The shape an Effect-native job implementation returns: a single `run`
@@ -260,9 +239,7 @@ export interface JobDefinitionRuntimeContext extends HostRuntimeContext {
   readonly Type: "AWS.Batch.JobDefinition";
 }
 
-const createJobDefinitionRuntimeContext = (
-  id: string,
-): JobDefinitionRuntimeContext => {
+const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeContext => {
   const base = createHostRuntimeContext("AWS.Batch.JobDefinition")(id);
   return {
     ...base,
@@ -272,9 +249,7 @@ const createJobDefinitionRuntimeContext = (
     // generated container entrypoint) instead of booting an HTTP server.
     serve: ((_handler, options) => {
       const run = (options?.shape as { run?: unknown } | undefined)?.run;
-      return Effect.isEffect(run)
-        ? base.run(run as Effect.Effect<void, never, any>)
-        : Effect.void;
+      return Effect.isEffect(run) ? base.run(run as Effect.Effect<void, never, any>) : Effect.void;
     }) as HostRuntimeContext["serve"],
   } as JobDefinitionRuntimeContext;
 };
@@ -393,9 +368,7 @@ export const JobDefinition: Platform<
 
 const observedTagsOf = (d: { tags?: { [key: string]: string | undefined } }) =>
   Object.fromEntries(
-    Object.entries(d.tags ?? {}).filter(
-      (e): e is [string, string] => typeof e[1] === "string",
-    ),
+    Object.entries(d.tags ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"),
   );
 
 /** Attributes only produced by the Effect-native (`main`) form. */
@@ -478,27 +451,20 @@ const fingerprint = (input: {
     command: input.command ?? [],
     vcpus: input.vcpus,
     memory: input.memory,
-    environment: Object.entries(input.environment ?? {}).sort(([a], [b]) =>
-      a.localeCompare(b),
-    ),
+    environment: Object.entries(input.environment ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     jobRoleArn: input.jobRoleArn,
     executionRoleArn: input.executionRoleArn,
     assignPublicIp: input.assignPublicIp ?? "ENABLED",
-    parameters: Object.entries(input.parameters ?? {}).sort(([a], [b]) =>
-      a.localeCompare(b),
-    ),
+    parameters: Object.entries(input.parameters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     retryAttempts: input.retryAttempts ?? 1,
     timeoutSeconds: input.timeoutSeconds,
     propagateTags: input.propagateTags ?? false,
-    platformCapabilities: [
-      ...(input.platformCapabilities ?? ["FARGATE"]),
-    ].sort(),
+    platformCapabilities: [...(input.platformCapabilities ?? ["FARGATE"])].sort(),
   });
 
 const observedFingerprint = (d: batch.JobDefinition) => {
   const c = d.containerProperties ?? {};
-  const req = (type: string) =>
-    c.resourceRequirements?.find((r) => r.type === type)?.value;
+  const req = (type: string) => c.resourceRequirements?.find((r) => r.type === type)?.value;
   return fingerprint({
     image: c.image,
     command: [...(c.command ?? [])],
@@ -513,23 +479,16 @@ const observedFingerprint = (d: batch.JobDefinition) => {
     executionRoleArn: c.executionRoleArn,
     assignPublicIp: c.networkConfiguration?.assignPublicIp,
     parameters: Object.fromEntries(
-      Object.entries(d.parameters ?? {}).flatMap(([k, v]) =>
-        v !== undefined ? [[k, v]] : [],
-      ),
+      Object.entries(d.parameters ?? {}).flatMap(([k, v]) => (v !== undefined ? [[k, v]] : [])),
     ),
     retryAttempts: d.retryStrategy?.attempts,
     timeoutSeconds: d.timeout?.attemptDurationSeconds,
     propagateTags: d.propagateTags,
-    platformCapabilities: d.platformCapabilities as
-      | ("EC2" | "FARGATE")[]
-      | undefined,
+    platformCapabilities: d.platformCapabilities as ("EC2" | "FARGATE")[] | undefined,
   });
 };
 
-const desiredFingerprint = (
-  effective: EffectiveContainer,
-  news: JobDefinitionProps,
-) =>
+const desiredFingerprint = (effective: EffectiveContainer, news: JobDefinitionProps) =>
   fingerprint({
     image: effective.image,
     command: effective.command,
@@ -561,10 +520,7 @@ export const JobDefinitionProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const toName = (
-        id: string,
-        props: { jobDefinitionName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { jobDefinitionName?: string } = {}) =>
         props.jobDefinitionName
           ? Effect.succeed(props.jobDefinitionName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -586,16 +542,14 @@ export const JobDefinitionProvider = () =>
 
       /** Every ACTIVE revision of the family, ascending by revision. */
       const activeRevisions = (name: string) =>
-        batch.describeJobDefinitions
-          .pages({ jobDefinitionName: name, status: "ACTIVE" })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((pages) =>
-              Array.from(pages)
-                .flatMap((page) => page.jobDefinitions ?? [])
-                .sort((a, b) => (a.revision ?? 0) - (b.revision ?? 0)),
-            ),
-          );
+        batch.describeJobDefinitions.pages({ jobDefinitionName: name, status: "ACTIVE" }).pipe(
+          Stream.runCollect,
+          Effect.map((pages) =>
+            Array.from(pages)
+              .flatMap((page) => page.jobDefinitions ?? [])
+              .sort((a, b) => (a.revision ?? 0) - (b.revision ?? 0)),
+          ),
+        );
 
       const latestRevision = (name: string) =>
         activeRevisions(name).pipe(Effect.map((defs) => defs.at(-1)));
@@ -617,17 +571,11 @@ export const JobDefinitionProvider = () =>
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "JobDefinitionStillVisible",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(15),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
           }),
         );
 
-      const listBackingTaskDefinitions = (
-        family: string,
-        status: "ACTIVE" | "INACTIVE",
-      ) =>
+      const listBackingTaskDefinitions = (family: string, status: "ACTIVE" | "INACTIVE") =>
         ecs.listTaskDefinitions.items({ familyPrefix: family, status }).pipe(
           Stream.filter((arn) => {
             const suffix = arn.split("/").at(-1);
@@ -637,21 +585,14 @@ export const JobDefinitionProvider = () =>
           Effect.map((chunk) => Array.from(chunk)),
         );
 
-      const waitUntilBackingRevisionDeletionStarted = (
-        family: string,
-        arn: string,
-      ) =>
+      const waitUntilBackingRevisionDeletionStarted = (family: string, arn: string) =>
         Effect.gen(function* () {
-          const status = yield* ecs
-            .describeTaskDefinition({ taskDefinition: arn })
-            .pipe(
-              Effect.map((response) => response.taskDefinition?.status),
-              // Not-found means ECS already completed the asynchronous
-              // deletion and is therefore terminal as well.
-              Effect.catchTag("ClientException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+          const status = yield* ecs.describeTaskDefinition({ taskDefinition: arn }).pipe(
+            Effect.map((response) => response.taskDefinition?.status),
+            // Not-found means ECS already completed the asynchronous
+            // deletion and is therefore terminal as well.
+            Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+          );
           if (status !== undefined && status !== "DELETE_IN_PROGRESS") {
             return yield* Effect.fail(
               new JobDefinitionStillVisible({
@@ -664,10 +605,7 @@ export const JobDefinitionProvider = () =>
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "JobDefinitionStillVisible",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
           }),
         );
 
@@ -692,10 +630,7 @@ export const JobDefinitionProvider = () =>
           // Observe ACTIVE absence before attempting the hard delete. This is
           // the transition ECS requires before deleteTaskDefinitions.
           yield* Effect.gen(function* () {
-            const remaining = yield* listBackingTaskDefinitions(
-              family,
-              "ACTIVE",
-            );
+            const remaining = yield* listBackingTaskDefinitions(family, "ACTIVE");
             if (remaining.length > 0) {
               return yield* Effect.fail(
                 new JobDefinitionStillVisible({
@@ -708,18 +643,12 @@ export const JobDefinitionProvider = () =>
           }).pipe(
             Effect.retry({
               while: (error) => error._tag === "JobDefinitionStillVisible",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
             }),
           );
 
           const inactive = [
-            ...new Set([
-              ...active,
-              ...(yield* listBackingTaskDefinitions(family, "INACTIVE")),
-            ]),
+            ...new Set([...active, ...(yield* listBackingTaskDefinitions(family, "INACTIVE"))]),
           ];
           for (let i = 0; i < inactive.length; i += 10) {
             const response = yield* ecs.deleteTaskDefinitions({
@@ -780,9 +709,7 @@ export const JobDefinitionProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(
-                      `Role '${roleName}' already exists and is not managed by alchemy`,
-                    ),
+                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
                 ),
               ),
             ),
@@ -902,8 +829,7 @@ export const JobDefinitionProvider = () =>
               external: [
                 "bun",
                 "bun:*",
-                ...((props.build?.input?.external as string[] | undefined) ??
-                  []),
+                ...((props.build?.input?.external as string[] | undefined) ?? []),
               ],
               resolve: {
                 conditionNames: [...Bundle.BUN_CONDITION_NAMES],
@@ -968,16 +894,11 @@ await bootstrap(entrypoint);
         props: JobDefinitionProps;
       }) {
         const realMain = yield* resolveMainPath(props.main!);
-        const contextDir = yield* getStableContextDir(
-          realMain,
-          dotAlchemy,
-          `${id}-image`,
-        );
+        const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
         const imageUri = `${repositoryUri}:${hash}`;
 
         const generatedDockerfile = (() => {
-          const base =
-            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          const base = props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
           return [
             `FROM ${base}`,
             `WORKDIR /app`,
@@ -1027,14 +948,9 @@ await bootstrap(entrypoint);
               repositoryName: platform.repositoryName,
               force: true,
             })
-            .pipe(
-              Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
         }
-        for (const roleName of [
-          platform.jobRoleName,
-          platform.executionRoleName,
-        ]) {
+        for (const roleName of [platform.jobRoleName, platform.executionRoleName]) {
           if (!roleName) continue;
           yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
             Stream.mapEffect((policyName) =>
@@ -1043,29 +959,23 @@ await bootstrap(entrypoint);
                   RoleName: roleName,
                   PolicyName: policyName,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
             ),
             Stream.runDrain,
             Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
-          yield* iam.listAttachedRolePolicies
-            .items({ RoleName: roleName })
-            .pipe(
-              Stream.mapEffect((policy) =>
-                iam
-                  .detachRolePolicy({
-                    RoleName: roleName,
-                    PolicyArn: policy.PolicyArn!,
-                  })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
-              ),
-              Stream.runDrain,
-              Effect.catchTag("NoSuchEntityException", () => Effect.void),
-            );
+          yield* iam.listAttachedRolePolicies.items({ RoleName: roleName }).pipe(
+            Stream.mapEffect((policy) =>
+              iam
+                .detachRolePolicy({
+                  RoleName: roleName,
+                  PolicyArn: policy.PolicyArn!,
+                })
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+            ),
+            Stream.runDrain,
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          );
           yield* iam
             .deleteRole({ RoleName: roleName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
@@ -1083,15 +993,12 @@ await bootstrap(entrypoint);
         ],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.jobDefinitionName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.jobDefinitionName ?? (yield* toName(id, olds ?? {}));
           const latest = yield* latestRevision(name);
           if (!latest?.jobDefinitionArn) return undefined;
           // Managed platform resources (repo, roles) are stable identifiers —
@@ -1127,17 +1034,9 @@ await bootstrap(entrypoint);
                 }
               }
             }
-            return Array.from(latest.values()).map((d) =>
-              toAttributes(d, observedTagsOf(d)),
-            );
+            return Array.from(latest.values()).map((d) => toAttributes(d, observedTagsOf(d)));
           }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const { region } = yield* AWSEnvironment.current;
           const name = output?.jobDefinitionName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -1176,13 +1075,10 @@ await bootstrap(entrypoint);
           let platformAttributes = emptyPlatformAttributes;
           let effective: EffectiveContainer;
           if (news.main !== undefined) {
-            const jobRoleName =
-              output?.jobRoleName ?? (yield* createRoleName(id, "job-role"));
+            const jobRoleName = output?.jobRoleName ?? (yield* createRoleName(id, "job-role"));
             const executionRoleName =
-              output?.executionRoleName ??
-              (yield* createRoleName(id, "execution-role"));
-            const repositoryName =
-              output?.repositoryName ?? (yield* createRepositoryName(id));
+              output?.executionRoleName ?? (yield* createRoleName(id, "execution-role"));
+            const repositoryName = output?.repositoryName ?? (yield* createRepositoryName(id));
             const jobPolicyName = yield* createPhysicalName({
               id: `${id}-job-policy`,
               maxLength: 128,
@@ -1268,11 +1164,7 @@ await bootstrap(entrypoint);
             // Low-level form. If a previous deploy used the Effect-native
             // form, its managed repo/roles are no longer referenced — reap
             // them so nothing leaks.
-            if (
-              output?.repositoryName ||
-              output?.jobRoleName ||
-              output?.executionRoleName
-            ) {
+            if (output?.repositoryName || output?.jobRoleName || output?.executionRoleName) {
               yield* cleanupPlatformResources(output);
             }
             effective = {
@@ -1296,13 +1188,8 @@ await bootstrap(entrypoint);
 
           // Ensure/Sync — register a new revision only when managed content
           // differs (revisions are immutable; registration IS the update).
-          if (
-            !latest ||
-            observedFingerprint(latest) !== desiredFingerprint(effective, news)
-          ) {
-            const platformCapabilities = news.platformCapabilities ?? [
-              "FARGATE",
-            ];
+          if (!latest || observedFingerprint(latest) !== desiredFingerprint(effective, news)) {
+            const platformCapabilities = news.platformCapabilities ?? ["FARGATE"];
             const registered = yield* batch.registerJobDefinition({
               jobDefinitionName: name,
               type: "container",
@@ -1316,12 +1203,10 @@ await bootstrap(entrypoint);
                   { type: "VCPU", value: effective.vcpus },
                   { type: "MEMORY", value: effective.memory },
                 ],
-                environment: Object.entries(effective.environment).map(
-                  ([key, value]) => ({
-                    name: key,
-                    value,
-                  }),
-                ),
+                environment: Object.entries(effective.environment).map(([key, value]) => ({
+                  name: key,
+                  value,
+                })),
                 networkConfiguration: platformCapabilities.includes("FARGATE")
                   ? { assignPublicIp: effective.assignPublicIp }
                   : undefined,
@@ -1351,10 +1236,7 @@ await bootstrap(entrypoint);
           }
 
           // Content unchanged — sync tags in place on the revision ARN.
-          const { upsert, removed } = diffTags(
-            observedTagsOf(latest),
-            desiredTags,
-          );
+          const { upsert, removed } = diffTags(observedTagsOf(latest), desiredTags);
           if (upsert.length > 0) {
             yield* batch.tagResource({
               resourceArn: latest.jobDefinitionArn!,
@@ -1408,12 +1290,8 @@ await bootstrap(entrypoint);
             })
             .pipe(
               Stream.runCollect,
-              Effect.map((pages) =>
-                Array.from(pages).flatMap((p) => p.logStreams ?? []),
-              ),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([]),
-              ),
+              Effect.map((pages) => Array.from(pages).flatMap((p) => p.logStreams ?? [])),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
             );
           yield* Effect.forEach(
             streams,
@@ -1425,12 +1303,7 @@ await bootstrap(entrypoint);
                       logGroupName,
                       logStreamName: s.logStreamName,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        "ResourceNotFoundException",
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
             { concurrency: 4 },
           );
         }),

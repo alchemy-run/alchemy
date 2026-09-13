@@ -45,9 +45,7 @@ test.provider(
       }).pipe(
         Effect.ensuring(
           captured
-            ? ses
-                .setActiveReceiptRuleSet({ RuleSetName: captured })
-                .pipe(Effect.ignore)
+            ? ses.setActiveReceiptRuleSet({ RuleSetName: captured }).pipe(Effect.ignore)
             : Effect.void,
         ),
       );

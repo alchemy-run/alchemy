@@ -9,7 +9,6 @@ import { WriteObject } from "./WriteObject.ts";
  * @layer
  * @provides WriteObject
  */
-export const WriteObjectHttp = Layer.effect(
-  WriteObject,
-  makeWriteObjectHttp(),
-).pipe(Layer.provide(storageHttpLayer));
+export const WriteObjectHttp = Layer.effect(WriteObject, makeWriteObjectHttp()).pipe(
+  Layer.provide(storageHttpLayer),
+);

@@ -5,11 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { readMailManagerTags, syncMailManagerTags } from "./internal.ts";
 
@@ -90,9 +86,7 @@ export interface AddonInstance extends Resource<
  *
  * @resource
  */
-export const AddonInstance = Resource<AddonInstance>(
-  "AWS.MailManager.AddonInstance",
-);
+export const AddonInstance = Resource<AddonInstance>("AWS.MailManager.AddonInstance");
 
 export const AddonInstanceProvider = () =>
   Provider.effect(
@@ -101,17 +95,11 @@ export const AddonInstanceProvider = () =>
       const getById = (addonInstanceId: string) =>
         mm
           .getAddonInstance({ AddonInstanceId: addonInstanceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const listAll = mm.listAddonInstances.pages({}).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.AddonInstances ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.AddonInstances ?? [])),
       );
 
       // Instances have no user-supplied name — recover identity after a lost
@@ -157,12 +145,7 @@ export const AddonInstanceProvider = () =>
       });
 
       return AddonInstance.Provider.of({
-        stables: [
-          "addonInstanceId",
-          "addonInstanceArn",
-          "addonSubscriptionId",
-          "addonName",
-        ],
+        stables: ["addonInstanceId", "addonInstanceArn", "addonSubscriptionId", "addonName"],
 
         list: () =>
           listAll.pipe(
@@ -187,10 +170,7 @@ export const AddonInstanceProvider = () =>
         // instance.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds !== undefined &&
-            olds.addonSubscriptionId !== news.addonSubscriptionId
-          ) {
+          if (olds !== undefined && olds.addonSubscriptionId !== news.addonSubscriptionId) {
             return { action: "replace" } as const;
           }
         }),
@@ -214,18 +194,13 @@ export const AddonInstanceProvider = () =>
                 AddonSubscriptionId: news.addonSubscriptionId,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             if (created !== undefined) {
               const found = yield* getById(created.AddonInstanceId);
               instance = {
                 AddonInstanceId: created.AddonInstanceId,
                 AddonInstanceArn: found?.AddonInstanceArn,
-                AddonSubscriptionId:
-                  found?.AddonSubscriptionId ?? news.addonSubscriptionId,
+                AddonSubscriptionId: found?.AddonSubscriptionId ?? news.addonSubscriptionId,
                 AddonName: found?.AddonName,
               };
             } else {

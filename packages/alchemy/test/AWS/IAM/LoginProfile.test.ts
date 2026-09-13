@@ -35,9 +35,7 @@ describe("AWS.IAM.LoginProfile", () => {
       const provider = yield* Provider.findProvider(LoginProfile);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (entry) => entry.userName === deployed.user.userName,
-      );
+      const found = all.find((entry) => entry.userName === deployed.user.userName);
       expect(found).toBeDefined();
       expect(found?.userName).toBe(deployed.user.userName);
 

@@ -51,28 +51,20 @@ export default GrafanaWorkspaceTestFunction.make(
       tags: { fixture: "grafana-bindings" },
     });
 
-    const describeAuth =
-      yield* Grafana.DescribeWorkspaceAuthentication(workspace);
+    const describeAuth = yield* Grafana.DescribeWorkspaceAuthentication(workspace);
     const updateAuth = yield* Grafana.UpdateWorkspaceAuthentication(workspace);
-    const describeConfig =
-      yield* Grafana.DescribeWorkspaceConfiguration(workspace);
+    const describeConfig = yield* Grafana.DescribeWorkspaceConfiguration(workspace);
     const updateConfig = yield* Grafana.UpdateWorkspaceConfiguration(workspace);
     const associateLicense = yield* Grafana.AssociateLicense(workspace);
     const disassociateLicense = yield* Grafana.DisassociateLicense(workspace);
     const listPermissions = yield* Grafana.ListPermissions(workspace);
     const updatePermissions = yield* Grafana.UpdatePermissions(workspace);
-    const createServiceAccount =
-      yield* Grafana.CreateWorkspaceServiceAccount(workspace);
-    const deleteServiceAccount =
-      yield* Grafana.DeleteWorkspaceServiceAccount(workspace);
-    const listServiceAccounts =
-      yield* Grafana.ListWorkspaceServiceAccounts(workspace);
-    const createToken =
-      yield* Grafana.CreateWorkspaceServiceAccountToken(workspace);
-    const deleteToken =
-      yield* Grafana.DeleteWorkspaceServiceAccountToken(workspace);
-    const listTokens =
-      yield* Grafana.ListWorkspaceServiceAccountTokens(workspace);
+    const createServiceAccount = yield* Grafana.CreateWorkspaceServiceAccount(workspace);
+    const deleteServiceAccount = yield* Grafana.DeleteWorkspaceServiceAccount(workspace);
+    const listServiceAccounts = yield* Grafana.ListWorkspaceServiceAccounts(workspace);
+    const createToken = yield* Grafana.CreateWorkspaceServiceAccountToken(workspace);
+    const deleteToken = yield* Grafana.DeleteWorkspaceServiceAccountToken(workspace);
+    const listTokens = yield* Grafana.ListWorkspaceServiceAccountTokens(workspace);
     const listVersions = yield* Grafana.ListVersions();
 
     const bound = {
@@ -126,9 +118,7 @@ export default GrafanaWorkspaceTestFunction.make(
         // typed error — either outcome proves the binding + IAM wiring.
         if (request.method === "GET" && pathname === "/permissions") {
           const result = yield* errorTagged(
-            listPermissions().pipe(
-              Effect.map((r) => ({ count: r.permissions.length })),
-            ),
+            listPermissions().pipe(Effect.map((r) => ({ count: r.permissions.length }))),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -151,10 +141,7 @@ export default GrafanaWorkspaceTestFunction.make(
         // Full service-account + token lifecycle: create → mint (Duration
         // timeToLive → wire secondsToLive; Redacted key) → list → revoke →
         // delete. Exercises five bindings in one deterministic round-trip.
-        if (
-          request.method === "POST" &&
-          pathname === "/service-account-roundtrip"
-        ) {
+        if (request.method === "POST" && pathname === "/service-account-roundtrip") {
           const account = yield* createServiceAccount({
             name: "bindings-roundtrip",
             grafanaRole: "EDITOR",

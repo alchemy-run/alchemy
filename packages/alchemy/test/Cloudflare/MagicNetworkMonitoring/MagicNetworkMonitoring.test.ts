@@ -8,10 +8,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -28,9 +25,7 @@ const forbiddenRetry = {
 // config without its required `name` field means "no config".
 const getConfig = (accountId: string) =>
   mnm.getConfig({ accountId }).pipe(
-    Effect.map((config) =>
-      config === null || config.name == null ? undefined : config,
-    ),
+    Effect.map((config) => (config === null || config.name == null ? undefined : config)),
     Effect.retry(forbiddenRetry),
   );
 
@@ -45,26 +40,18 @@ const expectRuleGone = (accountId: string, ruleId: string) =>
     Effect.catchTag("MnmRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RuleNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
 const expectConfigGone = (accountId: string) =>
   getConfig(accountId).pipe(
     Effect.flatMap((config) =>
-      config === undefined
-        ? Effect.void
-        : Effect.fail({ _tag: "ConfigNotDeleted" } as const),
+      config === undefined ? Effect.void : Effect.fail({ _tag: "ConfigNotDeleted" } as const),
     ),
     Effect.retry({
       while: (e) => e._tag === "ConfigNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -164,22 +151,16 @@ describe.sequential("MagicNetworkMonitoring", () => {
         }) =>
           stack.deploy(
             Effect.gen(function* () {
-              const config = yield* Cloudflare.MagicNetworkMonitoring.Config(
-                "Config",
-                {
-                  name: "alchemy-mnm-rule-test",
-                  defaultSampling: 1,
-                },
-              );
+              const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Config", {
+                name: "alchemy-mnm-rule-test",
+                defaultSampling: 1,
+              });
               // Rules cannot exist without the account config — sequence the
               // rule after the config via its accountId output.
-              const rule = yield* Cloudflare.MagicNetworkMonitoring.Rule(
-                "Rule",
-                {
-                  accountId: config.accountId,
-                  ...props,
-                },
-              );
+              const rule = yield* Cloudflare.MagicNetworkMonitoring.Rule("Rule", {
+                accountId: config.accountId,
+                ...props,
+              });
               return { config, rule };
             }),
           );
@@ -215,18 +196,12 @@ describe.sequential("MagicNetworkMonitoring", () => {
 
         expect(updated.ruleId).toEqual(rule.ruleId);
         expect(updated.name).toEqual("alchemy-mnm-rule-v2");
-        expect([...updated.prefixes].sort()).toEqual([
-          "10.0.0.0/24",
-          "10.0.1.0/24",
-        ]);
+        expect([...updated.prefixes].sort()).toEqual(["10.0.0.0/24", "10.0.1.0/24"]);
         expect(updated.bandwidthThreshold).toEqual(2_000_000);
 
         const liveUpdated = yield* getRule(accountId, rule.ruleId);
         expect(liveUpdated.name).toEqual("alchemy-mnm-rule-v2");
-        expect([...liveUpdated.prefixes].sort()).toEqual([
-          "10.0.0.0/24",
-          "10.0.1.0/24",
-        ]);
+        expect([...liveUpdated.prefixes].sort()).toEqual(["10.0.0.0/24", "10.0.1.0/24"]);
 
         // `type` is immutable — switching threshold → zscore replaces the
         // rule (new rule id). The name changes too: rule names are unique

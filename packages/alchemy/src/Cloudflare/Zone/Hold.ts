@@ -45,13 +45,7 @@ export type HoldAttributes = {
   includeSubdomains: boolean;
 };
 
-export type Hold = Resource<
-  TypeId,
-  HoldProps,
-  HoldAttributes,
-  never,
-  Providers
->;
+export type Hold = Resource<TypeId, HoldProps, HoldAttributes, never, Providers>;
 
 /**
  * A Cloudflare zone hold (`/zones/{zone_id}/hold`) — prevents the zone's
@@ -110,10 +104,7 @@ export const isHold = (value: unknown): value is Hold =>
 // `Forbidden`. Retry with exponential backoff capped at 5s, bounded to ~8
 // attempts so a persistently-unauthorized call still fails fast.
 const forbiddenRetrySchedule = Schedule.max([
-  Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("5 seconds"),
-  ]),
+  Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
   Schedule.recurs(8),
 ]);
 
@@ -142,9 +133,7 @@ export const HoldProvider = () =>
             }),
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Zone deleted out-of-band mid-enumeration — drop it.
-            Effect.catchTag("InvalidZoneIdentifier", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -156,28 +145,19 @@ export const HoldProvider = () =>
       const n = news as HoldProps;
       // zoneId is the hold's identity (one hold per zone). It is
       // Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* zones.getHold({ zoneId }).pipe(
         // Zone deleted out-of-band — the hold is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
       );
       if (observed === undefined || observed.hold !== true) return undefined;
       const attrs = toAttributes(zoneId, observed);
@@ -204,10 +184,7 @@ export const HoldProvider = () =>
       }
 
       // 3. Sync — patch includeSubdomains when the observed value differs.
-      if (
-        normalizeIncludeSubdomains(observed.includeSubdomains) !==
-        desiredIncludeSubdomains
-      ) {
+      if (normalizeIncludeSubdomains(observed.includeSubdomains) !== desiredIncludeSubdomains) {
         const patched = yield* zones
           .patchHold({
             zoneId,
@@ -244,15 +221,11 @@ export const HoldProvider = () =>
  * returns a boolean, while Cloudflare's published schema declares a string
  * (`"true"`/`"false"`) — accept both.
  */
-const normalizeIncludeSubdomains = (value: unknown): boolean =>
-  value === true || value === "true";
+const normalizeIncludeSubdomains = (value: unknown): boolean => value === true || value === "true";
 
 const toAttributes = (
   zoneId: string,
-  hold:
-    | zones.GetHoldResponse
-    | zones.CreateHoldResponse
-    | zones.PatchHoldResponse,
+  hold: zones.GetHoldResponse | zones.CreateHoldResponse | zones.PatchHoldResponse,
 ): HoldAttributes => ({
   zoneId,
   hold: hold.hold === true,

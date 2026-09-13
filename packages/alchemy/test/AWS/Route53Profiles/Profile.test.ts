@@ -20,10 +20,7 @@ const assertProfileGone = (profileId: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -54,9 +51,7 @@ test.provider(
         ResourceArn: first.profile.profileArn,
       });
       expect(tags.Tags.env).toBe("test");
-      expect(
-        Object.keys(tags.Tags).some((key) => key.startsWith("alchemy:")),
-      ).toBe(true);
+      expect(Object.keys(tags.Tags).some((key) => key.startsWith("alchemy:"))).toBe(true);
 
       // Update tags in place — same profile id.
       const second = yield* stack.deploy(

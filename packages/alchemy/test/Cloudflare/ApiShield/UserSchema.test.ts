@@ -15,13 +15,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test schema names.
 const NAME_DEFAULT = "alch-userschema-default";
@@ -32,9 +28,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -43,9 +37,7 @@ const fixture = (file: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    return yield* fs.readFileString(
-      path.join(import.meta.dirname, "fixtures", file),
-    );
+    return yield* fs.readFileString(path.join(import.meta.dirname, "fixtures", file));
   });
 
 // The scoped API token the test harness mints propagates eventually-
@@ -56,9 +48,7 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 // Read a schema out-of-band; `undefined` when gone.
 const getSchema = (zoneId: string, schemaId: string) =>
   apiGateway.getUserSchema({ zoneId, schemaId }).pipe(
-    Effect.map(
-      (schema): apiGateway.GetUserSchemaResponse | undefined => schema,
-    ),
+    Effect.map((schema): apiGateway.GetUserSchemaResponse | undefined => schema),
     Effect.catchTag("SchemaNotFound", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -217,9 +207,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ApiShield.UserSchema,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ApiShield.UserSchema);
       const all = yield* provider.list();
 
       const found = all.find((s) => s.schemaId === schema.schemaId);

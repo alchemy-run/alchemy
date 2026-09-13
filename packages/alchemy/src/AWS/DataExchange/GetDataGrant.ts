@@ -27,12 +27,7 @@ export interface GetDataGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.GetDataGrantRequest,
-    ) => Effect.Effect<
-      dataexchange.GetDataGrantResponse,
-      dataexchange.GetDataGrantError
-    >
+    ) => Effect.Effect<dataexchange.GetDataGrantResponse, dataexchange.GetDataGrantError>
   >
 > {}
-export const GetDataGrant = Binding.Service<GetDataGrant>(
-  "AWS.DataExchange.GetDataGrant",
-);
+export const GetDataGrant = Binding.Service<GetDataGrant>("AWS.DataExchange.GetDataGrant");

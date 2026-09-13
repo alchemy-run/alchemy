@@ -20,25 +20,16 @@ const request = (
     body: JSON.stringify(body),
   });
 
-test.effect(
-  "validates the versioned schedule envelope and attested header",
-  () =>
-    Effect.gen(function* () {
-      const event = yield* decodeFunctionTriggerEvent(
-        yield* Effect.sync(() => request(payload)),
-      );
-      expect(event).toEqual(payload);
-    }),
+test.effect("validates the versioned schedule envelope and attested header", () =>
+  Effect.gen(function* () {
+    const event = yield* decodeFunctionTriggerEvent(yield* Effect.sync(() => request(payload)));
+    expect(event).toEqual(payload);
+  }),
 );
 
 for (const [name, body, headers, status] of [
   ["missing attestation", payload, {}, 403],
-  [
-    "mismatched attestation",
-    payload,
-    { "x-neon-trigger-invocation-id": "other" },
-    403,
-  ],
+  ["mismatched attestation", payload, { "x-neon-trigger-invocation-id": "other" }, 403],
   [
     "future version",
     { ...payload, version: 2 },
@@ -58,9 +49,7 @@ for (const [name, body, headers, status] of [
         yield* Effect.sync(() => request(body, headers)),
       ).pipe(
         Effect.as(200),
-        Effect.catchTag("FunctionTriggerEventError", (error) =>
-          Effect.succeed(error.status),
-        ),
+        Effect.catchTag("FunctionTriggerEventError", (error) => Effect.succeed(error.status)),
       );
       expect(result).toBe(status);
     }),

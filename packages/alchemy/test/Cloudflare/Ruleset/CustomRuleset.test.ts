@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
@@ -175,9 +172,7 @@ test.provider(
         // Unentitled — assert the typed entitlement tag, then verify the
         // provider's `list()` still enumerates without error (returns []).
         expect(probe.failure._tag).toEqual("PhaseNotEntitled");
-        const provider = yield* Provider.findProvider(
-          Cloudflare.Ruleset.CustomRuleset,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.Ruleset.CustomRuleset);
         const all = yield* provider.list();
         expect(Array.isArray(all)).toBe(true);
         yield* stack.destroy();
@@ -205,9 +200,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Ruleset.CustomRuleset,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Ruleset.CustomRuleset);
       const all = yield* provider.list();
 
       expect(all.some((r) => r.rulesetId === deployed.rulesetId)).toBe(true);

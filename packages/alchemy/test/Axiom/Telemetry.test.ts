@@ -26,9 +26,7 @@ const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 // data actually landed in Axiom.
 const queryTraces = Effect.gen(function* () {
   const response = yield* HttpClient.execute(
-    HttpClientRequest.post(
-      "https://api.axiom.co/v1/datasets/_apl?format=legacy",
-    ).pipe(
+    HttpClientRequest.post("https://api.axiom.co/v1/datasets/_apl?format=legacy").pipe(
       HttpClientRequest.setHeaders({
         Authorization: `Bearer ${process.env.AXIOM_TOKEN ?? process.env.AXIOM_API_KEY}`,
         "Content-Type": "application/json",

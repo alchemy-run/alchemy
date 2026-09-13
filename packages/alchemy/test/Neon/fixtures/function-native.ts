@@ -29,8 +29,7 @@ export default {
         }),
         { headers: { "content-type": "text/event-stream" } },
       );
-    if (path === "/failure")
-      throw new Error("intentional function fixture failure");
+    if (path === "/failure") throw new Error("intentional function fixture failure");
     if (path === "/empty") return new Response(null, { status: 204 });
     console.log("neon-function-native-request");
     return new Response("native-v1");

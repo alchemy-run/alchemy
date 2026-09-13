@@ -29,10 +29,7 @@ export interface GetAttributeGroup extends Binding.Service<
   (
     attributeGroup: AttributeGroup,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      appregistry.GetAttributeGroupResponse,
-      appregistry.GetAttributeGroupError
-    >
+    () => Effect.Effect<appregistry.GetAttributeGroupResponse, appregistry.GetAttributeGroupError>
   >
 > {}
 

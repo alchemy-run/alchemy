@@ -6,9 +6,7 @@ import { diffTags } from "../../Tags.ts";
  * Coerce a Translate wire tag list (`{ Key, Value }[]`) into a plain
  * `Record<string, string>`.
  */
-export const toTagRecord = (
-  tags: readonly translate.Tag[] | undefined,
-): Record<string, string> =>
+export const toTagRecord = (tags: readonly translate.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.Key, t.Value] as const));
 
 /**

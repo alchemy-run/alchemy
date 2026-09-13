@@ -74,9 +74,7 @@ export const AnnotationProvider = () =>
         // response — the exact same shape `get`/`read` produce. Hand each
         // record back directly as the resource's Attributes.
         list: () =>
-          listAnnotations({}).pipe(
-            Effect.map((annotations) => annotations.map((a) => ({ ...a }))),
-          ),
+          listAnnotations({}).pipe(Effect.map((annotations) => annotations.map((a) => ({ ...a })))),
         reconcile: Effect.fn(function* ({ news, output }) {
           // Observe — Axiom assigns the annotation id server-side, so the
           // only handle to a previously-created annotation is the cached
@@ -104,9 +102,7 @@ export const AnnotationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

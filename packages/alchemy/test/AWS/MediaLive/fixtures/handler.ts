@@ -30,14 +30,12 @@ export default MediaLiveTestFunction.make(
     // Event source: subscribe the host to MediaLive state-change/alert
     // events. The deploy proves the EventBridge rule + invoke permission
     // wiring.
-    yield* MediaLive.consumeChannelEvents(
-      { kinds: ["state-change", "alert"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `medialive event: ${event["detail-type"]} ${event.detail.state ?? event.detail.message ?? ""}`,
-          ),
+    yield* MediaLive.consumeChannelEvents({ kinds: ["state-change", "alert"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(
+          `medialive event: ${event["detail-type"]} ${event.detail.state ?? event.detail.message ?? ""}`,
         ),
+      ),
     );
 
     const describeInput = yield* MediaLive.DescribeInput(input);

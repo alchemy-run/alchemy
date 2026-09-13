@@ -61,9 +61,7 @@ test.provider("create, update, and delete managed policy", (stack) =>
       PolicyArn: policy.policyArn,
     });
     expect(
-      Object.fromEntries(
-        (updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-      ),
+      Object.fromEntries((updatedTags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
     ).toMatchObject({
       env: "prod",
     });
@@ -124,17 +122,13 @@ test.provider(
       expect(versions.Versions?.length ?? 0).toBeLessThanOrEqual(5);
 
       // The default version must carry the last document.
-      const defaultVersion = versions.Versions?.find(
-        (version) => version.IsDefaultVersion,
-      );
+      const defaultVersion = versions.Versions?.find((version) => version.IsDefaultVersion);
       expect(defaultVersion?.VersionId).toBeDefined();
       const document = yield* IAM.getPolicyVersion({
         PolicyArn: policy!.policyArn,
         VersionId: defaultVersion!.VersionId!,
       });
-      const decoded = JSON.parse(
-        decodeURIComponent(document.PolicyVersion?.Document ?? ""),
-      ) as {
+      const decoded = JSON.parse(decodeURIComponent(document.PolicyVersion?.Document ?? "")) as {
         Statement: [{ Action: string[] }];
       };
       expect(decoded.Statement[0].Action).toEqual(["s3:GetBucketLocation"]);

@@ -2,10 +2,7 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
-import {
-  normalizePolicyDocument,
-  type ServiceControlPolicyDocument,
-} from "@/AWS/IAM/Policy.ts";
+import { normalizePolicyDocument, type ServiceControlPolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { Policy } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -95,9 +92,7 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       expect(created.policyId).toBeTruthy();
       expect(created.type).toBe("SERVICE_CONTROL_POLICY");
       // The typed attribute round-trips the typed document.
-      expect(normalizePolicyDocument(created.document)).toBe(
-        normalizePolicyDocument(document),
-      );
+      expect(normalizePolicyDocument(created.document)).toBe(normalizePolicyDocument(document));
 
       // Out-of-band verification via distilled: the stored content is
       // equivalent to the typed document.
@@ -114,21 +109,15 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
       const redeployed = yield* deployPolicy;
       expect(redeployed.policyId).toBe(created.policyId);
       expect(redeployed.policyArn).toBe(created.policyArn);
-      expect(normalizePolicyDocument(redeployed.document)).toBe(
-        normalizePolicyDocument(document),
-      );
+      expect(normalizePolicyDocument(redeployed.document)).toBe(normalizePolicyDocument(document));
 
       yield* stack.destroy();
 
       // Typed wait-until-gone: the policy is deleted after destroy.
-      const gone = yield* organizations
-        .describePolicy({ PolicyId: created.policyId })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("PolicyNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-        );
+      const gone = yield* organizations.describePolicy({ PolicyId: created.policyId }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }),
   { timeout: 240_000 },

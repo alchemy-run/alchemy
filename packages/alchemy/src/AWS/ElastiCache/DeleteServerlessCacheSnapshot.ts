@@ -34,7 +34,6 @@ export interface DeleteServerlessCacheSnapshot extends Binding.Service<
     >
   >
 > {}
-export const DeleteServerlessCacheSnapshot =
-  Binding.Service<DeleteServerlessCacheSnapshot>(
-    "AWS.ElastiCache.DeleteServerlessCacheSnapshot",
-  );
+export const DeleteServerlessCacheSnapshot = Binding.Service<DeleteServerlessCacheSnapshot>(
+  "AWS.ElastiCache.DeleteServerlessCacheSnapshot",
+);

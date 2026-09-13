@@ -218,9 +218,7 @@ export interface Table extends Resource<
  */
 export const Table = Resource<Table>("AWS.Keyspaces.Table");
 
-const toTagRecord = (
-  tags: keyspaces.Tag[] | undefined,
-): Record<string, string> =>
+const toTagRecord = (tags: keyspaces.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.key, t.value]));
 
 const buildSchema = (props: TableProps): keyspaces.SchemaDefinition => ({
@@ -246,44 +244,28 @@ export const TableProvider = () =>
               Effect.map((n) => n.replaceAll("-", "_")),
             );
 
-      const readTable = Effect.fn(function* (
-        keyspaceName: string,
-        tableName: string,
-      ) {
+      const readTable = Effect.fn(function* (keyspaceName: string, tableName: string) {
         return yield* keyspaces
           .getTable({ keyspaceName, tableName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
-        const tags = yield* keyspaces.listTagsForResource
-          .items({ resourceArn: arn })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((c) => Array.from(c)),
-            Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
-          );
+        const tags = yield* keyspaces.listTagsForResource.items({ resourceArn: arn }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => Array.from(c)),
+          Effect.catch(() => Effect.succeed<keyspaces.Tag[]>([])),
+        );
         return toTagRecord(tags);
       });
 
       // Resolve the most recent CDC stream's ARN (streams are labeled with
       // their creation timestamp; the lexicographically greatest label is the
       // latest). Only meaningful while CDC is (or was recently) enabled.
-      const readLatestStreamArn = Effect.fn(function* (
-        keyspaceName: string,
-        tableName: string,
-      ) {
+      const readLatestStreamArn = Effect.fn(function* (keyspaceName: string, tableName: string) {
         const response = yield* keyspacesstreams
           .listStreams({ keyspaceName, tableName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const sorted = [...(response?.streams ?? [])].sort((a, b) =>
           b.streamLabel.localeCompare(a.streamLabel),
         );
@@ -298,25 +280,17 @@ export const TableProvider = () =>
       // A freshly-enabled stream can lag ListStreams visibility briefly;
       // poll (bounded ~60s) and fall back to undefined rather than failing
       // the reconcile.
-      const waitForStreamArn = Effect.fn(function* (
-        keyspaceName: string,
-        tableName: string,
-      ) {
+      const waitForStreamArn = Effect.fn(function* (keyspaceName: string, tableName: string) {
         return yield* readLatestStreamArn(keyspaceName, tableName).pipe(
           Effect.flatMap((arn) =>
             arn !== undefined
               ? Effect.succeed<string | undefined>(arn)
               : Effect.fail(
-                  new Error(
-                    `CDC stream for '${keyspaceName}.${tableName}' not yet visible`,
-                  ),
+                  new Error(`CDC stream for '${keyspaceName}.${tableName}' not yet visible`),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(12),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
           }),
           Effect.catch(() => Effect.succeed(undefined)),
         );
@@ -332,22 +306,15 @@ export const TableProvider = () =>
         tableName: string,
         requiredColumns?: readonly string[],
       ) {
-        const policy = Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]);
         return yield* readTable(keyspaceName, tableName).pipe(
           Effect.flatMap((table) => {
             if (table === undefined) {
-              return Effect.fail(
-                new Error(`Keyspaces table '${tableName}' not found`),
-              );
+              return Effect.fail(new Error(`Keyspaces table '${tableName}' not found`));
             }
             if (!activeStatuses.has(table.status ?? "")) {
               return Effect.fail(
-                new Error(
-                  `Keyspaces table '${tableName}' not active (status: ${table.status})`,
-                ),
+                new Error(`Keyspaces table '${tableName}' not active (status: ${table.status})`),
               );
             }
             if (requiredColumns !== undefined) {
@@ -396,16 +363,12 @@ export const TableProvider = () =>
           // Keys and column removals/retypes require a replacement; pure
           // column additions are handled in reconcile via UpdateTable.
           const newCols = new Map(news.columns.map((c) => [c.name, c.type]));
-          const removedOrRetyped = oldProps.columns.some(
-            (c) => newCols.get(c.name) !== c.type,
-          );
+          const removedOrRetyped = oldProps.columns.some((c) => newCols.get(c.name) !== c.type);
           const keysChanged =
             JSON.stringify([...news.partitionKeys].sort()) !==
               JSON.stringify([...oldProps.partitionKeys].sort()) ||
             JSON.stringify(
-              (news.clusteringKeys ?? [])
-                .map((c) => `${c.name}:${c.orderBy ?? "ASC"}`)
-                .sort(),
+              (news.clusteringKeys ?? []).map((c) => `${c.name}:${c.orderBy ?? "ASC"}`).sort(),
             ) !==
               JSON.stringify(
                 (oldProps.clusteringKeys ?? [])
@@ -461,18 +424,14 @@ export const TableProvider = () =>
                 tableName,
                 schemaDefinition: buildSchema(props),
                 capacitySpecification: toCapacity(props.capacity),
-                pointInTimeRecovery: props.pointInTimeRecovery
-                  ? { status: "ENABLED" }
-                  : undefined,
+                pointInTimeRecovery: props.pointInTimeRecovery ? { status: "ENABLED" } : undefined,
                 ttl: props.ttlEnabled ? { status: "ENABLED" } : undefined,
                 defaultTimeToLive: desiredTtlSeconds,
                 cdcSpecification:
                   props.cdcSpecification?.status === "ENABLED"
                     ? {
                         status: "ENABLED",
-                        viewType:
-                          props.cdcSpecification.viewType ??
-                          "NEW_AND_OLD_IMAGES",
+                        viewType: props.cdcSpecification.viewType ?? "NEW_AND_OLD_IMAGES",
                       }
                     : undefined,
                 tags: Object.entries(desiredTags).map(([key, value]) => ({
@@ -495,9 +454,7 @@ export const TableProvider = () =>
           const observedCols = new Set(
             (observed.schemaDefinition?.allColumns ?? []).map((c) => c.name),
           );
-          const addColumns = props.columns.filter(
-            (c) => !observedCols.has(c.name),
-          );
+          const addColumns = props.columns.filter((c) => !observedCols.has(c.name));
           if (addColumns.length > 0) {
             update.addColumns = addColumns.map((c) => ({
               name: c.name,
@@ -509,8 +466,7 @@ export const TableProvider = () =>
           const desiredCapacity = toCapacity(props.capacity);
           if (
             desiredCapacity !== undefined &&
-            (desiredCapacity.throughputMode !==
-              observed.capacitySpecification?.throughputMode ||
+            (desiredCapacity.throughputMode !== observed.capacitySpecification?.throughputMode ||
               (desiredCapacity.throughputMode === "PROVISIONED" &&
                 (desiredCapacity.readCapacityUnits !==
                   observed.capacitySpecification?.readCapacityUnits ||
@@ -521,12 +477,8 @@ export const TableProvider = () =>
             needsUpdate = true;
           }
 
-          const desiredPitr = props.pointInTimeRecovery
-            ? "ENABLED"
-            : "DISABLED";
-          if (
-            desiredPitr !== (observed.pointInTimeRecovery?.status ?? "DISABLED")
-          ) {
+          const desiredPitr = props.pointInTimeRecovery ? "ENABLED" : "DISABLED";
+          if (desiredPitr !== (observed.pointInTimeRecovery?.status ?? "DISABLED")) {
             update.pointInTimeRecovery = { status: desiredPitr };
             needsUpdate = true;
           }
@@ -535,22 +487,17 @@ export const TableProvider = () =>
             update.ttl = { status: "ENABLED" };
             needsUpdate = true;
           }
-          if (
-            desiredTtlSeconds !== undefined &&
-            desiredTtlSeconds !== observed.defaultTimeToLive
-          ) {
+          if (desiredTtlSeconds !== undefined && desiredTtlSeconds !== observed.defaultTimeToLive) {
             update.defaultTimeToLive = desiredTtlSeconds;
             needsUpdate = true;
           }
 
-          const desiredCdcEnabled =
-            props.cdcSpecification?.status === "ENABLED";
+          const desiredCdcEnabled = props.cdcSpecification?.status === "ENABLED";
           if (desiredCdcEnabled !== isCdcEnabled(observed)) {
             update.cdcSpecification = desiredCdcEnabled
               ? {
                   status: "ENABLED",
-                  viewType:
-                    props.cdcSpecification?.viewType ?? "NEW_AND_OLD_IMAGES",
+                  viewType: props.cdcSpecification?.viewType ?? "NEW_AND_OLD_IMAGES",
                 }
               : { status: "DISABLED" };
             needsUpdate = true;
@@ -588,10 +535,7 @@ export const TableProvider = () =>
             tableArn: observed.resourceArn,
             status: observed.status ?? "ACTIVE",
             latestStreamArn: isCdcEnabled(observed)
-              ? yield* waitForStreamArn(
-                  observed.keyspaceName,
-                  observed.tableName,
-                )
+              ? yield* waitForStreamArn(observed.keyspaceName, observed.tableName)
               : undefined,
           };
         }),
@@ -604,10 +548,7 @@ export const TableProvider = () =>
             // ConflictException; retry until it settles.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(24),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
             }),
           );
           // Wait (bounded) until the table is gone so the parent keyspace can
@@ -619,10 +560,7 @@ export const TableProvider = () =>
                 : Effect.fail(new Error(`Table '${tableName}' still deleting`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
             Effect.catch(() => Effect.void),
           );

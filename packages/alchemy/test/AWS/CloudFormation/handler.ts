@@ -41,15 +41,11 @@ const tagOr = <A, E extends { _tag: string }, R>(
 ) =>
   Effect.result(effect).pipe(
     Effect.map((result) =>
-      Result.isSuccess(result)
-        ? onSuccess(result.success)
-        : { errorTag: result.failure._tag },
+      Result.isSuccess(result) ? onSuccess(result.success) : { errorTag: result.failure._tag },
     ),
   );
 
-export class CfnTestFunction extends Lambda.Function<Lambda.Function>()(
-  "CfnTestFunction",
-) {}
+export class CfnTestFunction extends Lambda.Function<Lambda.Function>()("CfnTestFunction") {}
 
 export default CfnTestFunction.make(
   {
@@ -65,15 +61,12 @@ export default CfnTestFunction.make(
     });
 
     const describeStacks = yield* CloudFormation.DescribeStacks(stack);
-    const describeStackEvents =
-      yield* CloudFormation.DescribeStackEvents(stack);
-    const describeStackResources =
-      yield* CloudFormation.DescribeStackResources(stack);
+    const describeStackEvents = yield* CloudFormation.DescribeStackEvents(stack);
+    const describeStackResources = yield* CloudFormation.DescribeStackResources(stack);
     const listStackResources = yield* CloudFormation.ListStackResources(stack);
     const getTemplate = yield* CloudFormation.GetTemplate(stack);
     const detectStackDrift = yield* CloudFormation.DetectStackDrift(stack);
-    const describeStackResourceDrifts =
-      yield* CloudFormation.DescribeStackResourceDrifts(stack);
+    const describeStackResourceDrifts = yield* CloudFormation.DescribeStackResourceDrifts(stack);
     const signalResource = yield* CloudFormation.SignalResource(stack);
     const listExports = yield* CloudFormation.ListExports();
     const listImports = yield* CloudFormation.ListImports();
@@ -103,9 +96,7 @@ export default CfnTestFunction.make(
           const result = yield* describeStackEvents();
           return yield* HttpServerResponse.json({
             count: (result.StackEvents ?? []).length,
-            statuses: (result.StackEvents ?? [])
-              .slice(0, 5)
-              .map((e) => e.ResourceStatus),
+            statuses: (result.StackEvents ?? []).slice(0, 5).map((e) => e.ResourceStatus),
           });
         }
 
@@ -124,9 +115,7 @@ export default CfnTestFunction.make(
         if (request.method === "GET" && pathname === "/list-resources") {
           const result = yield* listStackResources();
           return yield* HttpServerResponse.json({
-            types: (result.StackResourceSummaries ?? []).map(
-              (r) => r.ResourceType,
-            ),
+            types: (result.StackResourceSummaries ?? []).map((r) => r.ResourceType),
           });
         }
 
@@ -193,9 +182,7 @@ export default CfnTestFunction.make(
                 TemplateBody: body.template ?? template,
               }),
               (result) => ({
-                parameters: (result.Parameters ?? []).map(
-                  (p) => p.ParameterKey,
-                ),
+                parameters: (result.Parameters ?? []).map((p) => p.ParameterKey),
                 capabilities: result.Capabilities ?? [],
               }),
             ),

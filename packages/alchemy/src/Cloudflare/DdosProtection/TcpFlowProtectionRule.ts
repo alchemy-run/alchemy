@@ -138,9 +138,7 @@ export const TcpFlowProtectionRule = Resource<TcpFlowProtectionRule>(TypeId);
 /**
  * Returns true if the given value is a TcpFlowProtectionRule resource.
  */
-export const isTcpFlowProtectionRule = (
-  value: unknown,
-): value is TcpFlowProtectionRule =>
+export const isTcpFlowProtectionRule = (value: unknown): value is TcpFlowProtectionRule =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TcpFlowProtectionRuleProvider = () =>
@@ -162,25 +160,22 @@ export const TcpFlowProtectionRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* ddos.listAdvancedTcpProtectionTcpFlowProtectionRules
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
-            ),
+      return yield* ddos.listAdvancedTcpProtectionTcpFlowProtectionRules.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
           ),
-          // Accounts lacking the Advanced TCP Protection entitlement (or a
-          // token without access) can't enumerate rules — there is nothing
-          // to nuke, so report an empty set rather than failing.
-          Effect.catchTags({
-            AdvancedTcpProtectionNotEntitled: () =>
-              Effect.succeed<TcpFlowProtectionRuleAttributes[]>([]),
-            Forbidden: () =>
-              Effect.succeed<TcpFlowProtectionRuleAttributes[]>([]),
-          }),
-        );
+        ),
+        // Accounts lacking the Advanced TCP Protection entitlement (or a
+        // token without access) can't enumerate rules — there is nothing
+        // to nuke, so report an empty set rather than failing.
+        Effect.catchTags({
+          AdvancedTcpProtectionNotEntitled: () =>
+            Effect.succeed<TcpFlowProtectionRuleAttributes[]>([]),
+          Forbidden: () => Effect.succeed<TcpFlowProtectionRuleAttributes[]>([]),
+        }),
+      );
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -198,11 +193,7 @@ export const TcpFlowProtectionRuleProvider = () =>
       // the engine refuses to take over unless `adopt` is set.
       const identity = output ?? olds;
       if (identity?.scope) {
-        const observed = yield* findByScopeAndName(
-          acct,
-          identity.scope,
-          ruleName(identity),
-        );
+        const observed = yield* findByScopeAndName(acct, identity.scope, ruleName(identity));
         if (observed) return Unowned(toAttributes(observed, acct));
       }
       return undefined;
@@ -215,9 +206,7 @@ export const TcpFlowProtectionRuleProvider = () =>
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the scope + name
       //    scan and then to create.
-      let observed = output?.ruleId
-        ? yield* getRule(accountId, output.ruleId)
-        : undefined;
+      let observed = output?.ruleId ? yield* getRule(accountId, output.ruleId) : undefined;
 
       // 2. Fall back to scanning for the scope + name match (ownership was
       //    already gated by `read` reporting existing rules as Unowned).
@@ -227,16 +216,14 @@ export const TcpFlowProtectionRuleProvider = () =>
 
       // 3. Ensure — create when missing.
       if (!observed) {
-        observed = yield* ddos.createAdvancedTcpProtectionTcpFlowProtectionRule(
-          {
-            accountId,
-            scope: news.scope,
-            name,
-            mode: news.mode,
-            burstSensitivity: news.burstSensitivity,
-            rateSensitivity: news.rateSensitivity,
-          },
-        );
+        observed = yield* ddos.createAdvancedTcpProtectionTcpFlowProtectionRule({
+          accountId,
+          scope: news.scope,
+          name,
+          mode: news.mode,
+          burstSensitivity: news.burstSensitivity,
+          rateSensitivity: news.rateSensitivity,
+        });
       }
 
       // 4. Sync — diff observed mutable aspects against desired; skip the
@@ -246,14 +233,13 @@ export const TcpFlowProtectionRuleProvider = () =>
         observed.burstSensitivity !== news.burstSensitivity ||
         observed.rateSensitivity !== news.rateSensitivity;
       if (dirty) {
-        observed =
-          yield* ddos.patchAdvancedTcpProtectionTcpFlowProtectionRuleItem({
-            accountId,
-            ruleId: observed.id,
-            mode: news.mode,
-            burstSensitivity: news.burstSensitivity,
-            rateSensitivity: news.rateSensitivity,
-          });
+        observed = yield* ddos.patchAdvancedTcpProtectionTcpFlowProtectionRuleItem({
+          accountId,
+          ruleId: observed.id,
+          mode: news.mode,
+          burstSensitivity: news.burstSensitivity,
+          rateSensitivity: news.rateSensitivity,
+        });
       }
 
       return toAttributes(observed, accountId);
@@ -265,55 +251,41 @@ export const TcpFlowProtectionRuleProvider = () =>
           accountId: output.accountId,
           ruleId: output.ruleId,
         })
-        .pipe(
-          Effect.catchTag("TcpFlowProtectionRuleNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("TcpFlowProtectionRuleNotFound", () => Effect.void));
     }),
   });
 
-type ObservedRule =
-  ddos.GetAdvancedTcpProtectionTcpFlowProtectionRuleItemResponse;
+type ObservedRule = ddos.GetAdvancedTcpProtectionTcpFlowProtectionRuleItemResponse;
 
-const ruleName = (props: {
-  scope: TcpFlowProtectionRuleScope | string;
-  name?: string;
-}) => props.name ?? "global";
+const ruleName = (props: { scope: TcpFlowProtectionRuleScope | string; name?: string }) =>
+  props.name ?? "global";
 
 /**
  * Read a rule by id, mapping "gone" (`TcpFlowProtectionRuleNotFound`,
  * HTTP 404) to `undefined`.
  */
 const getRule = (accountId: string, ruleId: string) =>
-  ddos
-    .getAdvancedTcpProtectionTcpFlowProtectionRuleItem({ accountId, ruleId })
-    .pipe(
-      Effect.map((rule): ObservedRule | undefined => rule),
-      Effect.catchTag("TcpFlowProtectionRuleNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  ddos.getAdvancedTcpProtectionTcpFlowProtectionRuleItem({ accountId, ruleId }).pipe(
+    Effect.map((rule): ObservedRule | undefined => rule),
+    Effect.catchTag("TcpFlowProtectionRuleNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a rule by its scope + name identity. If several rules carry the same
  * pair, pick the oldest for determinism.
  */
 const findByScopeAndName = (accountId: string, scope: string, name: string) =>
-  ddos.listAdvancedTcpProtectionTcpFlowProtectionRules
-    .items({ accountId })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk)
-          .filter((rule) => rule.scope === scope && rule.name === name)
-          .sort((a, b) => a.createdOn.localeCompare(b.createdOn))
-          .at(0),
-      ),
-    );
+  ddos.listAdvancedTcpProtectionTcpFlowProtectionRules.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .filter((rule) => rule.scope === scope && rule.name === name)
+        .sort((a, b) => a.createdOn.localeCompare(b.createdOn))
+        .at(0),
+    ),
+  );
 
-const toAttributes = (
-  rule: ObservedRule,
-  accountId: string,
-): TcpFlowProtectionRuleAttributes => ({
+const toAttributes = (rule: ObservedRule, accountId: string): TcpFlowProtectionRuleAttributes => ({
   ruleId: rule.id,
   accountId,
   // Distilled widens generated string enums to plain strings.

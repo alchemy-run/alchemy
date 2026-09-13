@@ -23,12 +23,9 @@ import { concatBytes } from "./ObjectCodec.ts";
  * decompress, or when the upstream body stream fails while being piped
  * through the decompressor.
  */
-export class GzipBodyError extends Schema.TaggedError<GzipBodyError>()(
-  "GzipBodyError",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class GzipBodyError extends Schema.TaggedError<GzipBodyError>()("GzipBodyError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * Returns `true` when the bytes start with the gzip magic `1f 8b`.
@@ -65,21 +62,15 @@ export const gunzipStream = <E>(
       Stream.toReadableStream(input).pipeThrough(
         // dom.d.ts types DecompressionStream's writable as BufferSource; the
         // runtime accepts Uint8Array chunks — bridge the variance mismatch.
-        new DecompressionStream("gzip") as unknown as ReadableWritablePair<
-          Uint8Array,
-          Uint8Array
-        >,
+        new DecompressionStream("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
       ) as ReadableStream<Uint8Array>,
-    onError: (error) =>
-      new GzipBodyError({ reason: `gunzip failed: ${errorReason(error)}` }),
+    onError: (error) => new GzipBodyError({ reason: `gunzip failed: ${errorReason(error)}` }),
   });
 
 /**
  * One-shot gunzip of a fully buffered body.
  */
-export const gunzipBuffer = (
-  data: Uint8Array,
-): Effect.Effect<Uint8Array, GzipBodyError> =>
+export const gunzipBuffer = (data: Uint8Array): Effect.Effect<Uint8Array, GzipBodyError> =>
   gunzipStream(Stream.succeed(data)).pipe(
     Stream.runCollect,
     Effect.map((chunks) => concatBytes(chunks)),
@@ -139,14 +130,9 @@ export const decodeGitBodyStream = <E>(
         ? Stream.empty
         : // `toPull`'s error channel is already Done-free, so ExcludeDone<E> = E;
           // TS cannot reduce the conditional for a generic E, hence the cast.
-          (Stream.fromPull(Effect.succeed(pull)) as Stream.Stream<
-            Uint8Array,
-            E
-          >);
+          (Stream.fromPull(Effect.succeed(pull)) as Stream.Stream<Uint8Array, E>);
       const full: Stream.Stream<Uint8Array, E> =
-        length === 0
-          ? remainder
-          : Stream.concat(Stream.succeed(headBytes), remainder);
+        length === 0 ? remainder : Stream.concat(Stream.succeed(headBytes), remainder);
       return sniffGzip(headBytes)
         ? (gunzipStream(full) as Stream.Stream<Uint8Array, E | GzipBodyError>)
         : full;

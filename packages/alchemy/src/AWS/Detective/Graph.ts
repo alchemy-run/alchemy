@@ -62,9 +62,7 @@ export const GraphProvider = () =>
     Effect.gen(function* () {
       // Detective allows at most one behavior graph per account/region. Return
       // the first (only) graph, if any.
-      const firstGraph = detective
-        .listGraphs({})
-        .pipe(Effect.map((r) => r.GraphList?.[0]));
+      const firstGraph = detective.listGraphs({}).pipe(Effect.map((r) => r.GraphList?.[0]));
 
       const readTags = (arn: string) =>
         detective.listTagsForResource({ ResourceArn: arn }).pipe(
@@ -88,9 +86,7 @@ export const GraphProvider = () =>
 
         // Account/region singleton — enumerate the single behavior graph.
         list: () =>
-          detective
-            .listGraphs({})
-            .pipe(Effect.map((r) => (r.GraphList ?? []).map(buildAttrs))),
+          detective.listGraphs({}).pipe(Effect.map((r) => (r.GraphList ?? []).map(buildAttrs))),
 
         reconcile: Effect.fn(function* ({ id, news = {}, session }) {
           const internalTags = yield* createInternalTags(id);
@@ -128,17 +124,13 @@ export const GraphProvider = () =>
           // 4. RETURN fresh attributes.
           const final = yield* firstGraph;
           yield* session.note(arn);
-          return final?.Arn
-            ? buildAttrs(final)
-            : { graphArn: arn, createdTime: undefined };
+          return final?.Arn ? buildAttrs(final) : { graphArn: arn, createdTime: undefined };
         }),
 
         delete: Effect.fn(function* ({ output }) {
           yield* detective
             .deleteGraph({ GraphArn: output.graphArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

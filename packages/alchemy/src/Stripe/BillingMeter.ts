@@ -193,19 +193,13 @@ export type BillingMeter = Resource<
  */
 export const BillingMeter = Resource<BillingMeter>("Stripe.BillingMeter");
 
-export class BillingMeterNotResolved extends Data.TaggedError(
-  "Stripe.BillingMeterNotResolved",
-)<{
+export class BillingMeterNotResolved extends Data.TaggedError("Stripe.BillingMeterNotResolved")<{
   eventName: string;
 }> {}
 
 type BillingMeterAttributes = BillingMeter["Attributes"];
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       displayName ??
@@ -214,11 +208,7 @@ const toDisplayName = (
     );
   });
 
-const toEventName = (
-  id: string,
-  eventName: string | undefined,
-  existing?: string,
-) =>
+const toEventName = (id: string, eventName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       eventName ??
@@ -254,9 +244,7 @@ const toAttrs = (meter: StripeBillingMeter): BillingMeterAttributes => ({
 const isMissingMeter = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingMeter({ id }).pipe(
-    Effect.catchIf(isMissingMeter, () => Effect.succeed(undefined)),
-  );
+  GetBillingMeter({ id }).pipe(Effect.catchIf(isMissingMeter, () => Effect.succeed(undefined)));
 
 const listByStatus = Effect.fn(function* (status: BillingMeterStatus) {
   const meters: StripeBillingMeter[] = [];
@@ -280,10 +268,9 @@ const listByStatus = Effect.fn(function* (status: BillingMeterStatus) {
 });
 
 const listAllMeters = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByStatus("active"), listByStatus("inactive")],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByStatus("active"), listByStatus("inactive")], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const meters: StripeBillingMeter[] = [];
   for (const meter of [...active, ...inactive]) {
@@ -301,10 +288,7 @@ const findByEventName = Effect.fn(function* (eventName: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  eventName?: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; eventName?: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -367,16 +351,8 @@ export const BillingMeterProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
-      const eventName = yield* toEventName(
-        id,
-        news.eventName,
-        output?.eventName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
+      const eventName = yield* toEventName(id, news.eventName, output?.eventName);
       const desiredStatus = news.status ?? "active";
 
       let current = yield* observe({

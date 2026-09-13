@@ -14,17 +14,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on. Runs in every
 // CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "describeClusters on a nonexistent cluster fails with ClusterNotFoundFault",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        dax.describeClusters({
-          ClusterNames: ["alchemy-nonexistent-dax-cluster-probe"],
-        }),
-      );
-      expect(error._tag).toBe("ClusterNotFoundFault");
-    }),
+test.provider("describeClusters on a nonexistent cluster fails with ClusterNotFoundFault", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      dax.describeClusters({
+        ClusterNames: ["alchemy-nonexistent-dax-cluster-probe"],
+      }),
+    );
+    expect(error._tag).toBe("ClusterNotFoundFault");
+  }),
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -40,9 +38,7 @@ const defaultNetwork = Effect.gen(function* () {
   // region's first three AZs (suffix a/b/c) only.
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -67,21 +63,14 @@ const assertClusterDeleting = (name: string) =>
   Effect.gen(function* () {
     const status = yield* dax.describeClusters({ ClusterNames: [name] }).pipe(
       Effect.map((r) => r.Clusters?.[0]?.Status ?? "gone"),
-      Effect.catchTag("ClusterNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
-      return yield* Effect.fail(
-        new Error(`cluster '${name}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`cluster '${name}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -109,9 +98,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"],
           });
           const subnetGroup = yield* SubnetGroup("Subnets", {
             description: "alchemy dax cluster subnets",

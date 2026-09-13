@@ -30,12 +30,7 @@ export interface CopySnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: memorydb.CopySnapshotRequest,
-    ) => Effect.Effect<
-      memorydb.CopySnapshotResponse,
-      memorydb.CopySnapshotError
-    >
+    ) => Effect.Effect<memorydb.CopySnapshotResponse, memorydb.CopySnapshotError>
   >
 > {}
-export const CopySnapshot = Binding.Service<CopySnapshot>(
-  "AWS.MemoryDB.CopySnapshot",
-);
+export const CopySnapshot = Binding.Service<CopySnapshot>("AWS.MemoryDB.CopySnapshot");

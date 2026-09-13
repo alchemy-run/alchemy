@@ -21,32 +21,30 @@ export const BatchExecuteStatementHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchExecuteStatement(${sortedTables}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "dynamodb:PartiQLDelete",
-                    "dynamodb:PartiQLInsert",
-                    "dynamodb:PartiQLSelect",
-                    "dynamodb:PartiQLUpdate",
-                  ],
-                  Resource: sortedTables.flatMap((table) => [
-                    table.tableArn,
-                    Output.interpolate`${table.tableArn}/index/*`,
-                  ]),
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchExecuteStatement(${sortedTables}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "dynamodb:PartiQLDelete",
+                  "dynamodb:PartiQLInsert",
+                  "dynamodb:PartiQLSelect",
+                  "dynamodb:PartiQLUpdate",
+                ],
+                Resource: sortedTables.flatMap((table) => [
+                  table.tableArn,
+                  Output.interpolate`${table.tableArn}/index/*`,
+                ]),
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(
-        function* (request: BatchExecuteStatementRequest) {
-          return yield* batchExecuteStatement(request);
-        },
-      );
+      return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(function* (
+        request: BatchExecuteStatementRequest,
+      ) {
+        return yield* batchExecuteStatement(request);
+      });
     });
   }),
 );

@@ -34,10 +34,7 @@ export interface StartReferenceImportJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StartReferenceImportJobRequest,
-    ) => Effect.Effect<
-      omics.StartReferenceImportJobResponse,
-      omics.StartReferenceImportJobError
-    >
+    ) => Effect.Effect<omics.StartReferenceImportJobResponse, omics.StartReferenceImportJobError>
   >
 > {}
 

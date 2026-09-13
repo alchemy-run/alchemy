@@ -38,9 +38,7 @@ export interface PutImage extends Binding.Service<
   (
     repository: Repository,
   ) => Effect.Effect<
-    (
-      request: PutImageRequest,
-    ) => Effect.Effect<ecr.PutImageResponse, ecr.PutImageError>
+    (request: PutImageRequest) => Effect.Effect<ecr.PutImageResponse, ecr.PutImageError>
   >
 > {}
 

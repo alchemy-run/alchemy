@@ -105,9 +105,5 @@ export default LogEventSinkFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.provideMerge(Logs.LogEventSinkHttp, Logs.PutLogEventsHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.provideMerge(Logs.LogEventSinkHttp, Logs.PutLogEventsHttp))),
 );

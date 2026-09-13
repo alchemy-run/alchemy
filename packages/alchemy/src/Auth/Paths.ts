@@ -8,8 +8,7 @@ import path from "pathe";
  * and available to users who keep dotfiles elsewhere. Resolved lazily so an
  * override set after module load (e.g. in a test) still takes effect.
  */
-export const rootDir = () =>
-  process.env.ALCHEMY_HOME ?? path.join(os.homedir(), ".alchemy");
+export const rootDir = () => process.env.ALCHEMY_HOME ?? path.join(os.homedir(), ".alchemy");
 
 export const configFilePath = () => path.join(rootDir(), "profiles.json");
 
@@ -17,8 +16,7 @@ export const configFilePath = () => path.join(rootDir(), "profiles.json");
 export const profilesDirPath = () => path.join(rootDir(), "profiles");
 
 /** Directory containing all provider documents for a named profile. */
-export const profileDirPath = (profile: string) =>
-  path.join(profilesDirPath(), profile);
+export const profileDirPath = (profile: string) => path.join(profilesDirPath(), profile);
 
 /** The single persisted document for one provider in one profile. */
 export const profileProviderFilePath = (profile: string, provider: string) =>

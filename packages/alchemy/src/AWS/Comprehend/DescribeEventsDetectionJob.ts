@@ -35,7 +35,6 @@ export interface DescribeEventsDetectionJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeEventsDetectionJob =
-  Binding.Service<DescribeEventsDetectionJob>(
-    "AWS.Comprehend.DescribeEventsDetectionJob",
-  );
+export const DescribeEventsDetectionJob = Binding.Service<DescribeEventsDetectionJob>(
+  "AWS.Comprehend.DescribeEventsDetectionJob",
+);

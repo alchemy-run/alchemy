@@ -10,21 +10,14 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (id: string) =>
   GetCustomer({ customer: id }).pipe(
     Effect.map((customer) =>
-      "deleted" in customer && customer.deleted
-        ? ("gone" as const)
-        : ("found" as const),
+      "deleted" in customer && customer.deleted ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -69,12 +62,8 @@ test.provider(
       expect(fetched.description).toEqual("Initial description");
       expect(fetched.phone).toEqual("+15555550100");
       expect(fetched.metadata?.plan).toEqual("pro");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -90,9 +79,7 @@ test.provider(
       );
 
       expect(updated.id).toEqual(created.id);
-      expect(updated.email).toEqual(
-        "alchemy.catalog.customer.updated@example.com",
-      );
+      expect(updated.email).toEqual("alchemy.catalog.customer.updated@example.com");
       expect(updated.name).toEqual("Alchemy Catalog Customer Updated");
       expect(updated.description).toEqual("Updated description");
       expect(updated.phone).toEqual("+15555550199");

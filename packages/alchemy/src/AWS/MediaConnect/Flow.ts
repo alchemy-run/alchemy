@@ -15,9 +15,7 @@ import type { Providers } from "../Providers.ts";
  * Every flow output managed by alchemy must carry a `Name` so the reconciler
  * can converge outputs by identity across updates.
  */
-export class FlowOutputNameMissing extends Data.TaggedError(
-  "FlowOutputNameMissing",
-)<{
+export class FlowOutputNameMissing extends Data.TaggedError("FlowOutputNameMissing")<{
   message: string;
 }> {}
 
@@ -167,18 +165,12 @@ export const FlowProvider = () =>
     Flow,
     Effect.gen(function* () {
       const toName = (id: string, props: { flowName?: string }) =>
-        props.flowName
-          ? Effect.succeed(props.flowName)
-          : createPhysicalName({ id, maxLength: 60 });
+        props.flowName ? Effect.succeed(props.flowName) : createPhysicalName({ id, maxLength: 60 });
 
       const readFlow = Effect.fn(function* (flowArn: string) {
         const response = yield* mediaconnect
           .describeFlow({ FlowArn: flowArn })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         return response?.Flow;
       });
 
@@ -186,9 +178,7 @@ export const FlowProvider = () =>
       // When the ARN cache is lost (state persistence failure) fall back to
       // the first flow bearing our deterministic name.
       const findFlowArnByName = Effect.fn(function* (name: string) {
-        const flows = yield* mediaconnect.listFlows
-          .items({})
-          .pipe(Stream.runCollect);
+        const flows = yield* mediaconnect.listFlows.items({}).pipe(Stream.runCollect);
         for (const flow of flows) {
           if (flow.Name === name && flow.FlowArn !== undefined) {
             return flow.FlowArn;
@@ -200,11 +190,7 @@ export const FlowProvider = () =>
       const readFlowTags = Effect.fn(function* (flowArn: string) {
         const response = yield* mediaconnect
           .listTagsForResource({ ResourceArn: flowArn })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         const tags: Record<string, string> = {};
         for (const [key, value] of Object.entries(response?.Tags ?? {})) {
           if (value !== undefined) tags[key] = value;
@@ -215,26 +201,15 @@ export const FlowProvider = () =>
       // Flow creation and in-place updates are async; wait (bounded, ~3 min)
       // for the flow to settle into a steady state before mutating further.
       const waitUntilSettled = Effect.fn(function* (flowArn: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(36),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]);
         return yield* readFlow(flowArn).pipe(
           Effect.flatMap((flow) => {
             if (flow === undefined) {
-              return Effect.fail(
-                new Error(`MediaConnect flow '${flowArn}' not found`),
-              );
+              return Effect.fail(new Error(`MediaConnect flow '${flowArn}' not found`));
             }
-            if (
-              flow.Status !== "STANDBY" &&
-              flow.Status !== "ACTIVE" &&
-              flow.Status !== "ERROR"
-            ) {
+            if (flow.Status !== "STANDBY" && flow.Status !== "ACTIVE" && flow.Status !== "ERROR") {
               return Effect.fail(
-                new Error(
-                  `MediaConnect flow '${flowArn}' still settling (status: ${flow.Status})`,
-                ),
+                new Error(`MediaConnect flow '${flowArn}' still settling (status: ${flow.Status})`),
               );
             }
             return Effect.succeed(flow);
@@ -246,18 +221,13 @@ export const FlowProvider = () =>
       // Deletion is verified as fully gone (bounded, ~3 min) so dependents
       // (and re-creates of the same name) never race a half-deleted flow.
       const waitUntilGone = Effect.fn(function* (flowArn: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(36),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]);
         yield* readFlow(flowArn).pipe(
           Effect.flatMap((flow) =>
             flow === undefined
               ? Effect.void
               : Effect.fail(
-                  new Error(
-                    `MediaConnect flow '${flowArn}' still exists (status: ${flow.Status})`,
-                  ),
+                  new Error(`MediaConnect flow '${flowArn}' still exists (status: ${flow.Status})`),
                 ),
           ),
           Effect.retry({ schedule: policy }),
@@ -323,9 +293,7 @@ export const FlowProvider = () =>
           const flow = yield* readFlow(arn);
           if (flow === undefined) return undefined;
           const attrs = yield* toAttrs(flow);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -367,9 +335,7 @@ export const FlowProvider = () =>
             arn = created.Flow?.FlowArn;
           }
           if (arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`MediaConnect flow '${name}' is missing its ARN`),
-            );
+            return yield* Effect.fail(new Error(`MediaConnect flow '${name}' is missing its ARN`));
           }
           observed = yield* waitUntilSettled(arn);
 
@@ -379,22 +345,13 @@ export const FlowProvider = () =>
           if (source?.SourceArn !== undefined) {
             const desired = props.source;
             const transport = source.Transport;
-            const update: Omit<
-              mediaconnect.UpdateFlowSourceRequest,
-              "FlowArn" | "SourceArn"
-            > = {};
+            const update: Omit<mediaconnect.UpdateFlowSourceRequest, "FlowArn" | "SourceArn"> = {};
             let mutated = false;
-            if (
-              desired.Description !== undefined &&
-              desired.Description !== source.Description
-            ) {
+            if (desired.Description !== undefined && desired.Description !== source.Description) {
               update.Description = desired.Description;
               mutated = true;
             }
-            if (
-              desired.Protocol !== undefined &&
-              desired.Protocol !== transport?.Protocol
-            ) {
+            if (desired.Protocol !== undefined && desired.Protocol !== transport?.Protocol) {
               update.Protocol = desired.Protocol;
               mutated = true;
             }
@@ -405,38 +362,23 @@ export const FlowProvider = () =>
               update.WhitelistCidr = desired.WhitelistCidr;
               mutated = true;
             }
-            if (
-              desired.IngestPort !== undefined &&
-              desired.IngestPort !== source.IngestPort
-            ) {
+            if (desired.IngestPort !== undefined && desired.IngestPort !== source.IngestPort) {
               update.IngestPort = desired.IngestPort;
               mutated = true;
             }
-            if (
-              desired.MaxBitrate !== undefined &&
-              desired.MaxBitrate !== transport?.MaxBitrate
-            ) {
+            if (desired.MaxBitrate !== undefined && desired.MaxBitrate !== transport?.MaxBitrate) {
               update.MaxBitrate = desired.MaxBitrate;
               mutated = true;
             }
-            if (
-              desired.MaxLatency !== undefined &&
-              desired.MaxLatency !== transport?.MaxLatency
-            ) {
+            if (desired.MaxLatency !== undefined && desired.MaxLatency !== transport?.MaxLatency) {
               update.MaxLatency = desired.MaxLatency;
               mutated = true;
             }
-            if (
-              desired.MinLatency !== undefined &&
-              desired.MinLatency !== transport?.MinLatency
-            ) {
+            if (desired.MinLatency !== undefined && desired.MinLatency !== transport?.MinLatency) {
               update.MinLatency = desired.MinLatency;
               mutated = true;
             }
-            if (
-              desired.StreamId !== undefined &&
-              desired.StreamId !== transport?.StreamId
-            ) {
+            if (desired.StreamId !== undefined && desired.StreamId !== transport?.StreamId) {
               update.StreamId = desired.StreamId;
               mutated = true;
             }
@@ -474,9 +416,7 @@ export const FlowProvider = () =>
           const desiredNames = new Set(desiredOutputs.map((o) => o.Name));
           let outputsMutated = false;
 
-          const toAdd = desiredOutputs.filter(
-            (o) => !observedByName.has(o.Name),
-          );
+          const toAdd = desiredOutputs.filter((o) => !observedByName.has(o.Name));
           if (toAdd.length > 0) {
             yield* mediaconnect.addFlowOutputs({
               FlowArn: arn,
@@ -486,10 +426,7 @@ export const FlowProvider = () =>
           }
 
           for (const existing of observedOutputs) {
-            if (
-              !desiredNames.has(existing.Name) &&
-              existing.EntitlementArn === undefined
-            ) {
+            if (!desiredNames.has(existing.Name) && existing.EntitlementArn === undefined) {
               yield* mediaconnect
                 .removeFlowOutput({
                   FlowArn: arn,
@@ -504,22 +441,13 @@ export const FlowProvider = () =>
             const existing = observedByName.get(desired.Name);
             if (existing === undefined) continue;
             const transport = existing.Transport;
-            const update: Omit<
-              mediaconnect.UpdateFlowOutputRequest,
-              "FlowArn" | "OutputArn"
-            > = {};
+            const update: Omit<mediaconnect.UpdateFlowOutputRequest, "FlowArn" | "OutputArn"> = {};
             let mutated = false;
-            if (
-              desired.Description !== undefined &&
-              desired.Description !== existing.Description
-            ) {
+            if (desired.Description !== undefined && desired.Description !== existing.Description) {
               update.Description = desired.Description;
               mutated = true;
             }
-            if (
-              desired.Destination !== undefined &&
-              desired.Destination !== existing.Destination
-            ) {
+            if (desired.Destination !== undefined && desired.Destination !== existing.Destination) {
               update.Destination = desired.Destination;
               mutated = true;
             }
@@ -527,10 +455,7 @@ export const FlowProvider = () =>
               update.Port = desired.Port;
               mutated = true;
             }
-            if (
-              desired.Protocol !== undefined &&
-              desired.Protocol !== transport?.Protocol
-            ) {
+            if (desired.Protocol !== undefined && desired.Protocol !== transport?.Protocol) {
               update.Protocol = desired.Protocol;
               mutated = true;
             }
@@ -541,17 +466,11 @@ export const FlowProvider = () =>
               update.CidrAllowList = desired.CidrAllowList;
               mutated = true;
             }
-            if (
-              desired.MaxLatency !== undefined &&
-              desired.MaxLatency !== transport?.MaxLatency
-            ) {
+            if (desired.MaxLatency !== undefined && desired.MaxLatency !== transport?.MaxLatency) {
               update.MaxLatency = desired.MaxLatency;
               mutated = true;
             }
-            if (
-              desired.MinLatency !== undefined &&
-              desired.MinLatency !== transport?.MinLatency
-            ) {
+            if (desired.MinLatency !== undefined && desired.MinLatency !== transport?.MinLatency) {
               update.MinLatency = desired.MinLatency;
               mutated = true;
             }
@@ -562,17 +481,11 @@ export const FlowProvider = () =>
               update.SmoothingLatency = desired.SmoothingLatency;
               mutated = true;
             }
-            if (
-              desired.StreamId !== undefined &&
-              desired.StreamId !== transport?.StreamId
-            ) {
+            if (desired.StreamId !== undefined && desired.StreamId !== transport?.StreamId) {
               update.StreamId = desired.StreamId;
               mutated = true;
             }
-            if (
-              desired.RemoteId !== undefined &&
-              desired.RemoteId !== transport?.RemoteId
-            ) {
+            if (desired.RemoteId !== undefined && desired.RemoteId !== transport?.RemoteId) {
               update.RemoteId = desired.RemoteId;
               mutated = true;
             }
@@ -620,10 +533,7 @@ export const FlowProvider = () =>
               // A STARTING flow rejects StopFlow until the start completes.
               Effect.retry({
                 while: (e) => e._tag === "BadRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),
             );
@@ -639,10 +549,7 @@ export const FlowProvider = () =>
               // surface as BadRequestException — bounded retry through it.
               Effect.retry({
                 while: (e) => e._tag === "BadRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(12),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
               }),
               Effect.catchTag("NotFoundException", () => Effect.void),
             );
@@ -652,9 +559,7 @@ export const FlowProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const listed = yield* mediaconnect.listFlows
-              .items({})
-              .pipe(Stream.runCollect);
+            const listed = yield* mediaconnect.listFlows.items({}).pipe(Stream.runCollect);
             const arns: string[] = [];
             for (const flow of listed) {
               if (flow.FlowArn !== undefined) arns.push(flow.FlowArn);

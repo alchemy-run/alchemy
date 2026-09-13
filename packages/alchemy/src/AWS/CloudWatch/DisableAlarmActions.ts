@@ -31,9 +31,7 @@ export interface DisableAlarmActions extends Binding.Service<
   "AWS.CloudWatch.DisableAlarmActions",
   (
     ...alarms: AlarmResources
-  ) => Effect.Effect<
-    () => Effect.Effect<cloudwatch.DisableAlarmActionsResponse, any>
-  >
+  ) => Effect.Effect<() => Effect.Effect<cloudwatch.DisableAlarmActionsResponse, any>>
 > {}
 
 export const DisableAlarmActions = Binding.Service<DisableAlarmActions>(

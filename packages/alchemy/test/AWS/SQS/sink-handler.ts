@@ -11,10 +11,9 @@ import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
-export class TestQueue extends Context.Service<
-  TestQueue,
-  { queue: AWS.SQS.Queue }
->()("TestQueue") {}
+export class TestQueue extends Context.Service<TestQueue, { queue: AWS.SQS.Queue }>()(
+  "TestQueue",
+) {}
 
 export const TestQueueLive = Layer.effect(
   TestQueue,
@@ -76,9 +75,7 @@ export const QueueSinkFunctionLive = QueueSinkFunction.make(
         Effect.tapError(Console.log),
         Effect.tap(Console.log),
         Effect.catch(() =>
-          Effect.succeed(
-            HttpServerResponse.text("Internal server error", { status: 500 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Internal server error", { status: 500 })),
         ),
       ),
     };

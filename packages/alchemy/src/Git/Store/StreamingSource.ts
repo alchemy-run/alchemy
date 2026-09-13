@@ -127,9 +127,7 @@ export const makeStreamingSource = (options?: {
     if (ended || failure !== undefined) {
       const ws = endWaiters.splice(0);
       for (const w of ws) {
-        w(
-          failure !== undefined ? Effect.fail(failure) : Effect.succeed(total!),
-        );
+        w(failure !== undefined ? Effect.fail(failure) : Effect.succeed(total!));
       }
     }
   };
@@ -172,35 +170,30 @@ export const makeStreamingSource = (options?: {
         wakePush(); // a waiting reader releases a parked feeder
       });
     });
-  const waitForFallback: Effect.Effect<RandomAccess, StoreError> =
-    Effect.suspend(() => {
-      if (failure !== undefined) return Effect.fail(failure);
-      if (fallback !== undefined && ended) return Effect.succeed(fallback);
-      return Effect.callback<RandomAccess, StoreError>((resume) => {
-        fallbackWaiters.push(() => {
-          resume(
-            failure !== undefined
-              ? Effect.fail(failure)
-              : fallback !== undefined
-                ? Effect.succeed(fallback)
-                : Effect.fail(
-                    new StoreError({
-                      reason:
-                        "streaming source: bytes evicted and no fallback reader",
-                    }),
-                  ),
-          );
-        });
+  const waitForFallback: Effect.Effect<RandomAccess, StoreError> = Effect.suspend(() => {
+    if (failure !== undefined) return Effect.fail(failure);
+    if (fallback !== undefined && ended) return Effect.succeed(fallback);
+    return Effect.callback<RandomAccess, StoreError>((resume) => {
+      fallbackWaiters.push(() => {
+        resume(
+          failure !== undefined
+            ? Effect.fail(failure)
+            : fallback !== undefined
+              ? Effect.succeed(fallback)
+              : Effect.fail(
+                  new StoreError({
+                    reason: "streaming source: bytes evicted and no fallback reader",
+                  }),
+                ),
+        );
       });
     });
+  });
   const wakeFallback = () => {
     // Once the body has ended, evicted reads either get the fallback reader
     // or fail — they must never wait forever. When a fallback is expected
     // (the spill completes after the body ends), they wait for it.
-    if (
-      ended &&
-      (fallback !== undefined || !fallbackExpected || failure !== undefined)
-    ) {
+    if (ended && (fallback !== undefined || !fallbackExpected || failure !== undefined)) {
       const ws = fallbackWaiters.splice(0);
       for (const w of ws) w();
     }
@@ -295,9 +288,7 @@ export const makeStreamingSource = (options?: {
       Effect.gen(function* () {
         if (failure !== undefined) return yield* Effect.fail(failure);
         if (ended) {
-          return yield* Effect.fail(
-            new StoreError({ reason: "streaming source: push after end" }),
-          );
+          return yield* Effect.fail(new StoreError({ reason: "streaming source: push after end" }));
         }
         append(chunk);
         wake();

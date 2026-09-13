@@ -20,13 +20,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "astro-app");
 // hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "astro.config.mjs",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "astro.config.mjs", "src", "public"];
 
 // Skipped under the floci runner: in dev the composite deploys only the
 // framework dev server (no Lambda/S3/CloudFront), so this test's live
@@ -61,20 +55,14 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Astro", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
         // The Lambda Function URL serves the SSR page directly — isolates
         // server-function health from the CloudFront edge routing.
-        yield* expectUrlContains(
-          `${deployed.site.serverUrl!}`,
-          "ASTRO_AWS_PAGE_MARKER",
-          {
-            timeout: "120 seconds",
-            label: "SSR direct from Lambda URL",
-          },
-        );
+        yield* expectUrlContains(`${deployed.site.serverUrl!}`, "ASTRO_AWS_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR direct from Lambda URL",
+        });
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "ASTRO_AWS_PAGE_MARKER", {
@@ -82,37 +70,21 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Astro", () => {
           label: "SSR home page",
         });
         // API route through the streaming Function URL origin.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "ASTRO_AWS_API_MARKER",
-          {
-            label: "API route",
-          },
-        );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "roundtrip",
-          {
-            label: "API route query echo",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "ASTRO_AWS_API_MARKER", {
+          label: "API route",
+        });
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "roundtrip", {
+          label: "API route query echo",
+        });
         // Public file served from S3 via the KV file manifest.
-        yield* expectUrlContains(
-          `${url}/robots.txt`,
-          "astro-aws-robots-marker",
-          {
-            label: "public asset from S3",
-          },
-        );
+        yield* expectUrlContains(`${url}/robots.txt`, "astro-aws-robots-marker", {
+          label: "public asset from S3",
+        });
         // Prerendered page (astro wrote it into dist/client at build time;
         // the edge router serves it from S3 by directory-index match).
-        yield* expectUrlContains(
-          `${url}/prerendered/`,
-          "ASTRO_AWS_PRERENDERED_MARKER",
-          {
-            label: "prerendered page",
-          },
-        );
+        yield* expectUrlContains(`${url}/prerendered/`, "ASTRO_AWS_PRERENDERED_MARKER", {
+          label: "prerendered page",
+        });
 
         const distributionId = deployed.site.distribution!.distributionId;
 
@@ -132,9 +104,6 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.retry({
       while: (error): boolean =>
         error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

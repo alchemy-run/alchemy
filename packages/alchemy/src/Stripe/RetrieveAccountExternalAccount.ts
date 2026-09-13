@@ -33,15 +33,10 @@ export interface RetrieveAccountExternalAccount extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveAccountExternalAccountRequest,
-    ) => Effect.Effect<
-      StripeExternalAccount,
-      GetAccountExternalAccountError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeExternalAccount, GetAccountExternalAccountError, RuntimeContext>
   >
 > {}
 
-export const RetrieveAccountExternalAccount =
-  Binding.Service<RetrieveAccountExternalAccount>(
-    "Stripe.RetrieveAccountExternalAccount",
-  );
+export const RetrieveAccountExternalAccount = Binding.Service<RetrieveAccountExternalAccount>(
+  "Stripe.RetrieveAccountExternalAccount",
+);

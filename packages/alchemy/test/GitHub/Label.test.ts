@@ -13,9 +13,7 @@ const { test } = Test.make({
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {
-  throw new Error(
-    "GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2",
-  );
+  throw new Error("GITHUB_TEST_OWNER must be alchemy-run-test or alchemy-run-test-2");
 }
 
 const repoNameOf = (repo: GitHub.Repository) =>

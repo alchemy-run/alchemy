@@ -69,13 +69,7 @@ export interface PrefixAttributes {
   modifiedAt: string | undefined;
 }
 
-export type Prefix = Resource<
-  TypeId,
-  PrefixProps,
-  PrefixAttributes,
-  never,
-  Providers
->;
+export type Prefix = Resource<TypeId, PrefixProps, PrefixAttributes, never, Providers>;
 
 /**
  * A BYOIP (Bring Your Own IP) prefix onboarded to Cloudflare's network.
@@ -133,14 +127,7 @@ export const isPrefix = (value: unknown): value is Prefix =>
 
 export const PrefixProvider = () =>
   Provider.succeed(Prefix, {
-    stables: [
-      "prefixId",
-      "accountId",
-      "cidr",
-      "asn",
-      "ownershipValidationToken",
-      "createdAt",
-    ],
+    stables: ["prefixId", "accountId", "cidr", "asn", "ownershipValidationToken", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (olds === undefined) return undefined;
@@ -159,10 +146,7 @@ export const PrefixProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (
-        (news.delegateLoaCreation ?? false) !==
-        (olds.delegateLoaCreation ?? false)
-      ) {
+      if ((news.delegateLoaCreation ?? false) !== (olds.delegateLoaCreation ?? false)) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -204,9 +188,7 @@ export const PrefixProvider = () =>
 
       // 1. Observe — the prefix id on `output` is a hint; a missing prefix
       //    falls through to the by-CIDR lookup and then to create.
-      let observed = output?.prefixId
-        ? yield* getPrefix(acct, output.prefixId)
-        : undefined;
+      let observed = output?.prefixId ? yield* getPrefix(acct, output.prefixId) : undefined;
       if (!observed) {
         observed = yield* findByCidr(acct, news.cidr);
       }

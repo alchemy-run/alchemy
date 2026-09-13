@@ -48,10 +48,7 @@ export interface GetResourcePosition extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetResourcePositionRequest,
-    ) => Effect.Effect<
-      iotw.GetResourcePositionResponse,
-      iotw.GetResourcePositionError
-    >
+    ) => Effect.Effect<iotw.GetResourcePositionResponse, iotw.GetResourcePositionError>
   >
 > {}
 export const GetResourcePosition = Binding.Service<GetResourcePosition>(

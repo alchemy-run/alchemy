@@ -20,18 +20,13 @@ import {
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
 });
-const certificate = beforeAll(
-  importClientVpnCertificate("ClientVpnAuthorizationPrerequisites"),
-);
+const certificate = beforeAll(importClientVpnCertificate("ClientVpnAuthorizationPrerequisites"));
 const Stack = Alchemy.Stack(
   "ClientVpnAuthorizationPrerequisites",
   { providers: AWS.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const certificateArn = yield* certificate;
-    const endpoint = yield* ClientVpnEndpoint(
-      "Endpoint",
-      clientVpnEndpointProps(certificateArn),
-    );
+    const endpoint = yield* ClientVpnEndpoint("Endpoint", clientVpnEndpointProps(certificateArn));
     return { endpoint };
   }),
 );
@@ -40,9 +35,7 @@ const prerequisites = beforeAll(deploy(Stack), {
 });
 afterAll(
   destroy(Stack).pipe(
-    Effect.andThen(
-      certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
-    ),
+    Effect.andThen(certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted))),
   ),
   { timeout: clientVpnTestTimeout },
 );
@@ -63,19 +56,14 @@ test.provider(
             description,
           }),
         );
-      const created = yield* deployRule(
-        "10.171.0.0/16",
-        "Initial authorization",
-      );
+      const created = yield* deployRule("10.171.0.0/16", "Initial authorization");
       expect(created.clientVpnEndpointId).toBe(clientVpnEndpointId);
       expect(created.targetNetworkCidr).toBe("10.171.0.0/16");
       const initial = yield* waitForClientVpn(
         readClientVpnAuthorizationRules(clientVpnEndpointId),
         (rules) =>
           rules.some(
-            (rule) =>
-              rule.DestinationCidr === "10.171.0.0/16" &&
-              rule.Status?.Code === "active",
+            (rule) => rule.DestinationCidr === "10.171.0.0/16" && rule.Status?.Code === "active",
           ),
         "active authorization",
       );
@@ -108,9 +96,7 @@ test.provider(
       yield* deployRule("10.171.0.0/16", "Initial authorization");
       expect(
         (yield* readClientVpnAuthorizationRules(clientVpnEndpointId)).filter(
-          (rule) =>
-            rule.DestinationCidr === "10.171.0.0/16" &&
-            rule.Status?.Code === "active",
+          (rule) => rule.DestinationCidr === "10.171.0.0/16" && rule.Status?.Code === "active",
         ),
       ).toHaveLength(1);
 
@@ -129,9 +115,7 @@ test.provider(
       );
       expect(
         updated.filter(
-          (rule) =>
-            rule.DestinationCidr === "10.171.0.0/16" &&
-            rule.Status?.Code === "active",
+          (rule) => rule.DestinationCidr === "10.171.0.0/16" && rule.Status?.Code === "active",
         ),
       ).toHaveLength(1);
 
@@ -141,28 +125,18 @@ test.provider(
         readClientVpnAuthorizationRules(clientVpnEndpointId),
         (rules) =>
           rules.some(
-            (rule) =>
-              rule.DestinationCidr === "10.172.0.0/16" &&
-              rule.Status?.Code === "active",
+            (rule) => rule.DestinationCidr === "10.172.0.0/16" && rule.Status?.Code === "active",
           ),
         "replacement authorization CIDR",
       );
       expect(
         replacement.find(
-          (rule) =>
-            rule.DestinationCidr === "10.172.0.0/16" &&
-            rule.Status?.Code === "active",
+          (rule) => rule.DestinationCidr === "10.172.0.0/16" && rule.Status?.Code === "active",
         )?.Description ?? "",
       ).toBe("");
-      yield* assertClientVpnAuthorizationDeleted(
-        clientVpnEndpointId,
-        "10.171.0.0/16",
-      );
+      yield* assertClientVpnAuthorizationDeleted(clientVpnEndpointId, "10.171.0.0/16");
       yield* stack.destroy();
-      yield* assertClientVpnAuthorizationDeleted(
-        clientVpnEndpointId,
-        "10.172.0.0/16",
-      );
+      yield* assertClientVpnAuthorizationDeleted(clientVpnEndpointId, "10.172.0.0/16");
     }),
   { timeout: clientVpnTestTimeout },
 );
@@ -187,18 +161,13 @@ test.provider(
         TargetNetworkCidr: targetNetworkCidr,
         RevokeAllGroups: true,
       });
-      yield* assertClientVpnAuthorizationDeleted(
-        clientVpnEndpointId,
-        targetNetworkCidr,
-      );
+      yield* assertClientVpnAuthorizationDeleted(clientVpnEndpointId, targetNetworkCidr);
       yield* stack.deploy(program);
       const repaired = yield* waitForClientVpn(
         readClientVpnAuthorizationRules(clientVpnEndpointId),
         (rules) =>
           rules.some(
-            (rule) =>
-              rule.DestinationCidr === targetNetworkCidr &&
-              rule.Status?.Code === "active",
+            (rule) => rule.DestinationCidr === targetNetworkCidr && rule.Status?.Code === "active",
           ),
         "recreated authorization",
       );
@@ -210,10 +179,7 @@ test.provider(
         }),
       );
       yield* stack.destroy();
-      yield* assertClientVpnAuthorizationDeleted(
-        clientVpnEndpointId,
-        targetNetworkCidr,
-      );
+      yield* assertClientVpnAuthorizationDeleted(clientVpnEndpointId, targetNetworkCidr);
     }),
   { timeout: clientVpnTestTimeout },
 );
@@ -245,8 +211,7 @@ test.provider(
         "SDK-created authorization",
       );
       const original = preexisting.filter(
-        (rule) =>
-          rule.DestinationCidr === targetNetworkCidr && rule.AccessAll === true,
+        (rule) => rule.DestinationCidr === targetNetworkCidr && rule.AccessAll === true,
       );
       expect(original).toHaveLength(1);
 
@@ -265,21 +230,15 @@ test.provider(
         description,
         status: "active",
       });
-      const observed =
-        yield* readClientVpnAuthorizationRules(clientVpnEndpointId);
+      const observed = yield* readClientVpnAuthorizationRules(clientVpnEndpointId);
       expect(
         observed.filter(
-          (rule) =>
-            rule.DestinationCidr === targetNetworkCidr &&
-            rule.AccessAll === true,
+          (rule) => rule.DestinationCidr === targetNetworkCidr && rule.AccessAll === true,
         ),
       ).toEqual(original);
 
       yield* stack.destroy();
-      yield* assertClientVpnAuthorizationDeleted(
-        clientVpnEndpointId,
-        targetNetworkCidr,
-      );
+      yield* assertClientVpnAuthorizationDeleted(clientVpnEndpointId, targetNetworkCidr);
     }),
   { timeout: clientVpnTestTimeout },
 );

@@ -54,11 +54,7 @@ test.provider(
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(PreparedStatement);
       const all = yield* provider.list();
-      expect(
-        all.some(
-          (ps) => ps.statementName === stmtName && ps.workGroup === wgName,
-        ),
-      ).toBe(true);
+      expect(all.some((ps) => ps.statementName === stmtName && ps.workGroup === wgName)).toBe(true);
 
       // Update — statement text and description are updatable in place.
       yield* stack.deploy(

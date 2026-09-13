@@ -16,15 +16,9 @@ layer(NodeServices.layer)("Bundle.build with rawPlugin", (it) => {
       const root = yield* fs.makeTempDirectory({
         prefix: "alchemy-raw-bundle-",
       });
-      yield* fs.writeFileString(
-        path.join(root, "hello.txt"),
-        "HELLO_RAW_MARKER",
-      );
+      yield* fs.writeFileString(path.join(root, "hello.txt"), "HELLO_RAW_MARKER");
       const entry = path.join(root, "entry.ts");
-      yield* fs.writeFileString(
-        entry,
-        `import txt from "./hello.txt?raw";\nconsole.log(txt);\n`,
-      );
+      yield* fs.writeFileString(entry, `import txt from "./hello.txt?raw";\nconsole.log(txt);\n`);
 
       const result = yield* Bundle.build({
         input: entry,
@@ -37,9 +31,7 @@ layer(NodeServices.layer)("Bundle.build with rawPlugin", (it) => {
         .join("\n");
       expect(code).toContain(`"HELLO_RAW_MARKER"`);
       // The bundle should not emit hello.txt as a separate asset.
-      expect(result.files.every((f) => !f.path.endsWith("hello.txt"))).toBe(
-        true,
-      );
+      expect(result.files.every((f) => !f.path.endsWith("hello.txt"))).toBe(true);
 
       yield* fs.remove(root, { recursive: true });
     }),
@@ -177,10 +169,7 @@ describe("splitFileAndPostfix", () => {
   });
 
   it("splits at the first `#`", () => {
-    expect(splitFileAndPostfix("./foo.txt#frag")).toEqual([
-      "./foo.txt",
-      "#frag",
-    ]);
+    expect(splitFileAndPostfix("./foo.txt#frag")).toEqual(["./foo.txt", "#frag"]);
   });
 
   it("returns empty postfix when no query/hash", () => {
@@ -188,9 +177,6 @@ describe("splitFileAndPostfix", () => {
   });
 
   it("splits at whichever of `?` / `#` comes first", () => {
-    expect(splitFileAndPostfix("./foo.txt#frag?raw")).toEqual([
-      "./foo.txt",
-      "#frag?raw",
-    ]);
+    expect(splitFileAndPostfix("./foo.txt#frag?raw")).toEqual(["./foo.txt", "#frag?raw"]);
   });
 });

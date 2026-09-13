@@ -26,8 +26,7 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
   Effect.gen(function* () {
     const runMicrovm = yield* AWS.Lambda.RunMicrovm(IsolatedSandbox);
     const getMicrovm = yield* AWS.Lambda.GetMicrovm(IsolatedSandbox);
-    const terminateMicrovm =
-      yield* AWS.Lambda.TerminateMicrovm(IsolatedSandbox);
+    const terminateMicrovm = yield* AWS.Lambda.TerminateMicrovm(IsolatedSandbox);
     const createAuthToken = yield* AWS.Lambda.CreateAuthToken(IsolatedSandbox);
 
     return {
@@ -49,9 +48,7 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
           return yield* Effect.gen(function* () {
             yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
               Effect.flatMap((m) =>
-                m.state === "RUNNING"
-                  ? Effect.void
-                  : Effect.fail(new Error(`microvm ${m.state}`)),
+                m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
               ),
               Effect.retry({
                 schedule: Schedule.spaced("2 seconds"),
@@ -80,12 +77,9 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
             const client = yield* HttpClient.HttpClient;
             const headers = AWS.Lambda.microvmAuthHeaders(authToken);
             const echoRes = yield* client
-              .get(
-                `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-                {
-                  headers,
-                },
-              )
+              .get(`https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`, {
+                headers,
+              })
               .pipe(
                 Effect.retry({
                   schedule: Schedule.exponential("500 millis"),
@@ -103,9 +97,7 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
             });
           }).pipe(
             Effect.ensuring(
-              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
-                Effect.ignore,
-              ),
+              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
             ),
             Effect.provide(FetchHttpClient.layer),
           );

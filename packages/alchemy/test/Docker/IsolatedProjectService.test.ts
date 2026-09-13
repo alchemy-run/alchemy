@@ -4,10 +4,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Docker from "@/Docker";
 import * as Test from "@/Test/Alchemy";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../IsolatedProject.ts";
+import { materializeIsolatedProject, removeIsolatedProject } from "../IsolatedProject.ts";
 import IsolatedProjectService, {
   SERVICE_EXTERNAL_PORT,
   project,

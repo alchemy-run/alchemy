@@ -37,7 +37,6 @@ export interface DescribeStackDriftDetectionStatus extends Binding.Service<
     >
   >
 > {}
-export const DescribeStackDriftDetectionStatus =
-  Binding.Service<DescribeStackDriftDetectionStatus>(
-    "AWS.CloudFormation.DescribeStackDriftDetectionStatus",
-  );
+export const DescribeStackDriftDetectionStatus = Binding.Service<DescribeStackDriftDetectionStatus>(
+  "AWS.CloudFormation.DescribeStackDriftDetectionStatus",
+);

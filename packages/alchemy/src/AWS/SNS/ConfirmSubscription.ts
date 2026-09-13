@@ -38,10 +38,7 @@ export interface ConfirmSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ConfirmSubscriptionRequest,
-    ) => Effect.Effect<
-      sns.ConfirmSubscriptionResponse,
-      sns.ConfirmSubscriptionError
-    >
+    ) => Effect.Effect<sns.ConfirmSubscriptionResponse, sns.ConfirmSubscriptionError>
   >
 > {}
 export const ConfirmSubscription = Binding.Service<ConfirmSubscription>(

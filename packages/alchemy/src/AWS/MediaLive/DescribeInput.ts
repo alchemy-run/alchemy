@@ -31,12 +31,7 @@ export interface DescribeInput extends Binding.Service<
   (
     input: Input,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      medialive.DescribeInputResponse,
-      medialive.DescribeInputError
-    >
+    () => Effect.Effect<medialive.DescribeInputResponse, medialive.DescribeInputError>
   >
 > {}
-export const DescribeInput = Binding.Service<DescribeInput>(
-  "AWS.MediaLive.DescribeInput",
-);
+export const DescribeInput = Binding.Service<DescribeInput>("AWS.MediaLive.DescribeInput");

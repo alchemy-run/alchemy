@@ -48,9 +48,7 @@ const assertEnvironmentDeleting = (environmentId: string) =>
   Effect.gen(function* () {
     const status = yield* finspace.getEnvironment({ environmentId }).pipe(
       Effect.map((r) => r.environment?.status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (
       status !== "gone" &&
@@ -64,10 +62,7 @@ const assertEnvironmentDeleting = (environmentId: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 

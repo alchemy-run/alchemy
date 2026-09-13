@@ -40,12 +40,7 @@ export interface DeleteImageSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteImageSetRequest,
-    ) => Effect.Effect<
-      medicalimaging.DeleteImageSetResponse,
-      medicalimaging.DeleteImageSetError
-    >
+    ) => Effect.Effect<medicalimaging.DeleteImageSetResponse, medicalimaging.DeleteImageSetError>
   >
 > {}
-export const DeleteImageSet = Binding.Service<DeleteImageSet>(
-  "AWS.MedicalImaging.DeleteImageSet",
-);
+export const DeleteImageSet = Binding.Service<DeleteImageSet>("AWS.MedicalImaging.DeleteImageSet");

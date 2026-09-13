@@ -9,28 +9,21 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
 import { defaultProviderMode } from "../ProviderMode.ts";
-import {
-  CurrentRuntimeContext,
-  type RuntimeContext,
-} from "../RuntimeContext.ts";
+import { CurrentRuntimeContext, type RuntimeContext } from "../RuntimeContext.ts";
 import { bindBackendEnvironment } from "./BackendConnection.ts";
 import type { Bucket } from "./Bucket.ts";
 import { Credential, validateCredential } from "./Credential.ts";
 import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import { FunctionEnvironment } from "./FunctionEnvironment.ts";
-import {
-  makeStorageClient,
-  type StorageClient,
-  type StorageConfig,
-} from "./Storage.ts";
+import { makeStorageClient, type StorageClient, type StorageConfig } from "./Storage.ts";
 
 export interface StorageBindingOptions {
   /** Explicit sharing; validated against the requested scope and branch lineage. */
   credential?: Credential;
 }
-export class StorageBindingError extends Data.TaggedError(
-  "StorageBindingError",
-)<{ message: string }> {}
+export class StorageBindingError extends Data.TaggedError("StorageBindingError")<{
+  message: string;
+}> {}
 
 export type RuntimeStorageMethods<K extends keyof StorageClient> = {
   [P in K]: (
@@ -55,10 +48,7 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
       );
     const environment = yield* Effect.serviceOption(FunctionEnvironment);
     const createCredential = yield* Credential;
-    return Effect.fn(function* (
-      bucket: Bucket,
-      options: StorageBindingOptions = {},
-    ) {
+    return Effect.fn(function* (bucket: Bucket, options: StorageBindingOptions = {}) {
       const host = yield* Binding.Host;
       if (!host)
         return yield* Effect.die(
@@ -85,13 +75,8 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
       };
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const mode = host.Mode ?? (yield* defaultProviderMode);
-        const injected =
-          !options.credential &&
-          usesInjectedCredentials(host, bucket.Props, mode);
-        const env: Record<
-          string,
-          Output.Output<string | Redacted.Redacted<string>>
-        > = {
+        const injected = !options.credential && usesInjectedCredentials(host, bucket.Props, mode);
+        const env: Record<string, Output.Output<string | Redacted.Redacted<string>>> = {
           [bucketKey]: bucket.bucketName,
           [keys.injected]: Output.literal(injected ? "yes" : "no"),
           [keys.endpoint]: bucket.endpoint,
@@ -104,26 +89,14 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
               ...(bucket.Props.branch !== undefined
                 ? { branch: bucket.Props.branch }
                 : { project: bucket.Props.project }),
-              scopes:
-                scope === "storage:write"
-                  ? ["storage:read", "storage:write"]
-                  : [scope],
+              scopes: scope === "storage:write" ? ["storage:read", "storage:write"] : [scope],
             }));
-          const validated = Output.all(
-            Output.of(credential),
-            Output.of(bucket),
-          ).pipe(
+          const validated = Output.all(Output.of(credential), Output.of(bucket)).pipe(
             Output.mapEffect(
               Effect.fn(function* ([credential, target]) {
-                yield* validateCredential(credential, target, scope).pipe(
-                  Effect.orDie,
-                );
+                yield* validateCredential(credential, target, scope).pipe(Effect.orDie);
                 if (scope === "storage:write")
-                  yield* validateCredential(
-                    credential,
-                    target,
-                    "storage:read",
-                  ).pipe(Effect.orDie);
+                  yield* validateCredential(credential, target, "storage:read").pipe(Effect.orDie);
                 return credential;
               }),
             ),
@@ -142,9 +115,7 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
                     message: `Missing storage binding variable ${key}`,
                   }),
                 )
-              : Effect.succeed(
-                  Redacted.isRedacted(value) ? Redacted.value(value) : value,
-                ),
+              : Effect.succeed(Redacted.isRedacted(value) ? Redacted.value(value) : value),
           ),
         );
       const config = Effect.gen(function* () {
@@ -175,10 +146,7 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
         } satisfies StorageConfig;
       });
       const client = Effect.gen(function* () {
-        return yield* makeStorageClient(
-          yield* config,
-          yield* required(bucketKey),
-        );
+        return yield* makeStorageClient(yield* config, yield* required(bucketKey));
       }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
       return {
         get: (key: string) => client.pipe(Effect.flatMap((c) => c.get(key))),
@@ -189,29 +157,17 @@ export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
           client.pipe(Effect.flatMap((c) => c.presign(...args))),
         put: (...args: Parameters<StorageClient["put"]>) =>
           client.pipe(Effect.flatMap((c) => c.put(...args))),
-        delete: (key: string) =>
-          client.pipe(Effect.flatMap((c) => c.delete(key))),
-        deleteMany: (keys: string[]) =>
-          client.pipe(Effect.flatMap((c) => c.deleteMany(keys))),
-        createMultipartUpload: (
-          ...args: Parameters<StorageClient["createMultipartUpload"]>
-        ) =>
+        delete: (key: string) => client.pipe(Effect.flatMap((c) => c.delete(key))),
+        deleteMany: (keys: string[]) => client.pipe(Effect.flatMap((c) => c.deleteMany(keys))),
+        createMultipartUpload: (...args: Parameters<StorageClient["createMultipartUpload"]>) =>
           client.pipe(Effect.flatMap((c) => c.createMultipartUpload(...args))),
         uploadPart: (...args: Parameters<StorageClient["uploadPart"]>) =>
           client.pipe(Effect.flatMap((c) => c.uploadPart(...args))),
-        completeMultipartUpload: (
-          ...args: Parameters<StorageClient["completeMultipartUpload"]>
-        ) =>
-          client.pipe(
-            Effect.flatMap((c) => c.completeMultipartUpload(...args)),
-          ),
-        abortMultipartUpload: (
-          ...args: Parameters<StorageClient["abortMultipartUpload"]>
-        ) =>
+        completeMultipartUpload: (...args: Parameters<StorageClient["completeMultipartUpload"]>) =>
+          client.pipe(Effect.flatMap((c) => c.completeMultipartUpload(...args))),
+        abortMultipartUpload: (...args: Parameters<StorageClient["abortMultipartUpload"]>) =>
           client.pipe(Effect.flatMap((c) => c.abortMultipartUpload(...args))),
-        listMultipartUploads: (
-          ...args: Parameters<StorageClient["listMultipartUploads"]>
-        ) =>
+        listMultipartUploads: (...args: Parameters<StorageClient["listMultipartUploads"]>) =>
           client.pipe(Effect.flatMap((c) => c.listMultipartUploads(...args))),
         listParts: (...args: Parameters<StorageClient["listParts"]>) =>
           client.pipe(Effect.flatMap((c) => c.listParts(...args))),

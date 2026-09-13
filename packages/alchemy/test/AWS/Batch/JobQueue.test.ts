@@ -14,17 +14,11 @@ const queueName = "alchemy-test-batch-jq";
 
 const describeQueue = batch
   .describeJobQueues({ jobQueues: [queueName] })
-  .pipe(
-    Effect.map((res) => res.jobQueues?.find((q) => q.status !== "DELETED")),
-  );
+  .pipe(Effect.map((res) => res.jobQueues?.find((q) => q.status !== "DELETED")));
 
 const describeCe = batch
   .describeComputeEnvironments({ computeEnvironments: [ceName] })
-  .pipe(
-    Effect.map((res) =>
-      res.computeEnvironments?.find((ce) => ce.status !== "DELETED"),
-    ),
-  );
+  .pipe(Effect.map((res) => res.computeEnvironments?.find((ce) => ce.status !== "DELETED")));
 
 const chain = (priority?: number) =>
   Effect.gen(function* () {
@@ -56,9 +50,9 @@ test.provider(
       expect(created?.status).toBe("VALID");
       expect(created?.state).toBe("ENABLED");
       expect(created?.priority).toBe(1);
-      expect(
-        created?.computeEnvironmentOrder?.[0]?.computeEnvironment,
-      ).toContain(`compute-environment/${ceName}`);
+      expect(created?.computeEnvironmentOrder?.[0]?.computeEnvironment).toContain(
+        `compute-environment/${ceName}`,
+      );
 
       // Update — priority syncs in place.
       yield* stack.deploy(chain(5));

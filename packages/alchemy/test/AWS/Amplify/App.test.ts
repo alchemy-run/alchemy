@@ -27,16 +27,11 @@ class AppStillExists extends Data.TaggedError("AppStillExists")<{
 const assertAppDeleted = (appId: string) =>
   findApp(appId).pipe(
     Effect.flatMap((app) =>
-      app === undefined
-        ? Effect.void
-        : Effect.fail(new AppStillExists({ appId })),
+      app === undefined ? Effect.void : Effect.fail(new AppStillExists({ appId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AppStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 

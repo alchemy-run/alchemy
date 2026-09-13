@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeAlarmHistoryRequest
-  extends cloudwatch.DescribeAlarmHistoryInput {}
+export interface DescribeAlarmHistoryRequest extends cloudwatch.DescribeAlarmHistoryInput {}
 
 /**
  * Runtime binding for `cloudwatch:DescribeAlarmHistory` — read state
@@ -34,10 +33,7 @@ export interface DescribeAlarmHistory extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeAlarmHistoryRequest,
-    ) => Effect.Effect<
-      cloudwatch.DescribeAlarmHistoryOutput,
-      cloudwatch.DescribeAlarmHistoryError
-    >
+    ) => Effect.Effect<cloudwatch.DescribeAlarmHistoryOutput, cloudwatch.DescribeAlarmHistoryError>
   >
 > {}
 

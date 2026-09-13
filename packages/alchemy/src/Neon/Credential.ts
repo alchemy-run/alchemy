@@ -7,11 +7,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  resolveBranchScope,
-  type BranchScope,
-  type ResolvedBranchScope,
-} from "./BranchScope.ts";
+import { resolveBranchScope, type BranchScope, type ResolvedBranchScope } from "./BranchScope.ts";
 import type { Providers } from "./Providers.ts";
 
 export type CredentialScope = Neon.CredentialScope;
@@ -64,9 +60,7 @@ export interface Credential extends Resource<
  */
 export const Credential = Resource<Credential>("Neon.Credential");
 
-export class CredentialRecoveryError extends Data.TaggedError(
-  "CredentialRecoveryError",
-)<{
+export class CredentialRecoveryError extends Data.TaggedError("CredentialRecoveryError")<{
   message: string;
 }> {}
 
@@ -88,8 +82,7 @@ const findCredential = Effect.fn(function* (
     (credential) =>
       !credential.revoked_at &&
       credential.principal_type === "user" &&
-      (credential.branch_id === undefined ||
-        credential.branch_id === scope.branchId) &&
+      (credential.branch_id === undefined || credential.branch_id === scope.branchId) &&
       (tokenId ? credential.token_id === tokenId : credential.name === name),
   );
   if (matches.length > 1) {
@@ -158,9 +151,7 @@ export const CredentialProvider = () =>
       if (!output && !olds?.branch && !olds?.project) return undefined;
       const scope = output ?? (yield* resolveBranchScope(olds!));
       const name =
-        output?.name ??
-        olds?.name ??
-        (yield* createPhysicalName({ id, maxLength: 100 }));
+        output?.name ?? olds?.name ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       const metadata = yield* findCredential(scope, name, output?.tokenId);
       if (!metadata) return undefined;
       const attrs = yield* hydrateCredential(scope, metadata);
@@ -168,10 +159,7 @@ export const CredentialProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const scope = yield* resolveBranchScope(news);
-      const name =
-        news.name ??
-        output?.name ??
-        (yield* createPhysicalName({ id, maxLength: 100 }));
+      const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       let metadata = yield* findCredential(scope, name, output?.tokenId);
       if (!metadata && output) metadata = yield* findCredential(scope, name);
       if (!metadata) {
@@ -217,10 +205,7 @@ export const validateCredential = Effect.fn(function* (
   target: ResolvedBranchScope,
   required: CredentialScope,
 ) {
-  if (
-    credential.projectId !== target.projectId ||
-    !credential.scopes.includes(required)
-  ) {
+  if (credential.projectId !== target.projectId || !credential.scopes.includes(required)) {
     return yield* new CredentialRecoveryError({
       message: "Credential project or scope does not authorize this binding",
     });
@@ -231,11 +216,10 @@ export const validateCredential = Effect.fn(function* (
     if (branchId === credential.branchId) return;
     if (seen.has(branchId)) break;
     seen.add(branchId);
-    const response: Neon.GetProjectBranchResponse =
-      yield* Neon.getProjectBranch({
-        project_id: target.projectId,
-        branch_id: branchId,
-      });
+    const response: Neon.GetProjectBranchResponse = yield* Neon.getProjectBranch({
+      project_id: target.projectId,
+      branch_id: branchId,
+    });
     branchId = response.branch.parent_id;
   }
   return yield* new CredentialRecoveryError({

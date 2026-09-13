@@ -12,10 +12,7 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -73,9 +70,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const client = yield* HttpClient.HttpClient;
       const health = yield* client.get(`${url!}/health`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`health returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),

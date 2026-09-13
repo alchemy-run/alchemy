@@ -12,45 +12,39 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Create a generated key pair, assert the private key is captured, verify it
 // exists out-of-band, then destroy it and confirm it is gone.
-test.provider(
-  "create generates a key pair and captures the private key",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("create generates a key pair and captures the private key", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const keyPair = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* KeyPair("GeneratedKey", { keyType: "ed25519" });
-        }),
-      );
+    const keyPair = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* KeyPair("GeneratedKey", { keyType: "ed25519" });
+      }),
+    );
 
-      expect(keyPair.keyPairId).toMatch(/^key-/);
-      expect(keyPair.keyName).toBeTruthy();
-      expect(keyPair.keyType).toBe("ed25519");
-      expect(keyPair.keyFingerprint).toBeTruthy();
-      // AWS returns the private key exactly once, at create time.
-      expect(keyPair.privateKey).toBeDefined();
-      expect(Redacted.value(keyPair.privateKey!)).toContain("PRIVATE KEY");
+    expect(keyPair.keyPairId).toMatch(/^key-/);
+    expect(keyPair.keyName).toBeTruthy();
+    expect(keyPair.keyType).toBe("ed25519");
+    expect(keyPair.keyFingerprint).toBeTruthy();
+    // AWS returns the private key exactly once, at create time.
+    expect(keyPair.privateKey).toBeDefined();
+    expect(Redacted.value(keyPair.privateKey!)).toContain("PRIVATE KEY");
 
-      // Verify out-of-band.
-      const described = yield* ec2.describeKeyPairs({
-        KeyPairIds: [keyPair.keyPairId],
-      });
-      expect(described.KeyPairs?.[0]?.KeyName).toBe(keyPair.keyName);
-      expect(described.KeyPairs?.[0]?.KeyType).toBe("ed25519");
+    // Verify out-of-band.
+    const described = yield* ec2.describeKeyPairs({
+      KeyPairIds: [keyPair.keyPairId],
+    });
+    expect(described.KeyPairs?.[0]?.KeyName).toBe(keyPair.keyName);
+    expect(described.KeyPairs?.[0]?.KeyType).toBe("ed25519");
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Confirm deletion.
-      const after = yield* ec2
-        .describeKeyPairs({ KeyNames: [keyPair.keyName] })
-        .pipe(
-          Effect.catchTag("InvalidKeyPair.NotFound", () =>
-            Effect.succeed({ KeyPairs: [] }),
-          ),
-        );
-      expect(after.KeyPairs ?? []).toHaveLength(0);
-    }),
+    // Confirm deletion.
+    const after = yield* ec2
+      .describeKeyPairs({ KeyNames: [keyPair.keyName] })
+      .pipe(Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.succeed({ KeyPairs: [] })));
+    expect(after.KeyPairs ?? []).toHaveLength(0);
+  }),
 );
 
 // `list()` enumerates branded key pairs in the account.

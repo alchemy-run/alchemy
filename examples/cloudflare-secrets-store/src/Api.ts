@@ -23,9 +23,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           return HttpServerResponse.text(`Secret (masked): ${masked}`);
         }
 
-        return HttpServerResponse.text(
-          "Hello from Cloudflare Secrets Store example!",
-        );
+        return HttpServerResponse.text("Hello from Cloudflare Secrets Store example!");
       }).pipe(
         Effect.catchTag("SecretError", (err) =>
           Effect.succeed(

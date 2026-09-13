@@ -40,10 +40,7 @@ export interface ListTagsForResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTagsForResourceRequest,
-    ) => Effect.Effect<
-      Kinesis.ListTagsForResourceOutput,
-      Kinesis.ListTagsForResourceError
-    >
+    ) => Effect.Effect<Kinesis.ListTagsForResourceOutput, Kinesis.ListTagsForResourceError>
   >
 > {}
 

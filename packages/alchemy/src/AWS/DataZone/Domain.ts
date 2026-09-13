@@ -138,9 +138,7 @@ export interface Domain extends Resource<
 export const Domain = Resource<Domain>("AWS.DataZone.Domain");
 
 /** The domain never leaves a failed create — surface it as a typed error. */
-export class DomainCreationFailed extends Data.TaggedError(
-  "AWS.DataZone.DomainCreationFailed",
-)<{
+export class DomainCreationFailed extends Data.TaggedError("AWS.DataZone.DomainCreationFailed")<{
   readonly domainId: string;
   readonly status: string;
 }> {}
@@ -160,12 +158,10 @@ const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      (e._tag === "ValidationException" ||
-        e._tag === "AccessDeniedException") &&
+      (e._tag === "ValidationException" || e._tag === "AccessDeniedException") &&
       "message" in e &&
       typeof e.message === "string" &&
-      (e.message.toLowerCase().includes("role") ||
-        e.message.toLowerCase().includes("assume")),
+      (e.message.toLowerCase().includes("role") || e.message.toLowerCase().includes("assume")),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -180,8 +176,7 @@ export const DomainProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
       // A deleted (or never-existing) domain is reported by GetDomain as
       // AccessDeniedException ("User is not permitted to perform operation:
@@ -189,26 +184,17 @@ export const DomainProvider = () =>
       // domain-scoped authorization before existence. Both mean "absent".
       const getDomainOrUndefined = Effect.fn(function* (identifier: string) {
         return yield* datazone.getDomain({ identifier }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-          Effect.catchTag("AccessDeniedException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
         );
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* datazone.listDomains
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* datazone.listDomains.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.items ?? [])
           .find(
-            (s) =>
-              unredact(s.name) === name &&
-              s.status !== "DELETING" &&
-              s.status !== "DELETED",
+            (s) => unredact(s.name) === name && s.status !== "DELETING" && s.status !== "DELETED",
           );
         return summary?.id;
       });
@@ -222,8 +208,7 @@ export const DomainProvider = () =>
         return yield* getDomainOrUndefined(identifier).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("5 seconds"),
-            until: (domain) =>
-              domain !== undefined && !DOMAIN_TRANSIENT.has(domain.status),
+            until: (domain) => domain !== undefined && !DOMAIN_TRANSIENT.has(domain.status),
             times: 36,
           }),
         );
@@ -235,18 +220,14 @@ export const DomainProvider = () =>
         yield* getDomainOrUndefined(identifier).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("5 seconds"),
-            until: (domain) =>
-              domain === undefined || domain.status === "DELETED",
+            until: (domain) => domain === undefined || domain.status === "DELETED",
             times: 36,
           }),
         );
       });
 
-      const domainArnOf = (
-        region: string,
-        accountId: string,
-        domainId: string,
-      ) => `arn:aws:datazone:${region}:${accountId}:domain/${domainId}`;
+      const domainArnOf = (region: string, accountId: string, domainId: string) =>
+        `arn:aws:datazone:${region}:${accountId}:domain/${domainId}`;
 
       const ensureExecutionRole = Effect.fn(function* ({
         id,
@@ -303,9 +284,7 @@ export const DomainProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { region, accountId } = yield* AWSEnvironment.current;
-            const pages = yield* datazone.listDomains
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* datazone.listDomains.pages({}).pipe(Stream.runCollect);
             const summaries = Array.from(pages)
               .flatMap((page) => page.items ?? [])
               .filter((s) => s.status !== "DELETING" && s.status !== "DELETED");
@@ -325,16 +304,10 @@ export const DomainProvider = () =>
           const { region, accountId } = yield* AWSEnvironment.current;
           const domainId =
             output?.domainId ??
-            (yield* findByName(
-              output?.name ?? (yield* createName(id, olds ?? {})),
-            ));
+            (yield* findByName(output?.name ?? (yield* createName(id, olds ?? {}))));
           if (domainId === undefined) return undefined;
           const domain = yield* getDomainOrUndefined(domainId);
-          if (
-            domain === undefined ||
-            domain.status === "DELETING" ||
-            domain.status === "DELETED"
-          ) {
+          if (domain === undefined || domain.status === "DELETING" || domain.status === "DELETED") {
             return undefined;
           }
           const attrs = {
@@ -384,9 +357,7 @@ export const DomainProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative; output is only an id
           //    cache. Fall back to a name lookup after state loss.
-          let domain = output?.domainId
-            ? yield* getDomainOrUndefined(output.domainId)
-            : undefined;
+          let domain = output?.domainId ? yield* getDomainOrUndefined(output.domainId) : undefined;
           if (domain === undefined) {
             const foundId = yield* findByName(name);
             if (foundId !== undefined) {
@@ -421,11 +392,9 @@ export const DomainProvider = () =>
             domain = (yield* waitForSettled(domain.id)) ?? domain;
             const drifted =
               domain.name !== name ||
-              (domain.description ?? undefined) !==
-                (news.description ?? undefined) ||
+              (domain.description ?? undefined) !== (news.description ?? undefined) ||
               domain.domainExecutionRole !== executionRoleArn ||
-              (news.serviceRole !== undefined &&
-                domain.serviceRole !== news.serviceRole);
+              (news.serviceRole !== undefined && domain.serviceRole !== news.serviceRole);
             if (drifted) {
               yield* retryWhileRoleAssumeFails(
                 datazone.updateDomain({
@@ -442,16 +411,11 @@ export const DomainProvider = () =>
           }
 
           const domainId = domain.id;
-          const domainArn =
-            domain.arn ?? domainArnOf(region, accountId, domainId);
+          const domainArn = domain.arn ?? domainArnOf(region, accountId, domainId);
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags (create-time tags
           //     only apply on first create; adoption may carry foreign tags).
-          yield* syncDataZoneTags(
-            domainArn,
-            toTagRecord(domain.tags),
-            desiredTags,
-          );
+          yield* syncDataZoneTags(domainArn, toTagRecord(domain.tags), desiredTags);
 
           yield* session.note(domainId);
           return {
@@ -494,14 +458,10 @@ export const DomainProvider = () =>
                 RoleName: roleName,
                 PolicyArn: DOMAIN_EXECUTION_MANAGED_POLICY,
               })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             yield* iam
               .deleteRole({ RoleName: roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }),
       });

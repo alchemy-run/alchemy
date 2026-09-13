@@ -3,11 +3,7 @@ export * from "./AuthProvider.ts";
 export * from "./Bucket.ts";
 export * from "./Catalog.ts";
 export * from "./DeleteObject.ts";
-export type {
-  MachineDeploy,
-  MachineShutdown,
-  MachineCheck,
-} from "./Deployment.ts";
+export type { MachineDeploy, MachineShutdown, MachineCheck } from "./Deployment.ts";
 export { InvalidDeployment } from "./Deployment.ts";
 export * from "./DeleteObjectHttp.ts";
 export * from "./Certificate.ts";

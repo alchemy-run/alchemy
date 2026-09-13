@@ -37,6 +37,4 @@ export interface PutProtocolsList extends Binding.Service<
   >
 > {}
 
-export const PutProtocolsList = Binding.Service<PutProtocolsList>(
-  "AWS.FMS.PutProtocolsList",
-);
+export const PutProtocolsList = Binding.Service<PutProtocolsList>("AWS.FMS.PutProtocolsList");

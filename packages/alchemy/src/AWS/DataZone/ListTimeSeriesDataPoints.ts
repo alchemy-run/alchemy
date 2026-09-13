@@ -44,7 +44,6 @@ export interface ListTimeSeriesDataPoints extends Binding.Service<
     >
   >
 > {}
-export const ListTimeSeriesDataPoints =
-  Binding.Service<ListTimeSeriesDataPoints>(
-    "AWS.DataZone.ListTimeSeriesDataPoints",
-  );
+export const ListTimeSeriesDataPoints = Binding.Service<ListTimeSeriesDataPoints>(
+  "AWS.DataZone.ListTimeSeriesDataPoints",
+);

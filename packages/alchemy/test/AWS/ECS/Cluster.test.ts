@@ -35,15 +35,11 @@ test.provider("list enumerates the deployed cluster", (stack) =>
     const after = yield* ecs.describeClusters({
       clusters: ["alchemy-test-ecs-cluster-list"],
     });
-    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
-      false,
-    );
+    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
 
     // ECS can keep the terminal INACTIVE record discoverable for a while.
     // Provider inventory (and therefore nuke) must treat it as deleted.
     const afterList = yield* provider.list();
-    expect(afterList.some((c) => c.clusterArn === cluster.clusterArn)).toBe(
-      false,
-    );
+    expect(afterList.some((c) => c.clusterArn === cluster.clusterArn)).toBe(false);
   }),
 );

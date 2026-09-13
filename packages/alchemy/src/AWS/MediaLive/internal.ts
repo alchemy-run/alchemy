@@ -8,9 +8,7 @@ import { diffTags } from "../../Tags.ts";
  * Raised while a MediaLive resource is still transitioning (e.g. a channel
  * in `CREATING`); used as a typed retry signal, never surfaced on success.
  */
-export class MediaLiveResourcePending extends Data.TaggedError(
-  "MediaLiveResourcePending",
-)<{
+export class MediaLiveResourcePending extends Data.TaggedError("MediaLiveResourcePending")<{
   message: string;
 }> {}
 
@@ -44,9 +42,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
  * Raised when a MediaLive API response omits a field the provider requires
  * (e.g. a create response without the resource body or its Id/Arn).
  */
-export class MediaLiveIncompleteResponse extends Data.TaggedError(
-  "MediaLiveIncompleteResponse",
-)<{
+export class MediaLiveIncompleteResponse extends Data.TaggedError("MediaLiveIncompleteResponse")<{
   message: string;
 }> {}
 
@@ -70,10 +66,7 @@ export const ensurePresent = <T>(
 export const ensureIdentified = <T extends { Id?: string; Arn?: string }>(
   value: T | undefined,
   what: string,
-): Effect.Effect<
-  T & { Id: string; Arn: string },
-  MediaLiveIncompleteResponse
-> =>
+): Effect.Effect<T & { Id: string; Arn: string }, MediaLiveIncompleteResponse> =>
   value === undefined || value.Id === undefined || value.Arn === undefined
     ? Effect.fail(
         new MediaLiveIncompleteResponse({
@@ -111,10 +104,7 @@ export const readMlTags = Effect.fn(function* (arn: string) {
  * the desired set and apply only the delta. MediaLive's `createTags` upserts
  * a tag map; `deleteTags` removes keys.
  */
-export const syncMlTags = Effect.fn(function* (
-  arn: string,
-  desiredTags: Record<string, string>,
-) {
+export const syncMlTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
   const observedTags = yield* readMlTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {

@@ -67,14 +67,10 @@ test.provider(
 
       // Destroy — host is deleted; verify it is gone out-of-band.
       yield* stack.destroy();
-      const after = yield* codeconnections
-        .getHost({ HostArn: deployed.hostArn })
-        .pipe(
-          Effect.map((res) => res.Name),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const after = yield* codeconnections.getHost({ HostArn: deployed.hostArn }).pipe(
+        Effect.map((res) => res.Name),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+      );
       expect(after).toBeUndefined();
     }),
   { timeout: 120_000 },

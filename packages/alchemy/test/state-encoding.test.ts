@@ -20,24 +20,14 @@ describe("StateEncoding Duration round-trip", () => {
   // exactly what these tests assert; the cast lets `Duration.equals` (which
   // no longer accepts `unknown`) verify it.
   const roundTrip = (value: Duration.Duration) =>
-    JSON.parse(
-      JSON.stringify(encodeState(value)),
-      reviveState,
-    ) as Duration.Duration;
+    JSON.parse(JSON.stringify(encodeState(value)), reviveState) as Duration.Duration;
 
   test("finite, infinity, and negative infinity survive encode → JSON → revive", () => {
-    expect(
-      Duration.equals(roundTrip(Duration.seconds(15)), Duration.seconds(15)),
-    ).toBe(true);
-    expect(
-      Duration.equals(roundTrip(Duration.infinity), Duration.infinity),
-    ).toBe(true);
-    expect(
-      Duration.equals(
-        roundTrip(Duration.negativeInfinity),
-        Duration.negativeInfinity,
-      ),
-    ).toBe(true);
+    expect(Duration.equals(roundTrip(Duration.seconds(15)), Duration.seconds(15))).toBe(true);
+    expect(Duration.equals(roundTrip(Duration.infinity), Duration.infinity)).toBe(true);
+    expect(Duration.equals(roundTrip(Duration.negativeInfinity), Duration.negativeInfinity)).toBe(
+      true,
+    );
   });
 
   test("decodeDuration rebuilds Duration.toJSON without clamping negatives", () => {
@@ -61,16 +51,11 @@ describe("StateEncoding Date round-trip", () => {
   };
 
   test("encode → JSON → reviveState rebuilds Date instances (local store path)", () => {
-    const revived = JSON.parse(
-      JSON.stringify(encodeState(value)),
-      reviveState,
-    ) as typeof value;
+    const revived = JSON.parse(JSON.stringify(encodeState(value)), reviveState) as typeof value;
     expect(revived.expires).toBeInstanceOf(Date);
     expect(revived.expires.toISOString()).toBe("2027-01-01T00:00:00.000Z");
     expect(revived.nested.dates[0]).toBeInstanceOf(Date);
-    expect(revived.nested.dates[0]!.toISOString()).toBe(
-      "2028-06-15T12:30:00.000Z",
-    );
+    expect(revived.nested.dates[0]!.toISOString()).toBe("2028-06-15T12:30:00.000Z");
     expect(revived.text).toBe("unrelated");
   });
 
@@ -118,10 +103,7 @@ describe("StateEncoding Date round-trip", () => {
     ) as typeof suspicious;
     expect(viaHttp.n).toBe(1);
     expect(typeof viaHttp[DATE_MARKER]).toBe("string");
-    const viaLocal = JSON.parse(
-      JSON.stringify(suspicious),
-      reviveState,
-    ) as typeof suspicious;
+    const viaLocal = JSON.parse(JSON.stringify(suspicious), reviveState) as typeof suspicious;
     expect(viaLocal.n).toBe(1);
     expect(typeof viaLocal[DATE_MARKER]).toBe("string");
   });

@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const EMAIL = "test@alchemy.run";
 
@@ -48,13 +45,10 @@ test.provider("create, update window in place, delete silence", (stack) =>
 
     const initial = yield* stack.deploy(
       Effect.gen(function* () {
-        const policy = yield* Cloudflare.Alerting.NotificationPolicy(
-          "SilencedPolicy",
-          {
-            alertType: "universal_ssl_event_type",
-            mechanisms: { email: [{ id: EMAIL }] },
-          },
-        );
+        const policy = yield* Cloudflare.Alerting.NotificationPolicy("SilencedPolicy", {
+          alertType: "universal_ssl_event_type",
+          mechanisms: { email: [{ id: EMAIL }] },
+        });
         return yield* Cloudflare.Alerting.Silence("Maintenance", {
           policyId: policy.policyId,
           startTime: start,
@@ -81,13 +75,10 @@ test.provider("create, update window in place, delete silence", (stack) =>
     // Extend the window in place — same silence id.
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        const policy = yield* Cloudflare.Alerting.NotificationPolicy(
-          "SilencedPolicy",
-          {
-            alertType: "universal_ssl_event_type",
-            mechanisms: { email: [{ id: EMAIL }] },
-          },
-        );
+        const policy = yield* Cloudflare.Alerting.NotificationPolicy("SilencedPolicy", {
+          alertType: "universal_ssl_event_type",
+          mechanisms: { email: [{ id: EMAIL }] },
+        });
         return yield* Cloudflare.Alerting.Silence("Maintenance", {
           policyId: policy.policyId,
           startTime: start,
@@ -121,20 +112,14 @@ test.provider("replaces silence when the policy changes", (stack) =>
     const deploySilence = (policyResourceId: "PolicyA" | "PolicyB") =>
       stack.deploy(
         Effect.gen(function* () {
-          const policyA = yield* Cloudflare.Alerting.NotificationPolicy(
-            "PolicyA",
-            {
-              alertType: "universal_ssl_event_type",
-              mechanisms: { email: [{ id: EMAIL }] },
-            },
-          );
-          const policyB = yield* Cloudflare.Alerting.NotificationPolicy(
-            "PolicyB",
-            {
-              alertType: "universal_ssl_event_type",
-              mechanisms: { email: [{ id: EMAIL }] },
-            },
-          );
+          const policyA = yield* Cloudflare.Alerting.NotificationPolicy("PolicyA", {
+            alertType: "universal_ssl_event_type",
+            mechanisms: { email: [{ id: EMAIL }] },
+          });
+          const policyB = yield* Cloudflare.Alerting.NotificationPolicy("PolicyB", {
+            alertType: "universal_ssl_event_type",
+            mechanisms: { email: [{ id: EMAIL }] },
+          });
           const target = policyResourceId === "PolicyA" ? policyA : policyB;
           const silence = yield* Cloudflare.Alerting.Silence("ReplaceMe", {
             policyId: target.policyId,
@@ -178,13 +163,10 @@ test.provider("list enumerates the deployed silence", (stack) =>
 
     const deployed = yield* stack.deploy(
       Effect.gen(function* () {
-        const policy = yield* Cloudflare.Alerting.NotificationPolicy(
-          "ListedPolicy",
-          {
-            alertType: "universal_ssl_event_type",
-            mechanisms: { email: [{ id: EMAIL }] },
-          },
-        );
+        const policy = yield* Cloudflare.Alerting.NotificationPolicy("ListedPolicy", {
+          alertType: "universal_ssl_event_type",
+          mechanisms: { email: [{ id: EMAIL }] },
+        });
         return yield* Cloudflare.Alerting.Silence("ListedSilence", {
           policyId: policy.policyId,
           startTime: start,
@@ -210,9 +192,6 @@ const waitForSilenceDeleted = (accountId: string, silenceId: string) =>
     Effect.catchTag("SilenceNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SilenceNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

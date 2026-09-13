@@ -20,9 +20,9 @@ export interface StorageConfig {
   secretAccessKey: Redacted.Redacted<string>;
 }
 
-export class StoragePaginationError extends Data.TaggedError(
-  "StoragePaginationError",
-)<{ message: string }> {}
+export class StoragePaginationError extends Data.TaggedError("StoragePaginationError")<{
+  message: string;
+}> {}
 export class StorageDeleteError extends Data.TaggedError("StorageDeleteError")<{
   message: string;
 }> {}
@@ -54,17 +54,10 @@ export type StoragePutOptions = Pick<
 >;
 
 /** Construct clients once; no connections or disposable resources are retained. */
-export const makeStorageClient = Effect.fn(function* (
-  config: StorageConfig,
-  bucket: string,
-) {
+export const makeStorageClient = Effect.fn(function* (config: StorageConfig, bucket: string) {
   const http = yield* HttpClient.HttpClient;
-  const layer = Layer.mergeAll(
-    storageLayer(config),
-    Layer.succeed(HttpClient.HttpClient, http),
-  );
-  const provide = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.provide(layer));
+  const layer = Layer.mergeAll(storageLayer(config), Layer.succeed(HttpClient.HttpClient, http));
+  const provide = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(layer));
   return {
     get: (key: string) =>
       provide(S3.getObject({ Bucket: bucket, Key: key })).pipe(
@@ -91,16 +84,9 @@ export const makeStorageClient = Effect.fn(function* (
           MaxKeys: options.limit,
         }),
       ),
-    put: (
-      key: string,
-      body: string | Uint8Array,
-      options: StoragePutOptions = {},
-    ) =>
-      provide(
-        S3.putObject({ Bucket: bucket, Key: key, Body: body, ...options }),
-      ),
-    delete: (key: string) =>
-      provide(S3.deleteObject({ Bucket: bucket, Key: key })),
+    put: (key: string, body: string | Uint8Array, options: StoragePutOptions = {}) =>
+      provide(S3.putObject({ Bucket: bucket, Key: key, Body: body, ...options })),
+    delete: (key: string) => provide(S3.deleteObject({ Bucket: bucket, Key: key })),
     deleteMany: (keys: string[]) =>
       Effect.gen(function* () {
         const deleted: S3.DeletedObject[] = [];
@@ -110,9 +96,7 @@ export const makeStorageClient = Effect.fn(function* (
             S3.deleteObjects({
               Bucket: bucket,
               Delete: {
-                Objects: keys
-                  .slice(offset, offset + 100)
-                  .map((Key) => ({ Key })),
+                Objects: keys.slice(offset, offset + 100).map((Key) => ({ Key })),
               },
             }),
           );
@@ -125,15 +109,8 @@ export const makeStorageClient = Effect.fn(function* (
         return { Deleted: deleted } satisfies S3.DeleteObjectsOutput;
       }),
     createMultipartUpload: (key: string, options: StoragePutOptions = {}) =>
-      provide(
-        S3.createMultipartUpload({ Bucket: bucket, Key: key, ...options }),
-      ),
-    uploadPart: (
-      key: string,
-      uploadId: string,
-      partNumber: number,
-      body: Uint8Array,
-    ) =>
+      provide(S3.createMultipartUpload({ Bucket: bucket, Key: key, ...options })),
+    uploadPart: (key: string, uploadId: string, partNumber: number, body: Uint8Array) =>
       provide(
         S3.uploadPart({
           Bucket: bucket,
@@ -143,11 +120,7 @@ export const makeStorageClient = Effect.fn(function* (
           Body: body,
         }),
       ),
-    completeMultipartUpload: (
-      key: string,
-      uploadId: string,
-      parts: S3.CompletedPart[],
-    ) =>
+    completeMultipartUpload: (key: string, uploadId: string, parts: S3.CompletedPart[]) =>
       provide(
         S3.completeMultipartUpload({
           Bucket: bucket,
@@ -204,9 +177,7 @@ export const makeStorageClient = Effect.fn(function* (
       ),
     getCors: () =>
       provide(S3.getBucketCors({ Bucket: bucket })).pipe(
-        Effect.catchTag("NoSuchCORSConfiguration", () =>
-          Effect.succeed({ CORSRules: [] }),
-        ),
+        Effect.catchTag("NoSuchCORSConfiguration", () => Effect.succeed({ CORSRules: [] })),
       ),
     putCors: (rules: S3.CORSRule[]) =>
       provide(
@@ -223,9 +194,7 @@ export const makeStorageClient = Effect.fn(function* (
   };
 });
 
-export type StorageClient = Effect.Success<
-  ReturnType<typeof makeStorageClient>
->;
+export type StorageClient = Effect.Success<ReturnType<typeof makeStorageClient>>;
 
 /** Empty only this bucket and branch, checking pagination and partial failures. */
 export const emptyStorageBucket = Effect.fn(function* (client: StorageClient) {

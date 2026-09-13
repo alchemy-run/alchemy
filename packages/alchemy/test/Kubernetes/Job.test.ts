@@ -18,13 +18,11 @@ const { test } = Test.make(testOptions);
 // without paying the ~15-minute EKS control-plane create. Full lifecycle
 // coverage requires a live cluster and rides the gated Deployment E2E
 // budget (AWS_TEST_SLOW) — see Deployment.test.ts.
-test.provider(
-  "list returns an empty array (composite host, not enumerable)",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(Kubernetes.Job);
-      const all = yield* provider.list();
-      expect(Array.isArray(all)).toBe(true);
-      expect(all).toEqual([]);
-    }),
+test.provider("list returns an empty array (composite host, not enumerable)", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(Kubernetes.Job);
+    const all = yield* provider.list();
+    expect(Array.isArray(all)).toBe(true);
+    expect(all).toEqual([]);
+  }),
 );

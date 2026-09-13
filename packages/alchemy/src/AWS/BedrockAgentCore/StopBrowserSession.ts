@@ -40,10 +40,7 @@ export interface StopBrowserSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StopBrowserSessionRequest,
-    ) => Effect.Effect<
-      agentcore.StopBrowserSessionResponse,
-      agentcore.StopBrowserSessionError
-    >
+    ) => Effect.Effect<agentcore.StopBrowserSessionResponse, agentcore.StopBrowserSessionError>
   >
 > {}
 export const StopBrowserSession = Binding.Service<StopBrowserSession>(

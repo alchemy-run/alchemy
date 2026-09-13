@@ -33,15 +33,10 @@ export interface RetrieveRadarValueListItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveRadarValueListItemRequest,
-    ) => Effect.Effect<
-      StripeRadarValueListItem,
-      GetRadarValueListItemError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeRadarValueListItem, GetRadarValueListItemError, RuntimeContext>
   >
 > {}
 
-export const RetrieveRadarValueListItem =
-  Binding.Service<RetrieveRadarValueListItem>(
-    "Stripe.RetrieveRadarValueListItem",
-  );
+export const RetrieveRadarValueListItem = Binding.Service<RetrieveRadarValueListItem>(
+  "Stripe.RetrieveRadarValueListItem",
+);

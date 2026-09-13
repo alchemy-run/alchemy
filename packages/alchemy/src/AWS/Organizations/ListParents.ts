@@ -27,12 +27,7 @@ export interface ListParents extends Binding.Service<
   () => Effect.Effect<
     (
       request: organizations.ListParentsRequest,
-    ) => Effect.Effect<
-      organizations.ListParentsResponse,
-      organizations.ListParentsError
-    >
+    ) => Effect.Effect<organizations.ListParentsResponse, organizations.ListParentsError>
   >
 > {}
-export const ListParents = Binding.Service<ListParents>(
-  "AWS.Organizations.ListParents",
-);
+export const ListParents = Binding.Service<ListParents>("AWS.Organizations.ListParents");

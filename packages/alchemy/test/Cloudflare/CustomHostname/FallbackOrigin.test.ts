@@ -24,13 +24,9 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 const saasEnabled = !!process.env.CLOUDFLARE_SAAS_ENABLED;
 const testSaas = test.provider.skipIf(!saasEnabled);
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic record names for the origin DNS records the fallback origin
 // points at (the API requires the origin to be a DNS record in the zone).
@@ -41,9 +37,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -94,9 +88,7 @@ const probeSaasEntitlement = (zoneId: string) =>
   );
 
 const isGone = (
-  observed:
-    | { origin: string | undefined; status: string | undefined }
-    | undefined,
+  observed: { origin: string | undefined; status: string | undefined } | undefined,
 ): boolean =>
   observed === undefined ||
   observed.origin === undefined ||
@@ -113,9 +105,7 @@ test.provider("list enumerates fallback origins across all zones", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.CustomHostname.FallbackOrigin,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.FallbackOrigin);
     const all = yield* provider.list();
 
     // Well-typed `FallbackOriginAttributes[]`: each element matches the
@@ -159,13 +149,9 @@ testSaas(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.CustomHostname.FallbackOrigin,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname.FallbackOrigin);
       const all = yield* provider.list();
-      expect(
-        all.some((o) => o.zoneId === zoneId && o.origin === ORIGIN_A),
-      ).toBe(true);
+      expect(all.some((o) => o.zoneId === zoneId && o.origin === ORIGIN_A)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -191,13 +177,10 @@ testSaas(
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-            "Fallback",
-            {
-              zoneId,
-              origin: record.name,
-            },
-          ).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -219,13 +202,10 @@ testSaas(
             content: "203.0.113.50",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-            "Fallback",
-            {
-              zoneId,
-              origin: record.name,
-            },
-          ).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
           return { record, fallback };
         }),
       );
@@ -242,13 +222,10 @@ testSaas(
             content: "203.0.113.51",
             proxied: true,
           }).pipe(adopt(true));
-          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-            "Fallback",
-            {
-              zoneId,
-              origin: record.name,
-            },
-          ).pipe(adopt(true));
+          const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
           return { record, fallback };
         }),
       );

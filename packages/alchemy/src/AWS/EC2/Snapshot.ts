@@ -18,8 +18,7 @@ export type SnapshotId<ID extends string = string> = `snap-${ID}`;
 export const SnapshotId = <ID extends string>(id: ID): ID & SnapshotId<ID> =>
   `snap-${id}` as ID & SnapshotId<ID>;
 
-export type SnapshotArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
+export type SnapshotArn = `arn:aws:ec2:${RegionID}:${AccountID}:snapshot/${SnapshotId}`;
 
 export interface SnapshotProps {
   /**
@@ -226,21 +225,17 @@ export const SnapshotProvider = () =>
               .pages({ OwnerIds: ["self"] })
               .pipe(Stream.runCollect);
             return Array.from(chunk).flatMap((page) =>
-              (page.Snapshots ?? []).map((s) =>
-                toSnapshotAttributes(s, region, accountId),
-              ),
+              (page.Snapshots ?? []).map((s) => toSnapshotAttributes(s, region, accountId)),
             );
           }),
 
         delete: Effect.fn(function* ({ output, session }) {
           const snapshotId = output.snapshotId;
           yield* session.note(`Deleting snapshot: ${snapshotId}`);
-          yield* ec2
-            .deleteSnapshot({ SnapshotId: snapshotId, DryRun: false })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
-            );
+          yield* ec2.deleteSnapshot({ SnapshotId: snapshotId, DryRun: false }).pipe(
+            Effect.tapError(Effect.logDebug),
+            Effect.catchTag("InvalidSnapshot.NotFound", () => Effect.void),
+          );
           yield* session.note(`Snapshot ${snapshotId} deleted successfully`);
         }),
       };
@@ -255,8 +250,7 @@ const toSnapshotAttributes = (
   const snapshotId = snapshot.SnapshotId! as SnapshotId;
   return {
     snapshotId,
-    snapshotArn:
-      `arn:aws:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
+    snapshotArn: `arn:aws:ec2:${region}:${accountId}:snapshot/${snapshotId}` as SnapshotArn,
     volumeId: snapshot.VolumeId! as VolumeId,
     volumeSize: snapshot.VolumeSize ?? 0,
     state: snapshot.State ?? "pending",
@@ -277,10 +271,7 @@ class SnapshotPending extends Data.TaggedError("SnapshotPending")<{
  * Wait for the snapshot to reach the `completed` state. Bounded so a slow
  * snapshot fails fast rather than hanging the deploy.
  */
-const waitForSnapshotCompleted = (
-  snapshotId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForSnapshotCompleted = (snapshotId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeSnapshots({
       SnapshotIds: [snapshotId],
@@ -294,9 +285,7 @@ const waitForSnapshotCompleted = (
     }
     if (snapshot.State === "error") {
       return yield* Effect.fail(
-        new Error(
-          `Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`,
-        ),
+        new Error(`Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`),
       );
     }
     return yield* new SnapshotPending({
@@ -313,9 +302,7 @@ const waitForSnapshotCompleted = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for snapshot to complete... (${(attempt + 1) * 3}s)`,
-              )
+            ? session.note(`Waiting for snapshot to complete... (${(attempt + 1) * 3}s)`)
             : Effect.void,
         ),
       ),

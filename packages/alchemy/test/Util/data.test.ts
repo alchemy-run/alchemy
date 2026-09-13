@@ -141,11 +141,7 @@ describe("mapPlainData", () => {
     const arr: any[] = [obj];
     obj.arr = arr;
     const ancestors = new WeakSet<object>();
-    const rebuilt: any = mapPlainData(
-      { root: obj },
-      ancestors,
-      identity(ancestors),
-    );
+    const rebuilt: any = mapPlainData({ root: obj }, ancestors, identity(ancestors));
     expect(rebuilt.root.tag).toBe("obj");
     expect(rebuilt.root.arr[0]).toBeUndefined();
   });

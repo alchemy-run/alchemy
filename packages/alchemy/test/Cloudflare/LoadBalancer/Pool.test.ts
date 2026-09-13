@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Load Balancing is a paid add-on subscription. The testing account does
 // not have it: pool creation is rejected with "Internal error creating or
@@ -48,10 +45,7 @@ const expectGone = (accountId: string, poolId: string) =>
     Effect.catchTag("PoolNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PoolNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -119,9 +113,7 @@ test.provider.skipIf(!lbEnabled)(
       const live = yield* getPool(accountId, initial.pool.poolId);
       expect(live.name).toEqual(NAME_LIFECYCLE);
       expect(live.description).toEqual("v1");
-      expect((live.origins ?? []).map((o) => o.address)).toEqual([
-        "203.0.113.10",
-      ]);
+      expect((live.origins ?? []).map((o) => o.address)).toEqual(["203.0.113.10"]);
 
       // Mutable props (origins, weights, description) update in place —
       // same poolId. Keep the monitor deployed across every step so the
@@ -180,9 +172,7 @@ test.provider.skipIf(!lbEnabled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.Pool,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.Pool);
       const all = yield* provider.list();
 
       expect(all.some((p) => p.poolId === deployed.poolId)).toBe(true);

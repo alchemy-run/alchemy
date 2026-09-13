@@ -13,9 +13,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // one is `exclusive` — two contact-list suites running concurrently would
 // collide on the account-wide singleton.
 
-class ContactListStillExists extends Data.TaggedError(
-  "ContactListStillExists",
-)<{
+class ContactListStillExists extends Data.TaggedError("ContactListStillExists")<{
   readonly name: string;
 }> {}
 
@@ -60,9 +58,7 @@ test.provider(
       });
       expect(observed.Description).toBe("Weekly newsletter");
       expect(observed.Topics?.[0]?.TopicName).toBe("product-updates");
-      const tags = Object.fromEntries(
-        (observed.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((observed.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("Newsletter");
 
@@ -92,9 +88,7 @@ test.provider(
       });
       expect(updated.Description).toBe("Weekly product newsletter");
       expect((updated.Topics ?? []).length).toBe(2);
-      const updatedTags = Object.fromEntries(
-        (updated.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const updatedTags = Object.fromEntries((updated.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(updatedTags.Extra).toBe("1");
 
       yield* stack.destroy();

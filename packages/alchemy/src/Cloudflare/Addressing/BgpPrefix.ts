@@ -75,13 +75,7 @@ export interface BgpPrefixAttributes {
   modifiedAt: string | undefined;
 }
 
-export type BgpPrefix = Resource<
-  TypeId,
-  BgpPrefixProps,
-  BgpPrefixAttributes,
-  never,
-  Providers
->;
+export type BgpPrefix = Resource<TypeId, BgpPrefixProps, BgpPrefixAttributes, never, Providers>;
 
 /**
  * A BGP prefix controlling on-demand advertisement of a BYOIP prefix (or a
@@ -151,16 +145,11 @@ export const BgpPrefixProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const prefixId =
-        output?.prefixId ??
-        (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
+        output?.prefixId ?? (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
       if (!prefixId) return undefined;
 
       if (output?.bgpPrefixId) {
-        const observed = yield* getBgpPrefix(
-          acct,
-          prefixId,
-          output.bgpPrefixId,
-        );
+        const observed = yield* getBgpPrefix(acct, prefixId, output.bgpPrefixId);
         return observed ? toAttributes(observed, prefixId, acct) : undefined;
       }
       // Cold read — match on CIDR, which is unique within the parent prefix.
@@ -178,16 +167,14 @@ export const BgpPrefixProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const prefixIds = yield* addressing.listPrefixes
-        .items({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk)
-              .map((p) => p.id)
-              .filter((id): id is string => typeof id === "string"),
-          ),
-        );
+      const prefixIds = yield* addressing.listPrefixes.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk)
+            .map((p) => p.id)
+            .filter((id): id is string => typeof id === "string"),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         prefixIds,
@@ -195,14 +182,10 @@ export const BgpPrefixProvider = () =>
           addressing.listPrefixBgpPrefixes.items({ accountId, prefixId }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).map((bgp) =>
-                toAttributes(bgp, prefixId, accountId),
-              ),
+              Array.from(chunk).map((bgp) => toAttributes(bgp, prefixId, accountId)),
             ),
             // Parent prefix removed mid-enumeration — skip it.
-            Effect.catchTag("PrefixNotFound", () =>
-              Effect.succeed([] as BgpPrefixAttributes[]),
-            ),
+            Effect.catchTag("PrefixNotFound", () => Effect.succeed([] as BgpPrefixAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -244,8 +227,7 @@ export const BgpPrefixProvider = () =>
         (news.asnPrependCount !== undefined &&
           (observed.asnPrependCount ?? 0) !== news.asnPrependCount) ||
         (news.autoAdvertiseWithdraw !== undefined &&
-          (observed.autoAdvertiseWithdraw ?? false) !==
-            news.autoAdvertiseWithdraw);
+          (observed.autoAdvertiseWithdraw ?? false) !== news.autoAdvertiseWithdraw);
       if (dirty) {
         const patched = yield* addressing
           .patchPrefixBgpPrefix({
@@ -254,10 +236,7 @@ export const BgpPrefixProvider = () =>
             bgpPrefixId,
             asnPrependCount: news.asnPrependCount,
             autoAdvertiseWithdraw: news.autoAdvertiseWithdraw,
-            onDemand:
-              news.advertised !== undefined
-                ? { advertised: news.advertised }
-                : undefined,
+            onDemand: news.advertised !== undefined ? { advertised: news.advertised } : undefined,
           })
           .pipe(
             Effect.retry({
@@ -284,12 +263,7 @@ export const BgpPrefixProvider = () =>
             bgpPrefixId: output.bgpPrefixId,
             onDemand: { advertised: false },
           })
-          .pipe(
-            Effect.catchTag(
-              ["BgpPrefixNotFound", "PrefixNotFound"],
-              () => Effect.void,
-            ),
-          );
+          .pipe(Effect.catchTag(["BgpPrefixNotFound", "PrefixNotFound"], () => Effect.void));
       }
     }),
   });
@@ -300,17 +274,11 @@ type ObservedBgpPrefix = addressing.GetPrefixBgpPrefixResponse;
  * Read a BGP prefix by id, mapping "gone" (`BgpPrefixNotFound` /
  * `PrefixNotFound`) to `undefined`.
  */
-const getBgpPrefix = (
-  accountId: string,
-  prefixId: string,
-  bgpPrefixId: string,
-) =>
+const getBgpPrefix = (accountId: string, prefixId: string, bgpPrefixId: string) =>
   addressing
     .getPrefixBgpPrefix({ accountId, prefixId, bgpPrefixId })
     .pipe(
-      Effect.catchTag(["BgpPrefixNotFound", "PrefixNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag(["BgpPrefixNotFound", "PrefixNotFound"], () => Effect.succeed(undefined)),
     );
 
 /**

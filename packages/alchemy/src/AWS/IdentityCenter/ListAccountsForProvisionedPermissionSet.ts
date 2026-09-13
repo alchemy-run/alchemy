@@ -31,10 +31,7 @@ export interface ListAccountsForProvisionedPermissionSet extends Binding.Service
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        ssoAdmin.ListAccountsForProvisionedPermissionSetRequest,
-        "InstanceArn"
-      >,
+      request: Omit<ssoAdmin.ListAccountsForProvisionedPermissionSetRequest, "InstanceArn">,
     ) => Effect.Effect<
       ssoAdmin.ListAccountsForProvisionedPermissionSetResponse,
       ssoAdmin.ListAccountsForProvisionedPermissionSetError

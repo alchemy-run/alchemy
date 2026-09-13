@@ -29,12 +29,7 @@ export interface ListInsights extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.ListInsightsRequest,
-    ) => Effect.Effect<
-      devopsguru.ListInsightsResponse,
-      devopsguru.ListInsightsError
-    >
+    ) => Effect.Effect<devopsguru.ListInsightsResponse, devopsguru.ListInsightsError>
   >
 > {}
-export const ListInsights = Binding.Service<ListInsights>(
-  "AWS.DevOpsGuru.ListInsights",
-);
+export const ListInsights = Binding.Service<ListInsights>("AWS.DevOpsGuru.ListInsights");

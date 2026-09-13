@@ -37,9 +37,7 @@ describe("Drizzle + Aurora DSQL", () => {
         const status = yield* Core.withProviders(
           dsql.getCluster({ identifier: clusterId }).pipe(
             Effect.map((cluster) => cluster.status),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("NOT_FOUND"),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("NOT_FOUND")),
           ),
           { providers: AWS.providers() },
           "aws-dsql-drizzle",
@@ -57,16 +55,10 @@ describe("Drizzle + Aurora DSQL", () => {
         const { url, roleName } = yield* stack;
         if (!url) return yield* Effect.fail(new Error("Missing Function URL"));
         const policies = yield* iam.listRolePolicies({ RoleName: roleName });
-        const documents = yield* Effect.forEach(
-          policies.PolicyNames,
-          (PolicyName) =>
-            iam
-              .getRolePolicy({ RoleName: roleName, PolicyName })
-              .pipe(
-                Effect.map((policy) =>
-                  decodeURIComponent(policy.PolicyDocument),
-                ),
-              ),
+        const documents = yield* Effect.forEach(policies.PolicyNames, (PolicyName) =>
+          iam
+            .getRolePolicy({ RoleName: roleName, PolicyName })
+            .pipe(Effect.map((policy) => decodeURIComponent(policy.PolicyDocument))),
         );
         expect(documents.join("\n")).toContain('"dsql:DbConnect"');
         expect(documents.join("\n")).not.toContain("DbConnectAdmin");
@@ -97,17 +89,13 @@ describe("Drizzle + Aurora DSQL", () => {
           const response = yield* client.execute(
             payload === undefined
               ? base
-              : base.pipe(
-                  HttpClientRequest.bodyText(payload, "application/json"),
-                ),
+              : base.pipe(HttpClientRequest.bodyText(payload, "application/json")),
           );
           return { status: response.status, body: yield* response.text };
         });
         const health = yield* request("GET", "/health");
         expect(health.status).toBe(200);
-        expect(JSON.parse(health.body).rows).toEqual([
-          { username: "app_user" },
-        ]);
+        expect(JSON.parse(health.body).rows).toEqual([{ username: "app_user" }]);
         const id = "aaaaaaaa-0000-4000-8000-000000000001";
         yield* request("DELETE", `/todos/${id}`);
         expect((yield* request("GET", "/todos")).body).toBe("[]");
@@ -134,10 +122,7 @@ describe("Drizzle + Aurora DSQL", () => {
             done: true,
           });
         }
-        expect(
-          (yield* request("POST", "/todos", { id: "invalid", text: "" }))
-            .status,
-        ).toBe(400);
+        expect((yield* request("POST", "/todos", { id: "invalid", text: "" })).status).toBe(400);
         expect((yield* request("GET", "/setup")).status).toBe(404);
         expect((yield* request("DELETE", `/todos/${id}`)).status).toBe(204);
         expect((yield* request("GET", "/todos")).body).toBe("[]");

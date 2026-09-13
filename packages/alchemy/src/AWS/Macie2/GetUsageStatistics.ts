@@ -27,10 +27,7 @@ export interface GetUsageStatistics extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetUsageStatisticsRequest,
-    ) => Effect.Effect<
-      macie2.GetUsageStatisticsResponse,
-      macie2.GetUsageStatisticsError
-    >
+    ) => Effect.Effect<macie2.GetUsageStatisticsResponse, macie2.GetUsageStatisticsError>
   >
 > {}
 export const GetUsageStatistics = Binding.Service<GetUsageStatistics>(

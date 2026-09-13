@@ -30,12 +30,7 @@ export interface DescribeFlow extends Binding.Service<
   (
     flow: Flow,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mediaconnect.DescribeFlowResponse,
-      mediaconnect.DescribeFlowError
-    >
+    () => Effect.Effect<mediaconnect.DescribeFlowResponse, mediaconnect.DescribeFlowError>
   >
 > {}
-export const DescribeFlow = Binding.Service<DescribeFlow>(
-  "AWS.MediaConnect.DescribeFlow",
-);
+export const DescribeFlow = Binding.Service<DescribeFlow>("AWS.MediaConnect.DescribeFlow");

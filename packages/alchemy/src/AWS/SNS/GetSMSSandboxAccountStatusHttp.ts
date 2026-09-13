@@ -8,9 +8,6 @@ export const GetSMSSandboxAccountStatusHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.GetSMSSandboxAccountStatus",
     operation: sns.getSMSSandboxAccountStatus,
-    actions: [
-      "sns:GetSMSSandboxAccountStatus",
-      "sms-voice:DescribeAccountAttributes",
-    ],
+    actions: ["sns:GetSMSSandboxAccountStatus", "sms-voice:DescribeAccountAttributes"],
   }),
 );

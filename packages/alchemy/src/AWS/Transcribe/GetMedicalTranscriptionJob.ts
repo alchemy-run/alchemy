@@ -34,7 +34,6 @@ export interface GetMedicalTranscriptionJob extends Binding.Service<
     >
   >
 > {}
-export const GetMedicalTranscriptionJob =
-  Binding.Service<GetMedicalTranscriptionJob>(
-    "AWS.Transcribe.GetMedicalTranscriptionJob",
-  );
+export const GetMedicalTranscriptionJob = Binding.Service<GetMedicalTranscriptionJob>(
+  "AWS.Transcribe.GetMedicalTranscriptionJob",
+);

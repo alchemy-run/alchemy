@@ -11,26 +11,13 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/nuxt-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nuxt-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
 const waitUntilGone = (id: number) =>
   Services.servers.getServer({ id }).pipe(
@@ -60,13 +47,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           const site = yield* Hetzner.Website.Nuxt("Web", {
             rootDir,
             memo: {
-              include: [
-                "app/**",
-                "server/**",
-                "public/**",
-                "package.json",
-                "nuxt.config.ts",
-              ],
+              include: ["app/**", "server/**", "public/**", "package.json", "nuxt.config.ts"],
             },
           });
           return { site };
@@ -87,26 +68,18 @@ test.provider.skipIf(!hasHetznerCreds)(
         timeout: "30 seconds",
         label: "static robots",
       });
-      yield* expectUrlContains(
-        `${url!}/prerendered`,
-        "NUXT_AWS_PRERENDERED_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "extra route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/prerendered`, "NUXT_AWS_PRERENDERED_MARKER", {
+        timeout: "30 seconds",
+        label: "extra route",
+      });
       yield* expectUrlContains(`${url!}/`, "NUXT_AWS_PAGE_MARKER", {
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "NUXT_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "NUXT_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
 
       const serverId = deployed.site.server!.serverId;
       yield* stack.destroy();

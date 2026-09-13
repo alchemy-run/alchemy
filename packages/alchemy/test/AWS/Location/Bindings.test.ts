@@ -13,10 +13,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "LocationBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -35,19 +32,14 @@ const send = (route: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((response) => response.json),
   );
@@ -73,9 +65,7 @@ const sendUntil = <T>(route: string, until: (response: T) => boolean) =>
 describe.skipIf(!!process.env.FAST).sequential("AWS.Location Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Location test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Location test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Location test setup: deploying fixture");
@@ -89,9 +79,7 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Location Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `Location test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Location test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -99,9 +87,7 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Location Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Location test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Location test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -120,22 +106,15 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Location Bindings", () => {
         Effect.flatMap((body) =>
           (body as { ok?: boolean }).ok === true
             ? Effect.void
-            : Effect.fail(
-                new Error(`geo:* not ready: ${JSON.stringify(body)}`),
-              ),
+            : Effect.fail(new Error(`geo:* not ready: ${JSON.stringify(body)}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Location test setup: geo:* not authorized yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Location test setup: geo:* not authorized yet (${String(error)})`),
         ),
         // IAM propagation of the fresh execution-role policy to geo:* has
         // been observed to take >150s — give it up to ~5 minutes.
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(150),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(150)]),
         }),
       );
     }),
@@ -235,8 +214,7 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Location Bindings", () => {
           // rejected with the typed ValidationException — both prove the
           // binding, IAM grant, and typed error union.
           expect(
-            response.inferredState === true ||
-              typeof response.validationError === "string",
+            response.inferredState === true || typeof response.validationError === "string",
           ).toBe(true);
         }),
       { timeout: 120_000 },

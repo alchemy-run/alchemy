@@ -38,7 +38,6 @@ export interface CreateFaceLivenessSession extends Binding.Service<
     >
   >
 > {}
-export const CreateFaceLivenessSession =
-  Binding.Service<CreateFaceLivenessSession>(
-    "AWS.Rekognition.CreateFaceLivenessSession",
-  );
+export const CreateFaceLivenessSession = Binding.Service<CreateFaceLivenessSession>(
+  "AWS.Rekognition.CreateFaceLivenessSession",
+);

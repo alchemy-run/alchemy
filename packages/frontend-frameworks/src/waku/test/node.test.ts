@@ -27,9 +27,7 @@ describe("makeNodeTarget", () => {
   it("selects waku's node adapter from the project's waku package", async () => {
     const node = makeNodeTarget();
     const adapter = await Effect.runPromise(node.adapter(context));
-    expect(adapter).toBe(
-      NodePath.join(context.wakuDirectory, "dist/adapters/node.js"),
-    );
+    expect(adapter).toBe(NodePath.join(context.wakuDirectory, "dist/adapters/node.js"));
     expect(adapter).not.toContain("aws-adapter");
     expect(adapter).not.toContain("cloudflare");
   });

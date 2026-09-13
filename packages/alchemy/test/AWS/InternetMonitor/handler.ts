@@ -79,16 +79,11 @@ export default InternetMonitorBindingsFunction.make(
 
         // Typed probe: the request round-trips to the monitor-scoped API
         // (an IAM gap would surface AccessDeniedException instead).
-        if (
-          request.method === "GET" &&
-          pathname === "/health-events/typed-probe"
-        ) {
-          const tag = yield* bound
-            .getHealthEvent({ EventId: BOGUS_EVENT_ID })
-            .pipe(
-              Effect.map(() => "ok"),
-              Effect.catch((e) => Effect.succeed(e._tag)),
-            );
+        if (request.method === "GET" && pathname === "/health-events/typed-probe") {
+          const tag = yield* bound.getHealthEvent({ EventId: BOGUS_EVENT_ID }).pipe(
+            Effect.map(() => "ok"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
           return yield* HttpServerResponse.json({ tag });
         }
 
@@ -102,16 +97,11 @@ export default InternetMonitorBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/internet-event/typed-probe"
-        ) {
-          const tag = yield* bound
-            .getInternetEvent({ EventId: BOGUS_EVENT_ID })
-            .pipe(
-              Effect.map(() => "ok"),
-              Effect.catch((e) => Effect.succeed(e._tag)),
-            );
+        if (request.method === "GET" && pathname === "/internet-event/typed-probe") {
+          const tag = yield* bound.getInternetEvent({ EventId: BOGUS_EVENT_ID }).pipe(
+            Effect.map(() => "ok"),
+            Effect.catch((e) => Effect.succeed(e._tag)),
+          );
           return yield* HttpServerResponse.json({ tag });
         }
 
@@ -141,8 +131,7 @@ export default InternetMonitorBindingsFunction.make(
             bound.getQueryStatus({ QueryId }).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
-                until: (r): boolean =>
-                  r.Status !== "QUEUED" && r.Status !== "RUNNING",
+                until: (r): boolean => r.Status !== "QUEUED" && r.Status !== "RUNNING",
                 times: 20,
               }),
             ),

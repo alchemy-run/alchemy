@@ -29,12 +29,7 @@ export interface CreateUser extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.CreateUserRequest,
-    ) => Effect.Effect<
-      rekognition.CreateUserResponse,
-      rekognition.CreateUserError
-    >
+    ) => Effect.Effect<rekognition.CreateUserResponse, rekognition.CreateUserError>
   >
 > {}
-export const CreateUser = Binding.Service<CreateUser>(
-  "AWS.Rekognition.CreateUser",
-);
+export const CreateUser = Binding.Service<CreateUser>("AWS.Rekognition.CreateUser");

@@ -49,13 +49,10 @@ const call = (
         // Browsers send Origin on every request; Better Auth requires it on
         // cookie-authenticated writes (CSRF).
         origin: url,
-        ...(options.body !== undefined
-          ? { "content-type": "application/json" }
-          : {}),
+        ...(options.body !== undefined ? { "content-type": "application/json" } : {}),
         ...(options.cookie ? { cookie: options.cookie } : {}),
       },
-      body:
-        options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
     const text = await response.text();
     let json: unknown = null;
@@ -79,8 +76,7 @@ const call = (
     Effect.repeat({
       while: (response) =>
         typeof response.json === "string" &&
-        ((response.status === 404 &&
-          response.json.includes("<title>Page not found</title>")) ||
+        ((response.status === 404 && response.json.includes("<title>Page not found</title>")) ||
           response.json.trim() === "error code: 1042"),
       schedule: Schedule.spaced("2 seconds"),
       times: 5,
@@ -144,8 +140,7 @@ const git = (cwd: string, ...args: string[]) =>
       if (code !== 0) throw new GitError(args, code, stderr);
       return stdout;
     },
-    catch: (cause) =>
-      cause instanceof GitError ? cause : new GitError(args, -1, String(cause)),
+    catch: (cause) => (cause instanceof GitError ? cause : new GitError(args, -1, String(cause))),
   });
 
 const remoteWith = (url: string, key: string, owner: string, name: string) =>
@@ -215,24 +210,14 @@ test(
     yield* fs.writeFileString(path.join(work, "README.md"), "# hello\n");
     yield* git(work, "add", "-A");
     yield* git(work, "commit", "-qm", "first");
-    yield* git(
-      work,
-      "push",
-      "-q",
-      remoteWith(url, key, owner.id, name),
-      "main",
-    );
+    yield* git(work, "push", "-q", remoteWith(url, key, owner.id, name), "main");
 
     // The owner's session sees the branch through the API.
     const refs = yield* call(url, `/api/v1/repos/${owner.id}/${name}/refs`, {
       cookie: owner.cookie,
     });
     expect(refs.status).toBe(200);
-    expect(
-      refs.json.refs.some(
-        (r: { name: string }) => r.name === "refs/heads/main",
-      ),
-    ).toBe(true);
+    expect(refs.json.refs.some((r: { name: string }) => r.name === "refs/heads/main")).toBe(true);
 
     // Anonymous clone of a public repository needs no credential.
     const anon = path.join(tmp, "anon");

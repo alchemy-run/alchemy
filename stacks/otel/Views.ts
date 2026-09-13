@@ -30,13 +30,9 @@ import { Traces } from "./Datasets.ts";
  * `error` (bool) and `status.code` are first-class span fields.
  */
 
-const viewProps = <A>(
-  fn: (ctx: { stage: string; traces: Output.Output<string> }) => A,
-) =>
+const viewProps = <A>(fn: (ctx: { stage: string; traces: Output.Output<string> }) => A) =>
   Effect.all([Alchemy.Stack, Traces]).pipe(
-    Effect.map(([stack, traces]) =>
-      fn({ stage: stack.stage, traces: traces.name }),
-    ),
+    Effect.map(([stack, traces]) => fn({ stage: stack.stage, traces: traces.name })),
   );
 
 export const ActiveUsersHourly = Axiom.View(
@@ -129,8 +125,7 @@ export const ResourceLatency = Axiom.View(
   "ResourceLatency",
   viewProps(({ stage, traces }) => ({
     name: `${stage}-resource-latency`,
-    description:
-      "p50/p95 of provider.<op> spans by resource_type and op (last 7d)",
+    description: "p50/p95 of provider.<op> spans by resource_type and op (last 7d)",
     datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
@@ -151,8 +146,7 @@ export const CliInvocations = Axiom.View(
   "CliInvocations",
   viewProps(({ stage, traces }) => ({
     name: `${stage}-cli-invocations`,
-    description:
-      "cli.<command> span counts grouped by command and success/error",
+    description: "cli.<command> span counts grouped by command and success/error",
     datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
@@ -170,8 +164,7 @@ export const ResourceErrorRate = Axiom.View(
   "ResourceErrorRate",
   viewProps(({ stage, traces }) => ({
     name: `${stage}-resource-error-rate`,
-    description:
-      "provider.<op> spans split by status (success vs error) per hour",
+    description: "provider.<op> spans split by status (success vs error) per hour",
     datasets: [traces],
     aplQuery: `
       ['${stage}-traces']

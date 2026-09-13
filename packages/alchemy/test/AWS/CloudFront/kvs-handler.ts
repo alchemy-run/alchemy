@@ -124,16 +124,10 @@ export default CloudFrontKvsTestFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

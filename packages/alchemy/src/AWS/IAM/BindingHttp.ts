@@ -55,9 +55,7 @@ export const makeIamHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`AWS.IAM.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.IAM.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

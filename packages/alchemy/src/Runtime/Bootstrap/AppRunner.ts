@@ -12,12 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { BunHttpServer } from "../../Http.ts";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackFromEnv,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
 
 /** Serve the bundled program with a Bun HTTP server on the injected `PORT`. */
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
@@ -35,12 +30,7 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
         Layer.provideMerge(Region.fromEnv()),
         Layer.provideMerge(BunHttpServer()),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromEnv(),
-          ),
-        ),
+        Layer.provideMerge(Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv())),
       ),
     ),
     Effect.scoped,

@@ -34,14 +34,8 @@ export interface ImportSshPublicKey extends Binding.Service<
     user: User,
   ) => Effect.Effect<
     (
-      request: Omit<
-        transfer.ImportSshPublicKeyRequest,
-        "ServerId" | "UserName"
-      >,
-    ) => Effect.Effect<
-      transfer.ImportSshPublicKeyResponse,
-      transfer.ImportSshPublicKeyError
-    >
+      request: Omit<transfer.ImportSshPublicKeyRequest, "ServerId" | "UserName">,
+    ) => Effect.Effect<transfer.ImportSshPublicKeyResponse, transfer.ImportSshPublicKeyError>
   >
 > {}
 export const ImportSshPublicKey = Binding.Service<ImportSshPublicKey>(

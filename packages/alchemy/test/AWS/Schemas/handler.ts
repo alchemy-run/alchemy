@@ -162,9 +162,7 @@ export default SchemasTestFunction.make(
         if (request.method === "GET" && pathname === "/versions") {
           const response = yield* listSchemaVersions();
           return yield* HttpServerResponse.json({
-            versions: (response.SchemaVersions ?? []).map(
-              (v) => v.SchemaVersion,
-            ),
+            versions: (response.SchemaVersions ?? []).map((v) => v.SchemaVersion),
           });
         }
 

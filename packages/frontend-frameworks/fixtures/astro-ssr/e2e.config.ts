@@ -15,10 +15,7 @@ export default Options.make({
         compatibilityFlags: ["nodejs_compat"],
         worker: {
           name: "fixtures-astro-ssr",
-          bindings: [
-            Assets.local("ASSETS"),
-            Text.local("FIXTURE_VALUE", FIXTURE_VALUE),
-          ],
+          bindings: [Assets.local("ASSETS"), Text.local("FIXTURE_VALUE", FIXTURE_VALUE)],
           assets: {
             htmlHandling: "auto-trailing-slash",
             notFoundHandling: "none",

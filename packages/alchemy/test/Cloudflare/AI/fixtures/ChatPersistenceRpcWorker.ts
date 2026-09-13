@@ -24,9 +24,7 @@ export default class ChatPersistenceRpcWorker extends Cloudflare.RpcWorker<ChatP
 
     const handlers = ChatRpcs.toLayer({
       send: ({ id, prompt }) =>
-        Effect.flatMap(chats.getByName(id), (client) =>
-          client.send({ prompt }),
-        ).pipe(Effect.orDie),
+        Effect.flatMap(chats.getByName(id), (client) => client.send({ prompt })).pipe(Effect.orDie),
       streamMessage: ({ id, prompt }) =>
         chats.getByName(id).pipe(
           Effect.map((client) => client.streamMessage({ prompt })),

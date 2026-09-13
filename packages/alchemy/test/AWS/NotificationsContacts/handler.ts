@@ -26,18 +26,14 @@ export default NotificationsContactsTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const contact = yield* NotificationsContacts.EmailContact(
-      "BindingsContact",
-      {
-        name: CONTACT_NAME,
-        emailAddress: CONTACT_EMAIL,
-        tags: { fixture: "notificationscontacts-bindings" },
-      },
-    );
+    const contact = yield* NotificationsContacts.EmailContact("BindingsContact", {
+      name: CONTACT_NAME,
+      emailAddress: CONTACT_EMAIL,
+      tags: { fixture: "notificationscontacts-bindings" },
+    });
 
     const getContact = yield* NotificationsContacts.GetEmailContact(contact);
-    const sendActivationCode =
-      yield* NotificationsContacts.SendActivationCode(contact);
+    const sendActivationCode = yield* NotificationsContacts.SendActivationCode(contact);
     const activate = yield* NotificationsContacts.ActivateEmailContact(contact);
 
     return {
@@ -75,9 +71,7 @@ export default NotificationsContactsTestFunction.make(
           // Activation needs the code from the activation email (a human
           // loop) — a bogus code must surface a TYPED error, which proves
           // both the IAM grant and the request wiring.
-          const result = yield* Effect.result(
-            activate({ code: Redacted.make("000000") }),
-          );
+          const result = yield* Effect.result(activate({ code: Redacted.make("000000") }));
           if (Result.isFailure(result)) {
             return yield* HttpServerResponse.json({
               activated: false,

@@ -41,9 +41,7 @@ export class GreengrassTestFunction extends Lambda.Function<Lambda.Function>()(
  * Failures are logged (visible in CloudWatch) so unexpected tags are
  * diagnosable without redeploying.
  */
-const probe = <A, E extends { readonly _tag: string }>(
-  self: Effect.Effect<A, E>,
-) =>
+const probe = <A, E extends { readonly _tag: string }>(self: Effect.Effect<A, E>) =>
   self.pipe(
     Effect.map(() => ({ ok: true as const })),
     Effect.catch((error) =>
@@ -89,8 +87,7 @@ export default GreengrassTestFunction.make(
     // Component-version-scoped bindings.
     const getComponent = yield* GreengrassV2.GetComponent(component);
     const describeComponent = yield* GreengrassV2.DescribeComponent(component);
-    const getArtifact =
-      yield* GreengrassV2.GetComponentVersionArtifact(component);
+    const getArtifact = yield* GreengrassV2.GetComponentVersionArtifact(component);
 
     // Deployment-scoped bindings.
     const getDeployment = yield* GreengrassV2.GetDeployment(deployment);
@@ -103,20 +100,15 @@ export default GreengrassTestFunction.make(
     const listCoreDevices = yield* GreengrassV2.ListCoreDevices();
     const getCoreDevice = yield* GreengrassV2.GetCoreDevice();
     const deleteCoreDevice = yield* GreengrassV2.DeleteCoreDevice();
-    const listInstalledComponents =
-      yield* GreengrassV2.ListInstalledComponents();
-    const listEffectiveDeployments =
-      yield* GreengrassV2.ListEffectiveDeployments();
-    const listClientDevices =
-      yield* GreengrassV2.ListClientDevicesAssociatedWithCoreDevice();
-    const associateClientDevices =
-      yield* GreengrassV2.BatchAssociateClientDeviceWithCoreDevice();
+    const listInstalledComponents = yield* GreengrassV2.ListInstalledComponents();
+    const listEffectiveDeployments = yield* GreengrassV2.ListEffectiveDeployments();
+    const listClientDevices = yield* GreengrassV2.ListClientDevicesAssociatedWithCoreDevice();
+    const associateClientDevices = yield* GreengrassV2.BatchAssociateClientDeviceWithCoreDevice();
     const disassociateClientDevices =
       yield* GreengrassV2.BatchDisassociateClientDeviceFromCoreDevice();
     const getConnectivityInfo = yield* GreengrassV2.GetConnectivityInfo();
     const updateConnectivityInfo = yield* GreengrassV2.UpdateConnectivityInfo();
-    const resolveComponentCandidates =
-      yield* GreengrassV2.ResolveComponentCandidates();
+    const resolveComponentCandidates = yield* GreengrassV2.ResolveComponentCandidates();
 
     const bound = {
       getComponent,
@@ -168,9 +160,7 @@ export default GreengrassTestFunction.make(
           const { recipe: bytes, recipeOutputFormat } = yield* getComponent({
             recipeOutputFormat: "JSON",
           });
-          const text = yield* Effect.sync(() =>
-            new TextDecoder().decode(bytes),
-          );
+          const text = yield* Effect.sync(() => new TextDecoder().decode(bytes));
           return yield* HttpServerResponse.json({
             recipeOutputFormat,
             hasName: text.includes(COMPONENT_NAME),
@@ -180,9 +170,7 @@ export default GreengrassTestFunction.make(
         // The fixture component has no artifacts — the typed error proves
         // IAM + request plumbing end-to-end.
         if (request.method === "GET" && pathname === "/artifact") {
-          const result = yield* probe(
-            getArtifact({ artifactName: "missing.zip" }),
-          );
+          const result = yield* probe(getArtifact({ artifactName: "missing.zip" }));
           return yield* HttpServerResponse.json(result);
         }
 
@@ -250,9 +238,7 @@ export default GreengrassTestFunction.make(
             getCoreDevice: yield* probe(getCoreDevice(req)),
             deleteCoreDevice: yield* probe(deleteCoreDevice(req)),
             listInstalledComponents: yield* probe(listInstalledComponents(req)),
-            listEffectiveDeployments: yield* probe(
-              listEffectiveDeployments(req),
-            ),
+            listEffectiveDeployments: yield* probe(listEffectiveDeployments(req)),
             listClientDevices: yield* probe(listClientDevices(req)),
             associateClientDevices: yield* probe(
               associateClientDevices({
@@ -276,9 +262,7 @@ export default GreengrassTestFunction.make(
           const thingName = (detail.targetArn ?? "").split("/").pop()!;
           yield* updateConnectivityInfo({
             thingName,
-            connectivityInfo: [
-              { id: "fixture", hostAddress: "127.0.0.1", portNumber: 8883 },
-            ],
+            connectivityInfo: [{ id: "fixture", hostAddress: "127.0.0.1", portNumber: 8883 }],
           });
           const { connectivityInfo } = yield* getConnectivityInfo({
             thingName,

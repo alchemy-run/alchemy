@@ -25,12 +25,7 @@ export interface DescribeDomain extends Binding.Service<
   () => Effect.Effect<
     (
       request: opensearch.DescribeDomainRequest,
-    ) => Effect.Effect<
-      opensearch.DescribeDomainResponse,
-      opensearch.DescribeDomainError
-    >
+    ) => Effect.Effect<opensearch.DescribeDomainResponse, opensearch.DescribeDomainError>
   >
 > {}
-export const DescribeDomain = Binding.Service<DescribeDomain>(
-  "AWS.OpenSearch.DescribeDomain",
-);
+export const DescribeDomain = Binding.Service<DescribeDomain>("AWS.OpenSearch.DescribeDomain");

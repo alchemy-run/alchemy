@@ -43,8 +43,7 @@ export default RDSDrizzleIamFunction.make(
     timeout: Duration.seconds(60),
   },
   Effect.gen(function* () {
-    const { cluster, subnetA, subnetB, lambdaSecurityGroup } =
-      yield* RDSDataInfra;
+    const { cluster, subnetA, subnetB, lambdaSecurityGroup } = yield* RDSDataInfra;
 
     const connect = yield* RDS.Connect(cluster, {
       auth: "iam",
@@ -78,11 +77,9 @@ export default RDSDrizzleIamFunction.make(
             database: info.database,
             username: info.username,
             hasToken:
-              typeof info.password === "string" &&
-              info.password.includes("X-Amz-Signature="),
+              typeof info.password === "string" && info.password.includes("X-Amz-Signature="),
             ssl: info.ssl,
-            canRefresh:
-              refreshed !== undefined && refreshed.includes("X-Amz-Signature="),
+            canRefresh: refreshed !== undefined && refreshed.includes("X-Amz-Signature="),
           });
         }
 

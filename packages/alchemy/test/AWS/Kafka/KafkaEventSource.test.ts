@@ -6,10 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import KafkaTestFunctionLive, {
-  FixtureCluster,
-  KafkaTestFunction,
-} from "./kafka-handler.ts";
+import KafkaTestFunctionLive, { FixtureCluster, KafkaTestFunction } from "./kafka-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,10 +38,7 @@ describe.sequential("AWS.Kafka.KafkaEventSource", () => {
         // carries the configured topic. MSK ESMs progress
         // CREATING -> ENABLING -> ENABLED; assert it reached at least CREATING
         // and never FAILED.
-        const mapping = yield* waitForMapping(
-          fn.functionName,
-          cluster.clusterArn,
-        );
+        const mapping = yield* waitForMapping(fn.functionName, cluster.clusterArn);
         expect(mapping.Topics).toEqual(["orders"]);
         expect(mapping.State).not.toBe("Failed");
 
@@ -100,26 +94,18 @@ describe.sequential("AWS.Kafka.KafkaEventSource", () => {
 
 class MappingNotReady extends Data.TaggedError("MappingNotReady")<{}> {}
 
-const waitForMapping = Effect.fn(function* (
-  functionName: string,
-  eventSourceArn: string,
-) {
+const waitForMapping = Effect.fn(function* (functionName: string, eventSourceArn: string) {
   return yield* Lambda.listEventSourceMappings({
     FunctionName: functionName,
     EventSourceArn: eventSourceArn,
   }).pipe(
     Effect.flatMap((result) => {
       const mapping = result.EventSourceMappings?.[0];
-      return mapping?.UUID
-        ? Effect.succeed(mapping)
-        : Effect.fail(new MappingNotReady());
+      return mapping?.UUID ? Effect.succeed(mapping) : Effect.fail(new MappingNotReady());
     }),
     Effect.retry({
       while: (e) => e._tag === "MappingNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 });

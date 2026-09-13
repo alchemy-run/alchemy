@@ -55,9 +55,7 @@ interface TailEventMessage {
     | undefined;
 }
 
-const parseEvents = (
-  response: workers.QueryObservabilityTelemetryResponse,
-): LogLine[] => {
+const parseEvents = (response: workers.QueryObservabilityTelemetryResponse): LogLine[] => {
   const lines: LogLine[] = [];
   if (response.events?.events) {
     for (const event of response.events.events) {
@@ -65,9 +63,7 @@ const parseEvents = (
       const meta = event.metadata;
       const msg =
         meta.message ??
-        (meta.level === "error"
-          ? `error: ${meta.error ?? "unknown"}`
-          : `${meta.level ?? "log"}`);
+        (meta.level === "error" ? `error: ${meta.error ?? "unknown"}` : `${meta.level ?? "log"}`);
       lines.push({ timestamp: ts, message: msg });
     }
   }
@@ -108,11 +104,7 @@ export const CloudflareLogs = Effect.gen(function* () {
       ),
     );
 
-  const queryLogs = (opts: {
-    accountId: string;
-    filters: TelemetryFilter[];
-    options: LogsInput;
-  }) =>
+  const queryLogs = (opts: { accountId: string; filters: TelemetryFilter[]; options: LogsInput }) =>
     Effect.gen(function* () {
       const now = Date.now();
       const limit = opts.options.limit ?? 100;
@@ -234,15 +226,10 @@ export const CloudflareLogs = Effect.gen(function* () {
       return Stream.fromQueue(queue);
     });
 
-    return Stream.unwrap(runTailSession).pipe(
-      Stream.repeat(Schedule.spaced("1 second")),
-    );
+    return Stream.unwrap(runTailSession).pipe(Stream.repeat(Schedule.spaced("1 second")));
   };
 
-  const tailStream = (opts: {
-    accountId: string;
-    filters: TelemetryFilter[];
-  }) => {
+  const tailStream = (opts: { accountId: string; filters: TelemetryFilter[] }) => {
     const poll = (since: number): Stream.Stream<LogLine, any> =>
       Stream.unwrap(
         Effect.gen(function* () {
@@ -265,9 +252,7 @@ export const CloudflareLogs = Effect.gen(function* () {
 
           const lines = parseEvents(response);
           const nextSince =
-            lines.length > 0
-              ? Math.max(...lines.map((l) => l.timestamp.getTime())) + 1
-              : since;
+            lines.length > 0 ? Math.max(...lines.map((l) => l.timestamp.getTime())) + 1 : since;
 
           return Stream.concat(Stream.fromIterable(lines), poll(nextSince));
         }),

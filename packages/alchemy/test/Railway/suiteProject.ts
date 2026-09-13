@@ -35,10 +35,7 @@ const toProject = (
   name: project.name || SUITE_PROJECT_NAME,
   workspaceId: project.workspaceId ?? project.workspace?.id ?? workspaceId,
   environmentId:
-    project.primaryEnvironmentId ??
-    project.baseEnvironmentId ??
-    project.baseEnvironment?.id ??
-    "",
+    project.primaryEnvironmentId ?? project.baseEnvironmentId ?? project.baseEnvironment?.id ?? "",
   url: `https://railway.com/project/${project.id}`,
 });
 
@@ -56,15 +53,10 @@ const findByName = (workspaceId: string) =>
       },
     )
     .pipe(
-      Stream.filter(
-        (project) =>
-          project.deletedAt == null && project.name === SUITE_PROJECT_NAME,
-      ),
+      Stream.filter((project) => project.deletedAt == null && project.name === SUITE_PROJECT_NAME),
       Stream.take(1),
       Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
+      Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
     );
 
 const acquire = Effect.gen(function* () {
@@ -90,18 +82,13 @@ const acquire = Effect.gen(function* () {
         return attrs;
       }
       const env = yield* railway.environments
-        .items(
-          { projectId: attrs.projectId, first: 5 },
-          { id: true, deletedAt: true },
-        )
+        .items({ projectId: attrs.projectId, first: 5 }, { id: true, deletedAt: true })
         .pipe(
           Stream.filter((item) => item.deletedAt == null),
           Stream.take(1),
           Stream.runHead,
         );
-      return env._tag === "Some"
-        ? { ...attrs, environmentId: env.value.id }
-        : attrs;
+      return env._tag === "Some" ? { ...attrs, environmentId: env.value.id } : attrs;
     });
 
   if (existing !== undefined) {
@@ -116,9 +103,7 @@ const acquire = Effect.gen(function* () {
     Effect.flatMap((project) => resolve(project)),
     Effect.catch((error) =>
       findByName(workspace.id).pipe(
-        Effect.flatMap((found) =>
-          found !== undefined ? resolve(found) : Effect.fail(error),
-        ),
+        Effect.flatMap((found) => (found !== undefined ? resolve(found) : Effect.fail(error))),
       ),
     ),
   );

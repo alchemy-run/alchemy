@@ -23,10 +23,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -55,9 +52,7 @@ interface WorkflowStatus {
 }
 
 const isTerminal = (status: WorkflowStatus): boolean =>
-  status.status === "complete" ||
-  status.status === "errored" ||
-  status.status === "terminated";
+  status.status === "complete" || status.status === "errored" || status.status === "terminated";
 
 /**
  * Start a workflow instance over HTTP, retrying while the freshly-served
@@ -91,14 +86,10 @@ const waitForTerminal = (url: string, instanceId: string) =>
     return yield* client.get(`${url}/workflow/status/${instanceId}`).pipe(
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.json.pipe(
-              Effect.map((json) => json as unknown as WorkflowStatus),
-            )
+          ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
           : res.text.pipe(
               Effect.flatMap((body) =>
-                Effect.fail(
-                  new Error(`Workflow status ${res.status}: ${body}`),
-                ),
+                Effect.fail(new Error(`Workflow status ${res.status}: ${body}`)),
               ),
             ),
       ),
@@ -115,11 +106,7 @@ const runInstance = (url: string, path: string, live = false) =>
     const instanceId = yield* startInstance(url, path);
     const status = yield* waitForTerminal(url, instanceId);
     // A newly deployed live workflow can precede its worker/engine link.
-    if (
-      live &&
-      status.status === "errored" &&
-      status.error?.message === "Worker not found."
-    ) {
+    if (live && status.status === "errored" && status.error?.message === "Worker not found.") {
       return yield* Effect.fail(new WorkflowLinkNotReady({ instanceId }));
     }
     return { instanceId, status };
@@ -135,15 +122,12 @@ const probeWorkflow = Effect.fn(function* (url: string) {
   const ready = yield* Effect.gen(function* () {
     const id = yield* startInstance(url, "/workflow/probe");
     const status = yield* waitForTerminal(url, id);
-    yield* Effect.logInfo(
-      `Workflow readiness probe ${id}: ${JSON.stringify(status)}`,
-    );
+    yield* Effect.logInfo(`Workflow readiness probe ${id}: ${JSON.stringify(status)}`);
     if (
       status.status === "errored" &&
       (status.error?.message === "Worker not found." ||
         (status.error?.name === "TypeError" &&
-          (status.error.message ===
-            'The RPC receiver does not implement the method "run".' ||
+          (status.error.message === 'The RPC receiver does not implement the method "run".' ||
             status.error.message ===
               "The entrypoint name LocalTestWorkflow was not found in this worker. Ensure the worker exports an entrypoint with that name.")))
     )
@@ -167,11 +151,7 @@ const probeWorkflow = Effect.fn(function* (url: string) {
 const assertRollback = (url: string, live = false) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const { instanceId, status } = yield* runInstance(
-      url,
-      "/workflow/rollback",
-      live,
-    );
+    const { instanceId, status } = yield* runInstance(url, "/workflow/rollback", live);
     expect(status).toMatchObject({ status: "errored" });
     expect(status.error?.message).toContain("rollback requested");
     // Local bindings omit rollback metadata; the persisted records verify execution.
@@ -179,9 +159,7 @@ const assertRollback = (url: string, live = false) =>
       expect(status.rollback).toEqual({ outcome: "complete", error: null });
     }
 
-    const response = yield* client.get(
-      `${url}/workflow/rollback-result/${instanceId}`,
-    );
+    const response = yield* client.get(`${url}/workflow/rollback-result/${instanceId}`);
     expect(response.status).toBe(200);
     expect(yield* response.json).toEqual(
       ["undefined", "both", "timeout-only", "retries-only"].map((step) => ({
@@ -228,16 +206,12 @@ const assertFailureScenarios = (url: string, live = false) =>
         expect(record).toBeNull();
       } else {
         expect(status.error?.message).toContain(
-          scenario === "retry-exhaustion"
-            ? "retry budget exhausted"
-            : "rollback requested",
+          scenario === "retry-exhaustion" ? "retry budget exhausted" : "rollback requested",
         );
         expect(record).toEqual({ attempt: 2 });
         if (live && scenario === "rollback-retry-exhaustion") {
           expect(status.rollback?.outcome).toBe("failed");
-          expect(status.rollback?.error?.message).toContain(
-            "rollback budget exhausted",
-          );
+          expect(status.rollback?.error?.message).toContain("rollback budget exhausted");
         }
       }
     }
@@ -258,11 +232,7 @@ const readWorkflowRow = (stack: Test.ScratchStack) =>
         stage: stack.stage,
         fqn,
       });
-      if (
-        row &&
-        !State.isActionState(row) &&
-        row.resourceType === "Cloudflare.Workflow"
-      ) {
+      if (row && !State.isActionState(row) && row.resourceType === "Cloudflare.Workflow") {
         return row;
       }
     }
@@ -333,9 +303,7 @@ test.provider(
       const events = yield* client
         .get(`${url}/workflow/events/${instanceId}`)
         .pipe(Effect.flatMap((response) => response.json));
-      expect(events).toEqual([
-        expect.objectContaining({ type: "workflow_queued" }),
-      ]);
+      expect(events).toEqual([expect.objectContaining({ type: "workflow_queued" })]);
       const deleted = yield* client
         .post(`${url}/workflow/delete/${instanceId}`)
         .pipe(Effect.flatMap((response) => response.json));
@@ -384,9 +352,9 @@ test.provider(
       expect(workflowRow?.attr?.workflowId).toMatch(/^dev:/);
       expect(workflowRow?.attr?.workflowName).toBe(workflowName);
       const instance = yield* startInstance(created.url!);
-      expect(
-        (yield* waitForTerminal(created.url!, instance)).output?.workflowName,
-      ).toBe(workflowName);
+      expect((yield* waitForTerminal(created.url!, instance)).output?.workflowName).toBe(
+        workflowName,
+      );
 
       yield* deployWith();
       const preserved = yield* readWorkflowRow(stack);
@@ -395,9 +363,7 @@ test.provider(
 
       const renamed = yield* deployWith(`${workflowName}-renamed`);
       const replaced = yield* readWorkflowRow(stack);
-      expect(replaced?.attr?.workflowId).not.toBe(
-        workflowRow?.attr?.workflowId,
-      );
+      expect(replaced?.attr?.workflowId).not.toBe(workflowRow?.attr?.workflowId);
       expect(replaced?.attr?.workflowName).toBe(`${workflowName}-renamed`);
       const client = yield* HttpClient.HttpClient;
       const ready = yield* client.get(`${renamed.url!}/workflow/name`).pipe(
@@ -410,10 +376,9 @@ test.provider(
       );
       expect(ready).toBe(`${workflowName}-renamed`);
       const renamedInstance = yield* startInstance(renamed.url!);
-      expect(
-        (yield* waitForTerminal(renamed.url!, renamedInstance)).output
-          ?.workflowName,
-      ).toBe(`${workflowName}-renamed`);
+      expect((yield* waitForTerminal(renamed.url!, renamedInstance)).output?.workflowName).toBe(
+        `${workflowName}-renamed`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -486,9 +451,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const deployed = yield* stack.deploy(
-        ExplicitNameWorkflowWorker.pipe(Alchemy.remote()),
-      );
+      const deployed = yield* stack.deploy(ExplicitNameWorkflowWorker.pipe(Alchemy.remote()));
       expect(deployed.url).not.toMatch(/^http:\/\/localhost/);
 
       const row = yield* readWorkflowRow(stack);
@@ -502,27 +465,19 @@ test.provider(
       });
       expect(observed.id).toBe(row!.attr!.workflowId);
       expect(observed.name).toBe(EXPLICIT_WORKFLOW_NAME);
-      expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual([
-        "0 0 1 1 *",
-      ]);
+      expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual(["0 0 1 1 *"]);
 
-      const { status } = yield* runInstance(
-        deployed.url!,
-        "/workflow/start/world",
-        true,
-      );
+      const { status } = yield* runInstance(deployed.url!, "/workflow/start/world", true);
       expect(status).toMatchObject({ status: "complete" });
       expect(status.error).toBeFalsy();
       expect(status.output?.greeting).toBe("Hello, world!");
       expect(status.output?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
 
       yield* stack.destroy();
-      const gone = yield* workflows
-        .getWorkflow({ accountId, workflowName })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("WorkflowNotFound", () => Effect.succeed(true)),
-        );
+      const gone = yield* workflows.getWorkflow({ accountId, workflowName }).pipe(
+        Effect.as(false),
+        Effect.catchTag("WorkflowNotFound", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }).pipe(logLevel),
   { timeout: 120_000 },

@@ -12,9 +12,7 @@ NodeModule.enableCompileCache?.();
 
 const binDir = path.dirname(import.meta.filename);
 const entry = path.join(binDir, "alchemy.js");
-const isDev = !(
-  binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
-);
+const isDev = !(binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\"));
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
@@ -24,18 +22,14 @@ const runningInBun =
   "Bun" in globalThis && typeof globalThis.Bun !== "undefined";
 
 const runtime =
-  runningInBun || execpath.includes("bun") || userAgent.startsWith("bun/")
-    ? "bun"
-    : "node";
+  runningInBun || execpath.includes("bun") || userAgent.startsWith("bun/") ? "bun" : "node";
 
 if (runtime === "node") {
   // Oxc's loader requires module.registerHooks. Keep this gate in sync with
   // src/Util/Node.ts; the launcher must run before TypeScript can be loaded.
   const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
   const supportsHooks =
-    (major === 22 && minor >= 15) ||
-    (major === 23 && minor >= 5) ||
-    major >= 24;
+    (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
   if (!supportsHooks) {
     process.stderr.write(
       `alchemy: node ${process.versions.node} is not supported ` +
@@ -54,20 +48,12 @@ if (runtime === "node") {
   // before loading the CLI, independent of the caller's tsconfig.
   const tsconfig = path.join(binDir, isDev ? ".." : ".", "tsconfig.json");
   const bun = runningInBun ? process.execPath : (findBun() ?? "bun");
-  const args = [
-    `--tsconfig-override=${tsconfig}`,
-    entry,
-    ...process.argv.slice(2),
-  ];
+  const args = [`--tsconfig-override=${tsconfig}`, entry, ...process.argv.slice(2)];
 
   process.env.NODE_ENV = "production";
   // Bun's tsconfig override can emit this benign diagnostic (oven-sh/bun#25730).
   // Keep the parent to filter it and forward signals, IPC and exit status.
-  foregroundChild(
-    bun,
-    args,
-    (line) => !line.includes("directory mismatch for directory"),
-  );
+  foregroundChild(bun, args, (line) => !line.includes("directory mismatch for directory"));
 }
 
 /**
@@ -87,9 +73,7 @@ function foregroundChild(program, args, stderrFilter) {
   /** @type {Map<NodeJS.Signals, () => void>} */
   const listeners = new Map();
 
-  for (const signal of /** @type {Array<NodeJS.Signals>} */ (
-    Object.keys(constants.signals)
-  )) {
+  for (const signal of /** @type {Array<NodeJS.Signals>} */ (Object.keys(constants.signals))) {
     if (signal === "SIGKILL" || signal === "SIGSTOP") continue;
     const forward = () => child.kill(signal);
     try {
@@ -107,10 +91,7 @@ function foregroundChild(program, args, stderrFilter) {
     // the last line of every stderr burst (e.g. an error trace's final
     // frame) until the next write or stream end, where it surfaced after
     // Ctrl+C looking like unrelated output. Only buffer a genuine partial.
-    buffer =
-      lines.length > 0 && !lines[lines.length - 1].endsWith("\n")
-        ? (lines.pop() ?? "")
-        : "";
+    buffer = lines.length > 0 && !lines[lines.length - 1].endsWith("\n") ? (lines.pop() ?? "") : "";
     for (const line of lines) {
       if (stderrFilter(line)) process.stderr.write(line);
     }
@@ -121,16 +102,10 @@ function foregroundChild(program, args, stderrFilter) {
 
   if (process.send) {
     child.on("message", (message, handle) =>
-      process.send?.(
-        /** @type {import("node:child_process").Serializable} */ (message),
-        handle,
-      ),
+      process.send?.(/** @type {import("node:child_process").Serializable} */ (message), handle),
     );
     process.on("message", (message, handle) =>
-      child.send(
-        /** @type {import("node:child_process").Serializable} */ (message),
-        handle,
-      ),
+      child.send(/** @type {import("node:child_process").Serializable} */ (message), handle),
     );
   }
 

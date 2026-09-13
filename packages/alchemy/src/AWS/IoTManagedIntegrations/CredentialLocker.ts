@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  syncManagedIntegrationsTags,
-  toTagRecord,
-  unwrapSensitive,
-} from "./internal.ts";
+import { syncManagedIntegrationsTags, toTagRecord, unwrapSensitive } from "./internal.ts";
 
 export interface CredentialLockerProps {
   /**
@@ -77,19 +73,13 @@ export const CredentialLockerProvider = () =>
     CredentialLocker,
     Effect.gen(function* () {
       const toName = (id: string, props: CredentialLockerProps = {}) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       // Observe by service-generated Id.
       const observeById = (identifier: string) =>
         mi
           .getCredentialLocker({ Identifier: identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // Recover an existing locker by name when no Id is cached (e.g. after a
       // state persistence failure). Names are not unique server-side, so take
@@ -105,15 +95,9 @@ export const CredentialLockerProvider = () =>
         return yield* observeById(summary.Id);
       });
 
-      const toAttributes = Effect.fn(function* (
-        locker: mi.GetCredentialLockerResponse,
-      ) {
+      const toAttributes = Effect.fn(function* (locker: mi.GetCredentialLockerResponse) {
         const name = unwrapSensitive(locker.Name);
-        if (
-          locker.Id === undefined ||
-          locker.Arn === undefined ||
-          name === undefined
-        ) {
+        if (locker.Id === undefined || locker.Arn === undefined || name === undefined) {
           return yield* Effect.fail(
             new Error("credential locker response is missing Id, Arn, or Name"),
           );
@@ -127,16 +111,10 @@ export const CredentialLockerProvider = () =>
       });
 
       return {
-        stables: [
-          "credentialLockerId",
-          "credentialLockerArn",
-          "credentialLockerName",
-        ],
+        stables: ["credentialLockerId", "credentialLockerArn", "credentialLockerName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -147,9 +125,7 @@ export const CredentialLockerProvider = () =>
               : yield* findByName(yield* toName(id, olds ?? {}));
           if (locker === undefined) return undefined;
           const attrs = yield* toAttributes(locker);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -170,27 +146,19 @@ export const CredentialLockerProvider = () =>
               Tags: desiredTags,
             });
             if (created.Id === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to create credential locker '${name}'`),
-              );
+              return yield* Effect.fail(new Error(`failed to create credential locker '${name}'`));
             }
             locker = yield* observeById(created.Id);
             if (locker === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `credential locker '${created.Id}' vanished after create`,
-                ),
+                new Error(`credential locker '${created.Id}' vanished after create`),
               );
             }
           }
 
           // Sync tags — diff against OBSERVED cloud tags.
           if (locker.Arn !== undefined) {
-            yield* syncManagedIntegrationsTags(
-              locker.Arn,
-              toTagRecord(locker.Tags),
-              desiredTags,
-            );
+            yield* syncManagedIntegrationsTags(locker.Arn, toTagRecord(locker.Tags), desiredTags);
           }
 
           const attrs = yield* toAttributes(locker);
@@ -207,16 +175,14 @@ export const CredentialLockerProvider = () =>
             );
             const lockers = yield* Effect.forEach(
               summaries.filter(
-                (s): s is mi.CredentialLockerSummary & { Id: string } =>
-                  s.Id !== undefined,
+                (s): s is mi.CredentialLockerSummary & { Id: string } => s.Id !== undefined,
               ),
               (summary) => observeById(summary.Id),
               { concurrency: 5 },
             );
             return yield* Effect.forEach(
               lockers.filter(
-                (locker): locker is mi.GetCredentialLockerResponse =>
-                  locker !== undefined,
+                (locker): locker is mi.GetCredentialLockerResponse => locker !== undefined,
               ),
               toAttributes,
             );
@@ -224,9 +190,7 @@ export const CredentialLockerProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* mi
             .deleteCredentialLocker({ Identifier: output.credentialLockerId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -5,12 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryThroughEnablement } from "./common.ts";
 
@@ -23,12 +18,7 @@ export type JobType = "ONE_TIME" | "SCHEDULED";
 /**
  * How Macie selects managed data identifiers for the job.
  */
-export type ManagedDataIdentifierSelector =
-  | "ALL"
-  | "EXCLUDE"
-  | "INCLUDE"
-  | "NONE"
-  | "RECOMMENDED";
+export type ManagedDataIdentifierSelector = "ALL" | "EXCLUDE" | "INCLUDE" | "NONE" | "RECOMMENDED";
 
 /**
  * A set of S3 buckets (within one account) that the job analyzes.
@@ -131,16 +121,12 @@ export interface ClassificationJob extends Resource<
  * });
  * ```
  */
-const ClassificationJobResource = Resource<ClassificationJob>(
-  "AWS.Macie2.ClassificationJob",
-);
+const ClassificationJobResource = Resource<ClassificationJob>("AWS.Macie2.ClassificationJob");
 
 export { ClassificationJobResource as ClassificationJob };
 
 const createName = (id: string, props: Partial<ClassificationJobProps>) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 200 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 200 });
 
 // A stable fingerprint of the immutable definition — any change replaces.
 const fingerprint = (props: Partial<ClassificationJobProps>) =>
@@ -151,10 +137,7 @@ const fingerprint = (props: Partial<ClassificationJobProps>) =>
       .sort((a, b) => a.accountId.localeCompare(b.accountId)),
   });
 
-const buildAttrs = (
-  jobId: string,
-  d: macie2.DescribeClassificationJobResponse,
-) => ({
+const buildAttrs = (jobId: string, d: macie2.DescribeClassificationJobResponse) => ({
   jobId,
   jobArn: d.jobArn!,
   name: d.name!,
@@ -168,11 +151,7 @@ export const ClassificationJobProvider = () =>
       const describe = (jobId: string) =>
         macie2
           .describeClassificationJob({ jobId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       return {
         stables: ["jobId", "jobArn", "name"],
@@ -226,8 +205,7 @@ export const ClassificationJobProvider = () =>
                 description: news.description,
                 samplingPercentage: news.samplingPercentage,
                 initialRun: news.initialRun,
-                managedDataIdentifierSelector:
-                  news.managedDataIdentifierSelector,
+                managedDataIdentifierSelector: news.managedDataIdentifierSelector,
                 tags: desiredTags,
               }),
             );
@@ -235,10 +213,7 @@ export const ClassificationJobProvider = () =>
             live = yield* macie2.describeClassificationJob({ jobId });
           } else {
             // 3. SYNC tags — the definition is immutable; only tags mutate.
-            const { upsert, removed } = diffTags(
-              tagRecord(live.tags),
-              desiredTags,
-            );
+            const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
                 resourceArn: live.jobArn!,

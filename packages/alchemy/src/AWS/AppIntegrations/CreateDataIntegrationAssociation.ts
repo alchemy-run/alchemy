@@ -48,7 +48,6 @@ export interface CreateDataIntegrationAssociation extends Binding.Service<
     >
   >
 > {}
-export const CreateDataIntegrationAssociation =
-  Binding.Service<CreateDataIntegrationAssociation>(
-    "AWS.AppIntegrations.CreateDataIntegrationAssociation",
-  );
+export const CreateDataIntegrationAssociation = Binding.Service<CreateDataIntegrationAssociation>(
+  "AWS.AppIntegrations.CreateDataIntegrationAssociation",
+);

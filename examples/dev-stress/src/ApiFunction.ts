@@ -86,8 +86,7 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
           yield* putObject({ Key: "hello.txt", Body: "hello from s3" });
           const object = yield* getObject({ Key: "hello.txt" });
           const text = yield* (
-            object.Body?.pipe(Stream.decodeText, Stream.mkString) ??
-              Effect.succeed("")
+            object.Body?.pipe(Stream.decodeText, Stream.mkString) ?? Effect.succeed("")
           );
           return yield* HttpServerResponse.json({ text });
         }

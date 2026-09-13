@@ -14,17 +14,10 @@ import {
   resolvePackageInstallIdentity,
   type PackageInstall,
 } from "../Bundle/InstalledPackages.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../Bundle/TempRoot.ts";
 import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
-import {
-  createContainerRuntimeContext,
-  type HostRuntimeContext,
-} from "../Server/Process.ts";
+import { createContainerRuntimeContext, type HostRuntimeContext } from "../Server/Process.ts";
 import {
   copyExtraFiles,
   contextRootOf,
@@ -98,9 +91,7 @@ const matchesConfiguredExternal = (
   );
 };
 
-export class DeployTokenMissing extends Data.TaggedError(
-  "Fly.DeployTokenMissing",
-)<{
+export class DeployTokenMissing extends Data.TaggedError("Fly.DeployTokenMissing")<{
   appName: string;
 }> {}
 
@@ -136,9 +127,7 @@ export const plainEnvValue = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const toEnvRecord = (
-  env: Record<string, any> | undefined,
-): Record<string, string> =>
+export const toEnvRecord = (env: Record<string, any> | undefined): Record<string, string> =>
   Object.fromEntries(
     Object.entries(env ?? {}).flatMap(([key, value]) => {
       const raw = plainEnvValue(value);
@@ -160,12 +149,9 @@ const coerceBindingName = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const collectBindingState = (
-  bindings: readonly ResourceBinding<ServiceBinding>[],
-) => {
+export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBinding>[]) => {
   const active = bindings.filter(
-    (binding: ResourceBinding<ServiceBinding> & { action?: string }) =>
-      binding.action !== "delete",
+    (binding: ResourceBinding<ServiceBinding> & { action?: string }) => binding.action !== "delete",
   );
   const env = toEnvRecord(
     active
@@ -200,8 +186,7 @@ export const collectBindingState = (
         }
       | undefined;
     const bucketName = coerceBindingName(bucket?.name);
-    const bucketId =
-      coerceBindingName(bucket?.id) ?? coerceBindingName(bucket?.addOnId);
+    const bucketId = coerceBindingName(bucket?.id) ?? coerceBindingName(bucket?.addOnId);
     if (bucketName !== undefined || bucketId !== undefined) {
       buckets.push({
         name: bucketName ?? "",
@@ -223,10 +208,7 @@ export const collectBindingState = (
   return { env, mounts, redis, buckets, postgres };
 };
 
-export const defaultHttpServices = (
-  port: number,
-  count = 1,
-): FlyMachineService[] => [
+export const defaultHttpServices = (port: number, count = 1): FlyMachineService[] => [
   {
     protocol: "tcp",
     internal_port: port,
@@ -275,10 +257,7 @@ const generateDockerfile = (
   }
   if (props.isExternal === true) {
     lines.push(`COPY . /app`);
-    const entry =
-      entryRel !== undefined && entryRel.length > 0
-        ? entryRel
-        : "serve-node.mjs";
+    const entry = entryRel !== undefined && entryRel.length > 0 ? entryRel : "serve-node.mjs";
     lines.push(
       `ENV PORT=${String(port)}`,
       `ENV HOST=0.0.0.0`,
@@ -319,9 +298,7 @@ export const createFlyHostedSupport = ({
 }: {
   stackName: string;
   stage: string;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
   docker: Docker["Service"];
   dotAlchemy: string;
 }) => {
@@ -356,12 +333,7 @@ export const createFlyHostedSupport = ({
             for (const root of installRoots) {
               if (matchesPackageRoot(moduleId, root)) return true;
             }
-            return matchesConfiguredExternal(
-              configuredExternal,
-              moduleId,
-              parentId,
-              isResolved,
-            );
+            return matchesConfiguredExternal(configuredExternal, moduleId, parentId, isResolved);
           },
           resolve: {
             conditionNames: [...Bundle.NODE_CONDITION_NAMES],
@@ -392,17 +364,12 @@ export const createFlyHostedSupport = ({
       };
     }
 
-    const bundleOutput = yield* buildBundle(
-      realMain,
-      virtualEntryPlugin(bootstrap),
-    );
+    const bundleOutput = yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
 
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
       content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
+        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     }));
 
     return { files, hash: bundleOutput.hash };
@@ -422,8 +389,7 @@ export const createFlyHostedSupport = ({
       identity !== undefined && Object.keys(identity.resolved).length > 0
         ? identity.resolved
         : undefined;
-    const packageJson =
-      install === undefined ? undefined : installManifest(install);
+    const packageJson = install === undefined ? undefined : installManifest(install);
     const extras = (props.extraFiles ?? []).map((file) => ({
       source: file.source,
       dest: file.dest,
@@ -435,12 +401,7 @@ export const createFlyHostedSupport = ({
       props.isExternal === true
         ? (posixRelUnder(root, realMain, path) ?? path.basename(realMain))
         : undefined;
-    const dockerfile = generateDockerfile(
-      props,
-      bundled.files.length > 1,
-      install,
-      entryRel,
-    );
+    const dockerfile = generateDockerfile(props, bundled.files.length > 1, install, entryRel);
     const extraFiles = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
@@ -455,9 +416,7 @@ export const createFlyHostedSupport = ({
   const imageExists = (imageRef: string) =>
     docker.image.inspect(imageRef).pipe(
       Effect.map(() => true),
-      Effect.catchReason("PlatformError", "NotFound", () =>
-        Effect.succeed(false),
-      ),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
     );
 
   const pushBackoff = Schedule.exponential("2 seconds");
@@ -479,8 +438,7 @@ export const createFlyHostedSupport = ({
   }) {
     const note = input.session?.note ?? ((_message: string) => Effect.void);
     yield* note(`Bundling ${input.id} program...`);
-    const { bundled, dockerfile, codeHash, packageJson } =
-      yield* computeCodeHash(input.props);
+    const { bundled, dockerfile, codeHash, packageJson } = yield* computeCodeHash(input.props);
     yield* note(`Hashed ${input.id} (${codeHash})`);
     const repo = sanitizeImageRepo(input.id);
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${repo}-${codeHash}`;
@@ -491,11 +449,7 @@ export const createFlyHostedSupport = ({
 
     if (!(yield* imageExists(imageRef))) {
       const realMain = yield* resolveMainPath(input.props.main);
-      const contextDir = yield* getStableContextDir(
-        realMain,
-        dotAlchemy,
-        `${input.id}-image`,
-      );
+      const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${input.id}-image`);
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const files =
@@ -536,8 +490,7 @@ export const createFlyHostedSupport = ({
         const root = contextRootOf(realMain, extras, path, (source) =>
           resolveExtraSource(source, path),
         );
-        const entryRel =
-          posixRelUnder(root, realMain, path) ?? path.basename(realMain);
+        const entryRel = posixRelUnder(root, realMain, path) ?? path.basename(realMain);
         const dest = path.join(contextDir, entryRel);
         if (!(yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false)))) {
           yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
@@ -604,9 +557,7 @@ export const createSpriteHostedSupport = ({
 }: {
   stackName: string;
   stage: string;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
 }) => {
   const alchemyEnv = {
     ALCHEMY_STACK_NAME: stackName,
@@ -660,9 +611,7 @@ export const createSpriteHostedSupport = ({
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
       content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
+        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     }));
 
     return { files, hash: bundleOutput.hash };

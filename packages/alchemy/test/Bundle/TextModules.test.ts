@@ -109,14 +109,8 @@ layer(NodeServices.layer)("Bundle.build default text module types", (it) => {
       const root = yield* fs.makeTempDirectory({
         prefix: "alchemy-text-module-",
       });
-      yield* fs.writeFileString(
-        path.join(root, "note.txt"),
-        "TXT_MODULE_MARKER",
-      );
-      yield* fs.writeFileString(
-        path.join(root, "page.html"),
-        "<h1>HTML_MODULE_MARKER</h1>",
-      );
+      yield* fs.writeFileString(path.join(root, "note.txt"), "TXT_MODULE_MARKER");
+      yield* fs.writeFileString(path.join(root, "page.html"), "<h1>HTML_MODULE_MARKER</h1>");
       const entry = path.join(root, "entry.ts");
       yield* fs.writeFileString(
         entry,
@@ -152,10 +146,7 @@ layer(NodeServices.layer)("Bundle.build default text module types", (it) => {
       });
       yield* fs.writeFileString(path.join(root, "data.sql"), "OVERRIDE_MARKER");
       const entry = path.join(root, "entry.ts");
-      yield* fs.writeFileString(
-        entry,
-        `import data from "./data.sql";\nconsole.log(data);\n`,
-      );
+      yield* fs.writeFileString(entry, `import data from "./data.sql";\nconsole.log(data);\n`);
 
       const result = yield* Bundle.build({
         input: entry,

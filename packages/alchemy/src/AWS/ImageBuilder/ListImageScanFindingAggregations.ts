@@ -37,7 +37,6 @@ export interface ListImageScanFindingAggregations extends Binding.Service<
     >
   >
 > {}
-export const ListImageScanFindingAggregations =
-  Binding.Service<ListImageScanFindingAggregations>(
-    "AWS.ImageBuilder.ListImageScanFindingAggregations",
-  );
+export const ListImageScanFindingAggregations = Binding.Service<ListImageScanFindingAggregations>(
+  "AWS.ImageBuilder.ListImageScanFindingAggregations",
+);

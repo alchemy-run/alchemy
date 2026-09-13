@@ -123,10 +123,7 @@ const inflateEntryUnsafeSync = (
     return inflateEntryInfoSync(buf, offset, maxOutput, expectedSize);
   }
   try {
-    const output = engine._processChunk(
-      buf.subarray(offset),
-      zlib.constants.Z_SYNC_FLUSH,
-    );
+    const output = engine._processChunk(buf.subarray(offset), zlib.constants.Z_SYNC_FLUSH);
     const bytesConsumed = engine.bytesWritten;
     if (typeof bytesConsumed !== "number" || bytesConsumed <= 0) {
       return undefined;
@@ -174,12 +171,7 @@ export const inflateEntrySync = (
   },
 ): InflatedEntry | undefined =>
   offset >= 0 && offset < buf.length
-    ? inflateEntryUnsafeSync(
-        buf,
-        offset,
-        options.maxOutput,
-        options.expectedSize,
-      )
+    ? inflateEntryUnsafeSync(buf, offset, options.maxOutput, options.expectedSize)
     : undefined;
 
 export const inflateEntry = (
@@ -198,16 +190,9 @@ export const inflateEntry = (
   Effect.suspend(() => {
     const fast =
       offset >= 0 && offset < buf.length && options?.expectedSize !== undefined
-        ? inflateEntryUnsafeSync(
-            buf,
-            offset,
-            options.maxOutput,
-            options.expectedSize,
-          )
+        ? inflateEntryUnsafeSync(buf, offset, options.maxOutput, options.expectedSize)
         : undefined;
-    return fast === undefined
-      ? inflateEntryStreaming(buf, offset, options)
-      : Effect.succeed(fast);
+    return fast === undefined ? inflateEntryStreaming(buf, offset, options) : Effect.succeed(fast);
   });
 
 /** The portable fallback: a real zlib stream per entry. */
@@ -296,9 +281,7 @@ const inflateEntryStreaming = (
  * One-shot inflate of an exactly-known zlib span (e.g. a stored `zdata`
  * BLOB). Strict: trailing garbage or truncation fails.
  */
-export const inflate = (
-  data: Uint8Array,
-): Effect.Effect<Uint8Array, ZlibError> =>
+export const inflate = (data: Uint8Array): Effect.Effect<Uint8Array, ZlibError> =>
   Effect.try({
     try: () => new Uint8Array(zlib.inflateSync(data)),
     catch: (error) =>
@@ -312,10 +295,7 @@ export const inflate = (
  * level for delta-resolved objects; non-delta pack entries are stored
  * verbatim and never re-compressed).
  */
-export const deflate = (
-  data: Uint8Array,
-  level = 6,
-): Effect.Effect<Uint8Array, ZlibError> =>
+export const deflate = (data: Uint8Array, level = 6): Effect.Effect<Uint8Array, ZlibError> =>
   Effect.try({
     try: () => new Uint8Array(zlib.deflateSync(data, { level })),
     catch: (error) =>
@@ -337,9 +317,7 @@ export const inflateExactSpan = (
     try: () => {
       const out = new Uint8Array(zlib.inflateSync(span));
       if (out.length !== expectedSize) {
-        throw new Error(
-          `inflated ${out.length} bytes, expected ${expectedSize}`,
-        );
+        throw new Error(`inflated ${out.length} bytes, expected ${expectedSize}`);
       }
       return out;
     },

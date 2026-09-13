@@ -10,7 +10,5 @@ export const isMissingStripeResource = (error: StripeOpError): boolean => {
   if (error._tag === "NotFound") {
     return true;
   }
-  return (
-    error._tag === "InvalidRequestError" && error.code === "resource_missing"
-  );
+  return error._tag === "InvalidRequestError" && error.code === "resource_missing";
 };

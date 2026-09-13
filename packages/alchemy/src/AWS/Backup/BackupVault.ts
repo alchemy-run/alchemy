@@ -107,9 +107,7 @@ export interface BackupVault extends Resource<
  */
 export const BackupVault = Resource<BackupVault>("AWS.Backup.BackupVault");
 
-const toPolicyString = (
-  policy: PolicyDocument | string | undefined,
-): string | undefined =>
+const toPolicyString = (policy: PolicyDocument | string | undefined): string | undefined =>
   policy === undefined
     ? undefined
     : typeof policy === "string"
@@ -120,14 +118,8 @@ export const BackupVaultProvider = () =>
   Provider.effect(
     BackupVault,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: BackupVaultProps,
-      ) {
-        return (
-          props.backupVaultName ??
-          (yield* createPhysicalName({ id, maxLength: 50 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: BackupVaultProps) {
+        return props.backupVaultName ?? (yield* createPhysicalName({ id, maxLength: 50 }));
       });
 
       return BackupVault.Provider.of({
@@ -156,17 +148,15 @@ export const BackupVaultProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.backupVaultName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.backupVaultName ?? (yield* createName(id, olds ?? {}));
           // AWS Backup returns AccessDeniedException (with an empty message),
           // not ResourceNotFoundException, when a vault does not exist — it
           // hides existence behind a 403. Treat both as "absent".
           const found = yield* backup
             .describeBackupVault({ BackupVaultName: name })
             .pipe(
-              Effect.catchTag(
-                ["ResourceNotFoundException", "AccessDeniedException"],
-                () => Effect.succeed(undefined),
+              Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], () =>
+                Effect.succeed(undefined),
               ),
             );
           if (!found?.BackupVaultArn) return undefined;
@@ -174,14 +164,10 @@ export const BackupVaultProvider = () =>
             backupVaultName: name,
             backupVaultArn: found.BackupVaultArn,
           };
-          const tags = yield* backup
-            .listTags({ ResourceArn: found.BackupVaultArn })
-            .pipe(
-              Effect.map((r) => r.Tags ?? {}),
-              Effect.catch(() =>
-                Effect.succeed({} as Record<string, string | undefined>),
-              ),
-            );
+          const tags = yield* backup.listTags({ ResourceArn: found.BackupVaultArn }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string | undefined>)),
+          );
           return (yield* hasAlchemyTags(id, tags as Record<string, string>))
             ? attrs
             : Unowned(attrs);
@@ -204,9 +190,8 @@ export const BackupVaultProvider = () =>
           let live = yield* backup
             .describeBackupVault({ BackupVaultName: name })
             .pipe(
-              Effect.catchTag(
-                ["ResourceNotFoundException", "AccessDeniedException"],
-                () => Effect.succeed(undefined),
+              Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], () =>
+                Effect.succeed(undefined),
               ),
             );
 
@@ -234,25 +219,17 @@ export const BackupVaultProvider = () =>
             .getBackupVaultAccessPolicy({ BackupVaultName: name })
             .pipe(
               Effect.map((r) => (r.Policy ? r.Policy : undefined)),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           const policyDrifted =
             desiredPolicy === undefined || currentPolicy === undefined
               ? desiredPolicy !== currentPolicy
-              : normalizePolicyDocument(currentPolicy) !==
-                normalizePolicyDocument(desiredPolicy);
+              : normalizePolicyDocument(currentPolicy) !== normalizePolicyDocument(desiredPolicy);
           if (policyDrifted) {
             if (desiredPolicy === undefined) {
               yield* backup
                 .deleteBackupVaultAccessPolicy({ BackupVaultName: name })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             } else {
               yield* backup.putBackupVaultAccessPolicy({
                 BackupVaultName: name,
@@ -262,21 +239,14 @@ export const BackupVaultProvider = () =>
           }
 
           // SYNC tags — diff against observed cloud tags.
-          const currentTags = yield* backup
-            .listTags({ ResourceArn: backupVaultArn })
-            .pipe(
-              Effect.map((r) => r.Tags ?? {}),
-              Effect.catch(() =>
-                Effect.succeed({} as Record<string, string | undefined>),
-              ),
-            );
-          const { upsert, removed } = diffTags(
-            currentTags as Record<string, string>,
-            {
-              ...news.tags,
-              ...internalTags,
-            },
+          const currentTags = yield* backup.listTags({ ResourceArn: backupVaultArn }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string | undefined>)),
           );
+          const { upsert, removed } = diffTags(currentTags as Record<string, string>, {
+            ...news.tags,
+            ...internalTags,
+          });
           if (upsert.length > 0) {
             yield* backup.tagResource({
               ResourceArn: backupVaultArn,
@@ -302,12 +272,9 @@ export const BackupVaultProvider = () =>
             .pages({ BackupVaultName: output.backupVaultName })
             .pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.RecoveryPoints ?? []),
-              ),
-              Effect.catchTag(
-                ["ResourceNotFoundException", "AccessDeniedException"],
-                () => Effect.succeed([]),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.RecoveryPoints ?? [])),
+              Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], () =>
+                Effect.succeed([]),
               ),
             );
           yield* Effect.forEach(
@@ -321,10 +288,7 @@ export const BackupVaultProvider = () =>
                     })
                     .pipe(
                       Effect.catchTag(
-                        [
-                          "ResourceNotFoundException",
-                          "InvalidResourceStateException",
-                        ],
+                        ["ResourceNotFoundException", "InvalidResourceStateException"],
                         () => Effect.void,
                       ),
                     )
@@ -333,23 +297,18 @@ export const BackupVaultProvider = () =>
           );
           // A missing vault deletes as AccessDeniedException, not
           // ResourceNotFoundException — both mean "already gone" here.
-          yield* backup
-            .deleteBackupVault({ BackupVaultName: output.backupVaultName })
-            .pipe(
-              Effect.catchTag(
-                ["ResourceNotFoundException", "AccessDeniedException"],
-                () => Effect.void,
-              ),
-              // Recovery-point deletion is asynchronous; the vault delete
-              // rejects with InvalidRequestException until the vault empties.
-              Effect.retry({
-                while: (e) => e._tag === "InvalidRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(10),
-                ]),
-              }),
-            );
+          yield* backup.deleteBackupVault({ BackupVaultName: output.backupVaultName }).pipe(
+            Effect.catchTag(
+              ["ResourceNotFoundException", "AccessDeniedException"],
+              () => Effect.void,
+            ),
+            // Recovery-point deletion is asynchronous; the vault delete
+            // rejects with InvalidRequestException until the vault empties.
+            Effect.retry({
+              while: (e) => e._tag === "InvalidRequestException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+            }),
+          );
         }),
       });
     }),

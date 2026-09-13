@@ -9,19 +9,10 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryOnConflict,
-  waitUntilAbsent,
-  waitUntilStable,
-} from "./internal.ts";
+import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 
 /**
  * The kind of compute a target group routes to.
@@ -227,9 +218,7 @@ export interface TargetGroup extends Resource<
  */
 export const TargetGroup = Resource<TargetGroup>("AWS.VpcLattice.TargetGroup");
 
-const toWireHealthCheck = (
-  healthCheck: TargetGroupHealthCheck,
-): vpclattice.HealthCheckConfig => ({
+const toWireHealthCheck = (healthCheck: TargetGroupHealthCheck): vpclattice.HealthCheckConfig => ({
   enabled: healthCheck.enabled,
   protocol: healthCheck.protocol,
   protocolVersion: healthCheck.protocolVersion,
@@ -242,17 +231,14 @@ const toWireHealthCheck = (
   matcher: healthCheck.matcher,
 });
 
-const targetKey = (t: { id?: string; port?: number }) =>
-  `${t.id ?? ""}#${t.port ?? ""}`;
+const targetKey = (t: { id?: string; port?: number }) => `${t.id ?? ""}#${t.port ?? ""}`;
 
 /**
  * RegisterTargets reports per-target failures in `unsuccessful` instead of
  * throwing. Tagged so callers (e.g. `delete`'s not-found tolerance) can keep
  * using `Effect.catchTag` on the fully typed error union.
  */
-class TargetRegistrationFailed extends Data.TaggedError(
-  "AWS.VpcLattice.TargetRegistrationFailed",
-)<{
+class TargetRegistrationFailed extends Data.TaggedError("AWS.VpcLattice.TargetRegistrationFailed")<{
   targetGroupId: string;
   unsuccessful: vpclattice.TargetFailure[];
 }> {
@@ -273,11 +259,7 @@ export const TargetGroupProvider = () =>
       const observe = (targetGroupIdentifier: string) =>
         vpclattice
           .getTargetGroup({ targetGroupIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (name: string) =>
         vpclattice.listTargetGroups.pages({}).pipe(
@@ -292,17 +274,11 @@ export const TargetGroupProvider = () =>
           ),
         );
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -325,18 +301,14 @@ export const TargetGroupProvider = () =>
           .pages({ targetGroupIdentifier: targetGroupId })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.items ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
           );
         const desiredKeys = new Set(desired.map(targetKey));
         const observedKeys = new Set(observed.map(targetKey));
         // DRAINING targets are already being deregistered — leave them alone.
         const toRemove = observed.filter(
           (t): t is typeof t & { id: string } =>
-            t.id != null &&
-            !desiredKeys.has(targetKey(t)) &&
-            t.status !== "DRAINING",
+            t.id != null && !desiredKeys.has(targetKey(t)) && t.status !== "DRAINING",
         );
         const toAdd = desired.filter((t) => !observedKeys.has(targetKey(t)));
         if (toRemove.length > 0) {
@@ -366,9 +338,7 @@ export const TargetGroupProvider = () =>
         stables: ["targetGroupId", "targetGroupArn", "name", "type"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Everything except healthCheck, targets, and tags is fixed at
@@ -380,8 +350,7 @@ export const TargetGroupProvider = () =>
             (olds?.protocolVersion ?? undefined) !== news.protocolVersion ||
             (olds?.ipAddressType ?? undefined) !== news.ipAddressType ||
             (olds?.vpcIdentifier ?? undefined) !== news.vpcIdentifier ||
-            (olds?.lambdaEventStructureVersion ?? undefined) !==
-              news.lambdaEventStructureVersion
+            (olds?.lambdaEventStructureVersion ?? undefined) !== news.lambdaEventStructureVersion
           ) {
             return { action: "replace" } as const;
           }
@@ -402,9 +371,7 @@ export const TargetGroupProvider = () =>
             status: group.status ?? "UNKNOWN",
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -423,8 +390,7 @@ export const TargetGroupProvider = () =>
                 name,
                 type: news.type,
                 config:
-                  news.type === "LAMBDA" &&
-                  news.lambdaEventStructureVersion === undefined
+                  news.type === "LAMBDA" && news.lambdaEventStructureVersion === undefined
                     ? undefined
                     : {
                         port: news.port,
@@ -432,20 +398,15 @@ export const TargetGroupProvider = () =>
                         protocolVersion: news.protocolVersion,
                         ipAddressType: news.ipAddressType,
                         vpcIdentifier: news.vpcIdentifier,
-                        lambdaEventStructureVersion:
-                          news.lambdaEventStructureVersion,
+                        lambdaEventStructureVersion: news.lambdaEventStructureVersion,
                         healthCheck: news.healthCheck
                           ? toWireHealthCheck(news.healthCheck)
                           : undefined,
                       },
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () => findByName(name)),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(
-                new Error(`Failed to create target group ${name}`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create target group ${name}`));
             }
             group = yield* observe(created.id);
             if (!group?.arn || !group.id) {
@@ -455,9 +416,7 @@ export const TargetGroupProvider = () =>
           const targetGroupId = group.id;
           const targetGroupArn = group.arn;
           if (!targetGroupId || !targetGroupArn) {
-            return yield* Effect.fail(
-              new Error(`Target group ${name} is missing its id/arn`),
-            );
+            return yield* Effect.fail(new Error(`Target group ${name} is missing its id/arn`));
           }
 
           // Target groups reject updates while CREATE_IN_PROGRESS.
@@ -468,15 +427,11 @@ export const TargetGroupProvider = () =>
             const desired = toWireHealthCheck(news.healthCheck);
             const observedHealthCheck = stable?.config?.healthCheck ?? {};
             const drifted = (
-              Object.entries(desired) as [
-                keyof vpclattice.HealthCheckConfig,
-                unknown,
-              ][]
+              Object.entries(desired) as [keyof vpclattice.HealthCheckConfig, unknown][]
             ).some(
               ([key, value]) =>
                 value !== undefined &&
-                JSON.stringify(observedHealthCheck[key]) !==
-                  JSON.stringify(value),
+                JSON.stringify(observedHealthCheck[key]) !== JSON.stringify(value),
             );
             if (drifted) {
               yield* retryOnConflict(
@@ -508,14 +463,11 @@ export const TargetGroupProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* vpclattice.listTargetGroups.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.items ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
             );
             return yield* Effect.forEach(
               summaries.filter(
-                (s): s is typeof s & { id: string; arn: string } =>
-                  s.id != null && s.arn != null,
+                (s): s is typeof s & { id: string; arn: string } => s.id != null && s.arn != null,
               ),
               (summary) =>
                 Effect.gen(function* () {
@@ -545,19 +497,12 @@ export const TargetGroupProvider = () =>
           // has targets registered with it` until they are gone. Wait
           // (bounded) for the drain to complete.
           yield* Effect.repeat(
-            vpclattice
-              .listTargets({ targetGroupIdentifier: output.targetGroupId })
-              .pipe(
-                Effect.map((r) => r.items.length),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(0),
-                ),
-              ),
+            vpclattice.listTargets({ targetGroupIdentifier: output.targetGroupId }).pipe(
+              Effect.map((r) => r.items.length),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(0)),
+            ),
             {
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
               until: (remaining): boolean => remaining === 0,
             },
           );
@@ -565,9 +510,7 @@ export const TargetGroupProvider = () =>
             vpclattice.deleteTargetGroup({
               targetGroupIdentifier: output.targetGroupId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Deletion is asynchronous while targets drain; wait until the
           // group is actually gone so dependent VPC deletes don't conflict.
           yield* waitUntilAbsent(observe(output.targetGroupId));

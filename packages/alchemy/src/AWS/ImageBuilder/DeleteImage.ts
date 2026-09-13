@@ -28,12 +28,7 @@ export interface DeleteImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: imagebuilder.DeleteImageRequest,
-    ) => Effect.Effect<
-      imagebuilder.DeleteImageResponse,
-      imagebuilder.DeleteImageError
-    >
+    ) => Effect.Effect<imagebuilder.DeleteImageResponse, imagebuilder.DeleteImageError>
   >
 > {}
-export const DeleteImage = Binding.Service<DeleteImage>(
-  "AWS.ImageBuilder.DeleteImage",
-);
+export const DeleteImage = Binding.Service<DeleteImage>("AWS.ImageBuilder.DeleteImage");

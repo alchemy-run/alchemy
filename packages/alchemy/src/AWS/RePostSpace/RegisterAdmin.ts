@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Space } from "./Space.ts";
 
-export interface RegisterAdminRequest extends Omit<
-  repostspace.RegisterAdminInput,
-  "spaceId"
-> {}
+export interface RegisterAdminRequest extends Omit<repostspace.RegisterAdminInput, "spaceId"> {}
 
 /**
  * Runtime binding for the `RegisterAdmin` operation (IAM action
@@ -34,12 +31,7 @@ export interface RegisterAdmin extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RegisterAdminRequest,
-    ) => Effect.Effect<
-      repostspace.RegisterAdminResponse,
-      repostspace.RegisterAdminError
-    >
+    ) => Effect.Effect<repostspace.RegisterAdminResponse, repostspace.RegisterAdminError>
   >
 > {}
-export const RegisterAdmin = Binding.Service<RegisterAdmin>(
-  "AWS.RePostSpace.RegisterAdmin",
-);
+export const RegisterAdmin = Binding.Service<RegisterAdmin>("AWS.RePostSpace.RegisterAdmin");

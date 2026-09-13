@@ -114,9 +114,7 @@ export interface MakeOptions<ROut = any> {
  */
 export const sidecarProxy = (options: { profile?: string }) =>
   Layer.unwrap(
-    Effect.map(RpcSpawner.RpcSpawner, (spawner) =>
-      RpcProviderProxy.layer(spawner.url),
-    ),
+    Effect.map(RpcSpawner.RpcSpawner, (spawner) => RpcProviderProxy.layer(spawner.url)),
   ).pipe(
     Layer.provideMerge(
       RpcSpawner.layerServer({
@@ -132,9 +130,7 @@ export const sidecarProxy = (options: { profile?: string }) =>
  * in place. Accepts the usual truthy/falsey strings (`true`/`1`/`yes`/`on`,
  * `false`/`0`/`no`/`off`).
  */
-export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(
-  Config.option,
-);
+export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(Config.option);
 
 /** The `ALCHEMY_TEST_DEV` override, if the env var is set. */
 export const alchemyTestDevOverride = (): Option.Option<boolean> =>
@@ -188,9 +184,7 @@ export const resolveStage = (options: { stage?: string }): string =>
  * run `close` from the same final cleanup hook that closes the shared scope.
  */
 export interface SidecarHandle {
-  readonly provide: <A, E, R>(
-    eff: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, any, any>;
+  readonly provide: <A, E, R>(eff: Effect.Effect<A, E, R>) => Effect.Effect<A, any, any>;
   readonly close: Effect.Effect<void>;
 }
 
@@ -222,22 +216,16 @@ export const makeSidecarHandle = <ROut = any>(
         // (closed in afterAll). Merging it in would pin the process-wide
         // spawner HTTP server to a file that exits while others still need
         // it. Provide the sidecar singleton scope instead.
-        const ambient = Context.omit(Scope.Scope)(
-          yield* Effect.context<never>(),
-        );
+        const ambient = Context.omit(Scope.Scope)(yield* Effect.context<never>());
         const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
-          Effect.map((built) =>
-            Context.get(built, RpcProviderProxy.RpcProviderProxy),
-          ),
+          Effect.map((built) => Context.get(built, RpcProviderProxy.RpcProviderProxy)),
           Effect.provideContext(ambient as Context.Context<any>),
           Scope.provide(scope),
           Effect.orDie,
         );
         return RpcProviderProxy.RpcProviderProxy.of({
           get: (providersUrl, providerName) =>
-            Effect.flatMap(realProxy, (proxy) =>
-              proxy.get(providersUrl, providerName),
-            ),
+            Effect.flatMap(realProxy, (proxy) => proxy.get(providersUrl, providerName)),
         });
       }),
     );
@@ -398,9 +386,11 @@ export const toEffect = <A, ROut = any>(
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );
 
-  return (
-    scope === undefined ? Effect.scoped(base) : Scope.provide(base, scope)
-  ) as Effect.Effect<A, any, never>;
+  return (scope === undefined ? Effect.scoped(base) : Scope.provide(base, scope)) as Effect.Effect<
+    A,
+    any,
+    never
+  >;
 };
 
 /** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
@@ -568,9 +558,7 @@ export const scratchStack = <ROut>(
   // Pin both phases separately: Actions execute during apply, after the stack
   // program has finished. This override must be inside `compiled.services` so
   // Effect's closest-layer precedence selects Floci for Action data-plane calls.
-  const pinToFloci = <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, R> =>
+  const pinToFloci = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
       ? (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
       : effect;
@@ -621,9 +609,7 @@ export const scratchStack = <ROut>(
         Effect.asVoid,
         Effect.provide(
           stateLayer.pipe(
-            Layer.provideMerge(
-              options.providers as Layer.Layer<any, never, any>,
-            ),
+            Layer.provideMerge(options.providers as Layer.Layer<any, never, any>),
             Layer.provideMerge(
               Layer.succeed(Stack, {
                 name: stackName,

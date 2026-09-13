@@ -72,11 +72,8 @@ export interface Application extends Resource<
 export const Application = Resource<Application>("AWS.CodeDeploy.Application");
 
 /** Build the ARN for a CodeDeploy application. */
-const applicationArn = (
-  region: string,
-  account: string,
-  name: string,
-): string => `arn:aws:codedeploy:${region}:${account}:application:${name}`;
+const applicationArn = (region: string, account: string, name: string): string =>
+  `arn:aws:codedeploy:${region}:${account}:application:${name}`;
 
 /** Convert a CodeDeploy wire tag list into a plain record. */
 const toTagRecord = (
@@ -104,24 +101,16 @@ export const ApplicationProvider = () =>
         const response = yield* codedeploy
           .getApplication({ applicationName: name })
           .pipe(
-            Effect.catchTag("ApplicationDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ApplicationDoesNotExistException", () => Effect.succeed(undefined)),
           );
         return response?.application;
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codedeploy
           .listTagsForResource({ ResourceArn: arn })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        const { removed, upsert } = diffTags(
-          toTagRecord(observed?.Tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(toTagRecord(observed?.Tags), desiredTags);
         if (upsert.length > 0) {
           yield* codedeploy.tagResource({ ResourceArn: arn, Tags: upsert });
         }
@@ -138,24 +127,18 @@ export const ApplicationProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Compute platform is immutable — replace on change.
-          if (
-            (news?.computePlatform ?? "Server") !==
-            (olds?.computePlatform ?? "Server")
-          ) {
+          if ((news?.computePlatform ?? "Server") !== (olds?.computePlatform ?? "Server")) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.applicationName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.applicationName ?? (yield* toName(id, olds ?? {}));
           const application = yield* getApplication(name);
           if (application?.applicationId === undefined) return undefined;
           const arn = applicationArn(region, accountId, name);
@@ -165,12 +148,10 @@ export const ApplicationProvider = () =>
             applicationArn: arn,
             computePlatform: application.computePlatform ?? "Server",
           };
-          const tags = yield* codedeploy
-            .listTagsForResource({ ResourceArn: arn })
-            .pipe(
-              Effect.map((res) => toTagRecord(res.Tags)),
-              Effect.catch(() => Effect.succeed({})),
-            );
+          const tags = yield* codedeploy.listTagsForResource({ ResourceArn: arn }).pipe(
+            Effect.map((res) => toTagRecord(res.Tags)),
+            Effect.catch(() => Effect.succeed({})),
+          );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -230,9 +211,7 @@ export const ApplicationProvider = () =>
             const { accountId, region } = yield* AWSEnvironment.current;
             const names = yield* codedeploy.listApplications.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.applications ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.applications ?? [])),
             );
             return names.map((name) => ({
               applicationName: name,

@@ -7,10 +7,7 @@ import type { HostedZone } from "./HostedZone.ts";
  * `TestDNSAnswer` request with `HostedZoneId` injected from the bound
  * {@link HostedZone}.
  */
-export interface TestDNSAnswerRequest extends Omit<
-  route53.TestDNSAnswerRequest,
-  "HostedZoneId"
-> {}
+export interface TestDNSAnswerRequest extends Omit<route53.TestDNSAnswerRequest, "HostedZoneId"> {}
 
 /**
  * Runtime binding for the `TestDNSAnswer` operation (IAM action
@@ -45,12 +42,7 @@ export interface TestDNSAnswer extends Binding.Service<
   ) => Effect.Effect<
     (
       request: TestDNSAnswerRequest,
-    ) => Effect.Effect<
-      route53.TestDNSAnswerResponse,
-      route53.TestDNSAnswerError
-    >
+    ) => Effect.Effect<route53.TestDNSAnswerResponse, route53.TestDNSAnswerError>
   >
 > {}
-export const TestDNSAnswer = Binding.Service<TestDNSAnswer>(
-  "AWS.Route53.TestDNSAnswer",
-);
+export const TestDNSAnswer = Binding.Service<TestDNSAnswer>("AWS.Route53.TestDNSAnswer");

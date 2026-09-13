@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link UngroupResources} — the group is injected from the binding. */
-export type UngroupResourcesRequest = Omit<
-  resourcegroups.UngroupResourcesInput,
-  "Group"
->;
+export type UngroupResourcesRequest = Omit<resourcegroups.UngroupResourcesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:UngroupResources`.
@@ -41,10 +38,7 @@ export interface UngroupResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UngroupResourcesRequest,
-    ) => Effect.Effect<
-      resourcegroups.UngroupResourcesOutput,
-      resourcegroups.UngroupResourcesError
-    >
+    ) => Effect.Effect<resourcegroups.UngroupResourcesOutput, resourcegroups.UngroupResourcesError>
   >
 > {}
 export const UngroupResources = Binding.Service<UngroupResources>(

@@ -40,6 +40,4 @@ export interface GenerateRandom extends Binding.Service<
   >
 > {}
 
-export const GenerateRandom = Binding.Service<GenerateRandom>(
-  "AWS.KMS.GenerateRandom",
-);
+export const GenerateRandom = Binding.Service<GenerateRandom>("AWS.KMS.GenerateRandom");

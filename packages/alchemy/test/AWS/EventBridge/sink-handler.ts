@@ -91,13 +91,11 @@ export const BusSinkFunctionLive = BusSinkFunction.make(
             includeMalformed?: boolean;
           };
 
-          const entries: AWS.EventBridge.BusSinkEntry[] = body.markers.map(
-            (marker) => ({
-              Source: "alchemy.test.bussink",
-              DetailType: "BusSinkEvent",
-              Detail: JSON.stringify({ marker }),
-            }),
-          );
+          const entries: AWS.EventBridge.BusSinkEntry[] = body.markers.map((marker) => ({
+            Source: "alchemy.test.bussink",
+            DetailType: "BusSinkEvent",
+            Detail: JSON.stringify({ marker }),
+          }));
           if (body.includeMalformed) {
             // Detail must be valid JSON. EventBridge rejects this entry
             // per-entry (ErrorCode: MalformedDetail) without failing the

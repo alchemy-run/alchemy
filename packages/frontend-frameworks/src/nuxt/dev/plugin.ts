@@ -72,16 +72,13 @@ const synthesizeRequest = (
   try {
     const req = event.node?.req;
     if (req === undefined) return undefined;
-    const host =
-      (typeof req.headers?.host === "string" && req.headers.host) ||
-      "localhost";
+    const host = (typeof req.headers?.host === "string" && req.headers.host) || "localhost";
     const protocol = req.socket?.encrypted === true ? "https" : "http";
     const url = new URL(req.url ?? "/", `${protocol}://${host}`);
     const headers = new Headers();
     for (const [name, value] of Object.entries(req.headers ?? {})) {
       if (typeof value === "string") headers.set(name, value);
-      else if (Array.isArray(value))
-        for (const entry of value) headers.append(name, entry);
+      else if (Array.isArray(value)) for (const entry of value) headers.append(name, entry);
     }
     const request = new Request(url.toString(), {
       method: req.method ?? "GET",

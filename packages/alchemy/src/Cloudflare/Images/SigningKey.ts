@@ -38,13 +38,7 @@ export interface SigningKeyAttributes {
   value: Redacted.Redacted<string>;
 }
 
-export type SigningKey = Resource<
-  TypeId,
-  SigningKeyProps,
-  SigningKeyAttributes,
-  never,
-  Providers
->;
+export type SigningKey = Resource<TypeId, SigningKeyProps, SigningKeyAttributes, never, Providers>;
 
 /**
  * A Cloudflare Images signing key — an HMAC key used to generate signed
@@ -104,11 +98,7 @@ export const SigningKeyProvider = () =>
       // Only compare when the old name is knowable; a generated name is
       // stable across deploys so an omitted name never replaces.
       const oldName = output?.keyName ?? olds?.name;
-      if (
-        oldName !== undefined &&
-        news.name !== undefined &&
-        news.name !== oldName
-      ) {
+      if (oldName !== undefined && news.name !== undefined && news.name !== oldName) {
         return { action: "replace" } as const;
       }
       if (
@@ -130,10 +120,7 @@ export const SigningKeyProvider = () =>
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const acct =
-        output?.accountId ??
-        (olds?.accountId as string | undefined) ??
-        accountId;
+      const acct = output?.accountId ?? (olds?.accountId as string | undefined) ?? accountId;
       const name = output?.keyName ?? (yield* createKeyName(id, olds?.name));
 
       const observed = yield* findKey(acct, name);
@@ -156,9 +143,7 @@ export const SigningKeyProvider = () =>
         Effect.map((response): SigningKeyAttributes[] =>
           (response.keys ?? []).map((key) => toAttributes(key, accountId)),
         ),
-        Effect.catchTag("ImagesAccessNotEnabled", () =>
-          Effect.succeed<SigningKeyAttributes[]>([]),
-        ),
+        Effect.catchTag("ImagesAccessNotEnabled", () => Effect.succeed<SigningKeyAttributes[]>([])),
       );
     }),
 
@@ -181,9 +166,7 @@ export const SigningKeyProvider = () =>
           accountId: acct,
           signingKeyName: name,
         });
-        observed =
-          created.keys?.find((key) => key.name === name) ??
-          (yield* findKey(acct, name));
+        observed = created.keys?.find((key) => key.name === name) ?? (yield* findKey(acct, name));
       }
       if (!observed?.value) {
         // The PUT response and the follow-up list both failed to surface
@@ -223,9 +206,7 @@ const findKey = (accountId: string, name: string) =>
     .listV1Keys({ accountId })
     .pipe(
       Effect.map((response) =>
-        (response.keys ?? []).find(
-          (key): key is ObservedKey => key.name === name,
-        ),
+        (response.keys ?? []).find((key): key is ObservedKey => key.name === name),
       ),
     );
 
@@ -234,10 +215,7 @@ const createKeyName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  key: ObservedKey,
-  accountId: string,
-): SigningKeyAttributes => ({
+const toAttributes = (key: ObservedKey, accountId: string): SigningKeyAttributes => ({
   keyName: key.name ?? "",
   accountId,
   value: Redacted.make(key.value ?? ""),

@@ -31,9 +31,7 @@ describe("AWS.IAM.SAMLProvider", () => {
       const provider = yield* Provider.findProvider(SAMLProvider);
       const all = yield* provider.list();
 
-      expect(
-        all.some((x) => x.samlProviderArn === deployed.samlProviderArn),
-      ).toBe(true);
+      expect(all.some((x) => x.samlProviderArn === deployed.samlProviderArn)).toBe(true);
 
       yield* stack.destroy();
 

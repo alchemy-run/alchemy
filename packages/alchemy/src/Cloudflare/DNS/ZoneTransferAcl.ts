@@ -222,10 +222,7 @@ const createAclName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  acl: ObservedAcl,
-  accountId: string,
-): ZoneTransferAclAttributes => ({
+const toAttributes = (acl: ObservedAcl, accountId: string): ZoneTransferAclAttributes => ({
   aclId: acl.id,
   accountId,
   name: acl.name,

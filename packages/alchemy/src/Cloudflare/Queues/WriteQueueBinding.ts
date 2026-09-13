@@ -19,8 +19,7 @@ export const makeWriteQueueClient = ({
   use,
 }: ReturnType<typeof makeQueueHelpers>): WriteQueueClient => ({
   raw,
-  send: (body: unknown, options?: SendOptions) =>
-    use((q) => q.send(body, options)),
+  send: (body: unknown, options?: SendOptions) => use((q) => q.send(body, options)),
   sendBatch: (messages: ReadonlyArray<SendMessage>) =>
     use((q) =>
       q.sendBatch(

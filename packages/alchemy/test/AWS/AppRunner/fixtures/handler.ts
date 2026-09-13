@@ -32,8 +32,7 @@ export default AppRunnerTestFunction.make(
     const service = yield* AppRunner.Service("BindingsService", {
       serviceName: "alchemy-test-apprunner-bind",
       imageRepository: {
-        imageIdentifier:
-          "public.ecr.aws/aws-containers/hello-app-runner:latest",
+        imageIdentifier: "public.ecr.aws/aws-containers/hello-app-runner:latest",
         imageRepositoryType: "ECR_PUBLIC",
         port: "8000",
       },
@@ -44,8 +43,7 @@ export default AppRunnerTestFunction.make(
     const pauseService = yield* AppRunner.PauseService(service);
     const resumeService = yield* AppRunner.ResumeService(service);
     const startDeployment = yield* AppRunner.StartDeployment(service);
-    const describeCustomDomains =
-      yield* AppRunner.DescribeCustomDomains(service);
+    const describeCustomDomains = yield* AppRunner.DescribeCustomDomains(service);
 
     return {
       fetch: Effect.gen(function* () {
@@ -114,10 +112,7 @@ export default AppRunnerTestFunction.make(
         // Lambda 502, and the assertion blows up on a missing field rather
         // than saying what App Runner actually refused.
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
         Effect.orDie,
       ),

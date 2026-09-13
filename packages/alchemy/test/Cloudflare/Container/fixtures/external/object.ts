@@ -31,9 +31,7 @@ export class ExternalContainerObject extends Cloudflare.DurableObject<ExternalCo
 
       return {
         hello: Effect.fn("hello")(function* () {
-          const response = yield* fetch(
-            HttpClientRequest.get("http://container/"),
-          );
+          const response = yield* fetch(HttpClientRequest.get("http://container/"));
           return yield* response.text;
         }),
       };

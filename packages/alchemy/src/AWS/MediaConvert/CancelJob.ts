@@ -32,12 +32,7 @@ export interface CancelJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediaconvert.CancelJobRequest,
-    ) => Effect.Effect<
-      mediaconvert.CancelJobResponse,
-      mediaconvert.CancelJobError
-    >
+    ) => Effect.Effect<mediaconvert.CancelJobResponse, mediaconvert.CancelJobError>
   >
 > {}
-export const CancelJob = Binding.Service<CancelJob>(
-  "AWS.MediaConvert.CancelJob",
-);
+export const CancelJob = Binding.Service<CancelJob>("AWS.MediaConvert.CancelJob");

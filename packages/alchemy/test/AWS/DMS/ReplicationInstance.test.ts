@@ -76,8 +76,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const instance = yield* ReplicationInstance("Instance", {
             replicationInstanceClass: "dms.t3.micro",
             allocatedStorage: 20,
-            replicationSubnetGroupIdentifier:
-              subnetGroup.replicationSubnetGroupIdentifier,
+            replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
             publiclyAccessible: false,
             multiAZ: false,
           });
@@ -89,25 +88,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(instance.replicationInstanceClass).toBe("dms.t3.micro");
       expect(instance.status).toBe("available");
 
-      const observed = yield* findInstance(
-        instance.replicationInstanceIdentifier,
-      );
-      expect(observed?.ReplicationInstanceArn).toBe(
-        instance.replicationInstanceArn,
-      );
+      const observed = yield* findInstance(instance.replicationInstanceIdentifier);
+      expect(observed?.ReplicationInstanceArn).toBe(instance.replicationInstanceArn);
 
       // Destroy immediately — the instance bills hourly — and verify deletion
       // has at least initiated (full disappearance takes several more minutes).
       yield* stack.destroy();
-      const status = yield* findInstance(
-        instance.replicationInstanceIdentifier,
-      ).pipe(
+      const status = yield* findInstance(instance.replicationInstanceIdentifier).pipe(
         Effect.map((i) => i?.ReplicationInstanceStatus ?? "gone"),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("10 seconds"),
-            Schedule.recurs(12),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(12)]),
         }),
       );
       expect(["gone", "deleting"]).toContain(status);

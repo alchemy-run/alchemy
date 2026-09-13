@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test names (never derived from Date.now() or
 // randomness). Each test owns disjoint identifiers so reruns never collide.
@@ -39,14 +35,8 @@ const forbiddenRetry = {
   times: 8,
 } as const;
 
-const getDomain = (
-  accountId: string,
-  projectName: string,
-  domainName: string,
-) =>
-  pages
-    .getProjectDomain({ accountId, projectName, domainName })
-    .pipe(Effect.retry(forbiddenRetry));
+const getDomain = (accountId: string, projectName: string, domainName: string) =>
+  pages.getProjectDomain({ accountId, projectName, domainName }).pipe(Effect.retry(forbiddenRetry));
 
 // Attaching a domain is asynchronous: the attachment, its zone tag and
 // validation/verification blocks propagate across Cloudflare's edge a beat
@@ -54,26 +44,15 @@ const getDomain = (
 // riding out the brief `PagesDomainNotFound` window, until the domain is
 // observable with a status. We assert reachability — NOT a terminal `active`
 // status, since certificate issuance needs a real CNAME and stays pending.
-const waitForDomain = (
-  accountId: string,
-  projectName: string,
-  domainName: string,
-) =>
+const waitForDomain = (accountId: string, projectName: string, domainName: string) =>
   pages.getProjectDomain({ accountId, projectName, domainName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden" || e._tag === "PagesDomainNotFound",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
-const expectDomainGone = (
-  accountId: string,
-  projectName: string,
-  domainName: string,
-) =>
+const expectDomainGone = (accountId: string, projectName: string, domainName: string) =>
   getDomain(accountId, projectName, domainName).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "DomainNotDeleted" } as const)),
     // A detached domain surfaces as `PagesDomainNotFound` (code 8000021);
@@ -83,10 +62,7 @@ const expectDomainGone = (
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "DomainNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 

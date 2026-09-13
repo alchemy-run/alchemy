@@ -30,7 +30,7 @@ const asPlain = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const resolveName = (redis: Redis) =>
+const _resolveName = (redis: Redis) =>
   Effect.gen(function* () {
     const value = redis.name as unknown;
     const direct = asPlain(value);
@@ -49,9 +49,7 @@ const redisUrlFromEnv = Config.Redacted(REDIS_URL_ENV).pipe(
   Effect.map((value) => Redacted.value(value)),
 );
 
-export const makeRedisBinding = <Client>(options: {
-  makeClient: (url: Url) => Client;
-}) =>
+export const makeRedisBinding = <Client>(options: { makeClient: (url: Url) => Client }) =>
   Effect.succeed(
     Effect.fn(function* (redis: Redis) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {

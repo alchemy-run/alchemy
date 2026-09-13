@@ -10,18 +10,11 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const TEST_DOMAIN = process.env.RAILWAY_TEST_DOMAIN;
 
-const listLive = (
-  environmentId: string,
-  projectId: string,
-  serviceId: string,
-) =>
+const listLive = (environmentId: string, projectId: string, serviceId: string) =>
   railway
     .domains(
       { environmentId, projectId, serviceId },
@@ -38,8 +31,7 @@ const listLive = (
     .pipe(
       Effect.map((result) =>
         result.customDomains.filter(
-          (domain) =>
-            domain.deletedAt == null && domain.syncStatus !== "DELETED",
+          (domain) => domain.deletedAt == null && domain.syncStatus !== "DELETED",
         ),
       ),
       railway.catchTags(["RailwayNotFound"], () => Effect.succeed([])),
@@ -47,19 +39,14 @@ const listLive = (
 
 const waitUntilDomainGone = (customDomainId: string, projectId: string) =>
   railway
-    .customDomain(
-      { id: customDomainId, projectId },
-      { deletedAt: true, syncStatus: true },
-    )
+    .customDomain({ id: customDomainId, projectId }, { deletedAt: true, syncStatus: true })
     .pipe(
       Effect.map((domain) =>
         domain.deletedAt != null || domain.syncStatus === "DELETED"
           ? ("gone" as const)
           : ("found" as const),
       ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed("gone" as const),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status === "gone",
@@ -87,10 +74,7 @@ test.provider(
 
       const { project, environment } = yield* stack.deploy(suitePartition);
 
-      const service = yield* createTargetService(
-        project.projectId,
-        environment.environmentId,
-      );
+      const service = yield* createTargetService(project.projectId, environment.environmentId);
 
       const rejected = yield* Effect.result(
         railway.createCustomDomain(
@@ -107,9 +91,7 @@ test.provider(
       );
       expect(Result.isFailure(rejected)).toBe(true);
       if (Result.isFailure(rejected)) {
-        expect(
-          railway.isErrorTag(rejected.failure, "RailwayValidationError"),
-        ).toBe(true);
+        expect(railway.isErrorTag(rejected.failure, "RailwayValidationError")).toBe(true);
       }
 
       // The suite project is shared. Derive the hostname from this test's
@@ -138,14 +120,8 @@ test.provider(
       expect(created.domain.targetPort).toEqual(5678);
       expect(created.domain.url).toEqual(`https://${hostname}`);
 
-      const listed = yield* listLive(
-        environment.environmentId,
-        project.projectId,
-        service.id,
-      );
-      const fetched = listed.find(
-        (item) => item.id === created.domain.customDomainId,
-      );
+      const listed = yield* listLive(environment.environmentId, project.projectId, service.id);
+      const fetched = listed.find((item) => item.id === created.domain.customDomainId);
       expect(fetched).toBeDefined();
       expect(fetched?.domain).toEqual(hostname);
       expect(fetched?.targetPort).toEqual(5678);
@@ -174,9 +150,7 @@ test.provider(
         }),
       );
 
-      expect(updated.domain.customDomainId).toEqual(
-        created.domain.customDomainId,
-      );
+      expect(updated.domain.customDomainId).toEqual(created.domain.customDomainId);
       expect(updated.domain.targetPort).toEqual(8080);
       expect(updated.domain.domain).toEqual(hostname);
       expect(updated.project.projectId).toEqual(project.projectId);
@@ -211,10 +185,7 @@ test.provider.skipIf(!TEST_DOMAIN)(
 
       const { project, environment } = yield* stack.deploy(suitePartition);
 
-      const service = yield* createTargetService(
-        project.projectId,
-        environment.environmentId,
-      );
+      const service = yield* createTargetService(project.projectId, environment.environmentId);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -239,9 +210,7 @@ test.provider.skipIf(!TEST_DOMAIN)(
         { domain: true, status: { verified: true } },
       );
       expect(fetched.domain).toEqual(hostname);
-      expect(
-        fetched.status.verified === true || fetched.status.verified === false,
-      ).toBe(true);
+      expect(fetched.status.verified === true || fetched.status.verified === false).toBe(true);
 
       yield* stack.destroy();
 

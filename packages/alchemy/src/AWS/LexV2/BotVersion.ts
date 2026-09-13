@@ -4,11 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryWhileConflict,
-  waitForBotSettled,
-  waitForLocaleBuilt,
-} from "./internal.ts";
+import { retryWhileConflict, waitForBotSettled, waitForLocaleBuilt } from "./internal.ts";
 
 export interface BotVersionProps {
   /**
@@ -75,17 +71,10 @@ export interface BotVersion extends Resource<
  */
 export const BotVersion = Resource<BotVersion>("AWS.LexV2.BotVersion");
 
-const describeVersion = Effect.fn(function* (
-  botId: string,
-  botVersion: string,
-) {
+const describeVersion = Effect.fn(function* (botId: string, botVersion: string) {
   return yield* lexm
     .describeBotVersion({ botId, botVersion })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 export const BotVersionProvider = () =>
@@ -103,10 +92,7 @@ export const BotVersionProvider = () =>
           // Versions are auto-numbered — without cached output there is no
           // deterministic identity to look up.
           if (output === undefined) return undefined;
-          const observed = yield* describeVersion(
-            output.botId,
-            output.botVersion,
-          );
+          const observed = yield* describeVersion(output.botId, output.botVersion);
           if (observed === undefined) return undefined;
           return {
             botId: observed.botId!,
@@ -122,8 +108,7 @@ export const BotVersionProvider = () =>
           // created and the old one deleted).
           if (
             olds?.botId !== news.botId ||
-            (olds?.description ?? undefined) !==
-              (news.description ?? undefined) ||
+            (olds?.description ?? undefined) !== (news.description ?? undefined) ||
             JSON.stringify([...(olds?.localeIds ?? [])].sort()) !==
               JSON.stringify([...news.localeIds].sort())
           ) {
@@ -135,10 +120,7 @@ export const BotVersionProvider = () =>
           // 1. OBSERVE — versions are immutable; if the cached version still
           //    exists there is nothing to converge.
           if (output?.botVersion !== undefined) {
-            const existing = yield* describeVersion(
-              news.botId,
-              output.botVersion,
-            );
+            const existing = yield* describeVersion(news.botId, output.botVersion);
             if (existing !== undefined) {
               yield* session.note(`${news.botId}/${output.botVersion}`);
               return {
@@ -176,10 +158,7 @@ export const BotVersionProvider = () =>
               botId: news.botId,
               description: news.description,
               botVersionLocaleSpecification: Object.fromEntries(
-                news.localeIds.map((localeId) => [
-                  localeId,
-                  { sourceBotVersion: "DRAFT" },
-                ]),
+                news.localeIds.map((localeId) => [localeId, { sourceBotVersion: "DRAFT" }]),
               ),
             }),
           );
@@ -188,9 +167,7 @@ export const BotVersionProvider = () =>
           const observed = yield* describeVersion(news.botId, botVersion);
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `failed to read created Lex bot version ${news.botId}/${botVersion}`,
-              ),
+              new Error(`failed to read created Lex bot version ${news.botId}/${botVersion}`),
             );
           }
 
@@ -212,9 +189,7 @@ export const BotVersionProvider = () =>
               botVersion: output.botVersion,
               skipResourceInUseCheck: true,
             }),
-          ).pipe(
-            Effect.catchTag("PreconditionFailedException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("PreconditionFailedException", () => Effect.void));
         }),
       };
     }),

@@ -28,11 +28,7 @@ export interface ListMapRuns extends Binding.Service<
   (
     stateMachine: StateMachine,
   ) => Effect.Effect<
-    (
-      request: ListMapRunsRequest,
-    ) => Effect.Effect<sfn.ListMapRunsOutput, sfn.ListMapRunsError>
+    (request: ListMapRunsRequest) => Effect.Effect<sfn.ListMapRunsOutput, sfn.ListMapRunsError>
   >
 > {}
-export const ListMapRuns = Binding.Service<ListMapRuns>(
-  "AWS.StepFunctions.ListMapRuns",
-);
+export const ListMapRuns = Binding.Service<ListMapRuns>("AWS.StepFunctions.ListMapRuns");

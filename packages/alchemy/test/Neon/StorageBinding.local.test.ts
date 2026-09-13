@@ -28,9 +28,7 @@ test.provider(
         theme: "system",
         pageSize: 25,
       });
-      const written = yield* (yield* HttpClient.HttpClient).get(
-        `${fn.url}/write`,
-      );
+      const written = yield* (yield* HttpClient.HttpClient).get(`${fn.url}/write`);
       if (written.status !== 200)
         yield* Effect.log("Storage write failed", {
           tag: written.headers["x-storage-error"] ?? "unclassified",
@@ -40,18 +38,16 @@ test.provider(
         theme: "dark",
         pageSize: 50,
       });
-      expect(
-        (yield* (yield* bucketStorageClient(bucket)).head("settings.json"))
-          ?.ContentType,
-      ).toBe("application/json");
+      expect((yield* (yield* bucketStorageClient(bucket)).head("settings.json"))?.ContentType).toBe(
+        "application/json",
+      );
       const credentials = (yield* SDK.listCredentials({
         project_id: bucket.projectId,
         branch_id: bucket.branchId,
       })).credentials;
       expect(
         credentials.filter(
-          (credential) =>
-            credential.branch_id === bucket.branchId && !credential.revoked_at,
+          (credential) => credential.branch_id === bucket.branchId && !credential.revoked_at,
         ).length,
       ).toBe(3);
       yield* stack.destroy();

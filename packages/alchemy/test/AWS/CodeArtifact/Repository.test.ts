@@ -17,9 +17,7 @@ const getRepository = codeartifact
   .describeRepository({ domain: domainName, repository: repositoryName })
   .pipe(
     Effect.map((res) => res.repository),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const makeStack = (description: string, upstreamDescription: string) =>
@@ -81,14 +79,10 @@ test.provider(
       yield* stack.destroy();
       const afterRepo = yield* getRepository;
       expect(afterRepo).toBeUndefined();
-      const afterDomain = yield* codeartifact
-        .describeDomain({ domain: domainName })
-        .pipe(
-          Effect.map((res) => res.domain),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const afterDomain = yield* codeartifact.describeDomain({ domain: domainName }).pipe(
+        Effect.map((res) => res.domain),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+      );
       expect(afterDomain).toBeUndefined();
     }),
   { timeout: 300_000 },

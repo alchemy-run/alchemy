@@ -38,8 +38,6 @@ export interface GetLexicon extends Binding.Service<
   "AWS.Polly.GetLexicon",
   <L extends Lexicon>(
     lexicon: L,
-  ) => Effect.Effect<
-    () => Effect.Effect<polly.GetLexiconOutput, polly.GetLexiconError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<polly.GetLexiconOutput, polly.GetLexiconError>>
 > {}
 export const GetLexicon = Binding.Service<GetLexicon>("AWS.Polly.GetLexicon");

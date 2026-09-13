@@ -30,9 +30,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const response = yield* amp.getDefaultScraperConfiguration({});
-      const yaml = yield* Effect.sync(() =>
-        new TextDecoder().decode(response.configuration),
-      );
+      const yaml = yield* Effect.sync(() => new TextDecoder().decode(response.configuration));
       expect(yaml).toContain("scrape_configs");
     }),
   { timeout: 30_000 },

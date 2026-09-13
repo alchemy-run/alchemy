@@ -39,17 +39,13 @@ export interface StartDashboardSnapshotJob extends Binding.Service<
     dashboard: Dashboard,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.StartDashboardSnapshotJobRequest,
-        "AwsAccountId" | "DashboardId"
-      >,
+      request: Omit<quicksight.StartDashboardSnapshotJobRequest, "AwsAccountId" | "DashboardId">,
     ) => Effect.Effect<
       quicksight.StartDashboardSnapshotJobResponse,
       quicksight.StartDashboardSnapshotJobError
     >
   >
 > {}
-export const StartDashboardSnapshotJob =
-  Binding.Service<StartDashboardSnapshotJob>(
-    "AWS.QuickSight.StartDashboardSnapshotJob",
-  );
+export const StartDashboardSnapshotJob = Binding.Service<StartDashboardSnapshotJob>(
+  "AWS.QuickSight.StartDashboardSnapshotJob",
+);

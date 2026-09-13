@@ -48,9 +48,7 @@ export const makeBatchJobHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });
@@ -62,12 +60,7 @@ export const makeBatchJobHttpBinding = <I, A, E, R>(options: {
  * half grants `actions` on the queue ARN (or `*` when the action has no
  * resource-level IAM).
  */
-export const makeBatchQueueHttpBinding = <
-  I extends { jobQueue?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeBatchQueueHttpBinding = <I extends { jobQueue?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Batch.ListJobs`. */
   tag: string;
   /** The distilled operation; `jobQueue` is injected from the bound queue. */
@@ -91,9 +84,7 @@ export const makeBatchQueueHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: options.wildcardIam
-                  ? ["*"]
-                  : [Output.interpolate`${queue.jobQueueArn}`],
+                Resource: options.wildcardIam ? ["*"] : [Output.interpolate`${queue.jobQueueArn}`],
               },
             ],
           });

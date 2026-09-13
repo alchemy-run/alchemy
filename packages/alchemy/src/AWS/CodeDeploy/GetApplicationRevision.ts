@@ -36,10 +36,7 @@ export interface GetApplicationRevision extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetApplicationRevisionRequest,
-    ) => Effect.Effect<
-      SVC.GetApplicationRevisionOutput,
-      SVC.GetApplicationRevisionError
-    >
+    ) => Effect.Effect<SVC.GetApplicationRevisionOutput, SVC.GetApplicationRevisionError>
   >
 > {}
 export const GetApplicationRevision = Binding.Service<GetApplicationRevision>(

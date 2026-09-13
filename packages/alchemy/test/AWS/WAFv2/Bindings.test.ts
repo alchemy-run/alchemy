@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "Wafv2Bindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -36,32 +33,23 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("WAFv2 Bindings", () => {
@@ -81,9 +69,7 @@ describe.sequential("WAFv2 Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `WAFv2 test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`WAFv2 test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -91,9 +77,7 @@ describe.sequential("WAFv2 Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `WAFv2 test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`WAFv2 test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -133,10 +117,7 @@ describe.sequential("WAFv2 Bindings", () => {
           const updated = (yield* postJson("/ip-set", {
             addresses: ["192.0.2.44/32", "198.51.100.7/32"],
           })) as { addresses: string[] };
-          expect(updated.addresses).toEqual([
-            "192.0.2.44/32",
-            "198.51.100.7/32",
-          ]);
+          expect(updated.addresses).toEqual(["192.0.2.44/32", "198.51.100.7/32"]);
 
           // restore for idempotent re-runs
           const restored = (yield* postJson("/ip-set", {
@@ -274,15 +255,13 @@ describe.sequential("WAFv2 Bindings", () => {
   });
 
   describe("GetWebACLForResource", () => {
-    test.provider(
-      "returns not-found for an unassociated resource (typed)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/waf-for-resource")) as {
-            found: boolean;
-          };
-          expect(response.found).toBe(false);
-        }),
+    test.provider("returns not-found for an unassociated resource (typed)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/waf-for-resource")) as {
+          found: boolean;
+        };
+        expect(response.found).toBe(false);
+      }),
     );
   });
 });

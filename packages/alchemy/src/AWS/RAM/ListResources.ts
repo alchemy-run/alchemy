@@ -33,6 +33,4 @@ export interface ListResources extends Binding.Service<
     ) => Effect.Effect<ram.ListResourcesResponse, ram.ListResourcesError>
   >
 > {}
-export const ListResources = Binding.Service<ListResources>(
-  "AWS.RAM.ListResources",
-);
+export const ListResources = Binding.Service<ListResources>("AWS.RAM.ListResources");

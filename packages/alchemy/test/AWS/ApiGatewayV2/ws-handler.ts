@@ -64,28 +64,21 @@ export default WebSocketTestFunction.make(
       Effect.succeed({ statusCode: 200 }),
     );
 
-    yield* ApiGatewayV2.onWebSocketRoute(
-      api,
-      { routeKey: "$disconnect" },
-      () => Effect.void,
-    );
+    yield* ApiGatewayV2.onWebSocketRoute(api, { routeKey: "$disconnect" }, () => Effect.void);
 
-    yield* ApiGatewayV2.onWebSocketRoute(
-      api,
-      { routeKey: "$default" },
-      (event) =>
-        connections
-          .postToConnection({
-            ConnectionId: event.requestContext.connectionId,
-            Data: `echo:${event.body ?? ""}`,
-          })
-          .pipe(
-            Effect.asVoid,
-            // The peer may disconnect between send and receive — not a
-            // failure for the echo fixture.
-            Effect.catchTag("GoneException", () => Effect.void),
-            Effect.orDie,
-          ),
+    yield* ApiGatewayV2.onWebSocketRoute(api, { routeKey: "$default" }, (event) =>
+      connections
+        .postToConnection({
+          ConnectionId: event.requestContext.connectionId,
+          Data: `echo:${event.body ?? ""}`,
+        })
+        .pipe(
+          Effect.asVoid,
+          // The peer may disconnect between send and receive — not a
+          // failure for the echo fixture.
+          Effect.catchTag("GoneException", () => Effect.void),
+          Effect.orDie,
+        ),
     );
 
     return {
@@ -99,10 +92,7 @@ export default WebSocketTestFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(
-          Lambda.WebSocketEventSource,
-          ApiGatewayV2.ManageConnectionsHttp,
-        ),
+        Layer.mergeAll(Lambda.WebSocketEventSource, ApiGatewayV2.ManageConnectionsHttp),
         WsApiAndStageLive,
       ),
     ),

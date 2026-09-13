@@ -74,9 +74,7 @@ export const makeWafv2WebAclHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${webAcl.LogicalId})`)(function* (
-        request?: Partial<I>,
-      ) {
+      return Effect.fn(`${options.tag}(${webAcl.LogicalId})`)(function* (request?: Partial<I>) {
         const resolved: ResolvedWebAcl = {
           arn: yield* Arn,
           name: yield* Name,
@@ -191,10 +189,7 @@ export const makeWafv2RuleGroupHttpBinding = <
       return Effect.fn(`${options.tag}(${ruleGroup.LogicalId})`)(function* (
         request?: Omit<I, "ResourceArn">,
       ) {
-        return yield* withWafScope(
-          yield* Scope,
-          op({ ...request, ResourceArn: yield* Arn } as I),
-        );
+        return yield* withWafScope(yield* Scope, op({ ...request, ResourceArn: yield* Arn } as I));
       });
     });
   });
@@ -235,9 +230,7 @@ export const makeWafv2AccountHttpBinding = <I, A, E, R>(options: {
       return Effect.fn(options.tag)(function* (request?: I) {
         const input = (request ?? {}) as I;
         const scope: WafScope =
-          (input as { Scope?: string }).Scope === "CLOUDFRONT"
-            ? "CLOUDFRONT"
-            : "REGIONAL";
+          (input as { Scope?: string }).Scope === "CLOUDFRONT" ? "CLOUDFRONT" : "REGIONAL";
         return yield* withWafScope(scope, op(input));
       });
     });

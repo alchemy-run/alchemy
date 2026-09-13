@@ -14,10 +14,7 @@ const assertCheckGone = (id: string) =>
     Effect.catchTag("NoSuchHealthCheck", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -85,9 +82,7 @@ test.provider(
         HealthCheckId: check.id,
       });
       expect(observed2.HealthCheck.HealthCheckConfig.FailureThreshold).toBe(5);
-      expect(observed2.HealthCheck.HealthCheckConfig.ResourcePath).toBe(
-        "/health",
-      );
+      expect(observed2.HealthCheck.HealthCheckConfig.ResourcePath).toBe("/health");
 
       const tags2 = yield* route53.listTagsForResource({
         ResourceType: "healthcheck",

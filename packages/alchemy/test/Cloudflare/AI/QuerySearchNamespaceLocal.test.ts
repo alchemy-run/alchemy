@@ -10,10 +10,7 @@ import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Exercise `QuerySearchNamespaceLocal` — the current-credentials HTTP
 // implementation of the `QuerySearchNamespace` binding — from inside an Action.
@@ -47,10 +44,7 @@ test.provider(
       const out = yield* stack.deploy(
         Effect.gen(function* () {
           const target = yield* AiSearchCrawlTargetWorker;
-          const namespace = yield* Cloudflare.AI.SearchNamespace(
-            "SearchNs",
-            {},
-          );
+          const namespace = yield* Cloudflare.AI.SearchNamespace("SearchNs", {});
           const instance = yield* Cloudflare.AI.SearchInstance("Search", {
             type: "web-crawler",
             source: target.url.as<string>(),

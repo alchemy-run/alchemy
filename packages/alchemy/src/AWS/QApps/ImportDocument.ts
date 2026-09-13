@@ -47,6 +47,4 @@ export interface ImportDocument extends Binding.Service<
   >
 > {}
 
-export const ImportDocument = Binding.Service<ImportDocument>(
-  "AWS.QApps.ImportDocument",
-);
+export const ImportDocument = Binding.Service<ImportDocument>("AWS.QApps.ImportDocument");

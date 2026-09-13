@@ -24,9 +24,7 @@ test.provider(
             Namespace: "AWS/Lambda",
             MetricName: "Errors",
             Stat: "Sum",
-            Dimensions: [
-              { Name: "FunctionName", Value: "alchemy-test-anomaly-list" },
-            ],
+            Dimensions: [{ Name: "FunctionName", Value: "alchemy-test-anomaly-list" }],
           });
         }),
       );
@@ -41,9 +39,7 @@ test.provider(
       // Out-of-band assert-gone: the exhaustively-paginated live listing no
       // longer contains the detector after the final destroy.
       const after = yield* provider.list();
-      expect(after.some((d) => d.detectorId === detector.detectorId)).toBe(
-        false,
-      );
+      expect(after.some((d) => d.detectorId === detector.detectorId)).toBe(false);
     }),
   { timeout: 240_000 },
 );

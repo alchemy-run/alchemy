@@ -5,10 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import * as Kubernetes from "@/Kubernetes";
-import {
-  parseRenderedManifests,
-  renderHelmChart,
-} from "@/Kubernetes/internal/helm.ts";
+import { parseRenderedManifests, renderHelmChart } from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
@@ -81,9 +78,7 @@ describe("renderHelmChart (local fixture)", (it) => {
         namespace: "demo",
       });
       expect(objects.map((object) => object.kind)).not.toContain("Job");
-      expect(objects.map((object) => object.metadata.name)).toEqual([
-        "probe-config",
-      ]);
+      expect(objects.map((object) => object.metadata.name)).toEqual(["probe-config"]);
     }),
   );
 
@@ -150,9 +145,7 @@ metadata:
 `,
       );
 
-      expect(objects.map((object) => object.metadata.name)).toEqual([
-        "ordinary",
-      ]);
+      expect(objects.map((object) => object.metadata.name)).toEqual(["ordinary"]);
     }),
   );
 

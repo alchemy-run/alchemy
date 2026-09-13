@@ -64,13 +64,11 @@ export default class WorkflowLocalWorker extends Cloudflare.Worker<WorkflowLocal
 
         if (request.url.startsWith("/workflow/rollback-result/")) {
           const instanceId = request.url.split("/workflow/rollback-result/")[1];
-          const records = yield* Effect.forEach(
-            Object.keys(rollbackConfigs),
-            (name) =>
-              Effect.gen(function* () {
-                const object = yield* results.get(`${instanceId}/${name}`);
-                return object ? yield* object.json() : null;
-              }),
+          const records = yield* Effect.forEach(Object.keys(rollbackConfigs), (name) =>
+            Effect.gen(function* () {
+              const object = yield* results.get(`${instanceId}/${name}`);
+              return object ? yield* object.json() : null;
+            }),
           ).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(records);
         }
@@ -83,23 +81,17 @@ export default class WorkflowLocalWorker extends Cloudflare.Worker<WorkflowLocal
         }
 
         if (request.url.startsWith("/workflow/events/")) {
-          const instance = yield* workflow.get(
-            request.url.split("/workflow/events/")[1]!,
-          );
+          const instance = yield* workflow.get(request.url.split("/workflow/events/")[1]!);
           const events = yield* instance
             .subscribe({ filter: ["workflow_queued"] })
             .pipe(Stream.take(1), Stream.runCollect);
           return yield* HttpServerResponse.json(events);
         }
         if (request.url.startsWith("/workflow/delete/")) {
-          const instance = yield* workflow.get(
-            request.url.split("/workflow/delete/")[1]!,
-          );
+          const instance = yield* workflow.get(request.url.split("/workflow/delete/")[1]!);
           yield* instance.delete();
           // A second deletion should report the now-missing instance as an error.
-          return yield* HttpServerResponse.json(
-            yield* workflow.deleteBatch([instance.id]),
-          );
+          return yield* HttpServerResponse.json(yield* workflow.deleteBatch([instance.id]));
         }
         if (request.url.startsWith("/workflow/delete-batch/")) {
           const id = request.url.split("/workflow/delete-batch/")[1]!;

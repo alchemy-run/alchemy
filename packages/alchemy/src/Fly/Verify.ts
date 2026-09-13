@@ -39,9 +39,7 @@ export interface Verify extends Binding.Service<
   (
     key: SecretKey,
   ) => Effect.Effect<
-    (
-      request: VerifyRequest,
-    ) => Effect.Effect<VerifyResult, VerifySecretKeyError, RuntimeContext>
+    (request: VerifyRequest) => Effect.Effect<VerifyResult, VerifySecretKeyError, RuntimeContext>
   >
 > {}
 

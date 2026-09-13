@@ -12,13 +12,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test snippet names (snippet names only allow
 // [a-zA-Z0-9_]). Same value on every run — never derived from
@@ -43,18 +39,14 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
 
 const findSnippet = (zoneId: string, name: string) =>
   snippets.listSnippets({ zoneId, perPage: 100 }).pipe(
-    Effect.map((page) =>
-      (page.result ?? []).find((s) => s.snippetName === name),
-    ),
+    Effect.map((page) => (page.result ?? []).find((s) => s.snippetName === name)),
     // Freshly-minted scoped tokens propagate eventually-consistently
     // across Cloudflare's edge and intermittently 403. Ride out the
     // blips on the test's own out-of-band verification calls.
@@ -65,49 +57,47 @@ const findSnippet = (zoneId: string, name: string) =>
     }),
   );
 
-test.provider(
-  "create with generated name, update code in place, destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("create with generated name, update code in place, destroy", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Snippets.Snippet("GeneratedSnippet", {
-            zoneId,
-            code: codeV1,
-          }).pipe(adopt(true));
-        }),
-      );
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Snippets.Snippet("GeneratedSnippet", {
+          zoneId,
+          code: codeV1,
+        }).pipe(adopt(true));
+      }),
+    );
 
-      // Engine-generated names are normalized to the snippet charset.
-      expect(initial.name).toMatch(/^[a-z0-9_]+$/);
-      expect(initial.zoneId).toEqual(zoneId);
-      expect(initial.mainModule).toEqual("snippet.js");
-      expect(initial.createdOn).toBeDefined();
+    // Engine-generated names are normalized to the snippet charset.
+    expect(initial.name).toMatch(/^[a-z0-9_]+$/);
+    expect(initial.zoneId).toEqual(zoneId);
+    expect(initial.mainModule).toEqual("snippet.js");
+    expect(initial.createdOn).toBeDefined();
 
-      const live = yield* findSnippet(zoneId, initial.name);
-      expect(live?.snippetName).toEqual(initial.name);
+    const live = yield* findSnippet(zoneId, initial.name);
+    expect(live?.snippetName).toEqual(initial.name);
 
-      // Update the code — same identity, upserted in place.
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Snippets.Snippet("GeneratedSnippet", {
-            zoneId,
-            code: codeV2,
-          }).pipe(adopt(true));
-        }),
-      );
-      expect(updated.name).toEqual(initial.name);
-      expect(updated.createdOn).toEqual(initial.createdOn);
+    // Update the code — same identity, upserted in place.
+    const updated = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Snippets.Snippet("GeneratedSnippet", {
+          zoneId,
+          code: codeV2,
+        }).pipe(adopt(true));
+      }),
+    );
+    expect(updated.name).toEqual(initial.name);
+    expect(updated.createdOn).toEqual(initial.createdOn);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const gone = yield* findSnippet(zoneId, initial.name);
-      expect(gone).toBeUndefined();
-    }).pipe(logLevel),
+    const gone = yield* findSnippet(zoneId, initial.name);
+    expect(gone).toBeUndefined();
+  }).pipe(logLevel),
 );
 
 test.provider("renaming an explicit snippet triggers replacement", (stack) =>
@@ -189,14 +179,10 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SNIPPETS_LIST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Snippets.Snippet,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Snippets.Snippet);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (s) => s.zoneId === zoneId && s.name === deployed.name,
-      );
+      const found = all.find((s) => s.zoneId === zoneId && s.name === deployed.name);
       expect(found).toBeDefined();
       expect(found?.mainModule).toEqual("snippet.js");
 

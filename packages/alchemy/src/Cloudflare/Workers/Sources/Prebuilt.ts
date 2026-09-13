@@ -6,11 +6,7 @@ import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { sha256 } from "../../../Util/sha256.ts";
 import type { SourceProvider } from "../Source.ts";
-import {
-  bundleSource,
-  resolveMainPath,
-  watchBundleDirectory,
-} from "./shared.ts";
+import { bundleSource, resolveMainPath, watchBundleDirectory } from "./shared.ts";
 
 /**
  * A rule selecting additional module files to upload alongside the entry
@@ -59,9 +55,7 @@ export interface PrebuiltWorkerBundleOptions {
  * entry file is always first and never duplicated as an additional
  * module.
  */
-export const readPrebuiltWorkerBundle = Effect.fn(function* (
-  options: PrebuiltWorkerBundleOptions,
-) {
+export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWorkerBundleOptions) {
   const fs = yield* FileSystem.FileSystem;
 
   // Resolve without following symlinks (Alchemy v1 parity): the module
@@ -111,15 +105,10 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (
             .filter((name) => name !== entryName)
             .sort(),
         ),
-        Effect.flatMap(
-          Effect.forEach(readModuleFile, { concurrency: "unbounded" }),
-        ),
+        Effect.flatMap(Effect.forEach(readModuleFile, { concurrency: "unbounded" })),
       ),
       (entryModule, additionalModules) =>
-        [entryModule, ...additionalModules] as [
-          Bundle.BundleFile,
-          ...Bundle.BundleFile[],
-        ],
+        [entryModule, ...additionalModules] as [Bundle.BundleFile, ...Bundle.BundleFile[]],
       { concurrent: true },
     ),
     Effect.flatMap(Bundle.bundleOutputFromFiles),
@@ -135,9 +124,7 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (
  * WITHOUT re-bundling the prebuilt artifact, preserving the same
  * byte-for-byte contract as the deploy path.
  */
-export const watchPrebuiltWorkerBundle = (
-  options: PrebuiltWorkerBundleOptions,
-) =>
+export const watchPrebuiltWorkerBundle = (options: PrebuiltWorkerBundleOptions) =>
   watchBundleDirectory({
     main: options.main,
     read: readPrebuiltWorkerBundle(options),

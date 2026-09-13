@@ -13,9 +13,7 @@ import { languageModelBranch } from "./fixtures/language-model-resources.ts";
 const { test } = Test.make({ providers: Neon.providers() });
 const Text = Schema.Struct({ text: Schema.String });
 
-test.provider.skipIf(
-  process.env.NEON_TEST_AI_PAID !== "1" || !process.env.NEON_TEST_AI_MODEL,
-)(
+test.provider.skipIf(process.env.NEON_TEST_AI_PAID !== "1" || !process.env.NEON_TEST_AI_MODEL)(
   "injected and explicit credentials use the same HTTP Effect AI client for generation, streaming, tools and objects",
   (stack) =>
     Effect.gen(function* () {
@@ -36,9 +34,7 @@ test.provider.skipIf(
                 ? Effect.void
                 : response.json.pipe(
                     Effect.flatMap(
-                      Schema.decodeUnknownEffect(
-                        Schema.Struct({ reason: Schema.String }),
-                      ),
+                      Schema.decodeUnknownEffect(Schema.Struct({ reason: Schema.String })),
                     ),
                     Effect.flatMap(({ reason }) =>
                       Effect.log("Neon AI fixture rejected the request", {
@@ -74,19 +70,13 @@ test.provider.skipIf(
           const tool = yield* client.get(`${fn.url}/tool`).pipe(
             Effect.flatMap((response) => response.json),
             Effect.flatMap(
-              Schema.decodeUnknownEffect(
-                Schema.Struct({ results: Schema.Array(Schema.Number) }),
-              ),
+              Schema.decodeUnknownEffect(Schema.Struct({ results: Schema.Array(Schema.Number) })),
             ),
           );
           expect(tool.results).toContain(5);
           const object = yield* client.get(`${fn.url}/object`).pipe(
             Effect.flatMap((response) => response.json),
-            Effect.flatMap(
-              Schema.decodeUnknownEffect(
-                Schema.Struct({ greeting: Schema.String }),
-              ),
-            ),
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ greeting: Schema.String }))),
           );
           expect(object.greeting.length).toBeGreaterThan(0);
         }
@@ -96,8 +86,7 @@ test.provider.skipIf(
         });
         expect(
           credentials.credentials.some(
-            (entry) =>
-              !entry.revoked_at && entry.scopes.includes("ai_gateway:invoke"),
+            (entry) => !entry.revoked_at && entry.scopes.includes("ai_gateway:invoke"),
           ),
         ).toBe(true);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));

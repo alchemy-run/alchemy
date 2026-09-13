@@ -14,9 +14,7 @@ export default class Service extends Cloudflare.Worker<Service>()(
   },
   Effect.gen(function* () {
     const helloGroup = HttpApiBuilder.group(BackendApi, "Hello", (handlers) =>
-      handlers.handle("hello", () =>
-        Effect.succeed(new Greeting({ message: "Hello World" })),
-      ),
+      handlers.handle("hello", () => Effect.succeed(new Greeting({ message: "Hello World" }))),
     );
 
     return {

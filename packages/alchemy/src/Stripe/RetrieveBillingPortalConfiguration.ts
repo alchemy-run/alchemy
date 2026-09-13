@@ -42,6 +42,4 @@ export interface RetrieveBillingPortalConfiguration extends Binding.Service<
 > {}
 
 export const RetrieveBillingPortalConfiguration =
-  Binding.Service<RetrieveBillingPortalConfiguration>(
-    "Stripe.RetrieveBillingPortalConfiguration",
-  );
+  Binding.Service<RetrieveBillingPortalConfiguration>("Stripe.RetrieveBillingPortalConfiguration");

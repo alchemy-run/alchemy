@@ -5,9 +5,9 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import type { FunctionBinding, FunctionProps } from "./Function.ts";
 
-export class FunctionConfigurationError extends Data.TaggedError(
-  "FunctionConfigurationError",
-)<{ message: string }> {}
+export class FunctionConfigurationError extends Data.TaggedError("FunctionConfigurationError")<{
+  message: string;
+}> {}
 
 const injected = new Set([
   "NEON_API_KEY",
@@ -55,10 +55,7 @@ export function functionSlug(
   id: string,
   slug: string,
 ): Effect.Effect<string, FunctionConfigurationError>;
-export function functionSlug(
-  id: string,
-  slug?: string,
-): ReturnType<typeof checkedSlug>;
+export function functionSlug(id: string, slug?: string): ReturnType<typeof checkedSlug>;
 export function functionSlug(id: string, slug?: string) {
   return checkedSlug(id, slug);
 }
@@ -68,10 +65,7 @@ export const functionEnvironment = Effect.fn(function* (
   bindings: ResourceBinding<FunctionBinding>[],
 ) {
   const env: Record<string, string> = {};
-  for (const source of [
-    props.env ?? {},
-    ...bindings.map((binding) => binding.data.env ?? {}),
-  ]) {
+  for (const source of [props.env ?? {}, ...bindings.map((binding) => binding.data.env ?? {})]) {
     for (const [key, value] of Object.entries(source)) {
       if (value === undefined) continue;
       if (injected.has(key) || key.startsWith("ALCHEMY_"))

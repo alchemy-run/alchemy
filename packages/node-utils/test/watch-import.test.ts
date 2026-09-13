@@ -1,12 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -21,9 +15,7 @@ afterEach(() => {
 
 describe("watchImport", () => {
   it("transforms TypeScript, tracks dependencies, and reloads the whole graph", () => {
-    const temporaryDirectory = realpathSync(
-      mkdtempSync(path.join(os.tmpdir(), "alchemy-import-")),
-    );
+    const temporaryDirectory = realpathSync(mkdtempSync(path.join(os.tmpdir(), "alchemy-import-")));
     temporaryDirectories.push(temporaryDirectory);
     const directory = path.join(temporaryDirectory, "project");
     mkdirSync(directory);
@@ -53,12 +45,8 @@ describe("watchImport", () => {
       ].join("\n"),
     );
 
-    const moduleUrl = pathToFileURL(
-      path.resolve(import.meta.dir, "../src/watch-import.ts"),
-    ).href;
-    const registerUrl = pathToFileURL(
-      path.resolve(import.meta.dir, "../src/register-oxc.ts"),
-    ).href;
+    const moduleUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/watch-import.ts")).href;
+    const registerUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/register-oxc.ts")).href;
     const script = `
       import { writeFile } from "node:fs/promises";
       import { fileURLToPath, pathToFileURL } from "node:url";
@@ -120,14 +108,7 @@ describe("watchImport", () => {
 
     const result = spawnSync(
       "node",
-      [
-        "--no-warnings",
-        "--input-type=module",
-        "-e",
-        script,
-        directory,
-        temporaryDirectory,
-      ],
+      ["--no-warnings", "--input-type=module", "-e", script, directory, temporaryDirectory],
       { encoding: "utf8", timeout: 10_000 },
     );
 

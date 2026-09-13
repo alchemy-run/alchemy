@@ -76,9 +76,7 @@ export type GetBindingType<T> =
         : // `Worker.URL` (an Effect resolving to a deferred string accessor) needs
           // no case of its own: the generic Effect unwrap below reduces it to
           // `string` via the fallthrough.
-          T extends
-              | Output<infer A, infer _Req>
-              | Effect.Effect<infer A, infer _E, infer _R>
+          T extends Output<infer A, infer _Req> | Effect.Effect<infer A, infer _E, infer _R>
           ? GetBindingType<A>
           : T extends FlagshipNs.App
             ? Flagship
@@ -131,19 +129,12 @@ export type GetBindingType<T> =
                                                       : T extends WorkerLoaderResource
                                                         ? WorkerLoader
                                                         : T extends
-                                                              | WorkflowLike<
-                                                                  infer Params
-                                                                >
-                                                              | WorkflowBinding<
-                                                                  infer Params
-                                                                >
+                                                              | WorkflowLike<infer Params>
+                                                              | WorkflowBinding<infer Params>
                                                           ? Workflow<Params>
                                                           : T extends DurableObjectLike
                                                             ? DurableObjectNamespace<
-                                                                Exclude<
-                                                                  T["Shape"],
-                                                                  undefined
-                                                                >
+                                                                Exclude<T["Shape"], undefined>
                                                               >
                                                             : T extends
                                                                   | VpcService

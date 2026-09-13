@@ -37,12 +37,9 @@ test.provider(
         project_id: deployed.branch.projectId,
         branch_id: deployed.branch.branchId,
       };
-      expect(
-        (yield* SDK.getProjectBranchAiGateway(request)).base_url.replace(
-          /\/$/,
-          "",
-        ),
-      ).toBe(deployed.baseUrl);
+      expect((yield* SDK.getProjectBranchAiGateway(request)).base_url.replace(/\/$/, "")).toBe(
+        deployed.baseUrl,
+      );
       const http = yield* HttpClient.HttpClient;
       const models = yield* http.execute(
         HttpClientRequest.get(`${deployed.baseUrl}/v1/models`).pipe(
@@ -54,24 +51,18 @@ test.provider(
         Effect.flatMap(
           Schema.decodeUnknownEffect(
             Schema.Struct({
-              data: Schema.Array(
-                Schema.Struct({ id: Schema.String, enabled: Schema.Boolean }),
-              ),
+              data: Schema.Array(Schema.Struct({ id: Schema.String, enabled: Schema.Boolean })),
             }),
           ),
         ),
       );
       expect(catalog.data.length).toBeGreaterThan(0);
       yield* Effect.log("Enabled Neon AI Gateway models", {
-        models: catalog.data
-          .filter((model) => model.enabled)
-          .map((model) => model.id),
+        models: catalog.data.filter((model) => model.enabled).map((model) => model.id),
       });
       const list = yield* SDK.listCredentials(request);
       expect(
-        list.credentials.find(
-          (entry) => entry.token_id === deployed.credential.tokenId,
-        )?.scopes,
+        list.credentials.find((entry) => entry.token_id === deployed.credential.tokenId)?.scopes,
       ).toContain("ai_gateway:invoke");
       yield* stack.destroy();
       expect(
@@ -85,9 +76,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(
-  process.env.NEON_TEST_AI_PAID !== "1" || !process.env.NEON_TEST_AI_MODEL,
-)(
+test.provider.skipIf(process.env.NEON_TEST_AI_PAID !== "1" || !process.env.NEON_TEST_AI_MODEL)(
   "paid model invocation is explicitly gated and never purchases credits",
   (stack) =>
     Effect.gen(function* () {
@@ -122,9 +111,7 @@ test.provider.skipIf(
       if (response.status !== 200) {
         const body = yield* response.json;
         const error =
-          typeof body === "object" && body !== null && "error" in body
-            ? body.error
-            : body;
+          typeof body === "object" && body !== null && "error" in body ? body.error : body;
         const message =
           typeof error === "object" && error !== null && "message" in error
             ? error.message
@@ -134,10 +121,7 @@ test.provider.skipIf(
           message:
             typeof message === "string"
               ? message
-                  .replaceAll(
-                    Redacted.value(deployed.credential.apiToken),
-                    "[REDACTED]",
-                  )
+                  .replaceAll(Redacted.value(deployed.credential.apiToken), "[REDACTED]")
                   .slice(0, 1000)
               : "No error message",
         });

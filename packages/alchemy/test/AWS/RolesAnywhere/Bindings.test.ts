@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import RolesAnywhereTestFunctionLive, {
-  RolesAnywhereTestFunction,
-} from "./handler";
+import RolesAnywhereTestFunctionLive, { RolesAnywhereTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "RolesAnywhereBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,33 +34,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("RolesAnywhere Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "RolesAnywhere test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("RolesAnywhere test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("RolesAnywhere test setup: deploying fixture");
@@ -79,9 +65,7 @@ describe.sequential("RolesAnywhere Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `RolesAnywhere test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`RolesAnywhere test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -89,9 +73,7 @@ describe.sequential("RolesAnywhere Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `RolesAnywhere test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`RolesAnywhere test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -111,30 +93,26 @@ describe.sequential("RolesAnywhere Bindings", () => {
   });
 
   describe("ListSubjects", () => {
-    test.provider(
-      "lists the account's subjects (empty list proves the grant)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/subjects")) as {
-            ok: boolean;
-            count: number;
-          };
-          expect(response.ok).toBe(true);
-          expect(response.count).toBeGreaterThanOrEqual(0);
-        }),
+    test.provider("lists the account's subjects (empty list proves the grant)", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/subjects")) as {
+          ok: boolean;
+          count: number;
+        };
+        expect(response.ok).toBe(true);
+        expect(response.count).toBeGreaterThanOrEqual(0);
+      }),
     );
   });
 
   describe("GetSubject", () => {
-    test.provider(
-      "returns the typed ResourceNotFoundException for a bogus subject id",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/subject-not-found")) as {
-            tag: string;
-          };
-          expect(response.tag).toBe("ResourceNotFoundException");
-        }),
+    test.provider("returns the typed ResourceNotFoundException for a bogus subject id", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/subject-not-found")) as {
+          tag: string;
+        };
+        expect(response.tag).toBe("ResourceNotFoundException");
+      }),
     );
   });
 });

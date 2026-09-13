@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface HeadObjectRequest extends Omit<
-  S3.HeadObjectRequest,
-  "Bucket"
-> {}
+export interface HeadObjectRequest extends Omit<S3.HeadObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:HeadObject`.
@@ -45,9 +42,7 @@ export interface HeadObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: HeadObjectRequest,
-    ) => Effect.Effect<S3.HeadObjectOutput, S3.HeadObjectError>
+    (request: HeadObjectRequest) => Effect.Effect<S3.HeadObjectOutput, S3.HeadObjectError>
   >
 > {}
 

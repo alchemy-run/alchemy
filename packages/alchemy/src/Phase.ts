@@ -51,6 +51,4 @@ export const ALCHEMY_PHASE = Config.String("ALCHEMY_PHASE").pipe(
  * });
  * ```
  */
-export const ALCHEMY_DEV = Config.Boolean("ALCHEMY_DEV").pipe(
-  Config.withDefault(false),
-);
+export const ALCHEMY_DEV = Config.Boolean("ALCHEMY_DEV").pipe(Config.withDefault(false));

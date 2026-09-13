@@ -143,9 +143,7 @@ export interface CustomAction extends Resource<
  */
 export const CustomAction = Resource<CustomAction>("AWS.Chatbot.CustomAction");
 
-const toWireAttachment = (
-  attachment: CustomActionAttachment,
-): chatbot.CustomActionAttachment => ({
+const toWireAttachment = (attachment: CustomActionAttachment): chatbot.CustomActionAttachment => ({
   NotificationType: attachment.notificationType,
   ButtonText: attachment.buttonText,
   Criteria: attachment.criteria?.map((c) => ({
@@ -165,9 +163,7 @@ export const CustomActionProvider = () =>
         props: Pick<CustomActionProps, "actionName">,
       ) {
         // Custom action names are limited to 64 characters of [A-Za-z0-9-_].
-        return (
-          props.actionName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.actionName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const actionArn = Effect.fn(function* (actionName: string) {
@@ -179,9 +175,7 @@ export const CustomActionProvider = () =>
       const observeAction = (arn: string) =>
         chatbot.getCustomAction({ CustomActionArn: arn }).pipe(
           Effect.map((r) => r.CustomAction),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const observedTags = (arn: string) =>
@@ -196,17 +190,14 @@ export const CustomActionProvider = () =>
         stables: ["actionName", "customActionArn"],
         list: () =>
           Effect.gen(function* () {
-            const arns = yield* chatbot.listCustomActions
-              .items({})
-              .pipe(Stream.runCollect);
+            const arns = yield* chatbot.listCustomActions.items({}).pipe(Stream.runCollect);
             return Array.from(arns).map((arn) => ({
               actionName: arn.slice(arn.lastIndexOf("/") + 1),
               customActionArn: arn,
             }));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const actionName =
-            output?.actionName ?? (yield* createActionName(id, olds ?? {}));
+          const actionName = output?.actionName ?? (yield* createActionName(id, olds ?? {}));
           const arn = output?.customActionArn ?? (yield* actionArn(actionName));
           const found = yield* observeAction(arn);
           if (found === undefined) return undefined;
@@ -224,8 +215,7 @@ export const CustomActionProvider = () =>
           // fall through: engine default update logic for mutable fields
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const actionName =
-            output?.actionName ?? (yield* createActionName(id, news));
+          const actionName = output?.actionName ?? (yield* createActionName(id, news));
           const arn = output?.customActionArn ?? (yield* actionArn(actionName));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -260,8 +250,7 @@ export const CustomActionProvider = () =>
             live !== undefined &&
             live.Definition.CommandText === news.commandText &&
             live.AliasName === news.aliasName &&
-            JSON.stringify(live.Attachments ?? []) ===
-              JSON.stringify(desiredAttachments ?? []);
+            JSON.stringify(live.Attachments ?? []) === JSON.stringify(desiredAttachments ?? []);
           if (!inSync) {
             yield* chatbot.updateCustomAction({
               CustomActionArn: arn,
@@ -295,12 +284,10 @@ export const CustomActionProvider = () =>
           return { actionName, customActionArn: arn };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* chatbot
-            .deleteCustomAction({ CustomActionArn: output.customActionArn })
-            .pipe(
-              // Idempotent delete — a missing action is not an error.
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* chatbot.deleteCustomAction({ CustomActionArn: output.customActionArn }).pipe(
+            // Idempotent delete — a missing action is not an error.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

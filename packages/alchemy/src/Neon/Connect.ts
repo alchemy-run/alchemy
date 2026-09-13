@@ -5,10 +5,7 @@ import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
 import { defaultProviderMode } from "../ProviderMode.ts";
 import type { ResourceLike } from "../Resource.ts";
-import {
-  CurrentRuntimeContext,
-  type RuntimeContext,
-} from "../RuntimeContext.ts";
+import { CurrentRuntimeContext, type RuntimeContext } from "../RuntimeContext.ts";
 import type { Branch } from "./Branch.ts";
 import { resolveBranchScope } from "./BranchScope.ts";
 import type { Function } from "./Function.ts";
@@ -17,23 +14,11 @@ import type { Project } from "./Project.ts";
 /** Postgres connection accessors. Resolving these Effects does not acquire a socket or pool. */
 export interface ConnectClient {
   /** Pooled URL for ordinary application queries. */
-  connectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  connectionString: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
   /** Pooled URL, including Neon's pooler hostname. */
-  pooledConnectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  pooledConnectionString: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
   /** Direct URL for migrations, notifications, and session-oriented clients. */
-  directConnectionString: Effect.Effect<
-    Redacted.Redacted<string>,
-    never,
-    RuntimeContext
-  >;
+  directConnectionString: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
 }
 
 /**
@@ -83,9 +68,9 @@ export const Connect = Binding.Service<Connect>("Neon.Connect");
 
 /** Stable, collision-free environment names for native cross-host consumers. */
 export const connectEnvKeys = (database: Pick<Branch | Project, "FQN">) => {
-  const name = Array.from(database.FQN, (character) =>
-    character.codePointAt(0)!.toString(16),
-  ).join("_");
+  const name = Array.from(database.FQN, (character) => character.codePointAt(0)!.toString(16)).join(
+    "_",
+  );
   const prefix = `NEON_${name}`;
   return {
     injected: `${prefix}_INJECTED`,
@@ -98,12 +83,8 @@ export const connectEnvKeys = (database: Pick<Branch | Project, "FQN">) => {
 export const connectEnv = (database: Branch | Project) => {
   const keys = connectEnvKeys(database);
   return {
-    [keys.pooledConnectionString]: database.pooledConnectionUri.pipe(
-      Output.map(Redacted.make),
-    ),
-    [keys.directConnectionString]: database.connectionUri.pipe(
-      Output.map(Redacted.make),
-    ),
+    [keys.pooledConnectionString]: database.pooledConnectionUri.pipe(Output.map(Redacted.make)),
+    [keys.directConnectionString]: database.connectionUri.pipe(Output.map(Redacted.make)),
   };
 };
 
@@ -112,16 +93,11 @@ const isFunction = (host: ResourceLike | undefined): host is Function =>
 const stringOutput = (value: string | Output.Output<string>) =>
   typeof value === "string" ? Output.literal(value) : value;
 
-const injectedScope = (
-  host: ResourceLike | undefined,
-  database: Branch | Project,
-) => {
+const injectedScope = (host: ResourceLike | undefined, database: Branch | Project) => {
   if (!isFunction(host)) return Output.literal(false);
   const scope = host.Props;
   const targetBranch =
-    database.Type === "Neon.Branch"
-      ? database.branchId
-      : database.defaultBranchId;
+    database.Type === "Neon.Branch" ? database.branchId : database.defaultBranchId;
   if (scope.branch) {
     return Output.all(
       stringOutput(scope.branch.projectId),
@@ -141,12 +117,7 @@ const injectedScope = (
         resolveBranchScope({ project: { projectId } }).pipe(Effect.orDie),
       ),
     );
-    return Output.all(
-      resolved.projectId,
-      resolved.branchId,
-      database.projectId,
-      targetBranch,
-    ).pipe(
+    return Output.all(resolved.projectId, resolved.branchId, database.projectId, targetBranch).pipe(
       Output.map(
         ([project, branch, targetProject, target]) =>
           project === targetProject && branch === target,
@@ -161,34 +132,24 @@ export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
     const context = yield* CurrentRuntimeContext;
-    if (!context)
-      return yield* Effect.die(
-        new Error("Neon.Connect requires a Platform host"),
-      );
+    if (!context) return yield* Effect.die(new Error("Neon.Connect requires a Platform host"));
     return Effect.fn(function* (database: Branch | Project) {
       const keys = connectEnvKeys(database);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         const mode = host?.Mode ?? (yield* defaultProviderMode);
-        const injected =
-          mode === "local"
-            ? Output.literal(false)
-            : injectedScope(host, database);
+        const injected = mode === "local" ? Output.literal(false) : injectedScope(host, database);
         yield* context.set(keys.injected, injected);
         yield* context.set(
           keys.pooledConnectionString,
           Output.all(injected, database.pooledConnectionUri).pipe(
-            Output.map(([sameBranch, uri]) =>
-              sameBranch ? "" : Redacted.make(uri),
-            ),
+            Output.map(([sameBranch, uri]) => (sameBranch ? "" : Redacted.make(uri))),
           ),
         );
         yield* context.set(
           keys.directConnectionString,
           Output.all(injected, database.connectionUri).pipe(
-            Output.map(([sameBranch, uri]) =>
-              sameBranch ? "" : Redacted.make(uri),
-            ),
+            Output.map(([sameBranch, uri]) => (sameBranch ? "" : Redacted.make(uri))),
           ),
         );
       }
@@ -200,24 +161,16 @@ export const ConnectHttp = Layer.effect(
           );
           if (value === undefined || value === "") {
             return yield* Effect.die(
-              new Error(
-                `Missing Neon database environment value: ${injected ? injectedKey : key}`,
-              ),
+              new Error(`Missing Neon database environment value: ${injected ? injectedKey : key}`),
             );
           }
           return Redacted.isRedacted(value) ? value : Redacted.make(value);
         });
-      const pooledConnectionString = connection(
-        keys.pooledConnectionString,
-        "DATABASE_URL",
-      );
+      const pooledConnectionString = connection(keys.pooledConnectionString, "DATABASE_URL");
       return {
         connectionString: pooledConnectionString,
         pooledConnectionString,
-        directConnectionString: connection(
-          keys.directConnectionString,
-          "DATABASE_URL_UNPOOLED",
-        ),
+        directConnectionString: connection(keys.directConnectionString, "DATABASE_URL_UNPOOLED"),
       } satisfies ConnectClient;
     });
   }),

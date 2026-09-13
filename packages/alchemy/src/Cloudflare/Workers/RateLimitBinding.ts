@@ -10,11 +10,7 @@ import {
 } from "./RateLimit.ts";
 
 /** The binding value produced by calling {@link RateLimit} (declared on `env` or `yield*`-ed). */
-export type RateLimitBinding = Binding.Binding<
-  RateLimit["key"],
-  RateLimitClient,
-  RateLimit
-> & {
+export type RateLimitBinding = Binding.Binding<RateLimit["key"], RateLimitClient, RateLimit> & {
   readonly namespaceId: string;
   readonly simple: { limit: number; period: RateLimitPeriod };
 };
@@ -28,26 +24,22 @@ export type RateLimitBinding = Binding.Binding<
  * binding to the surrounding Worker at deploy time and, at runtime, resolves to
  * the Effect-native {@link RateLimitClient}.
  */
-export const RateLimitBinding = makeBindingLayer<
+export const RateLimitBinding = makeBindingLayer<RateLimit, cf.RateLimit, RateLimitClient>(
   RateLimit,
-  cf.RateLimit,
-  RateLimitClient
->(RateLimit, (raw) => ({
-  raw,
-  limit: (options) =>
-    raw.pipe(
-      Effect.flatMap((binding) =>
-        Effect.tryPromise({
-          try: () => binding.limit(options),
-          catch: (error) =>
-            new RateLimitError({
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown RateLimit error",
-              cause: error,
-            }),
-        }),
+  (raw) => ({
+    raw,
+    limit: (options) =>
+      raw.pipe(
+        Effect.flatMap((binding) =>
+          Effect.tryPromise({
+            try: () => binding.limit(options),
+            catch: (error) =>
+              new RateLimitError({
+                message: error instanceof Error ? error.message : "Unknown RateLimit error",
+                cause: error,
+              }),
+          }),
+        ),
       ),
-    ),
-}));
+  }),
+);

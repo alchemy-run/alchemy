@@ -335,9 +335,7 @@ export const ReleaseProvider = () =>
             (error) =>
               findRelease(news).pipe(
                 Effect.flatMap((release) =>
-                  release === undefined
-                    ? Effect.fail(error)
-                    : Effect.succeed(release),
+                  release === undefined ? Effect.fail(error) : Effect.succeed(release),
                 ),
               ),
           ),
@@ -394,14 +392,11 @@ export const ReleaseProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const releases = await octokit.paginate(
-                  octokit.rest.repos.listReleases,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const releases = await octokit.paginate(octokit.rest.repos.listReleases, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return releases.map(attrsOf);
               } catch (error: any) {
                 // Repos where the token lacks release access reject with
@@ -442,16 +437,12 @@ export const ReleaseProvider = () =>
     }),
   });
 
-const findRelease = Effect.fn(function* (
-  props: ReleaseProps,
-  releaseId?: number,
-) {
+const findRelease = Effect.fn(function* (props: ReleaseProps, releaseId?: number) {
   const octokit = yield* octokitFor(props.baseUrl);
   const request = { owner: props.owner, repo: props.repository };
   if (releaseId !== undefined) {
     const existing = yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.getRelease({ ...request, release_id: releaseId }),
+      try: () => octokit.rest.repos.getRelease({ ...request, release_id: releaseId }),
       catch: (error) => error as Error & { status?: number },
     }).pipe(
       Effect.map(({ data }) => data),
@@ -460,12 +451,10 @@ const findRelease = Effect.fn(function* (
         () => Effect.succeed(undefined),
       ),
     );
-    if (existing !== undefined && existing.tag_name === props.tagName)
-      return existing;
+    if (existing !== undefined && existing.tag_name === props.tagName) return existing;
   }
   const published = yield* Effect.tryPromise({
-    try: () =>
-      octokit.rest.repos.getReleaseByTag({ ...request, tag: props.tagName }),
+    try: () => octokit.rest.repos.getReleaseByTag({ ...request, tag: props.tagName }),
     catch: (error) => error as Error & { status?: number },
   }).pipe(
     Effect.map(({ data }) => data),

@@ -14,12 +14,9 @@ import { Counter, CounterLive } from "./object.ts";
 // the DO — every call is proxied to `counter.getByName(key).method({...})`.
 // Consumers can therefore hit the counter over a service binding via
 // `Cloudflare.RpcWorker.bind(WorkerA)` without knowing about DO routing.
-export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()(
-  "WorkerA",
-  {
-    schema: CounterRpcs,
-  },
-) {}
+export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()("WorkerA", {
+  schema: CounterRpcs,
+}) {}
 
 // Layer — yielding `Counter` resolves to WorkerA's local hosted
 // namespace (the `CounterLive` Layer below populates the tag).

@@ -79,8 +79,7 @@ export default CodeArtifactTestFunction.make(
     const copyToMirror = yield* CodeArtifact.CopyPackageVersions(mirror);
     const listMirrorPackages = yield* CodeArtifact.ListPackages(mirror);
     const disposeMirror = yield* CodeArtifact.DisposePackageVersions(mirror);
-    const deleteMirrorVersions =
-      yield* CodeArtifact.DeletePackageVersions(mirror);
+    const deleteMirrorVersions = yield* CodeArtifact.DeletePackageVersions(mirror);
     const deleteMirrorPackage = yield* CodeArtifact.DeletePackage(mirror);
 
     // --- event source ---
@@ -99,10 +98,7 @@ export default CodeArtifactTestFunction.make(
         ),
     );
 
-    const publishVersion = Effect.fn(function* (
-      version: string,
-      unfinished: boolean,
-    ) {
+    const publishVersion = Effect.fn(function* (version: string, unfinished: boolean) {
       const content = contentFor(version);
       const sha = yield* Effect.sync(() =>
         crypto.createHash("sha256").update(content).digest("hex"),
@@ -132,10 +128,7 @@ export default CodeArtifactTestFunction.make(
           const token = res.authorizationToken;
           return yield* HttpServerResponse.json({
             redacted: Redacted.isRedacted(token),
-            length: (Redacted.isRedacted(token)
-              ? Redacted.value(token)
-              : (token ?? "")
-            ).length,
+            length: (Redacted.isRedacted(token) ? Redacted.value(token) : (token ?? "")).length,
           });
         }
 
@@ -154,24 +147,17 @@ export default CodeArtifactTestFunction.make(
             format: FORMAT,
             namespace: NAMESPACE,
             package: PKG,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* deleteMirrorPackage({
             format: FORMAT,
             namespace: NAMESPACE,
             package: PKG,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           return yield* HttpServerResponse.json({ reset: true });
         }
 
         if (request.method === "POST" && pathname === "/publish") {
-          const res = yield* publishVersion(
-            param("version"),
-            param("unfinished") === "1",
-          );
+          const res = yield* publishVersion(param("version"), param("unfinished") === "1");
           return yield* HttpServerResponse.json({ status: res.status });
         }
 
@@ -239,9 +225,7 @@ export default CodeArtifactTestFunction.make(
             packageVersion: param("version"),
             asset: ASSET,
           });
-          const content = yield* Stream.mkString(
-            Stream.decodeText(res.asset!),
-          ).pipe(Effect.orDie);
+          const content = yield* Stream.mkString(Stream.decodeText(res.asset!)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ content });
         }
 
@@ -256,9 +240,8 @@ export default CodeArtifactTestFunction.make(
             packageVersion: param("version"),
           }).pipe(
             Effect.map((r) => ({ readme: r.readme ?? "", error: undefined })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ readme: undefined, error: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ readme: undefined, error: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(res);
@@ -277,9 +260,8 @@ export default CodeArtifactTestFunction.make(
               dependencies: (r.dependencies ?? []).map((d) => d.package),
               error: undefined,
             })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ dependencies: undefined, error: e._tag }),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ dependencies: undefined, error: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(res);
@@ -342,10 +324,7 @@ export default CodeArtifactTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/mirror/delete-versions"
-        ) {
+        if (request.method === "POST" && pathname === "/mirror/delete-versions") {
           const res = yield* deleteMirrorVersions({
             format: FORMAT,
             namespace: NAMESPACE,
@@ -357,17 +336,12 @@ export default CodeArtifactTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/mirror/delete-package"
-        ) {
+        if (request.method === "POST" && pathname === "/mirror/delete-package") {
           yield* deleteMirrorPackage({
             format: FORMAT,
             namespace: NAMESPACE,
             package: PKG,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           return yield* HttpServerResponse.json({ deleted: true });
         }
 
@@ -380,9 +354,7 @@ export default CodeArtifactTestFunction.make(
           // rejects updates to a Published generic version with the typed
           // ConflictException; the event already fired, so just poll.
           yield* publishVersion(version, false).pipe(
-            Effect.catchTag("ConflictException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
           );
           const seen = yield* getObject({ Key: `events/${version}` }).pipe(
             Effect.retry({

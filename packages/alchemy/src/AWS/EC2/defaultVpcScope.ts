@@ -36,9 +36,7 @@ export const getDefaultVpcScope = ec2
  * when the account has no default VPC. Rules on this group are AWS-provisioned
  * furniture; rules on user-created groups inside the default VPC are not.
  */
-export const getDefaultVpcDefaultSecurityGroupId = (
-  vpcId: string | undefined,
-) =>
+export const getDefaultVpcDefaultSecurityGroupId = (vpcId: string | undefined) =>
   vpcId === undefined
     ? Effect.succeed(undefined)
     : ec2

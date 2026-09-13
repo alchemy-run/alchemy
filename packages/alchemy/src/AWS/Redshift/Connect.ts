@@ -138,8 +138,6 @@ export interface Connect extends Binding.Service<
   (
     cluster: Cluster,
     options?: ConnectOptions,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, ConnectError, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, ConnectError, RuntimeContext>>
 > {}
 export const Connect = Binding.Service<Connect>("AWS.Redshift.Connect");

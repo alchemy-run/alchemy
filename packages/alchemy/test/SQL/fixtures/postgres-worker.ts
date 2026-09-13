@@ -43,9 +43,7 @@ const PostgresRoutes = Effect.gen(function* () {
   );
   const shared = makeSqlRoutes({ sql, layerUsers, ddl: DDL, table: TABLE });
 
-  const handle = Effect.fn(function* (
-    request: HttpServerRequest.HttpServerRequest,
-  ) {
+  const handle = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
     // POST /tx/commit — statements inside `withTransaction` share one
     // transaction and commit together.
     if (request.method === "POST" && request.url === "/tx/commit") {
@@ -80,8 +78,7 @@ const PostgresRoutes = Effect.gen(function* () {
           }),
         )
         .pipe(Effect.flip);
-      const rows =
-        yield* sql`SELECT id FROM ${sql(TABLE)} WHERE id = ${row.id}`;
+      const rows = yield* sql`SELECT id FROM ${sql(TABLE)} WHERE id = ${row.id}`;
       return yield* HttpServerResponse.json({
         error: (error as { _tag: string })._tag,
         rows,
@@ -136,10 +133,7 @@ export default class SqlPostgresWorker extends Cloudflare.Worker<SqlPostgresWork
         if (response !== undefined) {
           return response;
         }
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }).pipe(
         Effect.catchCause((cause) =>
           HttpServerResponse.json({ error: String(cause) }, { status: 500 }),

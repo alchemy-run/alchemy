@@ -7,9 +7,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import SecurityLakeBindingsFunctionLive, {
-  SecurityLakeBindingsFunction,
-} from "./bindings-handler";
+import SecurityLakeBindingsFunctionLive, { SecurityLakeBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -21,40 +19,34 @@ const RUN_LIVE = !!process.env.AWS_TEST_SECURITYLAKE;
 
 // Ungated typed-error probes: prove the distilled error unions the bindings
 // depend on are typed on every account, onboarded or not, at near-zero cost.
-test.provider(
-  "listDataLakeExceptions returns exceptions or a typed not-onboarded rejection",
-  () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.result(
-        securitylake.listDataLakeExceptions({}),
-      );
-      if (Result.isSuccess(result)) {
-        expect(Array.isArray(result.success.exceptions ?? [])).toBe(true);
-      } else {
-        expect([
-          "AccessDeniedException",
-          "ResourceNotFoundException",
-          "UnauthorizedException",
-        ]).toContain(result.failure._tag);
-      }
-    }),
+test.provider("listDataLakeExceptions returns exceptions or a typed not-onboarded rejection", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(securitylake.listDataLakeExceptions({}));
+    if (Result.isSuccess(result)) {
+      expect(Array.isArray(result.success.exceptions ?? [])).toBe(true);
+    } else {
+      expect([
+        "AccessDeniedException",
+        "ResourceNotFoundException",
+        "UnauthorizedException",
+      ]).toContain(result.failure._tag);
+    }
+  }),
 );
 
-test.provider(
-  "getDataLakeSources returns sources or a typed not-onboarded rejection",
-  () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.result(securitylake.getDataLakeSources({}));
-      if (Result.isSuccess(result)) {
-        expect(Array.isArray(result.success.dataLakeSources ?? [])).toBe(true);
-      } else {
-        expect([
-          "AccessDeniedException",
-          "ResourceNotFoundException",
-          "UnauthorizedException",
-        ]).toContain(result.failure._tag);
-      }
-    }),
+test.provider("getDataLakeSources returns sources or a typed not-onboarded rejection", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.result(securitylake.getDataLakeSources({}));
+    if (Result.isSuccess(result)) {
+      expect(Array.isArray(result.success.dataLakeSources ?? [])).toBe(true);
+    } else {
+      expect([
+        "AccessDeniedException",
+        "ResourceNotFoundException",
+        "UnauthorizedException",
+      ]).toContain(result.failure._tag);
+    }
+  }),
 );
 
 const sharedStack = Core.scratchStack(testOptions, "SecurityLakeBindings");
@@ -71,9 +63,7 @@ describe("SecurityLake Bindings (E2E)", () => {
       yield* Effect.logInfo("SecurityLake E2E setup: destroying previous run");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "SecurityLake E2E setup: deploying data lake + Lambda",
-      );
+      yield* Effect.logInfo("SecurityLake E2E setup: deploying data lake + Lambda");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* SecurityLakeBindingsFunction;
@@ -91,10 +81,7 @@ describe("SecurityLake Bindings (E2E)", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
         }),
       );
     }),
@@ -108,13 +95,11 @@ describe("SecurityLake Bindings (E2E)", () => {
     { timeout: 600_000 },
   );
 
-  test.provider.skipIf(!RUN_LIVE)(
-    "both capabilities initialize in the runtime",
-    () =>
-      Effect.gen(function* () {
-        const response = (yield* get("/bindings")) as { bound: string[] };
-        expect(response.bound).toHaveLength(2);
-      }),
+  test.provider.skipIf(!RUN_LIVE)("both capabilities initialize in the runtime", () =>
+    Effect.gen(function* () {
+      const response = (yield* get("/bindings")) as { bound: string[] };
+      expect(response.bound).toHaveLength(2);
+    }),
   );
 
   test.provider.skipIf(!RUN_LIVE)(

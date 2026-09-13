@@ -30,8 +30,7 @@ export default HeadObjectTestFunction.make(
           });
         }
         const key = url.searchParams.get("key");
-        if (!key)
-          return HttpServerResponse.text("Missing key", { status: 400 });
+        if (!key) return HttpServerResponse.text("Missing key", { status: 400 });
         return yield* headObject({
           Key: key,
           VersionId: url.searchParams.get("versionId") ?? undefined,

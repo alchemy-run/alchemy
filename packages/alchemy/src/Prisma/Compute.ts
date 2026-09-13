@@ -65,10 +65,7 @@ import {
 } from "./ComputeLifecycle.ts";
 import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
-import {
-  promoteAppObserved,
-  waitForAppDeploymentTarget,
-} from "./Internal/AppPromotion.ts";
+import { promoteAppObserved, waitForAppDeploymentTarget } from "./Internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./Internal/BundlePaths.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
 import {
@@ -245,10 +242,7 @@ export interface ComputeStaticBuild {
   timeoutSeconds?: number;
 }
 
-export type ComputeBuild =
-  | ComputeCommandBuild
-  | ComputeAutoBuild
-  | ComputeStaticBuild;
+export type ComputeBuild = ComputeCommandBuild | ComputeAutoBuild | ComputeStaticBuild;
 
 export interface ComputeBundleOptions {
   /**
@@ -547,12 +541,7 @@ export interface Compute extends Resource<
     /**
      * Action taken for the previous deployment.
      */
-    previousDeploymentAction:
-      | "stopped"
-      | "destroyed"
-      | "still-active"
-      | null
-      | undefined;
+    previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null | undefined;
     /** Stable App endpoint readiness observed after promotion. */
     readinessStatus?: "ready" | "pending" | "skipped";
     /** Old deployment cleanup that will be retried before another generation. */
@@ -606,17 +595,12 @@ export interface ComputeRuntimeContext extends Server.ProcessContext {
 }
 
 export const isCompute = (value: unknown): value is Compute =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  value.Type === ComputeTypeId;
+  typeof value === "object" && value !== null && "Type" in value && value.Type === ComputeTypeId;
 
 const hasEffectNativeComputeInput = (props: ComputeProps) =>
-  props.isExternal !== true &&
-  (props.main !== undefined || props.exports !== undefined);
+  props.isExternal !== true && (props.main !== undefined || props.exports !== undefined);
 
-const isEffectNativeCompute = (props: ComputeProps) =>
-  hasEffectNativeComputeInput(props);
+const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInput(props);
 
 /**
  * Build and deploy an application to Prisma Compute.
@@ -797,9 +781,7 @@ export const Compute: Platform<
 > & {
   <PropsReq = never>(
     id: string,
-    props:
-      | InputProps<ComputeProps>
-      | Effect.Effect<InputProps<ComputeProps>, never, PropsReq>,
+    props: InputProps<ComputeProps> | Effect.Effect<InputProps<ComputeProps>, never, PropsReq>,
   ): Effect.Effect<Compute, never, Providers | PropsReq>;
 } = Platform(ComputeTypeId, {
   createRuntimeContext: (id): ComputeRuntimeContext => {
@@ -820,9 +802,7 @@ export const Compute: Platform<
             );
             if (httpServer) {
               yield* httpServer.serve(
-                handler.pipe(
-                  Effect.provideService(RuntimeContext, runtimeContext),
-                ),
+                handler.pipe(Effect.provideService(RuntimeContext, runtimeContext)),
               );
               yield* Effect.never;
             }
@@ -962,9 +942,7 @@ const listApps = (projectId: string) =>
     let cursor: string | undefined;
     while (true) {
       const page = yield* getServices(
-        cursor === undefined
-          ? { projectId, limit: 100 }
-          : { projectId, limit: 100, cursor },
+        cursor === undefined ? { projectId, limit: 100 } : { projectId, limit: 100, cursor },
       );
       apps.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
@@ -991,9 +969,7 @@ const desiredComputeBranchId = Effect.fn(function* (
   }
   const branches = yield* listBranches(projectId, props.branchGitName);
   const matchingBranches =
-    props.branchGitName === undefined
-      ? branches.filter((branch) => branch.isDefault)
-      : branches;
+    props.branchGitName === undefined ? branches.filter((branch) => branch.isDefault) : branches;
   if (matchingBranches.length > 1) {
     return yield* Effect.fail(
       new Error(
@@ -1004,9 +980,7 @@ const desiredComputeBranchId = Effect.fn(function* (
     );
   }
   const branch = matchingBranches[0];
-  return branch
-    ? { resolved: true as const, id: branch.id }
-    : { resolved: false as const };
+  return branch ? { resolved: true as const, id: branch.id } : { resolved: false as const };
 });
 
 const createAppName = (id: string, appName: string | undefined) =>
@@ -1017,9 +991,7 @@ const findApp = Effect.fn(function* (
   appName: string,
   props: Pick<ComputeProps, "branchId" | "branchGitName">,
 ) {
-  const candidates = (yield* listApps(projectId)).filter(
-    (app) => app.name === appName,
-  );
+  const candidates = (yield* listApps(projectId)).filter((app) => app.name === appName);
   if (candidates.length === 0) return undefined;
   const branch = yield* desiredComputeBranchId(projectId, props);
   if (!branch.resolved) return undefined;
@@ -1052,10 +1024,7 @@ const createApp = (
   );
 
 const plainEnv = (
-  env: Record<
-    string,
-    string | Redacted.Redacted<string> | null | undefined
-  > = {},
+  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
 ) =>
   Object.fromEntries(
     Object.entries(env).flatMap(([key, value]) =>
@@ -1065,15 +1034,11 @@ const plainEnv = (
     ),
   ) as Record<string, string | null>;
 
-const persistedArtifactHashValue = (
-  value: Redacted.Redacted<string> | string | undefined,
-) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
+const persistedArtifactHashValue = (value: Redacted.Redacted<string> | string | undefined) =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 const managedEnvKeys = (
-  env: Record<
-    string,
-    string | Redacted.Redacted<string> | null | undefined
-  > = {},
+  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
 ) =>
   Object.entries(plainEnv(env))
     .flatMap(([key, value]) => (value === null ? [] : [key]))
@@ -1097,23 +1062,16 @@ const validateComputeEnvironmentKey = (key: string) =>
     }
   });
 
-const validateComputeEnvironmentWrite = (
-  key: string,
-  value: string | Redacted.Redacted<string>,
-) =>
+const validateComputeEnvironmentWrite = (key: string, value: string | Redacted.Redacted<string>) =>
   Effect.gen(function* () {
     yield* validateComputeEnvironmentKey(key);
     const raw = computeEnvValue(value);
     if (raw.length === 0) {
       return yield* Effect.fail(
-        new Error(
-          `Prisma environment variable '${key}' value must be non-empty.`,
-        ),
+        new Error(`Prisma environment variable '${key}' value must be non-empty.`),
       );
     }
-    const byteLength = yield* Effect.sync(
-      () => new TextEncoder().encode(raw).byteLength,
-    );
+    const byteLength = yield* Effect.sync(() => new TextEncoder().encode(raw).byteLength);
     if (byteLength > ENV_VALUE_MAX_BYTES) {
       return yield* Effect.fail(
         new Error(
@@ -1123,9 +1081,7 @@ const validateComputeEnvironmentWrite = (
     }
   });
 
-const validateComputeHealthCheck = (
-  healthCheck: ComputeHealthCheck | undefined,
-) =>
+const validateComputeHealthCheck = (healthCheck: ComputeHealthCheck | undefined) =>
   Effect.gen(function* () {
     if (healthCheck === undefined) return;
     if (
@@ -1135,15 +1091,10 @@ const validateComputeHealthCheck = (
       /\s/.test(healthCheck.path)
     ) {
       return yield* Effect.fail(
-        new Error(
-          "healthCheck.path must be an absolute application path beginning with one '/'.",
-        ),
+        new Error("healthCheck.path must be an absolute application path beginning with one '/'."),
       );
     }
-    if (
-      healthCheck.statusCodes !== undefined &&
-      healthCheck.statusCodes.length === 0
-    ) {
+    if (healthCheck.statusCodes !== undefined && healthCheck.statusCodes.length === 0) {
       return yield* Effect.fail(
         new Error("healthCheck.statusCodes must contain at least one status."),
       );
@@ -1163,14 +1114,10 @@ const validateComputeProps = (props: ComputeProps) =>
   Effect.gen(function* () {
     yield* validateComputeHealthCheck(props.healthCheck);
     if (props.healthCheck !== undefined && props.verifyUrl === false) {
-      return yield* Effect.fail(
-        new Error("healthCheck cannot be combined with verifyUrl: false."),
-      );
+      return yield* Effect.fail(new Error("healthCheck cannot be combined with verifyUrl: false."));
     }
     if (props.healthCheck !== undefined && props.start === false) {
-      return yield* Effect.fail(
-        new Error("healthCheck requires start to be enabled."),
-      );
+      return yield* Effect.fail(new Error("healthCheck requires start to be enabled."));
     }
     for (const [name, value] of [
       ["timeoutSeconds", props.timeoutSeconds],
@@ -1178,22 +1125,15 @@ const validateComputeProps = (props: ComputeProps) =>
       ["urlReadinessTimeoutSeconds", props.urlReadinessTimeoutSeconds],
     ] as const) {
       if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
-        return yield* Effect.fail(
-          new Error(`${name} must be a positive finite number.`),
-        );
+        return yield* Effect.fail(new Error(`${name} must be a positive finite number.`));
       }
     }
     for (const [name, value] of [
       ["port", props.port],
       ["dev.port", props.dev?.port],
     ] as const) {
-      if (
-        value !== undefined &&
-        (!Number.isInteger(value) || value < 1 || value > 65_535)
-      ) {
-        return yield* Effect.fail(
-          new Error(`${name} must be an integer between 1 and 65535.`),
-        );
+      if (value !== undefined && (!Number.isInteger(value) || value < 1 || value > 65_535)) {
+        return yield* Effect.fail(new Error(`${name} must be an integer between 1 and 65535.`));
       }
     }
     for (const [key, value] of Object.entries(props.env ?? {})) {
@@ -1219,9 +1159,7 @@ const validateComputeProps = (props: ComputeProps) =>
       );
     }
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* Effect.fail(
-        new Error("branchId and branchGitName are mutually exclusive."),
-      );
+      return yield* Effect.fail(new Error("branchId and branchGitName are mutually exclusive."));
     }
     if (props.branchId === null || props.branchGitName === null) {
       return yield* Effect.fail(
@@ -1231,14 +1169,10 @@ const validateComputeProps = (props: ComputeProps) =>
       );
     }
     if ((props.skipCodeUpload ?? false) && props.artifactPath !== undefined) {
-      return yield* Effect.fail(
-        new Error("skipCodeUpload cannot be combined with artifactPath."),
-      );
+      return yield* Effect.fail(new Error("skipCodeUpload cannot be combined with artifactPath."));
     }
     if ((props.skipCodeUpload ?? false) && props.build !== undefined) {
-      return yield* Effect.fail(
-        new Error("skipCodeUpload cannot be combined with build."),
-      );
+      return yield* Effect.fail(new Error("skipCodeUpload cannot be combined with build."));
     }
     if (hasEffectNativeComputeInput(props)) {
       const handler = props.handler ?? "default";
@@ -1258,31 +1192,22 @@ const validateComputeProps = (props: ComputeProps) =>
       }
       if (props.artifactPath !== undefined) {
         return yield* Effect.fail(
-          new Error(
-            "Effect-native Prisma Compute apps cannot use artifactPath.",
-          ),
+          new Error("Effect-native Prisma Compute apps cannot use artifactPath."),
         );
       }
       if (props.build !== undefined) {
-        return yield* Effect.fail(
-          new Error("Effect-native Prisma Compute apps cannot use build."),
-        );
+        return yield* Effect.fail(new Error("Effect-native Prisma Compute apps cannot use build."));
       }
       if (props.skipCodeUpload) {
         return yield* Effect.fail(
-          new Error(
-            "Effect-native Prisma Compute apps cannot skip code upload.",
-          ),
+          new Error("Effect-native Prisma Compute apps cannot skip code upload."),
         );
       }
     }
   });
 
 const processEnv = (
-  env: Record<
-    string,
-    string | Redacted.Redacted<string> | null | undefined
-  > = {},
+  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
 ) =>
   Object.fromEntries(
     Object.entries(env).flatMap(([key, value]) =>
@@ -1307,8 +1232,7 @@ const readResponseBodyPrefix = (response: HttpClientResponse) =>
       Effect.sync(() => {
         const remaining = URL_READINESS_BODY_PREFIX_BYTES - bytes;
         if (remaining <= 0) return false;
-        const kept =
-          chunk.byteLength > remaining ? chunk.slice(0, remaining) : chunk;
+        const kept = chunk.byteLength > remaining ? chunk.slice(0, remaining) : chunk;
         chunks.push(kept);
         bytes += kept.byteLength;
         return bytes < URL_READINESS_BODY_PREFIX_BYTES;
@@ -1329,9 +1253,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
 ) {
   yield* validateComputeHealthCheck(props.healthCheck);
   if (props.healthCheck !== undefined && props.verifyUrl === false) {
-    return yield* Effect.fail(
-      new Error("healthCheck cannot be combined with verifyUrl: false."),
-    );
+    return yield* Effect.fail(new Error("healthCheck cannot be combined with verifyUrl: false."));
   }
   if (props.verifyUrl === false) return;
   if (!url) {
@@ -1348,17 +1270,13 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     return props.healthCheck === undefined
       ? undefined
       : yield* Effect.fail(
-          new Error(
-            "Prisma Compute healthCheck requires an HTTP client service.",
-          ),
+          new Error("Prisma Compute healthCheck requires an HTTP client service."),
         );
   }
 
   const http = httpOption.value;
   const probeUrl =
-    props.healthCheck === undefined
-      ? url
-      : new URL(props.healthCheck.path, url).toString();
+    props.healthCheck === undefined ? url : new URL(props.healthCheck.path, url).toString();
   const acceptsStatus = (status: number) =>
     props.healthCheck === undefined ||
     (props.healthCheck.statusCodes === undefined
@@ -1372,9 +1290,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     );
   }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* Effect.fail(
-      new Error("pollIntervalMs must be a positive finite number."),
-    );
+    return yield* Effect.fail(new Error("pollIntervalMs must be a positive finite number."));
   }
   const timeoutMs = timeoutSeconds * 1_000;
   const startedAt = yield* Effect.sync(() => Date.now());
@@ -1385,9 +1301,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     const beforeRequest = yield* Effect.sync(() => Date.now());
     const remainingBeforeRequest = timeoutMs - (beforeRequest - startedAt);
     if (remainingBeforeRequest <= 0) {
-      return yield* Effect.fail(
-        deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody),
-      );
+      return yield* Effect.fail(deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody));
     }
     const requestTimeoutMs = Math.min(5_000, remainingBeforeRequest);
     const response = yield* http.execute(HttpClientRequest.get(probeUrl)).pipe(
@@ -1411,9 +1325,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       const remainingBeforeBody = timeoutMs - (beforeBody - startedAt);
       if (remainingBeforeBody > 0) {
         const bodyPrefix = yield* readResponseBodyPrefix(response).pipe(
-          Effect.timeoutOption(
-            Duration.millis(Math.min(2_000, remainingBeforeBody)),
-          ),
+          Effect.timeoutOption(Duration.millis(Math.min(2_000, remainingBeforeBody))),
           Effect.catch(() => Effect.succeed(Option.none<string>())),
         );
         if (Option.isSome(bodyPrefix)) {
@@ -1430,28 +1342,18 @@ export const waitForDeploymentUrl = Effect.fn(function* (
 
     const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
     if (elapsed >= timeoutMs) {
-      return yield* Effect.fail(
-        deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody),
-      );
+      return yield* Effect.fail(deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody));
     }
 
-    yield* Effect.sleep(
-      Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)),
-    );
+    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
   }
 });
 
-const deploymentUrlTimeoutError = (
-  url: string,
-  lastStatus: number | undefined,
-  lastBody: string,
-) =>
+const deploymentUrlTimeoutError = (url: string, lastStatus: number | undefined, lastBody: string) =>
   new Error(
     [
       `Timed out waiting for Prisma Compute URL '${url}' to become reachable.`,
-      lastStatus
-        ? `Last response: HTTP ${lastStatus}.`
-        : "No HTTP response was received.",
+      lastStatus ? `Last response: HTTP ${lastStatus}.` : "No HTTP response was received.",
       lastBody.includes("There is no service on this URL")
         ? "The Prisma edge returned: There is no service on this URL."
         : undefined,
@@ -1460,43 +1362,29 @@ const deploymentUrlTimeoutError = (
       .join(" "),
   );
 
-const isAutoBuild = (
-  build: ComputeProps["build"],
-): build is "auto" | ComputeAutoBuild =>
+const isAutoBuild = (build: ComputeProps["build"]): build is "auto" | ComputeAutoBuild =>
   build === "auto" ||
-  (typeof build === "object" &&
-    build !== null &&
-    "type" in build &&
-    build.type === "auto");
+  (typeof build === "object" && build !== null && "type" in build && build.type === "auto");
 
-const isStaticBuild = (
-  build: ComputeProps["build"],
-): build is ComputeStaticBuild =>
-  typeof build === "object" &&
-  build !== null &&
-  "type" in build &&
-  build.type === "static";
+const isStaticBuild = (build: ComputeProps["build"]): build is ComputeStaticBuild =>
+  typeof build === "object" && build !== null && "type" in build && build.type === "static";
 
 const readPackageMain = Effect.fn(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const text = yield* fs
-    .readFileString(path.join(directory, "package.json"))
-    .pipe(
-      Effect.catchIf(
-        (error) =>
-          error._tag === "PlatformError" && error.reason._tag === "NotFound",
-        () => Effect.succeed(undefined),
-      ),
-    );
+  const text = yield* fs.readFileString(path.join(directory, "package.json")).pipe(
+    Effect.catchIf(
+      (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
+      () => Effect.succeed(undefined),
+    ),
+  );
   if (!text) return undefined;
   return yield* Effect.try({
     try: () => {
       const parsed = JSON.parse(text) as { main?: unknown };
       return typeof parsed.main === "string" ? parsed.main : undefined;
     },
-    catch: (cause) =>
-      new Error(`Failed to parse package.json in ${directory}: ${cause}`),
+    catch: (cause) => new Error(`Failed to parse package.json in ${directory}: ${cause}`),
   });
 });
 
@@ -1504,9 +1392,7 @@ const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   if (bundle.files.length === 0) {
-    return yield* Effect.fail(
-      new Error("Effect-native Compute bundler produced no output files."),
-    );
+    return yield* Effect.fail(new Error("Effect-native Compute bundler produced no output files."));
   }
   const normalizedFiles = yield* Effect.forEach(bundle.files, (file) =>
     normalizeBundleFilePath(file.path).pipe(
@@ -1542,15 +1428,9 @@ const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
     return {
       directory,
       entrypoint: normalizedFiles[0].normalizedPath,
-      cleanup: fs
-        .remove(directory, { recursive: true })
-        .pipe(Effect.catch(() => Effect.void)),
+      cleanup: fs.remove(directory, { recursive: true }).pipe(Effect.catch(() => Effect.void)),
     };
-  }).pipe(
-    Effect.onError(() =>
-      fs.remove(directory, { recursive: true }).pipe(Effect.ignore),
-    ),
-  );
+  }).pipe(Effect.onError(() => fs.remove(directory, { recursive: true }).pipe(Effect.ignore)));
 });
 
 const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
@@ -1580,9 +1460,7 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
   const defaultPort = props.port ?? 8080;
 
   const importEntrypoint =
-    handler === "default"
-      ? "import entrypoint"
-      : `import { ${handler} as entrypoint }`;
+    handler === "default" ? "import entrypoint" : `import { ${handler} as entrypoint }`;
 
   const bundle = yield* Bundle.build(
     {
@@ -1654,9 +1532,7 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
       );
     }
     if (props.build !== undefined) {
-      return yield* Effect.fail(
-        new Error("Effect-native Prisma Compute apps cannot use build."),
-      );
+      return yield* Effect.fail(new Error("Effect-native Prisma Compute apps cannot use build."));
     }
     const artifact = yield* bundleEffectCompute(props);
     return {
@@ -1812,11 +1688,8 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
   };
 });
 
-const findExistingApp = Effect.fn(function* (
-  output: Compute["Attributes"] | undefined,
-) {
-  const appId =
-    output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
+const findExistingApp = Effect.fn(function* (output: Compute["Attributes"] | undefined) {
+  const appId = output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
   return appId
     ? yield* getService({ serviceId: appId }).pipe(
         Effect.map((response) => response.data),
@@ -1831,8 +1704,7 @@ const ensureApp = Effect.fn(function* (
   output: Compute["Attributes"] | undefined,
   observedApp?: ObservedApp,
 ) {
-  let app: ObservedApp | undefined =
-    observedApp ?? (yield* findExistingApp(output));
+  let app: ObservedApp | undefined = observedApp ?? (yield* findExistingApp(output));
   const branch = yield* desiredComputeBranchId(projectId, props);
   if (!branch.resolved) {
     return yield* Effect.fail(
@@ -1883,10 +1755,7 @@ const ensureApp = Effect.fn(function* (
   return { app, created: createdApp };
 });
 
-const ensureSkipCodeUploadCanFork = (
-  props: ComputeProps,
-  app: ObservedApp | undefined,
-) =>
+const ensureSkipCodeUploadCanFork = (props: ComputeProps, app: ObservedApp | undefined) =>
   Effect.gen(function* () {
     if (!(props.skipCodeUpload ?? false)) return;
     if (app?.latestDeploymentId) return;
@@ -1930,9 +1799,7 @@ const findEnvironmentVariable = (
       }
       cursor = nextCursor;
     }
-    return variables.find(
-      (variable) => variable.branchId === (branchId ?? null),
-    );
+    return variables.find((variable) => variable.branchId === (branchId ?? null));
   });
 
 const systemManagedEnvironmentVariableError = (key: string) =>
@@ -1940,14 +1807,10 @@ const systemManagedEnvironmentVariableError = (key: string) =>
     `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
   );
 
-const ensureUserManagedEnvironmentVariable = (
-  variable: ObservedEnvironmentVariable,
-) =>
+const ensureUserManagedEnvironmentVariable = (variable: ObservedEnvironmentVariable) =>
   Effect.gen(function* () {
     if (variable.isManagedBySystem) {
-      return yield* Effect.fail(
-        systemManagedEnvironmentVariableError(variable.key),
-      );
+      return yield* Effect.fail(systemManagedEnvironmentVariableError(variable.key));
     }
   });
 
@@ -1969,15 +1832,10 @@ const environmentScope = (
   branchId: branchId ?? null,
 });
 
-const sameEnvironmentScope = (
-  left: ComputeEnvironmentScope,
-  right: ComputeEnvironmentScope,
-) => left.class === right.class && left.branchId === right.branchId;
+const sameEnvironmentScope = (left: ComputeEnvironmentScope, right: ComputeEnvironmentScope) =>
+  left.class === right.class && left.branchId === right.branchId;
 
-const resolveComputeEnvironmentScope = Effect.fn(function* (
-  app: ObservedApp,
-  props: ComputeProps,
-) {
+const resolveComputeEnvironmentScope = Effect.fn(function* (app: ObservedApp, props: ComputeProps) {
   if (!app.branchId) {
     return yield* Effect.fail(
       new Error(
@@ -1998,10 +1856,7 @@ const resolveComputeEnvironmentScope = Effect.fn(function* (
     );
   }
 
-  return environmentScope(
-    inferredClass,
-    inferredClass === "preview" ? app.branchId : null,
-  );
+  return environmentScope(inferredClass, inferredClass === "preview" ? app.branchId : null);
 });
 
 interface ComputeEnvironmentPlan {
@@ -2042,10 +1897,7 @@ const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
 const syncComputeEnvironmentInternal = Effect.fn(function* (
   projectId: string,
   cls: "production" | "preview",
-  env: Record<
-    string,
-    string | Redacted.Redacted<string> | null | undefined
-  > = {},
+  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
   branchId?: string | null,
   ownedIds: Readonly<Record<string, string>> = {},
 ) {
@@ -2064,18 +1916,11 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
     } else {
       yield* validateComputeEnvironmentWrite(key, value);
     }
-    const variable = yield* findEnvironmentVariable(
-      projectId,
-      cls,
-      key,
-      branchId,
-    );
+    const variable = yield* findEnvironmentVariable(projectId, cls, key, branchId);
     if (variable) {
       yield* ensureUserManagedEnvironmentVariable(variable);
       if (ownedIds[key] !== variable.id) {
-        return yield* Effect.fail(
-          environmentVariableOwnershipError(key, variable.id),
-        );
+        return yield* Effect.fail(environmentVariableOwnershipError(key, variable.id));
       }
     }
     plans.push({ key, value, variable });
@@ -2120,29 +1965,18 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
   });
 
   return yield* apply.pipe(
-    Effect.catch((error) =>
-      rollbackCreatedEnvironmentVariables(createdIds, error),
-    ),
+    Effect.catch((error) => rollbackCreatedEnvironmentVariables(createdIds, error)),
   );
 });
 
 export const syncComputeEnvironment = Effect.fn(function* (
   projectId: string,
   cls: "production" | "preview",
-  env: Record<
-    string,
-    string | Redacted.Redacted<string> | null | undefined
-  > = {},
+  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
   branchId?: string | null,
   ownedIds: Readonly<Record<string, string>> = {},
 ) {
-  const result = yield* syncComputeEnvironmentInternal(
-    projectId,
-    cls,
-    env,
-    branchId,
-    ownedIds,
-  );
+  const result = yield* syncComputeEnvironmentInternal(projectId, cls, env, branchId, ownedIds);
   return {
     synced: result.synced,
     deleted: result.deleted,
@@ -2178,9 +2012,7 @@ const cleanupRemovedComputeEnvironment = Effect.fn(function* (
   oldScope: ComputeEnvironmentScope,
   oldOwnedIds: Readonly<Record<string, string>>,
   newScope: ComputeEnvironmentScope,
-  newEnv:
-    | Record<string, string | Redacted.Redacted<string> | null | undefined>
-    | undefined,
+  newEnv: Record<string, string | Redacted.Redacted<string> | null | undefined> | undefined,
 ) {
   const newValues = plainEnv(newEnv);
   const deleted: string[] = [];
@@ -2208,9 +2040,7 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
   const processKey = `dev:${id}`;
   const localUrl =
     dev?.url ??
-    ((dev?.port ?? props.port)
-      ? `http://localhost:${dev?.port ?? props.port}`
-      : undefined);
+    ((dev?.port ?? props.port) ? `http://localhost:${dev?.port ?? props.port}` : undefined);
   if (!dev?.command) {
     return localUrl;
   }
@@ -2222,9 +2052,7 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
     NODE_ENV: "development",
     ...processEnv(props.env),
     ...processEnv(dev.env),
-    ...((dev.port ?? props.port)
-      ? { PORT: String(dev.port ?? props.port) }
-      : {}),
+    ...((dev.port ?? props.port) ? { PORT: String(dev.port ?? props.port) } : {}),
   };
   const handle = yield* ChildProcess.make(dev.command, [], {
     shell: true,
@@ -2249,14 +2077,9 @@ const activeBindingEnv = (
         binding.action !== "delete",
     )
     .map((binding) => binding.data?.env)
-    .reduce<
-      Record<string, string | Redacted.Redacted<string> | null | undefined>
-    >(
+    .reduce<Record<string, string | Redacted.Redacted<string> | null | undefined>>(
       (acc, env) => (env ? { ...acc, ...env } : acc),
-      {} as Record<
-        string,
-        string | Redacted.Redacted<string> | null | undefined
-      >,
+      {} as Record<string, string | Redacted.Redacted<string> | null | undefined>,
     );
 
 const ProviderLive = () =>
@@ -2273,8 +2096,7 @@ const ProviderLive = () =>
           if (output?.local || isPrismaDevId(output?.appId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -2285,10 +2107,7 @@ const ProviderLive = () =>
           }
           if (isResolved(news.regionId) && news.regionId !== undefined) {
             const currentRegionId = output?.regionId ?? olds.regionId;
-            if (
-              currentRegionId !== undefined &&
-              news.regionId !== currentRegionId
-            ) {
+            if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
               return yield* Effect.fail(
                 new Error(
                   `Prisma Compute App region is immutable and cannot be changed atomically without deleting the live App first. Deploy a second Compute App under a different appName in the target region, cut traffic over, then remove the original.`,
@@ -2302,10 +2121,7 @@ const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.local) return output;
-          const appId =
-            output?.appId && !isPrismaDevId(output.appId)
-              ? output.appId
-              : undefined;
+          const appId = output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -2314,11 +2130,7 @@ const ProviderLive = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findApp(
-                      projectId,
-                      yield* createAppName(id, olds.appName),
-                      olds,
-                    )
+                  ? yield* findApp(projectId, yield* createAppName(id, olds.appName), olds)
                   : undefined;
               });
           if (!app) return undefined;
@@ -2330,24 +2142,17 @@ const ProviderLive = () =>
             ? yield* readDeployment(output.deploymentId)
             : undefined;
           if (outputDeployment) {
-            yield* ensureDeploymentMembership(
-              app.id,
-              outputDeployment,
-              app.latestDeploymentId,
-            );
+            yield* ensureDeploymentMembership(app.id, outputDeployment, app.latestDeploymentId);
           }
           const latestDeployment =
             !outputDeployment && app.latestDeploymentId
               ? yield* readDeployment(app.latestDeploymentId)
               : undefined;
           const deployment = outputDeployment ?? latestDeployment;
-          const deploymentUrl = toDeploymentUrl(
-            deployment?.previewDomain ?? undefined,
-          );
+          const deploymentUrl = toDeploymentUrl(deployment?.previewDomain ?? undefined);
           const appUrl = toDeploymentUrl(app.appEndpointDomain);
           const promoted =
-            app.latestDeploymentId !== null &&
-            deployment?.id === app.latestDeploymentId;
+            app.latestDeploymentId !== null && deployment?.id === app.latestDeploymentId;
           const attrs: Compute["Attributes"] = {
             appId: app.id,
             deploymentId: deployment?.id,
@@ -2356,8 +2161,7 @@ const ProviderLive = () =>
             regionId: app.region.id,
             deploymentEndpointDomain: deployment?.previewDomain ?? undefined,
             deploymentUrl,
-            appEndpointDomain:
-              app.appEndpointDomain ?? output?.appEndpointDomain,
+            appEndpointDomain: app.appEndpointDomain ?? output?.appEndpointDomain,
             url: promoted ? (appUrl ?? deploymentUrl) : deploymentUrl,
             promoted,
             previousDeploymentId: output?.previousDeploymentId,
@@ -2389,13 +2193,9 @@ const ProviderLive = () =>
           const projectId = yield* resolveProjectId(effectiveNews.project);
           const artifact = yield* resolveArtifact(effectiveNews);
           const cleanupArtifact = artifact.file?.cleanup ?? Effect.void;
-          const releaseArtifactOnFailure = <A, E, R>(
-            effect: Effect.Effect<A, E, R>,
-          ) =>
+          const releaseArtifactOnFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
             effect.pipe(
-              Effect.onExit((exit) =>
-                Exit.isSuccess(exit) ? Effect.void : cleanupArtifact,
-              ),
+              Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : cleanupArtifact)),
             );
           const observedApp = effectiveNews.skipCodeUpload
             ? yield* releaseArtifactOnFailure(
@@ -2407,9 +2207,7 @@ const ProviderLive = () =>
                 ),
               )
             : undefined;
-          yield* releaseArtifactOnFailure(
-            ensureSkipCodeUploadCanFork(effectiveNews, observedApp),
-          );
+          yield* releaseArtifactOnFailure(ensureSkipCodeUploadCanFork(effectiveNews, observedApp));
           const ensuredApp = yield* releaseArtifactOnFailure(
             ensureApp(projectId, effectiveNews, output, observedApp).pipe(
               Effect.retry({
@@ -2445,8 +2243,10 @@ const ProviderLive = () =>
           let deploymentConverged = false;
 
           return yield* Effect.gen(function* () {
-            const currentEnvironmentScope =
-              yield* resolveComputeEnvironmentScope(app, effectiveNews);
+            const currentEnvironmentScope = yield* resolveComputeEnvironmentScope(
+              app,
+              effectiveNews,
+            );
             const deploymentHash = yield* sha256Object({
               artifact: artifact.hash,
               branchId: app.branchId,
@@ -2454,10 +2254,7 @@ const ProviderLive = () =>
               environmentBranchId: currentEnvironmentScope.branchId,
             });
             const outputArtifactHash = persistedArtifactHashValue(
-              output?.artifactHash as
-                | Redacted.Redacted<string>
-                | string
-                | undefined,
+              output?.artifactHash as Redacted.Redacted<string> | string | undefined,
             );
             const persistedDeployment = output?.deploymentId
               ? yield* observeDeployment(output.deploymentId).pipe(
@@ -2465,9 +2262,7 @@ const ProviderLive = () =>
                 )
               : undefined;
             const terminalFailedDeploymentId =
-              persistedDeployment?.status === "failed"
-                ? persistedDeployment.id
-                : undefined;
+              persistedDeployment?.status === "failed" ? persistedDeployment.id : undefined;
             const promotionRequested = !(effectiveNews.skipPromote ?? false);
             let persistedPendingCleanup = output?.pendingDeploymentCleanup;
             const cleanupPreviousDeployment = Effect.fn(function* (
@@ -2478,15 +2273,9 @@ const ProviderLive = () =>
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               );
               if (!observed) {
-                return (action === "destroy" ? "destroyed" : "stopped") as
-                  | "destroyed"
-                  | "stopped";
+                return (action === "destroy" ? "destroyed" : "stopped") as "destroyed" | "stopped";
               }
-              yield* ensureDeploymentMembership(
-                app.id,
-                observed,
-                app.latestDeploymentId,
-              );
+              yield* ensureDeploymentMembership(app.id, observed, app.latestDeploymentId);
               if (action === "destroy") {
                 yield* destroyDeployment(deploymentId, effectiveNews);
                 return "destroyed" as const;
@@ -2494,11 +2283,7 @@ const ProviderLive = () =>
               yield* stopDeploymentIdempotent(deploymentId).pipe(
                 Effect.catchTag("NotFound", () => Effect.void),
               );
-              yield* waitForDeploymentStatus(
-                deploymentId,
-                "stopped",
-                effectiveNews,
-              ).pipe(
+              yield* waitForDeploymentStatus(deploymentId, "stopped", effectiveNews).pipe(
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               );
               return "stopped" as const;
@@ -2565,19 +2350,11 @@ const ProviderLive = () =>
               }
 
               app = observedAfterRollback.success;
-              yield* destroyDeployment(
-                displacedDeploymentId,
-                effectiveNews,
-              ).pipe(
+              yield* destroyDeployment(displacedDeploymentId, effectiveNews).pipe(
                 Effect.catch((cleanupError) =>
                   Effect.fail(
                     new AggregateError(
-                      [
-                        ...(Result.isFailure(rollback)
-                          ? [rollback.failure]
-                          : []),
-                        cleanupError,
-                      ],
+                      [...(Result.isFailure(rollback) ? [rollback.failure] : []), cleanupError],
                       `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
                     ),
                   ),
@@ -2585,10 +2362,7 @@ const ProviderLive = () =>
               );
             }
 
-            if (
-              output?.readinessStatus === "pending" &&
-              outputArtifactHash !== deploymentHash
-            ) {
+            if (output?.readinessStatus === "pending" && outputArtifactHash !== deploymentHash) {
               return yield* Effect.fail(
                 new Error(
                   `Prisma Compute deployment '${output.deploymentId ?? "unknown"}' still has pending stable-endpoint readiness. Reconcile the existing generation before changing code or environment inputs.`,
@@ -2608,26 +2382,20 @@ const ProviderLive = () =>
                 persistedPendingCleanup.action,
               );
               persistedPendingCleanup = undefined;
-            } else if (
-              persistedPendingCleanup?.deploymentId === app.latestDeploymentId
-            ) {
+            } else if (persistedPendingCleanup?.deploymentId === app.latestDeploymentId) {
               persistedPendingCleanup = undefined;
             }
             const previousEnvironmentScope = environmentScope(
               olds?.envClass ?? output?.environmentClass ?? "production",
               output?.environmentBranchId,
             );
-            const previousEnvironmentVariableIds =
-              output?.environmentVariableIds ?? {};
+            const previousEnvironmentVariableIds = output?.environmentVariableIds ?? {};
             const environmentResult = yield* syncComputeEnvironmentInternal(
               projectId,
               currentEnvironmentScope.class,
               effectiveNews.env,
               currentEnvironmentScope.branchId,
-              sameEnvironmentScope(
-                previousEnvironmentScope,
-                currentEnvironmentScope,
-              )
+              sameEnvironmentScope(previousEnvironmentScope, currentEnvironmentScope)
                 ? previousEnvironmentVariableIds
                 : {},
             );
@@ -2646,9 +2414,7 @@ const ProviderLive = () =>
             );
 
             let deployment: ObservedDeployment | undefined =
-              outputArtifactHash === deploymentHash
-                ? persistedDeployment
-                : undefined;
+              outputArtifactHash === deploymentHash ? persistedDeployment : undefined;
             // A failed deployment is terminal and cannot be repaired by
             // replaying start/promotion. Preserve it as the cleanup target,
             // but create a fresh generation and do not delete the failed one
@@ -2656,8 +2422,7 @@ const ProviderLive = () =>
             // promotion is observed.
             if (
               persistedDeployment !== undefined &&
-              (deployment !== undefined ||
-                terminalFailedDeploymentId !== undefined)
+              (deployment !== undefined || terminalFailedDeploymentId !== undefined)
             ) {
               yield* ensureDeploymentMembership(
                 app.id,
@@ -2707,20 +2472,12 @@ const ProviderLive = () =>
               if (artifact.file !== undefined && !created.uploadUrl) {
                 return yield* cleanupCreatedDeploymentOnFailure(
                   created.id,
-                  new Error(
-                    "Prisma deployment creation did not return an upload URL.",
-                  ),
+                  new Error("Prisma deployment creation did not return an upload URL."),
                 );
               }
               if (created.uploadUrl && artifact.file !== undefined) {
-                yield* uploadArtifact(
-                  created.uploadUrl,
-                  artifact.file,
-                  "application/gzip",
-                ).pipe(
-                  Effect.catch((error) =>
-                    cleanupCreatedDeploymentOnFailure(created.id, error),
-                  ),
+                yield* uploadArtifact(created.uploadUrl, artifact.file, "application/gzip").pipe(
+                  Effect.catch((error) => cleanupCreatedDeploymentOnFailure(created.id, error)),
                 );
               }
               deployment = yield* observeDeployment(created.id).pipe(
@@ -2733,30 +2490,23 @@ const ProviderLive = () =>
                     createdAt: undefined,
                   }),
                 ),
-                Effect.catch((error) =>
-                  cleanupCreatedDeploymentOnFailure(created.id, error),
-                ),
+                Effect.catch((error) => cleanupCreatedDeploymentOnFailure(created.id, error)),
               );
             }
             if (!deployment) {
               return yield* Effect.fail(
-                new Error(
-                  "Prisma deployment could not be resolved after creation.",
-                ),
+                new Error("Prisma deployment could not be resolved after creation."),
               );
             }
 
             const previousDeploymentId =
               terminalFailedDeploymentId ??
               persistedPendingCleanup?.deploymentId ??
-              (app.latestDeploymentId !== null &&
-              app.latestDeploymentId !== deployment.id
+              (app.latestDeploymentId !== null && app.latestDeploymentId !== deployment.id
                 ? app.latestDeploymentId
                 : null);
             const rollbackDeploymentId =
-              previousDeploymentId === terminalFailedDeploymentId
-                ? null
-                : previousDeploymentId;
+              previousDeploymentId === terminalFailedDeploymentId ? null : previousDeploymentId;
 
             if (effectiveNews.start ?? true) {
               const currentDeployment = deployment;
@@ -2773,10 +2523,7 @@ const ProviderLive = () =>
                   "running",
                   effectiveNews,
                 );
-                yield* waitForDeploymentUrl(
-                  toDeploymentUrl(running.previewDomain),
-                  effectiveNews,
-                );
+                yield* waitForDeploymentUrl(toDeploymentUrl(running.previewDomain), effectiveNews);
                 return running;
               }).pipe(
                 Effect.catch((error) =>
@@ -2786,35 +2533,26 @@ const ProviderLive = () =>
             }
 
             let appEndpointDomain = app.appEndpointDomain;
-            let previousDeploymentAction:
-              | "stopped"
-              | "destroyed"
-              | "still-active"
-              | null = previousDeploymentId ? "still-active" : null;
+            let previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null =
+              previousDeploymentId ? "still-active" : null;
             let promoted = app.latestDeploymentId === deployment.id;
             if (promotionRequested) {
               // Replay promotion even when latestDeploymentId already matches.
               // Promotion also repairs endpoint/custom-domain routing drift.
               preserveCreatedAppOnFailure = true;
-              const promotedApp = yield* promoteAppObserved(
-                app.id,
-                deployment.id,
-                effectiveNews,
-              );
+              const promotedApp = yield* promoteAppObserved(app.id, deployment.id, effectiveNews);
               appEndpointDomain = promotedApp.appEndpointDomain;
               promoted = true;
             }
 
             const deploymentUrl = toDeploymentUrl(deployment.previewDomain);
             const appUrl =
-              toDeploymentUrl(appEndpointDomain) ??
-              toDeploymentUrl(deployment.previewDomain);
+              toDeploymentUrl(appEndpointDomain) ?? toDeploymentUrl(deployment.previewDomain);
             let readinessStatus: "ready" | "pending" | "skipped" = "skipped";
             if (promoted && effectiveNews.verifyUrl !== false) {
-              const readiness = yield* waitForDeploymentUrl(
-                appUrl,
-                effectiveNews,
-              ).pipe(Effect.result);
+              const readiness = yield* waitForDeploymentUrl(appUrl, effectiveNews).pipe(
+                Effect.result,
+              );
               if (Result.isSuccess(readiness)) {
                 readinessStatus = "ready";
               } else if (rollbackDeploymentId) {
@@ -2876,14 +2614,11 @@ const ProviderLive = () =>
 
             deploymentConverged = true;
             let pendingDeploymentCleanup =
-              promoted &&
-              previousDeploymentId &&
-              previousDeploymentId !== deployment.id
+              promoted && previousDeploymentId && previousDeploymentId !== deployment.id
                 ? {
                     deploymentId: previousDeploymentId,
                     action:
-                      persistedPendingCleanup?.deploymentId ===
-                      previousDeploymentId
+                      persistedPendingCleanup?.deploymentId === previousDeploymentId
                         ? persistedPendingCleanup.action
                         : previousDeploymentId === terminalFailedDeploymentId
                           ? ("destroy" as const)
@@ -2933,10 +2668,7 @@ const ProviderLive = () =>
             Effect.catch((error) =>
               deploymentConverged
                 ? Effect.fail(error)
-                : rollbackCreatedEnvironmentVariables(
-                    createdEnvironmentVariableIds,
-                    error,
-                  ),
+                : rollbackCreatedEnvironmentVariables(createdEnvironmentVariableIds, error),
             ),
             Effect.catch(cleanupCreatedAppOnFailure),
             Effect.ensuring(cleanupArtifact),
@@ -2958,9 +2690,7 @@ const ProviderLive = () =>
           yield* destroyApp(output.appId);
         }),
         tail: ({ output }) =>
-          output.deploymentId
-            ? tailDeploymentLogs(output.deploymentId)
-            : Stream.empty,
+          output.deploymentId ? tailDeploymentLogs(output.deploymentId) : Stream.empty,
       };
     }),
   );
@@ -2991,9 +2721,7 @@ export const ComputeDevProvider = () =>
           yield* validateComputeProps(effectiveNews);
           const projectId = yield* resolveProjectId(effectiveNews.project);
           if (!ctx.dev) {
-            return yield* Effect.fail(
-              new Error("ComputeDevProvider requires Alchemy dev mode."),
-            );
+            return yield* Effect.fail(new Error("ComputeDevProvider requires Alchemy dev mode."));
           }
           const localUrl = yield* startDev(id, effectiveNews);
           return {

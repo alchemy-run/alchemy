@@ -3,18 +3,8 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
-import {
-  AuthError,
-  getAuthProvider,
-  presentEnvironment,
-} from "./AuthProvider.ts";
-import {
-  ALCHEMY_PROFILE,
-  DEFAULT_PROFILE_NAME,
-  ProfileError,
-  ProfileStore,
-  SuppressMissingProviderConfig,
-} from "./Profile.ts";
+import { AuthError, getAuthProvider, presentEnvironment } from "./AuthProvider.ts";
+import { ProfileStore, SuppressMissingProviderConfig } from "./Profile.ts";
 
 /**
  * Resolve the selected Alchemy profile after the command's dotenv provider is
@@ -28,15 +18,11 @@ export const resolveProfileSelection = Effect.fn(function* (
   const base = yield* loadConfigProvider(envFile);
   const profiles = yield* ProfileStore;
   const selected = yield* profiles.current.pipe(
-    Effect.provideService(
-      ConfigProvider.ConfigProvider,
-      withProfileOverride(base, override),
-    ),
+    Effect.provideService(ConfigProvider.ConfigProvider, withProfileOverride(base, override)),
   );
   return {
     ...selected,
-    source:
-      override === undefined ? selected.source : ("command-line" as const),
+    source: override === undefined ? selected.source : ("command-line" as const),
   };
 });
 
@@ -55,10 +41,7 @@ export const resolveProfileName = Effect.fn(function* (
  * CI, the provider's environment resolution alone (profiles do not exist
  * there), otherwise the selected profile.
  */
-export const resolveProviderConfig = <
-  C extends { method: string } = any,
-  Credentials = any,
->(
+export const resolveProviderConfig = <C extends { method: string } = any, Credentials = any>(
   providerName: string,
 ) =>
   Effect.gen(function* () {

@@ -14,11 +14,7 @@ import Stack from "../alchemy.run.ts";
 import type { Post, User } from "../src/schema.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(
-    Cloudflare.providers(),
-    Drizzle.providers(),
-    Planetscale.providers(),
-  ),
+  providers: Layer.mergeAll(Cloudflare.providers(), Drizzle.providers(), Planetscale.providers()),
   state: Alchemy.localState(),
 });
 
@@ -60,9 +56,7 @@ test(
     };
     expect(Array.isArray(initialBody.users)).toBe(true);
 
-    const createResponse = yield* HttpClient.execute(
-      HttpClientRequest.post(baseUrl),
-    );
+    const createResponse = yield* HttpClient.execute(HttpClientRequest.post(baseUrl));
     expect(createResponse.status).toBe(200);
 
     const createBody = (yield* createResponse.json) as unknown as {
@@ -95,9 +89,7 @@ test(
       error: "Invalid user ID",
     });
 
-    const methodResponse = yield* HttpClient.execute(
-      HttpClientRequest.patch(baseUrl),
-    );
+    const methodResponse = yield* HttpClient.execute(HttpClientRequest.patch(baseUrl));
     expect(methodResponse.status).toBe(405);
     expect(yield* methodResponse.json).toEqual({
       error: "Method not allowed",
@@ -122,9 +114,7 @@ test(
     const finalBody = (yield* finalResponse.json) as unknown as {
       users: User[];
     };
-    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(
-      false,
-    );
+    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(false);
   }),
   { timeout: 20_000 },
 );
@@ -144,14 +134,11 @@ test(
       expect(Array.isArray(body.users)).toBe(true);
     });
 
-    const jitter = Effect.sync(
-      () => Math.floor(Math.random() * 401) + 100,
-    ).pipe(Effect.flatMap((ms) => Effect.sleep(Duration.millis(ms))));
-
-    yield* queryOnce.pipe(
-      Effect.zip(jitter),
-      Effect.repeat(Schedule.recurs(99)),
+    const jitter = Effect.sync(() => Math.floor(Math.random() * 401) + 100).pipe(
+      Effect.flatMap((ms) => Effect.sleep(Duration.millis(ms))),
     );
+
+    yield* queryOnce.pipe(Effect.zip(jitter), Effect.repeat(Schedule.recurs(99)));
   }),
   { timeout: 120_000 },
 );

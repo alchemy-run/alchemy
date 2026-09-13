@@ -19,10 +19,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -42,10 +39,7 @@ const getReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -85,9 +79,7 @@ const postEmail = (workerUrl: string, raw: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     return yield* client.execute(
-      HttpClientRequest.post(emailTriggerPath(workerUrl)).pipe(
-        HttpClientRequest.bodyText(raw),
-      ),
+      HttpClientRequest.post(emailTriggerPath(workerUrl)).pipe(HttpClientRequest.bodyText(raw)),
     );
   });
 
@@ -155,10 +147,7 @@ test.provider(
         Effect.gen(function* () {
           const kv = yield* Cloudflare.KV.Namespace("EmailHandlerKV");
           const worker = yield* Cloudflare.Worker("email-handler-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/email-handler-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/email-handler-worker.ts"),
             env: { KV: kv },
           });
           return { worker };
@@ -176,17 +165,13 @@ test.provider(
 
       // 1. Accepted email → 200, and the handler observed the envelope
       //    addresses, the raw MIME content, and the parsed headers.
-      const okRaw = incomingEmail(
-        `accept-me:${marker}`,
-        `<incoming-${marker}@example.com>`,
-      );
+      const okRaw = incomingEmail(`accept-me:${marker}`, `<incoming-${marker}@example.com>`);
       const okRes = yield* postEmail(deployed.worker.url!, okRaw);
       expect(okRes.status).toBe(200);
       expect(yield* okRes.text).toBe("Worker successfully processed email");
 
-      const received = (yield* (yield* getReady(
-        `${deployed.worker.url}/received`,
-      )).json) as unknown as Array<ReceivedEmail>;
+      const received = (yield* (yield* getReady(`${deployed.worker.url}/received`))
+        .json) as unknown as Array<ReceivedEmail>;
       expect(received).toHaveLength(1);
       const message = received[0];
       // Envelope addresses come from the URL parameters, the raw MIME body

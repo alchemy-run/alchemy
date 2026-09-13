@@ -391,16 +391,12 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>(
-  "AWS.KinesisAnalyticsV2.Application",
-);
+export const Application = Resource<Application>("AWS.KinesisAnalyticsV2.Application");
 
 /**
  * Validation error raised before any AWS call when the props are invalid.
  */
-export class ApplicationValidationError extends Data.TaggedError(
-  "ApplicationValidationError",
-)<{
+export class ApplicationValidationError extends Data.TaggedError("ApplicationValidationError")<{
   readonly message: string;
 }> {}
 
@@ -408,9 +404,7 @@ export class ApplicationValidationError extends Data.TaggedError(
  * The application did not settle into a stable status (READY / RUNNING /
  * ROLLED_BACK) within the bounded wait.
  */
-export class ApplicationNotStable extends Data.TaggedError(
-  "ApplicationNotStable",
-)<{
+export class ApplicationNotStable extends Data.TaggedError("ApplicationNotStable")<{
   readonly applicationName: string;
   readonly status: string;
 }> {}
@@ -420,27 +414,18 @@ export class ApplicationNotStable extends Data.TaggedError(
  * — either the start rolled back (bad jar, bad configuration) or the
  * bounded wait elapsed.
  */
-export class ApplicationStartFailed extends Data.TaggedError(
-  "ApplicationStartFailed",
-)<{
+export class ApplicationStartFailed extends Data.TaggedError("ApplicationStartFailed")<{
   readonly applicationName: string;
   readonly status: string;
 }> {}
 
-class ApplicationStatusPending extends Data.TaggedError(
-  "ApplicationStatusPending",
-)<{
+class ApplicationStatusPending extends Data.TaggedError("ApplicationStatusPending")<{
   readonly status: string;
 }> {}
 
-class ApplicationStillExists extends Data.TaggedError(
-  "ApplicationStillExists",
-) {}
+class ApplicationStillExists extends Data.TaggedError("ApplicationStillExists") {}
 
-const createApplicationName = (
-  id: string,
-  props: { applicationName?: string | undefined },
-) =>
+const createApplicationName = (id: string, props: { applicationName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.applicationName) {
       return props.applicationName;
@@ -467,9 +452,7 @@ const retryThroughRolePropagation = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "InvalidArgumentException" &&
-      /role|assume|trust|principal/i.test(
-        (e as { message?: string }).message ?? "",
-      ),
+      /role|assume|trust|principal/i.test((e as { message?: string }).message ?? ""),
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
@@ -484,20 +467,14 @@ const retryWhileInUse = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "ResourceInUseException" ||
-      e._tag === "ConcurrentModificationException",
+      e._tag === "ResourceInUseException" || e._tag === "ConcurrentModificationException",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
-const toTagRecord = (
-  tags: ReadonlyArray<{ Key: string; Value?: string }> | undefined,
-) =>
+const toTagRecord = (tags: ReadonlyArray<{ Key: string; Value?: string }> | undefined) =>
   Object.fromEntries(
     (tags ?? [])
-      .filter(
-        (tag): tag is { Key: string; Value: string } =>
-          typeof tag.Value === "string",
-      )
+      .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")
       .map((tag) => [tag.Key, tag.Value]),
   );
 
@@ -523,31 +500,22 @@ const toAttrs = ({
     applicationMode: detail.ApplicationMode as ApplicationMode | undefined,
     serviceExecutionRole: detail.ServiceExecutionRole,
     roleName,
-    vpcConfigurationId:
-      config?.VpcConfigurationDescriptions?.[0]?.VpcConfigurationId,
+    vpcConfigurationId: config?.VpcConfigurationDescriptions?.[0]?.VpcConfigurationId,
     codeBucketArn: code?.BucketARN,
     codeFileKey: code?.FileKey,
     codeObjectVersion: code?.ObjectVersion,
     maintenanceWindowStartTime:
-      detail.ApplicationMaintenanceConfigurationDescription
-        ?.ApplicationMaintenanceWindowStartTime,
+      detail.ApplicationMaintenanceConfigurationDescription?.ApplicationMaintenanceWindowStartTime,
     maintenanceWindowEndTime:
-      detail.ApplicationMaintenanceConfigurationDescription
-        ?.ApplicationMaintenanceWindowEndTime,
+      detail.ApplicationMaintenanceConfigurationDescription?.ApplicationMaintenanceWindowEndTime,
     tags,
   };
 };
 
-const describeApplicationDetail = Effect.fn(function* (
-  applicationName: string,
-) {
+const describeApplicationDetail = Effect.fn(function* (applicationName: string) {
   const response = yield* analytics
     .describeApplication({ ApplicationName: applicationName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.ApplicationDetail;
 });
 
@@ -567,11 +535,7 @@ const readApplication = Effect.fn(function* ({
   // just means it's gone.
   const tagsResponse = yield* analytics
     .listTagsForResource({ ResourceARN: detail.ApplicationARN })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!tagsResponse) {
     return undefined;
   }
@@ -589,32 +553,23 @@ const waitForApplicationStable = (applicationName: string) =>
   Effect.gen(function* () {
     const detail = yield* describeApplicationDetail(applicationName);
     if (!detail) {
-      return yield* Effect.fail(
-        new ApplicationNotStable({ applicationName, status: "MISSING" }),
-      );
+      return yield* Effect.fail(new ApplicationNotStable({ applicationName, status: "MISSING" }));
     }
     if (
       detail.ApplicationStatus !== "READY" &&
       detail.ApplicationStatus !== "RUNNING" &&
       detail.ApplicationStatus !== "ROLLED_BACK"
     ) {
-      return yield* Effect.fail(
-        new ApplicationStatusPending({ status: detail.ApplicationStatus }),
-      );
+      return yield* Effect.fail(new ApplicationStatusPending({ status: detail.ApplicationStatus }));
     }
     return detail;
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(45),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(45)]),
     }),
     Effect.catchTag("ApplicationStatusPending", (e) =>
-      Effect.fail(
-        new ApplicationNotStable({ applicationName, status: e.status }),
-      ),
+      Effect.fail(new ApplicationNotStable({ applicationName, status: e.status })),
     ),
   );
 
@@ -631,21 +586,14 @@ const waitForApplicationRunning = (applicationName: string) =>
     if (status === "STARTING" || status === "UPDATING") {
       return yield* Effect.fail(new ApplicationStatusPending({ status }));
     }
-    return yield* Effect.fail(
-      new ApplicationStartFailed({ applicationName, status }),
-    );
+    return yield* Effect.fail(new ApplicationStartFailed({ applicationName, status }));
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(57),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(57)]),
     }),
     Effect.catchTag("ApplicationStatusPending", (e) =>
-      Effect.fail(
-        new ApplicationStartFailed({ applicationName, status: e.status }),
-      ),
+      Effect.fail(new ApplicationStartFailed({ applicationName, status: e.status })),
     ),
   );
 
@@ -655,26 +603,17 @@ const waitForApplicationStopped = (applicationName: string) =>
   Effect.gen(function* () {
     const detail = yield* describeApplicationDetail(applicationName);
     const status = detail?.ApplicationStatus ?? "MISSING";
-    if (
-      status === "READY" ||
-      status === "ROLLED_BACK" ||
-      status === "MISSING"
-    ) {
+    if (status === "READY" || status === "ROLLED_BACK" || status === "MISSING") {
       return;
     }
     return yield* Effect.fail(new ApplicationStatusPending({ status }));
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
     Effect.catchTag("ApplicationStatusPending", (e) =>
-      Effect.fail(
-        new ApplicationNotStable({ applicationName, status: e.status }),
-      ),
+      Effect.fail(new ApplicationNotStable({ applicationName, status: e.status })),
     ),
   );
 
@@ -689,10 +628,7 @@ const waitForApplicationDeleted = (applicationName: string) =>
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(50),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(50)]),
     }),
   );
 
@@ -715,9 +651,7 @@ const toWirePropertyGroups = (
 
 // Canonical string form for observed-vs-desired comparison — order of
 // groups and of keys within a group is not significant.
-const canonicalPropertyGroups = (
-  groups: ReadonlyArray<analytics.PropertyGroup> | undefined,
-) =>
+const canonicalPropertyGroups = (groups: ReadonlyArray<analytics.PropertyGroup> | undefined) =>
   JSON.stringify(
     [...(groups ?? [])]
       .map((group) => ({
@@ -742,19 +676,16 @@ const checkpointDiffers = (
   (desired.checkpointingEnabled !== undefined &&
     desired.checkpointingEnabled !== observed?.CheckpointingEnabled) ||
   (desired.checkpointInterval !== undefined &&
-    toWireMillis(desired.checkpointInterval) !==
-      observed?.CheckpointInterval) ||
+    toWireMillis(desired.checkpointInterval) !== observed?.CheckpointInterval) ||
   (desired.minPauseBetweenCheckpoints !== undefined &&
-    toWireMillis(desired.minPauseBetweenCheckpoints) !==
-      observed?.MinPauseBetweenCheckpoints);
+    toWireMillis(desired.minPauseBetweenCheckpoints) !== observed?.MinPauseBetweenCheckpoints);
 
 const monitoringDiffers = (
   desired: MonitoringConfigurationProps,
   observed: analytics.MonitoringConfigurationDescription | undefined,
 ) =>
   desired.configurationType !== observed?.ConfigurationType ||
-  (desired.metricsLevel !== undefined &&
-    desired.metricsLevel !== observed?.MetricsLevel) ||
+  (desired.metricsLevel !== undefined && desired.metricsLevel !== observed?.MetricsLevel) ||
   (desired.logLevel !== undefined && desired.logLevel !== observed?.LogLevel);
 
 const parallelismDiffers = (
@@ -762,8 +693,7 @@ const parallelismDiffers = (
   observed: analytics.ParallelismConfigurationDescription | undefined,
 ) =>
   desired.configurationType !== observed?.ConfigurationType ||
-  (desired.parallelism !== undefined &&
-    desired.parallelism !== observed?.Parallelism) ||
+  (desired.parallelism !== undefined && desired.parallelism !== observed?.Parallelism) ||
   (desired.parallelismPerKPU !== undefined &&
     desired.parallelismPerKPU !== observed?.ParallelismPerKPU) ||
   (desired.autoScalingEnabled !== undefined &&
@@ -778,9 +708,7 @@ const toFlinkConfiguration = (
     configuration.CheckpointConfiguration = {
       ConfigurationType: flink.checkpointConfiguration.configurationType,
       CheckpointingEnabled: flink.checkpointConfiguration.checkpointingEnabled,
-      CheckpointInterval: toWireMillis(
-        flink.checkpointConfiguration.checkpointInterval,
-      ),
+      CheckpointInterval: toWireMillis(flink.checkpointConfiguration.checkpointInterval),
       MinPauseBetweenCheckpoints: toWireMillis(
         flink.checkpointConfiguration.minPauseBetweenCheckpoints,
       ),
@@ -811,18 +739,12 @@ const toFlinkConfigurationUpdate = (
   const update: analytics.FlinkApplicationConfigurationUpdate = {};
   if (
     flink.checkpointConfiguration &&
-    checkpointDiffers(
-      flink.checkpointConfiguration,
-      observed?.CheckpointConfigurationDescription,
-    )
+    checkpointDiffers(flink.checkpointConfiguration, observed?.CheckpointConfigurationDescription)
   ) {
     update.CheckpointConfigurationUpdate = {
       ConfigurationTypeUpdate: flink.checkpointConfiguration.configurationType,
-      CheckpointingEnabledUpdate:
-        flink.checkpointConfiguration.checkpointingEnabled,
-      CheckpointIntervalUpdate: toWireMillis(
-        flink.checkpointConfiguration.checkpointInterval,
-      ),
+      CheckpointingEnabledUpdate: flink.checkpointConfiguration.checkpointingEnabled,
+      CheckpointIntervalUpdate: toWireMillis(flink.checkpointConfiguration.checkpointInterval),
       MinPauseBetweenCheckpointsUpdate: toWireMillis(
         flink.checkpointConfiguration.minPauseBetweenCheckpoints,
       ),
@@ -830,10 +752,7 @@ const toFlinkConfigurationUpdate = (
   }
   if (
     flink.monitoringConfiguration &&
-    monitoringDiffers(
-      flink.monitoringConfiguration,
-      observed?.MonitoringConfigurationDescription,
-    )
+    monitoringDiffers(flink.monitoringConfiguration, observed?.MonitoringConfigurationDescription)
   ) {
     update.MonitoringConfigurationUpdate = {
       ConfigurationTypeUpdate: flink.monitoringConfiguration.configurationType,
@@ -852,8 +771,7 @@ const toFlinkConfigurationUpdate = (
       ConfigurationTypeUpdate: flink.parallelismConfiguration.configurationType,
       ParallelismUpdate: flink.parallelismConfiguration.parallelism,
       ParallelismPerKPUUpdate: flink.parallelismConfiguration.parallelismPerKPU,
-      AutoScalingEnabledUpdate:
-        flink.parallelismConfiguration.autoScalingEnabled,
+      AutoScalingEnabledUpdate: flink.parallelismConfiguration.autoScalingEnabled,
     };
   }
   return Object.keys(update).length > 0 ? update : undefined;
@@ -863,8 +781,7 @@ export const ApplicationProvider = () =>
   Provider.effect(
     Application,
     Effect.gen(function* () {
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
       // Ensure the synthesized IAM role exists and its inline policy matches
       // the desired access. `createRole` tolerates the already-exists race;
@@ -920,11 +837,7 @@ export const ApplicationProvider = () =>
             // ApplicationCloudWatchLoggingOption), so log delivery is granted
             // broadly rather than per-stream.
             Effect: "Allow",
-            Action: [
-              "logs:DescribeLogGroups",
-              "logs:DescribeLogStreams",
-              "logs:PutLogEvents",
-            ],
+            Action: ["logs:DescribeLogGroups", "logs:DescribeLogStreams", "logs:PutLogEvents"],
             Resource: ["*"],
           },
         ];
@@ -958,12 +871,7 @@ export const ApplicationProvider = () =>
       });
 
       return Application.Provider.of({
-        stables: [
-          "applicationName",
-          "applicationArn",
-          "applicationMode",
-          "roleName",
-        ],
+        stables: ["applicationName", "applicationArn", "applicationMode", "roleName"],
 
         // Enumerate every application in the ambient account/region and
         // hydrate each summary into the `read` shape with bounded
@@ -971,9 +879,7 @@ export const ApplicationProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const summaries = Array.from(
-              yield* analytics.listApplications
-                .items({})
-                .pipe(Stream.runCollect),
+              yield* analytics.listApplications.items({}).pipe(Stream.runCollect),
             );
             const hydrated = yield* Effect.forEach(
               summaries,
@@ -985,23 +891,19 @@ export const ApplicationProvider = () =>
               { concurrency: 10 },
             );
             return hydrated.filter(
-              (attrs): attrs is Application["Attributes"] =>
-                attrs !== undefined,
+              (attrs): attrs is Application["Attributes"] => attrs !== undefined,
             );
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationName =
-            output?.applicationName ??
-            (yield* createApplicationName(id, olds ?? {}));
+            output?.applicationName ?? (yield* createApplicationName(id, olds ?? {}));
           const state = yield* readApplication({
             applicationName,
             roleName: output?.roleName,
           });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -1012,10 +914,7 @@ export const ApplicationProvider = () =>
             return { action: "replace" } as const;
           }
           // The mode is immutable.
-          if (
-            (olds?.applicationMode ?? "STREAMING") !==
-            (news?.applicationMode ?? "STREAMING")
-          ) {
+          if ((olds?.applicationMode ?? "STREAMING") !== (news?.applicationMode ?? "STREAMING")) {
             return { action: "replace" } as const;
           }
           // The API offers no UpdateApplication field for the description.
@@ -1045,8 +944,7 @@ export const ApplicationProvider = () =>
             ? undefined
             : (output?.roleName ?? (yield* createRoleName(id)));
           const serviceExecutionRole =
-            news.serviceExecutionRole ??
-            `arn:aws:iam::${accountId}:role/${roleName}`;
+            news.serviceExecutionRole ?? `arn:aws:iam::${accountId}:role/${roleName}`;
           if (roleName) {
             yield* ensureRole({
               id,
@@ -1086,14 +984,10 @@ export const ApplicationProvider = () =>
                 },
                 EnvironmentProperties: news.environmentProperties
                   ? {
-                      PropertyGroups: toWirePropertyGroups(
-                        news.environmentProperties,
-                      ),
+                      PropertyGroups: toWirePropertyGroups(news.environmentProperties),
                     }
                   : undefined,
-                FlinkApplicationConfiguration: toFlinkConfiguration(
-                  news.flinkConfiguration,
-                ),
+                FlinkApplicationConfiguration: toFlinkConfiguration(news.flinkConfiguration),
                 ApplicationSnapshotConfiguration:
                   news.snapshotsEnabled !== undefined
                     ? { SnapshotsEnabled: news.snapshotsEnabled }
@@ -1114,12 +1008,7 @@ export const ApplicationProvider = () =>
                 retryThroughRolePropagation(
                   analytics
                     .createApplication(request)
-                    .pipe(
-                      Effect.catchTag(
-                        "ResourceInUseException",
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void)),
                 ),
               );
             yield* create(createRequest).pipe(
@@ -1147,12 +1036,11 @@ export const ApplicationProvider = () =>
             if (!detail) return;
             const config = detail.ApplicationConfigurationDescription;
 
-            const configurationUpdate: analytics.ApplicationConfigurationUpdate =
-              {};
+            const configurationUpdate: analytics.ApplicationConfigurationUpdate = {};
 
             const observedCode =
-              config?.ApplicationCodeConfigurationDescription
-                ?.CodeContentDescription?.S3ApplicationCodeLocationDescription;
+              config?.ApplicationCodeConfigurationDescription?.CodeContentDescription
+                ?.S3ApplicationCodeLocationDescription;
             if (
               observedCode?.BucketARN !== news.code.bucketArn ||
               observedCode?.FileKey !== news.code.fileKey ||
@@ -1173,18 +1061,13 @@ export const ApplicationProvider = () =>
 
             if (
               news.environmentProperties !== undefined &&
-              canonicalPropertyGroups(
-                toWirePropertyGroups(news.environmentProperties),
-              ) !==
+              canonicalPropertyGroups(toWirePropertyGroups(news.environmentProperties)) !==
                 canonicalPropertyGroups(
-                  config?.EnvironmentPropertyDescriptions
-                    ?.PropertyGroupDescriptions,
+                  config?.EnvironmentPropertyDescriptions?.PropertyGroupDescriptions,
                 )
             ) {
               configurationUpdate.EnvironmentPropertyUpdates = {
-                PropertyGroups: toWirePropertyGroups(
-                  news.environmentProperties,
-                ),
+                PropertyGroups: toWirePropertyGroups(news.environmentProperties),
               };
             }
 
@@ -1194,16 +1077,14 @@ export const ApplicationProvider = () =>
                 config?.FlinkApplicationConfigurationDescription,
               );
               if (flinkUpdate) {
-                configurationUpdate.FlinkApplicationConfigurationUpdate =
-                  flinkUpdate;
+                configurationUpdate.FlinkApplicationConfigurationUpdate = flinkUpdate;
               }
             }
 
             if (
               news.snapshotsEnabled !== undefined &&
               news.snapshotsEnabled !==
-                config?.ApplicationSnapshotConfigurationDescription
-                  ?.SnapshotsEnabled
+                config?.ApplicationSnapshotConfigurationDescription?.SnapshotsEnabled
             ) {
               configurationUpdate.ApplicationSnapshotConfigurationUpdate = {
                 SnapshotsEnabledUpdate: news.snapshotsEnabled,
@@ -1215,10 +1096,7 @@ export const ApplicationProvider = () =>
               news.vpc &&
               observedVpc &&
               (!sameStringSet(news.vpc.subnetIds, observedVpc.SubnetIds) ||
-                !sameStringSet(
-                  news.vpc.securityGroupIds,
-                  observedVpc.SecurityGroupIds,
-                ))
+                !sameStringSet(news.vpc.securityGroupIds, observedVpc.SecurityGroupIds))
             ) {
               configurationUpdate.VpcConfigurationUpdates = [
                 {
@@ -1248,12 +1126,8 @@ export const ApplicationProvider = () =>
             }
             if (!dirty) return;
 
-            yield* retryThroughRolePropagation(
-              analytics.updateApplication(update),
-            );
-            yield* session.note(
-              `Updated application configuration for ${applicationName}`,
-            );
+            yield* retryThroughRolePropagation(analytics.updateApplication(update));
+            yield* session.note(`Updated application configuration for ${applicationName}`);
           });
           yield* retryWhileInUse(syncConfiguration);
           yield* waitForApplicationStable(applicationName);
@@ -1272,13 +1146,10 @@ export const ApplicationProvider = () =>
               yield* analytics.updateApplicationMaintenanceConfiguration({
                 ApplicationName: applicationName,
                 ApplicationMaintenanceConfigurationUpdate: {
-                  ApplicationMaintenanceWindowStartTimeUpdate:
-                    news.maintenanceWindowStartTime!,
+                  ApplicationMaintenanceWindowStartTimeUpdate: news.maintenanceWindowStartTime!,
                 },
               });
-              yield* session.note(
-                `Updated maintenance window for ${applicationName}`,
-              );
+              yield* session.note(`Updated maintenance window for ${applicationName}`);
             });
             yield* retryWhileInUse(syncMaintenanceWindow);
           }
@@ -1289,8 +1160,7 @@ export const ApplicationProvider = () =>
             const detail = yield* describeApplicationDetail(applicationName);
             if (!detail) return;
             const observedVpcs =
-              detail.ApplicationConfigurationDescription
-                ?.VpcConfigurationDescriptions ?? [];
+              detail.ApplicationConfigurationDescription?.VpcConfigurationDescriptions ?? [];
             if (news.vpc && observedVpcs.length === 0) {
               yield* analytics.addApplicationVpcConfiguration({
                 ApplicationName: applicationName,
@@ -1300,18 +1170,14 @@ export const ApplicationProvider = () =>
                   SecurityGroupIds: news.vpc.securityGroupIds,
                 },
               });
-              yield* session.note(
-                `Attached VPC configuration to ${applicationName}`,
-              );
+              yield* session.note(`Attached VPC configuration to ${applicationName}`);
             } else if (!news.vpc && observedVpcs[0]?.VpcConfigurationId) {
               yield* analytics.deleteApplicationVpcConfiguration({
                 ApplicationName: applicationName,
                 CurrentApplicationVersionId: detail.ApplicationVersionId,
                 VpcConfigurationId: observedVpcs[0].VpcConfigurationId,
               });
-              yield* session.note(
-                `Detached VPC configuration from ${applicationName}`,
-              );
+              yield* session.note(`Detached VPC configuration from ${applicationName}`);
             }
           });
           yield* retryWhileInUse(syncVpcAttachment);
@@ -1329,8 +1195,7 @@ export const ApplicationProvider = () =>
             yield* waitForApplicationRunning(applicationName);
           } else if (
             news.start !== true &&
-            (stable.ApplicationStatus === "RUNNING" ||
-              stable.ApplicationStatus === "AUTOSCALING")
+            (stable.ApplicationStatus === "RUNNING" || stable.ApplicationStatus === "AUTOSCALING")
           ) {
             yield* retryWhileInUse(
               analytics.stopApplication({
@@ -1347,11 +1212,7 @@ export const ApplicationProvider = () =>
           const applicationArn = stable.ApplicationARN;
           const observedTagsResponse = yield* analytics
             .listTagsForResource({ ResourceARN: applicationArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           const observedTags = toTagRecord(observedTagsResponse?.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (removed.length > 0) {
@@ -1396,9 +1257,7 @@ export const ApplicationProvider = () =>
           // DeleteApplication requires the application's CreateTimestamp —
           // observe it fresh rather than trusting persisted state. Missing
           // application means the delete already happened.
-          const detail = yield* describeApplicationDetail(
-            output.applicationName,
-          );
+          const detail = yield* describeApplicationDetail(output.applicationName);
           if (detail?.CreateTimestamp) {
             yield* retryWhileInUse(
               analytics
@@ -1406,12 +1265,7 @@ export const ApplicationProvider = () =>
                   ApplicationName: output.applicationName,
                   CreateTimestamp: detail.CreateTimestamp,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
             );
             yield* waitForApplicationDeleted(output.applicationName);
           }

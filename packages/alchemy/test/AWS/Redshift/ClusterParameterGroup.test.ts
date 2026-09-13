@@ -67,9 +67,7 @@ test.provider(
       });
 
       // Out-of-band verification via distilled.
-      const observedParams = yield* readUserParameters(
-        created.clusterParameterGroupName,
-      );
+      const observedParams = yield* readUserParameters(created.clusterParameterGroupName);
       expect(observedParams).toEqual({
         enable_user_activity_logging: "true",
         statement_timeout: "60000",
@@ -95,14 +93,10 @@ test.provider(
         }),
       );
 
-      expect(updated.clusterParameterGroupName).toBe(
-        created.clusterParameterGroupName,
-      );
+      expect(updated.clusterParameterGroupName).toBe(created.clusterParameterGroupName);
       expect(updated.parameters).toEqual({ statement_timeout: "120000" });
 
-      const reobservedParams = yield* readUserParameters(
-        created.clusterParameterGroupName,
-      );
+      const reobservedParams = yield* readUserParameters(created.clusterParameterGroupName);
       expect(reobservedParams).toEqual({ statement_timeout: "120000" });
 
       // Destroy and verify gone with the typed not-found tag.
@@ -145,9 +139,7 @@ test.provider(
         }),
       );
       expect(replaced.description).toBe("after replacement");
-      expect(replaced.clusterParameterGroupName).not.toBe(
-        created.clusterParameterGroupName,
-      );
+      expect(replaced.clusterParameterGroupName).not.toBe(created.clusterParameterGroupName);
 
       // Old group is gone, new group exists.
       const oldGone = yield* Effect.flip(
@@ -159,9 +151,7 @@ test.provider(
       const observed = yield* redshift.describeClusterParameterGroups({
         ParameterGroupName: replaced.clusterParameterGroupName,
       });
-      expect(observed.ParameterGroups?.[0]?.Description).toBe(
-        "after replacement",
-      );
+      expect(observed.ParameterGroups?.[0]?.Description).toBe("after replacement");
 
       yield* stack.destroy();
       const error = yield* Effect.flip(

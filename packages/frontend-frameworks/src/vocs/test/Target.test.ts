@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeDeployTarget } from "../../core/index.ts";
-import {
-  DEFAULT_TARGET_SPECIFIER,
-  isVocsTarget,
-  selectVocsTargetInput,
-} from "../Target.ts";
+import { DEFAULT_TARGET_SPECIFIER, isVocsTarget, selectVocsTargetInput } from "../Target.ts";
 
 describe("Vocs target selection", () => {
   it("uses the Vocs Cloudflare target by default", () => {
@@ -16,9 +12,7 @@ describe("Vocs target selection", () => {
 
   it("unwraps the E2E harness Cloudflare worker configuration", () => {
     const worker = { compatibilityDate: "2026-03-10" };
-    expect(
-      selectVocsTargetInput({ target: { cloudflare: { worker } } }),
-    ).toEqual({
+    expect(selectVocsTargetInput({ target: { cloudflare: { worker } } })).toEqual({
       input: DEFAULT_TARGET_SPECIFIER,
       config: worker,
     });
@@ -58,8 +52,6 @@ describe("Vocs target selection", () => {
         }),
       ),
     ).toBe(true);
-    expect(
-      isVocsTarget(makeDeployTarget({ platform: "test", config: undefined })),
-    ).toBe(false);
+    expect(isVocsTarget(makeDeployTarget({ platform: "test", config: undefined }))).toBe(false);
   });
 });

@@ -18,21 +18,12 @@ import {
 } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-import {
-  ApiTargetFunction,
-  ApiTargetFunctionLive,
-} from "./fixtures/api-handler.ts";
-import {
-  WebTargetFunction,
-  WebTargetFunctionLive,
-} from "./fixtures/web-handler.ts";
+import { ApiTargetFunction, ApiTargetFunctionLive } from "./fixtures/api-handler.ts";
+import { WebTargetFunction, WebTargetFunctionLive } from "./fixtures/web-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The flagship ELBv2 e2e: one internet-facing ALB routes two path patterns to
 // two different Lambda targets (no VPC targets, no NAT — Lambda targets prove
@@ -70,18 +61,13 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           { Name: "group-name", Values: ["default"] },
         ],
       });
-      const defaultGroupId = groupResult.SecurityGroups?.[0]
-        ?.GroupId as SecurityGroupId;
+      const defaultGroupId = groupResult.SecurityGroups?.[0]?.GroupId as SecurityGroupId;
       expect(defaultGroupId).toBeTruthy();
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const apiFn = yield* ApiTargetFunction.pipe(
-            Effect.provide(ApiTargetFunctionLive),
-          );
-          const webFn = yield* WebTargetFunction.pipe(
-            Effect.provide(WebTargetFunctionLive),
-          );
+          const apiFn = yield* ApiTargetFunction.pipe(Effect.provide(ApiTargetFunctionLive));
+          const webFn = yield* WebTargetFunction.pipe(Effect.provide(WebTargetFunctionLive));
 
           // Add one stack-owned ingress rule to the standing default SG. The
           // ALB uses only pre-existing network containers, so teardown does
@@ -186,25 +172,19 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         TargetGroupArn: out.apiTargetGroupArn,
       });
       expect(
-        apiHealth.TargetHealthDescriptions?.some(
-          (d) => d.Target?.Id === out.apiFunctionArn,
-        ),
+        apiHealth.TargetHealthDescriptions?.some((d) => d.Target?.Id === out.apiFunctionArn),
       ).toBe(true);
       const webHealth = yield* elbv2.describeTargetHealth({
         TargetGroupArn: out.webTargetGroupArn,
       });
       expect(
-        webHealth.TargetHealthDescriptions?.some(
-          (d) => d.Target?.Id === out.webFunctionArn,
-        ),
+        webHealth.TargetHealthDescriptions?.some((d) => d.Target?.Id === out.webFunctionArn),
       ).toBe(true);
 
       // Resolve the newly-created ALB explicitly before the first HTTP
       // request. Starting fetch while its hostname is still propagating can
       // retain the negative DNS lookup for every retry in this process.
-      const [albAddress] = yield* Effect.tryPromise(() =>
-        resolve4(out.dnsName),
-      ).pipe(
+      const [albAddress] = yield* Effect.tryPromise(() => resolve4(out.dnsName)).pipe(
         Effect.flatMap((addresses) =>
           addresses[0]
             ? Effect.succeed(addresses)
@@ -230,10 +210,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const [apiBody, webBody] = (yield* Effect.all(
         [getJson(`${baseUrl}/api/hello`), getJson(`${baseUrl}/web/hello`)],
         { concurrency: "unbounded" },
-      )) as [
-        { target: string; path: string },
-        { target: string; path: string },
-      ];
+      )) as [{ target: string; path: string }, { target: string; path: string }];
       expect(apiBody.target).toBe("api");
       expect(apiBody.path).toBe("/api/hello");
       expect(webBody.target).toBe("web");
@@ -250,9 +227,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         .describeTargetGroups({ TargetGroupArns: [out.apiTargetGroupArn] })
         .pipe(
           Effect.map((r) => r.TargetGroups?.length ?? 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
     }).pipe(logLevel),

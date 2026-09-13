@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface DeleteJobRequest extends Omit<
-  amplify.DeleteJobRequest,
-  "appId"
-> {}
+export interface DeleteJobRequest extends Omit<amplify.DeleteJobRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:DeleteJob`.
@@ -33,9 +30,7 @@ export interface DeleteJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: DeleteJobRequest,
-    ) => Effect.Effect<amplify.DeleteJobResult, amplify.DeleteJobError>
+    (request: DeleteJobRequest) => Effect.Effect<amplify.DeleteJobResult, amplify.DeleteJobError>
   >
 > {}
 

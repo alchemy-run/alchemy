@@ -63,9 +63,7 @@ test(
 
     const send = Effect.gen(function* () {
       const sendResponse = yield* executeWhenReady(
-        HttpClientRequest.post(
-          `${url}/queue/send?text=${encodeURIComponent(text)}`,
-        ),
+        HttpClientRequest.post(`${url}/queue/send?text=${encodeURIComponent(text)}`),
       );
       expect(sendResponse.status).toBe(202);
       const { sent } = (yield* sendResponse.json) as { sent: Message };
@@ -88,9 +86,7 @@ test(
         sent.push(yield* send);
       }
       for (const message of sent) {
-        const resultResponse = yield* HttpClient.get(
-          `${url}/queue/${message.id}`,
-        );
+        const resultResponse = yield* HttpClient.get(`${url}/queue/${message.id}`);
         if (resultResponse.status === 200) {
           const body = yield* resultResponse.text;
           if (body) return JSON.parse(body) as Message;

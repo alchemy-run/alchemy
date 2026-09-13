@@ -6,9 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 
-const timeoutHandlerPath = fileURLToPath(
-  new URL("./timeout-handler.ts", import.meta.url),
-);
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -81,9 +79,7 @@ test.provider(
       });
       expect(liveCreated.MaximumRetryAttempts).toBe(0);
       expect(liveCreated.MaximumEventAgeInSeconds).toBe(60);
-      expect(liveCreated.DestinationConfig?.OnFailure?.Destination).toBe(
-        undefined,
-      );
+      expect(liveCreated.DestinationConfig?.OnFailure?.Destination).toBe(undefined);
 
       // --- update retry behavior and add a failure destination ---
       const updated = yield* stack.deploy(
@@ -107,9 +103,7 @@ test.provider(
       });
       expect(liveUpdated.MaximumRetryAttempts).toBe(1);
       expect(liveUpdated.MaximumEventAgeInSeconds).toBe(120);
-      expect(liveUpdated.DestinationConfig?.OnFailure?.Destination).toBe(
-        created.queue.queueArn,
-      );
+      expect(liveUpdated.DestinationConfig?.OnFailure?.Destination).toBe(created.queue.queueArn);
 
       // --- omit the prop: the config is deleted, not left behind ---
       const removed = yield* stack.deploy(program({}));
@@ -151,10 +145,7 @@ test.provider(
 
       // --- omit the alias prop: the alias-scoped config is deleted ---
       const aliasCleared = yield* stack.deploy(program({ alias: {} }));
-      yield* expectNoConfig(
-        aliasCleared.fn.functionName,
-        aliasCleared.live!.aliasName,
-      );
+      yield* expectNoConfig(aliasCleared.fn.functionName, aliasCleared.live!.aliasName);
 
       yield* stack.destroy();
 
@@ -164,16 +155,11 @@ test.provider(
         FunctionName: aliasCleared.fn.functionName,
       }).pipe(
         Effect.flatMap(() =>
-          Effect.fail(
-            new Error(`Function ${aliasCleared.fn.functionName} still exists`),
-          ),
+          Effect.fail(new Error(`Function ${aliasCleared.fn.functionName} still exists`)),
         ),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
     }).pipe(
@@ -183,18 +169,11 @@ test.provider(
   { timeout: 360_000 },
 );
 
-const getConfigOrUndefined = Effect.fn(function* (
-  functionName: string,
-  qualifier?: string,
-) {
+const getConfigOrUndefined = Effect.fn(function* (functionName: string, qualifier?: string) {
   return yield* Lambda.getFunctionEventInvokeConfig({
     FunctionName: functionName,
     Qualifier: qualifier,
-  }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
 
 // Reads until the config matches the expected shape (updates propagate
@@ -214,8 +193,7 @@ const expectConfig = Effect.fn(function* (
         config !== undefined &&
         config.MaximumRetryAttempts === expected.maximumRetryAttempts &&
         config.MaximumEventAgeInSeconds === expected.maximumEventAgeInSeconds &&
-        config.DestinationConfig?.OnFailure?.Destination ===
-          expected.onFailureDestination,
+        config.DestinationConfig?.OnFailure?.Destination === expected.onFailureDestination,
       () => new Error("Event invoke config update has not propagated yet"),
     ),
     Effect.retry({
@@ -224,10 +202,7 @@ const expectConfig = Effect.fn(function* (
   );
 });
 
-const expectNoConfig = Effect.fn(function* (
-  functionName: string,
-  qualifier?: string,
-) {
+const expectNoConfig = Effect.fn(function* (functionName: string, qualifier?: string) {
   yield* getConfigOrUndefined(functionName, qualifier).pipe(
     Effect.filterOrFail(
       (config) => config === undefined,

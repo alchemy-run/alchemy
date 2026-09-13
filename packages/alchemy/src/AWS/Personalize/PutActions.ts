@@ -37,12 +37,7 @@ export interface PutActions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutActionsRequest,
-    ) => Effect.Effect<
-      personalizeevents.PutActionsResponse,
-      personalizeevents.PutActionsError
-    >
+    ) => Effect.Effect<personalizeevents.PutActionsResponse, personalizeevents.PutActionsError>
   >
 > {}
-export const PutActions = Binding.Service<PutActions>(
-  "AWS.Personalize.PutActions",
-);
+export const PutActions = Binding.Service<PutActions>("AWS.Personalize.PutActions");

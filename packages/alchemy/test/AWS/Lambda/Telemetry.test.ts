@@ -8,19 +8,13 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
-import {
-  OtelTestFunction,
-  OtelTestFunctionLive,
-} from "./fixtures/otel-handler.ts";
+import { OtelTestFunction, OtelTestFunctionLive } from "./fixtures/otel-handler.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
 });
 
-const collectorMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-collector-worker.ts",
-);
+const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/otel-collector-worker.ts");
 
 // The OTLP sink the Lambda exports to. A workers.dev URL is fine here —
 // the 1042 worker-to-worker restriction doesn't apply to requests coming
@@ -63,9 +57,7 @@ describe("AWS.Lambda Telemetry", () => {
           .deploy(
             Effect.gen(function* () {
               yield* collectorWorker();
-              const fn = yield* OtelTestFunction.pipe(
-                Effect.provide(OtelTestFunctionLive),
-              );
+              const fn = yield* OtelTestFunction.pipe(Effect.provide(OtelTestFunctionLive));
               return { fn };
             }),
           )

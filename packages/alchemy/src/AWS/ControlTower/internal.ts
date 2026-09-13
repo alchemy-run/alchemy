@@ -68,8 +68,7 @@ const sortKeysDeep = (value: unknown): unknown => {
  * parameter documents that round-trip through the Control Tower API (which
  * may reorder object keys).
  */
-export const canonicalJson = (value: unknown): string =>
-  JSON.stringify(sortKeysDeep(value)) ?? "";
+export const canonicalJson = (value: unknown): string => JSON.stringify(sortKeysDeep(value)) ?? "";
 
 /**
  * Canonical comparison form for `{ key, value }` parameter lists: sorted by
@@ -77,7 +76,4 @@ export const canonicalJson = (value: unknown): string =>
  */
 export const canonicalParameters = (
   parameters: readonly { key: string; value: any }[] | undefined,
-): string =>
-  canonicalJson(
-    [...(parameters ?? [])].sort((l, r) => l.key.localeCompare(r.key)),
-  );
+): string => canonicalJson([...(parameters ?? [])].sort((l, r) => l.key.localeCompare(r.key)));

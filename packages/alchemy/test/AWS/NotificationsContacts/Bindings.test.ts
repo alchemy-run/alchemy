@@ -12,29 +12,19 @@ import NotificationsContactsTestFunctionLive, {
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "NotificationsContactsBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "NotificationsContactsBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
 describe("NotificationsContacts Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "NotificationsContacts test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("NotificationsContacts test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
-      yield* Effect.logInfo(
-        "NotificationsContacts test setup: deploying fixture",
-      );
+      yield* Effect.logInfo("NotificationsContacts test setup: deploying fixture");
       const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* NotificationsContactsTestFunction;
@@ -121,9 +111,7 @@ describe("NotificationsContacts Bindings", () => {
           // code must surface one of the operation's TYPED error tags,
           // proving the IAM grant and request wiring end-to-end.
           expect(response.activated).toBe(false);
-          expect(["ValidationException", "ConflictException"]).toContain(
-            response.errorTag,
-          );
+          expect(["ValidationException", "ConflictException"]).toContain(response.errorTag);
         }),
       { timeout: 120_000 },
     );

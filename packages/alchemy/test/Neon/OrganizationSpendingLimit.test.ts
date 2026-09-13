@@ -25,14 +25,7 @@ const context = {
 test(
   "spending alerts require positive integer cents and an organization identity",
   Effect.gen(function* () {
-    for (const spendingLimitCents of [
-      0,
-      -1,
-      1.5,
-      Infinity,
-      NaN,
-      Number.MAX_SAFE_INTEGER + 1,
-    ]) {
+    for (const spendingLimitCents of [0, -1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
       expect(
         Result.isFailure(
           yield* validateOrganizationSpendingLimit({
@@ -57,53 +50,49 @@ test(
   }),
 );
 
-test.provider(
-  "spending organization changes fail before replacing the existing policy",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* OrganizationSpendingLimit.Provider;
-      const olds = { orgId: "org-old", spendingLimitCents: 100 };
+test.provider("spending organization changes fail before replacing the existing policy", () =>
+  Effect.gen(function* () {
+    const provider = yield* OrganizationSpendingLimit.Provider;
+    const olds = { orgId: "org-old", spendingLimitCents: 100 };
+    expect(
+      yield* provider.diff!({
+        ...context,
+        olds,
+        news: { orgId: "org-new", spendingLimitCents: 100 },
+        output: undefined,
+      }).pipe(
+        Effect.as(false),
+        Effect.catchTag("InvalidOrganizationSpendingLimit", () => Effect.succeed(true)),
+      ),
+    ).toBe(true);
+    for (const news of [
+      Output.literal(olds),
+      Effect.succeed(olds),
+      { ...olds, orgId: Output.literal("org-new") },
+    ]) {
       expect(
         yield* provider.diff!({
           ...context,
           olds,
-          news: { orgId: "org-new", spendingLimitCents: 100 },
-          output: undefined,
-        }).pipe(
-          Effect.as(false),
-          Effect.catchTag("InvalidOrganizationSpendingLimit", () =>
-            Effect.succeed(true),
-          ),
-        ),
-      ).toBe(true);
-      for (const news of [
-        Output.literal(olds),
-        Effect.succeed(olds),
-        { ...olds, orgId: Output.literal("org-new") },
-      ]) {
-        expect(
-          yield* provider.diff!({
-            ...context,
-            olds,
-            news,
-            output: undefined,
-          }),
-        ).toBeUndefined();
-      }
-      expect(
-        yield* provider.diff!({
-          ...context,
-          olds,
-          news: { ...olds, spendingLimitCents: Output.literal(200) },
+          news,
           output: undefined,
         }),
       ).toBeUndefined();
-    }).pipe(
-      Effect.provideService(
-        SDK.Credentials,
-        Effect.die("Unexpected Neon request in a no-I/O guard test"),
-      ),
+    }
+    expect(
+      yield* provider.diff!({
+        ...context,
+        olds,
+        news: { ...olds, spendingLimitCents: Output.literal(200) },
+        output: undefined,
+      }),
+    ).toBeUndefined();
+  }).pipe(
+    Effect.provideService(
+      SDK.Credentials,
+      Effect.die("Unexpected Neon request in a no-I/O guard test"),
     ),
+  ),
 );
 
 test.provider(
@@ -132,9 +121,7 @@ test.provider(
           })
           .pipe(
             Effect.as(false),
-            Effect.catchTag("InvalidOrganizationSpendingLimit", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("InvalidOrganizationSpendingLimit", () => Effect.succeed(true)),
           ),
       ).toBe(true);
     }).pipe(
@@ -149,10 +136,7 @@ test(
   "spending snapshots capture null without adoption and retain the baseline across interrupted writes",
   Effect.sync(() => {
     for (const baseline of [null, 400]) {
-      const snapshot = organizationSpendingLimitSnapshot(
-        "org-fixture",
-        baseline,
-      );
+      const snapshot = organizationSpendingLimitSnapshot("org-fixture", baseline);
       expect(Unowned.is(snapshot)).toBe(baseline !== null);
       expect(snapshot.initialSpendingLimitCents).toBe(baseline);
       expect(snapshot.managedSpendingLimitCents).toBe(baseline);
@@ -165,11 +149,7 @@ test(
       expect(refreshed.spendingLimitCents).toBe(100);
       expect(refreshed.initialSpendingLimitCents).toBe(baseline);
       expect(refreshed.managedSpendingLimitCents).toBe(baseline);
-      const disappeared = organizationSpendingLimitSnapshot(
-        "org-fixture",
-        null,
-        refreshed,
-      );
+      const disappeared = organizationSpendingLimitSnapshot("org-fixture", null, refreshed);
       expect(disappeared.initialSpendingLimitCents).toBe(baseline);
     }
   }),
@@ -181,9 +161,7 @@ test.provider(
     Effect.gen(function* () {
       const provider = yield* OrganizationSpendingLimit.Provider;
       const incomplete = organizationSpendingLimitSnapshot("org-fixture", null);
-      yield* Effect.sync(() =>
-        Reflect.deleteProperty(incomplete, "initialSpendingLimitCents"),
-      );
+      yield* Effect.sync(() => Reflect.deleteProperty(incomplete, "initialSpendingLimitCents"));
       for (const output of [undefined, incomplete]) {
         expect(
           yield* provider
@@ -202,9 +180,7 @@ test.provider(
             .pipe(
               adopt(true),
               Effect.as(false),
-              Effect.catchTag("InvalidOrganizationSpendingLimit", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("InvalidOrganizationSpendingLimit", () => Effect.succeed(true)),
             ),
         ).toBe(true);
       }
@@ -232,8 +208,7 @@ test.provider.skipIf(!enabled)(
       yield* stack.destroy();
       const organization = orgId!;
       const request = { org_id: organization };
-      const original = (yield* SDK.getOrganizationSpendingLimit(request))
-        .spending_limit_cents;
+      const original = (yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents;
       const application = (value: number, takeOwnership = false) =>
         OrganizationSpendingLimit("Alert", {
           orgId: organization,
@@ -248,37 +223,27 @@ test.provider.skipIf(!enabled)(
           initialSpendingLimitCents: null,
           managedSpendingLimitCents: null,
         });
-        expect(
-          (yield* SDK.getOrganizationSpendingLimit(request))
-            .spending_limit_cents,
-        ).toBeNull();
+        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBeNull();
         const created = yield* stack.deploy(application(threshold));
         expect(created.initialSpendingLimitCents).toBeNull();
-        expect(
-          (yield* SDK.getOrganizationSpendingLimit(request))
-            .spending_limit_cents,
-        ).toBe(threshold);
+        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+          threshold,
+        );
         yield* stack.deploy(application(threshold + 1));
         yield* SDK.setOrganizationSpendingLimit({
           ...request,
           spending_limit_cents: threshold + 2,
         });
-        expect(
-          Result.isFailure(yield* stack.destroy().pipe(Effect.result)),
-        ).toBe(true);
-        expect(
-          (yield* SDK.getOrganizationSpendingLimit(request))
-            .spending_limit_cents,
-        ).toBe(threshold + 2);
+        expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
+        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+          threshold + 2,
+        );
         yield* SDK.setOrganizationSpendingLimit({
           ...request,
           spending_limit_cents: threshold + 1,
         });
         yield* stack.destroy();
-        expect(
-          (yield* SDK.getOrganizationSpendingLimit(request))
-            .spending_limit_cents,
-        ).toBeNull();
+        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBeNull();
       }
 
       const baseline = original ?? threshold + 100;
@@ -287,30 +252,27 @@ test.provider.skipIf(!enabled)(
           ...request,
           spending_limit_cents: baseline,
         });
-      expect(
-        Result.isFailure(
-          yield* stack.plan(application(threshold)).pipe(Effect.result),
-        ),
-      ).toBe(true);
-      expect(
-        (yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents,
-      ).toBe(baseline);
+      expect(Result.isFailure(yield* stack.plan(application(threshold)).pipe(Effect.result))).toBe(
+        true,
+      );
+      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+        baseline,
+      );
       const adopted = yield* stack.deploy(application(threshold, true));
       expect(adopted.initialSpendingLimitCents).toBe(baseline);
-      expect(
-        (yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents,
-      ).toBe(threshold);
+      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+        threshold,
+      );
       const updated = yield* stack.deploy(application(threshold + 1));
       expect(updated.initialSpendingLimitCents).toBe(baseline);
       yield* stack.destroy();
-      expect(
-        (yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents,
-      ).toBe(baseline);
-      if (original === null)
-        yield* SDK.deleteOrganizationSpendingLimit(request);
-      expect(
-        (yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents,
-      ).toBe(original);
+      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+        baseline,
+      );
+      if (original === null) yield* SDK.deleteOrganizationSpendingLimit(request);
+      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+        original,
+      );
       yield* stack.destroy();
     }),
   { timeout: 120_000, exclusive: true },

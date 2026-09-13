@@ -14,26 +14,18 @@ import { PlatformServices } from "../../src/Util/PlatformServices";
 
 /** Resolves `true` when the effect is still running (parked) after the timeout. */
 const parks = <A, E>(effect: Effect.Effect<A, E>) =>
-  Effect.runPromise(
-    effect.pipe(Effect.timeoutOption("50 millis"), Effect.map(Option.isNone)),
-  );
+  Effect.runPromise(effect.pipe(Effect.timeoutOption("50 millis"), Effect.map(Option.isNone)));
 
 describe("devKeepAlive", () => {
   test("passes success through untouched", () =>
-    expect(Effect.runPromise(devKeepAlive(Effect.succeed(42)))).resolves.toBe(
-      42,
-    ));
+    expect(Effect.runPromise(devKeepAlive(Effect.succeed(42)))).resolves.toBe(42));
 
   test("parks on a typed failure instead of exiting", () =>
-    expect(
-      parks(devKeepAlive(Effect.fail(new Error("plan failed")))),
-    ).resolves.toBe(true));
+    expect(parks(devKeepAlive(Effect.fail(new Error("plan failed"))))).resolves.toBe(true));
 
   test("parks on a defect instead of exiting", () =>
     expect(
-      parks(
-        devKeepAlive(Effect.die(new TypeError("undefined is not an object"))),
-      ),
+      parks(devKeepAlive(Effect.die(new TypeError("undefined is not an object")))),
     ).resolves.toBe(true));
 
   // A run that ends by itself with nothing but interruptions in its cause was
@@ -41,21 +33,15 @@ describe("devKeepAlive", () => {
   // It must park like any other failure; letting it propagate exited dev
   // with a bare "Interrupted." and no hint of what went wrong (#1461).
   test("an internal interrupt-only cause parks instead of exiting", () =>
-    expect(
-      parks(devKeepAlive(Effect.failCause(Cause.interrupt()))),
-    ).resolves.toBe(true));
+    expect(parks(devKeepAlive(Effect.failCause(Cause.interrupt())))).resolves.toBe(true));
 
   test("interruption tears down a run that is still working (Ctrl-C in dev)", () =>
     expect(
       Effect.runPromise(
         Effect.gen(function* () {
-          const fiber = yield* Effect.forkChild(
-            devKeepAlive(Effect.sleep("1 second")),
-          );
+          const fiber = yield* Effect.forkChild(devKeepAlive(Effect.sleep("1 second")));
           yield* Effect.sleep("20 millis");
-          const exit = yield* Fiber.interrupt(fiber).pipe(
-            Effect.andThen(Fiber.await(fiber)),
-          );
+          const exit = yield* Fiber.interrupt(fiber).pipe(Effect.andThen(Fiber.await(fiber)));
           return exit._tag === "Failure" && Cause.hasInterruptsOnly(exit.cause);
         }),
       ),
@@ -65,9 +51,7 @@ describe("devKeepAlive", () => {
     expect(
       Effect.runPromise(
         Effect.gen(function* () {
-          const fiber = yield* Effect.forkChild(
-            devKeepAlive(Effect.die("apply failed")),
-          );
+          const fiber = yield* Effect.forkChild(devKeepAlive(Effect.die("apply failed")));
           yield* Effect.sleep("20 millis");
           yield* Fiber.interrupt(fiber);
           return "shut down";
@@ -83,11 +67,9 @@ describe("devKeepAlive", () => {
     expect(
       parks(
         devKeepAlive(
-          importStack(
-            fileURLToPath(
-              import.meta.resolve("./fixtures/import-stack-throws.ts"),
-            ),
-          ).pipe(Effect.provide(PlatformServices)),
+          importStack(fileURLToPath(import.meta.resolve("./fixtures/import-stack-throws.ts"))).pipe(
+            Effect.provide(PlatformServices),
+          ),
         ),
       ),
     ).resolves.toBe(true));

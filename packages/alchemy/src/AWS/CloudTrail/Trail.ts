@@ -322,9 +322,7 @@ const retryWhileConflict = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
-const toWireEventSelectors = (
-  selectors: TrailEventSelector[],
-): cloudtrail.EventSelector[] =>
+const toWireEventSelectors = (selectors: TrailEventSelector[]): cloudtrail.EventSelector[] =>
   selectors.map((s) => ({
     ReadWriteType: s.readWriteType,
     IncludeManagementEvents: s.includeManagementEvents,
@@ -380,21 +378,15 @@ export const TrailProvider = () =>
       const readTrail = (name: string) =>
         cloudtrail.getTrail({ Name: name }).pipe(
           Effect.map((r) => r.Trail),
-          Effect.catchTag("TrailNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("TrailNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const toAttributes = Effect.fn(function* (trail: cloudtrail.Trail) {
         const name = trail.Name!;
-        const isLogging = yield* cloudtrail
-          .getTrailStatus({ Name: trail.TrailARN ?? name })
-          .pipe(
-            Effect.map((s) => s.IsLogging ?? false),
-            Effect.catchTag("TrailNotFoundException", () =>
-              Effect.succeed(false),
-            ),
-          );
+        const isLogging = yield* cloudtrail.getTrailStatus({ Name: trail.TrailARN ?? name }).pipe(
+          Effect.map((s) => s.IsLogging ?? false),
+          Effect.catchTag("TrailNotFoundException", () => Effect.succeed(false)),
+        );
         return {
           trailName: name,
           trailArn: trail.TrailARN!,
@@ -412,16 +404,13 @@ export const TrailProvider = () =>
               .describeTrails({ includeShadowTrails: false })
               .pipe(Effect.map((r) => r.trailList ?? []));
             return yield* Effect.forEach(
-              trails.filter(
-                (t) => t.Name !== undefined && t.TrailARN !== undefined,
-              ),
+              trails.filter((t) => t.Name !== undefined && t.TrailARN !== undefined),
               (t) => toAttributes(t),
               { concurrency: 5 },
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.trailName ?? (yield* createTrailName(id, olds ?? {}));
+          const name = output?.trailName ?? (yield* createTrailName(id, olds ?? {}));
           const trail = yield* readTrail(name);
           if (trail === undefined) return undefined;
           const attrs = yield* toAttributes(trail);
@@ -471,9 +460,7 @@ export const TrailProvider = () =>
                   ...internalTags,
                 }).map(([Key, Value]) => ({ Key, Value })),
               }),
-            ).pipe(
-              Effect.catchTag("TrailAlreadyExistsException", () => Effect.void),
-            );
+            ).pipe(Effect.catchTag("TrailAlreadyExistsException", () => Effect.void));
             trail = yield* readTrail(name);
           }
           if (trail === undefined) {
@@ -485,58 +472,36 @@ export const TrailProvider = () =>
           // 3. SYNC settings — diff observed against desired, push only the
           // fields that actually changed (UpdateTrail leaves omitted fields
           // untouched, except booleans which we always pin to desired).
-          const settingsDelta: Partial<
-            Omit<cloudtrail.UpdateTrailRequest, "Name">
-          > = {};
+          const settingsDelta: Partial<Omit<cloudtrail.UpdateTrailRequest, "Name">> = {};
           if (trail.S3BucketName !== desired.S3BucketName) {
             settingsDelta.S3BucketName = desired.S3BucketName;
           }
           if ((trail.S3KeyPrefix ?? "") !== (desired.S3KeyPrefix ?? "")) {
             settingsDelta.S3KeyPrefix = desired.S3KeyPrefix ?? "";
           }
-          if (
-            (trail.IncludeGlobalServiceEvents ?? true) !==
-            desired.IncludeGlobalServiceEvents
-          ) {
-            settingsDelta.IncludeGlobalServiceEvents =
-              desired.IncludeGlobalServiceEvents;
+          if ((trail.IncludeGlobalServiceEvents ?? true) !== desired.IncludeGlobalServiceEvents) {
+            settingsDelta.IncludeGlobalServiceEvents = desired.IncludeGlobalServiceEvents;
           }
-          if (
-            (trail.IsMultiRegionTrail ?? false) !== desired.IsMultiRegionTrail
-          ) {
+          if ((trail.IsMultiRegionTrail ?? false) !== desired.IsMultiRegionTrail) {
             settingsDelta.IsMultiRegionTrail = desired.IsMultiRegionTrail;
           }
-          if (
-            (trail.LogFileValidationEnabled ?? false) !==
-            desired.EnableLogFileValidation
-          ) {
-            settingsDelta.EnableLogFileValidation =
-              desired.EnableLogFileValidation;
+          if ((trail.LogFileValidationEnabled ?? false) !== desired.EnableLogFileValidation) {
+            settingsDelta.EnableLogFileValidation = desired.EnableLogFileValidation;
           }
           if (
             desired.CloudWatchLogsLogGroupArn !== undefined &&
-            trail.CloudWatchLogsLogGroupArn !==
-              desired.CloudWatchLogsLogGroupArn
+            trail.CloudWatchLogsLogGroupArn !== desired.CloudWatchLogsLogGroupArn
           ) {
-            settingsDelta.CloudWatchLogsLogGroupArn =
-              desired.CloudWatchLogsLogGroupArn;
+            settingsDelta.CloudWatchLogsLogGroupArn = desired.CloudWatchLogsLogGroupArn;
             settingsDelta.CloudWatchLogsRoleArn = desired.CloudWatchLogsRoleArn;
           }
-          if (
-            desired.KmsKeyId !== undefined &&
-            trail.KmsKeyId !== desired.KmsKeyId
-          ) {
+          if (desired.KmsKeyId !== undefined && trail.KmsKeyId !== desired.KmsKeyId) {
             settingsDelta.KmsKeyId = desired.KmsKeyId;
           }
-          if (
-            (trail.IsOrganizationTrail ?? false) !== desired.IsOrganizationTrail
-          ) {
+          if ((trail.IsOrganizationTrail ?? false) !== desired.IsOrganizationTrail) {
             settingsDelta.IsOrganizationTrail = desired.IsOrganizationTrail;
           }
-          if (
-            desired.SnsTopicName !== undefined &&
-            trail.SnsTopicName !== desired.SnsTopicName
-          ) {
+          if (desired.SnsTopicName !== undefined && trail.SnsTopicName !== desired.SnsTopicName) {
             settingsDelta.SnsTopicName = desired.SnsTopicName;
           }
           if (Object.keys(settingsDelta).length > 0) {
@@ -559,14 +524,10 @@ export const TrailProvider = () =>
           if (observedLogging !== desiredLogging) {
             if (desiredLogging) {
               yield* session.note(`Starting logging for trail ${name}`);
-              yield* retryWhileConflict(
-                cloudtrail.startLogging({ Name: trailArn }),
-              );
+              yield* retryWhileConflict(cloudtrail.startLogging({ Name: trailArn }));
             } else {
               yield* session.note(`Stopping logging for trail ${name}`);
-              yield* retryWhileConflict(
-                cloudtrail.stopLogging({ Name: trailArn }),
-              );
+              yield* retryWhileConflict(cloudtrail.stopLogging({ Name: trailArn }));
             }
           }
 
@@ -574,21 +535,15 @@ export const TrailProvider = () =>
           // the trail's selectors untouched). Basic and advanced selectors
           // are mutually exclusive in the API; observed cloud selectors are
           // the diff baseline.
-          if (
-            news.eventSelectors !== undefined ||
-            news.advancedEventSelectors !== undefined
-          ) {
+          if (news.eventSelectors !== undefined || news.advancedEventSelectors !== undefined) {
             const observedSelectors = yield* cloudtrail.getEventSelectors({
               TrailName: trailArn,
             });
             if (news.advancedEventSelectors !== undefined) {
-              const desiredAdvanced = toWireAdvancedSelectors(
-                news.advancedEventSelectors,
-              );
+              const desiredAdvanced = toWireAdvancedSelectors(news.advancedEventSelectors);
               if (
-                JSON.stringify(
-                  observedSelectors.AdvancedEventSelectors ?? [],
-                ) !== JSON.stringify(desiredAdvanced)
+                JSON.stringify(observedSelectors.AdvancedEventSelectors ?? []) !==
+                JSON.stringify(desiredAdvanced)
               ) {
                 yield* session.note(`Updating advanced event selectors`);
                 yield* retryWhileConflict(
@@ -631,9 +586,7 @@ export const TrailProvider = () =>
               InsightType: s.insightType,
             }));
             if (
-              JSON.stringify(
-                observedInsights.map((s) => s.InsightType).sort(),
-              ) !==
+              JSON.stringify(observedInsights.map((s) => s.InsightType).sort()) !==
               JSON.stringify(desiredInsights.map((s) => s.InsightType).sort())
             ) {
               yield* session.note(`Updating Insights selectors`);
@@ -675,9 +628,7 @@ export const TrailProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* retryWhileConflict(
-            cloudtrail.deleteTrail({ Name: output.trailArn }),
-          ).pipe(
+          yield* retryWhileConflict(cloudtrail.deleteTrail({ Name: output.trailArn })).pipe(
             Effect.catchTag("TrailNotFoundException", () => Effect.void),
             // A stale ARN whose trail is already gone can also surface as an
             // invalid-ARN complaint; both mean "nothing left to delete".

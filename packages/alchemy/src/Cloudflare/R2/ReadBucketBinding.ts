@@ -35,9 +35,7 @@ export const makeRead = ({
         Effect.map((object) => (object ? wrapR2Object(object) : object)),
       ),
     get: ((key: string, options?: GetOptions) =>
-      use((raw) => raw.get(key, options)).pipe(
-        Effect.map(wrapR2ObjectOrBody),
-      )) as any,
+      use((raw) => raw.get(key, options)).pipe(Effect.map(wrapR2ObjectOrBody))) as any,
     list: (options?: ListOptions) =>
       use((raw) => raw.list(options)).pipe(Effect.map(wrapR2Objects)),
   };

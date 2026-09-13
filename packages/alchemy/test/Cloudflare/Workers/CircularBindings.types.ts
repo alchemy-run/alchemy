@@ -5,13 +5,9 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 import type { Tag } from "@/Named";
 
-class A extends Cloudflare.Worker<A, { work: () => Effect.Effect<string> }>()(
-  "A",
-) {}
+class A extends Cloudflare.Worker<A, { work: () => Effect.Effect<string> }>()("A") {}
 
-class B extends Cloudflare.Worker<B, { work: () => Effect.Effect<string> }>()(
-  "B",
-) {}
+class B extends Cloudflare.Worker<B, { work: () => Effect.Effect<string> }>()("B") {}
 
 const ALive = A.make(
   { main: import.meta.url },
@@ -45,19 +41,15 @@ const program = Effect.gen(function* () {
   return { aUrl: a.url, bUrl: b.url };
 }).pipe(Effect.provide(Layer.mergeAll(ALive, BLive)));
 
-type RequirementsOf<T> =
-  T extends Effect.Effect<unknown, unknown, infer Req> ? Req : never;
-type LayerRequirementsOf<T> =
-  T extends Layer.Layer<infer _A, infer _E, infer Req> ? Req : never;
+type RequirementsOf<T> = T extends Effect.Effect<unknown, unknown, infer Req> ? Req : never;
+type LayerRequirementsOf<T> = T extends Layer.Layer<infer _A, infer _E, infer Req> ? Req : never;
 type Assert<T extends true> = T;
 
 type _CircularWorkersAreProvided = Assert<
   Extract<RequirementsOf<typeof program>, A | B> extends never ? true : false
 >;
 
-class UserService extends Context.Service<UserService, {}>()(
-  "test/UserService",
-) {}
+class UserService extends Context.Service<UserService, {}>()("test/UserService") {}
 
 class OtherResource
   extends Context.Service<OtherResource, {}>()("test/OtherResource")
@@ -78,9 +70,5 @@ const RequirementsLive = A.make(
 );
 
 type _PreservesNonWorkerRequirements = Assert<
-  UserService | OtherResource extends LayerRequirementsOf<
-    typeof RequirementsLive
-  >
-    ? true
-    : false
+  UserService | OtherResource extends LayerRequirementsOf<typeof RequirementsLive> ? true : false
 >;

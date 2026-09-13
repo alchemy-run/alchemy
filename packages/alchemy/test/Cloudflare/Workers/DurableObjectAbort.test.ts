@@ -14,10 +14,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -29,9 +26,7 @@ const getJson = <T>(
   phase: "readiness" | "before abort" | "after abort",
 ): Effect.Effect<T, unknown> =>
   Effect.sync(() => `${url}?cb=${Date.now()}-${bust++}`).pipe(
-    Effect.flatMap((url) =>
-      client.get(url, { headers: { "cache-control": "no-cache" } }),
-    ),
+    Effect.flatMap((url) => client.get(url, { headers: { "cache-control": "no-cache" } })),
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.tapError((error) =>
       Effect.gen(function* () {
@@ -52,19 +47,14 @@ const getJson = <T>(
     Effect.retry({
       while: (error) =>
         Effect.gen(function* () {
-          if (phase !== "readiness" || new URL(url).pathname !== "/ping")
-            return false;
+          if (phase !== "readiness" || new URL(url).pathname !== "/ping") return false;
           if (error.reason._tag !== "StatusCodeError") return false;
           const response = error.reason.response;
-          const html = (response.headers["content-type"] ?? "").includes(
-            "text/html",
-          );
+          const html = (response.headers["content-type"] ?? "").includes("text/html");
           if (response.status === 404 && html) return true;
           if (response.status !== 500) return false;
           if (html) {
-            const body = yield* response.text.pipe(
-              Effect.orElseSucceed(() => ""),
-            );
+            const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""));
             return (
               body.includes('<span class="cf-error-code">1104</span>') &&
               body.includes("Script not found")
@@ -79,74 +69,54 @@ const getJson = <T>(
     Effect.flatMap((res) => res.json as Effect.Effect<T>),
   );
 
-describe.skipIf(!!process.env.FAST)(
-  "DurableObjectState.abort resets the isolate",
-  () => {
-    test(
-      "abort resets the Durable Object so the constructor re-runs",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        const client = yield* HttpClient.HttpClient;
+describe.skipIf(!!process.env.FAST)("DurableObjectState.abort resets the isolate", () => {
+  test(
+    "abort resets the Durable Object so the constructor re-runs",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const client = yield* HttpClient.HttpClient;
 
-        yield* getJson(client, `${url}/ping`, "readiness").pipe(
-          Effect.timeout("30 seconds"),
-        );
-        const before = yield* getJson<{ boots: number; ok: true }>(
-          client,
-          `${url}/ping`,
-          "before abort",
-        );
-        yield* Effect.logInfo("before abort", before);
-        expect(before.ok).toBe(true);
-        expect(before.boots).toBeGreaterThanOrEqual(1);
+      yield* getJson(client, `${url}/ping`, "readiness").pipe(Effect.timeout("30 seconds"));
+      const before = yield* getJson<{ boots: number; ok: true }>(
+        client,
+        `${url}/ping`,
+        "before abort",
+      );
+      yield* Effect.logInfo("before abort", before);
+      expect(before.ok).toBe(true);
+      expect(before.boots).toBeGreaterThanOrEqual(1);
 
-        const failure = yield* getJson(
-          client,
-          `${url}/fail-ping`,
-          "before abort",
-        ).pipe(Effect.flip);
-        if (
-          !isHttpClientError(failure) ||
-          failure.reason._tag !== "StatusCodeError"
-        ) {
-          return yield* Effect.die(failure);
-        }
-        expect(failure.reason.response.status).toBe(500);
-        expect(failure.reason.response.headers["x-do-readiness-retry"]).toBe(
-          "false",
-        );
-        expect(yield* failure.reason.response.text).toContain(
-          "application-ping-failure",
-        );
-        const unchanged = yield* getJson<{
-          boots: number;
-          failedPings: number;
-        }>(client, `${url}/ping`, "before abort");
-        expect(unchanged.boots).toBe(before.boots);
-        expect(unchanged.failedPings).toBe(1);
+      const failure = yield* getJson(client, `${url}/fail-ping`, "before abort").pipe(Effect.flip);
+      if (!isHttpClientError(failure) || failure.reason._tag !== "StatusCodeError") {
+        return yield* Effect.die(failure);
+      }
+      expect(failure.reason.response.status).toBe(500);
+      expect(failure.reason.response.headers["x-do-readiness-retry"]).toBe("false");
+      expect(yield* failure.reason.response.text).toContain("application-ping-failure");
+      const unchanged = yield* getJson<{
+        boots: number;
+        failedPings: number;
+      }>(client, `${url}/ping`, "before abort");
+      expect(unchanged.boots).toBe(before.boots);
+      expect(unchanged.failedPings).toBe(1);
 
-        const aborted = yield* Effect.sync(
-          () => `${url}/abort?cb=${Date.now()}-${bust++}`,
-        ).pipe(
-          Effect.flatMap((url) =>
-            client.get(url, { headers: { "cache-control": "no-cache" } }),
-          ),
-          Effect.flatMap(HttpClientResponse.filterStatusOk),
-          Effect.flatMap((response) => response.text),
-        );
-        yield* Effect.logInfo("abort RPC", aborted);
-        expect(aborted).toContain("test abort");
+      const aborted = yield* Effect.sync(() => `${url}/abort?cb=${Date.now()}-${bust++}`).pipe(
+        Effect.flatMap((url) => client.get(url, { headers: { "cache-control": "no-cache" } })),
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((response) => response.text),
+      );
+      yield* Effect.logInfo("abort RPC", aborted);
+      expect(aborted).toContain("test abort");
 
-        const after = yield* getJson<{ boots: number; ok: true }>(
-          client,
-          `${url}/ping`,
-          "after abort",
-        );
-        yield* Effect.logInfo("after abort", after);
-        expect(after.ok).toBe(true);
-        expect(after.boots).toBe(before.boots + 1);
-      }).pipe(logLevel),
-      { timeout: 120_000 },
-    );
-  },
-);
+      const after = yield* getJson<{ boots: number; ok: true }>(
+        client,
+        `${url}/ping`,
+        "after abort",
+      );
+      yield* Effect.logInfo("after abort", after);
+      expect(after.ok).toBe(true);
+      expect(after.boots).toBe(before.boots + 1);
+    }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+});

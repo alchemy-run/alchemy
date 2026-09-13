@@ -28,9 +28,7 @@ export default class Box extends Fly.Sprite<Box>()(
         yield* fs
           .writeFileString("/tmp/alchemy-sprite.txt", "hello-from-sprite")
           .pipe(Effect.orDie);
-        const text = yield* fs
-          .readFileString("/tmp/alchemy-sprite.txt")
-          .pipe(Effect.orDie);
+        const text = yield* fs.readFileString("/tmp/alchemy-sprite.txt").pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           ok: true,
           text,

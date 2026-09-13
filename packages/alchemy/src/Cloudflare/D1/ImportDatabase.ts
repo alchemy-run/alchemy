@@ -1,7 +1,4 @@
-import {
-  Credentials,
-  formatHeaders,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { Credentials, formatHeaders } from "@distilled.cloud/cloudflare/Credentials";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -46,16 +43,10 @@ export const importD1Database = (options: ImportDatabaseOptions) =>
     const credentialsEff = yield* Credentials;
     const credentials = yield* credentialsEff;
     const authHeaders = formatHeaders(credentials);
-    const url = importEndpoint(
-      credentials.apiBaseUrl,
-      options.accountId,
-      options.databaseId,
-    );
+    const url = importEndpoint(credentials.apiBaseUrl, options.accountId, options.databaseId);
     const client = yield* HttpClient.HttpClient;
 
-    const postJson = (
-      body: unknown,
-    ): Effect.Effect<ImportPollingResponse, never, never> =>
+    const postJson = (body: unknown): Effect.Effect<ImportPollingResponse, never, never> =>
       Effect.gen(function* () {
         const req = HttpClientRequest.post(url).pipe(
           HttpClientRequest.setHeaders(authHeaders),
@@ -64,9 +55,7 @@ export const importD1Database = (options: ImportDatabaseOptions) =>
         const res = yield* client.execute(req).pipe(Effect.orDie);
         if (res.status < 200 || res.status >= 300) {
           const text = yield* res.text.pipe(Effect.orElseSucceed(() => ""));
-          return yield* Effect.die(
-            `D1 import request failed (${res.status}): ${text}`,
-          );
+          return yield* Effect.die(`D1 import request failed (${res.status}): ${text}`);
         }
         const text = yield* res.text.pipe(Effect.orDie);
         const json = JSON.parse(text) as { result: ImportPollingResponse };
@@ -85,9 +74,7 @@ export const importD1Database = (options: ImportDatabaseOptions) =>
     });
 
     if (!init.uploadUrl) {
-      return yield* Effect.die(
-        init.error ?? "Failed to get upload URL for D1 import",
-      );
+      return yield* Effect.die(init.error ?? "Failed to get upload URL for D1 import");
     }
     const uploadFilename = options.filename ?? init.filename ?? "import.sql";
 
@@ -102,9 +89,7 @@ export const importD1Database = (options: ImportDatabaseOptions) =>
     const putRes = yield* client.execute(putReq).pipe(Effect.orDie);
     if (putRes.status < 200 || putRes.status >= 300) {
       const text = yield* putRes.text.pipe(Effect.orElseSucceed(() => ""));
-      return yield* Effect.die(
-        `Failed to upload SQL file to D1 (${putRes.status}): ${text}`,
-      );
+      return yield* Effect.die(`Failed to upload SQL file to D1 (${putRes.status}): ${text}`);
     }
 
     // Step 3: ingest
@@ -114,15 +99,11 @@ export const importD1Database = (options: ImportDatabaseOptions) =>
       filename: init.filename,
     });
     if (!ingest.at_bookmark) {
-      return yield* Effect.die(
-        ingest.error ?? "Ingest response missing bookmark",
-      );
+      return yield* Effect.die(ingest.error ?? "Ingest response missing bookmark");
     }
 
     // Step 4: poll until complete
-    const poll = (
-      bookmark: string,
-    ): Effect.Effect<ImportDatabaseResult, never, never> =>
+    const poll = (bookmark: string): Effect.Effect<ImportDatabaseResult, never, never> =>
       Effect.gen(function* () {
         const data = yield* postJson({
           action: "poll",
@@ -146,8 +127,5 @@ export const importD1Database = (options: ImportDatabaseOptions) =>
     return yield* poll(ingest.at_bookmark);
   });
 
-const importEndpoint = (
-  apiBaseUrl: string,
-  accountId: string,
-  databaseId: string,
-) => `${apiBaseUrl}/accounts/${accountId}/d1/database/${databaseId}/import`;
+const importEndpoint = (apiBaseUrl: string, accountId: string, databaseId: string) =>
+  `${apiBaseUrl}/accounts/${accountId}/d1/database/${databaseId}/import`;

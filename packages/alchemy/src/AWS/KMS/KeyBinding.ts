@@ -46,5 +46,4 @@ export const keyPolicyStatement = (
       };
 
 /** Stable human-readable label for tracing spans. @internal */
-export const keyLabel = (key: KeyLike): string =>
-  typeof key === "string" ? key : key.LogicalId;
+export const keyLabel = (key: KeyLike): string => (typeof key === "string" ? key : key.LogicalId);

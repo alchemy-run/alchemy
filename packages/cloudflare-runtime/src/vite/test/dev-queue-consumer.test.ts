@@ -70,9 +70,7 @@ async function startDevServer() {
           // The worker consumes the same queue it produces to, so the producer
           // binding must resolve to a local broker rather than the dev-registry
           // proxy. That only happens if this option reaches `runtime.start`.
-          queueConsumers: [
-            { queueName: QUEUE_NAME, maxBatchSize: 1, maxBatchTimeout: 0 },
-          ],
+          queueConsumers: [{ queueName: QUEUE_NAME, maxBatchSize: 1, maxBatchTimeout: 0 }],
         },
       }),
     ],
@@ -147,10 +145,6 @@ describe("queue consumers in dev", () => {
     await send("b");
     await send("c");
 
-    expect((await receivedEventually(received, 3)).sort()).toEqual([
-      "a",
-      "b",
-      "c",
-    ]);
+    expect((await receivedEventually(received, 3)).sort()).toEqual(["a", "b", "c"]);
   });
 });

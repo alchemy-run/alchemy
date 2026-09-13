@@ -26,10 +26,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeS3TestStack("GitBlobStoreS3Stack");
 
@@ -139,9 +136,7 @@ test(
        git push -q ${remote} main`,
     );
     // Compact now; the pack is written to the store.
-    yield* admin.repos
-      .compact({ params: { owner, repo: name } })
-      .pipe(edgeRetry);
+    yield* admin.repos.compact({ params: { owner, repo: name } }).pipe(edgeRetry);
     const repo = yield* admin.repos.get({ params: { owner, repo: name } }).pipe(
       edgeRetry,
       Effect.repeat({

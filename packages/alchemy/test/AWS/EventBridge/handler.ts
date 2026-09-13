@@ -62,8 +62,7 @@ export default EventBridgeTestFunction.make(
     functionUrl: true,
   },
   Effect.gen(function* () {
-    const { bus, customQueue, defaultQueue, toggleRule, archive } =
-      yield* BusAndQueues;
+    const { bus, customQueue, defaultQueue, toggleRule, archive } = yield* BusAndQueues;
 
     const putEventsCustom = yield* AWS.EventBridge.PutEvents(bus);
     const putEventsDefault = yield* AWS.EventBridge.PutEvents();
@@ -72,8 +71,7 @@ export default EventBridgeTestFunction.make(
     const enableRule = yield* AWS.EventBridge.EnableRule(toggleRule);
     const disableRule = yield* AWS.EventBridge.DisableRule(toggleRule);
     const describeToggleRule = yield* AWS.EventBridge.DescribeRule(toggleRule);
-    const listRuleNamesByTarget =
-      yield* AWS.EventBridge.ListRuleNamesByTarget();
+    const listRuleNamesByTarget = yield* AWS.EventBridge.ListRuleNamesByTarget();
     const startReplay = yield* AWS.EventBridge.StartReplay(archive);
     const describeReplay = yield* AWS.EventBridge.DescribeReplay();
     const cancelReplay = yield* AWS.EventBridge.CancelReplay();
@@ -81,8 +79,7 @@ export default EventBridgeTestFunction.make(
     const describeCustomBus = yield* AWS.EventBridge.DescribeEventBus(bus);
     const listEventBuses = yield* AWS.EventBridge.ListEventBuses();
     const listCustomBusRules = yield* AWS.EventBridge.ListRules(bus);
-    const listToggleRuleTargets =
-      yield* AWS.EventBridge.ListTargetsByRule(toggleRule);
+    const listToggleRuleTargets = yield* AWS.EventBridge.ListTargetsByRule(toggleRule);
     const testEventPattern = yield* AWS.EventBridge.TestEventPattern();
 
     // Consume loop on the CUSTOM bus: matching events are forwarded to the
@@ -200,9 +197,7 @@ export default EventBridgeTestFunction.make(
           // ListEventBuses is account-level; the default bus always exists.
           const result = yield* listEventBuses();
           return yield* HttpServerResponse.json({
-            names: (result.EventBuses ?? []).flatMap((b) =>
-              b.Name ? [b.Name] : [],
-            ),
+            names: (result.EventBuses ?? []).flatMap((b) => (b.Name ? [b.Name] : [])),
           });
         }
 
@@ -211,9 +206,7 @@ export default EventBridgeTestFunction.make(
           // and the consume-loop rule.
           const result = yield* listCustomBusRules();
           return yield* HttpServerResponse.json({
-            ruleNames: (result.Rules ?? []).flatMap((r) =>
-              r.Name ? [r.Name] : [],
-            ),
+            ruleNames: (result.Rules ?? []).flatMap((r) => (r.Name ? [r.Name] : [])),
           });
         }
 
@@ -266,9 +259,7 @@ export default EventBridgeTestFunction.make(
               EventStartTime: new Date(now - 10 * 60 * 1000),
               EventEndTime: new Date(now - 5 * 60 * 1000),
             }).pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
             ),
           );
           if (Result.isFailure(started)) {
@@ -280,9 +271,7 @@ export default EventBridgeTestFunction.make(
               { status: 400 },
             );
           }
-          const described = yield* Effect.result(
-            describeReplay({ ReplayName: replayName }),
-          );
+          const described = yield* Effect.result(describeReplay({ ReplayName: replayName }));
           if (Result.isFailure(described)) {
             return yield* HttpServerResponse.json(
               {

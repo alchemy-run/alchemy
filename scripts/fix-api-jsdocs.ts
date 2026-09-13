@@ -53,9 +53,7 @@ function fixBlock(block: string): string {
 
       const example = line.match(exampleTag);
       if (example) {
-        body.push(
-          `${example[1]}**Example:** ${example[2]?.trim() || "Example"}`,
-        );
+        body.push(`${example[1]}**Example:** ${example[2]?.trim() || "Example"}`);
         continue;
       }
     }

@@ -1,7 +1,4 @@
-import type {
-  AttributeValue,
-  ScalarAttributeType,
-} from "@distilled.cloud/aws/dynamodb";
+import type { AttributeValue, ScalarAttributeType } from "@distilled.cloud/aws/dynamodb";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
@@ -26,9 +23,7 @@ import {
  * Raised when a JavaScript value cannot be marshalled to a DynamoDB
  * `AttributeValue` (e.g. a function or symbol).
  */
-export class InvalidAttributeValue extends Data.TaggedError(
-  "InvalidAttributeValue",
-)<{
+export class InvalidAttributeValue extends Data.TaggedError("InvalidAttributeValue")<{
   message: string;
   value: any;
 }> {}
@@ -44,97 +39,95 @@ export class InvalidAttributeValue extends Data.TaggedError(
  */
 export const toAttributeValue: (
   value: any,
-) => Effect.Effect<AttributeValue, InvalidAttributeValue, never> = Effect.fn(
-  function* (value: any) {
-    if (value === undefined) {
+) => Effect.Effect<AttributeValue, InvalidAttributeValue, never> = Effect.fn(function* (
+  value: any,
+) {
+  if (value === undefined) {
+    return {
+      NULL: false,
+    };
+  } else if (value === null) {
+    return {
+      NULL: true,
+    };
+  } else if (typeof value === "boolean") {
+    return {
+      BOOL: value,
+    };
+  } else if (typeof value === "string") {
+    return {
+      S: value,
+    };
+  } else if (typeof value === "number") {
+    return {
+      N: value.toString(10),
+    };
+  } else if (Array.isArray(value)) {
+    return {
+      L: yield* Effect.all(value.map(toAttributeValue)),
+    };
+  } else if (value instanceof Set) {
+    const setType = getType(value);
+    if (setType === "EMPTY_SET") {
       return {
-        NULL: false,
+        SS: [],
       };
-    } else if (value === null) {
+    } else if (Array.isArray(setType)) {
       return {
-        NULL: true,
+        L: yield* Effect.all(setType.map(toAttributeValue)),
       };
-    } else if (typeof value === "boolean") {
+    } else if (setType === "SS") {
       return {
-        BOOL: value,
+        SS: Array.from(value.values()),
       };
-    } else if (typeof value === "string") {
+    } else if (setType === "NS") {
       return {
-        S: value,
+        NS: Array.from(value.values()).map((value) => value.toString(10)),
       };
-    } else if (typeof value === "number") {
+    } else if (setType === "BS") {
       return {
-        N: value.toString(10),
+        BS: Array.from(value.values()),
       };
-    } else if (Array.isArray(value)) {
+    } else {
       return {
-        L: yield* Effect.all(value.map(toAttributeValue)),
-      };
-    } else if (value instanceof Set) {
-      const setType = getType(value);
-      if (setType === "EMPTY_SET") {
-        return {
-          SS: [],
-        };
-      } else if (Array.isArray(setType)) {
-        return {
-          L: yield* Effect.all(setType.map(toAttributeValue)),
-        };
-      } else if (setType === "SS") {
-        return {
-          SS: Array.from(value.values()),
-        };
-      } else if (setType === "NS") {
-        return {
-          NS: Array.from(value.values()).map((value) => value.toString(10)),
-        };
-      } else if (setType === "BS") {
-        return {
-          BS: Array.from(value.values()),
-        };
-      } else {
-        return {
-          L: yield* Effect.all(
-            Array.from(value.values()).map(toAttributeValue),
-          ),
-        };
-      }
-    } else if (Buffer.isBuffer(value)) {
-      return {
-        B: new Uint8Array(value),
-      };
-    } else if (value instanceof File) {
-      return {
-        B: new Uint8Array(yield* Effect.promise(() => value.arrayBuffer())),
-      };
-    } else if (value instanceof Uint8Array) {
-      return {
-        B: value,
-      };
-    } else if (value instanceof ArrayBuffer) {
-      return {
-        B: new Uint8Array(value),
-      };
-    } else if (typeof value === "object") {
-      return {
-        M: Object.fromEntries(
-          yield* Effect.all(
-            Object.entries(value).map(([key, value]) =>
-              toAttributeValue(value).pipe(Effect.map((value) => [key, value])),
-            ),
-          ),
-        ),
+        L: yield* Effect.all(Array.from(value.values()).map(toAttributeValue)),
       };
     }
+  } else if (Buffer.isBuffer(value)) {
+    return {
+      B: new Uint8Array(value),
+    };
+  } else if (value instanceof File) {
+    return {
+      B: new Uint8Array(yield* Effect.promise(() => value.arrayBuffer())),
+    };
+  } else if (value instanceof Uint8Array) {
+    return {
+      B: value,
+    };
+  } else if (value instanceof ArrayBuffer) {
+    return {
+      B: new Uint8Array(value),
+    };
+  } else if (typeof value === "object") {
+    return {
+      M: Object.fromEntries(
+        yield* Effect.all(
+          Object.entries(value).map(([key, value]) =>
+            toAttributeValue(value).pipe(Effect.map((value) => [key, value])),
+          ),
+        ),
+      ),
+    };
+  }
 
-    return yield* Effect.fail(
-      new InvalidAttributeValue({
-        message: `Unknown value type: ${typeof value}`,
-        value,
-      }),
-    );
-  },
-);
+  return yield* Effect.fail(
+    new InvalidAttributeValue({
+      message: `Unknown value type: ${typeof value}`,
+      value,
+    }),
+  );
+});
 
 /**
  * Unmarshal a DynamoDB `AttributeValue` back into a plain JavaScript value
@@ -149,10 +142,7 @@ export const fromAttributeValue = (value: AttributeValue): any => {
     return value.L.map(fromAttributeValue);
   } else if (value.M) {
     return Object.fromEntries(
-      Object.entries(value.M).map(([key, value]) => [
-        key,
-        fromAttributeValue(value!),
-      ]),
+      Object.entries(value.M).map(([key, value]) => [key, fromAttributeValue(value!)]),
     );
   } else if (value.N) {
     return parseFloat(value.N);
@@ -224,9 +214,7 @@ const getType = (value: any): ValueType | ValueType[] => {
   }
 };
 
-export const isScalarAttributeType = (
-  type: string,
-): type is ScalarAttributeType => {
+export const isScalarAttributeType = (type: string): type is ScalarAttributeType => {
   return type === "S" || type === "N" || type === "B";
 };
 

@@ -12,22 +12,16 @@ export const attachmentStack = (attached = true) =>
     { providers: Cloudflare.providers(), state: Cloudflare.state() },
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const container = Cloudflare.Container<AttachmentContainerObject>(
-        "AttachmentContainer",
-        {
-          className: "AttachmentContainerObject",
-          image: "mendhak/http-https-echo:41",
-          maxInstances: 2,
-        },
-      );
-      const other = Cloudflare.Container<AttachmentContainerObject>(
-        "OtherAttachmentContainer",
-        {
-          className: "AttachmentContainerObject",
-          image: "mendhak/http-https-echo:41",
-          maxInstances: 2,
-        },
-      );
+      const container = Cloudflare.Container<AttachmentContainerObject>("AttachmentContainer", {
+        className: "AttachmentContainerObject",
+        image: "mendhak/http-https-echo:41",
+        maxInstances: 2,
+      });
+      const other = Cloudflare.Container<AttachmentContainerObject>("OtherAttachmentContainer", {
+        className: "AttachmentContainerObject",
+        image: "mendhak/http-https-echo:41",
+        maxInstances: 2,
+      });
       const worker = yield* Cloudflare.Worker("AttachmentWorker", {
         main: path.join(import.meta.dirname, "worker.ts"),
         env: attached ? { ECHO: container } : {},

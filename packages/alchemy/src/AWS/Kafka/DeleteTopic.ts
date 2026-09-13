@@ -30,6 +30,4 @@ export interface DeleteTopic extends Binding.Service<
     ) => Effect.Effect<kafka.DeleteTopicResponse, kafka.DeleteTopicError>
   >
 > {}
-export const DeleteTopic = Binding.Service<DeleteTopic>(
-  "AWS.Kafka.DeleteTopic",
-);
+export const DeleteTopic = Binding.Service<DeleteTopic>("AWS.Kafka.DeleteTopic");

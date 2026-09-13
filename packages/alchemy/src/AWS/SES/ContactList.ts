@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -137,8 +132,7 @@ export const ContactList = Resource<ContactList>("AWS.SES.ContactList");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const contactListArnOf = (region: string, accountId: string, name: string) =>
   `arn:aws:ses:${region}:${accountId}:contact-list/${name}`;
@@ -169,20 +163,13 @@ export const ContactListProvider = () =>
         id: string,
         props: Pick<ContactListProps, "contactListName">,
       ) {
-        return (
-          props.contactListName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.contactListName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getList = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getContactList({ ContactListName: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       return ContactList.Provider.of({
@@ -190,9 +177,7 @@ export const ContactListProvider = () =>
 
         list: Effect.fn(function* () {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const pages = yield* sesv2.listContactLists
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* sesv2.listContactLists.pages({}).pipe(Stream.runCollect);
           return Array.from(pages)
             .flatMap((page) => page.ContactLists ?? [])
             .flatMap((entry) =>
@@ -200,11 +185,7 @@ export const ContactListProvider = () =>
                 ? [
                     {
                       contactListName: entry.ContactListName,
-                      contactListArn: contactListArnOf(
-                        region,
-                        accountId,
-                        entry.ContactListName,
-                      ),
+                      contactListArn: contactListArnOf(region, accountId, entry.ContactListName),
                     },
                   ]
                 : [],
@@ -213,8 +194,7 @@ export const ContactListProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.contactListName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.contactListName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getList(name);
           if (!found) return undefined;
           const attrs = {
@@ -285,15 +265,12 @@ export const ContactListProvider = () =>
             const managesTopics = news.topics !== undefined;
             const descriptionChanged =
               managesDescription && observed.Description !== news.description;
-            const topicsChanged =
-              managesTopics && !sameTopics(observed.Topics, news.topics);
+            const topicsChanged = managesTopics && !sameTopics(observed.Topics, news.topics);
 
             if (descriptionChanged || topicsChanged) {
               yield* sesv2.updateContactList({
                 ContactListName: name,
-                Description: managesDescription
-                  ? news.description
-                  : observed.Description,
+                Description: managesDescription ? news.description : observed.Description,
                 Topics: managesTopics ? news.topics : observed.Topics,
               });
             }

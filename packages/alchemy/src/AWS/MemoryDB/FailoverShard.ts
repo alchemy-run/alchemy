@@ -30,12 +30,7 @@ export interface FailoverShard extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<memorydb.FailoverShardRequest, "ClusterName">,
-    ) => Effect.Effect<
-      memorydb.FailoverShardResponse,
-      memorydb.FailoverShardError
-    >
+    ) => Effect.Effect<memorydb.FailoverShardResponse, memorydb.FailoverShardError>
   >
 > {}
-export const FailoverShard = Binding.Service<FailoverShard>(
-  "AWS.MemoryDB.FailoverShard",
-);
+export const FailoverShard = Binding.Service<FailoverShard>("AWS.MemoryDB.FailoverShard");

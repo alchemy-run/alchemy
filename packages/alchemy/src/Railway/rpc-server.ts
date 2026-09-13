@@ -11,10 +11,8 @@ import {
   RPC_TOKEN_HEADER,
 } from "./rpc-token.ts";
 
-const header = (
-  headers: Record<string, string | undefined>,
-  name: string,
-): string => headers[name] ?? headers[name.toLowerCase()] ?? "";
+const header = (headers: Record<string, string | undefined>, name: string): string =>
+  headers[name] ?? headers[name.toLowerCase()] ?? "";
 
 const hostnameOf = (host: string): string => {
   const trimmed = host.trim();
@@ -27,8 +25,7 @@ const hostnameOf = (host: string): string => {
   return trimmed;
 };
 
-const isPrivateMesh = (host: string): boolean =>
-  hostnameOf(host).endsWith(PRIVATE_HOST_SUFFIX);
+const isPrivateMesh = (host: string): boolean => hostnameOf(host).endsWith(PRIVATE_HOST_SUFFIX);
 
 const tokensEqual = (left: string, right: string): boolean => {
   if (left.length !== right.length) return false;
@@ -117,9 +114,7 @@ export const serveRailwayRpc = <Req = never>(
     if (!Effect.isEffect(invoked)) {
       return yield* HttpServerResponse.json(invoked ?? null);
     }
-    const result = yield* Effect.result(
-      invoked as Effect.Effect<unknown, unknown>,
-    );
+    const result = yield* Effect.result(invoked as Effect.Effect<unknown, unknown>);
     if (Result.isSuccess(result)) {
       return yield* HttpServerResponse.json(result.success ?? null);
     }

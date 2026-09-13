@@ -14,9 +14,6 @@ import cloudflare_workers from "./cloudflare_workers.ts";
 export const WorkerConfigProvider = () =>
   cloudflare_workers.pipe(
     Effect.map(({ env }) =>
-      reifyBoundConfigProvider(
-        ConfigProvider.fromUnknown(env),
-        env as Record<string, unknown>,
-      ),
+      reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env as Record<string, unknown>),
     ),
   );

@@ -31,9 +31,7 @@ export default BackupSearchTestFunction.make(
       itemFilters: {
         s3ItemFilters: [
           {
-            objectKeys: [
-              { value: "alchemy-bindings-", operator: "BEGINS_WITH" },
-            ],
+            objectKeys: [{ value: "alchemy-bindings-", operator: "BEGINS_WITH" }],
           },
         ],
       },
@@ -41,10 +39,8 @@ export default BackupSearchTestFunction.make(
     });
 
     // --- search-job-scoped bindings ---
-    const listSearchJobResults =
-      yield* BackupSearch.ListSearchJobResults(search);
-    const listSearchJobBackups =
-      yield* BackupSearch.ListSearchJobBackups(search);
+    const listSearchJobResults = yield* BackupSearch.ListSearchJobResults(search);
+    const listSearchJobBackups = yield* BackupSearch.ListSearchJobBackups(search);
     const getSearchJob = yield* BackupSearch.GetSearchJob(search);
 
     const bound = { listSearchJobResults, listSearchJobBackups, getSearchJob };

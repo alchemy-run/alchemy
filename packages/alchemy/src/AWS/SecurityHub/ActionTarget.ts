@@ -72,9 +72,7 @@ export interface ActionTarget extends Resource<
  * );
  * ```
  */
-const ActionTargetResource = Resource<ActionTarget>(
-  "AWS.SecurityHub.ActionTarget",
-);
+const ActionTargetResource = Resource<ActionTarget>("AWS.SecurityHub.ActionTarget");
 
 export { ActionTargetResource as ActionTarget };
 
@@ -92,21 +90,15 @@ export const ActionTargetProvider = () =>
         props.id
           ? Effect.succeed(props.id)
           : createPhysicalName({ id, maxLength: 64 }).pipe(
-              Effect.map((name) =>
-                name.replace(/[^a-zA-Z0-9]/g, "").slice(-20),
-              ),
+              Effect.map((name) => name.replace(/[^a-zA-Z0-9]/g, "").slice(-20)),
             );
 
       const getActionTarget = (arn: string) =>
         securityhub.describeActionTargets({ ActionTargetArns: [arn] }).pipe(
           Effect.map((r) => r.ActionTargets?.[0]),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           // The whole hub may be disabled — the action target is gone too.
-          Effect.catchTag("InvalidAccessException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
         );
 
       const buildAttrs = (arn: string, t: securityhub.ActionTarget) => ({
@@ -171,13 +163,8 @@ export const ActionTargetProvider = () =>
                 Description: news.description,
                 Id: actionId,
               })
-              .pipe(
-                Effect.catchTag("ResourceConflictException", () => Effect.void),
-              );
-          } else if (
-            live.Name !== news.name ||
-            live.Description !== news.description
-          ) {
+              .pipe(Effect.catchTag("ResourceConflictException", () => Effect.void));
+          } else if (live.Name !== news.name || live.Description !== news.description) {
             // 3. SYNC — observed ↔ desired.
             yield* securityhub.updateActionTarget({
               ActionTargetArn: arn,
@@ -189,19 +176,14 @@ export const ActionTargetProvider = () =>
           // 4. RETURN fresh attributes.
           const final = yield* getActionTarget(arn);
           yield* session.note(arn);
-          return buildAttrs(
-            arn,
-            final ?? { Name: news.name, Description: news.description },
-          );
+          return buildAttrs(arn, final ?? { Name: news.name, Description: news.description });
         }),
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the action target (or the whole hub) may be gone.
-          yield* securityhub
-            .deleteActionTarget({ ActionTargetArn: output.actionTargetArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("InvalidAccessException", () => Effect.void),
-            );
+          yield* securityhub.deleteActionTarget({ ActionTargetArn: output.actionTargetArn }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.catchTag("InvalidAccessException", () => Effect.void),
+          );
         }),
       };
     }),

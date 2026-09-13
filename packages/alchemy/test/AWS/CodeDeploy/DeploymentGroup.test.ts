@@ -14,18 +14,13 @@ const applicationName = "alchemy-test-cd-app";
 const deploymentGroupName = "alchemy-test-cd-dg";
 const deploymentConfigName = "alchemy-test-cd-config";
 
-const getGroup = codedeploy
-  .getDeploymentGroup({ applicationName, deploymentGroupName })
-  .pipe(
-    Effect.map((res) => res.deploymentGroupInfo),
-    Effect.catchTag(
-      [
-        "DeploymentGroupDoesNotExistException",
-        "ApplicationDoesNotExistException",
-      ],
-      () => Effect.succeed(undefined),
-    ),
-  );
+const getGroup = codedeploy.getDeploymentGroup({ applicationName, deploymentGroupName }).pipe(
+  Effect.map((res) => res.deploymentGroupInfo),
+  Effect.catchTag(
+    ["DeploymentGroupDoesNotExistException", "ApplicationDoesNotExistException"],
+    () => Effect.succeed(undefined),
+  ),
+);
 
 // A Lambda-platform deployment group: an application, a custom canary
 // deployment configuration, a CodeDeploy service role (assumed by
@@ -56,9 +51,7 @@ const makeStack = (useCustomConfig: boolean) =>
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda"],
     });
     const group = yield* DeploymentGroup("Group", {
       applicationName: app.applicationName,
@@ -94,9 +87,7 @@ test.provider(
       expect(deployed.group.deploymentGroupName).toBe(deploymentGroupName);
       expect(deployed.group.deploymentGroupArn).toContain(":deploymentgroup:");
       expect(deployed.config.deploymentConfigName).toBe(deploymentConfigName);
-      expect(deployed.config.deploymentConfigArn).toContain(
-        ":deploymentconfig:",
-      );
+      expect(deployed.config.deploymentConfigArn).toContain(":deploymentconfig:");
       expect(deployed.config.deploymentConfigId).toBeTruthy();
       expect(deployed.config.computePlatform).toBe("Lambda");
 
@@ -104,9 +95,7 @@ test.provider(
       const created = yield* getGroup;
       expect(created?.deploymentGroupName).toBe(deploymentGroupName);
       expect(created?.computePlatform).toBe("Lambda");
-      expect(created?.deploymentConfigName).toBe(
-        "CodeDeployDefault.LambdaAllAtOnce",
-      );
+      expect(created?.deploymentConfigName).toBe("CodeDeployDefault.LambdaAllAtOnce");
 
       const appCheck = yield* codedeploy.getApplication({ applicationName });
       expect(appCheck.application?.computePlatform).toBe("Lambda");
@@ -117,29 +106,22 @@ test.provider(
       });
       expect(configCheck.deploymentConfigInfo?.computePlatform).toBe("Lambda");
       expect(
-        configCheck.deploymentConfigInfo?.trafficRoutingConfig?.timeBasedCanary
-          ?.canaryPercentage,
+        configCheck.deploymentConfigInfo?.trafficRoutingConfig?.timeBasedCanary?.canaryPercentage,
       ).toBe(10);
 
       // Canonical list() coverage for Application.
       const appProvider = yield* Provider.findProvider(Application);
       const apps = yield* appProvider.list();
-      expect(apps.some((a) => a.applicationName === applicationName)).toBe(
-        true,
-      );
+      expect(apps.some((a) => a.applicationName === applicationName)).toBe(true);
 
       // Canonical list() coverage for DeploymentConfig — custom configs are
       // listed, AWS-managed CodeDeployDefault.* ones are filtered out.
       const configProvider = yield* Provider.findProvider(DeploymentConfig);
       const configs = yield* configProvider.list();
-      expect(
-        configs.some((c) => c.deploymentConfigName === deploymentConfigName),
-      ).toBe(true);
-      expect(
-        configs.every(
-          (c) => !c.deploymentConfigName.startsWith("CodeDeployDefault."),
-        ),
-      ).toBe(true);
+      expect(configs.some((c) => c.deploymentConfigName === deploymentConfigName)).toBe(true);
+      expect(configs.every((c) => !c.deploymentConfigName.startsWith("CodeDeployDefault."))).toBe(
+        true,
+      );
 
       // Update — point the group at the custom config in place (no
       // replacement).
@@ -152,23 +134,15 @@ test.provider(
       yield* stack.destroy();
       const afterGroup = yield* getGroup;
       expect(afterGroup).toBeUndefined();
-      const afterApp = yield* codedeploy
-        .getApplication({ applicationName })
-        .pipe(
-          Effect.map((res) => res.application),
-          Effect.catchTag("ApplicationDoesNotExistException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const afterApp = yield* codedeploy.getApplication({ applicationName }).pipe(
+        Effect.map((res) => res.application),
+        Effect.catchTag("ApplicationDoesNotExistException", () => Effect.succeed(undefined)),
+      );
       expect(afterApp).toBeUndefined();
-      const afterConfig = yield* codedeploy
-        .getDeploymentConfig({ deploymentConfigName })
-        .pipe(
-          Effect.map((res) => res.deploymentConfigInfo),
-          Effect.catchTag("DeploymentConfigDoesNotExistException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const afterConfig = yield* codedeploy.getDeploymentConfig({ deploymentConfigName }).pipe(
+        Effect.map((res) => res.deploymentConfigInfo),
+        Effect.catchTag("DeploymentConfigDoesNotExistException", () => Effect.succeed(undefined)),
+      );
       expect(afterConfig).toBeUndefined();
     }),
   { timeout: 300_000 },

@@ -31,6 +31,4 @@ export interface DescribeJobs extends Binding.Service<
     ) => Effect.Effect<batch.DescribeJobsResponse, batch.DescribeJobsError>
   >
 > {}
-export const DescribeJobs = Binding.Service<DescribeJobs>(
-  "AWS.Batch.DescribeJobs",
-);
+export const DescribeJobs = Binding.Service<DescribeJobs>("AWS.Batch.DescribeJobs");

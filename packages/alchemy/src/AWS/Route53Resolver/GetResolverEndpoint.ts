@@ -29,10 +29,7 @@ export interface GetResolverEndpoint extends Binding.Service<
   (
     endpoint: ResolverEndpoint,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      r53r.GetResolverEndpointResponse,
-      r53r.GetResolverEndpointError
-    >
+    () => Effect.Effect<r53r.GetResolverEndpointResponse, r53r.GetResolverEndpointError>
   >
 > {}
 

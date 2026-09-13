@@ -26,10 +26,7 @@ export interface DeleteVocabulary extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.DeleteVocabularyRequest,
-    ) => Effect.Effect<
-      transcribe.DeleteVocabularyResponse,
-      transcribe.DeleteVocabularyError
-    >
+    ) => Effect.Effect<transcribe.DeleteVocabularyResponse, transcribe.DeleteVocabularyError>
   >
 > {}
 export const DeleteVocabulary = Binding.Service<DeleteVocabulary>(

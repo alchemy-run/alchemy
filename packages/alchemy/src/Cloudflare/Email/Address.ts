@@ -125,8 +125,7 @@ export const AddressProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const identifier =
-        output?.addressId ??
-        (olds?.email ? encodeURIComponent(olds.email) : undefined);
+        output?.addressId ?? (olds?.email ? encodeURIComponent(olds.email) : undefined);
       if (!identifier) return undefined;
       const acct = output?.accountId ?? accountId;
       return yield* emailRouting
@@ -171,23 +170,19 @@ export const AddressProvider = () =>
 
       // Ensure — register the address if it doesn't already exist.
       if (!observed) {
-        observed = yield* emailRouting
-          .createAddress({ accountId: acct, email })
-          .pipe(
-            Effect.map((created) => toAttrs(acct, created)),
-            // Cloudflare rate-limits verification emails per destination
-            // address ("Verification email has been sent too recently"). When
-            // the same address was (re)created recently the address record
-            // already exists account-wide, so adopt it instead of failing.
-            // Re-raise if the address genuinely isn't present.
-            Effect.catchTag("TooManyRequests", (error) =>
-              findByEmail(acct, email).pipe(
-                Effect.flatMap((found) =>
-                  found ? Effect.succeed(found) : Effect.fail(error),
-                ),
-              ),
+        observed = yield* emailRouting.createAddress({ accountId: acct, email }).pipe(
+          Effect.map((created) => toAttrs(acct, created)),
+          // Cloudflare rate-limits verification emails per destination
+          // address ("Verification email has been sent too recently"). When
+          // the same address was (re)created recently the address record
+          // already exists account-wide, so adopt it instead of failing.
+          // Re-raise if the address genuinely isn't present.
+          Effect.catchTag("TooManyRequests", (error) =>
+            findByEmail(acct, email).pipe(
+              Effect.flatMap((found) => (found ? Effect.succeed(found) : Effect.fail(error))),
             ),
-          );
+          ),
+        );
       }
 
       return observed;
@@ -210,10 +205,7 @@ export const AddressProvider = () =>
           Effect.catchTag("EmailAddressNotFound", () => Effect.void),
           Effect.retry({
             while: (e) => e._tag !== "EmailAddressCreatedTooRecently",
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
           }),
         );
     }),

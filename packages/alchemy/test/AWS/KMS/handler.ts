@@ -17,12 +17,9 @@ import * as AWS from "@/AWS";
  * therefore leaves no aliases and no enabled keys behind.
  */
 export const STANDING_KEY_ALIAS = "alias/alchemy-test-kms-bindings" as const;
-export const STANDING_HMAC_KEY_ALIAS =
-  "alias/alchemy-test-bindings-hmac" as const;
-export const STANDING_SIGNING_KEY_ALIAS =
-  "alias/alchemy-test-bindings-sign" as const;
-export const STANDING_AGREEMENT_KEY_ALIAS =
-  "alias/alchemy-test-bindings-ecdh" as const;
+export const STANDING_HMAC_KEY_ALIAS = "alias/alchemy-test-bindings-hmac" as const;
+export const STANDING_SIGNING_KEY_ALIAS = "alias/alchemy-test-bindings-sign" as const;
+export const STANDING_AGREEMENT_KEY_ALIAS = "alias/alchemy-test-bindings-ecdh" as const;
 
 export class KMSTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KMSTestFunction",
@@ -31,17 +28,12 @@ export class KMSTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
 const fromBase64 = (value: string) =>
   Effect.sync(() => new Uint8Array(Buffer.from(value, "base64")));
 
-const toBase64 = (value: Uint8Array) =>
-  Effect.sync(() => Buffer.from(value).toString("base64"));
+const toBase64 = (value: Uint8Array) => Effect.sync(() => Buffer.from(value).toString("base64"));
 
 const unwrapSensitive = (
   value: Uint8Array | Redacted.Redacted<Uint8Array> | undefined,
 ): Uint8Array | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 export default KMSTestFunction.make(
   {
@@ -55,8 +47,7 @@ export default KMSTestFunction.make(
     const generateDataKey = yield* AWS.KMS.GenerateDataKey(STANDING_KEY_ALIAS);
     const generateDataKeyWithoutPlaintext =
       yield* AWS.KMS.GenerateDataKeyWithoutPlaintext(STANDING_KEY_ALIAS);
-    const generateDataKeyPair =
-      yield* AWS.KMS.GenerateDataKeyPair(STANDING_KEY_ALIAS);
+    const generateDataKeyPair = yield* AWS.KMS.GenerateDataKeyPair(STANDING_KEY_ALIAS);
     const generateDataKeyPairWithoutPlaintext =
       yield* AWS.KMS.GenerateDataKeyPairWithoutPlaintext(STANDING_KEY_ALIAS);
     const reEncrypt = yield* AWS.KMS.ReEncrypt(STANDING_KEY_ALIAS);
@@ -67,16 +58,10 @@ export default KMSTestFunction.make(
     // Asymmetric signing key
     const sign = yield* AWS.KMS.Sign(STANDING_SIGNING_KEY_ALIAS);
     const verify = yield* AWS.KMS.Verify(STANDING_SIGNING_KEY_ALIAS);
-    const getSigningPublicKey = yield* AWS.KMS.GetPublicKey(
-      STANDING_SIGNING_KEY_ALIAS,
-    );
+    const getSigningPublicKey = yield* AWS.KMS.GetPublicKey(STANDING_SIGNING_KEY_ALIAS);
     // ECDH key-agreement key
-    const deriveSharedSecret = yield* AWS.KMS.DeriveSharedSecret(
-      STANDING_AGREEMENT_KEY_ALIAS,
-    );
-    const getAgreementPublicKey = yield* AWS.KMS.GetPublicKey(
-      STANDING_AGREEMENT_KEY_ALIAS,
-    );
+    const deriveSharedSecret = yield* AWS.KMS.DeriveSharedSecret(STANDING_AGREEMENT_KEY_ALIAS);
+    const getAgreementPublicKey = yield* AWS.KMS.GetPublicKey(STANDING_AGREEMENT_KEY_ALIAS);
     // Account-level (not key-scoped)
     const generateRandom = yield* AWS.KMS.GenerateRandom();
     // Deliberately NOT a binding: used by /unauthorized to prove the Lambda
@@ -138,9 +123,7 @@ export default KMSTestFunction.make(
           return yield* HttpServerResponse.json({
             ok: true,
             keyId: result.keyId,
-            plaintextBase64: result.plaintext
-              ? yield* toBase64(result.plaintext)
-              : undefined,
+            plaintextBase64: result.plaintext ? yield* toBase64(result.plaintext) : undefined,
           });
         }
 
@@ -156,10 +139,7 @@ export default KMSTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/generate-data-key-without-plaintext"
-        ) {
+        if (request.method === "POST" && pathname === "/generate-data-key-without-plaintext") {
           const result = yield* generateDataKeyWithoutPlaintext({
             KeySpec: "AES_256",
           });
@@ -171,22 +151,15 @@ export default KMSTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/generate-data-key-pair"
-        ) {
+        if (request.method === "POST" && pathname === "/generate-data-key-pair") {
           const result = yield* generateDataKeyPair({
             KeyPairSpec: "ECC_NIST_P256",
           });
-          const privateKeyPlaintext = unwrapSensitive(
-            result.PrivateKeyPlaintext,
-          );
+          const privateKeyPlaintext = unwrapSensitive(result.PrivateKeyPlaintext);
           return yield* HttpServerResponse.json({
             keyId: result.KeyId,
             keyPairSpec: result.KeyPairSpec,
-            publicKeyBase64: result.PublicKey
-              ? yield* toBase64(result.PublicKey)
-              : undefined,
+            publicKeyBase64: result.PublicKey ? yield* toBase64(result.PublicKey) : undefined,
             privateKeyPlaintextBase64: privateKeyPlaintext
               ? yield* toBase64(privateKeyPlaintext)
               : undefined,
@@ -196,18 +169,13 @@ export default KMSTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/generate-data-key-pair-without-plaintext"
-        ) {
+        if (request.method === "POST" && pathname === "/generate-data-key-pair-without-plaintext") {
           const result = yield* generateDataKeyPairWithoutPlaintext({
             KeyPairSpec: "ECC_NIST_P256",
           });
           return yield* HttpServerResponse.json({
             keyId: result.KeyId,
-            publicKeyBase64: result.PublicKey
-              ? yield* toBase64(result.PublicKey)
-              : undefined,
+            publicKeyBase64: result.PublicKey ? yield* toBase64(result.PublicKey) : undefined,
             privateKeyCiphertextBase64: result.PrivateKeyCiphertextBlob
               ? yield* toBase64(result.PrivateKeyCiphertextBlob)
               : undefined,
@@ -287,9 +255,7 @@ export default KMSTestFunction.make(
           });
           return yield* HttpServerResponse.json({
             keyId: result.KeyId,
-            signatureBase64: result.Signature
-              ? yield* toBase64(result.Signature)
-              : undefined,
+            signatureBase64: result.Signature ? yield* toBase64(result.Signature) : undefined,
           });
         }
 
@@ -322,9 +288,7 @@ export default KMSTestFunction.make(
           return yield* HttpServerResponse.json({
             keyId: result.KeyId,
             keyUsage: result.KeyUsage,
-            publicKeyBase64: result.PublicKey
-              ? yield* toBase64(result.PublicKey)
-              : undefined,
+            publicKeyBase64: result.PublicKey ? yield* toBase64(result.PublicKey) : undefined,
             signingAlgorithms: result.SigningAlgorithms,
           });
         }
@@ -337,10 +301,7 @@ export default KMSTestFunction.make(
             crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" }),
           );
           const localPublicDer = yield* Effect.sync(
-            () =>
-              new Uint8Array(
-                localPair.publicKey.export({ type: "spki", format: "der" }),
-              ),
+            () => new Uint8Array(localPair.publicKey.export({ type: "spki", format: "der" })),
           );
           const kmsResult = yield* deriveSharedSecret({
             KeyAgreementAlgorithm: "ECDH",

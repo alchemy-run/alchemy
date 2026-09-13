@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Function } from "./Function.ts";
 
-export interface InvokeFunctionRequest extends Omit<
-  Lambda.InvocationRequest,
-  "FunctionName"
-> {}
+export interface InvokeFunctionRequest extends Omit<Lambda.InvocationRequest, "FunctionName"> {}
 
 /** @binding */
 export interface InvokeFunction extends Binding.Service<
@@ -15,11 +12,7 @@ export interface InvokeFunction extends Binding.Service<
   (
     func: Function,
   ) => Effect.Effect<
-    (
-      request: InvokeFunctionRequest,
-    ) => Effect.Effect<Lambda.InvocationResponse, Lambda.InvokeError>
+    (request: InvokeFunctionRequest) => Effect.Effect<Lambda.InvocationResponse, Lambda.InvokeError>
   >
 > {}
-export const InvokeFunction = Binding.Service<InvokeFunction>(
-  "AWS.Lambda.InvokeFunction",
-);
+export const InvokeFunction = Binding.Service<InvokeFunction>("AWS.Lambda.InvokeFunction");

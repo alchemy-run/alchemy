@@ -25,37 +25,22 @@ describe.sequential("AWS.Pipes delivery", () => {
 
         // First request rides out cold-start / URL propagation; keep polling
         // until the fixture reports both queue identifiers.
-        const { sourceQueueUrl, sinkQueueUrl } = yield* HttpClient.get(
-          functionUrl,
-        ).pipe(
+        const { sourceQueueUrl, sinkQueueUrl } = yield* HttpClient.get(functionUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? (response.json as Effect.Effect<{
                   sourceQueueUrl?: string;
                   sinkQueueUrl?: string;
                 }>)
-              : Effect.fail(
-                  new FunctionNotReady(
-                    `Function not ready: ${response.status}`,
-                  ),
-                ),
+              : Effect.fail(new FunctionNotReady(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
             body.sourceQueueUrl && body.sinkQueueUrl
-              ? Effect.succeed(
-                  body as { sourceQueueUrl: string; sinkQueueUrl: string },
-                )
-              : Effect.fail(
-                  new FunctionNotReady(
-                    "Function returned empty queue identifiers",
-                  ),
-                ),
+              ? Effect.succeed(body as { sourceQueueUrl: string; sinkQueueUrl: string })
+              : Effect.fail(new FunctionNotReady("Function returned empty queue identifiers")),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("1 seconds"),
-              Schedule.recurs(45),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("1 seconds"), Schedule.recurs(45)]),
           }),
         );
 
@@ -78,9 +63,7 @@ describe.sequential("AWS.Pipes delivery", () => {
             MaxNumberOfMessages: 10,
             WaitTimeSeconds: 8,
           });
-          const match = (result.Messages ?? []).find(
-            (message) => message.Body === messageBody,
-          );
+          const match = (result.Messages ?? []).find((message) => message.Body === messageBody);
           if (!match?.ReceiptHandle) {
             return yield* Effect.fail(new MessageNotDelivered());
           }
@@ -92,10 +75,7 @@ describe.sequential("AWS.Pipes delivery", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
-            schedule: Schedule.max([
-              Schedule.spaced("500 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("500 millis"), Schedule.recurs(8)]),
           }),
         );
 

@@ -33,6 +33,4 @@ export interface ListPermissions extends Binding.Service<
     ) => Effect.Effect<ram.ListPermissionsResponse, ram.ListPermissionsError>
   >
 > {}
-export const ListPermissions = Binding.Service<ListPermissions>(
-  "AWS.RAM.ListPermissions",
-);
+export const ListPermissions = Binding.Service<ListPermissions>("AWS.RAM.ListPermissions");

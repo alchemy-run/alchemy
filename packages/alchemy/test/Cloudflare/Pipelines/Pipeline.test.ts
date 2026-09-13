@@ -13,10 +13,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const retryAuthBlip = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
@@ -84,18 +81,12 @@ test.provider(
       const creds = yield* r2Credentials;
       const deployed = yield* retryAuthBlip(stack.deploy(etl(creds)));
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Pipelines.Pipeline,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Pipelines.Pipeline);
       const all = yield* provider.list();
 
       // Each element is the full `read` Attributes shape, usable by delete.
-      expect(
-        all.some((p) => p.pipelineId === deployed.pipeline.pipelineId),
-      ).toBe(true);
-      const found = all.find(
-        (p) => p.pipelineId === deployed.pipeline.pipelineId,
-      )!;
+      expect(all.some((p) => p.pipelineId === deployed.pipeline.pipelineId)).toBe(true);
+      const found = all.find((p) => p.pipelineId === deployed.pipeline.pipelineId)!;
       expect(found.name).toEqual(deployed.pipeline.name);
       expect(found.sql).toEqual(deployed.pipeline.sql);
       expect(found.accountId).toEqual(deployed.pipeline.accountId);

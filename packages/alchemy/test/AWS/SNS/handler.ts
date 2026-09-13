@@ -35,18 +35,13 @@ export const TopicAndQueueLive = Layer.effect(
       },
     });
     const queue = yield* AWS.SQS.Queue("NotificationsQueue");
-    const subscriptionAttrsQueue = yield* AWS.SQS.Queue(
-      "SubscriptionAttrsQueue",
-    );
-    const queueSubscription = yield* AWS.SNS.Subscription(
-      "QueueFixtureSubscription",
-      {
-        topicArn: topic.topicArn,
-        protocol: "sqs",
-        endpoint: subscriptionAttrsQueue.queueArn,
-        returnSubscriptionArn: true,
-      },
-    );
+    const subscriptionAttrsQueue = yield* AWS.SQS.Queue("SubscriptionAttrsQueue");
+    const queueSubscription = yield* AWS.SNS.Subscription("QueueFixtureSubscription", {
+      topicArn: topic.topicArn,
+      protocol: "sqs",
+      endpoint: subscriptionAttrsQueue.queueArn,
+      returnSubscriptionArn: true,
+    });
     return {
       topic,
       queue,
@@ -59,9 +54,7 @@ export const TopicAndQueueLive = Layer.effect(
   }),
 );
 
-export class SNSApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
-  "SNSApiFunction",
-) {}
+export class SNSApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()("SNSApiFunction") {}
 
 export const SNSApiFunctionLive = SNSApiFunction.make(
   {
@@ -75,8 +68,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
     },
   },
   Effect.gen(function* () {
-    const { topic, queue, subscription, queueSubscription } =
-      yield* TopicAndQueue;
+    const { topic, queue, subscription, queueSubscription } = yield* TopicAndQueue;
 
     const publish = yield* AWS.SNS.Publish(topic);
     const publishBatch = yield* AWS.SNS.PublishBatch(topic);
@@ -84,28 +76,21 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
     const setTopicAttributes = yield* AWS.SNS.SetTopicAttributes(topic);
     const addPermission = yield* AWS.SNS.AddPermission(topic);
     const removePermission = yield* AWS.SNS.RemovePermission(topic);
-    const getDataProtectionPolicy =
-      yield* AWS.SNS.GetDataProtectionPolicy(topic);
-    const putDataProtectionPolicy =
-      yield* AWS.SNS.PutDataProtectionPolicy(topic);
+    const getDataProtectionPolicy = yield* AWS.SNS.GetDataProtectionPolicy(topic);
+    const putDataProtectionPolicy = yield* AWS.SNS.PutDataProtectionPolicy(topic);
     const listTopics = yield* AWS.SNS.ListTopics();
     const listSubscriptions = yield* AWS.SNS.ListSubscriptions();
-    const listSubscriptionsByTopic =
-      yield* AWS.SNS.ListSubscriptionsByTopic(topic);
+    const listSubscriptionsByTopic = yield* AWS.SNS.ListSubscriptionsByTopic(topic);
     const listTagsForResource = yield* AWS.SNS.ListTagsForResource(topic);
     const tagResource = yield* AWS.SNS.TagResource(topic);
     const untagResource = yield* AWS.SNS.UntagResource(topic);
-    const getSubscriptionAttributes =
-      yield* AWS.SNS.GetSubscriptionAttributes(queueSubscription);
-    const setSubscriptionAttributes =
-      yield* AWS.SNS.SetSubscriptionAttributes(queueSubscription);
-    const confirmSubscription =
-      yield* AWS.SNS.ConfirmSubscription(subscription);
+    const getSubscriptionAttributes = yield* AWS.SNS.GetSubscriptionAttributes(queueSubscription);
+    const setSubscriptionAttributes = yield* AWS.SNS.SetSubscriptionAttributes(queueSubscription);
+    const confirmSubscription = yield* AWS.SNS.ConfirmSubscription(subscription);
     const subscribeToTopic = yield* AWS.SNS.Subscribe(topic);
     const unsubscribe = yield* AWS.SNS.Unsubscribe();
     const publishSms = yield* AWS.SNS.PublishSms();
-    const checkIfPhoneNumberIsOptedOut =
-      yield* AWS.SNS.CheckIfPhoneNumberIsOptedOut();
+    const checkIfPhoneNumberIsOptedOut = yield* AWS.SNS.CheckIfPhoneNumberIsOptedOut();
     const optInPhoneNumber = yield* AWS.SNS.OptInPhoneNumber();
     const listPhoneNumbersOptedOut = yield* AWS.SNS.ListPhoneNumbersOptedOut();
     const getSmsAttributes = yield* AWS.SNS.GetSMSAttributes();
@@ -120,9 +105,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
     const sink = yield* AWS.SNS.TopicSink(topic);
     const QueueArn = yield* queue.queueArn;
     const TopicArn = yield* topic.topicArn;
-    const accountId = TopicArn.pipe(
-      Effect.map((topicArn) => topicArn.split(":")[4] ?? ""),
-    );
+    const accountId = TopicArn.pipe(Effect.map((topicArn) => topicArn.split(":")[4] ?? ""));
 
     const queueSink = yield* AWS.SQS.QueueSink(queue);
 
@@ -217,10 +200,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(response);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/data-protection-policy"
-        ) {
+        if (request.method === "GET" && pathname === "/data-protection-policy") {
           return yield* HttpServerResponse.json(
             yield* getDataProtectionPolicy().pipe(
               Effect.catch((error) => Effect.succeed(formatError(error))),
@@ -228,10 +208,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           );
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/data-protection-policy"
-        ) {
+        if (request.method === "POST" && pathname === "/data-protection-policy") {
           const body = (yield* request.json) as { policy: string };
           const response = yield* putDataProtectionPolicy({
             DataProtectionPolicy: body.policy,
@@ -247,13 +224,8 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(yield* listSubscriptions());
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/subscriptions-by-topic"
-        ) {
-          return yield* HttpServerResponse.json(
-            yield* listSubscriptionsByTopic(),
-          );
+        if (request.method === "GET" && pathname === "/subscriptions-by-topic") {
+          return yield* HttpServerResponse.json(yield* listSubscriptionsByTopic());
         }
 
         if (request.method === "GET" && pathname === "/tags") {
@@ -281,19 +253,11 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           );
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/subscription-attributes"
-        ) {
-          return yield* HttpServerResponse.json(
-            yield* getSubscriptionAttributes(),
-          );
+        if (request.method === "GET" && pathname === "/subscription-attributes") {
+          return yield* HttpServerResponse.json(yield* getSubscriptionAttributes());
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/subscription-attributes"
-        ) {
+        if (request.method === "POST" && pathname === "/subscription-attributes") {
           const body = (yield* request.json) as {
             name: string;
             value?: string;
@@ -343,9 +307,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(
             yield* setSmsAttributes({
               attributes: { DefaultSMSType: body.type },
-            }).pipe(
-              Effect.catch((error) => Effect.succeed(formatError(error))),
-            ),
+            }).pipe(Effect.catch((error) => Effect.succeed(formatError(error)))),
           );
         }
 
@@ -362,9 +324,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(
             yield* checkIfPhoneNumberIsOptedOut({
               phoneNumber: body.phoneNumber,
-            }).pipe(
-              Effect.catch((error) => Effect.succeed(formatError(error))),
-            ),
+            }).pipe(Effect.catch((error) => Effect.succeed(formatError(error)))),
           );
         }
 
@@ -376,10 +336,7 @@ export const SNSApiFunctionLive = SNSApiFunction.make(
           return yield* HttpServerResponse.json(response);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/sms/origination-numbers"
-        ) {
+        if (request.method === "GET" && pathname === "/sms/origination-numbers") {
           return yield* HttpServerResponse.json(
             yield* listOriginationNumbers().pipe(
               Effect.catch((error) => Effect.succeed(formatError(error))),

@@ -56,9 +56,7 @@ describe("AWS.Website.Nextjs local", () => {
         // The site is the framework's own dev server: a localhost URL and
         // no cloud rows at all (proof no AWS call ran).
         const url = deployed.site.url! as string;
-        expect(url).toMatch(
-          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-        );
+        expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
         expect(deployed.site.distribution).toBeUndefined();
         expect(deployed.site.server).toBeUndefined();
         expect(deployed.site.bucket).toBeUndefined();
@@ -71,13 +69,9 @@ describe("AWS.Website.Nextjs local", () => {
           label: "dev SSR home page",
         });
         // App Router API route through the dev server.
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "NEXTJS_AWS_API_MARKER",
-          {
-            label: "API route (dev)",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "NEXTJS_AWS_API_MARKER", {
+          label: "API route (dev)",
+        });
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
         });
@@ -91,14 +85,10 @@ describe("AWS.Website.Nextjs local", () => {
           routePath,
           route.replace("NEXTJS_AWS_API_MARKER", "NEXTJS_AWS_API_MARKER_V2"),
         );
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=dev`,
-          "NEXTJS_AWS_API_MARKER_V2",
-          {
-            timeout: "120 seconds",
-            label: "API route after HMR edit",
-          },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=dev`, "NEXTJS_AWS_API_MARKER_V2", {
+          timeout: "120 seconds",
+          label: "API route after HMR edit",
+        });
         // The route still round-trips its query after the recompile.
         yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "post-hmr", {
           label: "API route query echo after HMR edit",

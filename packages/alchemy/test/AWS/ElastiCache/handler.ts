@@ -83,9 +83,7 @@ const resolveFixtureVpc = Effect.gen(function* () {
   const securityGroupId = groups.SecurityGroups?.[0]?.GroupId;
   if (subnetIds.length === 0 || securityGroupId === undefined) {
     return yield* Effect.die(
-      new Error(
-        "default VPC is missing default-for-AZ subnets or its default security group",
-      ),
+      new Error("default VPC is missing default-for-AZ subnets or its default security group"),
     );
   }
   return { subnetIds, securityGroupIds: [securityGroupId] };
@@ -144,8 +142,7 @@ export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
   Effect.gen(function* () {
     const { cache } = yield* FixtureCache;
     const connection = yield* AWS.ElastiCache.Connect(cache);
-    const createSnapshot =
-      yield* AWS.ElastiCache.CreateServerlessCacheSnapshot(cache);
+    const createSnapshot = yield* AWS.ElastiCache.CreateServerlessCacheSnapshot(cache);
 
     return {
       fetch: Effect.gen(function* () {
@@ -168,8 +165,7 @@ export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
           }).pipe(
             Effect.flatMap((result) =>
               HttpServerResponse.json({
-                name: result.ServerlessCacheSnapshot
-                  ?.ServerlessCacheSnapshotName,
+                name: result.ServerlessCacheSnapshot?.ServerlessCacheSnapshotName,
                 status: result.ServerlessCacheSnapshot?.Status,
               }),
             ),
@@ -189,10 +185,7 @@ export const ElastiCacheTestFunctionLive = ElastiCacheTestFunction.make(
           return yield* cacheRoundtrip(info, value).pipe(
             Effect.flatMap((read) => HttpServerResponse.json({ value: read })),
             Effect.catch((error) =>
-              HttpServerResponse.json(
-                { error: String(error) },
-                { status: 500 },
-              ),
+              HttpServerResponse.json({ error: String(error) }, { status: 500 }),
             ),
           );
         }

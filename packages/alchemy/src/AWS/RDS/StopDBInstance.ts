@@ -34,6 +34,4 @@ export interface StopDBInstance extends Binding.Service<
     ) => Effect.Effect<rds.StopDBInstanceResult, rds.StopDBInstanceError>
   >
 > {}
-export const StopDBInstance = Binding.Service<StopDBInstance>(
-  "AWS.RDS.StopDBInstance",
-);
+export const StopDBInstance = Binding.Service<StopDBInstance>("AWS.RDS.StopDBInstance");

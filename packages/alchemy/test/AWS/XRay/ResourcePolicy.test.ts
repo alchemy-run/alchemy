@@ -25,9 +25,7 @@ class PolicyStillExists extends Data.TaggedError("PolicyStillExists")<{
 const assertPolicyDeleted = (policyName: string) =>
   findPolicy(policyName).pipe(
     Effect.flatMap((policy) =>
-      policy === undefined
-        ? Effect.void
-        : Effect.fail(new PolicyStillExists({ policyName })),
+      policy === undefined ? Effect.void : Effect.fail(new PolicyStillExists({ policyName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "PolicyStillExists",
@@ -73,10 +71,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ResourcePolicy("TestResourcePolicy", {
-            policyDocument: policyDocument([
-              "xray:PutTraceSegments",
-              "xray:GetSamplingRules",
-            ]),
+            policyDocument: policyDocument(["xray:PutTraceSegments", "xray:GetSamplingRules"]),
           });
         }),
       );
@@ -90,10 +85,7 @@ test.provider(
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ResourcePolicy("TestResourcePolicy", {
-            policyDocument: policyDocument([
-              "xray:PutTraceSegments",
-              "xray:GetSamplingRules",
-            ]),
+            policyDocument: policyDocument(["xray:PutTraceSegments", "xray:GetSamplingRules"]),
           });
         }),
       );
@@ -101,10 +93,6 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertPolicyDeleted(created.policyName);
-    }).pipe(
-      Effect.ensuring(
-        stack.destroy().pipe(Effect.catchCause(() => Effect.void)),
-      ),
-    ),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.catchCause(() => Effect.void)))),
   { timeout: 120_000 },
 );

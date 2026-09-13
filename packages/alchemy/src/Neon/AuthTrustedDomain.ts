@@ -43,19 +43,13 @@ export interface AuthTrustedDomain extends Resource<
  *
  * @resource
  */
-export const AuthTrustedDomain = Resource<AuthTrustedDomain>(
-  "Neon.AuthTrustedDomain",
-);
+export const AuthTrustedDomain = Resource<AuthTrustedDomain>("Neon.AuthTrustedDomain");
 
-const observe = (
-  scope: { projectId: string; branchId: string },
-  domain: string,
-) =>
+const observe = (scope: { projectId: string; branchId: string }, domain: string) =>
   Neon.listBranchNeonAuthTrustedDomains(authRequest(scope)).pipe(
     Effect.map((response) =>
       response.domains.some(
-        (item) =>
-          item.domain === domain && item.auth_provider === "better_auth",
+        (item) => item.domain === domain && item.auth_provider === "better_auth",
       ),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed(false)),
@@ -65,10 +59,7 @@ export const AuthTrustedDomainProvider = () =>
   Provider.succeed(AuthTrustedDomain, {
     stables: ["projectId", "branchId", "domain"],
     diff: Effect.fn(function* ({ olds, news, output }) {
-      const scope =
-        "auth" in news
-          ? yield* authPlanScope({ branch: news.auth })
-          : undefined;
+      const scope = "auth" in news ? yield* authPlanScope({ branch: news.auth }) : undefined;
       if (
         output &&
         (!scope ||
@@ -86,14 +77,10 @@ export const AuthTrustedDomainProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!(yield* observe(news.auth, news.domain)))
-        return { action: "update" } as const;
+      if (!(yield* observe(news.auth, news.domain))) return { action: "update" } as const;
     }),
     read: Effect.fn(function* ({ olds, output }) {
-      if (
-        !output &&
-        (!olds?.auth?.projectId || !olds.auth.branchId || !olds.domain)
-      )
+      if (!output && (!olds?.auth?.projectId || !olds.auth.branchId || !olds.domain))
         return undefined;
       const scope = output ?? olds.auth;
       const domain = output?.domain ?? olds.domain;
@@ -132,8 +119,7 @@ export const AuthTrustedDomainProvider = () =>
           Effect.catchTag("Conflict", () =>
             Effect.fail(
               new OwnedBySomeoneElse({
-                message:
-                  "Trusted origin appeared during creation; explicit adoption is required",
+                message: "Trusted origin appeared during creation; explicit adoption is required",
                 resourceType: "Neon.AuthTrustedDomain",
               }),
             ),
@@ -141,9 +127,7 @@ export const AuthTrustedDomainProvider = () =>
         );
       }
       if (!(yield* observe(news.auth, news.domain))) {
-        return yield* Effect.fail(
-          new Error("Trusted origin was not visible after reconciliation"),
-        );
+        return yield* Effect.fail(new Error("Trusted origin was not visible after reconciliation"));
       }
       return {
         projectId: news.auth.projectId,

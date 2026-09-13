@@ -48,13 +48,9 @@ export interface SendDataToWirelessDevice extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendDataToWirelessDeviceRequest,
-    ) => Effect.Effect<
-      iotw.SendDataToWirelessDeviceResponse,
-      iotw.SendDataToWirelessDeviceError
-    >
+    ) => Effect.Effect<iotw.SendDataToWirelessDeviceResponse, iotw.SendDataToWirelessDeviceError>
   >
 > {}
-export const SendDataToWirelessDevice =
-  Binding.Service<SendDataToWirelessDevice>(
-    "AWS.IoTWireless.SendDataToWirelessDevice",
-  );
+export const SendDataToWirelessDevice = Binding.Service<SendDataToWirelessDevice>(
+  "AWS.IoTWireless.SendDataToWirelessDevice",
+);

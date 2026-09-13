@@ -101,11 +101,7 @@ const createS3DataCacheAdapter = ({
     async get(key: string, ctx?: Record<string, unknown>) {
       return (handler ?? (await ready)).get(key, ctx);
     },
-    async set(
-      key: string,
-      data: Record<string, unknown> | null,
-      ctx?: Record<string, unknown>,
-    ) {
+    async set(key: string, data: Record<string, unknown> | null, ctx?: Record<string, unknown>) {
       return (handler ?? (await ready)).set(key, data, ctx);
     },
     async revalidateTag(tags: string | Array<string>) {

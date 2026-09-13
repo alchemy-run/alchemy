@@ -14,14 +14,8 @@ import type { App } from "@/Prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
 import { PrismaApiError, PrismaClient } from "@/Prisma/Client";
 import type { PrismaManagementClient } from "@/Prisma/Client";
-import {
-  CustomDomain as PrismaCustomDomain,
-  CustomDomainProvider,
-} from "@/Prisma/CustomDomain";
-import {
-  Database as PrismaDatabase,
-  DatabaseProvider,
-} from "@/Prisma/Database";
+import { CustomDomain as PrismaCustomDomain, CustomDomainProvider } from "@/Prisma/CustomDomain";
+import { Database as PrismaDatabase, DatabaseProvider } from "@/Prisma/Database";
 import {
   EnvironmentVariable as PrismaEnvironmentVariable,
   EnvironmentVariableProvider,
@@ -64,9 +58,7 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
   adopt: false,
 });
 
-class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()(
-  "Prisma",
-) {}
+class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()("Prisma") {}
 
 const projectLayer = (fake: FakeManagementApi) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaProject])).pipe(
@@ -171,30 +163,21 @@ const clientBackedApi = (client: any) =>
   });
 
 const environmentVariableLayer = (client: PrismaManagementClient) =>
-  Layer.effect(
-    TestPrismaProviders,
-    Provider.collection([PrismaEnvironmentVariable]),
-  ).pipe(
+  Layer.effect(TestPrismaProviders, Provider.collection([PrismaEnvironmentVariable])).pipe(
     Layer.provideMerge(EnvironmentVariableProvider()),
     Layer.provide(liveProviderContext),
     Layer.provideMerge(clientBackedApi(client).layer),
   );
 
 const customDomainLayer = (client: PrismaManagementClient) =>
-  Layer.effect(
-    TestPrismaProviders,
-    Provider.collection([PrismaCustomDomain]),
-  ).pipe(
+  Layer.effect(TestPrismaProviders, Provider.collection([PrismaCustomDomain])).pipe(
     Layer.provideMerge(CustomDomainProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
   );
 
 const sourceRepositoryLayer = (client: PrismaManagementClient) =>
-  Layer.effect(
-    TestPrismaProviders,
-    Provider.collection([PrismaSourceRepository]),
-  ).pipe(
+  Layer.effect(TestPrismaProviders, Provider.collection([PrismaSourceRepository])).pipe(
     Layer.provideMerge(SourceRepositoryProvider()),
     Layer.provide(liveProviderContext),
     Layer.provideMerge(clientBackedApi(client).layer),
@@ -247,95 +230,84 @@ const apiConnection = (
   },
 });
 
-it.effect(
-  "database credential recovery waits for a ready default connection",
-  () => {
-    const provisioning: ApiDatabase = {
-      ...apiDatabase("database-provisioning", {
-        projectId: "project-1",
-        name: "provisioning",
-      }),
-      status: "provisioning",
-      defaultConnectionId: null,
-      connections: [],
-    };
-    const ready: ApiDatabase = {
-      ...provisioning,
-      status: "ready",
-      defaultConnectionId: "connection-provisioning",
-    };
-    let reads = 0;
-    let rotations = 0;
-    const fake = makeFakeManagementApi((request) => {
-      if (request.pathname.startsWith("/v1/databases/")) {
-        return data(toWireDatabase(reads++ === 0 ? provisioning : ready));
-      }
-      if (request.pathname.endsWith("/rotate")) {
-        rotations += 1;
-        return data(apiConnection(ready.id, ready.defaultConnectionId!));
-      }
-      return unhandled(request);
-    });
+it.effect("database credential recovery waits for a ready default connection", () => {
+  const provisioning: ApiDatabase = {
+    ...apiDatabase("database-provisioning", {
+      projectId: "project-1",
+      name: "provisioning",
+    }),
+    status: "provisioning",
+    defaultConnectionId: null,
+    connections: [],
+  };
+  const ready: ApiDatabase = {
+    ...provisioning,
+    status: "ready",
+    defaultConnectionId: "connection-provisioning",
+  };
+  let reads = 0;
+  let rotations = 0;
+  const fake = makeFakeManagementApi((request) => {
+    if (request.pathname.startsWith("/v1/databases/")) {
+      return data(toWireDatabase(reads++ === 0 ? provisioning : ready));
+    }
+    if (request.pathname.endsWith("/rotate")) {
+      rotations += 1;
+      return data(apiConnection(ready.id, ready.defaultConnectionId!));
+    }
+    return unhandled(request);
+  });
 
-    return Effect.gen(function* () {
-      const fiber = yield* recoverDatabaseConnectionSecrets(
-        provisioning,
-        {},
-      ).pipe(Effect.forkChild({ startImmediately: true }));
-      yield* Effect.yieldNow;
-      yield* TestClock.adjust("1 second");
-      const recovered = yield* Fiber.join(fiber);
-      expect(recovered.database.status).toBe("ready");
-      expect(recovered.database.defaultConnectionId).toBe(
-        "connection-provisioning",
-      );
-      expect(
-        Redacted.value(recovered.secrets.directConnectionString!),
-      ).toContain(ready.id);
-      expect(rotations).toBe(1);
-    }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
-  },
-);
+  return Effect.gen(function* () {
+    const fiber = yield* recoverDatabaseConnectionSecrets(provisioning, {}).pipe(
+      Effect.forkChild({ startImmediately: true }),
+    );
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust("1 second");
+    const recovered = yield* Fiber.join(fiber);
+    expect(recovered.database.status).toBe("ready");
+    expect(recovered.database.defaultConnectionId).toBe("connection-provisioning");
+    expect(Redacted.value(recovered.secrets.directConnectionString!)).toContain(ready.id);
+    expect(rotations).toBe(1);
+  }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
+});
 
-it.effect(
-  "database credential recovery has a bounded status-rich timeout",
-  () => {
-    const provisioning: ApiDatabase = {
-      ...apiDatabase("database-stuck", {
-        projectId: "project-1",
-        name: "stuck",
-      }),
-      status: "provisioning",
-      defaultConnectionId: null,
-      connections: [],
-    };
-    const fake = makeFakeManagementApi((request) => {
-      if (request.pathname.startsWith("/v1/databases/")) {
-        return data(toWireDatabase(provisioning));
-      }
-      if (request.pathname.endsWith("/rotate")) {
-        throw new Error("must not rotate while provisioning");
-      }
-      return unhandled(request);
-    });
+it.effect("database credential recovery has a bounded status-rich timeout", () => {
+  const provisioning: ApiDatabase = {
+    ...apiDatabase("database-stuck", {
+      projectId: "project-1",
+      name: "stuck",
+    }),
+    status: "provisioning",
+    defaultConnectionId: null,
+    connections: [],
+  };
+  const fake = makeFakeManagementApi((request) => {
+    if (request.pathname.startsWith("/v1/databases/")) {
+      return data(toWireDatabase(provisioning));
+    }
+    if (request.pathname.endsWith("/rotate")) {
+      throw new Error("must not rotate while provisioning");
+    }
+    return unhandled(request);
+  });
 
-    return Effect.gen(function* () {
-      const fiber = yield* recoverDatabaseConnectionSecrets(
-        provisioning,
-        {},
-      ).pipe(Effect.result, Effect.forkChild({ startImmediately: true }));
-      yield* Effect.yieldNow;
-      yield* TestClock.adjust("1 minute");
-      const result = yield* Fiber.join(fiber);
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("database-stuck");
-        expect(String(result.failure)).toContain("provisioning");
-        expect(String(result.failure)).toContain("defaultConnectionId 'null'");
-      }
-    }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
-  },
-);
+  return Effect.gen(function* () {
+    const fiber = yield* recoverDatabaseConnectionSecrets(provisioning, {}).pipe(
+      Effect.result,
+      Effect.forkChild({ startImmediately: true }),
+    );
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust("1 minute");
+    const result = yield* Fiber.join(fiber);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain("database-stuck");
+      expect(String(result.failure)).toContain("provisioning");
+      expect(String(result.failure)).toContain("defaultConnectionId 'null'");
+    }
+  }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
+});
 
 const makeProjectCloud = (initial: ApiProject[] = []) => {
   const projects = new Map(initial.map((project) => [project.id, project]));
@@ -404,18 +376,13 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
 
     if (request.pathname === "/v1/services" && request.method === "GET") {
-      calls.push([
-        "listApps",
-        Object.fromEntries(new URLSearchParams(request.search)),
-      ]);
+      calls.push(["listApps", Object.fromEntries(new URLSearchParams(request.search))]);
       return page([]);
     }
 
     if (request.pathname === "/v1/projects" && request.method === "GET") {
       calls.push(["listProjects"]);
-      return page(
-        Array.from(projects.values()).map(currentProject).map(toWireProject),
-      );
+      return page(Array.from(projects.values()).map(currentProject).map(toWireProject));
     }
 
     if (request.pathname === "/v1/projects" && request.method === "POST") {
@@ -455,9 +422,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
             : currentProject(stored)
           : undefined;
         if (staleProjectReads > 0) staleProjectReads -= 1;
-        return project === undefined
-          ? notFound("not found")
-          : data(toWireProject(project));
+        return project === undefined ? notFound("not found") : data(toWireProject(project));
       }
       if (request.method === "PATCH") {
         const input = request.bodyJson as {
@@ -480,11 +445,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
       }
     }
 
-    if (
-      segments.length === 4 &&
-      segments[1] === "projects" &&
-      segments[3] === "databases"
-    ) {
+    if (segments.length === 4 && segments[1] === "projects" && segments[3] === "databases") {
       const projectId = segments[2]!;
       if (request.method === "GET") {
         calls.push(["listProjectDatabases", projectId]);
@@ -533,9 +494,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
       if (request.method === "GET") {
         calls.push(["getDatabase", id]);
         const database = databases.get(id);
-        return database === undefined
-          ? notFound("not found")
-          : data(toWireDatabase(database));
+        return database === undefined ? notFound("not found") : data(toWireDatabase(database));
       }
       if (request.method === "DELETE") {
         calls.push(["deleteDatabase", id]);
@@ -581,35 +540,31 @@ const refusal = Test.make({
   providers: projectLayer(refusalCloud.fake),
 });
 
-refusal.test.provider(
-  "Plan refuses cold adoption of a foreign Prisma project",
-  (stack) =>
-    Effect.gen(function* () {
-      refusalCloud.projects.clear();
-      refusalCloud.projects.set(foreignProject.id, foreignProject);
-      refusalCloud.calls.length = 0;
-      yield* stack.destroy();
+refusal.test.provider("Plan refuses cold adoption of a foreign Prisma project", (stack) =>
+  Effect.gen(function* () {
+    refusalCloud.projects.clear();
+    refusalCloud.projects.set(foreignProject.id, foreignProject);
+    refusalCloud.calls.length = 0;
+    yield* stack.destroy();
 
-      const result = yield* stack
-        .deploy(
-          PrismaProject("Project", {
-            name: "app",
-            createDatabase: false,
-          }),
-        )
-        .pipe(Effect.result);
+    const result = yield* stack
+      .deploy(
+        PrismaProject("Project", {
+          name: "app",
+          createDatabase: false,
+        }),
+      )
+      .pipe(Effect.result);
 
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("Cannot adopt resource");
-      }
-      expect(refusalCloud.projects.get("project-foreign")?.name).toBe("app");
-      expect(refusalCloud.calls.map(([operation]) => operation)).not.toContain(
-        "updateProject",
-      );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain("Cannot adopt resource");
+    }
+    expect(refusalCloud.projects.get("project-foreign")?.name).toBe("app");
+    expect(refusalCloud.calls.map(([operation]) => operation)).not.toContain("updateProject");
 
-      yield* stack.destroy();
-    }),
+    yield* stack.destroy();
+  }),
 );
 
 const generatedProjectRecoveryCloud = makeProjectCloud();
@@ -664,15 +619,9 @@ generatedProjectRecovery.test.provider(
           password: Redacted.make("old-password"),
         },
       } as never).pipe(Effect.provideService(InstanceId, instanceId));
-      expect((switched as PrismaProject["Attributes"]).databaseId).toBe(
-        "database-new-default",
-      );
-      expect(
-        (switched as PrismaProject["Attributes"]).directConnectionString,
-      ).toBeUndefined();
-      expect(
-        (switched as PrismaProject["Attributes"]).password,
-      ).toBeUndefined();
+      expect((switched as PrismaProject["Attributes"]).databaseId).toBe("database-new-default");
+      expect((switched as PrismaProject["Attributes"]).directConnectionString).toBeUndefined();
+      expect((switched as PrismaProject["Attributes"]).password).toBeUndefined();
       const cannotDropAdoptedDefault = yield* provider
         .reconcile({
           id: "Project",
@@ -685,9 +634,7 @@ generatedProjectRecovery.test.provider(
         .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
       expect(Result.isFailure(cannotDropAdoptedDefault)).toBe(true);
       if (Result.isFailure(cannotDropAdoptedDefault)) {
-        expect(String(cannotDropAdoptedDefault.failure)).toContain(
-          "cannot be removed in place",
-        );
+        expect(String(cannotDropAdoptedDefault.failure)).toContain("cannot be removed in place");
       }
       generatedProjectRecoveryCloud.calls.length = 0;
       const recoveredSecrets = yield* provider
@@ -700,9 +647,9 @@ generatedProjectRecovery.test.provider(
           bindings: [],
         } as never)
         .pipe(Effect.provideService(InstanceId, instanceId));
-      expect(
-        Redacted.value(recoveredSecrets.directConnectionString!),
-      ).toContain("database-new-default");
+      expect(Redacted.value(recoveredSecrets.directConnectionString!)).toContain(
+        "database-new-default",
+      );
       expect(generatedProjectRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
         "connection-database-new-default",
@@ -719,32 +666,30 @@ const adoption = Test.make({
   adopt: true,
 });
 
-adoption.test.provider(
-  "Plan adopts explicitly and applies write-only project settings",
-  (stack) =>
-    Effect.gen(function* () {
-      adoptionCloud.projects.clear();
-      adoptionCloud.projects.set(foreignProject.id, foreignProject);
-      adoptionCloud.calls.length = 0;
-      yield* stack.destroy();
+adoption.test.provider("Plan adopts explicitly and applies write-only project settings", (stack) =>
+  Effect.gen(function* () {
+    adoptionCloud.projects.clear();
+    adoptionCloud.projects.set(foreignProject.id, foreignProject);
+    adoptionCloud.calls.length = 0;
+    yield* stack.destroy();
 
-      const project = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: true,
-          region: "us-east-1",
-          settings: {},
-        }),
-      );
+    const project = yield* stack.deploy(
+      PrismaProject("Project", {
+        name: "app",
+        createDatabase: true,
+        region: "us-east-1",
+        settings: {},
+      }),
+    );
 
-      expect(project.projectId).toBe("project-foreign");
-      expect(adoptionCloud.calls).toContainEqual([
-        "updateProject",
-        { id: "project-foreign", input: { name: "app", settings: {} } },
-      ]);
+    expect(project.projectId).toBe("project-foreign");
+    expect(adoptionCloud.calls).toContainEqual([
+      "updateProject",
+      { id: "project-foreign", input: { name: "app", settings: {} } },
+    ]);
 
-      yield* stack.destroy();
-    }),
+    yield* stack.destroy();
+  }),
 );
 
 const replacementCloud = makeProjectCloud();
@@ -790,9 +735,7 @@ replacement.test.provider(
       expect(operations).not.toContain("deleteDatabase");
       expect(operations).not.toContain("deleteProject");
       expect(Array.from(replacementCloud.databases.values())).toHaveLength(1);
-      expect(
-        Array.from(replacementCloud.databases.values())[0]?.region?.id,
-      ).toBe("us-east-1");
+      expect(Array.from(replacementCloud.databases.values())[0]?.region?.id).toBe("us-east-1");
 
       yield* stack.destroy();
     }),
@@ -829,13 +772,10 @@ eventuallyConsistentRegion.test.provider(
 
       expect(second.projectId).toBe(first.projectId);
       expect(second.defaultRegion).toBe("us-west-1");
-      expect(Redacted.value(second.directConnectionString!)).toContain(
-        second.databaseId!,
-      );
+      expect(Redacted.value(second.directConnectionString!)).toContain(second.databaseId!);
       expect(
-        eventuallyConsistentRegionCloud.calls.filter(
-          ([operation]) => operation === "getProject",
-        ).length,
+        eventuallyConsistentRegionCloud.calls.filter(([operation]) => operation === "getProject")
+          .length,
       ).toBeGreaterThanOrEqual(3);
       expect(
         eventuallyConsistentRegionCloud.calls.filter(
@@ -881,15 +821,13 @@ conflictingRegion.test.provider(
 
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain(
-          "does not expose the requested default database",
-        );
+        expect(String(result.failure)).toContain("does not expose the requested default database");
       }
       expect(first.databaseId).toBeUndefined();
       expect(conflictingRegionCloud.databases.size).toBe(0);
-      expect(
-        conflictingRegionCloud.calls.map(([operation]) => operation),
-      ).not.toContain("deleteDatabase");
+      expect(conflictingRegionCloud.calls.map(([operation]) => operation)).not.toContain(
+        "deleteDatabase",
+      );
 
       conflictingRegionCloud.databases.clear();
       yield* stack.destroy();
@@ -930,9 +868,7 @@ addDefault.test.provider(
       expect(addDefaultCloud.calls.map(([operation]) => operation)).toContain(
         "createProjectDatabase",
       );
-      expect(
-        addDefaultCloud.calls.map(([operation]) => operation),
-      ).not.toContain("deleteProject");
+      expect(addDefaultCloud.calls.map(([operation]) => operation)).not.toContain("deleteProject");
 
       yield* stack.destroy();
     }),
@@ -967,12 +903,8 @@ removeDefault.test.provider(
 
       expect(second.projectId).not.toBe(first.projectId);
       expect(second.databaseId).toBeUndefined();
-      const operations = removeDefaultCloud.calls.map(
-        ([operation]) => operation,
-      );
-      expect(operations.indexOf("deleteProject")).toBeLessThan(
-        operations.indexOf("createProject"),
-      );
+      const operations = removeDefaultCloud.calls.map(([operation]) => operation);
+      expect(operations.indexOf("deleteProject")).toBeLessThan(operations.indexOf("createProject"));
 
       yield* stack.destroy();
     }),
@@ -1059,9 +991,7 @@ const makeDatabaseCloud = () => {
       if (request.method === "GET") {
         calls.push(["getDatabase", id]);
         const database = databases.get(id);
-        return database === undefined
-          ? notFound("not found")
-          : data(toWireDatabase(database));
+        return database === undefined ? notFound("not found") : data(toWireDatabase(database));
       }
       if (request.method === "PATCH") {
         const input = request.bodyJson as { name?: string };
@@ -1130,9 +1060,7 @@ generatedDatabaseRecovery.test.provider(
 
       expect(observed).toBeDefined();
       expect(Unowned.is(observed!)).toBe(false);
-      expect((observed as PrismaDatabase["Attributes"]).databaseName).toBe(
-        name,
-      );
+      expect((observed as PrismaDatabase["Attributes"]).databaseName).toBe(name);
       const localSecret = Redacted.make("postgres://local-dev-secret");
       const fromDev = yield* provider.read!({
         id: "Database",
@@ -1156,15 +1084,9 @@ generatedDatabaseRecovery.test.provider(
           password: Redacted.make("local-password"),
         },
       } as never).pipe(Effect.provideService(InstanceId, instanceId));
-      expect((fromDev as PrismaDatabase["Attributes"]).databaseId).toBe(
-        "database-generated",
-      );
-      expect(
-        (fromDev as PrismaDatabase["Attributes"]).directConnectionString,
-      ).toBeUndefined();
-      expect(
-        (fromDev as PrismaDatabase["Attributes"]).password,
-      ).toBeUndefined();
+      expect((fromDev as PrismaDatabase["Attributes"]).databaseId).toBe("database-generated");
+      expect((fromDev as PrismaDatabase["Attributes"]).directConnectionString).toBeUndefined();
+      expect((fromDev as PrismaDatabase["Attributes"]).password).toBeUndefined();
 
       generatedDatabaseRecoveryCloud.calls.length = 0;
       const recovered = yield* provider
@@ -1177,9 +1099,7 @@ generatedDatabaseRecovery.test.provider(
           bindings: [],
         } as never)
         .pipe(Effect.provideService(InstanceId, instanceId));
-      expect(Redacted.value(recovered.directConnectionString!)).toContain(
-        "database-generated",
-      );
+      expect(Redacted.value(recovered.directConnectionString!)).toContain("database-generated");
       expect(generatedDatabaseRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
         "connection-database-generated",
@@ -1240,9 +1160,7 @@ generatedDatabaseRecovery.test.provider(
         .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
       expect(Result.isFailure(cannotPromoteAdopted)).toBe(true);
       if (Result.isFailure(cannotPromoteAdopted)) {
-        expect(String(cannotPromoteAdopted.failure)).toContain(
-          "cannot manage a default database",
-        );
+        expect(String(cannotPromoteAdopted.failure)).toContain("cannot manage a default database");
       }
       const adopted = yield* provider
         .reconcile({
@@ -1262,8 +1180,7 @@ generatedDatabaseRecovery.test.provider(
       expect(
         generatedDatabaseRecoveryCloud.calls.filter(
           ([operation, id]) =>
-            operation === "rotateConnection" &&
-            id === "connection-database-explicit",
+            operation === "rotateConnection" && id === "connection-database-explicit",
         ),
       ).toEqual([]);
 
@@ -1282,9 +1199,9 @@ generatedDatabaseRecovery.test.provider(
           bindings: [],
         } as never)
         .pipe(Effect.provideService(InstanceId, instanceId));
-      expect(
-        Redacted.value(adoptedWithRotation.directConnectionString!),
-      ).toContain("database-explicit");
+      expect(Redacted.value(adoptedWithRotation.directConnectionString!)).toContain(
+        "database-explicit",
+      );
       expect(generatedDatabaseRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
         "connection-database-explicit",
@@ -1370,9 +1287,9 @@ inheritedRegion.test.provider(
         }),
       );
       expect(second.databaseId).toBe(first.databaseId);
-      expect(
-        inheritedRegionCloud.calls.map(([operation]) => operation),
-      ).not.toContain("createDatabase");
+      expect(inheritedRegionCloud.calls.map(([operation]) => operation)).not.toContain(
+        "createDatabase",
+      );
 
       inheritedRegionCloud.databases.set("project-default", {
         ...inheritedRegionCloud.databases.get("project-default")!,
@@ -1388,9 +1305,9 @@ inheritedRegion.test.provider(
       );
       expect(moved.databaseId).not.toBe(first.databaseId);
       expect(moved.region).toBe("us-west-1");
-      expect(
-        inheritedRegionCloud.calls.map(([operation]) => operation),
-      ).toContain("createDatabase");
+      expect(inheritedRegionCloud.calls.map(([operation]) => operation)).toContain(
+        "createDatabase",
+      );
 
       yield* stack.destroy();
       inheritedRegionCloud.databases.clear();
@@ -1414,8 +1331,7 @@ const environmentSecrets = new Map([[environmentVariable.id, "foreign"]]);
 const environmentCalls: Array<[string, unknown?]> = [];
 const environmentClient = {
   listEnvironmentVariables: () => Effect.succeed([environmentVariable]),
-  getEnvironmentVariable: (id: string) =>
-    Effect.succeed({ ...environmentVariable, id }),
+  getEnvironmentVariable: (id: string) => Effect.succeed({ ...environmentVariable, id }),
   createEnvironmentVariable: () =>
     Effect.fail(
       new PrismaApiError({
@@ -1467,9 +1383,7 @@ environmentAdoption.test.provider(
       yield* deploy();
       expect(environmentSecrets.get("env-1")).toBe("desired");
       expect(
-        environmentCalls.filter(
-          ([operation]) => operation === "updateEnvironmentVariable",
-        ),
+        environmentCalls.filter(([operation]) => operation === "updateEnvironmentVariable"),
       ).toHaveLength(2);
 
       yield* stack.destroy();
@@ -1483,9 +1397,7 @@ const customDomainClient = {
   listAppDomains: (appId: string) =>
     Effect.sync(() => {
       customDomainCalls.push(["listAppDomains", appId]);
-      return Array.from(customDomainCloud.values()).filter(
-        (domain) => domain.appId === appId,
-      );
+      return Array.from(customDomainCloud.values()).filter((domain) => domain.appId === appId);
     }),
   getCustomDomain: (id: string) =>
     Effect.suspend(() => {
@@ -1661,14 +1573,9 @@ customDomains.test.provider(
       } as never);
       expect(retried.customDomainId).toBe(replacement.customDomainId);
       expect(retried.status).toBe("verifying");
-      expect(customDomainCalls).toContainEqual([
-        "retryCustomDomain",
-        replacement.customDomainId,
-      ]);
+      expect(customDomainCalls).toContainEqual(["retryCustomDomain", replacement.customDomainId]);
       expect(
-        customDomainCalls.filter(
-          ([operation]) => operation === "retryCustomDomain",
-        ),
+        customDomainCalls.filter(([operation]) => operation === "retryCustomDomain"),
       ).toHaveLength(1);
       const moveDiff = yield* provider.diff!({
         id: "Domain",
@@ -1715,15 +1622,11 @@ const sourceRepositoryCalls: Array<[string, unknown?]> = [];
 let nextSourceRepositoryId = 1;
 const sourceRepositoryClient = {
   listProjects: () =>
-    Effect.succeed([
-      apiProject("project-1", "one", null),
-      apiProject("project-2", "two", null),
-    ]),
+    Effect.succeed([apiProject("project-1", "one", null), apiProject("project-2", "two", null)]),
   listSourceRepositories: ({ projectId }: { projectId: string }) =>
     Effect.succeed(
       Array.from(sourceRepositoryCloud.values()).filter(
-        (repository) =>
-          repository.projectId === projectId && repository.status === "active",
+        (repository) => repository.projectId === projectId && repository.status === "active",
       ),
     ),
   listApps: () => Effect.succeed([]),
@@ -1845,14 +1748,10 @@ sourceRepositories.test.provider(
         .pipe(Effect.result);
       expect(Result.isFailure(relink)).toBe(true);
       if (Result.isFailure(relink)) {
-        expect(String(relink.failure)).toContain(
-          "cannot be replaced atomically",
-        );
+        expect(String(relink.failure)).toContain("cannot be replaced atomically");
       }
       expect(sourceRepositoryCalls).toEqual([]);
-      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe(
-        "active",
-      );
+      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe("active");
 
       const provider = yield* PrismaSourceRepository.Provider;
       const archivedDiff = yield* provider.diff!({
@@ -1867,9 +1766,7 @@ sourceRepositories.test.provider(
       expect(Result.isFailure(archivedDiff)).toBe(true);
 
       yield* stack.destroy();
-      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe(
-        "archived",
-      );
+      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe("archived");
     }),
 );
 
@@ -1881,15 +1778,11 @@ const branchClient = {
   listBranches: (_projectId: string, query?: { gitName?: string }) =>
     Effect.succeed(
       Array.from(branchCloud.values()).filter(
-        (branch) =>
-          query?.gitName === undefined || branch.gitName === query.gitName,
+        (branch) => query?.gitName === undefined || branch.gitName === query.gitName,
       ),
     ),
   getBranch: (id: string) => Effect.succeed(branchCloud.get(id)!),
-  createBranch: (
-    projectId: string,
-    input: { gitName: string; isDefault?: boolean },
-  ) =>
+  createBranch: (projectId: string, input: { gitName: string; isDefault?: boolean }) =>
     Effect.sync(() => {
       branchCalls.push(["createBranch", { projectId, input }]);
       const first = branchCloud.size === 0;
@@ -1947,11 +1840,7 @@ const branchFake = makeFakeManagementApi((request) => {
     return page([toWireProject(apiProject("project-1", "app"))]);
   }
 
-  if (
-    segments.length === 4 &&
-    segments[1] === "projects" &&
-    segments[3] === "branches"
-  ) {
+  if (segments.length === 4 && segments[1] === "projects" && segments[3] === "branches") {
     const projectId = segments[2]!;
     if (request.method === "GET") {
       const gitName = request.search.includes("gitName=")
@@ -2177,12 +2066,8 @@ branches.test.provider(
         .pipe(Effect.result);
       expect(Result.isFailure(firstBranch)).toBe(true);
       if (Result.isFailure(firstBranch)) {
-        expect(String(firstBranch.failure)).toContain(
-          "undeletable production branch",
-        );
+        expect(String(firstBranch.failure)).toContain("undeletable production branch");
       }
-      expect(branchCalls.map(([operation]) => operation)).not.toContain(
-        "createBranch",
-      );
+      expect(branchCalls.map(([operation]) => operation)).not.toContain("createBranch");
     }),
 );

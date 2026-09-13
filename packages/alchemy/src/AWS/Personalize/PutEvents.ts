@@ -6,10 +6,7 @@ import type { EventTracker } from "./EventTracker.ts";
 /**
  * `PutEvents` request with `trackingId` injected from the bound tracker.
  */
-export interface PutEventsRequest extends Omit<
-  personalizeevents.PutEventsRequest,
-  "trackingId"
-> {}
+export interface PutEventsRequest extends Omit<personalizeevents.PutEventsRequest, "trackingId"> {}
 
 /**
  * Runtime binding for `personalize:PutEvents`, scoped to one {@link EventTracker} —
@@ -43,12 +40,7 @@ export interface PutEvents extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutEventsRequest,
-    ) => Effect.Effect<
-      personalizeevents.PutEventsResponse,
-      personalizeevents.PutEventsError
-    >
+    ) => Effect.Effect<personalizeevents.PutEventsResponse, personalizeevents.PutEventsError>
   >
 > {}
-export const PutEvents = Binding.Service<PutEvents>(
-  "AWS.Personalize.PutEvents",
-);
+export const PutEvents = Binding.Service<PutEvents>("AWS.Personalize.PutEvents");

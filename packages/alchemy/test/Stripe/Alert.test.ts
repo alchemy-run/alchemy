@@ -10,19 +10,14 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilArchived = (id: string) =>
   GetBillingAlert({ id }).pipe(
     Effect.map((alert) =>
-      alert.status === "archived"
-        ? ("archived" as const)
-        : ("present" as const),
+      alert.status === "archived" ? ("archived" as const) : ("present" as const),
     ),
     Effect.catchIf(isMissing, () => Effect.succeed("archived" as const)),
     Effect.repeat({
@@ -225,9 +220,7 @@ test.provider(
       expect(archived).toEqual("archived");
 
       const after = yield* provider.list();
-      expect(
-        after.find((alert) => alert.id === deployed.alert.id),
-      ).toBeUndefined();
+      expect(after.find((alert) => alert.id === deployed.alert.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

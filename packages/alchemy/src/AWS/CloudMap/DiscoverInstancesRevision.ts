@@ -41,13 +41,9 @@ export interface DiscoverInstancesRevision extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DiscoverInstancesRevisionRequest,
-    ) => Effect.Effect<
-      SD.DiscoverInstancesRevisionResponse,
-      SD.DiscoverInstancesRevisionError
-    >
+    ) => Effect.Effect<SD.DiscoverInstancesRevisionResponse, SD.DiscoverInstancesRevisionError>
   >
 > {}
-export const DiscoverInstancesRevision =
-  Binding.Service<DiscoverInstancesRevision>(
-    "AWS.CloudMap.DiscoverInstancesRevision",
-  );
+export const DiscoverInstancesRevision = Binding.Service<DiscoverInstancesRevision>(
+  "AWS.CloudMap.DiscoverInstancesRevision",
+);

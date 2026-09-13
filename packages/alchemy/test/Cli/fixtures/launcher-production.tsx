@@ -25,8 +25,6 @@ Effect.gen(function* () {
     if (process.env.NODE_ENV !== "production" || "_store" in element) {
       throw new Error("The CLI must use the production JSX runtime");
     }
-    console.log(
-      JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }),
-    );
+    console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));
   });
 }).pipe(Effect.scoped, runMain);

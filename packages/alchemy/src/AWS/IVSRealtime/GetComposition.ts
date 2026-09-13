@@ -26,12 +26,7 @@ export interface GetComposition extends Binding.Service<
   () => Effect.Effect<
     (
       request: ivsrealtime.GetCompositionRequest,
-    ) => Effect.Effect<
-      ivsrealtime.GetCompositionResponse,
-      ivsrealtime.GetCompositionError
-    >
+    ) => Effect.Effect<ivsrealtime.GetCompositionResponse, ivsrealtime.GetCompositionError>
   >
 > {}
-export const GetComposition = Binding.Service<GetComposition>(
-  "AWS.IVSRealtime.GetComposition",
-);
+export const GetComposition = Binding.Service<GetComposition>("AWS.IVSRealtime.GetComposition");

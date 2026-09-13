@@ -3,9 +3,7 @@ import type { AssetConfig } from "../../../shared/types.ts";
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { resolveCompatibilityOptions } from "./compatibility-flags.ts";
 
-export const normalizeConfiguration = (
-  configuration?: AssetConfig,
-): Required<AssetConfig> => {
+export const normalizeConfiguration = (configuration?: AssetConfig): Required<AssetConfig> => {
   const compatibilityOptions = resolveCompatibilityOptions(configuration);
 
   return {

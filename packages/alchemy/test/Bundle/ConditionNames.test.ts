@@ -80,24 +80,20 @@ layer(NodeServices.layer)("bundle conditionNames", (it) => {
       }
     });
 
-  it.effect(
-    "BUN_CONDITION_NAMES: require() resolves the CJS export, import the ESM one",
-    () =>
-      Effect.gen(function* () {
-        const code = yield* bundleWith(Bundle.BUN_CONDITION_NAMES);
-        expect(code).toContain("DUAL_PKG_CJS_ENTRY");
-        expect(code).toContain("DUAL_PKG_ESM_ENTRY");
-      }),
+  it.effect("BUN_CONDITION_NAMES: require() resolves the CJS export, import the ESM one", () =>
+    Effect.gen(function* () {
+      const code = yield* bundleWith(Bundle.BUN_CONDITION_NAMES);
+      expect(code).toContain("DUAL_PKG_CJS_ENTRY");
+      expect(code).toContain("DUAL_PKG_ESM_ENTRY");
+    }),
   );
 
-  it.effect(
-    "NODE_CONDITION_NAMES: require() resolves the CJS export, import the ESM one",
-    () =>
-      Effect.gen(function* () {
-        const code = yield* bundleWith(Bundle.NODE_CONDITION_NAMES);
-        expect(code).toContain("DUAL_PKG_CJS_ENTRY");
-        expect(code).toContain("DUAL_PKG_ESM_ENTRY");
-      }),
+  it.effect("NODE_CONDITION_NAMES: require() resolves the CJS export, import the ESM one", () =>
+    Effect.gen(function* () {
+      const code = yield* bundleWith(Bundle.NODE_CONDITION_NAMES);
+      expect(code).toContain("DUAL_PKG_CJS_ENTRY");
+      expect(code).toContain("DUAL_PKG_ESM_ENTRY");
+    }),
   );
 
   // The control: the former list, with `"import"` baked in, hands the CJS

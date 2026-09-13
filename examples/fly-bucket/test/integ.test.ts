@@ -18,9 +18,7 @@ const fetchOk = (url: string) =>
     const client = yield* HttpClient.HttpClient;
     return yield* client.get(url).pipe(
       Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`HTTP ${res.status}`)),
+        res.status === 200 ? Effect.succeed(res) : Effect.fail(new Error(`HTTP ${res.status}`)),
       ),
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),

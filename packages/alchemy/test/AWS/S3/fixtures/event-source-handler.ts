@@ -50,9 +50,7 @@ export default BucketEventSourceFunction.make(
                   new Error("Versioned bucket notification omitted versionId"),
                 );
               }
-              const key = yield* Effect.sync(() =>
-                recordKey(event.key, event.type, versionId),
-              );
+              const key = yield* Effect.sync(() => recordKey(event.key, event.type, versionId));
               // Redelivery can arrive after the source version was deleted.
               const recorded = yield* getObject({ Key: key }).pipe(
                 Effect.flatMap(({ Body }) => Stream.runDrain(Body!)),
@@ -129,22 +127,13 @@ export default BucketEventSourceFunction.make(
           const eventName = url.searchParams.get("eventName");
           const versionId = url.searchParams.get("versionId");
           if (!key || !eventName || !versionId) {
-            return HttpServerResponse.text(
-              "Missing key, eventName, or versionId",
-              { status: 400 },
-            );
+            return HttpServerResponse.text("Missing key, eventName, or versionId", { status: 400 });
           }
-          const storedKey = yield* Effect.sync(() =>
-            recordKey(key, eventName, versionId),
-          );
+          const storedKey = yield* Effect.sync(() => recordKey(key, eventName, versionId));
           return yield* getObject({ Key: storedKey }).pipe(
-            Effect.flatMap((result) =>
-              Stream.mkString(Stream.decodeText(result.Body!)),
-            ),
+            Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
             Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
-            Effect.flatMap((processed) =>
-              HttpServerResponse.json({ processed }),
-            ),
+            Effect.flatMap((processed) => HttpServerResponse.json({ processed })),
             // Object not written yet — the test polls until it appears.
             Effect.catchTag("NoSuchKey", () =>
               HttpServerResponse.json({ processed: null }, { status: 404 }),
@@ -152,19 +141,10 @@ export default BucketEventSourceFunction.make(
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Lambda.BucketEventSource,
-        S3.PutObjectHttp,
-        S3.GetObjectHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(Lambda.BucketEventSource, S3.PutObjectHttp, S3.GetObjectHttp)),
   ),
 );

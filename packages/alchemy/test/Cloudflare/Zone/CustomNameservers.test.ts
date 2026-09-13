@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Enabling account-level custom nameservers (ACNS) on a zone requires an
 // account nameserver set to exist first — a Business/Enterprise feature the
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -114,16 +108,14 @@ test.provider(
 
       // The testing account has no account-level custom nameserver set, so
       // enabling ACNS on the zone must fail with the typed gate error.
-      const error = yield* zones
-        .putCustomNameserver({ zoneId, enabled: true })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-          Effect.flip,
-        );
+      const error = yield* zones.putCustomNameserver({ zoneId, enabled: true }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+        Effect.flip,
+      );
       expect(error._tag).toEqual("CustomNameserverSetNotFound");
 
       yield* stack.destroy();
@@ -137,34 +129,25 @@ test.provider(
 // default-disabled ones, mirroring `read`). The read-only shape assertion
 // always runs; the testing account has no ACNS entitlement, so the array is
 // typically empty.
-test.provider(
-  "list enumerates zones using account custom nameservers",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("list enumerates zones using account custom nameservers", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Zone.CustomNameservers,
-      );
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(Cloudflare.Zone.CustomNameservers);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      for (const item of all) {
-        expect(typeof item.zoneId).toBe("string");
-        // `list()` only emits zones with ACNS actively enabled.
-        expect(item.enabled).toBe(true);
-        expect(typeof item.initialEnabled).toBe("boolean");
-        expect(item.nsSet === undefined || typeof item.nsSet === "number").toBe(
-          true,
-        );
-        expect(
-          item.initialNsSet === undefined ||
-            typeof item.initialNsSet === "number",
-        ).toBe(true);
-      }
+    expect(Array.isArray(all)).toBe(true);
+    for (const item of all) {
+      expect(typeof item.zoneId).toBe("string");
+      // `list()` only emits zones with ACNS actively enabled.
+      expect(item.enabled).toBe(true);
+      expect(typeof item.initialEnabled).toBe("boolean");
+      expect(item.nsSet === undefined || typeof item.nsSet === "number").toBe(true);
+      expect(item.initialNsSet === undefined || typeof item.initialNsSet === "number").toBe(true);
+    }
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // In an ACNS-entitled account, `list()` must surface the enabled zone.
@@ -186,9 +169,7 @@ test.provider.skipIf(!acnsZoneId)(
       );
       expect(enabled.enabled).toEqual(true);
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Zone.CustomNameservers,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Zone.CustomNameservers);
       const all = yield* provider.list();
       expect(all.some((x) => x.zoneId === zoneId && x.enabled)).toBe(true);
 

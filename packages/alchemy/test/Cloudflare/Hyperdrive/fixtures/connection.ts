@@ -12,11 +12,8 @@ import * as Neon from "@/Neon/index.ts";
  */
 export const HyperdriveConnection = Effect.gen(function* () {
   const project = yield* Neon.Project("HyperdriveBindingProject");
-  const connection = yield* Cloudflare.Hyperdrive.Connection(
-    "HyperdriveBindingConnection",
-    {
-      origin: project.origin,
-    },
-  );
+  const connection = yield* Cloudflare.Hyperdrive.Connection("HyperdriveBindingConnection", {
+    origin: project.origin,
+  });
   return { project, connection };
 });

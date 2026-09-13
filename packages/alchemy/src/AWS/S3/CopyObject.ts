@@ -4,10 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface CopyObjectRequest extends Omit<
-  S3.CopyObjectRequest,
-  "Bucket"
-> {}
+export interface CopyObjectRequest extends Omit<S3.CopyObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:CopyObject`.
@@ -66,9 +63,7 @@ export interface CopyObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: CopyObjectRequest,
-    ) => Effect.Effect<S3.CopyObjectOutput, S3.CopyObjectError>
+    (request: CopyObjectRequest) => Effect.Effect<S3.CopyObjectOutput, S3.CopyObjectError>
   >
 > {}
 

@@ -2,26 +2,17 @@ import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { normalizeTransferredFrom } from "@/Cloudflare/Workers/DurableObject.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
-import {
-  Platform,
-  type PlatformIdentity,
-  type PlatformProps,
-} from "@/Platform.ts";
+import { Platform, type PlatformIdentity, type PlatformProps } from "@/Platform.ts";
 import type { Resource } from "@/Resource.ts";
 import type { BaseRuntimeContext } from "@/RuntimeContext.ts";
 
 interface TestProps extends PlatformProps {
   env?: Record<string, string>;
 }
-interface TestResource extends Resource<
-  "Test.PlatformIdentity",
-  TestProps,
-  {}
-> {}
+interface TestResource extends Resource<"Test.PlatformIdentity", TestProps, {}> {}
 
-const identity = <const Id extends string>(
-  declaration: PlatformIdentity<Id>,
-): Id => declaration.LogicalId;
+const identity = <const Id extends string>(declaration: PlatformIdentity<Id>): Id =>
+  declaration.LogicalId;
 
 test("Platform declarations expose their logical id without evaluating effects", () => {
   const TestPlatform: Platform<TestResource, never, {}, BaseRuntimeContext> =
@@ -40,11 +31,7 @@ test("Platform declarations expose their logical id without evaluating effects",
   class Modular extends TestPlatform<Modular, {}>()("Modular") {}
   class Bare extends TestPlatform<Bare>()("Bare") {}
   class Inline extends TestPlatform<Inline>()("Inline", {}, impl) {}
-  class EffectProps extends TestPlatform<EffectProps>()(
-    "EffectProps",
-    props,
-    impl,
-  ) {}
+  class EffectProps extends TestPlatform<EffectProps>()("EffectProps", props, impl) {}
   const External = TestPlatform("External", {});
   const ExternalEffect = TestPlatform("ExternalEffect", props);
   const Functional = TestPlatform("Functional", {}, impl);
@@ -82,10 +69,7 @@ test("ordinary Worker declarations retain logical ids before yielding", () => {
   class Inline extends Worker<Inline>()("Inline", {}, impl) {}
   class EffectProps extends Worker<EffectProps>()("EffectProps", props, impl) {}
   class External extends Worker<External>()("External", {}) {}
-  class ExternalEffect extends Worker<ExternalEffect>()(
-    "ExternalEffect",
-    props,
-  ) {}
+  class ExternalEffect extends Worker<ExternalEffect>()("ExternalEffect", props) {}
   const Functional = Worker("Functional", {}, impl);
   const ExternalFunctional = Worker("ExternalFunctional", {});
   const ExternalFunctionalEffect = Worker("ExternalFunctionalEffect", props);

@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "SimpleDBBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -38,20 +35,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
-      while: (e) =>
-        e._tag === "TransientUpstream" || e._tag === "HttpClientError",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      while: (e) => e._tag === "TransientUpstream" || e._tag === "HttpClientError",
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -60,23 +51,13 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
 const asUnknown = Effect.map((body: unknown) => body);
 
 const postJson = (path: string, body: unknown) =>
-  send(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(`${baseUrl}${path}`),
-      body,
-    ),
-  ).pipe(
+  send(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}${path}`), body)).pipe(
     Effect.flatMap((r) => r.json),
     asUnknown,
   );
 
 const deleteJson = (path: string, body: unknown) =>
-  send(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.delete(`${baseUrl}${path}`),
-      body,
-    ),
-  ).pipe(
+  send(HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.delete(`${baseUrl}${path}`), body)).pipe(
     Effect.flatMap((r) => r.json),
     asUnknown,
   );
@@ -100,9 +81,7 @@ interface Item {
 describe("SimpleDB Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "SimpleDB test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("SimpleDB test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("SimpleDB test setup: deploying fixture");
@@ -116,9 +95,7 @@ describe("SimpleDB Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/metadata`;
 
-      yield* Effect.logInfo(
-        `SimpleDB test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`SimpleDB test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -126,9 +103,7 @@ describe("SimpleDB Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `SimpleDB test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`SimpleDB test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -161,15 +136,11 @@ describe("SimpleDB Bindings", () => {
           ],
         });
 
-        const response = (yield* getJson(
-          `/get?item=${encodeURIComponent("get-test#1")}`,
-        )) as {
+        const response = (yield* getJson(`/get?item=${encodeURIComponent("get-test#1")}`)) as {
           attributes: Attribute[];
         };
 
-        const byName = Object.fromEntries(
-          response.attributes.map((a) => [a.Name, a.Value]),
-        );
+        const byName = Object.fromEntries(response.attributes.map((a) => [a.Name, a.Value]));
         expect(byName).toMatchObject({ color: "green", size: "large" });
       }),
     );
@@ -223,18 +194,14 @@ describe("SimpleDB Bindings", () => {
         });
         expect(response).toHaveProperty("success", true);
 
-        const first = (yield* getJson(
-          `/get?item=${encodeURIComponent("batch-test#1")}`,
-        )) as {
+        const first = (yield* getJson(`/get?item=${encodeURIComponent("batch-test#1")}`)) as {
           attributes: Attribute[];
         };
         expect(first.attributes).toContainEqual({
           Name: "batch",
           Value: "one",
         });
-        const second = (yield* getJson(
-          `/get?item=${encodeURIComponent("batch-test#2")}`,
-        )) as {
+        const second = (yield* getJson(`/get?item=${encodeURIComponent("batch-test#2")}`)) as {
           attributes: Attribute[];
         };
         expect(second.attributes).toContainEqual({
@@ -258,9 +225,7 @@ describe("SimpleDB Bindings", () => {
         });
         expect(response).toHaveProperty("success", true);
 
-        const after = (yield* getJson(
-          `/get?item=${encodeURIComponent("delete-test#1")}`,
-        )) as {
+        const after = (yield* getJson(`/get?item=${encodeURIComponent("delete-test#1")}`)) as {
           attributes: Attribute[];
         };
         expect(after.attributes).toEqual([]);
@@ -282,9 +247,7 @@ describe("SimpleDB Bindings", () => {
           attributes: ["drop"],
         });
 
-        const after = (yield* getJson(
-          `/get?item=${encodeURIComponent("delete-test#2")}`,
-        )) as {
+        const after = (yield* getJson(`/get?item=${encodeURIComponent("delete-test#2")}`)) as {
           attributes: Attribute[];
         };
         expect(after.attributes).toContainEqual({ Name: "keep", Value: "me" });
@@ -314,15 +277,11 @@ describe("SimpleDB Bindings", () => {
         });
         expect(response).toHaveProperty("success", true);
 
-        const first = (yield* getJson(
-          `/get?item=${encodeURIComponent("batch-delete#1")}`,
-        )) as {
+        const first = (yield* getJson(`/get?item=${encodeURIComponent("batch-delete#1")}`)) as {
           attributes: Attribute[];
         };
         expect(first.attributes).toEqual([]);
-        const second = (yield* getJson(
-          `/get?item=${encodeURIComponent("batch-delete#2")}`,
-        )) as {
+        const second = (yield* getJson(`/get?item=${encodeURIComponent("batch-delete#2")}`)) as {
           attributes: Attribute[];
         };
         expect(second.attributes).toEqual([]);
@@ -336,9 +295,7 @@ describe("SimpleDB Bindings", () => {
         const response = (yield* getJson("/domains")) as {
           domainNames: string[];
         };
-        expect(
-          response.domainNames.some((name) => name.includes("BindingsDomain")),
-        ).toBe(true);
+        expect(response.domainNames.some((name) => name.includes("BindingsDomain"))).toBe(true);
       }),
     );
   });

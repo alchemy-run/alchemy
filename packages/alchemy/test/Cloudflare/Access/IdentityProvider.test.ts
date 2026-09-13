@@ -18,21 +18,15 @@ import IdpLookupWorker from "./fixtures/idp-lookup-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -40,11 +34,7 @@ const resolveZoneId = Effect.gen(function* () {
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge. Zone-level when `zoneId` is set,
 // account-level otherwise — mirroring the provider's own scoping.
-const getIdp = (
-  zoneId: string | undefined,
-  accountId: string,
-  identityProviderId: string,
-) =>
+const getIdp = (zoneId: string | undefined, accountId: string, identityProviderId: string) =>
   (zoneId !== undefined
     ? zeroTrust.getIdentityProviderForZone({ zoneId, identityProviderId })
     : zeroTrust.getIdentityProviderForAccount({ accountId, identityProviderId })
@@ -58,20 +48,13 @@ const getIdp = (
 
 // A deleted IdP surfaces as `AccessIdentityProviderNotFound` (Cloudflare
 // code 12135, `access.api.error.not_found`).
-const expectGone = (
-  zoneId: string | undefined,
-  accountId: string,
-  identityProviderId: string,
-) =>
+const expectGone = (zoneId: string | undefined, accountId: string, identityProviderId: string) =>
   getIdp(zoneId, accountId, identityProviderId).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "IdpNotDeleted" } as const)),
     Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "IdpNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -109,9 +92,7 @@ test.provider("create, verify, and destroy an OIDC IdP", (stack) =>
     expect(live.name).toEqual("alchemy-zt-idp-basic");
     expect(live.type).toEqual("oidc");
     // Cloudflare masks the client secret on read.
-    expect(
-      (live.config as { clientSecret?: string | null }).clientSecret ?? null,
-    ).toBeNull();
+    expect((live.config as { clientSecret?: string | null }).clientSecret ?? null).toBeNull();
 
     yield* stack.destroy();
     yield* expectGone(undefined, accountId, idp.identityProviderId);
@@ -152,15 +133,12 @@ test.provider("update name and config in place (same id)", (stack) =>
     expect(updated.identityProviderId).toEqual(initial.identityProviderId);
     expect(updated.name).toEqual("alchemy-zt-idp-update-v2");
 
-    const live = yield* getIdp(
-      undefined,
-      accountId,
-      updated.identityProviderId,
-    );
+    const live = yield* getIdp(undefined, accountId, updated.identityProviderId);
     expect(live.name).toEqual("alchemy-zt-idp-update-v2");
-    expect(
-      [...((live.config as { claims?: string[] | null }).claims ?? [])].sort(),
-    ).toEqual(["email", "groups"]);
+    expect([...((live.config as { claims?: string[] | null }).claims ?? [])].sort()).toEqual([
+      "email",
+      "groups",
+    ]);
 
     // Redeploying identical props is a no-op (still the same IdP).
     const noop = yield* stack.deploy(
@@ -192,21 +170,13 @@ test.provider("list enumerates the deployed IdP", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Access.IdentityProvider,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Access.IdentityProvider);
     const all = yield* provider.list();
 
-    expect(
-      all.some((x) => x.identityProviderId === deployed.identityProviderId),
-    ).toBe(true);
+    expect(all.some((x) => x.identityProviderId === deployed.identityProviderId)).toBe(true);
 
     yield* stack.destroy();
-    yield* expectGone(
-      undefined,
-      deployed.accountId,
-      deployed.identityProviderId,
-    );
+    yield* expectGone(undefined, deployed.accountId, deployed.identityProviderId);
   }).pipe(logLevel),
 );
 
@@ -319,9 +289,7 @@ test.provider("moving an IdP between scopes replaces it", (stack) =>
         config: oidcConfig,
       }),
     );
-    expect(zoneScoped.identityProviderId).not.toEqual(
-      accountScoped.identityProviderId,
-    );
+    expect(zoneScoped.identityProviderId).not.toEqual(accountScoped.identityProviderId);
     expect(zoneScoped.zoneId).toEqual(zoneId);
 
     // The old account-scoped IdP was deleted by the replacement.
@@ -342,9 +310,7 @@ const forbiddenRetryPolicy = {
   times: 8,
 } as const;
 
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "Forbidden",
@@ -375,9 +341,7 @@ const findLiveIdp = (
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -386,10 +350,7 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);
 
 test.provider(
   "adoption — existing IdP errors without adopt, takes over with adopt(true)",
@@ -452,153 +413,145 @@ test.provider(
 // `""` when provisioned from the Zero Trust dashboard. Both rounds run in
 // ONE sequential case because the singleton is account-global and
 // `test.provider` cases within a file run concurrently.
-test.provider(
-  "adoption — cloudflare-type IdP by empty name, then by type alone",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("adoption — cloudflare-type IdP by empty name, then by type alone", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const findWarp = findLiveIdp(
-        accountId,
-        (idp) => idp.type === "cloudflare",
-      );
+    const findWarp = findLiveIdp(accountId, (idp) => idp.type === "cloudflare");
 
-      // Round 1 — the user-reported regression: an explicit `name: ""` must
-      // match the live IdP (a truthiness check used to swallow `""` and
-      // probe for a generated physical name instead, so the provider tried
-      // to create a second singleton and failed).
-      const pre1 =
-        (yield* findWarp) ??
-        (yield* retryForbidden(
-          zeroTrust.createIdentityProviderForAccount({
-            accountId,
-            name: "",
-            type: "cloudflare",
-            config: { restrictToAccountMembers: true },
-          }),
-        ).pipe(Effect.map((created): LiveIdp => created as LiveIdp)));
-      expect(pre1.id).toBeTruthy();
-
-      const adopted1 = yield* stack.deploy(
-        Cloudflare.Access.IdentityProvider("CloudflareIDP", {
-          name: "",
-          type: "cloudflare",
-          config: { restrictToAccountMembers: true },
-        }).pipe(adopt(true)),
-      );
-      expect(adopted1.identityProviderId).toEqual(pre1.id);
-      expect(adopted1.name).toEqual("");
-
-      yield* stack.destroy();
-      yield* expectGone(undefined, accountId, adopted1.identityProviderId);
-
-      // Round 2 — omitted name: singletons are located by type and keep
-      // their observed display name (no rename to a generated physical
-      // name).
-      const pre2 = yield* retryForbidden(
+    // Round 1 — the user-reported regression: an explicit `name: ""` must
+    // match the live IdP (a truthiness check used to swallow `""` and
+    // probe for a generated physical name instead, so the provider tried
+    // to create a second singleton and failed).
+    const pre1 =
+      (yield* findWarp) ??
+      (yield* retryForbidden(
         zeroTrust.createIdentityProviderForAccount({
           accountId,
           name: "",
           type: "cloudflare",
           config: { restrictToAccountMembers: true },
         }),
-      ).pipe(Effect.map((created): LiveIdp => created as LiveIdp));
-      expect(pre2.id).toBeTruthy();
+      ).pipe(Effect.map((created): LiveIdp => created as LiveIdp)));
+    expect(pre1.id).toBeTruthy();
 
-      const adopted2 = yield* stack.deploy(
-        Cloudflare.Access.IdentityProvider("CloudflareIDP", {
-          type: "cloudflare",
-          config: { restrictToAccountMembers: true },
-        }).pipe(adopt(true)),
-      );
-      expect(adopted2.identityProviderId).toEqual(pre2.id);
-      expect(adopted2.name).toEqual("");
+    const adopted1 = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("CloudflareIDP", {
+        name: "",
+        type: "cloudflare",
+        config: { restrictToAccountMembers: true },
+      }).pipe(adopt(true)),
+    );
+    expect(adopted1.identityProviderId).toEqual(pre1.id);
+    expect(adopted1.name).toEqual("");
 
-      yield* stack.destroy();
-      yield* expectGone(undefined, accountId, adopted2.identityProviderId);
-    }).pipe(logLevel),
+    yield* stack.destroy();
+    yield* expectGone(undefined, accountId, adopted1.identityProviderId);
+
+    // Round 2 — omitted name: singletons are located by type and keep
+    // their observed display name (no rename to a generated physical
+    // name).
+    const pre2 = yield* retryForbidden(
+      zeroTrust.createIdentityProviderForAccount({
+        accountId,
+        name: "",
+        type: "cloudflare",
+        config: { restrictToAccountMembers: true },
+      }),
+    ).pipe(Effect.map((created): LiveIdp => created as LiveIdp));
+    expect(pre2.id).toBeTruthy();
+
+    const adopted2 = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("CloudflareIDP", {
+        type: "cloudflare",
+        config: { restrictToAccountMembers: true },
+      }).pipe(adopt(true)),
+    );
+    expect(adopted2.identityProviderId).toEqual(pre2.id);
+    expect(adopted2.name).toEqual("");
+
+    yield* stack.destroy();
+    yield* expectGone(undefined, accountId, adopted2.identityProviderId);
+  }).pipe(logLevel),
 );
 
-test.provider(
-  "getIdentityProvider data source feeds another resource's props",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider("getIdentityProvider data source feeds another resource's props", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const NAME = "alchemy-zt-idp-lookup";
+    const NAME = "alchemy-zt-idp-lookup";
 
-      // First deploy creates the IdP alone so the live IdP exists before
-      // the next plan's data-source Output resolves.
-      const idp = yield* stack.deploy(
-        Cloudflare.Access.IdentityProvider("LookupOidc", {
+    // First deploy creates the IdP alone so the live IdP exists before
+    // the next plan's data-source Output resolves.
+    const idp = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("LookupOidc", {
+        name: NAME,
+        type: "oidc",
+        config: oidcConfig,
+      }),
+    );
+
+    // Second deploy consumes the lookup Output IN PLACE OF a resource
+    // reference: `allowedIdps` receives the looked-up id — the "gate an
+    // application on an IdP managed outside the stack" use case.
+    const result = yield* stack.deploy(
+      Effect.gen(function* () {
+        const same = yield* Cloudflare.Access.IdentityProvider("LookupOidc", {
           name: NAME,
           type: "oidc",
           config: oidcConfig,
-        }),
-      );
-
-      // Second deploy consumes the lookup Output IN PLACE OF a resource
-      // reference: `allowedIdps` receives the looked-up id — the "gate an
-      // application on an IdP managed outside the stack" use case.
-      const result = yield* stack.deploy(
-        Effect.gen(function* () {
-          const same = yield* Cloudflare.Access.IdentityProvider("LookupOidc", {
-            name: NAME,
-            type: "oidc",
-            config: oidcConfig,
-          });
-          yield* Cloudflare.Zone.Zone("TestZone", {
-            name: zoneName,
-          }).pipe(adopt(true));
-          const app = yield* Cloudflare.Access.Application("LookupGatedApp", {
-            type: "self_hosted",
-            domain: `alchemy-test-idp-lookup.${zoneName}`,
-            sessionDuration: "24h",
-            allowedIdps: [
-              Cloudflare.Access.getIdentityProvider({
-                name: NAME,
-              }).identityProviderId.as<string>(),
-            ],
-          });
-          return {
-            deployedId: same.identityProviderId,
-            app,
-            missing: Cloudflare.Access.getIdentityProvider({
-              name: "alchemy-zt-idp-lookup-nonexistent",
-            }),
-          };
-        }),
-      );
-
-      expect(result.deployedId).toEqual(idp.identityProviderId);
-      expect(result.missing).toBeUndefined();
-      expect(result.app.applicationId).toBeTruthy();
-
-      // The application's allowed-IdP list must carry the looked-up id —
-      // verified out-of-band against the live application.
-      const liveApp = yield* zeroTrust
-        .getAccessApplicationForAccount({
-          accountId,
-          appId: result.app.applicationId,
-        })
-        .pipe(
-          Effect.retry({
-            while: (e): boolean => e._tag === "Forbidden",
-            ...forbiddenRetryPolicy,
+        });
+        yield* Cloudflare.Zone.Zone("TestZone", {
+          name: zoneName,
+        }).pipe(adopt(true));
+        const app = yield* Cloudflare.Access.Application("LookupGatedApp", {
+          type: "self_hosted",
+          domain: `alchemy-test-idp-lookup.${zoneName}`,
+          sessionDuration: "24h",
+          allowedIdps: [
+            Cloudflare.Access.getIdentityProvider({
+              name: NAME,
+            }).identityProviderId.as<string>(),
+          ],
+        });
+        return {
+          deployedId: same.identityProviderId,
+          app,
+          missing: Cloudflare.Access.getIdentityProvider({
+            name: "alchemy-zt-idp-lookup-nonexistent",
           }),
-        );
-      const allowed =
-        (liveApp as { allowedIdps?: ReadonlyArray<string | null> | null })
-          .allowedIdps ?? [];
-      expect(allowed).toContain(idp.identityProviderId);
+        };
+      }),
+    );
 
-      yield* stack.destroy();
-      yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
-    }).pipe(logLevel),
+    expect(result.deployedId).toEqual(idp.identityProviderId);
+    expect(result.missing).toBeUndefined();
+    expect(result.app.applicationId).toBeTruthy();
+
+    // The application's allowed-IdP list must carry the looked-up id —
+    // verified out-of-band against the live application.
+    const liveApp = yield* zeroTrust
+      .getAccessApplicationForAccount({
+        accountId,
+        appId: result.app.applicationId,
+      })
+      .pipe(
+        Effect.retry({
+          while: (e): boolean => e._tag === "Forbidden",
+          ...forbiddenRetryPolicy,
+        }),
+      );
+    const allowed =
+      (liveApp as { allowedIdps?: ReadonlyArray<string | null> | null }).allowedIdps ?? [];
+    expect(allowed).toContain(idp.identityProviderId);
+
+    yield* stack.destroy();
+    yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
+  }).pipe(logLevel),
 );
 
 class LookupNotServing extends Data.TaggedError("LookupNotServing")<{
@@ -613,14 +566,11 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const idp = yield* Cloudflare.Access.IdentityProvider(
-            "WorkerLookupOidc",
-            {
-              name: "alchemy-zt-idp-worker-lookup",
-              type: "oidc",
-              config: oidcConfig,
-            },
-          );
+          const idp = yield* Cloudflare.Access.IdentityProvider("WorkerLookupOidc", {
+            name: "alchemy-zt-idp-worker-lookup",
+            type: "oidc",
+            config: oidcConfig,
+          });
           const worker = yield* IdpLookupWorker;
           return { idp, worker };
         }),
@@ -648,10 +598,7 @@ test.provider(
         Effect.retry({
           while: (e): boolean => e._tag === "LookupNotServing",
           schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential("1 second"),
-              Schedule.spaced("5 seconds"),
-            ]),
+            Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
             Schedule.recurs(15),
           ]),
         }),
@@ -661,11 +608,7 @@ test.provider(
       expect(body.type).toEqual("oidc");
 
       yield* stack.destroy();
-      yield* expectGone(
-        undefined,
-        deployed.idp.accountId,
-        deployed.idp.identityProviderId,
-      );
+      yield* expectGone(undefined, deployed.idp.accountId, deployed.idp.identityProviderId);
     }).pipe(logLevel),
   { timeout: 180_000 },
 );
@@ -681,9 +624,7 @@ type Not<T extends boolean> = T extends true ? false : true;
 type Assert<T extends true> = T;
 
 // Valid shapes are accepted.
-type _OkOidc = Assert<
-  Extends<{ type: "oidc"; config: typeof oidcConfig }, IdpProps>
->;
+type _OkOidc = Assert<Extends<{ type: "oidc"; config: typeof oidcConfig }, IdpProps>>;
 type _OkPin = Assert<Extends<{ type: "onetimepin" }, IdpProps>>;
 type _OkSaml = Assert<
   Extends<
@@ -701,23 +642,11 @@ type _OkSaml = Assert<
 >;
 // An OAuth-only config is rejected on an oidc IdP (missing endpoints).
 type _BadOidc = Assert<
-  Not<
-    Extends<
-      { type: "oidc"; config: { clientId: string; clientSecret: string } },
-      IdpProps
-    >
-  >
+  Not<Extends<{ type: "oidc"; config: { clientId: string; clientSecret: string } }, IdpProps>>
 >;
 // azureAD requires directoryId.
 type _BadAzure = Assert<
-  Not<
-    Extends<
-      { type: "azureAD"; config: { clientId: string; clientSecret: string } },
-      IdpProps
-    >
-  >
+  Not<Extends<{ type: "azureAD"; config: { clientId: string; clientSecret: string } }, IdpProps>>
 >;
 // saml requires issuerUrl/ssoTargetUrl/idpPublicCerts.
-type _BadSaml = Assert<
-  Not<Extends<{ type: "saml"; config: { issuerUrl: string } }, IdpProps>>
->;
+type _BadSaml = Assert<Not<Extends<{ type: "saml"; config: { issuerUrl: string } }, IdpProps>>>;

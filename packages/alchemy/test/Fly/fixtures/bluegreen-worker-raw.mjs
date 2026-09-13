@@ -27,8 +27,7 @@ const stopping = new Promise((resolve) => {
 const jobs = new Set();
 let workerClientOpen = true;
 const workerCall = (operation, args) => {
-  if (!workerClientOpen)
-    throw new Error("worker queue client already released");
+  if (!workerClientOpen) throw new Error("worker queue client already released");
   return call(operation, args);
 };
 const requestFinalizers = [];
@@ -38,20 +37,15 @@ let started = false;
 const server = http.createServer(async (request, response) => {
   try {
     if (request.url === "/health") return response.end("ready");
-    if (request.url === "/")
-      return response.end(JSON.stringify({ machine, version }));
+    if (request.url === "/") return response.end(JSON.stringify({ machine, version }));
     await event("request-started");
-    response.once("finish", () =>
-      requestFinalizers.push(event("request-finalized")),
-    );
+    response.once("finish", () => requestFinalizers.push(event("request-finalized")));
     if (request.url === "/stream") response.write("first\n".repeat(32768));
     await stopping;
     await sleep(afterSignal);
     await event("response-finished");
     response.end(
-      request.url === "/stream"
-        ? "last\n".repeat(32768)
-        : JSON.stringify({ machine, version }),
+      request.url === "/stream" ? "last\n".repeat(32768) : JSON.stringify({ machine, version }),
     );
   } catch (error) {
     console.error(error);
@@ -100,10 +94,7 @@ const timer = setInterval(() => {
 const shutdown = async (signal) => {
   if (started) return;
   started = true;
-  setTimeout(
-    () => process.exit(1),
-    Number(process.env.SHUTDOWN_MS || "30000") * 0.9,
-  );
+  setTimeout(() => process.exit(1), Number(process.env.SHUTDOWN_MS || "30000") * 0.9);
   const httpClosed = new Promise((resolve) => server.close(resolve));
   await event("stop-started", { worker: "a", signal });
   if (mode === "stop-delay") await sleep(1000);

@@ -16,11 +16,7 @@ const BOGUS_ACCESSOR_ID = "00000000-0000-0000-0000-000000000000";
 const unwrapSensitive = (
   value: string | Redacted.Redacted<string> | undefined,
 ): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 export class RePostSpaceBindingsFunction extends Lambda.Function<Lambda.Function>()(
   "RePostSpaceBindingsFunction",
@@ -50,10 +46,8 @@ export default RePostSpaceBindingsFunction.make(
     const getChannel = yield* RePostSpace.GetChannel(space);
     const listChannels = yield* RePostSpace.ListChannels(space);
     const updateChannel = yield* RePostSpace.UpdateChannel(space);
-    const addChannelRole =
-      yield* RePostSpace.BatchAddChannelRoleToAccessors(space);
-    const removeChannelRole =
-      yield* RePostSpace.BatchRemoveChannelRoleFromAccessors(space);
+    const addChannelRole = yield* RePostSpace.BatchAddChannelRoleToAccessors(space);
+    const removeChannelRole = yield* RePostSpace.BatchRemoveChannelRoleFromAccessors(space);
 
     const bound = {
       sendInvites,
@@ -121,9 +115,8 @@ export default RePostSpaceBindingsFunction.make(
               errors: r.errors.length,
               added: r.addedAccessorIds.length,
             })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false, tag: e._tag }),
             ),
           );
           const removed = yield* batchRemoveRole({
@@ -135,9 +128,8 @@ export default RePostSpaceBindingsFunction.make(
               errors: r.errors.length,
               removed: r.removedAccessorIds.length,
             })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json({ added, removed });
@@ -151,9 +143,8 @@ export default RePostSpaceBindingsFunction.make(
             channelRole: "EXPERT",
           }).pipe(
             Effect.map((r) => ({ ok: true, errors: r.errors.length })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false, tag: e._tag }),
             ),
           );
           const removed = yield* removeChannelRole({
@@ -162,9 +153,8 @@ export default RePostSpaceBindingsFunction.make(
             channelRole: "EXPERT",
           }).pipe(
             Effect.map((r) => ({ ok: true, errors: r.errors.length })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json({ added, removed });
@@ -178,18 +168,16 @@ export default RePostSpaceBindingsFunction.make(
             adminId: BOGUS_ACCESSOR_ID,
           }).pipe(
             Effect.map(() => ({ ok: true as const })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           const deregister = yield* deregisterAdmin({
             adminId: BOGUS_ACCESSOR_ID,
           }).pipe(
             Effect.map(() => ({ ok: true as const })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json({ register, deregister });
@@ -202,9 +190,8 @@ export default RePostSpaceBindingsFunction.make(
             body: "This invite targets a nonexistent accessor on purpose.",
           }).pipe(
             Effect.map(() => ({ ok: true as const })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);

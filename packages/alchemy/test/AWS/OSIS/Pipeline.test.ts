@@ -11,33 +11,27 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getPipeline on a nonexistent pipeline fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        osis.getPipeline({ PipelineName: "alchemy-nonexistent-probe" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getPipeline on a nonexistent pipeline fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      osis.getPipeline({ PipelineName: "alchemy-nonexistent-probe" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Ungated probe for the ResourcePolicy provider's read path: OSIS reports
 // "no policy" as a SUCCESS response with the empty document `"{}"` (not a
 // ResourceNotFoundException) — the provider's absent-detection depends on
 // this observed behavior.
-test.provider(
-  "getResourcePolicy on a nonexistent pipeline returns the empty document",
-  () =>
-    Effect.gen(function* () {
-      const { region, accountId } = yield* AWSEnvironment.current;
-      const response = yield* osis.getResourcePolicy({
-        ResourceArn: `arn:aws:osis:${region}:${accountId}:pipeline/alchemy-nonexistent-probe`,
-      });
-      expect(response.Policy === undefined || response.Policy === "{}").toBe(
-        true,
-      );
-    }),
+test.provider("getResourcePolicy on a nonexistent pipeline returns the empty document", () =>
+  Effect.gen(function* () {
+    const { region, accountId } = yield* AWSEnvironment.current;
+    const response = yield* osis.getResourcePolicy({
+      ResourceArn: `arn:aws:osis:${region}:${accountId}:pipeline/alchemy-nonexistent-probe`,
+    });
+    expect(response.Policy === undefined || response.Policy === "{}").toBe(true);
+  }),
 );
 
 // Ungated probe for the PipelineEndpoint provider's observe path: the list
@@ -79,21 +73,14 @@ const assertPipelineDeleting = (name: string) =>
   Effect.gen(function* () {
     const status = yield* osis.getPipeline({ PipelineName: name }).pipe(
       Effect.map((response) => response.Pipeline?.Status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`pipeline '${name}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`pipeline '${name}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -146,11 +133,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           const pipeline = yield* AWS.OSIS.Pipeline("Logs", {
             minUnits: 1,
             maxUnits: 1,
-            pipelineConfigurationBody: pipelineConfig(
-              role.roleArn,
-              bucket.bucketName,
-              region,
-            ),
+            pipelineConfigurationBody: pipelineConfig(role.roleArn, bucket.bucketName, region),
             tags: { fixture: "osis-pipeline" },
           });
 
@@ -208,9 +191,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       });
       expect(described.Pipeline?.Status).toBe("ACTIVE");
       expect(described.Pipeline?.MinUnits).toBe(1);
-      expect(described.Pipeline?.PipelineConfigurationBody).toContain(
-        "log-pipeline",
-      );
+      expect(described.Pipeline?.PipelineConfigurationBody).toContain("log-pipeline");
 
       // Resource policy: attached and readable out-of-band.
       expect(policy.resourceArn).toBe(pipeline.pipelineArn);
@@ -224,9 +205,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(endpoint.pipelineArn).toBe(pipeline.pipelineArn);
       expect(endpoint.status).toBe("ACTIVE");
       const endpoints = yield* osis.listPipelineEndpoints({});
-      expect(
-        (endpoints.PipelineEndpoints ?? []).map((e) => e.EndpointId),
-      ).toContain(endpoint.endpointId);
+      expect((endpoints.PipelineEndpoints ?? []).map((e) => e.EndpointId)).toContain(
+        endpoint.endpointId,
+      );
 
       // Destroy immediately — pipelines bill per OCU-hour — and verify
       // deletion was initiated out-of-band.

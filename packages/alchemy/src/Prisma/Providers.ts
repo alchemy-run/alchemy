@@ -16,43 +16,25 @@ import { PrismaAuth } from "./AuthProvider.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { BucketAccessKey, BucketAccessKeyProvider } from "./BucketAccessKey.ts";
-import {
-  PrismaClient,
-  PrismaClientLive,
-  type PrismaManagementClient,
-} from "./Client.ts";
+import { PrismaClient, PrismaClientLive, type PrismaManagementClient } from "./Client.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
 import * as Credentials from "./Credentials.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
 import { Deployment, DeploymentProvider } from "./Deployment.ts";
-import {
-  EnvironmentVariable,
-  EnvironmentVariableProvider,
-} from "./EnvironmentVariable.ts";
-import {
-  PrismaHttpClientLive,
-  PrismaUploadClientLive,
-} from "./Internal/HttpClient.ts";
+import { EnvironmentVariable, EnvironmentVariableProvider } from "./EnvironmentVariable.ts";
+import { PrismaHttpClientLive, PrismaUploadClientLive } from "./Internal/HttpClient.ts";
 import { Contract, ContractProvider } from "./ORM/Contract.ts";
 import { Migrate, MigrateProvider } from "./ORM/Migrate.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
-import {
-  SourceRepository,
-  SourceRepositoryProvider,
-} from "./SourceRepository.ts";
-import {
-  WebsiteArtifact,
-  WebsiteArtifactProvider,
-} from "./Website/Artifact.ts";
+import { SourceRepository, SourceRepositoryProvider } from "./SourceRepository.ts";
+import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
 export { PrismaEnvironment } from "./PrismaEnvironment.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Prisma",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Prisma") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -66,10 +48,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 const standaloneManagementApiLayer = () =>
   PrismaClientLive.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        Credentials.fromEnvironment(),
-        Layer.succeed(Retry.Retry, Retry.makeDefault),
-      ),
+      Layer.mergeAll(Credentials.fromEnvironment(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
     ),
     Layer.provideMerge(fromProfile()),
     Layer.provideMerge(PrismaAuth),
@@ -126,10 +105,7 @@ const stackManagementApiLayer = () =>
     }),
   ).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        Credentials.fromAuthProvider(),
-        Layer.succeed(Retry.Retry, Retry.makeDefault),
-      ),
+      Layer.mergeAll(Credentials.fromAuthProvider(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
     ),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
@@ -173,10 +149,7 @@ const stackManagementApiLayer = () =>
  * ```
  */
 export const managementApi = () =>
-  standaloneManagementApiLayer().pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.orDie,
-  );
+  standaloneManagementApiLayer().pipe(Layer.provide(FetchHttpClient.layer), Layer.orDie);
 
 /**
  * Build a layer that registers all Prisma resource providers, the Prisma

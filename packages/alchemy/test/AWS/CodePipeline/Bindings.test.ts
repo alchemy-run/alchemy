@@ -20,10 +20,7 @@ const sharedStack = Core.scratchStack(testOptions, "CodePipelineBindings");
 
 // A fresh Lambda role can remain unauthorized by CodePipeline after the
 // function itself is active.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(90),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(90)]);
 
 let baseUrl: string;
 
@@ -32,9 +29,7 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly body: string;
 }> {}
 
-class PipelineReadinessError extends Data.TaggedError(
-  "PipelineReadinessError",
-)<{
+class PipelineReadinessError extends Data.TaggedError("PipelineReadinessError")<{
   readonly status: number;
   readonly errorTag?: string;
   readonly errorMessage?: string;
@@ -54,19 +49,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -74,12 +64,11 @@ const getJson = (url: string) =>
   send(HttpClientRequest.get(url)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (url: string, body: unknown) =>
-  send(
-    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
-const post = (url: string) =>
-  send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
+const post = (url: string) => send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
 
 /**
  * A route answered with a typed error tag. The tag being present proves the
@@ -111,16 +100,11 @@ const untilExecutionVisible = <A, E, R>(
 ): Effect.Effect<A, E | ExecutionNotVisible, R> =>
   effect.pipe(
     Effect.flatMap((body) =>
-      visible(body)
-        ? Effect.succeed(body)
-        : Effect.fail(new ExecutionNotVisible()),
+      visible(body) ? Effect.succeed(body) : Effect.fail(new ExecutionNotVisible()),
     ),
     Effect.retry({
       while: (e): boolean => e instanceof ExecutionNotVisible,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -143,9 +127,7 @@ describe.sequential("CodePipeline Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/state`;
 
-      yield* Effect.logInfo(
-        `CodePipeline test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`CodePipeline test setup: probing readiness at ${readinessUrl}`);
       // Readiness requires an authorized downstream call, not just HTTP 200.
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
@@ -162,9 +144,7 @@ describe.sequential("CodePipeline Bindings", () => {
           const result = body as { errorTag?: string; errorMessage?: string };
           return result.errorTag === undefined
             ? Effect.succeed(result)
-            : Effect.fail(
-                new PipelineReadinessError({ status: 200, ...result }),
-              );
+            : Effect.fail(new PipelineReadinessError({ status: 200, ...result }));
         }),
         Effect.tapError((error) => Effect.logWarning(String(error))),
         Effect.retry({ schedule: readinessPolicy }),
@@ -214,11 +194,8 @@ describe.sequential("CodePipeline Bindings", () => {
 
           // GetPipelineExecution sees it (eventual consistency — poll).
           const got = (yield* untilExecutionVisible(
-            getJson(
-              `${baseUrl}/execution/get?id=${encodeURIComponent(executionId)}`,
-            ),
-            (body: any) =>
-              body.errorTag !== "PipelineExecutionNotFoundException",
+            getJson(`${baseUrl}/execution/get?id=${encodeURIComponent(executionId)}`),
+            (body: any) => body.errorTag !== "PipelineExecutionNotFoundException",
           )) as any;
           expect(got.errorTag).toBeUndefined();
           expect(got.status).toBeTruthy();
@@ -240,10 +217,7 @@ describe.sequential("CodePipeline Bindings", () => {
             ),
             Effect.retry({
               while: (e): boolean => e._tag === "ApprovalNotPending",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(20)]),
             }),
           );
 
@@ -358,36 +332,32 @@ describe.sequential("CodePipeline Bindings", () => {
   });
 
   describe("GetJobDetails + PutJobSuccessResult + PutJobFailureResult + PollForJobs + AcknowledgeJob", () => {
-    test.provider(
-      "job-worker bindings answer typed for unknown jobs",
-      (_stack) =>
-        Effect.gen(function* () {
-          const details = (yield* getJson(
-            `${baseUrl}/job/get?id=${FAKE_UUID}`,
-          )) as any;
-          expectAuthorized(details);
+    test.provider("job-worker bindings answer typed for unknown jobs", (_stack) =>
+      Effect.gen(function* () {
+        const details = (yield* getJson(`${baseUrl}/job/get?id=${FAKE_UUID}`)) as any;
+        expectAuthorized(details);
 
-          const success = (yield* postJson(`${baseUrl}/job/success`, {
-            jobId: FAKE_UUID,
-          })) as any;
-          expectTypedNonAuthz(success);
+        const success = (yield* postJson(`${baseUrl}/job/success`, {
+          jobId: FAKE_UUID,
+        })) as any;
+        expectTypedNonAuthz(success);
 
-          const failure = (yield* postJson(`${baseUrl}/job/failure`, {
-            jobId: FAKE_UUID,
-          })) as any;
-          expectTypedNonAuthz(failure);
+        const failure = (yield* postJson(`${baseUrl}/job/failure`, {
+          jobId: FAKE_UUID,
+        })) as any;
+        expectTypedNonAuthz(failure);
 
-          // No custom action type exists — typed ActionTypeNotFoundException.
-          const polled = (yield* post(`${baseUrl}/job/poll`)) as any;
-          expectTypedNonAuthz(polled);
+        // No custom action type exists — typed ActionTypeNotFoundException.
+        const polled = (yield* post(`${baseUrl}/job/poll`)) as any;
+        expectTypedNonAuthz(polled);
 
-          // Unknown job/nonce — typed JobNotFound / InvalidNonce rejection.
-          const acked = (yield* postJson(`${baseUrl}/job/ack`, {
-            jobId: FAKE_UUID,
-            nonce: FAKE_UUID,
-          })) as any;
-          expectTypedNonAuthz(acked);
-        }),
+        // Unknown job/nonce — typed JobNotFound / InvalidNonce rejection.
+        const acked = (yield* postJson(`${baseUrl}/job/ack`, {
+          jobId: FAKE_UUID,
+          nonce: FAKE_UUID,
+        })) as any;
+        expectTypedNonAuthz(acked);
+      }),
     );
   });
 });

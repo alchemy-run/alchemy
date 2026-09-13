@@ -41,9 +41,7 @@ const selectRejected = (
     info.expiredLogEventEndIndex ?? -1,
   );
   const tooNewStart = info.tooNewLogEventStartIndex ?? batch.length;
-  return batch.filter(
-    (_, index) => index <= rejectedHeadEnd || index >= tooNewStart,
-  );
+  return batch.filter((_, index) => index <= rejectedHeadEnd || index >= tooNewStart);
 };
 
 export const LogEventSinkHttp = Layer.effect(
@@ -70,24 +68,21 @@ export const LogEventSinkHttp = Layer.effect(
         }
       }
       const put = yield* putLogEvents(logGroup);
-      return makeBatchedSink<
-        Logs.InputLogEvent,
-        Logs.PutLogEventsResponse,
-        Logs.PutLogEventsError
-      >({
-        maxRecords: 10_000,
-        maxBytes: 1_048_576,
-        sizeOf: (event) =>
-          encoder.encode(event.message).length + PER_EVENT_OVERHEAD,
-        send: (batch) =>
-          put({
-            logStreamName: props.logStreamName,
-            logEvents: [...batch],
-          }),
-        // No `unprocessed` extractor: PutLogEvents has no transient per-event
-        // failure mode — timestamp rejections are permanent, so drop + surface.
-        rejected: selectRejected,
-      });
+      return makeBatchedSink<Logs.InputLogEvent, Logs.PutLogEventsResponse, Logs.PutLogEventsError>(
+        {
+          maxRecords: 10_000,
+          maxBytes: 1_048_576,
+          sizeOf: (event) => encoder.encode(event.message).length + PER_EVENT_OVERHEAD,
+          send: (batch) =>
+            put({
+              logStreamName: props.logStreamName,
+              logEvents: [...batch],
+            }),
+          // No `unprocessed` extractor: PutLogEvents has no transient per-event
+          // failure mode — timestamp rejections are permanent, so drop + surface.
+          rejected: selectRejected,
+        },
+      );
     });
   }),
 );

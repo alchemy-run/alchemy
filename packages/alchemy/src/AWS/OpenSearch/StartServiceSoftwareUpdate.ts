@@ -31,7 +31,6 @@ export interface StartServiceSoftwareUpdate extends Binding.Service<
     >
   >
 > {}
-export const StartServiceSoftwareUpdate =
-  Binding.Service<StartServiceSoftwareUpdate>(
-    "AWS.OpenSearch.StartServiceSoftwareUpdate",
-  );
+export const StartServiceSoftwareUpdate = Binding.Service<StartServiceSoftwareUpdate>(
+  "AWS.OpenSearch.StartServiceSoftwareUpdate",
+);

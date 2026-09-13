@@ -55,11 +55,7 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       const all = yield* provider.list();
 
       expect(
-        all.some(
-          (a) =>
-            a.clusterName === addon.clusterName &&
-            a.addonName === addon.addonName,
-        ),
+        all.some((a) => a.clusterName === addon.clusterName && a.addonName === addon.addonName),
       ).toBe(true);
 
       yield* stack.destroy();

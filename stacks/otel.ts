@@ -32,11 +32,7 @@ import {
 export default Alchemy.Stack(
   "AlchemyOtel",
   {
-    providers: Layer.mergeAll(
-      Axiom.providers(),
-      Cloudflare.providers(),
-      GitHub.providers(),
-    ),
+    providers: Layer.mergeAll(Axiom.providers(), Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {

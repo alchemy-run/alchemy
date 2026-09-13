@@ -30,9 +30,7 @@ export interface OxcLoaderOptions {
    */
   readonly tsconfig?: boolean | undefined;
   /** Controls which file URLs belong to the fresh import graph. */
-  readonly shouldInvalidate?:
-    | ((url: string, parentURL: string | undefined) => boolean)
-    | undefined;
+  readonly shouldInvalidate?: ((url: string, parentURL: string | undefined) => boolean) | undefined;
   /**
    * Limits transformation to matching absolute file paths; everything else
    * loads through Node untouched. Lets a published install transpile only
@@ -75,14 +73,9 @@ export interface OxcLoader {
 }
 
 const namespaceParameter = "alchemy-import-namespace";
-const globalRegistrationKey = Symbol.for(
-  "@alchemy.run/node-utils/register-oxc",
-);
+const globalRegistrationKey = Symbol.for("@alchemy.run/node-utils/register-oxc");
 
-type NextResolve = (
-  specifier: string,
-  context?: Partial<ResolveHookContext>,
-) => ResolveFnOutput;
+type NextResolve = (specifier: string, context?: Partial<ResolveHookContext>) => ResolveFnOutput;
 
 const namespaceOf = (url: string | undefined) => {
   if (url === undefined || !url.startsWith("file:")) return undefined;
@@ -127,13 +120,11 @@ const scheduleCompileCacheFlush = (() => {
 
 /** Specifiers Node owns outright: builtins, data URLs, remote schemes. */
 const isForeignSpecifier = (specifier: string) =>
-  /^(?:node:|data:|[a-z][a-z\d+.-]*:\/\/)/i.test(specifier) &&
-  !specifier.startsWith("file:");
+  /^(?:node:|data:|[a-z][a-z\d+.-]*:\/\/)/i.test(specifier) && !specifier.startsWith("file:");
 
 /** A `require()` reaching the hooks: Node's CommonJS resolver wants paths, not URLs. */
 const isRequireContext = (context: ResolveHookContext) =>
-  context.conditions?.includes("require") === true &&
-  !context.conditions.includes("import");
+  context.conditions?.includes("require") === true && !context.conditions.includes("import");
 
 const resolveWithCandidate = (
   candidate: string,
@@ -174,12 +165,7 @@ const resolveSpecifier = (
   if (parentPath !== undefined && isProjectPath(parentPath)) {
     const candidate = resolver.resolve(parentPath, clean, conditions);
     if (candidate !== undefined) {
-      const resolved = resolveWithCandidate(
-        candidate,
-        metadata,
-        context,
-        nextResolve,
-      );
+      const resolved = resolveWithCandidate(candidate, metadata, context, nextResolve);
       if (resolved !== undefined) return resolved;
     }
   }
@@ -251,24 +237,15 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
           ? context
           : {
               ...context,
-              conditions: [
-                ...new Set([...options.conditions, ...context.conditions]),
-              ],
+              conditions: [...new Set([...options.conditions, ...context.conditions])],
             };
-      const resolved = resolveSpecifier(
-        resolver,
-        specifier,
-        resolutionContext,
-        nextResolve,
-      );
+      const resolved = resolveSpecifier(resolver, specifier, resolutionContext, nextResolve);
       if (
         namespace !== undefined &&
         resolved.url.startsWith("file:") &&
         shouldInvalidate(
           withoutNamespace(resolved.url),
-          context.parentURL === undefined
-            ? undefined
-            : withoutNamespace(context.parentURL),
+          context.parentURL === undefined ? undefined : withoutNamespace(context.parentURL),
         )
       ) {
         return { ...resolved, url: withNamespace(resolved.url, namespace) };
@@ -301,25 +278,14 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
   const loader: OxcLoader = {
     import<T>(specifier: string, parentURL: string) {
       if (!isFileLikeSpecifier(specifier)) {
-        throw new Error(
-          `Cannot import '${specifier}': expected a file URL or path.`,
-        );
+        throw new Error(`Cannot import '${specifier}': expected a file URL or path.`);
       }
-      const base = parentURL.startsWith("file:")
-        ? parentURL
-        : pathToFileURL(parentURL).href;
+      const base = parentURL.startsWith("file:") ? parentURL : pathToFileURL(parentURL).href;
       const url = specifier.startsWith("file:")
         ? specifier
-        : new URL(
-            specifier.startsWith(".")
-              ? specifier
-              : pathToFileURL(specifier).href,
-            base,
-          ).href;
+        : new URL(specifier.startsWith(".") ? specifier : pathToFileURL(specifier).href, base).href;
       return import(
-        options.namespace === undefined
-          ? url
-          : withNamespace(url, options.namespace)
+        options.namespace === undefined ? url : withNamespace(url, options.namespace)
       ) as Promise<T>;
     },
     unregister() {

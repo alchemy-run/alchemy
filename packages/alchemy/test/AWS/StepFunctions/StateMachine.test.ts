@@ -14,9 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const plain = (value: string | Redacted.Redacted<string>): string =>
   typeof value === "string" ? value : Redacted.value(value);
 
-class StateMachineStillExists extends Data.TaggedError(
-  "StateMachineStillExists",
-)<{
+class StateMachineStillExists extends Data.TaggedError("StateMachineStillExists")<{
   readonly stateMachineArn: string;
 }> {}
 
@@ -34,10 +32,7 @@ const assertStateMachineDeleted = (stateMachineArn: string) =>
     Effect.catchTag("StateMachineDoesNotExist", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StateMachineStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -51,10 +46,7 @@ const assertRoleDeleted = (roleName: string) =>
     Effect.catchTag("NoSuchEntityException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RoleStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -95,9 +87,7 @@ test.provider(
       const tags = yield* sfn.listTagsForResource({
         resourceArn: machine.stateMachineArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.tags ?? []).map((t) => [t.key, t.value]),
-      );
+      const tagRecord = Object.fromEntries((tags.tags ?? []).map((t) => [t.key, t.value]));
       expect(tagRecord.Environment).toBe("test");
       expect(tagRecord["alchemy::id"]).toBe("Workflow");
 
@@ -122,9 +112,7 @@ test.provider(
         resourceArn: machine.stateMachineArn,
       });
       expect(
-        Object.fromEntries(
-          (afterUpdateTags.tags ?? []).map((t) => [t.key, t.value]),
-        ).Extra,
+        Object.fromEntries((afterUpdateTags.tags ?? []).map((t) => [t.key, t.value])).Extra,
       ).toBe("1");
 
       // no-op deploy converges without creating a new revision
@@ -231,9 +219,7 @@ test.provider(
       const observed = yield* sfn.describeStateMachine({
         stateMachineArn: machine.stateMachineArn,
       });
-      expect(JSON.parse(plain(observed.definition)).Comment).toBe(
-        "substituted-value",
-      );
+      expect(JSON.parse(plain(observed.definition)).Comment).toBe("substituted-value");
 
       yield* stack.destroy();
       yield* assertStateMachineDeleted(machine.stateMachineArn);

@@ -34,6 +34,4 @@ export interface UpdateStep extends Binding.Service<
     ) => Effect.Effect<deadline.UpdateStepResponse, deadline.UpdateStepError>
   >
 > {}
-export const UpdateStep = Binding.Service<UpdateStep>(
-  "AWS.Deadline.UpdateStep",
-);
+export const UpdateStep = Binding.Service<UpdateStep>("AWS.Deadline.UpdateStep");

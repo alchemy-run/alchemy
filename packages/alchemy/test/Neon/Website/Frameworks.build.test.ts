@@ -49,8 +49,7 @@ describe.sequential("Neon Website production Fetch artifacts", () => {
                     target,
                     memo: false,
                     env: { GREETING: `Hello from ${name} on Neon!` },
-                    options:
-                      slug === "astro" ? { astro: { output: "server" } } : {},
+                    options: slug === "astro" ? { astro: { output: "server" } } : {},
                   });
             }),
           );

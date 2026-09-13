@@ -168,14 +168,10 @@ export const DashboardProvider = () =>
           // Sync — `overwrite: true` short-circuits Axiom's optimistic-
           // concurrency check (otherwise the API requires the caller to
           // echo back the server-side `version`, which we don't track).
-          return toAttrsFromCreate(
-            yield* update({ ...news, uid: observed.uid, overwrite: true }),
-          );
+          return toAttrsFromCreate(yield* update({ ...news, uid: observed.uid, overwrite: true }));
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ uid: output.uid }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ uid: output.uid }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.uid) return undefined;
@@ -189,10 +185,7 @@ export const DashboardProvider = () =>
         // each item carries the same shape as `getDashboard`, so we map through
         // the shared `toAttrsFromGet` hydrator to produce the exact `read`
         // Attributes shape.
-        list: () =>
-          listAll({}).pipe(
-            Effect.map((dashboards) => dashboards.map(toAttrsFromGet)),
-          ),
+        list: () => listAll({}).pipe(Effect.map((dashboards) => dashboards.map(toAttrsFromGet))),
       };
     }),
   );

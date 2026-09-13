@@ -29,10 +29,7 @@ export interface DescribeDBClusters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: neptune.DescribeDBClustersMessage,
-    ) => Effect.Effect<
-      neptune.DBClusterMessage,
-      neptune.DescribeDBClustersError
-    >
+    ) => Effect.Effect<neptune.DBClusterMessage, neptune.DescribeDBClustersError>
   >
 > {}
 export const DescribeDBClusters = Binding.Service<DescribeDBClusters>(

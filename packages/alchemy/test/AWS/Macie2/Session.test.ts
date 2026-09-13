@@ -32,9 +32,7 @@ test.provider(
     Effect.gen(function* () {
       const preexisting = yield* getSession;
       if (preexisting) {
-        yield* Effect.logInfo(
-          "Macie already enabled — skipping destructive lifecycle test",
-        );
+        yield* Effect.logInfo("Macie already enabled — skipping destructive lifecycle test");
         return;
       }
 

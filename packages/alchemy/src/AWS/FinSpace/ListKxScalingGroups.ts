@@ -25,10 +25,7 @@ export interface ListKxScalingGroups extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListKxScalingGroupsRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.ListKxScalingGroupsResponse,
-      SVC.ListKxScalingGroupsError
-    >
+    ) => Effect.Effect<SVC.ListKxScalingGroupsResponse, SVC.ListKxScalingGroupsError>
   >
 > {}
 export const ListKxScalingGroups = Binding.Service<ListKxScalingGroups>(

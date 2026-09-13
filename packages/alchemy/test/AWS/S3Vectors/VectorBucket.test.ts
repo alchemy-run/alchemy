@@ -30,9 +30,7 @@ const findIndex = (vectorBucketName: string, indexName: string) =>
 const findPolicy = (vectorBucketName: string) =>
   s3vectors.getVectorBucketPolicy({ vectorBucketName }).pipe(
     Effect.map((r) => r.policy),
-    Effect.catchTag("NotFoundException", () =>
-      Effect.succeed(undefined as string | undefined),
-    ),
+    Effect.catchTag("NotFoundException", () => Effect.succeed(undefined as string | undefined)),
   );
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists")<{
@@ -42,9 +40,7 @@ class BucketStillExists extends Data.TaggedError("BucketStillExists")<{
 const assertBucketDeleted = (vectorBucketName: string) =>
   findBucket(vectorBucketName).pipe(
     Effect.flatMap((bucket) =>
-      bucket === undefined
-        ? Effect.void
-        : Effect.fail(new BucketStillExists({ vectorBucketName })),
+      bucket === undefined ? Effect.void : Effect.fail(new BucketStillExists({ vectorBucketName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "BucketStillExists",
@@ -79,10 +75,7 @@ test.provider(
       const observedBucket = yield* findBucket(bucket.vectorBucketName);
       expect(observedBucket?.vectorBucketArn).toBe(bucket.vectorBucketArn);
 
-      const observedIndex = yield* findIndex(
-        bucket.vectorBucketName,
-        index.indexName,
-      );
+      const observedIndex = yield* findIndex(bucket.vectorBucketName, index.indexName);
       expect(observedIndex?.dimension).toBe(8);
       expect(observedIndex?.distanceMetric).toBe("cosine");
 
@@ -140,10 +133,7 @@ test.provider(
       // replacement produced a new physical index
       expect(second.index.indexName).not.toBe(first.index.indexName);
 
-      const observed = yield* findIndex(
-        "alchemy-test-vectors-a",
-        second.index.indexName,
-      );
+      const observed = yield* findIndex("alchemy-test-vectors-a", second.index.indexName);
       expect(observed?.dimension).toBe(16);
 
       yield* stack.destroy();
@@ -246,16 +236,12 @@ test.provider(
         session: stubSession,
         bindings: [],
       };
-      const protectedDelete = yield* Effect.result(
-        provider.delete(deleteInput),
-      );
+      const protectedDelete = yield* Effect.result(provider.delete(deleteInput));
       expect(Result.isFailure(protectedDelete)).toBe(true);
       if (Result.isFailure(protectedDelete)) {
         expect(protectedDelete.failure._tag).toBe("ConflictException");
       }
-      expect(
-        yield* findIndex(bucket.vectorBucketName, "untracked-child"),
-      ).toBeDefined();
+      expect(yield* findIndex(bucket.vectorBucketName, "untracked-child")).toBeDefined();
 
       yield* provider.delete({ ...deleteInput, force: true });
       yield* assertBucketDeleted(bucket.vectorBucketName);

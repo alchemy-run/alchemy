@@ -12,15 +12,9 @@ describe("tarGzipDirectory", () => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-tar-" });
-      yield* fs.writeFileString(
-        path.join(dir, "Dockerfile"),
-        "FROM oven/bun:1\n",
-      );
+      yield* fs.writeFileString(path.join(dir, "Dockerfile"), "FROM oven/bun:1\n");
       yield* fs.makeDirectory(path.join(dir, "dist"), { recursive: true });
-      yield* fs.writeFileString(
-        path.join(dir, "dist", "index.html"),
-        "<h1>ok</h1>\n",
-      );
+      yield* fs.writeFileString(path.join(dir, "dist", "index.html"), "<h1>ok</h1>\n");
       const gz = yield* tarGzipDirectory(dir);
       expect(gz.byteLength).toBeGreaterThan(80);
       const tar = yield* Effect.sync(() => zlib.gunzipSync(gz));

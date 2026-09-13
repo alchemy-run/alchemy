@@ -16,10 +16,7 @@ export class Task extends Cloudflare.DurableObject<Task>()(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "abort fixture: constructor started",
-        state.id.toString(),
-      );
+      yield* Effect.logInfo("abort fixture: constructor started", state.id.toString());
       const boots = ((yield* state.storage.get<number>("boots")) ?? 0) + 1;
       yield* state.storage.put("boots", boots);
       yield* Effect.logInfo("abort fixture: constructor completed", { boots });
@@ -31,9 +28,7 @@ export class Task extends Cloudflare.DurableObject<Task>()(
             if (fail) {
               failedPings++;
               return yield* Effect.die(
-                new Error(
-                  "internal error; reference = application-ping-failure",
-                ),
+                new Error("internal error; reference = application-ping-failure"),
               );
             }
             return { boots, failedPings, ok: true as const };
@@ -68,9 +63,7 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
             name: error.name,
             message: error.message,
             ownProperties: Object.getOwnPropertyDescriptors(error),
-            prototypeProperties: Object.getOwnPropertyNames(
-              Object.getPrototypeOf(error),
-            ),
+            prototypeProperties: Object.getOwnPropertyNames(Object.getPrototypeOf(error)),
           }
         : { value: String(error) };
     return {
@@ -84,15 +77,11 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
             Effect.flatMap((result) => HttpServerResponse.json(result)),
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause);
-              const native =
-                error instanceof Cloudflare.RpcCallError
-                  ? error.cause
-                  : undefined;
+              const native = error instanceof Cloudflare.RpcCallError ? error.cause : undefined;
               const methodUnavailable =
                 native instanceof Error &&
                 native.name === "TypeError" &&
-                native.message ===
-                  'The RPC receiver does not implement the method "ping".';
+                native.message === 'The RPC receiver does not implement the method "ping".';
               const readinessRetry =
                 url.pathname === "/ping" &&
                 native instanceof Error &&

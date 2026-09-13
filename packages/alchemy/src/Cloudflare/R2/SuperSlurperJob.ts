@@ -208,9 +208,7 @@ export type SuperSlurperJob = Resource<
  * @product R2
  * @category Storage & Databases
  */
-export const SuperSlurperJob = Resource<SuperSlurperJob>(
-  "Cloudflare.R2.SuperSlurperJob",
-);
+export const SuperSlurperJob = Resource<SuperSlurperJob>("Cloudflare.R2.SuperSlurperJob");
 
 export const SuperSlurperJobProvider = () =>
   Provider.succeed(SuperSlurperJob, {
@@ -261,21 +259,15 @@ export const SuperSlurperJobProvider = () =>
             Retry.none,
             // Preconnectivity rejects before creating a job; fresh tokens may not have propagated.
             Effect.retry({
-              while: (error) =>
-                error._tag === "SuperSlurperPreconnectivityFailed",
+              while: (error) => error._tag === "SuperSlurperPreconnectivityFailed",
               schedule: Schedule.spaced("3 seconds"),
               times: 8,
             }),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Super Slurper did not return a job ID"),
-          );
+          return yield* Effect.fail(new Error("Super Slurper did not return a job ID"));
         }
-        identity = attributes(
-          { accountId, jobId: created.id },
-          { status: "running" },
-        );
+        identity = attributes({ accountId, jobId: created.id }, { status: "running" });
         observed = { id: created.id, status: "running" };
       }
       const current = identity!;
@@ -305,15 +297,10 @@ const observe = (identity: { accountId: string; jobId: string }) =>
     .pipe(
       Retry.none,
       Effect.map((job) => (job.id ? job : undefined)),
-      Effect.catchTag("SuperSlurperJobOperationFailed", () =>
-        findInHistory(identity),
-      ),
+      Effect.catchTag("SuperSlurperJobOperationFailed", () => findInHistory(identity)),
     );
 
-const findInHistory = Effect.fn(function* (identity: {
-  accountId: string;
-  jobId: string;
-}) {
+const findInHistory = Effect.fn(function* (identity: { accountId: string; jobId: string }) {
   const limit = 50;
   const seen = new Set<string>();
   for (let offset = 0; ;) {
@@ -330,9 +317,7 @@ const findInHistory = Effect.fn(function* (identity: {
     if (page.result.length === 0) return undefined;
     const ids = page.result.flatMap((item) => (item.id ? [item.id] : []));
     if (ids.length === 0 || ids.every((id) => seen.has(id))) {
-      return yield* Effect.fail(
-        new Error("Super Slurper job history pagination did not advance"),
-      );
+      return yield* Effect.fail(new Error("Super Slurper job history pagination did not advance"));
     }
     for (const id of ids) seen.add(id);
     offset += page.result.length;
@@ -389,9 +374,7 @@ const credentialsRequest = (secret: SuperSlurperCredentials) => ({
   secretAccessKey: Redacted.value(secret.secretAccessKey),
 });
 
-const sourceRequest = (
-  source: SuperSlurperSource,
-): r2.SuperSlurperJobsCreateRequestSource =>
+const sourceRequest = (source: SuperSlurperSource): r2.SuperSlurperJobsCreateRequestSource =>
   source.vendor === "gcs"
     ? {
         ...source,

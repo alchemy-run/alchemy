@@ -1,18 +1,18 @@
 onlyBuiltDependencies:
   - "@parcel/watcher"
   - esbuild
-  - msgpackr-extract
   - sharp
   - workerd
+
 allowBuilds:
   "@parcel/watcher": true
   core-js: false
   es5-ext: false
   esbuild: true
-  msgpackr-extract: true
   sharp: true
   vue-demi: false
   workerd: true
+
 packages:
   - website
   - packages/*
@@ -24,6 +24,7 @@ packages:
   - submodules/distilled/packages/*
   - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
+
 catalog:
   "@alchemy.run/sigil": "0.1.0-alpha.1"
   "@astrojs/check": "0.9.10"
@@ -46,14 +47,13 @@ catalog:
   "@cloudflare/vitest-plugin": "^1.0.0"
   "@cloudflare/workers-types": "5.20260918.1"
   "@effect/atom-react": ">=4.0.0-rc.115 || >=4.0.0"
-  "@effect/language-service": "^0.87.2"
   "@effect/platform-bun": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/platform-node": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/sql-d1": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/sql-mysql2": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/sql-pg": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/sql-sqlite-do": ">=4.0.0-rc.115 || >=4.0.0"
-  "@effect/tsgo": "0.36.4"
+  "@effect/tsgo": "^0.45.0"
   "@effect/vitest": ">=4.0.0-rc.115 || >=4.0.0"
   "@foldkit/vite-plugin": "^0.22.0"
   "@fontsource-variable/caveat": "^5.3.0"
@@ -161,6 +161,7 @@ catalog:
   octane: "0.1.22"
   oxfmt: "^0.66.0"
   oxlint: "^1.82.0"
+  oxlint-tsgolint: "7.0.2001"
   pathe: "^2.0.3"
   pg: "^8.22.0"
   picomatch: "^4.0.4"
@@ -182,6 +183,7 @@ catalog:
   svelte: "^5.56.6"
   tailwindcss: "^4.1.18"
   takumi-js: "^2.13.5"
+  termcut: "1.4.2"
   toucan-js: "4.0.0"
   tsdown: "^0.22.4"
   tsx: "^4.20.6"
@@ -204,6 +206,7 @@ catalog:
   ws: "^8.21.0"
   yaml: "^2.9.0"
   yauzl: "^3.4.0"
+
 catalogs:
   # SvelteKit requires the TypeScript JavaScript compiler API.
   typescript-classic:
@@ -231,6 +234,7 @@ catalogs:
   tanstack-start-legacy:
     "@types/node": "^22.10.2"
     "@vitejs/plugin-react": "^5.1.4"
+
 overrides:
   "@cloudflare/workers-types": 5.20260918.1
   workerd: 1.20260918.1
@@ -243,9 +247,11 @@ overrides:
   mysql2: 3.24.2
   zod: 4.5.4
   rolldown: 1.2.5
+
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
+
 minimumReleaseAgeExclude:
   - "@alchemy.run/sigil@0.1.0-alpha.1"
   - "@effect/atom-react@4.0.0-rc.115"

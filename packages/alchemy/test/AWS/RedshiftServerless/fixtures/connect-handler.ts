@@ -56,8 +56,7 @@ export default ServerlessConnectFunction.make(
             ssl: info.ssl,
             urlScheme: Redacted.value(info.url).split("://")[0],
             expiresInFuture:
-              info.expiration !== undefined &&
-              info.expiration.getTime() > Date.now(),
+              info.expiration !== undefined && info.expiration.getTime() > Date.now(),
           });
         }
 

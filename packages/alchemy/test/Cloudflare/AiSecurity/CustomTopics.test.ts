@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // AI Security for Apps (Firewall for AI) is entitlement-gated — on the
 // standard testing account every call fails with "not entitled to access
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -52,10 +46,7 @@ const getTopics = (zoneId: string) =>
 
 // Normalize the list to a known baseline so each run starts from the same
 // cloud state regardless of what a previous run left behind.
-const setBaseline = (
-  zoneId: string,
-  topics: { label: string; topic: string }[],
-) =>
+const setBaseline = (zoneId: string, topics: { label: string; topic: string }[]) =>
   aiSecurity.putCustomTopic({ zoneId, topics }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -64,24 +55,22 @@ const setBaseline = (
     }),
   );
 
-test.provider(
-  "surfaces the typed AiSecurityNotEntitled error on unentitled accounts",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("surfaces the typed AiSecurityNotEntitled error on unentitled accounts", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // The testing account lacks the AI Security entitlement — both the
-      // read and the write must fail with the typed entitlement tag.
-      const readError = yield* getTopics(zoneId).pipe(Effect.flip);
-      expect(readError._tag).toEqual("AiSecurityNotEntitled");
+    // The testing account lacks the AI Security entitlement — both the
+    // read and the write must fail with the typed entitlement tag.
+    const readError = yield* getTopics(zoneId).pipe(Effect.flip);
+    expect(readError._tag).toEqual("AiSecurityNotEntitled");
 
-      const writeError = yield* setBaseline(zoneId, []).pipe(Effect.flip);
-      expect(writeError._tag).toEqual("AiSecurityNotEntitled");
+    const writeError = yield* setBaseline(zoneId, []).pipe(Effect.flip);
+    expect(writeError._tag).toEqual("AiSecurityNotEntitled");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -148,9 +137,7 @@ test.provider.skipIf(!entitledZoneId)(
         Effect.gen(function* () {
           return yield* Cloudflare.AI.CustomTopics("Topics", {
             zoneId,
-            topics: [
-              { label: "support", topic: "Questions about product support" },
-            ],
+            topics: [{ label: "support", topic: "Questions about product support" }],
           });
         }),
       );

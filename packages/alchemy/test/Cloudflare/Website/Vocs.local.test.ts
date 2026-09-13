@@ -11,10 +11,7 @@ import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
@@ -35,13 +32,7 @@ describe.concurrent("Vocs dev", () => {
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-vocs-dev-",
           tempRoot,
-          entries: [
-            "package.json",
-            "public",
-            "src",
-            "tsconfig.json",
-            "vocs.config.ts",
-          ],
+          entries: ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"],
         });
 
         const site = yield* stack.deploy(
@@ -49,13 +40,7 @@ describe.concurrent("Vocs dev", () => {
             rootDir,
             dev: { port: 0 },
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "tsconfig.json",
-                "vocs.config.ts",
-              ],
+              include: ["src/**", "public/**", "package.json", "tsconfig.json", "vocs.config.ts"],
             },
           }),
         );
@@ -71,15 +56,11 @@ describe.concurrent("Vocs dev", () => {
           headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
           label: "Vocs dev MDX guide",
         });
-        yield* expectUrlContains(
-          `${site.url!}/hello.txt`,
-          "hello from the Vocs public directory",
-          {
-            timeout: "60 seconds",
-            headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
-            label: "Vocs dev public asset",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/hello.txt`, "hello from the Vocs public directory", {
+          timeout: "60 seconds",
+          headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
+          label: "Vocs dev public asset",
+        });
 
         const pagePath = path.join(rootDir, "src/pages/index.mdx");
         const page = yield* fs.readFileString(pagePath);

@@ -34,10 +34,7 @@ export interface ListReferenceImportJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListReferenceImportJobsRequest,
-    ) => Effect.Effect<
-      omics.ListReferenceImportJobsResponse,
-      omics.ListReferenceImportJobsError
-    >
+    ) => Effect.Effect<omics.ListReferenceImportJobsResponse, omics.ListReferenceImportJobsError>
   >
 > {}
 

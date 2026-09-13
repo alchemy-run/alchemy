@@ -10,21 +10,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // A syntactically valid Lambda ARN for a function that need not exist —
 // createTopicRule validates the ARN shape, not existence.
-const FAKE_LAMBDA_ARN =
-  "arn:aws:lambda:us-west-2:391965393224:function:alchemy-iot-topicrule-test";
+const FAKE_LAMBDA_ARN = "arn:aws:lambda:us-west-2:391965393224:function:alchemy-iot-topicrule-test";
 
 const assertRuleGone = (ruleName: string) =>
   iot.getTopicRule({ ruleName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`topic rule ${ruleName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`topic rule ${ruleName} still exists`))),
     Effect.catchTag("TopicRuleNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -49,9 +43,7 @@ describe.sequential("AWS.IoT.TopicRule", () => {
         const observed = yield* iot.getTopicRule({
           ruleName: created.ruleName,
         });
-        expect(observed.rule?.sql).toEqual(
-          "SELECT * FROM 'alchemy/iot/test/v1'",
-        );
+        expect(observed.rule?.sql).toEqual("SELECT * FROM 'alchemy/iot/test/v1'");
 
         // Update the SQL — same name, so this is an in-place replaceTopicRule.
         yield* stack.deploy(
@@ -63,9 +55,7 @@ describe.sequential("AWS.IoT.TopicRule", () => {
           }),
         );
         const updated = yield* iot.getTopicRule({ ruleName: created.ruleName });
-        expect(updated.rule?.sql).toEqual(
-          "SELECT temperature FROM 'alchemy/iot/test/v2'",
-        );
+        expect(updated.rule?.sql).toEqual("SELECT temperature FROM 'alchemy/iot/test/v2'");
 
         yield* stack.destroy();
         yield* assertRuleGone(created.ruleName);

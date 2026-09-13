@@ -84,8 +84,7 @@ const transientWriteSchedule = Schedule.max([
   Schedule.recurs(6),
 ]);
 const isEmptyUpdateError = (error: { _tag: string; message?: string }) =>
-  error._tag === "ValidationError" &&
-  (error.message?.includes("No updates are defined") ?? false);
+  error._tag === "ValidationError" && (error.message?.includes("No updates are defined") ?? false);
 
 const isTransientWriteError = (error: {
   _tag: "ValidationError" | "ConcurrentModificationException" | (string & {});
@@ -95,9 +94,7 @@ const isTransientWriteError = (error: {
   (error._tag === "ValidationError" && !isEmptyUpdateError(error));
 
 const toName = (id: string, props: { name?: string }) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 128 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
 export const SAMLProviderProvider = () =>
   Provider.succeed(SAMLProvider, {
@@ -116,11 +113,7 @@ export const SAMLProviderProvider = () =>
         .getSAMLProvider({
           SAMLProviderArn: output.samlProviderArn,
         })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       if (!response) {
         return undefined;
       }
@@ -141,20 +134,14 @@ export const SAMLProviderProvider = () =>
       // account but only returns the ARN, so hydrate each via
       // `getSAMLProvider` + `listSAMLProviderTags` for the full Attributes.
       const { SAMLProviderList } = yield* iam.listSAMLProviders({});
-      const arns = (SAMLProviderList ?? []).flatMap((entry) =>
-        entry.Arn ? [entry.Arn] : [],
-      );
+      const arns = (SAMLProviderList ?? []).flatMap((entry) => (entry.Arn ? [entry.Arn] : []));
       const rows = yield* Effect.forEach(
         arns,
         (samlProviderArn) =>
           Effect.gen(function* () {
             const response = yield* iam
               .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
             if (!response) {
               return undefined;
             }
@@ -183,18 +170,13 @@ export const SAMLProviderProvider = () =>
       const name = output?.name ?? (yield* toName(id, news));
       const accountId = (yield* AWSEnvironment.current).accountId;
       const samlProviderArn =
-        output?.samlProviderArn ??
-        `arn:aws:iam::${accountId}:saml-provider/${name}`;
+        output?.samlProviderArn ?? `arn:aws:iam::${accountId}:saml-provider/${name}`;
 
       // Observe — `getSAMLProvider` returns the metadata, encryption
       // mode, and UUID; absence is `NoSuchEntityException`.
       let observed = yield* iam
         .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
 
       // Ensure — create when missing. Race with a peer is recovered by
       // verifying alchemy ownership tags on the existing provider.
@@ -243,28 +225,19 @@ export const SAMLProviderProvider = () =>
         // (greenfield adopt of a leftover provider, or a tags-only
         // reconcile).
         const metadataChanged =
-          (observed.SAMLMetadataDocument ?? undefined) !==
-          news.samlMetadataDocument;
+          (observed.SAMLMetadataDocument ?? undefined) !== news.samlMetadataDocument;
         const encryptionChanged =
           news.assertionEncryptionMode !== undefined &&
           observed.AssertionEncryptionMode !== news.assertionEncryptionMode;
         const addPrivateKey = news.addPrivateKey
           ? unwrapRedactedString(news.addPrivateKey)
           : undefined;
-        if (
-          metadataChanged ||
-          encryptionChanged ||
-          addPrivateKey !== undefined
-        ) {
+        if (metadataChanged || encryptionChanged || addPrivateKey !== undefined) {
           yield* iam
             .updateSAMLProvider({
               SAMLProviderArn: samlProviderArn,
-              SAMLMetadataDocument: metadataChanged
-                ? news.samlMetadataDocument
-                : undefined,
-              AssertionEncryptionMode: encryptionChanged
-                ? news.assertionEncryptionMode
-                : undefined,
+              SAMLMetadataDocument: metadataChanged ? news.samlMetadataDocument : undefined,
+              AssertionEncryptionMode: encryptionChanged ? news.assertionEncryptionMode : undefined,
               AddPrivateKey: addPrivateKey,
             })
             .pipe(
@@ -300,8 +273,7 @@ export const SAMLProviderProvider = () =>
       return {
         samlProviderArn,
         name,
-        samlProviderUUID:
-          observed?.SAMLProviderUUID ?? output?.samlProviderUUID,
+        samlProviderUUID: observed?.SAMLProviderUUID ?? output?.samlProviderUUID,
         samlMetadataDocument: news.samlMetadataDocument,
         assertionEncryptionMode: news.assertionEncryptionMode,
         tags: desiredTags,

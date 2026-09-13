@@ -31,10 +31,7 @@ type CreateSandboxResponse = railway.Result<"Sandbox!", typeof selection>;
 type SandboxResponse = railway.Result<"Sandbox!", typeof selection>;
 type SandboxDestroyResponse = railway.Result<"Sandbox!", typeof selection>;
 type SandboxHeartbeatResponse = railway.Result<"Sandbox!", typeof selection>;
-type SandboxesResponseEdgesItemNode = railway.Result<
-  "Sandbox!",
-  typeof selection
->;
+type SandboxesResponseEdgesItemNode = railway.Result<"Sandbox!", typeof selection>;
 type SandboxCheckpointsResultItem = railway.Result<
   "SandboxCheckpoint!",
   { createdAt: true; environmentId: true; id: true; key: true }
@@ -207,11 +204,7 @@ const resolveSandboxProps = (
     const resolved = Effect.isEffect(props) ? yield* props : props;
     if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
     const environment = Effect.isEffect(resolved.environment)
-      ? yield* resolved.environment as Effect.Effect<
-          SandboxEnvironment,
-          never,
-          Providers
-        >
+      ? yield* resolved.environment as Effect.Effect<SandboxEnvironment, never, Providers>
       : resolved.environment;
     return { ...resolved, environment };
   });
@@ -345,16 +338,12 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * @resource
  */
 export const Sandbox: typeof SandboxResource = Object.assign(
-  (
-    id: string,
-    props: SandboxProps | Effect.Effect<SandboxProps, never, Providers>,
-  ) => SandboxResource(id, resolveSandboxProps(props)),
+  (id: string, props: SandboxProps | Effect.Effect<SandboxProps, never, Providers>) =>
+    SandboxResource(id, resolveSandboxProps(props)),
   SandboxResource,
 );
 
-export class SandboxNotCreated extends Data.TaggedError(
-  "Railway.SandboxNotCreated",
-)<{
+export class SandboxNotCreated extends Data.TaggedError("Railway.SandboxNotCreated")<{
   environmentId: string;
 }> {}
 
@@ -399,9 +388,7 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const isGone = (sandbox: CloudSandbox | undefined) =>
@@ -424,13 +411,9 @@ const toAttrs = (
 
 const toTemplateInput = (template: SandboxTemplate): SandboxTemplateInput => ({
   ...(template.region !== undefined ? { region: template.region } : {}),
-  ...(template.instructions !== undefined
-    ? { instructions: [...template.instructions] }
-    : {}),
+  ...(template.instructions !== undefined ? { instructions: [...template.instructions] } : {}),
   ...(template.name !== undefined ? { name: template.name } : {}),
-  ...(template.variables !== undefined
-    ? { variables: template.variables }
-    : {}),
+  ...(template.variables !== undefined ? { variables: template.variables } : {}),
 });
 
 const varsKey = (vars: Record<string, string> | undefined) => {
@@ -458,9 +441,7 @@ const domainsKey = (domains: SandboxDomain[] | undefined) =>
 
 const getById = (environmentId: string, sandboxId: string) =>
   railway.sandbox({ environmentId, id: sandboxId }, selection).pipe(
-    Effect.map((sandbox) =>
-      sandbox == null || isGone(sandbox) ? undefined : sandbox,
-    ),
+    Effect.map((sandbox) => (sandbox == null || isGone(sandbox) ? undefined : sandbox)),
     railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
@@ -469,21 +450,14 @@ const listSandboxes = (environmentId: string) =>
     Stream.filter((sandbox) => !isGone(sandbox)),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    railway.catchTags(
-      ["RailwayNotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"],
-      () => Effect.succeed([] as SandboxesResponseEdgesItemNode[]),
+    railway.catchTags(["RailwayNotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"], () =>
+      Effect.succeed([] as SandboxesResponseEdgesItemNode[]),
     ),
   );
 
-const listEnvironmentIds = (project: {
-  projectId: string;
-  environmentId: string;
-}) =>
+const _listEnvironmentIds = (project: { projectId: string; environmentId: string }) =>
   railway.environments
-    .items(
-      { projectId: project.projectId, first: 50 },
-      { id: true, deletedAt: true },
-    )
+    .items({ projectId: project.projectId, first: 50 }, { id: true, deletedAt: true })
     .pipe(
       Stream.filter((env) => env.deletedAt == null),
       Stream.map((env) => env.id),
@@ -496,9 +470,7 @@ const listEnvironmentIds = (project: {
         return Array.from(set);
       }),
       railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed(
-          project.environmentId.length > 0 ? [project.environmentId] : [],
-        ),
+        Effect.succeed(project.environmentId.length > 0 ? [project.environmentId] : []),
       ),
     );
 
@@ -533,9 +505,7 @@ const waitUntilGone = (environmentId: string, sandboxId: string) =>
   waitUntilDeleted(
     "Sandbox",
     sandboxId,
-    getById(environmentId, sandboxId).pipe(
-      Effect.map((sandbox) => sandbox === undefined),
-    ),
+    getById(environmentId, sandboxId).pipe(Effect.map((sandbox) => sandbox === undefined)),
     10,
   );
 
@@ -554,9 +524,7 @@ export const execSandbox = Effect.fn(function* (input: {
       command: input.command,
       environmentId: input.environmentId,
       id: input.sandboxId,
-      ...(input.timeoutSec !== undefined
-        ? { timeoutSec: input.timeoutSec }
-        : {}),
+      ...(input.timeoutSec !== undefined ? { timeoutSec: input.timeoutSec } : {}),
     },
     {
       exitCode: true,
@@ -607,9 +575,7 @@ export const createSandboxCheckpoint = Effect.fn(function* (input: {
 /**
  * List named sandbox checkpoints in an environment (newest first).
  */
-export const listSandboxCheckpoints = Effect.fn(function* (input: {
-  environmentId: string;
-}) {
+export const listSandboxCheckpoints = Effect.fn(function* (input: { environmentId: string }) {
   return yield* railway.sandboxCheckpoints(
     {
       environmentId: input.environmentId,
@@ -618,10 +584,8 @@ export const listSandboxCheckpoints = Effect.fn(function* (input: {
   );
 });
 
-const findCheckpoint = (
-  items: readonly SandboxCheckpointsResultItem[],
-  name: string,
-) => items.find((item) => item.key === name);
+const findCheckpoint = (items: readonly SandboxCheckpointsResultItem[], name: string) =>
+  items.find((item) => item.key === name);
 
 /**
  * Rename a sandbox checkpoint by its current name (`key`).
@@ -712,11 +676,7 @@ export const Exec = Binding.Service<Exec>("Railway.Sandbox.Exec");
 export interface ExecClient {
   (
     request: ExecRequest,
-  ): Effect.Effect<
-    ExecResult,
-    Effect.Error<ReturnType<typeof execSandbox>>,
-    RuntimeContext
-  >;
+  ): Effect.Effect<ExecResult, Effect.Error<ReturnType<typeof execSandbox>>, RuntimeContext>;
 }
 
 /**
@@ -736,9 +696,7 @@ export const ExecHttp = Layer.effect(
           sandboxId,
           environmentId,
           command: request.command,
-          ...(request.timeoutSec !== undefined
-            ? { timeoutSec: request.timeoutSec }
-            : {}),
+          ...(request.timeoutSec !== undefined ? { timeoutSec: request.timeoutSec } : {}),
         })) as unknown as ExecClient;
     }),
   ),
@@ -753,8 +711,7 @@ export const SandboxProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
       const regionChanged =
         olds !== undefined
           ? news.region !== olds.region
@@ -769,12 +726,9 @@ export const SandboxProvider = () =>
           ? news.networkIsolation !== olds.networkIsolation
           : news.networkIsolation !== undefined &&
             news.networkIsolation !== output.networkIsolation;
-      const templateChanged =
-        templateKey(news.template) !== templateKey(olds?.template);
-      const variablesChanged =
-        varsKey(news.variables) !== varsKey(olds?.variables);
-      const domainsChanged =
-        domainsKey(news.publicDomains) !== domainsKey(olds?.publicDomains);
+      const templateChanged = templateKey(news.template) !== templateKey(olds?.template);
+      const variablesChanged = varsKey(news.variables) !== varsKey(olds?.variables);
+      const domainsChanged = domainsKey(news.publicDomains) !== domainsKey(olds?.publicDomains);
       const resourcesChanged =
         news.resources?.cpu !== olds?.resources?.cpu ||
         news.resources?.memoryGB !== olds?.resources?.memoryGB;
@@ -807,8 +761,7 @@ export const SandboxProvider = () =>
       if (found === undefined) return undefined;
       return toAttrs(found, {
         projectId:
-          output?.projectId ??
-          (olds !== undefined ? projectIdOf(olds.environment) : undefined),
+          output?.projectId ?? (olds !== undefined ? projectIdOf(olds.environment) : undefined),
       });
     }),
 
@@ -820,9 +773,7 @@ export const SandboxProvider = () =>
           const nested = yield* Effect.forEach(envIds, (environmentId) =>
             listSandboxes(environmentId).pipe(
               Effect.map((items) =>
-                items.map((item) =>
-                  toAttrs(item, { projectId: project.projectId }),
-                ),
+                items.map((item) => toAttrs(item, { projectId: project.projectId })),
               ),
             ),
           );
@@ -841,8 +792,7 @@ export const SandboxProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as SandboxProps);
-      const environmentId =
-        environmentIdOf(props.environment) ?? output?.environmentId;
+      const environmentId = environmentIdOf(props.environment) ?? output?.environmentId;
       if (environmentId === undefined) {
         return yield* new SandboxEnvironmentRequired({
           message:
@@ -868,21 +818,15 @@ export const SandboxProvider = () =>
                 ? { networkIsolation: props.networkIsolation }
                 : {}),
               ...(props.region !== undefined ? { region: props.region } : {}),
-              ...(props.publicDomains !== undefined
-                ? { publicDomains: props.publicDomains }
-                : {}),
-              ...(props.resources !== undefined
-                ? { resources: props.resources }
-                : {}),
+              ...(props.publicDomains !== undefined ? { publicDomains: props.publicDomains } : {}),
+              ...(props.resources !== undefined ? { resources: props.resources } : {}),
               ...(props.sourceSandboxId !== undefined
                 ? { sourceSandboxId: props.sourceSandboxId }
                 : {}),
               ...(props.template !== undefined
                 ? { template: toTemplateInput(props.template) }
                 : {}),
-              ...(props.variables !== undefined
-                ? { variables: props.variables }
-                : {}),
+              ...(props.variables !== undefined ? { variables: props.variables } : {}),
             },
           },
           selection,

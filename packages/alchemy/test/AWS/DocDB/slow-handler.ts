@@ -111,9 +111,7 @@ export default DocDBSlowTestFunction.make(
 
         if (request.method === "GET" && pathname === "/ping") {
           const { use } = yield* db;
-          const pong = yield* use((_db, client) =>
-            client.db("admin").command({ ping: 1 }),
-          );
+          const pong = yield* use((_db, client) => client.db("admin").command({ ping: 1 }));
           return yield* HttpServerResponse.json({ ok: pong.ok });
         }
 

@@ -31,12 +31,7 @@ const currentEnv = AWSEnvironment.current as unknown as Effect.Effect<{
  * or full ARN), grants `actions` on exactly the resolved model ARNs, and the
  * runtime callable defaults `modelId` to the first bound model.
  */
-export const makeModelScopedHttpBinding = <
-  I extends { modelId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeModelScopedHttpBinding = <I extends { modelId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Bedrock.Converse`. */
   tag: string;
   /** The distilled operation; `modelId` defaults to the first bound model. */
@@ -55,23 +50,17 @@ export const makeModelScopedHttpBinding = <
           // Sort so the binding identity (SID + ARN list) is deterministic
           // regardless of argument order.
           const sorted = [...new Set([model, ...additionalModels])].sort();
-          yield* host.bind`Allow(${host}, ${options.tag}(${sorted.join(",")}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [
-                    ...new Set(
-                      sorted.flatMap((id) =>
-                        bedrockModelArns(region, accountId, id),
-                      ),
-                    ),
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${sorted.join(",")}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [
+                  ...new Set(sorted.flatMap((id) => bedrockModelArns(region, accountId, id))),
+                ],
+              },
+            ],
+          });
         }
       }
       return Effect.fn(`${options.tag}(${model})`)(function* (
@@ -173,8 +162,7 @@ export const makeDataSourceScopedHttpBinding = <
                 Resource: [
                   dataSource.knowledgeBaseId.pipe(
                     Output.map(
-                      (id) =>
-                        `arn:aws:bedrock:${region}:${accountId}:knowledge-base/${id}`,
+                      (id) => `arn:aws:bedrock:${region}:${accountId}:knowledge-base/${id}`,
                     ),
                   ),
                 ],
@@ -264,10 +252,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* <K extends KnowledgeBase>(
-      knowledgeBase: K,
-      ...models: string[]
-    ) {
+    return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K, ...models: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -276,13 +261,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
           // cross-region inference profiles when the caller names none.
           const modelResources =
             models.length > 0
-              ? [
-                  ...new Set(
-                    models.flatMap((id) =>
-                      bedrockModelArns(region, accountId, id),
-                    ),
-                  ),
-                ]
+              ? [...new Set(models.flatMap((id) => bedrockModelArns(region, accountId, id)))]
               : [
                   `arn:aws:bedrock:${region}::foundation-model/*`,
                   `arn:aws:bedrock:${region}:${accountId}:inference-profile/*`,
@@ -303,9 +282,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${knowledgeBase.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${knowledgeBase.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

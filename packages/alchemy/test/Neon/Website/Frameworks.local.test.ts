@@ -51,12 +51,8 @@ describe.sequential("Neon Website native frameworks", () => {
             const location = new URL(redirect.headers.location!);
             expect(["localhost", "127.0.0.1"]).toContain(location.hostname);
             expect(location.port).toBe(new URL(String(site.url)).port);
-            expect(location.pathname + location.search).toBe(
-              "/?redirected=yes",
-            );
-            expect(
-              (yield* HttpClient.get(`${site.url}/not-a-real-page`)).status,
-            ).toBe(404);
+            expect(location.pathname + location.search).toBe("/?redirected=yes");
+            expect((yield* HttpClient.get(`${site.url}/not-a-real-page`)).status).toBe(404);
           }
           yield* browserRoundtrip(String(site.url), slug);
           yield* stack.destroy();

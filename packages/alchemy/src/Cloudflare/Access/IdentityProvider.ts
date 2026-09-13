@@ -55,8 +55,7 @@ export type IdentityProviderType =
  * ({@link OidcConfig}, {@link SamlConfig}, {@link AzureADConfig}, …) —
  * they are enforced by the discriminated {@link IdentityProviderProps}.
  */
-export type IdentityProviderConfig =
-  zeroTrust.CreateIdentityProviderForAccountRequest["config"];
+export type IdentityProviderConfig = zeroTrust.CreateIdentityProviderForAccountRequest["config"];
 
 /**
  * OAuth client credentials shared by every OAuth/OIDC-based IdP type.
@@ -675,12 +674,7 @@ export const IdentityProviderProvider = () =>
           Effect.map((chunk) =>
             Array.from(chunk).flatMap((page) =>
               (page.result ?? []).map((idp) =>
-                toAttributes(
-                  idp as unknown as ObservedIdp,
-                  undefined,
-                  accountId,
-                  undefined,
-                ),
+                toAttributes(idp as unknown as ObservedIdp, undefined, accountId, undefined),
               ),
             ),
           ),
@@ -693,24 +687,17 @@ export const IdentityProviderProvider = () =>
       const zoneGroups = yield* Effect.forEach(
         zones,
         (zone) =>
-          zeroTrust.listIdentityProvidersForZone
-            .pages({ zoneId: zone.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((idp) =>
-                    toAttributes(
-                      idp as unknown as ObservedIdp,
-                      zone.id,
-                      accountId,
-                      undefined,
-                    ),
-                  ),
+          zeroTrust.listIdentityProvidersForZone.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((idp) =>
+                  toAttributes(idp as unknown as ObservedIdp, zone.id, accountId, undefined),
                 ),
               ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
 
@@ -736,11 +723,7 @@ export const IdentityProviderProvider = () =>
         ? yield* getIdp(zoneId, accountId, output.identityProviderId)
         : undefined;
       if (!observed) {
-        observed = yield* findByName(
-          zoneId,
-          accountId,
-          news.name ?? generatedName,
-        );
+        observed = yield* findByName(zoneId, accountId, news.name ?? generatedName);
       }
       // Singleton types (`cloudflare`, `onetimepin`) exist at most once per
       // scope — creating a second one is rejected by the API, so an
@@ -756,10 +739,7 @@ export const IdentityProviderProvider = () =>
       // adoption would be surprising. Everything else defaults to the
       // deterministic physical name (the resource's cold-read identity).
       const name =
-        news.name ??
-        (isSingletonType(news.type) && observed
-          ? observed.name
-          : generatedName);
+        news.name ?? (isSingletonType(news.type) && observed ? observed.name : generatedName);
 
       // 2. Ensure — create with the full desired body when missing. Names
       //    are not unique on Cloudflare's side, so there is no
@@ -773,12 +753,7 @@ export const IdentityProviderProvider = () =>
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
-        return toAttributes(
-          created as ObservedIdp,
-          zoneId,
-          accountId,
-          output?.scimSecret,
-        );
+        return toAttributes(created as ObservedIdp, zoneId, accountId, output?.scimSecret);
       }
 
       // 3. Sync — the update API is a PUT of the full desired state.
@@ -787,11 +762,9 @@ export const IdentityProviderProvider = () =>
       //    declared props because Cloudflare masks secrets on read.
       const dirty =
         observed.name !== name ||
-        JSON.stringify(news.config ?? {}) !==
-          JSON.stringify(olds?.config ?? null) ||
+        JSON.stringify(news.config ?? {}) !== JSON.stringify(olds?.config ?? null) ||
         samlCertificateSetIdOf(news) !== samlCertificateSetIdOf(olds) ||
-        (news.scimConfig !== undefined &&
-          !sameScim(observed.scimConfig, news.scimConfig));
+        (news.scimConfig !== undefined && !sameScim(observed.scimConfig, news.scimConfig));
       if (dirty) {
         const updated = yield* updateIdp(zoneId, accountId, observed.id ?? "", {
           name,
@@ -800,12 +773,7 @@ export const IdentityProviderProvider = () =>
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
-        return toAttributes(
-          updated as ObservedIdp,
-          zoneId,
-          accountId,
-          output?.scimSecret,
-        );
+        return toAttributes(updated as ObservedIdp, zoneId, accountId, output?.scimSecret);
       }
 
       return toAttributes(observed, zoneId, accountId, output?.scimSecret);
@@ -816,11 +784,7 @@ export const IdentityProviderProvider = () =>
       // deletion — applications referencing the id as an Input get correct
       // destroy ordering. A missing IdP (AccessIdentityProviderNotFound,
       // Cloudflare code 12135) means we're done.
-      yield* deleteIdp(
-        output.zoneId,
-        output.accountId,
-        output.identityProviderId,
-      ).pipe(
+      yield* deleteIdp(output.zoneId, output.accountId, output.identityProviderId).pipe(
         Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.void),
       );
     }),
@@ -842,16 +806,10 @@ interface IdpBody {
  * variant. Narrowing helper — `samlCertificateSetId` only exists on the
  * SAML member of the props union.
  */
-const samlCertificateSetIdOf = (
-  props: IdentityProviderProps | undefined,
-): string | undefined =>
+const samlCertificateSetIdOf = (props: IdentityProviderProps | undefined): string | undefined =>
   props?.type === "saml" ? props.samlCertificateSetId : undefined;
 
-const createIdp = (
-  zoneId: string | undefined,
-  accountId: string,
-  body: IdpBody,
-) =>
+const createIdp = (zoneId: string | undefined, accountId: string, body: IdpBody) =>
   zoneId !== undefined
     ? zeroTrust.createIdentityProviderForZone({ zoneId, ...body })
     : zeroTrust.createIdentityProviderForAccount({ accountId, ...body });
@@ -874,11 +832,7 @@ const updateIdp = (
         ...body,
       });
 
-const deleteIdp = (
-  zoneId: string | undefined,
-  accountId: string,
-  identityProviderId: string,
-) =>
+const deleteIdp = (zoneId: string | undefined, accountId: string, identityProviderId: string) =>
   zoneId !== undefined
     ? zeroTrust.deleteIdentityProviderForZone({ zoneId, identityProviderId })
     : zeroTrust.deleteIdentityProviderForAccount({
@@ -906,7 +860,6 @@ const sameScim = (
     sameBool(o.seatDeprovision, desired.seatDeprovision) &&
     sameBool(o.userDeprovision, desired.userDeprovision) &&
     (desired.identityUpdateBehavior === undefined ||
-      (o.identityUpdateBehavior ?? "no_action") ===
-        desired.identityUpdateBehavior)
+      (o.identityUpdateBehavior ?? "no_action") === desired.identityUpdateBehavior)
   );
 };

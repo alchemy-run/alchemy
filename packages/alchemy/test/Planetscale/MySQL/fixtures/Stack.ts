@@ -33,14 +33,11 @@ export const PlanetscaleDb = Effect.gen(function* () {
     migrations: migrationsDir,
   });
 
-  const password = yield* Planetscale.MySQLPassword(
-    "MySQLHyperdriveTestPassword",
-    {
-      database,
-      branch,
-      role: "admin",
-    },
-  );
+  const password = yield* Planetscale.MySQLPassword("MySQLHyperdriveTestPassword", {
+    database,
+    branch,
+    role: "admin",
+  });
 
   return { database, branch, password };
 });

@@ -22,24 +22,17 @@ export const ScheduledTaskCronBinding = Cloudflare.Workers.cron(
   }),
 );
 
-type RequirementsOf<T> =
-  T extends Effect.Effect<unknown, unknown, infer Req> ? Req : never;
+type RequirementsOf<T> = T extends Effect.Effect<unknown, unknown, infer Req> ? Req : never;
 type Assert<T extends true> = T;
 
 type _PreservesUserRequirement = Assert<
-  ScheduledTask extends RequirementsOf<typeof ScheduledTaskCronBinding>
-    ? true
-    : false
+  ScheduledTask extends RequirementsOf<typeof ScheduledTaskCronBinding> ? true : false
 >;
 type _StillRequiresCronEventSource = Assert<
-  Cloudflare.Workers.CronEventSource extends RequirementsOf<
-    typeof ScheduledTaskCronBinding
-  >
+  Cloudflare.Workers.CronEventSource extends RequirementsOf<typeof ScheduledTaskCronBinding>
     ? true
     : false
 >;
 type _HidesRuntimeContext = Assert<
-  RuntimeContext extends RequirementsOf<typeof ScheduledTaskCronBinding>
-    ? false
-    : true
+  RuntimeContext extends RequirementsOf<typeof ScheduledTaskCronBinding> ? false : true
 >;

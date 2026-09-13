@@ -24,9 +24,7 @@ const importMysql = () =>
     );
   });
 
-export class MySQLMigrationError extends Data.TaggedError(
-  "Planetscale::MySQLMigrationError",
-)<{
+export class MySQLMigrationError extends Data.TaggedError("Planetscale::MySQLMigrationError")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -50,9 +48,7 @@ export const runMySQLMigrations = (
     input,
     stamped,
     withExecutor: (apply) =>
-      withMySQLConnection(target, (connection) =>
-        apply(makeMySQLMigrationExecutor(connection)),
-      ),
+      withMySQLConnection(target, (connection) => apply(makeMySQLMigrationExecutor(connection))),
   });
 
 export const runMySQLImports = (
@@ -156,10 +152,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
           // Already-deleted passwords are a success: nothing to clean up.
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(5),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(5)]),
           }),
           // Migrations succeeded; don't fail the parent over a release-step
           // hiccup. The password's TTL bounds the orphan window; log loudly

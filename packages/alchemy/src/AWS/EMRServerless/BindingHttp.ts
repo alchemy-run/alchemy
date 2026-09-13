@@ -71,8 +71,7 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
                 Resource: [
                   Output.interpolate`${application.applicationArn}`,
                   ...(options.subresources ?? []).map(
-                    (suffix) =>
-                      Output.interpolate`${application.applicationArn}${suffix}`,
+                    (suffix) => Output.interpolate`${application.applicationArn}${suffix}`,
                   ),
                 ],
               },

@@ -32,10 +32,7 @@ export interface BatchDetectEntities extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.BatchDetectEntitiesRequest,
-    ) => Effect.Effect<
-      comprehend.BatchDetectEntitiesResponse,
-      comprehend.BatchDetectEntitiesError
-    >
+    ) => Effect.Effect<comprehend.BatchDetectEntitiesResponse, comprehend.BatchDetectEntitiesError>
   >
 > {}
 export const BatchDetectEntities = Binding.Service<BatchDetectEntities>(

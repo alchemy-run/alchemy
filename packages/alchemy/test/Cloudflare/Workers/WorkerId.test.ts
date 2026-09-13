@@ -11,10 +11,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const script = (marker: string) => `
 export default {
@@ -50,9 +47,7 @@ test.provider(
       expect(v1.workerId).toMatch(HEX_ID);
       expect(v1.workerId).not.toEqual(v1.workerName);
       // It is exactly what Cloudflare reports as the script's tag.
-      expect(yield* liveScriptTag(accountId, v1.workerName)).toEqual(
-        v1.workerId,
-      );
+      expect(yield* liveScriptTag(accountId, v1.workerName)).toEqual(v1.workerId);
 
       // A code update keeps both identifiers.
       const v2 = yield* deployWith("v2");
@@ -71,9 +66,7 @@ test.provider(
       yield* stack.destroy();
 
       const deployWith = (marker: string) =>
-        stack.deploy(
-          Cloudflare.Worker("LegacyIdWorker", { script: script(marker) }),
-        );
+        stack.deploy(Cloudflare.Worker("LegacyIdWorker", { script: script(marker) }));
 
       const v1 = yield* deployWith("v1");
       const realId = v1.workerId;
@@ -85,9 +78,7 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const workerRow = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
@@ -146,13 +137,10 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const workerRow = rows.find(
-        (r) =>
-          isResourceState(r.row) && r.row.resourceType === "Cloudflare.Worker",
+        (r) => isResourceState(r.row) && r.row.resourceType === "Cloudflare.Worker",
       );
       if (!workerRow) {
         return yield* Effect.die(new Error("no Worker state row after deploy"));

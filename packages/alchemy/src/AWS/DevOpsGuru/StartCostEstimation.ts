@@ -28,10 +28,7 @@ export interface StartCostEstimation extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.StartCostEstimationRequest,
-    ) => Effect.Effect<
-      devopsguru.StartCostEstimationResponse,
-      devopsguru.StartCostEstimationError
-    >
+    ) => Effect.Effect<devopsguru.StartCostEstimationResponse, devopsguru.StartCostEstimationError>
   >
 > {}
 export const StartCostEstimation = Binding.Service<StartCostEstimation>(

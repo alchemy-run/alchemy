@@ -16,46 +16,23 @@ export const WriteDnsHttp = Layer.effect(
 );
 
 /** Build the write client over an injectable auth and zone id. */
-export const dnsWriteClient = (
-  auth: DnsAuth,
-  zoneId: Effect.Effect<string>,
-): WriteDnsClient => {
+export const dnsWriteClient = (auth: DnsAuth, zoneId: Effect.Effect<string>): WriteDnsClient => {
   const authorize = auth.authorize;
   return {
-    createDnsRecord: Effect.fn("Cloudflare.DNS.createDnsRecord")(
-      function* (request) {
-        return yield* authorize(
-          dns.createRecord({ zoneId: yield* zoneId, ...request }),
-        );
-      },
-    ),
-    updateDnsRecord: Effect.fn("Cloudflare.DNS.updateDnsRecord")(
-      function* (dnsRecordId, request) {
-        return yield* authorize(
-          dns.updateRecord({ zoneId: yield* zoneId, dnsRecordId, ...request }),
-        );
-      },
-    ),
-    patchDnsRecord: Effect.fn("Cloudflare.DNS.patchDnsRecord")(
-      function* (dnsRecordId, request) {
-        return yield* authorize(
-          dns.patchRecord({ zoneId: yield* zoneId, dnsRecordId, ...request }),
-        );
-      },
-    ),
-    deleteDnsRecord: Effect.fn("Cloudflare.DNS.deleteDnsRecord")(
-      function* (dnsRecordId) {
-        return yield* authorize(
-          dns.deleteRecord({ zoneId: yield* zoneId, dnsRecordId }),
-        );
-      },
-    ),
-    batchDnsRecords: Effect.fn("Cloudflare.DNS.batchDnsRecords")(
-      function* (request) {
-        return yield* authorize(
-          dns.batchRecord({ zoneId: yield* zoneId, ...request }),
-        );
-      },
-    ),
+    createDnsRecord: Effect.fn("Cloudflare.DNS.createDnsRecord")(function* (request) {
+      return yield* authorize(dns.createRecord({ zoneId: yield* zoneId, ...request }));
+    }),
+    updateDnsRecord: Effect.fn("Cloudflare.DNS.updateDnsRecord")(function* (dnsRecordId, request) {
+      return yield* authorize(dns.updateRecord({ zoneId: yield* zoneId, dnsRecordId, ...request }));
+    }),
+    patchDnsRecord: Effect.fn("Cloudflare.DNS.patchDnsRecord")(function* (dnsRecordId, request) {
+      return yield* authorize(dns.patchRecord({ zoneId: yield* zoneId, dnsRecordId, ...request }));
+    }),
+    deleteDnsRecord: Effect.fn("Cloudflare.DNS.deleteDnsRecord")(function* (dnsRecordId) {
+      return yield* authorize(dns.deleteRecord({ zoneId: yield* zoneId, dnsRecordId }));
+    }),
+    batchDnsRecords: Effect.fn("Cloudflare.DNS.batchDnsRecords")(function* (request) {
+      return yield* authorize(dns.batchRecord({ zoneId: yield* zoneId, ...request }));
+    }),
   };
 };

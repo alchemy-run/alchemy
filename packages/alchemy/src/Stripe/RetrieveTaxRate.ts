@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { TaxRate } from "./TaxRate.ts";
 
-export interface RetrieveTaxRateRequest extends Omit<
-  GetTaxRateRequest,
-  "tax_rate"
-> {}
+export interface RetrieveTaxRateRequest extends Omit<GetTaxRateRequest, "tax_rate"> {}
 
 /**
  * Retrieve a bound Stripe Tax Rate over HTTP.
@@ -37,6 +34,4 @@ export interface RetrieveTaxRate extends Binding.Service<
   >
 > {}
 
-export const RetrieveTaxRate = Binding.Service<RetrieveTaxRate>(
-  "Stripe.RetrieveTaxRate",
-);
+export const RetrieveTaxRate = Binding.Service<RetrieveTaxRate>("Stripe.RetrieveTaxRate");

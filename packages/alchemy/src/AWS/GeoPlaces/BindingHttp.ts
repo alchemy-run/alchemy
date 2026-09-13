@@ -32,25 +32,21 @@ export const makeGeoPlacesHttpBinding = <I extends object, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.GeoPlaces.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  // geo-places is a standalone, account-wide pay-per-call API
-                  // scoped through the singleton `provider/default`; the
-                  // operations have no per-resource ARN.
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.GeoPlaces.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                // geo-places is a standalone, account-wide pay-per-call API
+                // scoped through the singleton `provider/default`; the
+                // operations have no per-resource ARN.
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.GeoPlaces.${options.capability}`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`AWS.GeoPlaces.${options.capability}`)(function* (request: I) {
         return yield* op(request);
       });
     });

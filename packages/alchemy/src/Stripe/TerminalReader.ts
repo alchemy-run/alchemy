@@ -167,8 +167,7 @@ const userMetadata = (
 
 const isDeletedReader = (
   value: StripeTerminalReader | DeletedTerminalReader,
-): value is DeletedTerminalReader =>
-  "deleted" in value && value.deleted === true;
+): value is DeletedTerminalReader => "deleted" in value && value.deleted === true;
 
 const asReader = (
   value: StripeTerminalReader | DeletedTerminalReader | undefined,
@@ -177,9 +176,7 @@ const asReader = (
   return value;
 };
 
-const locationIdOf = (
-  location: TerminalReaderLocation | null | undefined,
-): string | undefined => {
+const locationIdOf = (location: TerminalReaderLocation | null | undefined): string | undefined => {
   if (location == null) return undefined;
   if (typeof location === "string") return location;
   return location.id;
@@ -239,10 +236,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -265,10 +259,7 @@ const shouldReplace = (
   output: TerminalReaderAttributes | undefined,
 ): boolean => {
   if (output === undefined) return false;
-  if (
-    news.location !== undefined &&
-    news.location !== (output.location ?? undefined)
-  ) {
+  if (news.location !== undefined && news.location !== (output.location ?? undefined)) {
     return true;
   }
   return false;
@@ -293,9 +284,7 @@ export const TerminalReaderProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -341,8 +330,7 @@ export const TerminalReaderProvider = () =>
       const observedMetadata = tagRecord(current.metadata);
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
-      const labelChanged =
-        news.label !== undefined && current.label !== news.label;
+      const labelChanged = news.label !== undefined && current.label !== news.label;
 
       if (!labelChanged && !metadataChanged) {
         return toAttrs(current);
@@ -354,9 +342,7 @@ export const TerminalReaderProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

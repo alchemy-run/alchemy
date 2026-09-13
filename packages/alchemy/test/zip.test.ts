@@ -43,9 +43,7 @@ test("zipCode is deterministic for nested package paths", async () => {
 
   await new Promise((resolve) => setTimeout(resolve, 1100));
   const second = await build();
-  expect(await Effect.runPromise(sha256(second))).toBe(
-    await Effect.runPromise(sha256(first)),
-  );
+  expect(await Effect.runPromise(sha256(second))).toBe(await Effect.runPromise(sha256(first)));
 });
 
 test("zipFiles preserves binary data, Unicode, empty files, and input order independence", async () => {
@@ -62,14 +60,10 @@ test("zipFiles preserves binary data, Unicode, empty files, and input order inde
   const entries = unzipSync(first);
   for (const file of files) {
     expect(entries[file.path]).toEqual(
-      typeof file.content === "string"
-        ? new TextEncoder().encode(file.content)
-        : file.content,
+      typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     );
   }
-  expect(Object.keys(unzipSync(await Effect.runPromise(zipFiles([]))))).toEqual(
-    [],
-  );
+  expect(Object.keys(unzipSync(await Effect.runPromise(zipFiles([]))))).toEqual([]);
 });
 
 test("zipFiles records fixed timestamps and Unix file types and permissions", async () => {
@@ -91,17 +85,10 @@ test("zipFiles records fixed timestamps and Unix file types and permissions", as
     expect(archive.readUInt16LE(offset + 12)).toBe(0);
     expect(archive.readUInt16LE(offset + 14)).toBe(33);
     const nameLength = archive.readUInt16LE(offset + 28);
-    const name = archive.toString(
-      "utf8",
-      offset + 46,
-      offset + 46 + nameLength,
-    );
+    const name = archive.toString("utf8", offset + 46, offset + 46 + nameLength);
     modes[name] = archive.readUInt32LE(offset + 38) >>> 16;
     offset +=
-      46 +
-      nameLength +
-      archive.readUInt16LE(offset + 30) +
-      archive.readUInt16LE(offset + 32);
+      46 + nameLength + archive.readUInt16LE(offset + 30) + archive.readUInt16LE(offset + 32);
   }
   expect(modes).toEqual({
     "bin/tool": 0o100755,

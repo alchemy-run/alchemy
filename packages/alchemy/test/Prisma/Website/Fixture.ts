@@ -7,12 +7,8 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 export const copyViteFixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const source = yield* path.fromFileUrl(
-    new URL("./fixtures/vite/", import.meta.url),
-  );
-  const modules = yield* path.fromFileUrl(
-    new URL("../../../node_modules/", import.meta.url),
-  );
+  const source = yield* path.fromFileUrl(new URL("./fixtures/vite/", import.meta.url));
+  const modules = yield* path.fromFileUrl(new URL("../../../node_modules/", import.meta.url));
   const rootDir = yield* fs.makeTempDirectoryScoped({
     prefix: "prisma-website-vite-",
   });
@@ -21,18 +17,13 @@ export const copyViteFixture = Effect.gen(function* () {
   return rootDir;
 });
 
-export const bodyContaining = Effect.fn(function* (
-  url: string,
-  expected: string,
-) {
+export const bodyContaining = Effect.fn(function* (url: string, expected: string) {
   return yield* Effect.gen(function* () {
     const response = yield* HttpClient.get(url);
     const body = yield* response.text;
     if (response.status !== 200 || !body.includes(expected)) {
       return yield* Effect.fail(
-        new Error(
-          `${url} returned ${response.status} without ${expected}: ${body.slice(0, 500)}`,
-        ),
+        new Error(`${url} returned ${response.status} without ${expected}: ${body.slice(0, 500)}`),
       );
     }
     return body;

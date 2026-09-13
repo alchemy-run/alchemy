@@ -33,10 +33,7 @@ export interface DeregisterInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeregisterInstanceRequest,
-    ) => Effect.Effect<
-      SD.DeregisterInstanceResponse,
-      SD.DeregisterInstanceError
-    >
+    ) => Effect.Effect<SD.DeregisterInstanceResponse, SD.DeregisterInstanceError>
   >
 > {}
 export const DeregisterInstance = Binding.Service<DeregisterInstance>(

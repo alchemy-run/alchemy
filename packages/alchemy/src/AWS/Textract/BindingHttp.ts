@@ -39,22 +39,18 @@ export const makeTextractHttpBinding = <I extends object, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Textract.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Textract.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.Textract.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.Textract.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });
@@ -67,12 +63,7 @@ export const makeTextractHttpBinding = <I extends object, A, E, R>(options: {
  * children), and the runtime callable injects the adapter's `AdapterId`
  * into every request.
  */
-export const makeTextractAdapterHttpBinding = <
-  I extends { AdapterId?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeTextractAdapterHttpBinding = <I extends { AdapterId?: string }, A, E, R>(options: {
   /** Short capability name, e.g. `"GetAdapter"`. */
   capability: string;
   /** IAM actions granted on the adapter ARN + `/versions/*`. */
@@ -88,27 +79,25 @@ export const makeTextractAdapterHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Textract.${options.capability}(${adapter}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [
-                    Output.interpolate`${adapter.adapterArn}`,
-                    Output.interpolate`${adapter.adapterArn}/versions/*`,
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Textract.${options.capability}(${adapter}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: [
+                  Output.interpolate`${adapter.adapterArn}`,
+                  Output.interpolate`${adapter.adapterArn}/versions/*`,
+                ],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.Textract.${options.capability}(${adapter.LogicalId})`,
-      )(function* (request?: Omit<I, "AdapterId">) {
+      return Effect.fn(`AWS.Textract.${options.capability}(${adapter.LogicalId})`)(function* (
+        request?: Omit<I, "AdapterId">,
+      ) {
         return yield* op({
-          ...(request ?? {}),
+          ...request,
           AdapterId: yield* AdapterId,
         } as I);
       });

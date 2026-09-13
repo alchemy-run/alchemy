@@ -16,9 +16,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
  */
 export const PROBE_RELEASE_LABEL = "emr-7.5.0";
 
-export class EmrTestFunction extends Lambda.Function<Lambda.Function>()(
-  "EmrTestFunction",
-) {}
+export class EmrTestFunction extends Lambda.Function<Lambda.Function>()("EmrTestFunction") {}
 
 /**
  * Account-scoped binding fixture: no EMR cluster is ever created. The four
@@ -36,9 +34,7 @@ export default EmrTestFunction.make(
     // The deploy proves the EventBridge rule + invoke permission wiring.
     yield* EMR.consumeClusterEvents({ kinds: ["cluster", "step"] }, (events) =>
       Stream.runForEach(events, (event) =>
-        Effect.log(
-          `emr event: ${event.detail.clusterId} -> ${event.detail.state}`,
-        ),
+        Effect.log(`emr event: ${event.detail.clusterId} -> ${event.detail.state}`),
       ),
     );
 

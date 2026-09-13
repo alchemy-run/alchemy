@@ -41,11 +41,7 @@ export const RestoreTableHttp = Layer.effect(
                   // The keyspace ARN ends with a trailing slash
                   // (`.../keyspace/name/`), so its tables match `table/*`.
                   Effect: "Allow",
-                  Action: [
-                    "cassandra:Restore",
-                    "cassandra:Create",
-                    "cassandra:TagResource",
-                  ],
+                  Action: ["cassandra:Restore", "cassandra:Create", "cassandra:TagResource"],
                   Resource: [
                     targetKeyspace.keyspaceArn,
                     Output.interpolate`${targetKeyspace.keyspaceArn}table/*`,
@@ -56,19 +52,19 @@ export const RestoreTableHttp = Layer.effect(
           );
         }
       }
-      return Effect.fn(`AWS.Keyspaces.RestoreTable(${source.LogicalId})`)(
-        function* (request: RestoreTableRequest) {
-          const sourceKeyspaceName = yield* SourceKeyspaceName;
-          const sourceTableName = yield* SourceTableName;
-          const targetKeyspaceName = yield* TargetKeyspaceName;
-          return yield* restoreTable({
-            ...request,
-            sourceKeyspaceName,
-            sourceTableName,
-            targetKeyspaceName,
-          });
-        },
-      );
+      return Effect.fn(`AWS.Keyspaces.RestoreTable(${source.LogicalId})`)(function* (
+        request: RestoreTableRequest,
+      ) {
+        const sourceKeyspaceName = yield* SourceKeyspaceName;
+        const sourceTableName = yield* SourceTableName;
+        const targetKeyspaceName = yield* TargetKeyspaceName;
+        return yield* restoreTable({
+          ...request,
+          sourceKeyspaceName,
+          sourceTableName,
+          targetKeyspaceName,
+        });
+      });
     });
   }),
 );

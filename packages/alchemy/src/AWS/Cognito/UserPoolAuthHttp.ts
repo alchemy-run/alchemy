@@ -34,8 +34,7 @@ export const UserPoolAuthHttp = Layer.effect(
     const changePassword = yield* cip.changePassword;
     const updateUserAttributes = yield* cip.updateUserAttributes;
     const deleteUserAttributes = yield* cip.deleteUserAttributes;
-    const getUserAttributeVerificationCode =
-      yield* cip.getUserAttributeVerificationCode;
+    const getUserAttributeVerificationCode = yield* cip.getUserAttributeVerificationCode;
     const verifyUserAttribute = yield* cip.verifyUserAttribute;
     const setUserMFAPreference = yield* cip.setUserMFAPreference;
     const associateSoftwareToken = yield* cip.associateSoftwareToken;
@@ -50,17 +49,12 @@ export const UserPoolAuthHttp = Layer.effect(
         if (isBindingHost(host)) {
           // No IAM is required for the public auth flows; the binding is
           // recorded so the app client deploys before the function.
-          yield* host.bind`Allow(${host}, AWS.Cognito.UserPoolAuth(${client}))`(
-            {
-              policyStatements: [],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Cognito.UserPoolAuth(${client}))`({
+            policyStatements: [],
+          });
         }
       }
-      const methods = cognitoMethods(
-        "AWS.Cognito.UserPoolAuth",
-        client.LogicalId,
-      );
+      const methods = cognitoMethods("AWS.Cognito.UserPoolAuth", client.LogicalId);
       const withClient = methods.injecting(
         Effect.map(ClientId, (id): ClientIdField => ({ ClientId: id })),
       );
@@ -68,20 +62,11 @@ export const UserPoolAuthHttp = Layer.effect(
         // client-scoped flows — the app client ID is injected
         signUp: withClient("signUp", signUp),
         confirmSignUp: withClient("confirmSignUp", confirmSignUp),
-        resendConfirmationCode: withClient(
-          "resendConfirmationCode",
-          resendConfirmationCode,
-        ),
+        resendConfirmationCode: withClient("resendConfirmationCode", resendConfirmationCode),
         initiateAuth: withClient("initiateAuth", initiateAuth),
-        respondToAuthChallenge: withClient(
-          "respondToAuthChallenge",
-          respondToAuthChallenge,
-        ),
+        respondToAuthChallenge: withClient("respondToAuthChallenge", respondToAuthChallenge),
         forgotPassword: withClient("forgotPassword", forgotPassword),
-        confirmForgotPassword: withClient(
-          "confirmForgotPassword",
-          confirmForgotPassword,
-        ),
+        confirmForgotPassword: withClient("confirmForgotPassword", confirmForgotPassword),
         revokeToken: withClient("revokeToken", revokeToken),
         getTokensFromRefreshToken: withClient(
           "getTokensFromRefreshToken",
@@ -91,38 +76,17 @@ export const UserPoolAuthHttp = Layer.effect(
         getUser: methods.plain("getUser", getUser),
         globalSignOut: methods.plain("globalSignOut", globalSignOut),
         changePassword: methods.plain("changePassword", changePassword),
-        updateUserAttributes: methods.plain(
-          "updateUserAttributes",
-          updateUserAttributes,
-        ),
-        deleteUserAttributes: methods.plain(
-          "deleteUserAttributes",
-          deleteUserAttributes,
-        ),
+        updateUserAttributes: methods.plain("updateUserAttributes", updateUserAttributes),
+        deleteUserAttributes: methods.plain("deleteUserAttributes", deleteUserAttributes),
         getUserAttributeVerificationCode: methods.plain(
           "getUserAttributeVerificationCode",
           getUserAttributeVerificationCode,
         ),
-        verifyUserAttribute: methods.plain(
-          "verifyUserAttribute",
-          verifyUserAttribute,
-        ),
-        setUserMFAPreference: methods.plain(
-          "setUserMFAPreference",
-          setUserMFAPreference,
-        ),
-        associateSoftwareToken: methods.plain(
-          "associateSoftwareToken",
-          associateSoftwareToken,
-        ),
-        verifySoftwareToken: methods.plain(
-          "verifySoftwareToken",
-          verifySoftwareToken,
-        ),
-        getUserAuthFactors: methods.plain(
-          "getUserAuthFactors",
-          getUserAuthFactors,
-        ),
+        verifyUserAttribute: methods.plain("verifyUserAttribute", verifyUserAttribute),
+        setUserMFAPreference: methods.plain("setUserMFAPreference", setUserMFAPreference),
+        associateSoftwareToken: methods.plain("associateSoftwareToken", associateSoftwareToken),
+        verifySoftwareToken: methods.plain("verifySoftwareToken", verifySoftwareToken),
+        getUserAuthFactors: methods.plain("getUserAuthFactors", getUserAuthFactors),
         deleteUser: methods.plain("deleteUser", deleteUser),
       };
       return authClient;

@@ -36,10 +36,7 @@ export interface GetResourcePolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetResourcePolicyRequest,
-    ) => Effect.Effect<
-      Kinesis.GetResourcePolicyOutput,
-      Kinesis.GetResourcePolicyError
-    >
+    ) => Effect.Effect<Kinesis.GetResourcePolicyOutput, Kinesis.GetResourcePolicyError>
   >
 > {}
 

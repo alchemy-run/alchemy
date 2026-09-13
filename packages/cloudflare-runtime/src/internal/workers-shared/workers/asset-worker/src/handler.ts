@@ -21,10 +21,7 @@ import {
   SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
 } from "./compatibility-flags.ts";
 import { attachCustomHeaders, getAssetHeaders } from "./utils/headers.ts";
-import {
-  generateRedirectsMatcher,
-  staticRedirectsMatcher,
-} from "./utils/rules-engine.ts";
+import { generateRedirectsMatcher, staticRedirectsMatcher } from "./utils/rules-engine.ts";
 import type EntrypointType from "./worker.ts";
 import type { Env } from "./worker.ts";
 
@@ -64,12 +61,7 @@ const getResponseOrAssetIntent = async (
 
   const decodedPathname = decodePath(pathname);
 
-  const intent = await getIntent(
-    decodedPathname,
-    request,
-    configuration,
-    exists,
-  );
+  const intent = await getIntent(decodedPathname, request, configuration, exists);
 
   if (!intent) {
     const response = proxied ? new NotFoundResponse() : new NoIntentResponse();
@@ -114,9 +106,7 @@ const getResponseOrAssetIntent = async (
       span.setTags({
         originalPath: pathname,
         location:
-          encodedDestination !== pathname
-            ? encodedDestination
-            : (intent.redirect ?? "<unknown>"),
+          encodedDestination !== pathname ? encodedDestination : (intent.redirect ?? "<unknown>"),
         status: TemporaryRedirectResponse.status,
       });
 
@@ -212,10 +202,7 @@ export const canFetch = async (
 ): Promise<boolean> => {
   const shouldKeepNotFoundHandling =
     configuration.has_static_routing ||
-    (flagIsEnabled(
-      configuration,
-      SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
-    ) &&
+    (flagIsEnabled(configuration, SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING) &&
       request.headers.get("Sec-Fetch-Mode") === "navigate");
   if (!shouldKeepNotFoundHandling) {
     configuration = {
@@ -224,12 +211,7 @@ export const canFetch = async (
     };
   }
 
-  const responseOrAssetIntent = await getResponseOrAssetIntent(
-    request,
-    env,
-    configuration,
-    exists,
-  );
+  const responseOrAssetIntent = await getResponseOrAssetIntent(request, env, configuration, exists);
 
   if (responseOrAssetIntent instanceof NoIntentResponse) {
     return false;
@@ -271,10 +253,7 @@ export const handleRequest = async (
 
 type Resolver = "html-handling" | "not-found";
 
-function servedByForResolver(
-  resolver: Resolver,
-  configuration: Required<AssetConfig>,
-): ServedBy {
+function servedByForResolver(resolver: Resolver, configuration: Required<AssetConfig>): ServedBy {
   if (resolver === "html-handling") {
     return "asset";
   }
@@ -311,13 +290,7 @@ export const getIntent = async (
 ): Promise<Intent> => {
   switch (configuration.html_handling) {
     case "auto-trailing-slash": {
-      return htmlHandlingAutoTrailingSlash(
-        pathname,
-        request,
-        configuration,
-        exists,
-        skipRedirects,
-      );
+      return htmlHandlingAutoTrailingSlash(pathname, request, configuration, exists, skipRedirects);
     }
     case "force-trailing-slash": {
       return htmlHandlingForceTrailingSlash(
@@ -329,13 +302,7 @@ export const getIntent = async (
       );
     }
     case "drop-trailing-slash": {
-      return htmlHandlingDropTrailingSlash(
-        pathname,
-        request,
-        configuration,
-        exists,
-        skipRedirects,
-      );
+      return htmlHandlingDropTrailingSlash(pathname, request, configuration, exists, skipRedirects);
     }
     case "none": {
       return htmlHandlingNone(pathname, request, configuration, exists);
@@ -588,12 +555,7 @@ const htmlHandlingForceTrailingSlash = async (
         redirect: null,
         resolver: "html-handling",
       };
-    } else if (
-      (eTagResult = await exists(
-        `${pathname.slice(0, -"/".length)}.html`,
-        request,
-      ))
-    ) {
+    } else if ((eTagResult = await exists(`${pathname.slice(0, -"/".length)}.html`, request))) {
       // /foo.html exists so serve at /foo/
       return {
         asset: { eTag: eTagResult, status: OkResponse.status },
@@ -952,13 +914,7 @@ const safeRedirect = async (
   }
 
   if (!(await exists(destination, request))) {
-    const intent = await getIntent(
-      destination,
-      request,
-      configuration,
-      exists,
-      true,
-    );
+    const intent = await getIntent(destination, request, configuration, exists, true);
     // return only if the eTag matches - i.e. not the 404 case
     if (intent?.asset && intent.asset.eTag === (await exists(file, request))) {
       return {

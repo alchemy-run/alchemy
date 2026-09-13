@@ -24,8 +24,7 @@ export default AossBindingsFunction.make(
     const getAccountSettings = yield* AOSS.GetAccountSettings();
     const updateAccountSettings = yield* AOSS.UpdateAccountSettings();
     const getPoliciesStats = yield* AOSS.GetPoliciesStats();
-    const batchGetEffectiveLifecyclePolicy =
-      yield* AOSS.BatchGetEffectiveLifecyclePolicy();
+    const batchGetEffectiveLifecyclePolicy = yield* AOSS.BatchGetEffectiveLifecyclePolicy();
 
     const bound = {
       getAccountSettings,
@@ -49,15 +48,11 @@ export default AossBindingsFunction.make(
         if (request.method === "GET" && pathname === "/account-settings") {
           const response = yield* getAccountSettings();
           return yield* HttpServerResponse.json({
-            capacityLimits:
-              response.accountSettingsDetail?.capacityLimits ?? null,
+            capacityLimits: response.accountSettingsDetail?.capacityLimits ?? null,
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/account-settings/noop"
-        ) {
+        if (request.method === "POST" && pathname === "/account-settings/noop") {
           // Read-modify-write with the observed values (falling back to the
           // service defaults) — proves the UpdateAccountSettings grant
           // without changing the account's effective configuration.
@@ -71,8 +66,7 @@ export default AossBindingsFunction.make(
             },
           });
           return yield* HttpServerResponse.json({
-            capacityLimits:
-              response.accountSettingsDetail?.capacityLimits ?? null,
+            capacityLimits: response.accountSettingsDetail?.capacityLimits ?? null,
           });
         }
 
@@ -80,8 +74,7 @@ export default AossBindingsFunction.make(
           const response = yield* getPoliciesStats();
           return yield* HttpServerResponse.json({
             total: response.TotalPolicyCount ?? 0,
-            securityPolicies:
-              response.SecurityPolicyStats?.EncryptionPolicyCount ?? 0,
+            securityPolicies: response.SecurityPolicyStats?.EncryptionPolicyCount ?? 0,
           });
         }
 
@@ -99,8 +92,7 @@ export default AossBindingsFunction.make(
           });
           return yield* HttpServerResponse.json({
             details: (response.effectiveLifecyclePolicyDetails ?? []).length,
-            errors: (response.effectiveLifecyclePolicyErrorDetails ?? [])
-              .length,
+            errors: (response.effectiveLifecyclePolicyErrorDetails ?? []).length,
           });
         }
 

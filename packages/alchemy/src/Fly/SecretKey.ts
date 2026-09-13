@@ -176,32 +176,24 @@ const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
  * @resource
  */
 export const SecretKey: typeof SecretKeyResource = Object.assign(
-  (
-    id: string,
-    props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>,
-  ) => SecretKeyResource(id, resolveSecretKeyProps(props)),
+  (id: string, props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>) =>
+    SecretKeyResource(id, resolveSecretKeyProps(props)),
   SecretKeyResource,
 );
 
-export class SecretKeyNotCreated extends Data.TaggedError(
-  "Fly.SecretKeyNotCreated",
-)<{
+export class SecretKeyNotCreated extends Data.TaggedError("Fly.SecretKeyNotCreated")<{
   appName: string;
   name: string;
 }> {}
 
-export class SecretKeyAppRequired extends Data.TaggedError(
-  "Fly.SecretKeyAppRequired",
-)<{
+export class SecretKeyAppRequired extends Data.TaggedError("Fly.SecretKeyAppRequired")<{
   message: string;
 }> {}
 
 const appNameOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { appName?: unknown };
-  return typeof rec.appName === "string" && rec.appName.length > 0
-    ? rec.appName
-    : undefined;
+  return typeof rec.appName === "string" && rec.appName.length > 0 ? rec.appName : undefined;
 };
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
@@ -276,17 +268,12 @@ export const SecretKeyProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const desiredName =
-        news.name !== undefined
-          ? sanitizeFlyVolumeName(news.name)
-          : output.name;
+      const desiredName = news.name !== undefined ? sanitizeFlyVolumeName(news.name) : output.name;
       const nameChanged = desiredName !== output.name;
       const nextApp = appNameOf(news.app);
       const appChanged = nextApp !== undefined && nextApp !== output.appName;
       const typeChanged =
-        news.type !== undefined &&
-        output.type !== undefined &&
-        news.type !== output.type;
+        news.type !== undefined && output.type !== undefined && news.type !== output.type;
       if (nameChanged || appChanged || typeChanged) {
         return {
           action: "replace" as const,
@@ -298,9 +285,7 @@ export const SecretKeyProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const appName =
-        output?.appName ??
-        (olds !== undefined ? appNameOf(olds.app) : undefined);
+      const appName = output?.appName ?? (olds !== undefined ? appNameOf(olds.app) : undefined);
       if (appName === undefined) return undefined;
       const name = yield* resolveName(id, olds?.name, output?.name);
       const found = yield* getByName(appName, name);
@@ -341,14 +326,10 @@ export const SecretKeyProvider = () =>
 
       // Observe by cached identity, then the desired (app, name).
       let current =
-        output !== undefined
-          ? yield* getByName(output.appName, output.name)
-          : undefined;
+        output !== undefined ? yield* getByName(output.appName, output.name) : undefined;
       if (
         current === undefined &&
-        (output === undefined ||
-          output.appName !== appName ||
-          output.name !== name)
+        (output === undefined || output.appName !== appName || output.name !== name)
       ) {
         current = yield* getByName(appName, name);
       }
@@ -372,9 +353,7 @@ export const SecretKeyProvider = () =>
       const desiredValue = props.value;
       if (desiredValue !== undefined) {
         const previousValue = olds?.value;
-        const shouldSet =
-          previousValue === undefined ||
-          !valuesEqual(previousValue, desiredValue);
+        const shouldSet = previousValue === undefined || !valuesEqual(previousValue, desiredValue);
         if (shouldSet) {
           yield* putKey({
             appName,

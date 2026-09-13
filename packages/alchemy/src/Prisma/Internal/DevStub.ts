@@ -18,8 +18,7 @@ export const devId = (type: string, id: string) => `dev:${type}:${id}`;
 export const isRecord = (value: unknown): value is DevRecord =>
   typeof value === "object" && value !== null;
 
-const attr = (value: unknown, key: string) =>
-  isRecord(value) ? value[key] : undefined;
+const attr = (value: unknown, key: string) => (isRecord(value) ? value[key] : undefined);
 
 export const attrOrString = (value: unknown, attrName: string) =>
   typeof value === "string"
@@ -30,9 +29,7 @@ export const attrOrString = (value: unknown, attrName: string) =>
 
 export const attrOrNullableString = (value: unknown, key: string) => {
   const candidate = attr(value, key);
-  return candidate === null || typeof candidate === "string"
-    ? candidate
-    : undefined;
+  return candidate === null || typeof candidate === "string" ? candidate : undefined;
 };
 
 export const attrOrRedactedString = (value: unknown, key: string) => {
@@ -52,11 +49,7 @@ export const attrOrRedactedString = (value: unknown, key: string) => {
 export const devProvider = <R extends ResourceLike>(
   resource: ResourceClass<R>,
   stables: Extract<keyof R["Attributes"], string>[],
-  attrs: (input: {
-    id: string;
-    news: DevRecord;
-    output?: DevRecord;
-  }) => DevRecord,
+  attrs: (input: { id: string; news: DevRecord; output?: DevRecord }) => DevRecord,
 ) =>
   Provider.succeed(resource, {
     stables,

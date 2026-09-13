@@ -159,9 +159,7 @@ export const Room = Resource<Room>("AWS.IVSChat.Room");
  * Raised when the IVS Chat API returns a room missing its ARN, ID, or
  * name.
  */
-export class IvsChatRoomIncomplete extends Data.TaggedError(
-  "IvsChatRoomIncomplete",
-)<{
+export class IvsChatRoomIncomplete extends Data.TaggedError("IvsChatRoomIncomplete")<{
   message: string;
 }> {}
 
@@ -194,11 +192,7 @@ const resolveMessageReviewHandler = Effect.fn(function* (
   ].filter((handler) => handler !== undefined);
   let resolved: RoomMessageReviewHandler | undefined;
   for (const handler of contributions) {
-    if (
-      resolved?.uri !== undefined &&
-      handler.uri !== undefined &&
-      resolved.uri !== handler.uri
-    ) {
+    if (resolved?.uri !== undefined && handler.uri !== undefined && resolved.uri !== handler.uri) {
       return yield* Effect.fail(
         new ConflictingRoomMessageReviewHandler({
           uris: [resolved.uri, handler.uri],
@@ -248,9 +242,7 @@ export const RoomProvider = () =>
       const getByIdentifier = Effect.fn(function* (identifier: string) {
         return yield* ivschat.getRoom({ identifier }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -258,9 +250,7 @@ export const RoomProvider = () =>
       const findByName = Effect.fn(function* (name: string) {
         const summaries = yield* ivschat.listRooms.pages({ name }).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.rooms),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.rooms)),
           retryWhileThrottled,
         );
         const match = summaries.find((s) => s.name === name && s.arn);
@@ -276,25 +266,14 @@ export const RoomProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (room === undefined) return undefined;
           const attrs = yield* toAttrs(room);
-          return (yield* hasAlchemyTags(id, toTagRecord(room.tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(room.tags))) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          session,
-          bindings,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session, bindings }) {
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const messageReviewHandler = yield* resolveMessageReviewHandler(
-            news,
-            bindings,
-          );
+          const messageReviewHandler = yield* resolveMessageReviewHandler(news, bindings);
 
           // 1. Observe.
           let observed: RoomState | undefined = output?.roomArn
@@ -309,14 +288,10 @@ export const RoomProvider = () =>
                 maximumMessageRatePerSecond: news.maximumMessageRatePerSecond,
                 maximumMessageLength: news.maximumMessageLength,
                 messageReviewHandler,
-                loggingConfigurationIdentifiers:
-                  news.loggingConfigurationIdentifiers,
+                loggingConfigurationIdentifiers: news.loggingConfigurationIdentifiers,
                 tags: desiredTags,
               })
-              .pipe(
-                retryWhileThrottled,
-                retryWhileHandlerPermissionPropagating,
-              );
+              .pipe(retryWhileThrottled, retryWhileHandlerPermissionPropagating);
           }
           const arn = observed.arn;
           if (arn === undefined) {
@@ -333,11 +308,9 @@ export const RoomProvider = () =>
           if (observed.name !== name) patch.name = name;
           if (
             news.maximumMessageRatePerSecond !== undefined &&
-            observed.maximumMessageRatePerSecond !==
-              news.maximumMessageRatePerSecond
+            observed.maximumMessageRatePerSecond !== news.maximumMessageRatePerSecond
           ) {
-            patch.maximumMessageRatePerSecond =
-              news.maximumMessageRatePerSecond;
+            patch.maximumMessageRatePerSecond = news.maximumMessageRatePerSecond;
           }
           if (
             news.maximumMessageLength !== undefined &&
@@ -350,10 +323,8 @@ export const RoomProvider = () =>
           // no-handler desire converges from either direction.
           const observedHandlerUri = observed.messageReviewHandler?.uri ?? "";
           const desiredHandlerUri = messageReviewHandler?.uri ?? "";
-          const observedFallback =
-            observed.messageReviewHandler?.fallbackResult ?? "ALLOW";
-          const desiredFallback =
-            messageReviewHandler?.fallbackResult ?? "ALLOW";
+          const observedFallback = observed.messageReviewHandler?.fallbackResult ?? "ALLOW";
+          const desiredFallback = messageReviewHandler?.fallbackResult ?? "ALLOW";
           if (
             observedHandlerUri !== desiredHandlerUri ||
             (desiredHandlerUri !== "" && observedFallback !== desiredFallback)
@@ -365,16 +336,12 @@ export const RoomProvider = () =>
             JSON.stringify(observed.loggingConfigurationIdentifiers ?? []) !==
               JSON.stringify(news.loggingConfigurationIdentifiers)
           ) {
-            patch.loggingConfigurationIdentifiers =
-              news.loggingConfigurationIdentifiers;
+            patch.loggingConfigurationIdentifiers = news.loggingConfigurationIdentifiers;
           }
           if (Object.keys(patch).length > 0) {
             yield* ivschat
               .updateRoom({ identifier: arn, ...patch })
-              .pipe(
-                retryWhileThrottled,
-                retryWhileHandlerPermissionPropagating,
-              );
+              .pipe(retryWhileThrottled, retryWhileHandlerPermissionPropagating);
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
@@ -403,17 +370,13 @@ export const RoomProvider = () =>
         list: () =>
           ivschat.listRooms.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.rooms),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.rooms)),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>
                   toAttrs(summary).pipe(
                     // Tolerate a malformed/deleted summary — drop it.
-                    Effect.catchTag("IvsChatRoomIncomplete", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("IvsChatRoomIncomplete", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 5 },
               ),

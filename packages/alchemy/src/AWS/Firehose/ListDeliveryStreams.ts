@@ -2,8 +2,7 @@ import type * as Firehose from "@distilled.cloud/aws/firehose";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListDeliveryStreamsRequest
-  extends Firehose.ListDeliveryStreamsInput {}
+export interface ListDeliveryStreamsRequest extends Firehose.ListDeliveryStreamsInput {}
 
 /**
  * Runtime binding for `firehose:ListDeliveryStreams`.
@@ -30,10 +29,7 @@ export interface ListDeliveryStreams extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListDeliveryStreamsRequest,
-    ) => Effect.Effect<
-      Firehose.ListDeliveryStreamsOutput,
-      Firehose.ListDeliveryStreamsError
-    >
+    ) => Effect.Effect<Firehose.ListDeliveryStreamsOutput, Firehose.ListDeliveryStreamsError>
   >
 > {}
 

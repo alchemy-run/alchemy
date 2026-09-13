@@ -19,11 +19,7 @@ type OrderId = typeof OrderId.Type;
 type PortNum = number & Brand.Brand<"PortNum">;
 
 // --- ToOutput keeps branded primitives as plain Output ---
-type NotExploded<T> = "charAt" extends keyof T
-  ? false
-  : "toFixed" extends keyof T
-    ? false
-    : true;
+type NotExploded<T> = "charAt" extends keyof T ? false : "toFixed" extends keyof T ? false : true;
 
 declare const t1: NotExploded<Output.ToOutput<UserId, never>>;
 declare const t2: NotExploded<Output.ToOutput<OrderId, never>>;

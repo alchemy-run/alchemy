@@ -7,10 +7,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 interface User {
   id: string;
@@ -39,9 +36,7 @@ test.provider(
               const databaseId = yield* database.databaseId;
 
               return Effect.fn(function* () {
-                yield* db.exec(
-                  "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT)",
-                );
+                yield* db.exec("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT)");
                 yield* db.prepare("DELETE FROM users").run();
                 yield* db
                   .prepare("INSERT INTO users (id, name) VALUES (?, ?)")
@@ -105,14 +100,8 @@ test.provider(
               const db = yield* Cloudflare.D1.QueryDatabase(database);
               return Effect.fn(function* () {
                 // Single statement: number, null, boolean (-> 1/0) via SELECT ?.
-                const num = yield* db
-                  .prepare("SELECT ? AS value")
-                  .bind(42)
-                  .first<number>("value");
-                const nul = yield* db
-                  .prepare("SELECT ? AS value")
-                  .bind(null)
-                  .first<null>("value");
+                const num = yield* db.prepare("SELECT ? AS value").bind(42).first<number>("value");
+                const nul = yield* db.prepare("SELECT ? AS value").bind(null).first<null>("value");
                 const boolTrue = yield* db
                   .prepare("SELECT ? AS value")
                   .bind(true)
@@ -129,14 +118,10 @@ test.provider(
                 yield* db.prepare("DELETE FROM items").run();
                 yield* db.batch([
                   db
-                    .prepare(
-                      "INSERT INTO items (id, qty, note) VALUES (?, ?, ?)",
-                    )
+                    .prepare("INSERT INTO items (id, qty, note) VALUES (?, ?, ?)")
                     .bind(1, 10, null),
                   db
-                    .prepare(
-                      "INSERT INTO items (id, qty, note) VALUES (?, ?, ?)",
-                    )
+                    .prepare("INSERT INTO items (id, qty, note) VALUES (?, ?, ?)")
                     .bind(2, 20, "second"),
                 ]);
                 const rows = yield* db

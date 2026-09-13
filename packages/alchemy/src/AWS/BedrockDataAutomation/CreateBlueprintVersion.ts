@@ -42,10 +42,7 @@ export interface CreateBlueprintVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateBlueprintVersionRequest,
-    ) => Effect.Effect<
-      bda.CreateBlueprintVersionResponse,
-      bda.CreateBlueprintVersionError
-    >
+    ) => Effect.Effect<bda.CreateBlueprintVersionResponse, bda.CreateBlueprintVersionError>
   >
 > {}
 export const CreateBlueprintVersion = Binding.Service<CreateBlueprintVersion>(

@@ -15,10 +15,9 @@ const ping = Rpc.make("ping", {
 
 class PingRpcs extends RpcGroup.make(ping) {}
 
-class ModularRpcWorker extends Cloudflare.RpcWorker<ModularRpcWorker>()(
-  "ModularRpcWorker",
-  { schema: PingRpcs },
-) {}
+class ModularRpcWorker extends Cloudflare.RpcWorker<ModularRpcWorker>()("ModularRpcWorker", {
+  schema: PingRpcs,
+}) {}
 
 class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
   "InlineRpcWorker",
@@ -26,14 +25,10 @@ class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
   Effect.succeed(RpcServer.toHttpEffect(PingRpcs)),
 ) {}
 
-const identity = <const Id extends string>(
-  declaration: PlatformIdentity<Id>,
-): Id => declaration.LogicalId;
+const identity = <const Id extends string>(declaration: PlatformIdentity<Id>): Id =>
+  declaration.LogicalId;
 
-class OrdinaryWorker extends Cloudflare.Worker<OrdinaryWorker>()(
-  "OrdinaryWorker",
-  {},
-) {}
+class OrdinaryWorker extends Cloudflare.Worker<OrdinaryWorker>()("OrdinaryWorker", {}) {}
 
 test("ordinary and RPC Workers share a native identity reader", () => {
   expect(identity(OrdinaryWorker)).toBe("OrdinaryWorker");
@@ -50,10 +45,6 @@ test("RpcWorker inline class copies LogicalId from the underlying Worker", () =>
 });
 
 test("RpcWorker class is a transferredFrom source by logical id", () => {
-  expect(normalizeTransferredFrom(ModularRpcWorker)).toEqual([
-    "ModularRpcWorker",
-  ]);
-  expect(normalizeTransferredFrom(InlineRpcWorker)).toEqual([
-    "InlineRpcWorker",
-  ]);
+  expect(normalizeTransferredFrom(ModularRpcWorker)).toEqual(["ModularRpcWorker"]);
+  expect(normalizeTransferredFrom(InlineRpcWorker)).toEqual(["InlineRpcWorker"]);
 });

@@ -25,9 +25,7 @@ export interface PublishOptions {
 const currentRun = Effect.gen(function* () {
   const repo = yield* Config.String("GITHUB_REPOSITORY");
   const runId = yield* Config.Int("GITHUB_RUN_ID");
-  const attempt = yield* Config.Int("GITHUB_RUN_ATTEMPT").pipe(
-    Config.withDefault(1),
-  );
+  const attempt = yield* Config.Int("GITHUB_RUN_ATTEMPT").pipe(Config.withDefault(1));
   return { repo, runId, attempt };
 }).pipe(
   Effect.mapError(
@@ -39,11 +37,10 @@ const currentRun = Effect.gen(function* () {
 );
 
 /** Render a registry or transport failure as a `PublishError`. */
-const failed =
-  (what: string) => (e: { readonly _tag: string; readonly message?: string }) =>
-    new PublishError({
-      message: `${what}: ${e.message ? `${e._tag}: ${e.message}` : e._tag}`,
-    });
+const failed = (what: string) => (e: { readonly _tag: string; readonly message?: string }) =>
+  new PublishError({
+    message: `${what}: ${e.message ? `${e._tag}: ${e.message}` : e._tag}`,
+  });
 
 /**
  * Publish a `pkg pack` directory from the current GitHub Actions job. The
@@ -52,9 +49,7 @@ const failed =
  * through GitHub, then either reports the tarballs it lacks, which are
  * uploaded before trying again, or writes the tags.
  */
-export const publish = Effect.fn("publish")(function* (
-  options: PublishOptions,
-) {
+export const publish = Effect.fn("publish")(function* (options: PublishOptions) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const registry = options.registry.replace(/\/+$/, "");
@@ -63,8 +58,7 @@ export const publish = Effect.fn("publish")(function* (
 
   const dir = path.resolve(options.cwd, options.dir);
   const manifestText = yield* fs.readFileString(path.join(dir, MANIFEST_FILE));
-  const manifest =
-    yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText);
+  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText);
   if (manifest.registry !== registry) {
     return yield* new PublishError({
       message: `artifact was packed for ${manifest.registry}, not ${registry}`,
@@ -96,9 +90,7 @@ export const publish = Effect.fn("publish")(function* (
     ).pipe(
       Effect.andThen(
         Effect.forEach(
-          manifest.packages.filter((pkg) =>
-            wanted.has(`${pkg.name}@${pkg.sha256}`),
-          ),
+          manifest.packages.filter((pkg) => wanted.has(`${pkg.name}@${pkg.sha256}`)),
           upload,
           { concurrency: 4, discard: true },
         ),
@@ -112,9 +104,7 @@ export const publish = Effect.fn("publish")(function* (
   const published = yield* attempt.pipe(
     // The first answer is usually the tarballs to upload; publish once more
     // after uploading them.
-    Effect.catchTag("MissingTarballs", (e) =>
-      Effect.andThen(uploadMissing(e.missing), attempt),
-    ),
+    Effect.catchTag("MissingTarballs", (e) => Effect.andThen(uploadMissing(e.missing), attempt)),
     Effect.catchTag(
       "MissingTarballs",
       (e) =>
@@ -122,9 +112,7 @@ export const publish = Effect.fn("publish")(function* (
           message: `registry still reports missing tarballs after upload: ${e.missing.map((ref) => ref.name).join(", ")}`,
         }),
     ),
-    Effect.mapError((e) =>
-      e._tag === "PublishError" ? e : failed("publish")(e),
-    ),
+    Effect.mapError((e) => (e._tag === "PublishError" ? e : failed("publish")(e))),
   );
 
   for (const pkg of published.packages) {

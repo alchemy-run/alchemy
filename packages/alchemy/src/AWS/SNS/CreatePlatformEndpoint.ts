@@ -32,10 +32,7 @@ export interface CreatePlatformEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreatePlatformEndpointRequest,
-    ) => Effect.Effect<
-      sns.CreateEndpointResponse,
-      sns.CreatePlatformEndpointError
-    >
+    ) => Effect.Effect<sns.CreateEndpointResponse, sns.CreatePlatformEndpointError>
   >
 > {}
 

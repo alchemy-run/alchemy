@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /** CIS Benchmark hardening level the scan checks against. */
@@ -126,9 +121,7 @@ export const CisScanConfigurationProvider = () =>
           ? Effect.succeed(props.scanName)
           : createPhysicalName({ id, maxLength: 128 });
 
-      const findBy = (
-        filter: inspector2.ListCisScanConfigurationsFilterCriteria,
-      ) =>
+      const findBy = (filter: inspector2.ListCisScanConfigurationsFilterCriteria) =>
         inspector2
           .listCisScanConfigurations({ filterCriteria: filter })
           .pipe(Effect.map((r) => r.scanConfigurations?.[0]));
@@ -156,9 +149,7 @@ export const CisScanConfigurationProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (!live) return undefined;
           const attrs = buildAttrs(live);
-          return (yield* hasAlchemyTags(id, live.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, live.tags)) ? attrs : Unowned(attrs);
         }),
         list: () =>
           inspector2.listCisScanConfigurations
@@ -178,22 +169,19 @@ export const CisScanConfigurationProvider = () =>
 
           // 2. ENSURE — create when missing.
           if (!live) {
-            const { scanConfigurationArn } =
-              yield* inspector2.createCisScanConfiguration({
-                scanName,
-                securityLevel: news.securityLevel,
-                schedule: news.schedule,
-                targets: news.targets,
-                tags: desiredTags,
-              });
+            const { scanConfigurationArn } = yield* inspector2.createCisScanConfiguration({
+              scanName,
+              securityLevel: news.securityLevel,
+              schedule: news.schedule,
+              targets: news.targets,
+              tags: desiredTags,
+            });
             live = scanConfigurationArn
               ? yield* findByArn(scanConfigurationArn)
               : yield* findByName(scanName);
             if (!live) {
               return yield* Effect.die(
-                new Error(
-                  `Inspector2 CIS scan configuration ${scanName} not visible after create`,
-                ),
+                new Error(`Inspector2 CIS scan configuration ${scanName} not visible after create`),
               );
             }
           }
@@ -203,8 +191,7 @@ export const CisScanConfigurationProvider = () =>
             live.scanName !== scanName ||
             live.securityLevel !== news.securityLevel ||
             JSON.stringify(live.schedule) !== JSON.stringify(news.schedule) ||
-            JSON.stringify(live.targets?.accountIds) !==
-              JSON.stringify(news.targets.accountIds) ||
+            JSON.stringify(live.targets?.accountIds) !== JSON.stringify(news.targets.accountIds) ||
             JSON.stringify(live.targets?.targetResourceTags) !==
               JSON.stringify(news.targets.targetResourceTags);
           if (drift) {
@@ -219,10 +206,7 @@ export const CisScanConfigurationProvider = () =>
 
           // 3b. SYNC tags — diff against OBSERVED cloud tags so adoption
           // converges foreign tags too.
-          const { upsert, removed } = diffTags(
-            tagRecord(live.tags),
-            desiredTags,
-          );
+          const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
           if (upsert.length > 0) {
             yield* inspector2.tagResource({
               resourceArn: live.scanConfigurationArn,
@@ -247,9 +231,7 @@ export const CisScanConfigurationProvider = () =>
             .deleteCisScanConfiguration({
               scanConfigurationArn: output.scanConfigurationArn,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

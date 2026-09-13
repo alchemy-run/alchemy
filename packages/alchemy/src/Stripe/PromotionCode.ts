@@ -193,9 +193,7 @@ export interface PromotionCode extends Resource<
  */
 export const PromotionCode = Resource<PromotionCode>("Stripe.PromotionCode");
 
-export class PromotionCodeNotResolved extends Data.TaggedError(
-  "Stripe.PromotionCodeNotResolved",
-)<{
+export class PromotionCodeNotResolved extends Data.TaggedError("Stripe.PromotionCodeNotResolved")<{
   code: string;
 }> {}
 
@@ -214,8 +212,7 @@ const idOf = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const couponIdOf = (promo: StripePromotionCode): string =>
-  idOf(promo.promotion?.coupon) ?? "";
+const couponIdOf = (promo: StripePromotionCode): string => idOf(promo.promotion?.coupon) ?? "";
 
 const fromWireCurrencyOptions = (
   options: StripePromotionCode["restrictions"]["currency_options"] | undefined,
@@ -247,17 +244,13 @@ const fromObservedRestrictions = (
   if (restrictions === undefined) return {};
   return {
     firstTimeTransaction: restrictions.first_time_transaction,
-    ...(restrictions.minimum_amount != null
-      ? { minimumAmount: restrictions.minimum_amount }
-      : {}),
+    ...(restrictions.minimum_amount != null ? { minimumAmount: restrictions.minimum_amount } : {}),
     ...(restrictions.minimum_amount_currency != null
       ? { minimumAmountCurrency: restrictions.minimum_amount_currency }
       : {}),
     ...(fromWireCurrencyOptions(restrictions.currency_options) !== undefined
       ? {
-          currencyOptions: fromWireCurrencyOptions(
-            restrictions.currency_options,
-          ),
+          currencyOptions: fromWireCurrencyOptions(restrictions.currency_options),
         }
       : {}),
   };
@@ -301,11 +294,7 @@ const toAttrs = (promo: StripePromotionCode): PromotionCodeAttributes => ({
 
 const toCode = (id: string, code: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      code ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: CODE_MAX_LENGTH }))
-    );
+    return code ?? existing ?? (yield* createPhysicalName({ id, maxLength: CODE_MAX_LENGTH }));
   });
 
 const isResourceMissing = isMissingStripeResource;
@@ -360,10 +349,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllPromotionCodes = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const items: StripePromotionCode[] = [];
   for (const item of [...active, ...inactive]) {
@@ -382,10 +370,7 @@ const observe = Effect.fn(function* (input: { id?: string; code: string }) {
   return yield* findByCode(input.code);
 });
 
-const desiredMetadata = Effect.fn(function* (
-  id: string,
-  user: Record<string, string> | undefined,
-) {
+const desiredMetadata = Effect.fn(function* (id: string, user: Record<string, string> | undefined) {
   return {
     ...toMetadata(user),
     ...(yield* createInternalMetadata(id)),
@@ -407,36 +392,25 @@ const replaceOnCreateOnlyChange = (
   if ((news.customer ?? undefined) !== (output?.customer ?? olds?.customer)) {
     return true;
   }
-  if (
-    (news.customerAccount ?? undefined) !==
-    (output?.customerAccount ?? olds?.customerAccount)
-  ) {
+  if ((news.customerAccount ?? undefined) !== (output?.customerAccount ?? olds?.customerAccount)) {
     return true;
   }
-  if (
-    (news.expiresAt ?? undefined) !== (output?.expiresAt ?? olds?.expiresAt)
-  ) {
+  if ((news.expiresAt ?? undefined) !== (output?.expiresAt ?? olds?.expiresAt)) {
     return true;
   }
-  if (
-    (news.maxRedemptions ?? undefined) !==
-    (output?.maxRedemptions ?? olds?.maxRedemptions)
-  ) {
+  if ((news.maxRedemptions ?? undefined) !== (output?.maxRedemptions ?? olds?.maxRedemptions)) {
     return true;
   }
   const oldR = olds?.restrictions;
   const newR = news.restrictions;
   const outR = output?.restrictions;
-  const desiredFirstTime =
-    newR?.firstTimeTransaction ?? oldR?.firstTimeTransaction ?? false;
-  const observedFirstTime =
-    outR?.firstTimeTransaction ?? oldR?.firstTimeTransaction ?? false;
+  const desiredFirstTime = newR?.firstTimeTransaction ?? oldR?.firstTimeTransaction ?? false;
+  const observedFirstTime = outR?.firstTimeTransaction ?? oldR?.firstTimeTransaction ?? false;
   if (desiredFirstTime !== observedFirstTime) {
     return true;
   }
   if (
-    (newR?.minimumAmount ?? oldR?.minimumAmount) !==
-    (outR?.minimumAmount ?? oldR?.minimumAmount)
+    (newR?.minimumAmount ?? oldR?.minimumAmount) !== (outR?.minimumAmount ?? oldR?.minimumAmount)
   ) {
     return true;
   }
@@ -456,10 +430,7 @@ export const PromotionCodeProvider = () =>
     list: Effect.fn(function* () {
       const items = yield* listAllPromotionCodes();
       return items
-        .filter(
-          (item) =>
-            tagRecord(item.metadata)[alchemyMetadataKeys.stack] !== undefined,
-        )
+        .filter((item) => tagRecord(item.metadata)[alchemyMetadataKeys.stack] !== undefined)
         .map(toAttrs);
     }),
 
@@ -482,8 +453,7 @@ export const PromotionCodeProvider = () =>
       if (
         !deepEqual(
           news.restrictions?.currencyOptions,
-          olds?.restrictions?.currencyOptions ??
-            output?.restrictions.currencyOptions,
+          olds?.restrictions?.currencyOptions ?? output?.restrictions.currencyOptions,
           { stripNullish: true },
         )
       ) {
@@ -497,9 +467,7 @@ export const PromotionCodeProvider = () =>
       const existing = yield* observe({ id: output?.id, code });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
@@ -526,19 +494,11 @@ export const PromotionCodeProvider = () =>
           code,
           active,
           ...(news.customer !== undefined ? { customer: news.customer } : {}),
-          ...(news.customerAccount !== undefined
-            ? { customer_account: news.customerAccount }
-            : {}),
-          ...(news.expiresAt !== undefined
-            ? { expires_at: news.expiresAt }
-            : {}),
-          ...(news.maxRedemptions !== undefined
-            ? { max_redemptions: news.maxRedemptions }
-            : {}),
+          ...(news.customerAccount !== undefined ? { customer_account: news.customerAccount } : {}),
+          ...(news.expiresAt !== undefined ? { expires_at: news.expiresAt } : {}),
+          ...(news.maxRedemptions !== undefined ? { max_redemptions: news.maxRedemptions } : {}),
           metadata,
-          ...(createRestrictions !== undefined
-            ? { restrictions: createRestrictions }
-            : {}),
+          ...(createRestrictions !== undefined ? { restrictions: createRestrictions } : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-promotion-code-${instanceId}`,
@@ -579,9 +539,7 @@ export const PromotionCodeProvider = () =>
       }
 
       const desiredCurrency = news.restrictions?.currencyOptions;
-      const observedCurrency = fromWireCurrencyOptions(
-        current.restrictions.currency_options,
-      );
+      const observedCurrency = fromWireCurrencyOptions(current.restrictions.currency_options);
       if (
         desiredCurrency !== undefined &&
         !deepEqual(desiredCurrency, observedCurrency, { stripNullish: true })

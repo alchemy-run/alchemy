@@ -34,10 +34,7 @@ export interface StartDataSourceRun extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartDataSourceRunRequest,
-    ) => Effect.Effect<
-      datazone.StartDataSourceRunOutput,
-      datazone.StartDataSourceRunError
-    >
+    ) => Effect.Effect<datazone.StartDataSourceRunOutput, datazone.StartDataSourceRunError>
   >
 > {}
 export const StartDataSourceRun = Binding.Service<StartDataSourceRun>(

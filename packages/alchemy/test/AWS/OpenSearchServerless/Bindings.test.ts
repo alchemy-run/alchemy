@@ -7,9 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import AossBindingsFunctionLive, {
-  AossBindingsFunction,
-} from "./bindings-handler";
+import AossBindingsFunctionLive, { AossBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "AossBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -72,9 +62,7 @@ describe.sequential("OpenSearchServerless Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `AOSS test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`AOSS test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -82,9 +70,7 @@ describe.sequential("OpenSearchServerless Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `AOSS test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`AOSS test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -97,9 +83,9 @@ describe.sequential("OpenSearchServerless Bindings", () => {
   describe("binding registration", () => {
     test.provider("all 4 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/bindings`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).bound).toHaveLength(4);
       }),
     );
@@ -108,9 +94,9 @@ describe.sequential("OpenSearchServerless Bindings", () => {
   describe("GetAccountSettings", () => {
     test.provider("reads the account's capacity limits", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/account-settings`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/account-settings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         // Limits may be unset on a fresh account — the call round-tripping
         // proves the grant.
         expect(response).toHaveProperty("capacityLimits");
@@ -124,9 +110,7 @@ describe.sequential("OpenSearchServerless Bindings", () => {
         const response = (yield* send(
           HttpClientRequest.post(`${baseUrl}/account-settings/noop`),
         ).pipe(Effect.flatMap((r) => r.json))) as any;
-        expect(
-          response.capacityLimits?.maxIndexingCapacityInOCU,
-        ).toBeGreaterThan(0);
+        expect(response.capacityLimits?.maxIndexingCapacityInOCU).toBeGreaterThan(0);
       }),
     );
   });
@@ -134,24 +118,22 @@ describe.sequential("OpenSearchServerless Bindings", () => {
   describe("GetPoliciesStats", () => {
     test.provider("counts the account's aoss policies", (_stack) =>
       Effect.gen(function* () {
-        const response = (yield* send(
-          HttpClientRequest.get(`${baseUrl}/policies-stats`),
-        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        const response = (yield* send(HttpClientRequest.get(`${baseUrl}/policies-stats`)).pipe(
+          Effect.flatMap((r) => r.json),
+        )) as any;
         expect(typeof response.total).toBe("number");
       }),
     );
   });
 
   describe("BatchGetEffectiveLifecyclePolicy", () => {
-    test.provider(
-      "resolves a nonexistent index through the error-detail channel",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/effective-lifecycle`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
-          expect(response.details + response.errors).toBeGreaterThan(0);
-        }),
+    test.provider("resolves a nonexistent index through the error-detail channel", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* send(
+          HttpClientRequest.post(`${baseUrl}/effective-lifecycle`),
+        ).pipe(Effect.flatMap((r) => r.json))) as any;
+        expect(response.details + response.errors).toBeGreaterThan(0);
+      }),
     );
   });
 });

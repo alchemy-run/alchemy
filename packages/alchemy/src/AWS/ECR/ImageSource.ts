@@ -6,17 +6,10 @@ import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { Docker } from "../../Docker/Docker.ts";
-import {
-  isInlineDockerfile,
-  type InlineDockerfile,
-} from "../../Docker/Dockerfile.ts";
+import { isInlineDockerfile, type InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { buildAndPushEcrImage, getEcrRegistryCredentials } from "./Image.ts";
 
@@ -132,10 +125,7 @@ export interface RegistryImageSource {
  * The image-source union. Discriminated by presence: exactly one of
  * `main`, `context`, or `image`.
  */
-export type ImageSourceProps =
-  | BundledImageSource
-  | DockerfileImageSource
-  | RegistryImageSource;
+export type ImageSourceProps = BundledImageSource | DockerfileImageSource | RegistryImageSource;
 
 /** Loose bag shape used to sniff which source variant a props object is. */
 export interface ImageSourceLike {
@@ -155,9 +145,7 @@ export type ImageSourceKind = "main" | "context" | "image";
  * mirrored-verbatim source and any `context`/`dockerfile` (path or inline)
  * is an external docker build.
  */
-export const imageSourceKind = (
-  source: ImageSourceLike,
-): ImageSourceKind | undefined =>
+export const imageSourceKind = (source: ImageSourceLike): ImageSourceKind | undefined =>
   source.main !== undefined
     ? "main"
     : source.image !== undefined
@@ -170,10 +158,7 @@ export const imageSourceKind = (
  * Validate environment-source exclusivity. Dies (plan-time defect) on
  * `image`+`dockerfile`, `image`+`context`, or inline-`dockerfile`+`context`.
  */
-export const validateImageSource = (
-  id: string,
-  source: ImageSourceLike,
-): Effect.Effect<void> => {
+export const validateImageSource = (id: string, source: ImageSourceLike): Effect.Effect<void> => {
   if (source.image !== undefined && source.dockerfile !== undefined) {
     return Effect.die(
       new Error(
@@ -291,14 +276,10 @@ const resolveContextPaths = Effect.fn(function* (source: {
     ? path.resolve(source.dockerfile)
     : path.join(context, "Dockerfile");
   if (!(yield* fs.exists(context))) {
-    return yield* Effect.die(
-      new Error(`Docker build context does not exist: ${context}`),
-    );
+    return yield* Effect.die(new Error(`Docker build context does not exist: ${context}`));
   }
   if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.die(
-      new Error(`Dockerfile does not exist: ${dockerfile}`),
-    );
+    return yield* Effect.die(new Error(`Dockerfile does not exist: ${dockerfile}`));
   }
   return { context, dockerfile };
 });
@@ -329,10 +310,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
     })).slice(0, 16);
   }
   if (kind === "context") {
-    if (
-      source.dockerfile !== undefined &&
-      isInlineDockerfile(source.dockerfile)
-    ) {
+    if (source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)) {
       // Inline content builds with no context; an unresolved (Output)
       // content can't be hashed at plan time — defer to reconcile.
       if (typeof source.dockerfile.content !== "string") return undefined;
@@ -425,11 +403,7 @@ export const makeImageSource = Effect.gen(function* () {
       plugins?: rolldown.RolldownPluginOption,
     ) {
       const opts = mainBundleOptions(source, entry, cwd, plugins);
-      return yield* Bundle.build(
-        opts.inputOptions,
-        opts.outputOptions,
-        source.build,
-      );
+      return yield* Bundle.build(opts.inputOptions, opts.outputOptions, source.build);
     });
 
     const bundleOutput = options.isExternal
@@ -442,9 +416,7 @@ export const makeImageSource = Effect.gen(function* () {
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
       content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
+        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     }));
 
     return { files, hash: bundleOutput.hash };
@@ -512,16 +484,11 @@ export const makeImageSource = Effect.gen(function* () {
    * default bun base (`oven/bun` is Docker-Hub only — there is no
    * `docker/library/bun` and no `public.ecr.aws/oven/bun`).
    */
-  const generateDockerfile = (
-    source: BundledImageSource,
-    port?: number,
-    envFrom?: string,
-  ) => {
+  const generateDockerfile = (source: BundledImageSource, port?: number, envFrom?: string) => {
     const preamble =
       envFrom !== undefined
         ? `FROM ${envFrom}`
-        : source.dockerfile !== undefined &&
-            isInlineDockerfile(source.dockerfile)
+        : source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)
           ? String(source.dockerfile.content).trimEnd()
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [
@@ -575,28 +542,22 @@ export const makeImageSource = Effect.gen(function* () {
     const repository = created.repository;
     if (!repository?.repositoryUri) {
       return yield* Effect.die(
-        new Error(
-          `Failed to resolve ECR repository '${options.repositoryName}'`,
-        ),
+        new Error(`Failed to resolve ECR repository '${options.repositoryName}'`),
       );
     }
     return repository.repositoryUri;
   });
 
   /** Observe a pushed tag in ECR. Missing repository or tag → undefined. */
-  const describeImage = Effect.fn(function* (
-    repositoryName: string,
-    imageTag: string,
-  ) {
+  const describeImage = Effect.fn(function* (repositoryName: string, imageTag: string) {
     const described = yield* ecr
       .describeImages({
         repositoryName,
         imageIds: [{ imageTag }],
       })
       .pipe(
-        Effect.catchTag(
-          ["ImageNotFoundException", "RepositoryNotFoundException"],
-          () => Effect.succeed(undefined),
+        Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
+          Effect.succeed(undefined),
         ),
       );
     return described?.imageDetails?.[0];
@@ -622,18 +583,13 @@ export const makeImageSource = Effect.gen(function* () {
     yield* validateImageSource(id, source);
 
     const repositoryUri =
-      options.repositoryUri ??
-      (yield* ensureRepository({ repositoryName, tags: options.tags }));
+      options.repositoryUri ?? (yield* ensureRepository({ repositoryName, tags: options.tags }));
 
     if (kind === "main") {
       // Bundle → hash → (skip if pushed) → materialize generated Dockerfile
       // → build + push.
       const df = source.dockerfile;
-      if (
-        df !== undefined &&
-        isInlineDockerfile(df) &&
-        typeof df.content !== "string"
-      ) {
+      if (df !== undefined && isInlineDockerfile(df) && typeof df.content !== "string") {
         return yield* Effect.die(
           new Error(
             `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
@@ -675,20 +631,10 @@ export const makeImageSource = Effect.gen(function* () {
       const finalDockerfile =
         envFrom === undefined
           ? dockerfile
-          : generateDockerfile(
-              source as BundledImageSource,
-              options.port,
-              envFrom,
-            );
+          : generateDockerfile(source as BundledImageSource, options.port, envFrom);
 
-      const realMain = yield* resolveMainPath(
-        (source as BundledImageSource).main,
-      );
-      const contextDir = yield* getStableContextDir(
-        realMain,
-        dotAlchemy,
-        `${id}-image`,
-      );
+      const realMain = yield* resolveMainPath((source as BundledImageSource).main);
+      const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
       yield* docker.materialize({
         context: contextDir,
         dockerfile: finalDockerfile,
@@ -759,11 +705,7 @@ export const makeImageSource = Effect.gen(function* () {
       if (yield* describeImage(repositoryName, codeHash)) {
         return { imageUri, repositoryName, repositoryUri, codeHash };
       }
-      const contextDir = yield* getStableContextDir(
-        dotAlchemy,
-        dotAlchemy,
-        `${id}-image`,
-      );
+      const contextDir = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-image`);
       yield* docker.materialize({
         context: contextDir,
         dockerfile: externalDf.content,
@@ -823,11 +765,7 @@ export const makeImageSource = Effect.gen(function* () {
       // Unresolved inline environment content (an Output) can't be hashed
       // at plan time — return undefined so the diff defers to reconcile.
       const df = options.source.dockerfile;
-      if (
-        df !== undefined &&
-        isInlineDockerfile(df) &&
-        typeof df.content !== "string"
-      ) {
+      if (df !== undefined && isInlineDockerfile(df) && typeof df.content !== "string") {
         return undefined;
       }
       const { codeHash } = yield* computeMainCodeHash({

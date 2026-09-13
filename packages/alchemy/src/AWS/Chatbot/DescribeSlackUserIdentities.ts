@@ -33,7 +33,6 @@ export interface DescribeSlackUserIdentities extends Binding.Service<
   >
 > {}
 
-export const DescribeSlackUserIdentities =
-  Binding.Service<DescribeSlackUserIdentities>(
-    "AWS.Chatbot.DescribeSlackUserIdentities",
-  );
+export const DescribeSlackUserIdentities = Binding.Service<DescribeSlackUserIdentities>(
+  "AWS.Chatbot.DescribeSlackUserIdentities",
+);

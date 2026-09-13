@@ -13,10 +13,7 @@ import {
 import { Function } from "./Function.ts";
 import { FunctionRequest } from "./FunctionEnvironment.ts";
 import { FunctionTrigger } from "./FunctionTrigger.ts";
-import {
-  decodeFunctionTriggerEvent,
-  type BucketEvent,
-} from "./FunctionTriggerEvent.ts";
+import { decodeFunctionTriggerEvent, type BucketEvent } from "./FunctionTriggerEvent.ts";
 
 /**
  * Neon Function HTTP object-event dispatch and deployment wiring.
@@ -67,9 +64,7 @@ export const BucketEventSourceHttp = Layer.effect(
       yield* host.route(
         path,
         Effect.gen(function* () {
-          const event = yield* decodeFunctionTriggerEvent(
-            yield* FunctionRequest,
-          );
+          const event = yield* decodeFunctionTriggerEvent(yield* FunctionRequest);
           if (
             event.trigger.type !== "storage_object_created" ||
             event.trigger.name !== triggerName ||

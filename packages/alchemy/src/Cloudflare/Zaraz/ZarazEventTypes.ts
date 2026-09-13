@@ -82,9 +82,7 @@ export type EcommerceRefund = {
  * Standard ecommerce events supported by Cloudflare's `zaraz.ecommerce()` API.
  */
 export type EcommerceEvents = {
-  readonly "Product List Viewed": RequireAtLeastOne<
-    Pick<EcommerceOrder, "products">
-  >;
+  readonly "Product List Viewed": RequireAtLeastOne<Pick<EcommerceOrder, "products">>;
   readonly "Products Searched": RequireAtLeastOne<EcommerceSearch>;
   readonly "Product Clicked": RequireAtLeastOne<EcommerceProduct>;
   readonly "Product Added": RequireAtLeastOne<EcommerceProduct>;
@@ -98,9 +96,7 @@ export type EcommerceEvents = {
   readonly "Payment Info Entered": RequireAtLeastOne<EcommercePayment>;
   readonly "Order Completed": RequireAtLeastOne<EcommerceOrder>;
   readonly "Order Updated": RequireAtLeastOne<EcommerceOrder>;
-  readonly "Order Refunded": RequireAtLeastOne<
-    EcommerceOrder & EcommerceRefund
-  >;
+  readonly "Order Refunded": RequireAtLeastOne<EcommerceOrder & EcommerceRefund>;
   readonly "Order Cancelled": RequireAtLeastOne<EcommerceOrder>;
   readonly "Clicked Promotion": RequireAtLeastOne<EcommercePromotion>;
   readonly "Viewed Promotion": RequireAtLeastOne<EcommercePromotion>;
@@ -116,10 +112,7 @@ declare const ZarazEventContractTypeId: unique symbol;
  * import derived types and call Cloudflare's injected `window.zaraz` API rather
  * than importing Alchemy runtime code into the client bundle.
  */
-export type EventContract<
-  Events extends EventMap,
-  EcommerceEvents extends EventMap = {},
-> = {
+export type EventContract<Events extends EventMap, EcommerceEvents extends EventMap = {}> = {
   readonly [ZarazEventContractTypeId]: {
     readonly events: Events;
     readonly ecommerceEvents: EcommerceEvents;
@@ -159,16 +152,11 @@ export type InferZarazEvents<Contract> =
   Contract extends EventContract<infer Events, EventMap> ? Events : never;
 
 export type InferZarazEcommerceEvents<Contract> =
-  Contract extends EventContract<EventMap, infer EcommerceEvents>
-    ? EcommerceEvents
-    : never;
+  Contract extends EventContract<EventMap, infer EcommerceEvents> ? EcommerceEvents : never;
 
 export type EventName<Events extends EventMap> = Extract<keyof Events, string>;
 
-export type EventProperties<
-  Events extends EventMap,
-  Name extends EventName<Events>,
-> = Events[Name];
+export type EventProperties<Events extends EventMap, Name extends EventName<Events>> = Events[Name];
 
 type ZarazEventPropertiesArgs<Properties> = [Properties] extends [undefined]
   ? [properties?: undefined]
@@ -179,9 +167,7 @@ type ZarazEventPropertiesArgs<Properties> = [Properties] extends [undefined]
 /**
  * Type for Cloudflare's injected `window.zaraz.track` function.
  */
-export type Track<Events extends EventMap> = <
-  const Name extends EventName<Events>,
->(
+export type Track<Events extends EventMap> = <const Name extends EventName<Events>>(
   eventName: Name,
   ...args: ZarazEventPropertiesArgs<Events[Name]>
 ) => Promise<void>;
@@ -196,10 +182,7 @@ export type SetScope = "page" | "session" | "persist";
 /**
  * Type for Cloudflare's injected browser-side Zaraz API.
  */
-export type WebApi<
-  Events extends EventMap,
-  EcommerceEvents extends EventMap = {},
-> = {
+export type WebApi<Events extends EventMap, EcommerceEvents extends EventMap = {}> = {
   set: (name: string, value: unknown, options?: { scope?: SetScope }) => void;
   track: Track<Events>;
   ecommerce: Ecommerce<EcommerceEvents>;

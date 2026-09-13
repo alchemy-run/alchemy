@@ -31,10 +31,7 @@ export interface DescribeCertificate extends Binding.Service<
   (
     certificate: Certificate,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      acm.DescribeCertificateResponse,
-      acm.DescribeCertificateError
-    >
+    () => Effect.Effect<acm.DescribeCertificateResponse, acm.DescribeCertificateError>
   >
 > {}
 

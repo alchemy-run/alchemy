@@ -29,12 +29,7 @@ export interface PauseService extends Binding.Service<
   (
     service: Service,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      apprunner.PauseServiceResponse,
-      apprunner.PauseServiceError
-    >
+    () => Effect.Effect<apprunner.PauseServiceResponse, apprunner.PauseServiceError>
   >
 > {}
-export const PauseService = Binding.Service<PauseService>(
-  "AWS.AppRunner.PauseService",
-);
+export const PauseService = Binding.Service<PauseService>("AWS.AppRunner.PauseService");

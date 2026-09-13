@@ -34,12 +34,7 @@ export interface PostLineageEvent extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PostLineageEventRequest,
-    ) => Effect.Effect<
-      datazone.PostLineageEventOutput,
-      datazone.PostLineageEventError
-    >
+    ) => Effect.Effect<datazone.PostLineageEventOutput, datazone.PostLineageEventError>
   >
 > {}
-export const PostLineageEvent = Binding.Service<PostLineageEvent>(
-  "AWS.DataZone.PostLineageEvent",
-);
+export const PostLineageEvent = Binding.Service<PostLineageEvent>("AWS.DataZone.PostLineageEvent");

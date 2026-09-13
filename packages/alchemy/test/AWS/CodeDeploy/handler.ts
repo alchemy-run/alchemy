@@ -39,9 +39,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A | { errorTag: string }, never, R> =>
   effect.pipe(
     Effect.map((a): A | { errorTag: string } => a),
-    Effect.catch((e) =>
-      Effect.logError(e).pipe(Effect.as({ errorTag: e._tag })),
-    ),
+    Effect.catch((e) => Effect.logError(e).pipe(Effect.as({ errorTag: e._tag }))),
   );
 
 export default CodeDeployTestFunction.make(
@@ -64,9 +62,7 @@ export default CodeDeployTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda"],
     });
 
     const app = yield* CodeDeploy.Application("BindingsApp", {
@@ -92,23 +88,16 @@ export default CodeDeployTestFunction.make(
     const listDeployments = yield* CodeDeploy.ListDeployments(group);
     const stopDeployment = yield* CodeDeploy.StopDeployment(group);
     const continueDeployment = yield* CodeDeploy.ContinueDeployment(group);
-    const putHookStatus =
-      yield* CodeDeploy.PutLifecycleEventHookExecutionStatus(group);
+    const putHookStatus = yield* CodeDeploy.PutLifecycleEventHookExecutionStatus(group);
     // Target plane
     const getDeploymentTarget = yield* CodeDeploy.GetDeploymentTarget(group);
-    const listDeploymentTargets =
-      yield* CodeDeploy.ListDeploymentTargets(group);
-    const batchGetDeploymentTargets =
-      yield* CodeDeploy.BatchGetDeploymentTargets(group);
+    const listDeploymentTargets = yield* CodeDeploy.ListDeploymentTargets(group);
+    const batchGetDeploymentTargets = yield* CodeDeploy.BatchGetDeploymentTargets(group);
     // Revision plane
-    const registerApplicationRevision =
-      yield* CodeDeploy.RegisterApplicationRevision(app);
-    const getApplicationRevision =
-      yield* CodeDeploy.GetApplicationRevision(app);
-    const listApplicationRevisions =
-      yield* CodeDeploy.ListApplicationRevisions(app);
-    const batchGetApplicationRevisions =
-      yield* CodeDeploy.BatchGetApplicationRevisions(app);
+    const registerApplicationRevision = yield* CodeDeploy.RegisterApplicationRevision(app);
+    const getApplicationRevision = yield* CodeDeploy.GetApplicationRevision(app);
+    const listApplicationRevisions = yield* CodeDeploy.ListApplicationRevisions(app);
+    const batchGetApplicationRevisions = yield* CodeDeploy.BatchGetApplicationRevisions(app);
 
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.codedeploy) targeting this Function. Runtime firing rides on real
@@ -117,9 +106,7 @@ export default CodeDeployTestFunction.make(
       { kinds: ["deployment"], applications: [FIXTURE_APPLICATION_NAME] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `codedeploy event: ${event.detail.deploymentId} -> ${event.detail.state}`,
-          ),
+          Effect.log(`codedeploy event: ${event.detail.deploymentId} -> ${event.detail.state}`),
         ),
     );
 
@@ -139,19 +126,13 @@ export default CodeDeployTestFunction.make(
             // wiring, the name injection, and the IAM grant.
             const result = yield* errorTagged(createDeployment());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { deploymentId: result.deploymentId },
+              "errorTag" in result ? result : { deploymentId: result.deploymentId },
             );
           }
           case "GET /deployment/get": {
-            const result = yield* errorTagged(
-              getDeployment({ deploymentId: param("id") }),
-            );
+            const result = yield* errorTagged(getDeployment({ deploymentId: param("id") }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { status: result.deploymentInfo?.status },
+              "errorTag" in result ? result : { status: result.deploymentInfo?.status },
             );
           }
           case "GET /deployment/batch-get": {
@@ -159,36 +140,26 @@ export default CodeDeployTestFunction.make(
               batchGetDeployments({ deploymentIds: [param("id")] }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.deploymentsInfo ?? []).length },
+              "errorTag" in result ? result : { count: (result.deploymentsInfo ?? []).length },
             );
           }
           case "GET /deployment/list": {
             const result = yield* errorTagged(listDeployments());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { deployments: result.deployments ?? [] },
+              "errorTag" in result ? result : { deployments: result.deployments ?? [] },
             );
           }
           case "POST /deployment/stop": {
             const body = (yield* request.json) as unknown as { id: string };
-            const result = yield* errorTagged(
-              stopDeployment({ deploymentId: body.id }),
-            );
+            const result = yield* errorTagged(stopDeployment({ deploymentId: body.id }));
             return yield* HttpServerResponse.json(
               "errorTag" in result ? result : { status: result.status },
             );
           }
           case "POST /deployment/continue": {
             const body = (yield* request.json) as unknown as { id: string };
-            const result = yield* errorTagged(
-              continueDeployment({ deploymentId: body.id }),
-            );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            const result = yield* errorTagged(continueDeployment({ deploymentId: body.id }));
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /hook/status": {
             const body = (yield* request.json) as unknown as {
@@ -202,9 +173,7 @@ export default CodeDeployTestFunction.make(
                 status: "Succeeded",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           // ---- target plane ----
@@ -226,9 +195,7 @@ export default CodeDeployTestFunction.make(
               listDeploymentTargets({ deploymentId: param("deploymentId") }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { targetIds: result.targetIds ?? [] },
+              "errorTag" in result ? result : { targetIds: result.targetIds ?? [] },
             );
           }
           case "GET /target/batch-get": {
@@ -239,9 +206,7 @@ export default CodeDeployTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.deploymentTargets ?? []).length },
+              "errorTag" in result ? result : { count: (result.deploymentTargets ?? []).length },
             );
           }
 
@@ -253,9 +218,7 @@ export default CodeDeployTestFunction.make(
                 description: "alchemy CodeDeploy bindings fixture revision",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "GET /revision/get": {
             const result = yield* errorTagged(
@@ -272,9 +235,7 @@ export default CodeDeployTestFunction.make(
           case "GET /revision/list": {
             const result = yield* errorTagged(listApplicationRevisions());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.revisions ?? []).length },
+              "errorTag" in result ? result : { count: (result.revisions ?? []).length },
             );
           }
           case "GET /revision/batch-get": {
@@ -284,17 +245,12 @@ export default CodeDeployTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.revisions ?? []).length },
+              "errorTag" in result ? result : { count: (result.revisions ?? []).length },
             );
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

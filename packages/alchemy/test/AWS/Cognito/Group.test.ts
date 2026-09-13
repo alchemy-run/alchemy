@@ -76,9 +76,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(oldGone).toBe(true);
 
@@ -90,9 +88,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }),

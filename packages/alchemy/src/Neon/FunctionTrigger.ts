@@ -44,9 +44,7 @@ export interface FunctionTriggerAttributes {
   /** Project-wide trigger identifier. */ triggerId: string;
   /** Target Function slug. */ slug: string;
   /** Trigger name. */ name: string;
-  /** Event type; changing it replaces the trigger. */ type:
-    | "schedule"
-    | "storage_object_created";
+  /** Event type; changing it replaces the trigger. */ type: "schedule" | "storage_object_created";
   /** Configured delivery route. */ path: string;
   /** Whether future delivery is enabled. */ enabled: boolean;
   /** Monotonic configuration version, not the event schema version. */ version: number;
@@ -92,9 +90,7 @@ export interface FunctionTrigger extends Resource<
  *
  * @resource
  */
-export const FunctionTrigger = Resource<FunctionTrigger>(
-  "Neon.FunctionTrigger",
-);
+export const FunctionTrigger = Resource<FunctionTrigger>("Neon.FunctionTrigger");
 export class FunctionTriggerConfigurationError extends Data.TaggedError(
   "FunctionTriggerConfigurationError",
 )<{ message: string }> {}
@@ -108,9 +104,7 @@ const observe = Effect.fn(function* (
 ) {
   const { triggers } = yield* Neon.listProjectBranchTriggers(scope);
   return triggers.find((trigger) =>
-    identity.id
-      ? trigger.trigger_id === identity.id
-      : trigger.name === identity.name,
+    identity.id ? trigger.trigger_id === identity.id : trigger.name === identity.name,
   );
 });
 const attrs = (
@@ -135,15 +129,9 @@ const desiredConfig = Effect.fn(function* (
   inherited: boolean,
 ) {
   const path = news.path ?? "/";
-  if (
-    !path.startsWith("/") ||
-    path.startsWith("//") ||
-    path.includes("?") ||
-    path.includes("#")
-  )
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("?") || path.includes("#"))
     return yield* new FunctionTriggerConfigurationError({
-      message:
-        "Trigger path must be an absolute path without query or fragment",
+      message: "Trigger path must be an absolute path without query or fragment",
     });
   const common = {
     name,
@@ -154,10 +142,7 @@ const desiredConfig = Effect.fn(function* (
   if (news.type === "schedule")
     return { ...common, type: "schedule" as const, schedule: news.schedule };
   const bucket = news.storageObjectCreated.bucket;
-  if (
-    bucket.projectId !== news.function.projectId ||
-    bucket.branchId !== news.function.branchId
-  )
+  if (bucket.projectId !== news.function.projectId || bucket.branchId !== news.function.branchId)
     return yield* new FunctionTriggerConfigurationError({
       message: "Function and trigger bucket must belong to the same branch",
     });
@@ -166,9 +151,7 @@ const desiredConfig = Effect.fn(function* (
     type: "storage_object_created" as const,
     storage_object_created: {
       bucket_name: bucket.bucketName,
-      ...(news.storageObjectCreated.prefix
-        ? { prefix: news.storageObjectCreated.prefix }
-        : {}),
+      ...(news.storageObjectCreated.prefix ? { prefix: news.storageObjectCreated.prefix } : {}),
     },
   };
 });
@@ -177,9 +160,7 @@ export const FunctionTriggerProvider = () =>
     stables: ["projectId", "branchId", "triggerId"],
     list: Effect.fn(function* () {
       const result: FunctionTriggerAttributes[] = [];
-      for (const project of yield* Neon.listProjects
-        .items({})
-        .pipe(Stream.runCollect)) {
+      for (const project of yield* Neon.listProjects.items({}).pipe(Stream.runCollect)) {
         for (const branch of yield* Neon.listProjectBranches
           .items({ project_id: project.id })
           .pipe(Stream.runCollect)) {
@@ -209,9 +190,7 @@ export const FunctionTriggerProvider = () =>
       if (!output && !olds?.function) return undefined;
       const fn = output ?? olds!.function;
       const name =
-        output?.name ??
-        olds?.name ??
-        (yield* createPhysicalName({ id, maxLength: 256 }));
+        output?.name ?? olds?.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       const found = yield* observe(scopeOf(fn), {
         id: output?.triggerId,
         name,
@@ -222,16 +201,9 @@ export const FunctionTriggerProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const scope = scopeOf(news.function);
-      const name =
-        news.name ??
-        output?.name ??
-        (yield* createPhysicalName({ id, maxLength: 256 }));
+      const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       let current = yield* observe(scope, { id: output?.triggerId, name });
-      const desired = yield* desiredConfig(
-        news,
-        name,
-        current?.inherited ?? false,
-      );
+      const desired = yield* desiredConfig(news, name, current?.inherited ?? false);
       if (!current)
         current = yield* Neon.createProjectBranchTrigger({
           ...scope,
@@ -240,9 +212,7 @@ export const FunctionTriggerProvider = () =>
           Effect.map((response) => response.trigger),
           Effect.catchTag("Conflict", (error) =>
             observe(scope, { name }).pipe(
-              Effect.flatMap((trigger) =>
-                trigger ? Effect.succeed(trigger) : Effect.fail(error),
-              ),
+              Effect.flatMap((trigger) => (trigger ? Effect.succeed(trigger) : Effect.fail(error))),
             ),
           ),
         );

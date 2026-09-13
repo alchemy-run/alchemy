@@ -35,12 +35,7 @@ export interface CreateProgram extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.CreateProgramRequest,
-    ) => Effect.Effect<
-      mediatailor.CreateProgramResponse,
-      mediatailor.CreateProgramError
-    >
+    ) => Effect.Effect<mediatailor.CreateProgramResponse, mediatailor.CreateProgramError>
   >
 > {}
-export const CreateProgram = Binding.Service<CreateProgram>(
-  "AWS.MediaTailor.CreateProgram",
-);
+export const CreateProgram = Binding.Service<CreateProgram>("AWS.MediaTailor.CreateProgram");

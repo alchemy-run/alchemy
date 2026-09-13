@@ -6,10 +6,7 @@ import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../internal/BatchedSink.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { DeliveryStream } from "./DeliveryStream.ts";
-import {
-  DeliveryStreamSink,
-  type DeliveryStreamSinkRecord,
-} from "./DeliveryStreamSink.ts";
+import { DeliveryStreamSink, type DeliveryStreamSinkRecord } from "./DeliveryStreamSink.ts";
 import { PutRecordBatch } from "./PutRecordBatch.ts";
 
 /**
@@ -28,19 +25,15 @@ export const DeliveryStreamSinkHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Firehose.DeliveryStreamSink(${deliveryStream}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["firehose:PutRecordBatch"],
-                  Resource: [
-                    Output.interpolate`${deliveryStream.deliveryStreamArn}`,
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Firehose.DeliveryStreamSink(${deliveryStream}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["firehose:PutRecordBatch"],
+                Resource: [Output.interpolate`${deliveryStream.deliveryStreamArn}`],
+              },
+            ],
+          });
         }
       }
       const send = yield* putRecordBatch(deliveryStream);
@@ -61,9 +54,7 @@ export const DeliveryStreamSinkHttp = Layer.effect(
           if (!out.FailedPutCount) {
             return [];
           }
-          return batch.filter(
-            (_, index) => out.RequestResponses[index]?.ErrorCode !== undefined,
-          );
+          return batch.filter((_, index) => out.RequestResponses[index]?.ErrorCode !== undefined);
         },
       });
     });

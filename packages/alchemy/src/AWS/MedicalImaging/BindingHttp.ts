@@ -108,30 +108,28 @@ export const makeMedicalImagingStartJobHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}, ${dataAccessRole}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [Output.interpolate`${datastore.datastoreArn}`],
-                },
-                // CRITICAL: without iam:PassRole on the data-access role,
-                // StartDICOMImportJob fails only at runtime with an
-                // AccessDenied.
-                {
-                  Effect: "Allow",
-                  Action: ["iam:PassRole"],
-                  Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
-                  Condition: {
-                    StringEquals: {
-                      "iam:PassedToService": "medical-imaging.amazonaws.com",
-                    },
+          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}, ${dataAccessRole}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [Output.interpolate`${datastore.datastoreArn}`],
+              },
+              // CRITICAL: without iam:PassRole on the data-access role,
+              // StartDICOMImportJob fails only at runtime with an
+              // AccessDenied.
+              {
+                Effect: "Allow",
+                Action: ["iam:PassRole"],
+                Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
+                Condition: {
+                  StringEquals: {
+                    "iam:PassedToService": "medical-imaging.amazonaws.com",
                   },
                 },
-              ],
-            },
-          );
+              },
+            ],
+          });
         }
       }
       return Effect.fn(`${options.tag}(${datastore.LogicalId})`)(function* (

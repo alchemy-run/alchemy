@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { CreditGrant } from "./CreditGrant.ts";
 
-export interface UpdateCreditGrantRequest extends Omit<
-  UpdateBillingCreditGrantRequest,
-  "id"
-> {}
+export interface UpdateCreditGrantRequest extends Omit<UpdateBillingCreditGrantRequest, "id"> {}
 
 /**
  * Update a bound Stripe Credit Grant over HTTP. Mutable fields are
@@ -34,14 +31,8 @@ export interface UpdateCreditGrant extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateCreditGrantRequest,
-    ) => Effect.Effect<
-      StripeCreditGrant,
-      UpdateBillingCreditGrantError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeCreditGrant, UpdateBillingCreditGrantError, RuntimeContext>
   >
 > {}
 
-export const UpdateCreditGrant = Binding.Service<UpdateCreditGrant>(
-  "Stripe.UpdateCreditGrant",
-);
+export const UpdateCreditGrant = Binding.Service<UpdateCreditGrant>("Stripe.UpdateCreditGrant");

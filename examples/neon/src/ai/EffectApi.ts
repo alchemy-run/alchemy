@@ -21,15 +21,12 @@ export const chat = (
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (
       !environment.NEON_EXAMPLE_API_KEY ||
-      request.headers.authorization !==
-        `Bearer ${environment.NEON_EXAMPLE_API_KEY}`
+      request.headers.authorization !== `Bearer ${environment.NEON_EXAMPLE_API_KEY}`
     ) {
       return HttpServerResponse.text("Unauthorized", { status: 401 });
     }
     const body = yield* request.json.pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(Schema.Struct({ prompt: Schema.String })),
-      ),
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ prompt: Schema.String }))),
       Effect.catch(() => Effect.succeed(undefined)),
     );
     if (!body)
@@ -37,15 +34,11 @@ export const chat = (
         status: 400,
       });
     if (body.prompt.trim().length === 0 || body.prompt.length > 4000) {
-      return HttpServerResponse.text(
-        "Expected a nonempty prompt of at most 4000 characters",
-        { status: 400 },
-      );
+      return HttpServerResponse.text("Expected a nonempty prompt of at most 4000 characters", {
+        status: 400,
+      });
     }
-    if (
-      environment.NEON_AI_ALLOW_PAID !== "true" ||
-      !environment.NEON_AI_MODEL
-    ) {
+    if (environment.NEON_AI_ALLOW_PAID !== "true" || !environment.NEON_AI_MODEL) {
       return HttpServerResponse.text(
         "Explicit paid inference opt-in and a configured model are required",
         { status: 503 },
@@ -109,9 +102,7 @@ export const chat = (
           const abort = () => resume(Effect.void);
           if (native.signal.aborted) abort();
           else native.signal.addEventListener("abort", abort, { once: true });
-          return Effect.sync(() =>
-            native.signal.removeEventListener("abort", abort),
-          );
+          return Effect.sync(() => native.signal.removeEventListener("abort", abort));
         }),
       ),
     );

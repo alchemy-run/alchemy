@@ -89,9 +89,7 @@ test.provider.skipIf(!!process.env.FAST)(
           ],
         })
         .pipe(
-          Effect.map((r) =>
-            (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-          ),
+          Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))),
         );
 
       const program = (includeEchoB: boolean) =>
@@ -170,9 +168,7 @@ test.provider.skipIf(!!process.env.FAST)(
         client
           .get(`http://${dns}${path}`)
           .pipe(
-            Effect.flatMap((res) =>
-              Effect.map(res.text, (body) => ({ status: res.status, body })),
-            ),
+            Effect.flatMap((res) => Effect.map(res.text, (body) => ({ status: res.status, body }))),
           );
       // Bounded route poll: ALB provisioning (~2 min) + Fargate task start +
       // fast-converge health checks (~20s). Under a saturated full-suite run
@@ -207,9 +203,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const rulesBefore = yield* elbv2.describeRules({
         ListenerArn: deployed.listenerArn,
       });
-      expect((rulesBefore.Rules ?? []).filter((r) => !r.IsDefault).length).toBe(
-        2,
-      );
+      expect((rulesBefore.Rules ?? []).filter((r) => !r.IsDefault).length).toBe(2);
 
       // ── destroy ONE service (EchoB) ────────────────────────────────────
       yield* stack.deploy(program(false));
@@ -221,17 +215,13 @@ test.provider.skipIf(!!process.env.FAST)(
         })
         .pipe(
           Effect.map((r) => (r.TargetGroups ?? []).length === 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
         );
       expect(bTargetGroupGone).toBe(true);
       const rulesAfter = yield* elbv2.describeRules({
         ListenerArn: deployed.listenerArn,
       });
-      expect((rulesAfter.Rules ?? []).filter((r) => !r.IsDefault).length).toBe(
-        1,
-      );
+      expect((rulesAfter.Rules ?? []).filter((r) => !r.IsDefault).length).toBe(1);
 
       // ...the shared ALB + listener are untouched...
       const albAfter = yield* elbv2.describeLoadBalancers({
@@ -257,9 +247,7 @@ test.provider.skipIf(!!process.env.FAST)(
         .describeLoadBalancers({ LoadBalancerArns: [deployed.albArn] })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(albGone).toBe(true);
 
@@ -269,20 +257,14 @@ test.provider.skipIf(!!process.env.FAST)(
         })
         .pipe(
           Effect.map((r) => (r.TargetGroups ?? []).length === 0),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(true)),
         );
       expect(aTargetGroupGone).toBe(true);
 
-      const listenerGone = yield* elbv2
-        .describeRules({ ListenerArn: deployed.listenerArn })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ListenerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
-        );
+      const listenerGone = yield* elbv2.describeRules({ ListenerArn: deployed.listenerArn }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(true)),
+      );
       expect(listenerGone).toBe(true);
     }),
   { timeout: 900_000 },

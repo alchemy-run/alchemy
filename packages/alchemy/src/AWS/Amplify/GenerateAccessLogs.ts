@@ -39,10 +39,7 @@ export interface GenerateAccessLogs extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GenerateAccessLogsRequest,
-    ) => Effect.Effect<
-      amplify.GenerateAccessLogsResult,
-      amplify.GenerateAccessLogsError
-    >
+    ) => Effect.Effect<amplify.GenerateAccessLogsResult, amplify.GenerateAccessLogsError>
   >
 > {}
 

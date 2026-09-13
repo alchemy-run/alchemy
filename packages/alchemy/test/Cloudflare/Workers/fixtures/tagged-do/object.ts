@@ -50,12 +50,9 @@ export const CounterLive = Counter.make(
           .pipe(Effect.asVoid);
 
       const readDO = () =>
-        state.storage
-          .get<number>(DO_COUNT_KEY)
-          .pipe(Effect.map((value) => value ?? 0));
+        state.storage.get<number>(DO_COUNT_KEY).pipe(Effect.map((value) => value ?? 0));
 
-      const writeDO = (value: number) =>
-        state.storage.put(DO_COUNT_KEY, value).pipe(Effect.asVoid);
+      const writeDO = (value: number) => state.storage.put(DO_COUNT_KEY, value).pipe(Effect.asVoid);
 
       return {
         incrementD1: (key: string) =>

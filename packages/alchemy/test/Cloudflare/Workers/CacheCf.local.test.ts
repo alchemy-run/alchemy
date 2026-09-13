@@ -13,10 +13,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -36,10 +33,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -63,10 +57,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const worker = yield* Cloudflare.Worker("cache-cf-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/cache-cf/worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/cache-cf/worker.ts"),
           });
           return { worker };
         }),
@@ -123,10 +114,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const worker = yield* Cloudflare.Worker("cache-off-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/cache-cf/worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/cache-cf/worker.ts"),
             dev: {
               cache: false,
               cf: { colo: "TST", country: "XX" },

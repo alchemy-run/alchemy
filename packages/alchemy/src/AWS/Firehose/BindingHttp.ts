@@ -46,22 +46,20 @@ export const makeDeliveryStreamHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${deliveryStream.deliveryStreamArn}`,
-                ],
+                Resource: [Output.interpolate`${deliveryStream.deliveryStreamArn}`],
               },
             ],
           });
         }
       }
-      return Effect.fn(`${options.tag}(${deliveryStream.LogicalId})`)(
-        function* (request: Omit<I, "DeliveryStreamName">) {
-          return yield* op({
-            ...request,
-            DeliveryStreamName: yield* DeliveryStreamName,
-          } as I);
-        },
-      );
+      return Effect.fn(`${options.tag}(${deliveryStream.LogicalId})`)(function* (
+        request: Omit<I, "DeliveryStreamName">,
+      ) {
+        return yield* op({
+          ...request,
+          DeliveryStreamName: yield* DeliveryStreamName,
+        } as I);
+      });
     });
   });
 

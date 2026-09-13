@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type EnvironmentStatus = finspace.EnvironmentStatus;
@@ -141,21 +136,15 @@ export interface Environment extends Resource<
  */
 export const Environment = Resource<Environment>("AWS.FinSpace.Environment");
 
-const createEnvironmentName = (
-  id: string,
-  props: { name?: string | undefined },
-) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 255 });
+const createEnvironmentName = (id: string, props: { name?: string | undefined }) =>
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 255 });
 
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(
-        ["ResourceNotFoundException", "InvalidRequestException"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
+        Effect.succeed(undefined),
       ),
     );
   return Object.fromEntries(
@@ -165,10 +154,7 @@ const fetchTags = Effect.fn(function* (arn: string) {
   );
 });
 
-const toAttributes = Effect.fn(function* (
-  env: finspace.Environment,
-  fallbackId: string,
-) {
+const toAttributes = Effect.fn(function* (env: finspace.Environment, fallbackId: string) {
   const environmentId = env.environmentId ?? fallbackId;
   const environmentArn = env.environmentArn ?? "";
   const attrs: Environment["Attributes"] = {
@@ -186,18 +172,12 @@ const toAttributes = Effect.fn(function* (
 });
 
 const isGone = (status: EnvironmentStatus | undefined) =>
-  status === "DELETED" ||
-  status === "DELETING" ||
-  status === "DELETE_REQUESTED";
+  status === "DELETED" || status === "DELETING" || status === "DELETE_REQUESTED";
 
 const readEnvironmentById = Effect.fn(function* (environmentId: string) {
   const response = yield* finspace
     .getEnvironment({ environmentId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   const env = response?.environment;
   if (!env || isGone(env.status)) return undefined;
   return env;
@@ -252,41 +232,25 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "EnvironmentNotReady",
     // Environment provisioning is slow (~20 min); poll every 20s up to ~40 min.
-    schedule: Schedule.max([
-      Schedule.spaced("20 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(120)]),
   });
 
-const waitForEnvironmentStatus = (
-  environmentId: string,
-  target: "CREATED" | "DELETED",
-) =>
+const waitForEnvironmentStatus = (environmentId: string, target: "CREATED" | "DELETED") =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const response = yield* finspace
         .getEnvironment({ environmentId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       const status = response?.environment?.status;
       if (target === "DELETED") {
         if (response === undefined || isGone(status)) return;
-        return yield* Effect.fail(
-          new EnvironmentNotReady({ environmentId, status }),
-        );
+        return yield* Effect.fail(new EnvironmentNotReady({ environmentId, status }));
       }
       if (status === "CREATED") return;
       if (status === "FAILED_CREATION" || status === "SUSPENDED") {
-        return yield* Effect.fail(
-          new EnvironmentProvisioningFailed({ environmentId, status }),
-        );
+        return yield* Effect.fail(new EnvironmentProvisioningFailed({ environmentId, status }));
       }
-      return yield* Effect.fail(
-        new EnvironmentNotReady({ environmentId, status }),
-      );
+      return yield* Effect.fail(new EnvironmentNotReady({ environmentId, status }));
     }),
   );
 
@@ -309,14 +273,10 @@ export const EnvironmentProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const env = output?.environmentId
             ? yield* readEnvironmentById(output.environmentId)
-            : yield* findEnvironmentByName(
-                yield* createEnvironmentName(id, olds ?? {}),
-              );
+            : yield* findEnvironmentByName(yield* createEnvironmentName(id, olds ?? {}));
           if (!env) return undefined;
           const attrs = yield* toAttributes(env, output?.environmentId ?? "");
-          return (yield* hasAlchemyTags(id, attrs.tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
@@ -324,10 +284,8 @@ export const EnvironmentProvider = () =>
           // KMS key, superuser and data bundles are fixed at creation.
           if (
             olds.kmsKeyId !== news.kmsKeyId ||
-            JSON.stringify(olds.superuserParameters) !==
-              JSON.stringify(news.superuserParameters) ||
-            JSON.stringify(olds.dataBundles) !==
-              JSON.stringify(news.dataBundles)
+            JSON.stringify(olds.superuserParameters) !== JSON.stringify(news.superuserParameters) ||
+            JSON.stringify(olds.dataBundles) !== JSON.stringify(news.dataBundles)
           ) {
             return { action: "replace" } as const;
           }
@@ -367,25 +325,19 @@ export const EnvironmentProvider = () =>
             yield* waitForEnvironmentStatus(created.environmentId, "CREATED");
             env = yield* readEnvironmentById(created.environmentId);
             if (env === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created environment ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created environment ${name}`));
             }
           }
           const environmentId = env.environmentId;
           if (environmentId === undefined) {
-            return yield* Effect.fail(
-              new Error(`environment '${name}' has no environmentId`),
-            );
+            return yield* Effect.fail(new Error(`environment '${name}' has no environmentId`));
           }
 
           // Sync mutable settings — only call UpdateEnvironment on drift.
           const needsUpdate =
             name !== env.name ||
-            (props.description !== undefined &&
-              props.description !== env.description) ||
-            (props.federationMode !== undefined &&
-              props.federationMode !== env.federationMode);
+            (props.description !== undefined && props.description !== env.description) ||
+            (props.federationMode !== undefined && props.federationMode !== env.federationMode);
           if (needsUpdate) {
             yield* finspace.updateEnvironment({
               environmentId,
@@ -410,9 +362,7 @@ export const EnvironmentProvider = () =>
             if (upsert.length > 0) {
               yield* finspace.tagResource({
                 resourceArn: attrs.environmentArn,
-                tags: Object.fromEntries(
-                  upsert.map(({ Key, Value }) => [Key, Value]),
-                ),
+                tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
               });
             }
           }
@@ -421,18 +371,14 @@ export const EnvironmentProvider = () =>
 
           const final = yield* readEnvironmentById(environmentId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled environment ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled environment ${name}`));
           }
           return yield* toAttributes(final, environmentId);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* finspace
             .deleteEnvironment({ environmentId: output.environmentId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Deletion is irreversible once initiated; wait until the service
           // reports it gone (DELETE_REQUESTED/DELETING/DELETED or NotFound).
           yield* waitForEnvironmentStatus(output.environmentId, "DELETED");

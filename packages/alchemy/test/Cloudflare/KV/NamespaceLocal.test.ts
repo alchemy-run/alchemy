@@ -8,10 +8,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Binding a KV namespace inside an Action via `ReadWriteNamespaceLocal` — the
 // local (current-credentials) implementation of the `ReadWriteNamespace`
@@ -59,9 +56,7 @@ test.provider(
 
                 const afterDelete = yield* kv.get("greeting").pipe(
                   Effect.flatMap((v) =>
-                    v === null
-                      ? Effect.succeed(v)
-                      : Effect.fail("not yet deleted" as const),
+                    v === null ? Effect.succeed(v) : Effect.fail("not yet deleted" as const),
                   ),
                   Effect.retry({
                     schedule: Schedule.spaced("1 second"),

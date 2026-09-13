@@ -15,11 +15,7 @@ import {
   Subnet,
   Vpc,
 } from "@/AWS/EC2";
-import type {
-  DefaultSecurityGroupProps,
-  SecurityGroupRuleData,
-  VpcId,
-} from "@/AWS/EC2";
+import type { DefaultSecurityGroupProps, SecurityGroupRuleData, VpcId } from "@/AWS/EC2";
 import * as Drift from "@/Drift";
 import * as Output from "@/Output";
 import { isActionState, State } from "@/State/State";
@@ -28,10 +24,7 @@ import { assertVpcGone } from "./Gone.ts";
 import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() }, 2);
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("AWS creates the default group with its initial rules", (stack) =>
   Effect.gen(function* () {
@@ -58,112 +51,105 @@ test.provider("AWS creates the default group with its initial rules", (stack) =>
 
 // This changes the AWS-created default security group only inside the VPC this
 // test creates and destroys.
-test.provider(
-  "manages a temporary VPC's default security group without deleting it",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("manages a temporary VPC's default security group without deleting it", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      // The VPC output is consumed in this same first deployment. This proves
-      // that the default group can be found and closed without a second deploy.
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          const vpc = yield* Vpc("DefaultSecurityGroupVpc", {
-            cidrBlock: "10.42.0.0/16",
-          });
-          const defaultSecurityGroup = yield* DefaultSecurityGroup(
-            "DefaultSecurityGroup",
+    // The VPC output is consumed in this same first deployment. This proves
+    // that the default group can be found and closed without a second deploy.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        const vpc = yield* Vpc("DefaultSecurityGroupVpc", {
+          cidrBlock: "10.42.0.0/16",
+        });
+        const defaultSecurityGroup = yield* DefaultSecurityGroup("DefaultSecurityGroup", {
+          vpcId: vpc.vpcId,
+          ingress: [],
+          egress: [],
+        });
+        return { vpc, defaultSecurityGroup };
+      }),
+    );
+
+    const defaultGroup = yield* findDefaultGroup(initial.vpc.vpcId);
+    expect(initial.defaultSecurityGroup.groupId).toEqual(defaultGroup.GroupId);
+    yield* expectRules(initial.defaultSecurityGroup.groupId, [], []);
+
+    // A second identical deployment verifies idempotence against AWS readback.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        const vpc = yield* Vpc("DefaultSecurityGroupVpc", {
+          cidrBlock: "10.42.0.0/16",
+        });
+        return yield* DefaultSecurityGroup("DefaultSecurityGroup", {
+          vpcId: vpc.vpcId,
+          ingress: [],
+          egress: [],
+        });
+      }),
+    );
+    yield* expectRules(initial.defaultSecurityGroup.groupId, [], []);
+
+    // A changed inline declaration replaces the inline rule set.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        const vpc = yield* Vpc("DefaultSecurityGroupVpc", {
+          cidrBlock: "10.42.0.0/16",
+        });
+        return yield* DefaultSecurityGroup("DefaultSecurityGroup", {
+          vpcId: vpc.vpcId,
+          ingress: [
             {
-              vpcId: vpc.vpcId,
-              ingress: [],
-              egress: [],
+              ipProtocol: "tcp",
+              fromPort: 443,
+              toPort: 443,
+              cidrIpv4: "10.42.0.0/16",
             },
-          );
-          return { vpc, defaultSecurityGroup };
-        }),
-      );
+          ],
+          egress: [],
+        });
+      }),
+    );
+    yield* expectRules(
+      initial.defaultSecurityGroup.groupId,
+      [
+        {
+          IpProtocol: "tcp",
+          FromPort: 443,
+          ToPort: 443,
+          CidrIpv4: "10.42.0.0/16",
+        },
+      ],
+      [],
+    );
 
-      const defaultGroup = yield* findDefaultGroup(initial.vpc.vpcId);
-      expect(initial.defaultSecurityGroup.groupId).toEqual(
-        defaultGroup.GroupId,
-      );
-      yield* expectRules(initial.defaultSecurityGroup.groupId, [], []);
+    // Removing the Alchemy resource must not delete the AWS-owned group or
+    // restore its initial AWS rules.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Vpc("DefaultSecurityGroupVpc", {
+          cidrBlock: "10.42.0.0/16",
+        });
+      }),
+    );
+    const preserved = yield* findDefaultGroup(initial.vpc.vpcId);
+    expect(preserved.GroupId).toEqual(initial.defaultSecurityGroup.groupId);
+    yield* expectRules(
+      initial.defaultSecurityGroup.groupId,
+      [
+        {
+          IpProtocol: "tcp",
+          FromPort: 443,
+          ToPort: 443,
+          CidrIpv4: "10.42.0.0/16",
+        },
+      ],
+      [],
+    );
 
-      // A second identical deployment verifies idempotence against AWS readback.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const vpc = yield* Vpc("DefaultSecurityGroupVpc", {
-            cidrBlock: "10.42.0.0/16",
-          });
-          return yield* DefaultSecurityGroup("DefaultSecurityGroup", {
-            vpcId: vpc.vpcId,
-            ingress: [],
-            egress: [],
-          });
-        }),
-      );
-      yield* expectRules(initial.defaultSecurityGroup.groupId, [], []);
-
-      // A changed inline declaration replaces the inline rule set.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const vpc = yield* Vpc("DefaultSecurityGroupVpc", {
-            cidrBlock: "10.42.0.0/16",
-          });
-          return yield* DefaultSecurityGroup("DefaultSecurityGroup", {
-            vpcId: vpc.vpcId,
-            ingress: [
-              {
-                ipProtocol: "tcp",
-                fromPort: 443,
-                toPort: 443,
-                cidrIpv4: "10.42.0.0/16",
-              },
-            ],
-            egress: [],
-          });
-        }),
-      );
-      yield* expectRules(
-        initial.defaultSecurityGroup.groupId,
-        [
-          {
-            IpProtocol: "tcp",
-            FromPort: 443,
-            ToPort: 443,
-            CidrIpv4: "10.42.0.0/16",
-          },
-        ],
-        [],
-      );
-
-      // Removing the Alchemy resource must not delete the AWS-owned group or
-      // restore its initial AWS rules.
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Vpc("DefaultSecurityGroupVpc", {
-            cidrBlock: "10.42.0.0/16",
-          });
-        }),
-      );
-      const preserved = yield* findDefaultGroup(initial.vpc.vpcId);
-      expect(preserved.GroupId).toEqual(initial.defaultSecurityGroup.groupId);
-      yield* expectRules(
-        initial.defaultSecurityGroup.groupId,
-        [
-          {
-            IpProtocol: "tcp",
-            FromPort: 443,
-            ToPort: 443,
-            CidrIpv4: "10.42.0.0/16",
-          },
-        ],
-        [],
-      );
-
-      yield* stack.destroy();
-      yield* assertVpcGone(initial.vpc.vpcId);
-    }).pipe(logLevel),
+    yield* stack.destroy();
+    yield* assertVpcGone(initial.vpc.vpcId);
+  }).pipe(logLevel),
 );
 
 for (const direction of ["ingress", "egress"] as const) {
@@ -203,9 +189,7 @@ for (const direction of ["ingress", "egress"] as const) {
         expect(stable).toHaveLength(2);
         const missing = initial.find((rule) => rule.FromPort === 53)!;
         const revoke =
-          direction === "ingress"
-            ? EC2.revokeSecurityGroupIngress
-            : EC2.revokeSecurityGroupEgress;
+          direction === "ingress" ? EC2.revokeSecurityGroupIngress : EC2.revokeSecurityGroupEgress;
         const authorize =
           direction === "ingress"
             ? EC2.authorizeSecurityGroupIngress
@@ -235,10 +219,8 @@ for (const direction of ["ingress", "egress"] as const) {
         yield* waitForRules(
           groupId,
           (rules) =>
-            !rules.some(
-              (rule) =>
-                rule.SecurityGroupRuleId === missing.SecurityGroupRuleId,
-            ) && rules.some((rule) => rule.SecurityGroupRuleId === rogueId),
+            !rules.some((rule) => rule.SecurityGroupRuleId === missing.SecurityGroupRuleId) &&
+            rules.some((rule) => rule.SecurityGroupRuleId === rogueId),
         );
         const missingRuleError = yield* EC2.modifySecurityGroupRules({
           GroupId: groupId,
@@ -258,22 +240,16 @@ for (const direction of ["ingress", "egress"] as const) {
         expect(missingRuleError).toMatchObject({
           _tag: "InvalidSecurityGroupRuleId.NotFound",
         });
-        expect(
-          (yield* stack.plan(program())).resources.DriftGroup?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(program())).resources.DriftGroup?.action).toBe("update");
         yield* stack.deploy(program());
         const repaired = yield* readRules(groupId);
         expect(repaired).toHaveLength(3);
         expect(repaired).toEqual(expect.arrayContaining(stable));
         const restored = repaired.find((rule) => rule.FromPort === 53)!;
-        expect(restored.SecurityGroupRuleId).not.toBe(
-          missing.SecurityGroupRuleId,
-        );
+        expect(restored.SecurityGroupRuleId).not.toBe(missing.SecurityGroupRuleId);
         expect(restored.IsEgress).toBe(direction === "egress");
         expect(restored.Description).toBe("DNS");
-        expect(
-          repaired.some((rule) => rule.SecurityGroupRuleId === rogueId),
-        ).toBe(false);
+        expect(repaired.some((rule) => rule.SecurityGroupRuleId === rogueId)).toBe(false);
 
         yield* EC2.modifySecurityGroupRules({
           GroupId: groupId,
@@ -297,14 +273,10 @@ for (const direction of ["ingress", "egress"] as const) {
               rule.Description === "external description",
           ),
         );
-        expect(
-          (yield* stack.plan(program())).resources.DriftGroup?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(program())).resources.DriftGroup?.action).toBe("update");
         yield* stack.deploy(program());
         const descriptions = yield* readRules(groupId);
-        expect(descriptions).toEqual(
-          expect.arrayContaining([...stable, restored]),
-        );
+        expect(descriptions).toEqual(expect.arrayContaining([...stable, restored]));
 
         // External identity edits are removed, not preserved as extra access.
         yield* EC2.modifySecurityGroupRules({
@@ -325,23 +297,16 @@ for (const direction of ["ingress", "egress"] as const) {
         yield* waitForRules(groupId, (rules) =>
           rules.some(
             (rule) =>
-              rule.SecurityGroupRuleId === restored.SecurityGroupRuleId &&
-              rule.FromPort === 25,
+              rule.SecurityGroupRuleId === restored.SecurityGroupRuleId && rule.FromPort === 25,
           ),
         );
-        expect(
-          (yield* stack.plan(program())).resources.DriftGroup?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(program())).resources.DriftGroup?.action).toBe("update");
         yield* stack.deploy(program());
         const repairedIdentity = yield* readRules(groupId);
         expect(repairedIdentity).toHaveLength(3);
         expect(repairedIdentity).toEqual(expect.arrayContaining(stable));
-        expect(repairedIdentity.some((rule) => rule.FromPort === 25)).toBe(
-          false,
-        );
-        expect(
-          repairedIdentity.find((rule) => rule.FromPort === 53)?.Description,
-        ).toBe("DNS");
+        expect(repairedIdentity.some((rule) => rule.FromPort === 25)).toBe(false);
+        expect(repairedIdentity.find((rule) => rule.FromPort === 53)?.Description).toBe("DNS");
 
         const replacement = {
           ...changed,
@@ -354,45 +319,32 @@ for (const direction of ["ingress", "egress"] as const) {
         expect(edited).toHaveLength(3);
         expect(edited).toEqual(expect.arrayContaining(stable));
         expect(edited.some((rule) => rule.FromPort === 53)).toBe(false);
-        expect(edited.find((rule) => rule.FromPort === 123)?.Description).toBe(
-          "NTP",
-        );
+        expect(edited.find((rule) => rule.FromPort === 123)?.Description).toBe("NTP");
 
         yield* stack.deploy(program([]));
-        const opposite = stable.filter(
-          (rule) => rule.IsEgress !== (direction === "egress"),
-        );
+        const opposite = stable.filter((rule) => rule.IsEgress !== (direction === "egress"));
         expect(yield* readRules(groupId)).toEqual(opposite);
         const external = yield* authorize({
           GroupId: groupId,
-          IpPermissions: [
-            { IpProtocol: "-1", IpRanges: [{ CidrIp: "0.0.0.0/0" }] },
-          ],
+          IpPermissions: [{ IpProtocol: "-1", IpRanges: [{ CidrIp: "0.0.0.0/0" }] }],
         });
         yield* waitForRules(groupId, (rules) =>
           rules.some(
             (rule) =>
-              rule.SecurityGroupRuleId ===
-              external.SecurityGroupRules![0]!.SecurityGroupRuleId,
+              rule.SecurityGroupRuleId === external.SecurityGroupRules![0]!.SecurityGroupRuleId,
           ),
         );
-        expect(
-          (yield* stack.plan(program([]))).resources.DriftGroup?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(program([]))).resources.DriftGroup?.action).toBe("update");
         yield* stack.deploy(program([]));
         expect(yield* readRules(groupId)).toEqual(opposite);
 
         const observer = yield* observeRuleRequests;
         yield* Effect.gen(function* () {
-          expect(
-            (yield* stack.plan(program([]))).resources.DriftGroup?.action,
-          ).toBe("noop");
+          expect((yield* stack.plan(program([]))).resources.DriftGroup?.action).toBe("noop");
           yield* stack.deploy(program([]));
         }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
         expect(observer.requests.length).toBeGreaterThan(0);
-        expect(observer.requests.filter((request) => request.write)).toEqual(
-          [],
-        );
+        expect(observer.requests.filter((request) => request.write)).toEqual([]);
         expect(yield* readRules(groupId)).toEqual(opposite);
         yield* stack.destroy();
         yield* assertVpcGone(created.vpc.vpcId);
@@ -512,18 +464,14 @@ test.provider(
           ),
         ).toBe(true);
       }
-      expect(
-        (yield* stack.plan(program(supplied))).resources.CanonicalGroup?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program(supplied))).resources.CanonicalGroup?.action).toBe("noop");
       const observer = yield* observeRuleRequests;
       yield* stack
         .deploy(program(canonical))
         .pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
       expect(observer.requests.length).toBeGreaterThan(0);
       expect(observer.requests.filter((request) => request.write)).toEqual([]);
-      expect(yield* readRules(groupId)).toEqual(
-        expect.arrayContaining(initial),
-      );
+      expect(yield* readRules(groupId)).toEqual(expect.arrayContaining(initial));
       expect(yield* readRules(groupId)).toHaveLength(initial.length);
 
       for (const description of ["Updated HTTPS", undefined]) {
@@ -536,14 +484,10 @@ test.provider(
           .pipe(Effect.provideService(HttpClient.HttpClient, writes.client));
         const mutations = writes.requests.filter((request) => request.write);
         expect(mutations.length).toBeGreaterThan(0);
-        expect(
-          mutations.every(
-            (request) => request.action === "ModifySecurityGroupRules",
-          ),
-        ).toBe(true);
-        expect(
-          [...new Set(mutations.flatMap((request) => request.ruleIds))].sort(),
-        ).toEqual(
+        expect(mutations.every((request) => request.action === "ModifySecurityGroupRules")).toBe(
+          true,
+        );
+        expect([...new Set(mutations.flatMap((request) => request.ruleIds))].sort()).toEqual(
           initial
             .filter((rule) => rule.IpProtocol === "tcp")
             .map((rule) => rule.SecurityGroupRuleId)
@@ -554,13 +498,9 @@ test.provider(
           initial.map((rule) => rule.SecurityGroupRuleId).sort(),
         );
         for (const rule of observed) {
-          if (rule.IpProtocol === "tcp")
-            expect(rule.Description ?? "").toBe(description ?? "");
+          if (rule.IpProtocol === "tcp") expect(rule.Description ?? "").toBe(description ?? "");
         }
-        expect(
-          (yield* stack.plan(program(desired))).resources.CanonicalGroup
-            ?.action,
-        ).toBe("noop");
+        expect((yield* stack.plan(program(desired))).resources.CanonicalGroup?.action).toBe("noop");
         const noop = yield* observeRuleRequests;
         yield* stack
           .deploy(program(desired))
@@ -606,14 +546,8 @@ test.provider(
         return yield* yield* State;
       }).pipe(Effect.provide(stack.state));
       const row = yield* state.get(key);
-      if (
-        !row ||
-        isActionState(row) ||
-        (row.status !== "created" && row.status !== "updated")
-      ) {
-        return yield* Effect.fail(
-          new Error("Expected a persisted default security group"),
-        );
+      if (!row || isActionState(row) || (row.status !== "created" && row.status !== "updated")) {
+        return yield* Effect.fail(new Error("Expected a persisted default security group"));
       }
       const rules = yield* readRules(created.group.groupId);
       yield* state.set({
@@ -636,9 +570,7 @@ test.provider(
       // Lose only the managed-group row; the VPC remains tracked for cleanup.
       yield* state.delete(key);
       const adoptedPlan = yield* stack.plan(program(8443, created.vpc.vpcId));
-      expect(adoptedPlan.resources.RecoveryGroup?.state?.attr?.groupId).toBe(
-        created.group.groupId,
-      );
+      expect(adoptedPlan.resources.RecoveryGroup?.state?.attr?.groupId).toBe(created.group.groupId);
       const adopted = yield* stack.deploy(program(8443, created.vpc.vpcId));
       expect(adopted.group.groupId).toBe(created.group.groupId);
       yield* expectRules(
@@ -654,8 +586,7 @@ test.provider(
         [],
       );
       expect(
-        (yield* stack.plan(program(8443, created.vpc.vpcId))).resources
-          .RecoveryGroup?.action,
+        (yield* stack.plan(program(8443, created.vpc.vpcId))).resources.RecoveryGroup?.action,
       ).toBe("noop");
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
@@ -681,9 +612,7 @@ test.provider(
       );
       yield* EC2.deleteVpc({ VpcId: created.vpc.vpcId });
       yield* assertVpcGone(created.vpc.vpcId);
-      const drift = yield* Drift.detect(stack).pipe(
-        Effect.provide(stack.state),
-      );
+      const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
       expect(drift.resources.MissingGroup?.action).toBe("missing");
       expect(drift.resources.MissingGroup?.attr).toBeUndefined();
       yield* Effect.gen(function* () {
@@ -742,15 +671,11 @@ test.provider(
       const oldVpcId = created.first!.vpcId;
       const oldRules = yield* readRules(created.group.groupId);
       expect(oldRules).toHaveLength(1);
-      expect(
-        (yield* stack.plan(program(true))).resources.MovingGroup?.action,
-      ).toBe("replace");
+      expect((yield* stack.plan(program(true))).resources.MovingGroup?.action).toBe("replace");
       const moved = yield* stack.deploy(program(true));
       expect(moved.group.groupId).not.toBe(created.group.groupId);
       expect(moved.group.vpcId).toBe(created.second.vpcId);
-      expect((yield* findDefaultGroup(oldVpcId)).GroupId).toBe(
-        created.group.groupId,
-      );
+      expect((yield* findDefaultGroup(oldVpcId)).GroupId).toBe(created.group.groupId);
       expect(yield* readRules(created.group.groupId)).toEqual(oldRules);
       yield* expectRules(
         moved.group.groupId,
@@ -769,19 +694,14 @@ test.provider(
       yield* stack.deploy(program(true, false));
       yield* assertVpcGone(oldVpcId);
       expect(yield* readRules(moved.group.groupId)).toEqual(newRules);
-      expect(
-        (yield* stack.plan(program(true, false))).resources.MovingGroup?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program(true, false))).resources.MovingGroup?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertVpcGone(created.second.vpcId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
 
-for (const scenario of [
-  "new destination VPC",
-  "upstream VPC replacement",
-] as const) {
+for (const scenario of ["new destination VPC", "upstream VPC replacement"] as const) {
   test.provider(
     `propagates unresolved group identity to a real ENI during ${scenario}`,
     (stack) =>
@@ -846,13 +766,11 @@ for (const scenario of [
         })).NetworkInterfaces?.[0];
         expect(observed?.VpcId).toBe(moved.destination.vpcId);
         expect(observed?.SubnetId).toBe(moved.subnet!.subnetId);
-        expect(observed?.Groups?.map((group) => group.GroupId)).toEqual([
-          moved.group.groupId,
-        ]);
+        expect(observed?.Groups?.map((group) => group.GroupId)).toEqual([moved.group.groupId]);
         if (scenario === "new destination VPC") {
-          expect(
-            (yield* findDefaultGroup(created.original.vpcId)).GroupId,
-          ).toBe(created.group.groupId);
+          expect((yield* findDefaultGroup(created.original.vpcId)).GroupId).toBe(
+            created.group.groupId,
+          );
           expect(yield* readRules(created.group.groupId)).toEqual(oldRules);
         } else {
           yield* assertVpcGone(created.original.vpcId);
@@ -932,9 +850,7 @@ test.provider(
           const observer = yield* observeRuleRequests;
           yield* stack
             .deploy(program(description))
-            .pipe(
-              Effect.provideService(HttpClient.HttpClient, observer.client),
-            );
+            .pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
           const rules = yield* readRules(groupId);
           expect(rules).toHaveLength(4);
           expect(rules.map((rule) => rule.SecurityGroupRuleId).sort()).toEqual(
@@ -942,26 +858,21 @@ test.provider(
           );
           for (const original of initial) {
             const rule = rules.find(
-              (rule) =>
-                rule.SecurityGroupRuleId === original.SecurityGroupRuleId,
+              (rule) => rule.SecurityGroupRuleId === original.SecurityGroupRuleId,
             )!;
             expect(rule.IsEgress).toBe(original.IsEgress);
-            expect(rule.ReferencedGroupInfo?.GroupId).toBe(
-              original.ReferencedGroupInfo?.GroupId,
-            );
+            expect(rule.ReferencedGroupInfo?.GroupId).toBe(original.ReferencedGroupInfo?.GroupId);
             expect(rule.PrefixListId).toBe(original.PrefixListId);
             expect(rule.Description ?? "").toBe(description ?? "");
           }
           const writes = observer.requests.filter((request) => request.write);
           expect(writes.length).toBeGreaterThan(0);
-          expect(
-            writes.every(
-              (request) => request.action === "ModifySecurityGroupRules",
-            ),
-          ).toBe(true);
-          expect(
-            [...new Set(writes.flatMap((request) => request.ruleIds))].sort(),
-          ).toEqual(initial.map((rule) => rule.SecurityGroupRuleId).sort());
+          expect(writes.every((request) => request.action === "ModifySecurityGroupRules")).toBe(
+            true,
+          );
+          expect([...new Set(writes.flatMap((request) => request.ruleIds))].sort()).toEqual(
+            initial.map((rule) => rule.SecurityGroupRuleId).sort(),
+          );
         }
         const settled = yield* readRules(groupId);
         const invalid: Array<{
@@ -1000,31 +911,20 @@ test.provider(
           const observer = yield* observeRuleRequests;
           const error = yield* stack
             .deploy(program(undefined, { ingress: [], egress: rules }))
-            .pipe(
-              Effect.provideService(HttpClient.HttpClient, observer.client),
-              Effect.flip,
-            );
+            .pipe(Effect.provideService(HttpClient.HttpClient, observer.client), Effect.flip);
           expect(error).toMatchObject({
             _tag: "InvalidDefaultSecurityGroupRules",
             message,
           });
-          expect(observer.requests.filter((request) => request.write)).toEqual(
-            [],
-          );
-          expect(yield* readRules(groupId)).toEqual(
-            expect.arrayContaining(settled),
-          );
+          expect(observer.requests.filter((request) => request.write)).toEqual([]);
+          expect(yield* readRules(groupId)).toEqual(expect.arrayContaining(settled));
           expect(yield* readRules(groupId)).toHaveLength(settled.length);
         }
-        expect(
-          (yield* stack.plan(program())).resources.SourcesGroup?.action,
-        ).toBe("noop");
+        expect((yield* stack.plan(program())).resources.SourcesGroup?.action).toBe("noop");
       }).pipe(
         // Release source references even when an assertion fails before teardown.
         Effect.ensuring(
-          stack
-            .deploy(program(undefined, { ingress: [], egress: [] }))
-            .pipe(Effect.ignore),
+          stack.deploy(program(undefined, { ingress: [], egress: [] })).pipe(Effect.ignore),
         ),
       );
       expect(yield* readRules(groupId)).toEqual([]);
@@ -1034,13 +934,9 @@ test.provider(
         PrefixListIds: [created.prefix.prefixListId],
       }).pipe(
         Effect.map((result) =>
-          (result.PrefixLists ?? []).every(
-            (list) => list.State === "delete-complete",
-          ),
+          (result.PrefixLists ?? []).every((list) => list.State === "delete-complete"),
         ),
-        Effect.catchTag("InvalidPrefixListID.NotFound", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.succeed(true)),
         Effect.repeat({
           until: Boolean,
           schedule: Schedule.spaced("1 second"),
@@ -1057,9 +953,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const program = (
-        rules: Pick<DefaultSecurityGroupProps, "ingress" | "egress"> = {},
-      ) =>
+      const program = (rules: Pick<DefaultSecurityGroupProps, "ingress" | "egress"> = {}) =>
         Effect.gen(function* () {
           const vpc = yield* Vpc("DefaultsVpc", { cidrBlock: "10.55.0.0/16" });
           const group = yield* DefaultSecurityGroup("DefaultsGroup", {
@@ -1070,14 +964,8 @@ test.provider(
         });
       const created = yield* stack.deploy(program());
       const groupId = created.group.groupId;
-      expect((yield* findDefaultGroup(created.vpc.vpcId)).GroupId).toBe(
-        groupId,
-      );
-      yield* expectRules(
-        groupId,
-        [],
-        [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
-      );
+      expect((yield* findDefaultGroup(created.vpc.vpcId)).GroupId).toBe(groupId);
+      yield* expectRules(groupId, [], [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }]);
       expect(created.group.ingressRules).toEqual([]);
       expect(created.group.egressRules).toHaveLength(1);
 
@@ -1092,27 +980,17 @@ test.provider(
       yield* stack.deploy(program({ ingress: custom, egress: custom }));
       expect(yield* readRules(groupId)).toHaveLength(2);
       yield* stack.deploy(program());
-      yield* expectRules(
-        groupId,
-        [],
-        [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
-      );
+      yield* expectRules(groupId, [], [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }]);
       for (const defaults of [{}, { ingress: undefined, egress: undefined }]) {
         yield* stack.deploy(program({ ingress: [], egress: [] }));
         yield* expectRules(groupId, [], []);
         const restored = yield* stack.deploy(program(defaults));
         expect(restored.group.groupId).toBe(groupId);
-        yield* expectRules(
-          groupId,
-          [],
-          [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
-        );
+        yield* expectRules(groupId, [], [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }]);
       }
       const observer = yield* observeRuleRequests;
       yield* Effect.gen(function* () {
-        expect(
-          (yield* stack.plan(program())).resources.DefaultsGroup?.action,
-        ).toBe("noop");
+        expect((yield* stack.plan(program())).resources.DefaultsGroup?.action).toBe("noop");
         yield* stack.deploy(program());
       }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
       expect(observer.requests.length).toBeGreaterThan(0);
@@ -1144,20 +1022,14 @@ test.provider(
         return yield* yield* State;
       }).pipe(Effect.provide(stack.state));
       for (const adopt of [false, true]) {
-        const outbound = (yield* readRules(groupId)).filter(
-          (rule) => rule.IsEgress,
-        );
+        const outbound = (yield* readRules(groupId)).filter((rule) => rule.IsEgress);
         yield* EC2.revokeSecurityGroupEgress({
           GroupId: groupId,
-          SecurityGroupRuleIds: outbound.map(
-            (rule) => rule.SecurityGroupRuleId!,
-          ),
+          SecurityGroupRuleIds: outbound.map((rule) => rule.SecurityGroupRuleId!),
         });
         const self = yield* EC2.authorizeSecurityGroupIngress({
           GroupId: groupId,
-          IpPermissions: [
-            { IpProtocol: "-1", UserIdGroupPairs: [{ GroupId: groupId }] },
-          ],
+          IpPermissions: [{ IpProtocol: "-1", UserIdGroupPairs: [{ GroupId: groupId }] }],
         });
         const rogue = yield* EC2.authorizeSecurityGroupEgress({
           GroupId: groupId,
@@ -1170,17 +1042,14 @@ test.provider(
             },
           ],
         });
-        const rogueIds = [
-          ...self.SecurityGroupRules!,
-          ...rogue.SecurityGroupRules!,
-        ].map((rule) => rule.SecurityGroupRuleId!);
+        const rogueIds = [...self.SecurityGroupRules!, ...rogue.SecurityGroupRules!].map(
+          (rule) => rule.SecurityGroupRuleId!,
+        );
         yield* waitForRules(
           groupId,
           (rules) =>
             rules.length === 2 &&
-            rogueIds.every((id) =>
-              rules.some((rule) => rule.SecurityGroupRuleId === id),
-            ),
+            rogueIds.every((id) => rules.some((rule) => rule.SecurityGroupRuleId === id)),
         );
         if (adopt) {
           yield* state.delete({
@@ -1189,28 +1058,16 @@ test.provider(
             fqn: "DefaultDriftGroup",
           });
         } else {
-          expect(
-            (yield* stack.plan(program())).resources.DefaultDriftGroup?.action,
-          ).toBe("update");
+          expect((yield* stack.plan(program())).resources.DefaultDriftGroup?.action).toBe("update");
         }
-        const repaired = yield* stack.deploy(
-          program(adopt ? created.vpc.vpcId : undefined),
-        );
+        const repaired = yield* stack.deploy(program(adopt ? created.vpc.vpcId : undefined));
         expect(repaired.group.groupId).toBe(groupId);
-        yield* expectRules(
-          groupId,
-          [],
-          [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
-        );
+        yield* expectRules(groupId, [], [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }]);
         expect(
-          (yield* readRules(groupId)).some((rule) =>
-            rogueIds.includes(rule.SecurityGroupRuleId!),
-          ),
+          (yield* readRules(groupId)).some((rule) => rogueIds.includes(rule.SecurityGroupRuleId!)),
         ).toBe(false);
       }
-      expect(
-        (yield* stack.plan(program())).resources.DefaultDriftGroup?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(program())).resources.DefaultDriftGroup?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
@@ -1284,19 +1141,11 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
           created.egress!.securityGroupRuleId,
         ];
         const initial = yield* readRules(groupId);
-        expect(initial).toHaveLength(
-          mode === "omitted" ? 3 : mode === "empty" ? 2 : 4,
-        );
-        expect(initial.filter((rule) => !rule.IsEgress)).toHaveLength(
-          mode === "inline" ? 2 : 1,
-        );
-        expect(initial.filter((rule) => rule.IsEgress)).toHaveLength(
-          mode === "empty" ? 1 : 2,
-        );
+        expect(initial).toHaveLength(mode === "omitted" ? 3 : mode === "empty" ? 2 : 4);
+        expect(initial.filter((rule) => !rule.IsEgress)).toHaveLength(mode === "inline" ? 2 : 1);
+        expect(initial.filter((rule) => rule.IsEgress)).toHaveLength(mode === "empty" ? 1 : 2);
         if (mode === "omitted") {
-          expect(
-            initial.find((rule) => rule.IpProtocol === "-1"),
-          ).toMatchObject({
+          expect(initial.find((rule) => rule.IpProtocol === "-1")).toMatchObject({
             IsEgress: true,
             CidrIpv4: "0.0.0.0/0",
           });
@@ -1310,9 +1159,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
           yield* stack.deploy(program());
         }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
         expect(observer.requests.length).toBeGreaterThan(0);
-        expect(observer.requests.filter((request) => request.write)).toEqual(
-          [],
-        );
+        expect(observer.requests.filter((request) => request.write)).toEqual([]);
 
         if (mode === "inline") {
           const state = yield* Effect.gen(function* () {
@@ -1328,9 +1175,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
                 isActionState(row) ||
                 (row.status !== "created" && row.status !== "updated")
               ) {
-                return yield* Effect.fail(
-                  new Error("Expected a persisted standalone rule"),
-                );
+                return yield* Effect.fail(new Error("Expected a persisted standalone rule"));
               }
               return {
                 key,
@@ -1354,9 +1199,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
                 value: { ...updating, attr: undefined },
               });
             }
-            expect(
-              (yield* stack.plan(program())).resources.CompositionGroup?.action,
-            ).toBe("noop");
+            expect((yield* stack.plan(program())).resources.CompositionGroup?.action).toBe("noop");
           }).pipe(
             Effect.ensuring(
               Effect.forEach(rows, ({ key, updating }) =>
@@ -1366,24 +1209,17 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
           );
         }
         const updated = yield* stack.deploy(program(8443));
-        expect([
-          updated.ingress!.securityGroupRuleId,
-          updated.egress!.securityGroupRuleId,
-        ]).toEqual(ownedIds);
+        expect([updated.ingress!.securityGroupRuleId, updated.egress!.securityGroupRuleId]).toEqual(
+          ownedIds,
+        );
         const updatedRules = yield* readRules(groupId);
         expect(updatedRules).toHaveLength(4);
+        expect(updatedRules.filter((rule) => rule.FromPort === 8443)).toHaveLength(2);
         expect(
-          updatedRules.filter((rule) => rule.FromPort === 8443),
-        ).toHaveLength(2);
-        expect(
-          updatedRules.filter((rule) =>
-            ownedIds.some((id) => id === rule.SecurityGroupRuleId),
-          ),
+          updatedRules.filter((rule) => ownedIds.some((id) => id === rule.SecurityGroupRuleId)),
         ).toEqual(
           expect.arrayContaining(
-            initial.filter((rule) =>
-              ownedIds.some((id) => id === rule.SecurityGroupRuleId),
-            ),
+            initial.filter((rule) => ownedIds.some((id) => id === rule.SecurityGroupRuleId)),
           ),
         );
         expect(
@@ -1392,56 +1228,42 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
           ),
         ).toEqual(expect.arrayContaining(ownedIds));
 
-        const described = yield* stack.deploy(
-          program(8443, "Updated standalone"),
-        );
+        const described = yield* stack.deploy(program(8443, "Updated standalone"));
         expect([
           described.ingress!.securityGroupRuleId,
           described.egress!.securityGroupRuleId,
         ]).toEqual(ownedIds);
         const descriptions = yield* readRules(groupId);
         for (const id of ownedIds) {
-          expect(
-            descriptions.find((rule) => rule.SecurityGroupRuleId === id)
-              ?.Description,
-          ).toBe("Updated standalone");
+          expect(descriptions.find((rule) => rule.SecurityGroupRuleId === id)?.Description).toBe(
+            "Updated standalone",
+          );
         }
-        const replaced = yield* stack.deploy(
-          program(8443, "Updated standalone", true),
-        );
+        const replaced = yield* stack.deploy(program(8443, "Updated standalone", true));
         expect(replaced.ingress!.securityGroupRuleId).not.toBe(ownedIds[0]);
         expect(replaced.egress!.securityGroupRuleId).not.toBe(ownedIds[1]);
         const replacementRules = yield* readRules(groupId);
         expect(replacementRules).toHaveLength(4);
         expect(
-          replacementRules.some((rule) =>
-            ownedIds.some((id) => id === rule.SecurityGroupRuleId),
-          ),
+          replacementRules.some((rule) => ownedIds.some((id) => id === rule.SecurityGroupRuleId)),
         ).toBe(false);
         expect(
           replacementRules.find(
-            (rule) =>
-              rule.SecurityGroupRuleId ===
-              replaced.ingress!.securityGroupRuleId,
+            (rule) => rule.SecurityGroupRuleId === replaced.ingress!.securityGroupRuleId,
           ),
         ).toMatchObject({ IsEgress: false, FromPort: 5433, ToPort: 5433 });
         expect(
           replacementRules.find(
-            (rule) =>
-              rule.SecurityGroupRuleId === replaced.egress!.securityGroupRuleId,
+            (rule) => rule.SecurityGroupRuleId === replaced.egress!.securityGroupRuleId,
           ),
         ).toMatchObject({ IsEgress: true, FromPort: 123, ToPort: 123 });
-        expect(
-          replacementRules.filter((rule) => rule.FromPort === 8443),
-        ).toEqual(
-          expect.arrayContaining(
-            updatedRules.filter((rule) => rule.FromPort === 8443),
-          ),
+        expect(replacementRules.filter((rule) => rule.FromPort === 8443)).toEqual(
+          expect.arrayContaining(updatedRules.filter((rule) => rule.FromPort === 8443)),
         );
 
         expect(
-          (yield* stack.plan(program(8443, "Updated standalone", true, false)))
-            .resources.CompositionGroup?.action,
+          (yield* stack.plan(program(8443, "Updated standalone", true, false))).resources
+            .CompositionGroup?.action,
         ).toBe("update");
         yield* stack.deploy(program(8443, "Updated standalone", true, false));
         const final = yield* readRules(groupId);
@@ -1458,14 +1280,10 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
         );
         const recreatedRules = yield* readRules(groupId);
         expect(recreatedRules).toHaveLength(4);
-        expect(
-          recreatedRules.filter((rule) => rule.FromPort === 9443),
-        ).toHaveLength(2);
+        expect(recreatedRules.filter((rule) => rule.FromPort === 9443)).toHaveLength(2);
         expect(
           recreatedRules.find(
-            (rule) =>
-              rule.SecurityGroupRuleId ===
-              recreated.ingress!.securityGroupRuleId,
+            (rule) => rule.SecurityGroupRuleId === recreated.ingress!.securityGroupRuleId,
           ),
         ).toMatchObject({
           IsEgress: false,
@@ -1474,9 +1292,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
         });
         expect(
           recreatedRules.find(
-            (rule) =>
-              rule.SecurityGroupRuleId ===
-              recreated.egress!.securityGroupRuleId,
+            (rule) => rule.SecurityGroupRuleId === recreated.egress!.securityGroupRuleId,
           ),
         ).toMatchObject({
           IsEgress: true,
@@ -1544,14 +1360,11 @@ test.provider(
               cidrIpv4: "10.59.0.0/16",
             },
           ];
-          const group = yield* DefaultSecurityGroup(
-            "ReplacementOrderingGroup",
-            {
-              vpcId: vpc.vpcId,
-              ingress: inline,
-              egress: inline,
-            },
-          );
+          const group = yield* DefaultSecurityGroup("ReplacementOrderingGroup", {
+            vpcId: vpc.vpcId,
+            ingress: inline,
+            egress: inline,
+          });
           const direction = yield* SecurityGroupRule("DirectionReplacement", {
             group: group,
             type: desired.direction,
@@ -1587,10 +1400,7 @@ test.provider(
       const initial = yield* readRules(groupId);
       expect(initial).toHaveLength(4);
       expect(
-        initial.find(
-          (rule) =>
-            rule.SecurityGroupRuleId === previous.direction.securityGroupRuleId,
-        ),
+        initial.find((rule) => rule.SecurityGroupRuleId === previous.direction.securityGroupRuleId),
       ).toMatchObject({
         GroupId: groupId,
         IsEgress: false,
@@ -1600,10 +1410,7 @@ test.provider(
         CidrIpv4: "10.59.1.0/24",
       });
       expect(
-        initial.find(
-          (rule) =>
-            rule.SecurityGroupRuleId === previous.identity.securityGroupRuleId,
-        ),
+        initial.find((rule) => rule.SecurityGroupRuleId === previous.identity.securityGroupRuleId),
       ).toMatchObject({
         GroupId: groupId,
         IsEgress: true,
@@ -1619,9 +1426,7 @@ test.provider(
         expect(plan.resources.ReplacementOrderingGroup?.action).toBe("update");
         expect(plan.resources.DirectionReplacement?.action).toBe("replace");
         expect(plan.resources.IdentityReplacement?.action).toBe("replace");
-        expect(plan.resources.AddedDuringReplacement?.action).toBe(
-          phase === 1 ? "create" : "noop",
-        );
+        expect(plan.resources.AddedDuringReplacement?.action).toBe(phase === 1 ? "create" : "noop");
         retiredIds.push(
           previous.direction.securityGroupRuleId,
           previous.identity.securityGroupRuleId,
@@ -1636,9 +1441,7 @@ test.provider(
           previous.identity.securityGroupRuleId,
         );
         if (previous.added) {
-          expect(deployed.added!.securityGroupRuleId).toBe(
-            previous.added.securityGroupRuleId,
-          );
+          expect(deployed.added!.securityGroupRuleId).toBe(previous.added.securityGroupRuleId);
         }
         const currentIds = [
           deployed.direction.securityGroupRuleId,
@@ -1649,18 +1452,12 @@ test.provider(
           groupId,
           (rules) =>
             rules.length === 5 &&
-            !rules.some((rule) =>
-              retiredIds.includes(rule.SecurityGroupRuleId!),
-            ) &&
-            currentIds.every((id) =>
-              rules.some((rule) => rule.SecurityGroupRuleId === id),
-            ),
+            !rules.some((rule) => retiredIds.includes(rule.SecurityGroupRuleId!)) &&
+            currentIds.every((id) => rules.some((rule) => rule.SecurityGroupRuleId === id)),
         );
         expect(
           observed.find(
-            (rule) =>
-              rule.SecurityGroupRuleId ===
-              deployed.direction.securityGroupRuleId,
+            (rule) => rule.SecurityGroupRuleId === deployed.direction.securityGroupRuleId,
           ),
         ).toMatchObject({
           GroupId: groupId,
@@ -1672,9 +1469,7 @@ test.provider(
         });
         expect(
           observed.find(
-            (rule) =>
-              rule.SecurityGroupRuleId ===
-              deployed.identity.securityGroupRuleId,
+            (rule) => rule.SecurityGroupRuleId === deployed.identity.securityGroupRuleId,
           ),
         ).toMatchObject({
           GroupId: groupId,
@@ -1685,10 +1480,7 @@ test.provider(
           CidrIpv4: desired.identityCidr,
         });
         expect(
-          observed.find(
-            (rule) =>
-              rule.SecurityGroupRuleId === deployed.added!.securityGroupRuleId,
-          ),
+          observed.find((rule) => rule.SecurityGroupRuleId === deployed.added!.securityGroupRuleId),
         ).toMatchObject({
           GroupId: groupId,
           IsEgress: false,
@@ -1702,9 +1494,7 @@ test.provider(
         );
         expect(inline).toHaveLength(2);
         for (const isEgress of [false, true]) {
-          expect(
-            inline.find((rule) => rule.IsEgress === isEgress),
-          ).toMatchObject({
+          expect(inline.find((rule) => rule.IsEgress === isEgress)).toMatchObject({
             GroupId: groupId,
             IpProtocol: "tcp",
             FromPort: desired.inlinePort,
@@ -1804,12 +1594,8 @@ test.provider(
         expect(targetRules).toHaveLength(2);
         const copiedIds: string[] = [];
         for (const isEgress of [false, true]) {
-          const source = targetRules.find(
-            (rule) => !!rule.IsEgress === isEgress,
-          )!;
-          expect(source.Tags?.some((tag) => tag.Key === "alchemy::id")).toBe(
-            true,
-          );
+          const source = targetRules.find((rule) => !!rule.IsEgress === isEgress)!;
+          expect(source.Tags?.some((tag) => tag.Key === "alchemy::id")).toBe(true);
           const authorize = isEgress
             ? EC2.authorizeSecurityGroupEgress
             : EC2.authorizeSecurityGroupIngress;
@@ -1823,9 +1609,7 @@ test.provider(
                 IpRanges: [{ CidrIp: "0.0.0.0/0" }],
               },
             ],
-            TagSpecifications: [
-              { ResourceType: "security-group-rule", Tags: source.Tags },
-            ],
+            TagSpecifications: [{ ResourceType: "security-group-rule", Tags: source.Tags }],
           });
           copiedIds.push(copied.SecurityGroupRules![0]!.SecurityGroupRuleId!);
         }
@@ -1864,9 +1648,7 @@ test.provider(
             fqn,
           });
           if (!row || isActionState(row)) {
-            return yield* Effect.fail(
-              new Error("Expected a persisted cross-stack rule"),
-            );
+            return yield* Effect.fail(new Error("Expected a persisted cross-stack rule"));
           }
           expect(row.attr?.securityGroupRuleId).toBe(attrs.securityGroupRuleId);
           expect(row.attr?.groupId).toBe(groupId);
@@ -1880,18 +1662,12 @@ test.provider(
           groupId,
           (rules) =>
             rules.length === 6 &&
-            unownedIds.every((id) =>
-              rules.some((rule) => rule.SecurityGroupRuleId === id),
-            ),
+            unownedIds.every((id) => rules.some((rule) => rule.SecurityGroupRuleId === id)),
         );
-        expect(
-          (yield* stack.plan(program)).resources.OwnershipGroup?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(program)).resources.OwnershipGroup?.action).toBe("update");
         const repaired = yield* stack.deploy(program);
         expect(yield* readRules(groupId)).toHaveLength(2);
-        expect(yield* readRules(groupId)).toEqual(
-          expect.arrayContaining(targetRules),
-        );
+        expect(yield* readRules(groupId)).toEqual(expect.arrayContaining(targetRules));
         expect(repaired.group.ingressRules).toHaveLength(1);
         expect(repaired.group.egressRules).toHaveLength(1);
         expect(
@@ -1899,21 +1675,15 @@ test.provider(
             .map((rule) => rule.securityGroupRuleId)
             .sort(),
         ).toEqual(targetRules.map((rule) => rule.SecurityGroupRuleId).sort());
-        expect(yield* readRules(created.peer.groupId)).toEqual(
-          expect.arrayContaining(peerRules),
-        );
+        expect(yield* readRules(created.peer.groupId)).toEqual(expect.arrayContaining(peerRules));
         expect(yield* readRules(created.peer.groupId)).toHaveLength(2);
         const observer = yield* observeRuleRequests;
         yield* Effect.gen(function* () {
-          expect(
-            (yield* stack.plan(program)).resources.OwnershipGroup?.action,
-          ).toBe("noop");
+          expect((yield* stack.plan(program)).resources.OwnershipGroup?.action).toBe("noop");
           yield* stack.deploy(program);
         }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
         expect(observer.requests.length).toBeGreaterThan(0);
-        expect(observer.requests.filter((request) => request.write)).toEqual(
-          [],
-        );
+        expect(observer.requests.filter((request) => request.write)).toEqual([]);
         yield* foreign.destroy();
         yield* stack.destroy();
         yield* assertVpcGone(created.vpc.vpcId);
@@ -1977,15 +1747,11 @@ for (const kind of ["default", "custom"] as const) {
                     ? { group: { groupId: targetGroup.groupId } }
                     : form === "flatMap-id"
                       ? {
-                          groupId: vpc.vpcId.pipe(
-                            Output.flatMap(() => targetGroup.groupId),
-                          ),
+                          groupId: vpc.vpcId.pipe(Output.flatMap(() => targetGroup.groupId)),
                         }
                       : form === "flatMap-resource"
                         ? {
-                            group: vpc.vpcId.pipe(
-                              Output.flatMap(() => Output.of(targetGroup)),
-                            ),
+                            group: vpc.vpcId.pipe(Output.flatMap(() => Output.of(targetGroup))),
                           }
                         : form === "both"
                           ? { group: targetGroup, groupId: targetGroup.groupId }
@@ -2022,19 +1788,13 @@ for (const kind of ["default", "custom"] as const) {
             const deployed = yield* stack.deploy(program(form));
             expect(deployed.rule.securityGroupRuleId).toBe(ruleId);
             expect(deployed.rule.groupId).toBe(groupId);
-          }).pipe(
-            Effect.provideService(HttpClient.HttpClient, observer.client),
-          );
+          }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
           expect(observer.requests.length).toBeGreaterThan(0);
-          expect(observer.requests.filter((request) => request.write)).toEqual(
-            [],
-          );
+          expect(observer.requests.filter((request) => request.write)).toEqual([]);
           const rules = yield* readRules(groupId);
           expect(rules).toEqual(expect.arrayContaining(initial));
           expect(rules).toHaveLength(2);
-          expect(
-            rules.find((rule) => rule.SecurityGroupRuleId === ruleId),
-          ).toMatchObject({
+          expect(rules.find((rule) => rule.SecurityGroupRuleId === ruleId)).toMatchObject({
             GroupId: groupId,
             SecurityGroupRuleId: ruleId,
             IsEgress: true,
@@ -2046,21 +1806,15 @@ for (const kind of ["default", "custom"] as const) {
           const observer = yield* observeRuleRequests;
           const error = yield* stack
             .plan(program(form))
-            .pipe(
-              Effect.provideService(HttpClient.HttpClient, observer.client),
-              Effect.flip,
-            );
+            .pipe(Effect.provideService(HttpClient.HttpClient, observer.client), Effect.flip);
           expect(error).toMatchObject({
             _tag: "InvalidSecurityGroupRuleGroup",
             message: "Specify exactly one of group or groupId.",
           });
-          expect(observer.requests.filter((request) => request.write)).toEqual(
-            [],
-          );
+          expect(observer.requests.filter((request) => request.write)).toEqual([]);
         }
         expect(
-          (yield* stack.plan(program("resource", "Updated"))).resources
-            .InputFormsRule?.action,
+          (yield* stack.plan(program("resource", "Updated"))).resources.InputFormsRule?.action,
         ).toBe("update");
         const updated = yield* stack.deploy(program("resource", "Updated"));
         expect(updated.rule.securityGroupRuleId).toBe(ruleId);
@@ -2073,37 +1827,25 @@ for (const kind of ["default", "custom"] as const) {
         );
         const observer = yield* observeRuleRequests;
         yield* Effect.gen(function* () {
-          const plan = yield* stack.plan(
-            program("resource", "Updated", "Changed inline"),
-          );
+          const plan = yield* stack.plan(program("resource", "Updated", "Changed inline"));
           expect(plan.resources.InputFormsGroup?.action).toBe("update");
           expect(plan.resources.InputFormsRule?.action).toBe("noop");
-          const deployed = yield* stack.deploy(
-            program("resource", "Updated", "Changed inline"),
-          );
+          const deployed = yield* stack.deploy(program("resource", "Updated", "Changed inline"));
           expect(deployed.rule.securityGroupRuleId).toBe(ruleId);
         }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
         const writes = observer.requests.filter((request) => request.write);
         expect(writes.length).toBeGreaterThan(0);
+        expect(writes.every((request) => request.action === "ModifySecurityGroupRules")).toBe(true);
+        expect(writes.flatMap((request) => request.ruleIds)).not.toContain(ruleId);
         expect(
-          writes.every(
-            (request) => request.action === "ModifySecurityGroupRules",
-          ),
-        ).toBe(true);
-        expect(writes.flatMap((request) => request.ruleIds)).not.toContain(
-          ruleId,
-        );
-        expect(
-          (yield* readRules(groupId)).find(
-            (rule) => rule.SecurityGroupRuleId === ruleId,
-          ),
+          (yield* readRules(groupId)).find((rule) => rule.SecurityGroupRuleId === ruleId),
         ).toEqual(observed);
         for (const form of ["resource", "id"] as const) {
           const noop = yield* observeRuleRequests;
           yield* Effect.gen(function* () {
             expect(
-              (yield* stack.plan(program(form, "Updated", "Changed inline")))
-                .resources.InputFormsRule?.action,
+              (yield* stack.plan(program(form, "Updated", "Changed inline"))).resources
+                .InputFormsRule?.action,
             ).toBe("noop");
             yield* stack.deploy(program(form, "Updated", "Changed inline"));
           }).pipe(Effect.provideService(HttpClient.HttpClient, noop.client));
@@ -2112,9 +1854,7 @@ for (const kind of ["default", "custom"] as const) {
         }
         // A current declaration targeting another group no longer delegates its old ID.
         for (const form of ["flatMap-id", "flatMap-resource"] as const) {
-          const movePlan = yield* stack.plan(
-            program(form, "Updated", "Changed inline", true),
-          );
+          const movePlan = yield* stack.plan(program(form, "Updated", "Changed inline", true));
           expect(movePlan.resources.InputFormsGroup?.action).toBe("update");
           expect(movePlan.resources.InputFormsRule?.action).toBe("replace");
         }
@@ -2149,10 +1889,7 @@ for (const kind of ["default", "custom"] as const) {
   );
 }
 
-for (const scenario of [
-  "new destination VPC",
-  "upstream VPC replacement",
-] as const) {
+for (const scenario of ["new destination VPC", "upstream VPC replacement"] as const) {
   test.provider(
     `replaces whole-group standalone rules during ${scenario}`,
     (stack) =>
@@ -2162,9 +1899,7 @@ for (const scenario of [
           Effect.gen(function* () {
             const original = yield* Vpc("RuleIdentityVpc", {
               cidrBlock:
-                move && scenario === "upstream VPC replacement"
-                  ? "10.62.0.0/16"
-                  : "10.61.0.0/16",
+                move && scenario === "upstream VPC replacement" ? "10.62.0.0/16" : "10.61.0.0/16",
             });
             const destination =
               move && scenario === "new destination VPC"
@@ -2197,21 +1932,13 @@ for (const scenario of [
           });
         const created = yield* stack.deploy(program(false));
         const plan = yield* stack.plan(program(true));
-        for (const fqn of [
-          "RuleIdentityGroup",
-          "MovingIngress",
-          "MovingEgress",
-        ]) {
+        for (const fqn of ["RuleIdentityGroup", "MovingIngress", "MovingEgress"]) {
           expect(plan.resources[fqn]?.action).toBe("replace");
         }
         const moved = yield* stack.deploy(program(true));
         expect(moved.group.groupId).not.toBe(created.group.groupId);
-        expect(moved.ingress.securityGroupRuleId).not.toBe(
-          created.ingress.securityGroupRuleId,
-        );
-        expect(moved.egress.securityGroupRuleId).not.toBe(
-          created.egress.securityGroupRuleId,
-        );
+        expect(moved.ingress.securityGroupRuleId).not.toBe(created.ingress.securityGroupRuleId);
+        expect(moved.egress.securityGroupRuleId).not.toBe(created.egress.securityGroupRuleId);
         expect(moved.ingress.groupId).toBe(moved.group.groupId);
         expect(moved.egress.groupId).toBe(moved.group.groupId);
         yield* expectRules(
@@ -2243,11 +1970,7 @@ for (const scenario of [
           yield* assertVpcGone(created.original.vpcId);
         }
         const noop = yield* stack.plan(program(true));
-        for (const fqn of [
-          "RuleIdentityGroup",
-          "MovingIngress",
-          "MovingEgress",
-        ]) {
+        for (const fqn of ["RuleIdentityGroup", "MovingIngress", "MovingEgress"]) {
           expect(noop.resources[fqn]?.action).toBe("noop");
         }
         yield* stack.destroy();
@@ -2260,17 +1983,14 @@ for (const scenario of [
 
 const observeRuleRequests = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
-  const requests: Array<{ action: string; write: boolean; ruleIds: string[] }> =
-    [];
+  const requests: Array<{ action: string; write: boolean; ruleIds: string[] }> = [];
   return {
     requests,
     client: client.pipe(
       HttpClient.tapRequest((request) =>
         Effect.sync(() => {
           if (request.body._tag !== "Uint8Array") return;
-          const parameters = new URLSearchParams(
-            new TextDecoder().decode(request.body.body),
-          );
+          const parameters = new URLSearchParams(new TextDecoder().decode(request.body.body));
           const action = parameters.get("Action");
           if (
             !action ||
@@ -2285,8 +2005,7 @@ const observeRuleRequests = Effect.gen(function* () {
             ruleIds: [...parameters.entries()]
               .filter(
                 ([key]) =>
-                  key.endsWith(".SecurityGroupRuleId") ||
-                  key.startsWith("SecurityGroupRuleId."),
+                  key.endsWith(".SecurityGroupRuleId") || key.startsWith("SecurityGroupRuleId."),
               )
               .map(([, value]) => value),
           });
@@ -2326,20 +2045,16 @@ const findDefaultGroup = Effect.fn(function* (vpcId: string) {
     }),
   );
   if (!group?.GroupId) {
-    return yield* Effect.fail(
-      new Error(`Default group for ${vpcId} was not found`),
-    );
+    return yield* Effect.fail(new Error(`Default group for ${vpcId} was not found`));
   }
   return group;
 });
 
 const readRules = (groupId: string) =>
-  EC2.describeSecurityGroupRules
-    .items({ Filters: [{ Name: "group-id", Values: [groupId] }] })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((rules) => Array.from(rules)),
-    );
+  EC2.describeSecurityGroupRules.items({ Filters: [{ Name: "group-id", Values: [groupId] }] }).pipe(
+    Stream.runCollect,
+    Effect.map((rules) => Array.from(rules)),
+  );
 
 const expectRules = Effect.fn(function* (
   groupId: string,

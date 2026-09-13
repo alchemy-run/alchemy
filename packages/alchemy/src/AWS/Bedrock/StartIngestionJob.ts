@@ -45,10 +45,7 @@ export interface StartIngestionJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartIngestionJobRequest,
-    ) => Effect.Effect<
-      bedrock.StartIngestionJobResponse,
-      bedrock.StartIngestionJobError
-    >
+    ) => Effect.Effect<bedrock.StartIngestionJobResponse, bedrock.StartIngestionJobError>
   >
 > {}
 export const StartIngestionJob = Binding.Service<StartIngestionJob>(

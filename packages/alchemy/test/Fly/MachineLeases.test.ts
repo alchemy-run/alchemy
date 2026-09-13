@@ -30,19 +30,14 @@ const targets = Effect.gen(function* () {
 const sanitizeFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.mapError(
-      (error) =>
-        new Error(
-          error instanceof Error ? error.name : "Fly lease regression failed",
-        ),
+      (error) => new Error(error instanceof Error ? error.name : "Fly lease regression failed"),
     ),
   );
 
 const isLease = (machineId: string) => (event: TransportEvent) =>
-  event.method === "POST" &&
-  event.path.endsWith(`/machines/${machineId}/lease`);
+  event.method === "POST" && event.path.endsWith(`/machines/${machineId}/lease`);
 
-const isAbsent = (event: TransportEvent) =>
-  event.status === 404 || event.state === "destroyed";
+const isAbsent = (event: TransportEvent) => event.status === 404 || event.state === "destroyed";
 
 // Faults hold or drop real responses; no Fly status, lease, or nonce is fabricated.
 describe.sequential("native lease controller concurrency", () => {
@@ -65,11 +60,9 @@ describe.sequential("native lease controller concurrency", () => {
             const client = yield* HttpClient.HttpClient;
             let observations = 0;
             const routed = HttpClient.mapRequest(client, (request) => {
-              if (!request.url.startsWith("https://api.machines.dev/"))
-                return request;
+              if (!request.url.startsWith("https://api.machines.dev/")) return request;
               const observing =
-                request.method === "GET" &&
-                request.url.endsWith(`/machines/${removedId}`);
+                request.method === "GET" && request.url.endsWith(`/machines/${removedId}`);
               const proxy = observing && ++observations > 1 ? second : first;
               return HttpClientRequest.setUrl(
                 request,
@@ -79,15 +72,11 @@ describe.sequential("native lease controller concurrency", () => {
             yield* Effect.gen(function* () {
               const leases = yield* makeMachineLeases(created.appName);
               yield* leases.acquire(created.machineIds);
-              const before = yield* machines
-                .getMachineLease(sibling)
-                .pipe(Retry.none);
+              const before = yield* machines.getMachineLease(sibling).pipe(Retry.none);
               const deleting = (event: TransportEvent) =>
-                event.method === "DELETE" &&
-                event.path.endsWith(`/machines/${removedId}`);
+                event.method === "DELETE" && event.path.endsWith(`/machines/${removedId}`);
               const observing = (event: TransportEvent) =>
-                event.method === "GET" &&
-                event.path.endsWith(`/machines/${removedId}`);
+                event.method === "GET" && event.path.endsWith(`/machines/${removedId}`);
               yield* Effect.sync(() => {
                 first.arm({
                   match: deleting,
@@ -119,9 +108,7 @@ describe.sequential("native lease controller concurrency", () => {
               const dropped = yield* first.wait(
                 (event) => deleting(event) && event.stage === "dropped",
               );
-              expect(dropped.status! >= 200 && dropped.status! < 300).toBe(
-                true,
-              );
+              expect(dropped.status! >= 200 && dropped.status! < 300).toBe(true);
               const initialObservation = yield* first.wait(
                 (event) => observing(event) && event.stage === "held",
               );
@@ -140,16 +127,12 @@ describe.sequential("native lease controller concurrency", () => {
               ).toBe(true);
               if (confirmed) {
                 yield* Effect.sync(first.release);
-                const removed = yield* Fiber.join(removal).pipe(
-                  Effect.timeout("5 seconds"),
-                );
+                const removed = yield* Fiber.join(removal).pipe(Effect.timeout("5 seconds"));
                 expect(Result.isSuccess(removed)).toBe(true);
                 expect(yield* leases.nonceIfHeld(removedId!)).toBeUndefined();
               }
               // The renewal observer remains held until its own 30-second deadline.
-              const outcome = yield* leases
-                .guard(Effect.sleep("32 seconds"))
-                .pipe(Effect.result);
+              const outcome = yield* leases.guard(Effect.sleep("32 seconds")).pipe(Effect.result);
               expect(Result.isSuccess(outcome)).toBe(confirmed);
               if (Result.isFailure(outcome)) {
                 expect(outcome.failure._tag).toBe("Fly.MachineLeaseLost");
@@ -159,18 +142,12 @@ describe.sequential("native lease controller concurrency", () => {
                 );
               }
               expect(
-                second.events.some(
-                  (event) => observing(event) && event.stage === "forwarded",
-                ),
+                second.events.some((event) => observing(event) && event.stage === "forwarded"),
               ).toBe(false);
               if (confirmed) {
                 yield* leases.checkTarget(siblingId!);
-                const after = yield* machines
-                  .getMachineLease(sibling)
-                  .pipe(Retry.none);
-                expect(after.data?.expires_at).toBeGreaterThan(
-                  before.data!.expires_at!,
-                );
+                const after = yield* machines.getMachineLease(sibling).pipe(Retry.none);
+                expect(after.data?.expires_at).toBeGreaterThan(before.data!.expires_at!);
                 expect(
                   first.events.some(
                     (event) =>
@@ -182,20 +159,13 @@ describe.sequential("native lease controller concurrency", () => {
                   ),
                 ).toBe(true);
               } else {
-                const removed = yield* Fiber.join(removal).pipe(
-                  Effect.timeout("5 seconds"),
-                );
+                const removed = yield* Fiber.join(removal).pipe(Effect.timeout("5 seconds"));
                 expect(Result.isFailure(removed)).toBe(true);
               }
               expect(
-                first.events.filter(
-                  (event) => deleting(event) && event.stage === "request",
-                ),
+                first.events.filter((event) => deleting(event) && event.stage === "request"),
               ).toHaveLength(1);
-            }).pipe(
-              Effect.scoped,
-              Effect.provideService(HttpClient.HttpClient, routed),
-            );
+            }).pipe(Effect.scoped, Effect.provideService(HttpClient.HttpClient, routed));
           }).pipe(Effect.scoped);
           yield* stack.destroy();
           yield* assertAppGone(created.appName);
@@ -217,11 +187,8 @@ describe.sequential("native lease controller concurrency", () => {
           const second = yield* transportProxy();
           const client = yield* HttpClient.HttpClient;
           const routed = HttpClient.mapRequest(client, (request) => {
-            if (!request.url.startsWith("https://api.machines.dev/"))
-              return request;
-            const proxy = request.url.includes(`/machines/${a}/`)
-              ? first
-              : second;
+            if (!request.url.startsWith("https://api.machines.dev/")) return request;
+            const proxy = request.url.includes(`/machines/${a}/`) ? first : second;
             return HttpClientRequest.setUrl(
               request,
               request.url.replace("https://api.machines.dev", proxy.url),
@@ -244,9 +211,7 @@ describe.sequential("native lease controller concurrency", () => {
               });
             });
             const heldB = yield* leases.guard(
-              second.wait(
-                (event) => isLease(b!)(event) && event.stage === "held",
-              ),
+              second.wait((event) => isLease(b!)(event) && event.stage === "held"),
             );
             expect(heldB.status! >= 200 && heldB.status! < 300).toBe(true);
             const heldAt = yield* Clock.currentTimeMillis;
@@ -255,54 +220,37 @@ describe.sequential("native lease controller concurrency", () => {
               Effect.forkScoped,
             );
             const heldA = yield* leases
-              .guard(
-                first.wait(
-                  (event) => isLease(a!)(event) && event.stage === "held",
-                ),
-              )
+              .guard(first.wait((event) => isLease(a!)(event) && event.stage === "held"))
               .pipe(Effect.timeout("45 seconds"));
             expect(heldA.status! >= 200 && heldA.status! < 300).toBe(true);
-            expect((yield* Clock.currentTimeMillis) - heldAt).toBeLessThan(
-              45_000,
-            );
+            expect((yield* Clock.currentTimeMillis) - heldAt).toBeLessThan(45_000);
             expect(
               second.events.some(
-                (event) =>
-                  event.sequence === heldB.sequence &&
-                  event.stage === "forwarded",
+                (event) => event.sequence === heldB.sequence && event.stage === "forwarded",
               ),
             ).toBe(false);
             const releaseA = yield* Effect.sleep("60 seconds").pipe(
               Effect.andThen(Effect.sync(first.release)),
               Effect.forkScoped,
             );
-            yield* leases.guard(
-              Effect.all([Fiber.join(releaseA), Fiber.join(releaseB)]),
-            );
+            yield* leases.guard(Effect.all([Fiber.join(releaseA), Fiber.join(releaseB)]));
             yield* leases.guard(Effect.sleep("5 seconds"));
-            for (const machineId of created.machineIds)
-              yield* leases.checkTarget(machineId);
+            for (const machineId of created.machineIds) yield* leases.checkTarget(machineId);
             for (const [proxy, held, machineId] of [
               [first, heldA, a!],
               [second, heldB, b!],
             ] as const) {
               const forwarded = proxy.events.findIndex(
-                (event) =>
-                  event.sequence === held.sequence &&
-                  event.stage === "forwarded",
+                (event) => event.sequence === held.sequence && event.stage === "forwarded",
               );
               const started = proxy.events.findIndex(
-                (event) =>
-                  event.sequence === held.sequence && event.stage === "held",
+                (event) => event.sequence === held.sequence && event.stage === "held",
               );
               expect(forwarded).toBeGreaterThan(started);
               expect(
                 proxy.events
                   .slice(started + 1, forwarded)
-                  .some(
-                    (event) =>
-                      isLease(machineId)(event) && event.stage === "request",
-                  ),
+                  .some((event) => isLease(machineId)(event) && event.stage === "request"),
               ).toBe(false);
               expect(
                 proxy.events
@@ -316,10 +264,7 @@ describe.sequential("native lease controller concurrency", () => {
                   ),
               ).toBe(true);
             }
-          }).pipe(
-            Effect.scoped,
-            Effect.provideService(HttpClient.HttpClient, routed),
-          );
+          }).pipe(Effect.scoped, Effect.provideService(HttpClient.HttpClient, routed));
         }).pipe(Effect.scoped);
         yield* stack.destroy();
         yield* assertAppGone(created.appName);

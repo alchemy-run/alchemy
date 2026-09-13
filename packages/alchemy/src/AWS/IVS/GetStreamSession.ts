@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Channel } from "./Channel.ts";
 
-export interface GetStreamSessionRequest extends Omit<
-  ivs.GetStreamSessionRequest,
-  "channelArn"
-> {}
+export interface GetStreamSessionRequest extends Omit<ivs.GetStreamSessionRequest, "channelArn"> {}
 
 /**
  * Runtime binding for `ivs:GetStreamSession`.
@@ -40,6 +37,4 @@ export interface GetStreamSession extends Binding.Service<
     ) => Effect.Effect<ivs.GetStreamSessionResponse, ivs.GetStreamSessionError>
   >
 > {}
-export const GetStreamSession = Binding.Service<GetStreamSession>(
-  "AWS.IVS.GetStreamSession",
-);
+export const GetStreamSession = Binding.Service<GetStreamSession>("AWS.IVS.GetStreamSession");

@@ -61,8 +61,7 @@ export default SageMakerEndpointTestFunction.make(
     });
 
     const describeEndpoint = yield* SageMaker.DescribeEndpoint(endpoint);
-    const updateWeights =
-      yield* SageMaker.UpdateEndpointWeightsAndCapacities(endpoint);
+    const updateWeights = yield* SageMaker.UpdateEndpointWeightsAndCapacities(endpoint);
 
     const bound = { describeEndpoint, updateWeights };
 
@@ -81,9 +80,7 @@ export default SageMakerEndpointTestFunction.make(
           return yield* HttpServerResponse.json({
             endpointName: described.EndpointName,
             status: described.EndpointStatus,
-            variants: (described.ProductionVariants ?? []).map(
-              (v) => v.VariantName,
-            ),
+            variants: (described.ProductionVariants ?? []).map((v) => v.VariantName),
           });
         }
 
@@ -91,10 +88,7 @@ export default SageMakerEndpointTestFunction.make(
           return yield* HttpServerResponse.json({ ok: true });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

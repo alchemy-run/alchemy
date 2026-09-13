@@ -11,19 +11,17 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "describeComponent on a nonexistent ARN fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const region = yield* yield* AWS.Region;
-      const { Account } = yield* sts.getCallerIdentity({});
-      const error = yield* Effect.flip(
-        greengrassv2.describeComponent({
-          arn: `arn:aws:greengrass:${region}:${Account}:components:com.alchemy.test.Nonexistent:versions:0.0.1`,
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeComponent on a nonexistent ARN fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const region = yield* yield* AWS.Region;
+    const { Account } = yield* sts.getCallerIdentity({});
+    const error = yield* Effect.flip(
+      greengrassv2.describeComponent({
+        arn: `arn:aws:greengrass:${region}:${Account}:components:com.alchemy.test.Nonexistent:versions:0.0.1`,
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const recipe = (version: string) =>
@@ -75,9 +73,7 @@ test.provider(
       );
       expect(component.componentName).toBe("com.alchemy.test.GgHello");
       expect(component.componentVersion).toBe("1.0.0");
-      expect(component.arn).toContain(
-        ":components:com.alchemy.test.GgHello:versions:1.0.0",
-      );
+      expect(component.arn).toContain(":components:com.alchemy.test.GgHello:versions:1.0.0");
 
       // Out-of-band verification via distilled: DEPLOYABLE + branded tags.
       const described = yield* greengrassv2.describeComponent({

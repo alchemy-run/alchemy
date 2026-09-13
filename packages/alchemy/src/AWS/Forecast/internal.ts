@@ -14,12 +14,8 @@ export const unredact = (value: string | Redacted.Redacted<string>): string =>
  * Coerce a Forecast wire tag list (`{ Key, Value }[]`, values decode as
  * `Redacted`) into a plain `Record<string, string>`.
  */
-export const toTagRecord = (
-  tags: forecast.Tag[] | undefined,
-): Record<string, string> =>
-  Object.fromEntries(
-    (tags ?? []).map((t) => [unredact(t.Key), unredact(t.Value)] as const),
-  );
+export const toTagRecord = (tags: forecast.Tag[] | undefined): Record<string, string> =>
+  Object.fromEntries((tags ?? []).map((t) => [unredact(t.Key), unredact(t.Value)] as const));
 
 /**
  * Read the observed tags of a Forecast resource by ARN. Tag reads are

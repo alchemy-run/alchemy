@@ -28,10 +28,6 @@ export interface DescribeBroker extends Binding.Service<
   "AWS.MQ.DescribeBroker",
   (
     broker: Broker,
-  ) => Effect.Effect<
-    () => Effect.Effect<mq.DescribeBrokerResponse, mq.DescribeBrokerError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<mq.DescribeBrokerResponse, mq.DescribeBrokerError>>
 > {}
-export const DescribeBroker = Binding.Service<DescribeBroker>(
-  "AWS.MQ.DescribeBroker",
-);
+export const DescribeBroker = Binding.Service<DescribeBroker>("AWS.MQ.DescribeBroker");

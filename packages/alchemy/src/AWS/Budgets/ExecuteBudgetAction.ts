@@ -45,10 +45,7 @@ export interface ExecuteBudgetAction extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecuteBudgetActionRequest,
-    ) => Effect.Effect<
-      budgets.ExecuteBudgetActionResponse,
-      budgets.ExecuteBudgetActionError
-    >
+    ) => Effect.Effect<budgets.ExecuteBudgetActionResponse, budgets.ExecuteBudgetActionError>
   >
 > {}
 

@@ -20,17 +20,13 @@ afterAll(testLease.release);
 const findAnalyzer = (name: string) =>
   aa.getAnalyzer({ analyzerName: name }).pipe(
     Effect.map((r) => r.analyzer),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const findArchiveRule = (analyzerName: string, ruleName: string) =>
   aa.getArchiveRule({ analyzerName, ruleName }).pipe(
     Effect.map((r) => r.archiveRule),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
@@ -40,16 +36,11 @@ class AnalyzerStillExists extends Data.TaggedError("AnalyzerStillExists")<{
 const assertAnalyzerDeleted = (name: string) =>
   findAnalyzer(name).pipe(
     Effect.flatMap((analyzer) =>
-      analyzer === undefined
-        ? Effect.void
-        : Effect.fail(new AnalyzerStillExists({ name })),
+      analyzer === undefined ? Effect.void : Effect.fail(new AnalyzerStillExists({ name })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AnalyzerStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -79,9 +70,7 @@ test.provider(
         });
 
       // create
-      const { analyzer } = yield* stack.deploy(
-        makeStack("test", "111111111111"),
-      );
+      const { analyzer } = yield* stack.deploy(makeStack("test", "111111111111"));
       expect(analyzer.analyzerName).toBe(analyzerName);
       expect(analyzer.analyzerArn).toContain(":analyzer/");
       expect(analyzer.type).toBe("ACCOUNT");
@@ -92,13 +81,8 @@ test.provider(
       expect(created?.tags?.Environment).toBe("test");
       expect(created?.tags?.["alchemy::id"]).toBe("AccountAnalyzer");
 
-      const createdRule = yield* findArchiveRule(
-        analyzerName,
-        "trusted-account",
-      );
-      expect(createdRule?.filter?.["principal.AWS"]?.eq).toEqual([
-        "111111111111",
-      ]);
+      const createdRule = yield* findArchiveRule(analyzerName, "trusted-account");
+      expect(createdRule?.filter?.["principal.AWS"]?.eq).toEqual(["111111111111"]);
 
       // update tags + archive rule filter in place (no replacement)
       const updated = yield* stack.deploy(makeStack("prod", "222222222222"));
@@ -107,13 +91,8 @@ test.provider(
       const afterTagUpdate = yield* findAnalyzer(analyzerName);
       expect(afterTagUpdate?.tags?.Environment).toBe("prod");
 
-      const afterRuleUpdate = yield* findArchiveRule(
-        analyzerName,
-        "trusted-account",
-      );
-      expect(afterRuleUpdate?.filter?.["principal.AWS"]?.eq).toEqual([
-        "222222222222",
-      ]);
+      const afterRuleUpdate = yield* findArchiveRule(analyzerName, "trusted-account");
+      expect(afterRuleUpdate?.filter?.["principal.AWS"]?.eq).toEqual(["222222222222"]);
 
       // destroy
       yield* stack.destroy();
@@ -122,9 +101,8 @@ test.provider(
   { timeout: 180_000 },
 );
 
-const observedUnusedAccessAge = (
-  analyzer: aa.AnalyzerSummary | undefined,
-): number | undefined => analyzer?.configuration?.unusedAccess?.unusedAccessAge;
+const observedUnusedAccessAge = (analyzer: aa.AnalyzerSummary | undefined): number | undefined =>
+  analyzer?.configuration?.unusedAccess?.unusedAccessAge;
 
 test.provider(
   "unused-access analyzer: create with a tracking period, replace on change, destroy",

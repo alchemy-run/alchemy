@@ -25,10 +25,7 @@ export interface ListBuildsForProject extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListBuildsForProjectInput, "projectName">,
-    ) => Effect.Effect<
-      SVC.ListBuildsForProjectOutput,
-      SVC.ListBuildsForProjectError
-    >
+    ) => Effect.Effect<SVC.ListBuildsForProjectOutput, SVC.ListBuildsForProjectError>
   >
 > {}
 export const ListBuildsForProject = Binding.Service<ListBuildsForProject>(

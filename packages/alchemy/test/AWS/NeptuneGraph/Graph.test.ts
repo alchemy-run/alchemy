@@ -6,26 +6,21 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import NeptuneGraphTestFunctionLive, {
-  FixtureGraph,
-  NeptuneGraphTestFunction,
-} from "./handler.ts";
+import NeptuneGraphTestFunctionLive, { FixtureGraph, NeptuneGraphTestFunction } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag this provider's read/delete/wait paths depend on. Runs in
 // every CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "getGraph on a nonexistent graph fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        // Well-formed but nonexistent graph id (g-<10 alphanumerics>).
-        neptunegraph.getGraph({ graphIdentifier: "g-0123456789" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getGraph on a nonexistent graph fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      // Well-formed but nonexistent graph id (g-<10 alphanumerics>).
+      neptunegraph.getGraph({ graphIdentifier: "g-0123456789" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // The snapshot / import-task / export-task bindings address resources by
@@ -44,41 +39,32 @@ test.provider(
     }),
 );
 
-test.provider(
-  "getImportTask on a nonexistent task fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        neptunegraph.getImportTask({ taskIdentifier: "t-0123456789" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getImportTask on a nonexistent task fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      neptunegraph.getImportTask({ taskIdentifier: "t-0123456789" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
-test.provider(
-  "getExportTask on a nonexistent task fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        neptunegraph.getExportTask({ taskIdentifier: "t-0123456789" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getExportTask on a nonexistent task fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      neptunegraph.getExportTask({ taskIdentifier: "t-0123456789" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertGraphGone = (graphId: string) =>
   neptunegraph.getGraph({ graphIdentifier: graphId }).pipe(
     Effect.flatMap((graph) =>
-      Effect.fail(
-        new Error(`graph '${graphId}' still exists (status: ${graph.status})`),
-      ),
+      Effect.fail(new Error(`graph '${graphId}' still exists (status: ${graph.status})`)),
     ),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -123,46 +109,31 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const graphInfo = yield* HttpClient.get(`${baseUrl}/graph`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`/graph returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`/graph returned ${res.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
         }),
       );
       expect((graphInfo as { graphId: string }).graphId).toBe(graph.graphId);
 
       // openCypher through the ExecuteQuery binding: write a node, read it
       // back.
-      const query = (body: {
-        query: string;
-        parameters?: Record<string, unknown>;
-      }) =>
+      const query = (body: { query: string; parameters?: Record<string, unknown> }) =>
         HttpClient.execute(
-          HttpClientRequest.post(`${baseUrl}/query`).pipe(
-            HttpClientRequest.bodyJsonUnsafe(body),
-          ),
+          HttpClientRequest.post(`${baseUrl}/query`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
         ).pipe(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
               : res.text.pipe(
                   Effect.flatMap((text) =>
-                    Effect.fail(
-                      new Error(`/query returned ${res.status}: ${text}`),
-                    ),
+                    Effect.fail(new Error(`/query returned ${res.status}: ${text}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
 
@@ -182,17 +153,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               ? res.json
               : res.text.pipe(
                   Effect.flatMap((text) =>
-                    Effect.fail(
-                      new Error(`${path} returned ${res.status}: ${text}`),
-                    ),
+                    Effect.fail(new Error(`${path} returned ${res.status}: ${text}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
 

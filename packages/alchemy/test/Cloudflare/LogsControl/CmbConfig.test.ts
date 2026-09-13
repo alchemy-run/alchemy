@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The Customer Metadata Boundary is part of the Data Localization Suite and
 // requires an Enterprise plan. On the standard testing account every
@@ -46,9 +43,7 @@ test.provider.skipIf(entitled)(
       // The testing account has no CMB / Data Localization entitlement —
       // both reads and writes must fail with the typed authorization tag
       // (Cloudflare error code 10000).
-      const readError = yield* logs
-        .getControlCmbConfig({ accountId })
-        .pipe(Effect.flip);
+      const readError = yield* logs.getControlCmbConfig({ accountId }).pipe(Effect.flip);
       expect(readError._tag).toEqual("LogsControlNotAuthorized");
 
       const writeError = yield* logs
@@ -125,9 +120,7 @@ test.provider.skipIf(entitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LogsControl.CmbConfig,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.CmbConfig);
       const all = yield* provider.list();
       expect(all).toEqual([]);
 
@@ -151,9 +144,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LogsControl.CmbConfig,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LogsControl.CmbConfig);
       const all = yield* provider.list();
 
       expect(all.length).toEqual(1);

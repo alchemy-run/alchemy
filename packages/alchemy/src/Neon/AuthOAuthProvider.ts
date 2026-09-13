@@ -6,12 +6,7 @@ import { isResolved } from "../Diff.ts";
 import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  authPlanScope,
-  authRequest,
-  InvalidManagedAuth,
-  removedAuthSettings,
-} from "./Auth.ts";
+import { authPlanScope, authRequest, InvalidManagedAuth, removedAuthSettings } from "./Auth.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface AuthOAuthProviderProps {
@@ -65,18 +60,14 @@ export interface AuthOAuthProvider extends Resource<
  *
  * @resource
  */
-export const AuthOAuthProvider = Resource<AuthOAuthProvider>(
-  "Neon.AuthOAuthProvider",
-);
+export const AuthOAuthProvider = Resource<AuthOAuthProvider>("Neon.AuthOAuthProvider");
 
 const observe = (
   scope: { projectId: string; branchId: string },
   provider: Neon.NeonAuthOauthProviderId,
 ) =>
   Neon.listBranchNeonAuthOauthProviders(authRequest(scope)).pipe(
-    Effect.map((response) =>
-      response.providers.find((item) => item.id === provider),
-    ),
+    Effect.map((response) => response.providers.find((item) => item.id === provider)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
@@ -114,10 +105,7 @@ export const AuthOAuthProviderProvider = () =>
     stables: ["projectId", "branchId", "provider"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       yield* validateOAuthRemoval(olds, news);
-      const scope =
-        "auth" in news
-          ? yield* authPlanScope({ branch: news.auth })
-          : undefined;
+      const scope = "auth" in news ? yield* authPlanScope({ branch: news.auth }) : undefined;
       if (
         output &&
         (!scope ||
@@ -137,10 +125,7 @@ export const AuthOAuthProviderProvider = () =>
       }
       if (output) {
         const current = yield* observe(news.auth, news.provider);
-        if (
-          !current ||
-          (news.clientId !== undefined && current.client_id !== news.clientId)
-        )
+        if (!current || (news.clientId !== undefined && current.client_id !== news.clientId))
           return { action: "update" } as const;
       }
     }),
@@ -160,8 +145,7 @@ export const AuthOAuthProviderProvider = () =>
           news.provider !== output.provider)
       )
         return yield* new InvalidManagedAuth({
-          message:
-            "OAuth identity changed without replacement; refusing to mutate either provider",
+          message: "OAuth identity changed without replacement; refusing to mutate either provider",
         });
       const request = authRequest(news.auth);
       let current = yield* observe(news.auth, news.provider);
@@ -181,8 +165,7 @@ export const AuthOAuthProviderProvider = () =>
           Effect.catchTag("Conflict", () =>
             Effect.fail(
               new OwnedBySomeoneElse({
-                message:
-                  "OAuth provider appeared during creation; explicit adoption is required",
+                message: "OAuth provider appeared during creation; explicit adoption is required",
                 resourceType: "Neon.AuthOAuthProvider",
               }),
             ),
@@ -211,13 +194,9 @@ export const AuthOAuthProviderProvider = () =>
         });
       }
       const result = yield* Neon.listBranchNeonAuthOauthProviders(request);
-      const provider = result.providers.find(
-        (item) => item.id === news.provider,
-      );
+      const provider = result.providers.find((item) => item.id === news.provider);
       if (!provider)
-        return yield* Effect.fail(
-          new Error("OAuth provider was not visible after reconciliation"),
-        );
+        return yield* Effect.fail(new Error("OAuth provider was not visible after reconciliation"));
       return attributes(news.auth, provider);
     }),
     delete: Effect.fn(function* ({ output }) {

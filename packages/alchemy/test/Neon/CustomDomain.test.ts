@@ -53,9 +53,7 @@ test.provider(
           const { project, api } = yield* resources;
           const domain = yield* CustomDomain("Domain", {
             function: api,
-            hostname: api.slug.pipe(
-              AlchemyOutput.map((slug) => `${slug}.alchemy-test-2.us`),
-            ),
+            hostname: api.slug.pipe(AlchemyOutput.map((slug) => `${slug}.alchemy-test-2.us`)),
           });
           const record = yield* Cloudflare.DNS.Record("DomainCname", {
             zoneId,
@@ -84,9 +82,7 @@ test.provider(
         branch_id: deployed.api.branchId,
       }).pipe(
         Effect.map(({ custom_domains }) =>
-          custom_domains.find(
-            (domain) => domain.domain === deployed.domain.hostname,
-          ),
+          custom_domains.find((domain) => domain.domain === deployed.domain.hostname),
         ),
       );
       const registered = yield* observeDomain;
@@ -156,9 +152,7 @@ test.provider(
         Effect.catchTag("NotFound", () => Effect.succeed(false)),
       );
       expect(projectExists).toBe(false);
-      yield* Effect.logInfo(
-        "Custom domain, DNS record, and project independently absent",
-      );
+      yield* Effect.logInfo("Custom domain, DNS record, and project independently absent");
     }),
   { timeout: 180_000 },
 );

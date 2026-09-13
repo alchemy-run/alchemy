@@ -33,9 +33,7 @@ const readMigrationSql = (): string[] => {
     .readdirSync(dir)
     .filter((entry) => fs.existsSync(path.join(dir, entry, "migration.sql")))
     .sort()
-    .map((entry) =>
-      fs.readFileSync(path.join(dir, entry, "migration.sql"), "utf8"),
-    );
+    .map((entry) => fs.readFileSync(path.join(dir, entry, "migration.sql"), "utf8"));
 };
 
 /** Run a request, retrying non-200s through the fresh app's warmup. */
@@ -44,9 +42,7 @@ const executeOk = (request: HttpClientRequest.HttpClientRequest) =>
     const client = yield* HttpClient.HttpClient;
     return yield* client.execute(request).pipe(
       Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`HTTP ${res.status}`)),
+        res.status === 200 ? Effect.succeed(res) : Effect.fail(new Error(`HTTP ${res.status}`)),
       ),
       // Bounded (~90s): machine boot + route warmup. Never use unbounded
       // exponential growth here — a genuinely broken route should surface
@@ -90,17 +86,13 @@ test(
       expect(applied).toBeGreaterThan(0);
     }
 
-    const health = yield* executeOk(
-      HttpClientRequest.get(`${out.apiUrl}/health`),
-    );
+    const health = yield* executeOk(HttpClientRequest.get(`${out.apiUrl}/health`));
     expect(health.status).toBe(200);
     const body = (yield* health.json) as { ok: boolean; users: number };
     expect(body.ok).toBe(true);
     expect(body.users).toBeNumber();
 
-    const created = yield* HttpClient.execute(
-      HttpClientRequest.post(`${out.apiUrl}/users`),
-    );
+    const created = yield* HttpClient.execute(HttpClientRequest.post(`${out.apiUrl}/users`));
     expect(created.status).toBe(200);
     const createdBody = (yield* created.json) as { user: SerializedUser[] };
     expect(createdBody.user).toHaveLength(1);

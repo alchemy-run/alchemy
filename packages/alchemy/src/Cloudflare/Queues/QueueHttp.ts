@@ -100,9 +100,6 @@ export interface HttpScope {
   queueId: string;
 }
 
-const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
-  "Queues Read",
-  "Queues Write",
-];
+const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = ["Queues Read", "Queues Write"];
 
 type PermissionGroup = (typeof QUEUE_HTTP_PERMISSION_GROUPS)[number];

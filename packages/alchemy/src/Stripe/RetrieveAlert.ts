@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Alert } from "./Alert.ts";
 
-export interface RetrieveAlertRequest extends Omit<
-  GetBillingAlertRequest,
-  "id"
-> {}
+export interface RetrieveAlertRequest extends Omit<GetBillingAlertRequest, "id"> {}
 
 /**
  * Retrieve a bound Stripe Billing Alert over HTTP.
@@ -37,6 +34,4 @@ export interface RetrieveAlert extends Binding.Service<
   >
 > {}
 
-export const RetrieveAlert = Binding.Service<RetrieveAlert>(
-  "Stripe.RetrieveAlert",
-);
+export const RetrieveAlert = Binding.Service<RetrieveAlert>("Stripe.RetrieveAlert");

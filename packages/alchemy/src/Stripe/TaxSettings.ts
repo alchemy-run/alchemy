@@ -13,10 +13,7 @@ import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
 /** Default [tax behavior](https://docs.stripe.com/tax/products-prices-tax-categories-tax-behavior#tax-behavior). Once set, Stripe will not unset it. */
-export type TaxSettingsTaxBehavior =
-  | "exclusive"
-  | "inclusive"
-  | "inferred_by_currency";
+export type TaxSettingsTaxBehavior = "exclusive" | "inclusive" | "inferred_by_currency";
 
 /** The tax calculation provider this account uses. */
 export type TaxSettingsProviderKind = "anrok" | "avalara" | "sphere" | "stripe";
@@ -221,23 +218,17 @@ const toAddress = (
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 };
 
-const toWireAddress = (
-  address: TaxSettingsAddress,
-): CreateTaxSettingsRequestHeadOfficeAddress => ({
+const toWireAddress = (address: TaxSettingsAddress): CreateTaxSettingsRequestHeadOfficeAddress => ({
   ...(address.city !== undefined ? { city: address.city } : {}),
   ...(address.country !== undefined ? { country: address.country } : {}),
   ...(address.line1 !== undefined ? { line1: address.line1 } : {}),
   ...(address.line2 !== undefined ? { line2: address.line2 } : {}),
-  ...(address.postalCode !== undefined
-    ? { postal_code: address.postalCode }
-    : {}),
+  ...(address.postalCode !== undefined ? { postal_code: address.postalCode } : {}),
   ...(address.state !== undefined ? { state: address.state } : {}),
 });
 
 const toSnapshot = (settings: StripeTaxSettings): TaxSettingsSnapshot => ({
-  taxBehavior: undef(settings.defaults.tax_behavior) as
-    | TaxSettingsTaxBehavior
-    | undefined,
+  taxBehavior: undef(settings.defaults.tax_behavior) as TaxSettingsTaxBehavior | undefined,
   taxCode: undef(settings.defaults.tax_code),
   headOffice: toAddress(settings.head_office?.address),
 });
@@ -248,9 +239,7 @@ const toAttrs = (
 ): TaxSettingsAttributes => ({
   object: "tax.settings",
   provider: settings.defaults.provider as TaxSettingsProviderKind,
-  taxBehavior: undef(settings.defaults.tax_behavior) as
-    | TaxSettingsTaxBehavior
-    | undefined,
+  taxBehavior: undef(settings.defaults.tax_behavior) as TaxSettingsTaxBehavior | undefined,
   taxCode: undef(settings.defaults.tax_code),
   headOffice: toAddress(settings.head_office?.address),
   status: settings.status,
@@ -261,25 +250,17 @@ const toAttrs = (
 
 const observe = GetTaxSettings({});
 
-const desiredDefaults = (
-  news: TaxSettingsProps,
-): CreateTaxSettingsRequestDefaults | undefined => {
+const desiredDefaults = (news: TaxSettingsProps): CreateTaxSettingsRequestDefaults | undefined => {
   if (news.defaults === undefined) return undefined;
   const defaults: CreateTaxSettingsRequestDefaults = {
-    ...(news.defaults.taxBehavior !== undefined
-      ? { tax_behavior: news.defaults.taxBehavior }
-      : {}),
-    ...(news.defaults.taxCode !== undefined
-      ? { tax_code: news.defaults.taxCode }
-      : {}),
+    ...(news.defaults.taxBehavior !== undefined ? { tax_behavior: news.defaults.taxBehavior } : {}),
+    ...(news.defaults.taxCode !== undefined ? { tax_code: news.defaults.taxCode } : {}),
   };
   return Object.keys(defaults).length > 0 ? defaults : undefined;
 };
 
 const desiredHeadOffice = (news: TaxSettingsProps) =>
-  news.headOffice !== undefined
-    ? { address: toWireAddress(news.headOffice.address) }
-    : undefined;
+  news.headOffice !== undefined ? { address: toWireAddress(news.headOffice.address) } : undefined;
 
 const syncBody = (
   news: TaxSettingsProps,
@@ -293,8 +274,7 @@ const syncBody = (
       news.defaults?.taxBehavior !== undefined &&
       snapshot.taxBehavior !== news.defaults.taxBehavior;
     const taxCodeChanged =
-      news.defaults?.taxCode !== undefined &&
-      snapshot.taxCode !== news.defaults.taxCode;
+      news.defaults?.taxCode !== undefined && snapshot.taxCode !== news.defaults.taxCode;
     if (taxBehaviorChanged || taxCodeChanged) {
       body.defaults = defaults;
     }
@@ -320,10 +300,7 @@ const restoreBody = (
   const defaults: CreateTaxSettingsRequestDefaults = {};
   // Stripe will not unset a field that was originally null — only restore
   // values that were already set when Alchemy first captured the snapshot.
-  if (
-    initial.taxBehavior !== undefined &&
-    current.taxBehavior !== initial.taxBehavior
-  ) {
+  if (initial.taxBehavior !== undefined && current.taxBehavior !== initial.taxBehavior) {
     defaults.tax_behavior = initial.taxBehavior;
   }
   if (initial.taxCode !== undefined && current.taxCode !== initial.taxCode) {

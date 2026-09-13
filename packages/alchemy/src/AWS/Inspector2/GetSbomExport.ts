@@ -27,12 +27,7 @@ export interface GetSbomExport extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.GetSbomExportRequest,
-    ) => Effect.Effect<
-      inspector2.GetSbomExportResponse,
-      inspector2.GetSbomExportError
-    >
+    ) => Effect.Effect<inspector2.GetSbomExportResponse, inspector2.GetSbomExportError>
   >
 > {}
-export const GetSbomExport = Binding.Service<GetSbomExport>(
-  "AWS.Inspector2.GetSbomExport",
-);
+export const GetSbomExport = Binding.Service<GetSbomExport>("AWS.Inspector2.GetSbomExport");

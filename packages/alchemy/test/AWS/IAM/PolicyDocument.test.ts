@@ -44,23 +44,17 @@ describe("normalizePolicyDocument", () => {
       ],
       Version: "2012-10-17",
     };
-    expect(normalizePolicyDocument(reordered)).toBe(
-      normalizePolicyDocument(document),
-    );
+    expect(normalizePolicyDocument(reordered)).toBe(normalizePolicyDocument(document));
   });
 
   it("treats a JSON string and the equivalent object identically", () => {
     const json = JSON.stringify(document, null, 2);
-    expect(normalizePolicyDocument(json)).toBe(
-      normalizePolicyDocument(document),
-    );
+    expect(normalizePolicyDocument(json)).toBe(normalizePolicyDocument(document));
   });
 
   it("handles the URL-encoded documents IAM returns", () => {
     const encoded = encodeURIComponent(JSON.stringify(document));
-    expect(normalizePolicyDocument(encoded)).toBe(
-      normalizePolicyDocument(document),
-    );
+    expect(normalizePolicyDocument(encoded)).toBe(normalizePolicyDocument(document));
   });
 
   it("is deterministic for the same document", () => {
@@ -98,9 +92,7 @@ describe("normalizePolicyDocument", () => {
         Resource: "*",
       },
     };
-    expect(normalizePolicyDocument(arrays)).toBe(
-      normalizePolicyDocument(scalars),
-    );
+    expect(normalizePolicyDocument(arrays)).toBe(normalizePolicyDocument(scalars));
     // Multi-element arrays are untouched (order still significant).
     expect(normalizePolicyDocument(document)).toContain(
       '"Action":["s3:GetObject","s3:ListBucket"]',
@@ -125,9 +117,7 @@ describe("IamAction", () => {
     // PolicyStatement.Action accepts both typed and plain-string arrays.
     const typed: PolicyDocument = {
       Version: "2012-10-17",
-      Statement: [
-        { Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: "*" },
-      ],
+      Statement: [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: "*" }],
     };
     const plain: string[] = ["s3:GetObject"];
     const fromStrings: PolicyDocument = {

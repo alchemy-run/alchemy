@@ -36,7 +36,6 @@ export interface ApplyPendingMaintenanceAction extends Binding.Service<
     >
   >
 > {}
-export const ApplyPendingMaintenanceAction =
-  Binding.Service<ApplyPendingMaintenanceAction>(
-    "AWS.RDS.ApplyPendingMaintenanceAction",
-  );
+export const ApplyPendingMaintenanceAction = Binding.Service<ApplyPendingMaintenanceAction>(
+  "AWS.RDS.ApplyPendingMaintenanceAction",
+);

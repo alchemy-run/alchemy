@@ -12,9 +12,7 @@ import { RuntimeContext } from "@/RuntimeContext.ts";
  * provided to the calling fiber (a request-scoped deadline, a tracer, an alarm
  * floor) must reach those closures the same way.
  */
-class Marker extends Context.Service<Marker, { readonly value: string }>()(
-  "test/Marker",
-) {}
+class Marker extends Context.Service<Marker, { readonly value: string }>()("test/Marker") {}
 
 const readMarker = Effect.map(Marker, (marker) => marker.value);
 

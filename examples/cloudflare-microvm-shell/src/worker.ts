@@ -43,9 +43,7 @@ export default Cloudflare.Worker(
       });
       yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
         Effect.flatMap((m) =>
-          m.state === "RUNNING"
-            ? Effect.void
-            : Effect.fail(new Error(`microvm ${m.state}`)),
+          m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
         ),
         Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
       );

@@ -3,9 +3,7 @@ import type * as Effect from "effect/Effect";
 import type { SQLiteConnection } from "./SQLiteConnection.ts";
 import type { SQLiteErrorType } from "./SQLiteError.ts";
 
-export class SQLite extends Context.Service<SQLite, SQLiteService>()(
-  "SQLite",
-) {}
+export class SQLite extends Context.Service<SQLite, SQLiteService>()("SQLite") {}
 
 /**
  * SQLite service that provides database connection factory.

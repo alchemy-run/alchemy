@@ -36,24 +36,14 @@ type Variant = {
   ) => Effect.Effect<microvms.GetMicrovmResponse, microvms.GetMicrovmError>;
   readonly auth: (
     req: AWS.Lambda.CreateAuthTokenRequest,
-  ) => Effect.Effect<
-    microvms.CreateMicrovmAuthTokenResponse,
-    microvms.CreateMicrovmAuthTokenError
-  >;
+  ) => Effect.Effect<microvms.CreateMicrovmAuthTokenResponse, microvms.CreateMicrovmAuthTokenError>;
   readonly term: (
     req: AWS.Lambda.TerminateMicrovmRequest,
-  ) => Effect.Effect<
-    microvms.TerminateMicrovmResponse,
-    microvms.TerminateMicrovmError
-  >;
+  ) => Effect.Effect<microvms.TerminateMicrovmResponse, microvms.TerminateMicrovmError>;
   readonly reachable: (
     endpoint: string,
     authToken: AWS.Lambda.MicrovmConnection["authToken"],
-  ) => Effect.Effect<
-    unknown,
-    HttpClientError.HttpClientError | Error,
-    HttpClient.HttpClient
-  >;
+  ) => Effect.Effect<unknown, HttpClientError.HttpClientError | Error, HttpClient.HttpClient>;
 };
 
 export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
@@ -66,10 +56,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
   Effect.gen(function* () {
     // Plain-HTTP reachable check shared by every non-effectful (raw) image:
     // hit `GET /` with the MicroVM auth headers and read the body.
-    const rawReachable = (
-      endpoint: string,
-      authToken: AWS.Lambda.MicrovmConnection["authToken"],
-    ) =>
+    const rawReachable = (endpoint: string, authToken: AWS.Lambda.MicrovmConnection["authToken"]) =>
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
         const res = yield* client.get(`https://${endpoint}/`, {
@@ -148,16 +135,11 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
             // base64("opencode:bench")
             authorization: "Basic b3BlbmNvZGU6YmVuY2g=",
           };
-          const health = yield* client.get(
-            `https://${endpoint}/global/health`,
-            { headers },
-          );
+          const health = yield* client.get(`https://${endpoint}/global/health`, { headers });
           const healthBody = yield* health.text;
           if (health.status !== 200 || !healthBody.includes('"healthy":true')) {
             return yield* Effect.fail(
-              new Error(
-                `opencode health ${health.status}: ${healthBody.slice(0, 120)}`,
-              ),
+              new Error(`opencode health ${health.status}: ${healthBody.slice(0, 120)}`),
             );
           }
           const session = yield* client.post(`https://${endpoint}/session`, {
@@ -167,9 +149,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
           const sessionBody = yield* session.text;
           if (session.status !== 200 || !sessionBody.includes('"id"')) {
             return yield* Effect.fail(
-              new Error(
-                `opencode session ${session.status}: ${sessionBody.slice(0, 120)}`,
-              ),
+              new Error(`opencode session ${session.status}: ${sessionBody.slice(0, 120)}`),
             );
           }
           return sessionBody;
@@ -183,8 +163,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
       external,
       opencode,
     };
-    const pick = (v: string | null): Variant =>
-      variants[v ?? ""] ?? effectfulBun;
+    const pick = (v: string | null): Variant => variants[v ?? ""] ?? effectfulBun;
 
     // Run one fresh MicroVM and time RunMicrovm → service-reachable (readyMs).
     // Leaves it running for an explicit /shutdown; self-terminates only if boot
@@ -202,9 +181,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
         return yield* Effect.gen(function* () {
           yield* v.get({ microvmIdentifier: vm.microvmId }).pipe(
             Effect.flatMap((m) =>
-              m.state === "RUNNING"
-                ? Effect.void
-                : Effect.fail(new Error(`microvm ${m.state}`)),
+              m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
             ),
             Effect.retry({
               schedule: Schedule.spaced("500 millis"),
@@ -225,9 +202,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
           const readyMs = (yield* Effect.sync(() => Date.now())) - start;
           return yield* HttpServerResponse.json({ id: vm.microvmId, readyMs });
         }).pipe(
-          Effect.onError(() =>
-            v.term({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
-          ),
+          Effect.onError(() => v.term({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore)),
           Effect.provide(FetchHttpClient.layer),
         );
       });

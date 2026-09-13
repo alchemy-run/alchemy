@@ -102,13 +102,7 @@ export const ContextProvider = () =>
       const inspect = (nameOrId: string) =>
         docker.context
           .inspect(nameOrId)
-          .pipe(
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
-          );
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
       return Context.Provider.of({
         list: () => Effect.succeed([]),
@@ -142,13 +136,7 @@ export const ContextProvider = () =>
 
           return { action: "noop" as const };
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news,
-          olds,
-          output,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const desired = yield* normalizeDesired(id, news, instanceId);
 
           if (output && olds) {
@@ -161,28 +149,21 @@ export const ContextProvider = () =>
             }
           }
 
-          const existing = output
-            ? yield* inspect(output.id)
-            : yield* inspect(desired.name);
+          const existing = output ? yield* inspect(output.id) : yield* inspect(desired.name);
 
           if (!existing) {
             const createArgs = {
               name: desired.name,
               ...(desired.docker ? { docker: desired.docker } : {}),
-              ...(desired.description.length > 0
-                ? { description: desired.description }
-                : {}),
+              ...(desired.description.length > 0 ? { description: desired.description } : {}),
             };
             yield* docker.context.create(createArgs);
-            return toContextAttributes(
-              yield* docker.context.inspect(desired.name),
-            );
+            return toContextAttributes(yield* docker.context.inspect(desired.name));
           }
 
           const current = toContextAttributes(existing);
           const needsUpdate =
-            current.description !== desired.description ||
-            current.docker !== desired.docker;
+            current.description !== desired.description || current.docker !== desired.docker;
 
           if (needsUpdate) {
             yield* docker.context.update({
@@ -192,9 +173,7 @@ export const ContextProvider = () =>
             });
           }
 
-          return toContextAttributes(
-            yield* docker.context.inspect(desired.name),
-          );
+          return toContextAttributes(yield* docker.context.inspect(desired.name));
         }),
         delete: Effect.fn(({ output }) =>
           docker.context.remove(output.id, true).pipe(
@@ -206,11 +185,7 @@ export const ContextProvider = () =>
     }),
   );
 
-const normalizeDesired = (
-  id: string,
-  props: ContextProps,
-  instanceId: string,
-) =>
+const normalizeDesired = (id: string, props: ContextProps, instanceId: string) =>
   dockerPhysicalName(id, props, instanceId).pipe(
     Effect.map((name) => ({
       name,
@@ -219,17 +194,14 @@ const normalizeDesired = (
     })),
   );
 
-const normalizeDescription = (description: string | undefined): string =>
-  description?.trim() ?? "";
+const normalizeDescription = (description: string | undefined): string => description?.trim() ?? "";
 
 const normalizeDocker = (docker: string | undefined): string | undefined => {
   const value = docker?.trim();
   return value && value.length > 0 ? value : undefined;
 };
 
-const toContextAttributes = (
-  context: Docker.Context,
-): Context["Attributes"] => ({
+const toContextAttributes = (context: Docker.Context): Context["Attributes"] => ({
   id: context.Name,
   name: context.Name,
   description: context.Metadata?.Description ?? "",

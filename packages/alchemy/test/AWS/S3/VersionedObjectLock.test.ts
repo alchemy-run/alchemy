@@ -50,9 +50,7 @@ let roleName: string;
 let functionName: string;
 
 class FixtureNotReady extends Data.TaggedError("FixtureNotReady") {}
-class UnexpectedFixtureStatus extends Data.TaggedError(
-  "UnexpectedFixtureStatus",
-)<{
+class UnexpectedFixtureStatus extends Data.TaggedError("UnexpectedFixtureStatus")<{
   readonly status: number;
 }> {}
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
@@ -66,9 +64,7 @@ const bucketFor = (binding: Binding) => {
 const post = <A, I>(path: string, body: object, schema: Schema.Codec<A, I>) =>
   Effect.gen(function* () {
     const response = yield* HttpClient.execute(
-      HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(body),
-      ),
+      HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
     );
     if (response.status !== 200) {
       return yield* Effect.fail(
@@ -81,9 +77,7 @@ const post = <A, I>(path: string, body: object, schema: Schema.Codec<A, I>) =>
 const rejected = (path: string, body: object, status: number, tag: string) =>
   Effect.gen(function* () {
     const response = yield* HttpClient.execute(
-      HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(body),
-      ),
+      HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
     );
     const result = yield* response.json;
     expect({ status: response.status, body: result }).toEqual({
@@ -92,19 +86,11 @@ const rejected = (path: string, body: object, status: number, tag: string) =>
     });
   });
 
-const assertProtectedDelete = (
-  Bucket: string,
-  Key: string,
-  VersionId: string,
-) =>
+const assertProtectedDelete = (Bucket: string, Key: string, VersionId: string) =>
   S3.deleteObject({ Bucket, Key, VersionId }).pipe(
     Effect.as("deleted"),
-    Effect.catchTag("AccessDeniedException", () =>
-      Effect.succeed("AccessDeniedException"),
-    ),
-    Effect.tap((tag) =>
-      Effect.sync(() => expect(tag).toBe("AccessDeniedException")),
-    ),
+    Effect.catchTag("AccessDeniedException", () => Effect.succeed("AccessDeniedException")),
+    Effect.tap((tag) => Effect.sync(() => expect(tag).toBe("AccessDeniedException"))),
   );
 
 const policyDocument = Schema.fromJsonString(
@@ -129,15 +115,9 @@ const assertPermissions = Effect.gen(function* () {
     .pages({ RoleName: roleName })
     .pipe(Stream.runCollect);
   expect(
-    attached
-      .flatMap((page) => page.AttachedPolicies ?? [])
-      .map((policy) => policy.PolicyArn),
-  ).toEqual([
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-  ]);
-  const pages = yield* IAM.listRolePolicies
-    .pages({ RoleName: roleName })
-    .pipe(Stream.runCollect);
+    attached.flatMap((page) => page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
+  ).toEqual(["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]);
+  const pages = yield* IAM.listRolePolicies.pages({ RoleName: roleName }).pipe(Stream.runCollect);
   const policies = yield* Effect.forEach(
     pages.flatMap((page) => page.PolicyNames),
     (PolicyName) =>
@@ -146,9 +126,7 @@ const assertPermissions = Effect.gen(function* () {
           RoleName: roleName,
           PolicyName,
         });
-        const decoded = yield* Effect.try(() =>
-          decodeURIComponent(policy.PolicyDocument),
-        );
+        const decoded = yield* Effect.try(() => decodeURIComponent(policy.PolicyDocument));
         return yield* Schema.decodeUnknownEffect(policyDocument)(decoded);
       }),
   );
@@ -156,30 +134,20 @@ const assertPermissions = Effect.gen(function* () {
     .flatMap((policy) =>
       policy.Statement.flatMap((statement) => {
         const actionList =
-          typeof statement.Action === "string"
-            ? [statement.Action]
-            : statement.Action;
+          typeof statement.Action === "string" ? [statement.Action] : statement.Action;
         const resources =
-          typeof statement.Resource === "string"
-            ? [statement.Resource]
-            : statement.Resource;
+          typeof statement.Resource === "string" ? [statement.Resource] : statement.Resource;
         return actionList.flatMap((action) =>
-          resources.map(
-            (resource) => `${statement.Effect} ${action} ${resource}`,
-          ),
+          resources.map((resource) => `${statement.Effect} ${action} ${resource}`),
         );
       }),
     )
     .sort();
   expect(actual).toEqual(
-    buckets
-      .map((bucket) => `Allow ${actions[bucket.binding]} ${bucket.bucketArn}/*`)
-      .sort(),
+    buckets.map((bucket) => `Allow ${actions[bucket.binding]} ${bucket.bucketArn}/*`).sort(),
   );
   for (const bucket of buckets) {
-    expect(
-      (yield* S3.getBucketVersioning({ Bucket: bucket.bucketName })).Status,
-    ).toBe("Enabled");
+    expect((yield* S3.getBucketVersioning({ Bucket: bucket.bucketName })).Status).toBe("Enabled");
     if (bucket.binding !== "RestoreObject") {
       const lock = yield* S3.getObjectLockConfiguration({
         Bucket: bucket.bucketName,
@@ -249,9 +217,7 @@ const assertVersions = Effect.fn(function* (
     const object = yield* S3.getObject({ Bucket, Key, VersionId });
     expect(object.VersionId).toBe(expectedId);
     expect(object.Body).toBeDefined();
-    expect(yield* object.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(
-      body,
-    );
+    expect(yield* object.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(body);
   }
   const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
   expect(
@@ -319,9 +285,7 @@ beforeAll(
   Effect.gen(function* () {
     yield* stack.destroy();
     const deployed = yield* stack.deploy(
-      S3VersionedObjectLockFunction.pipe(
-        Effect.provide(S3VersionedObjectLockFunctionLive),
-      ),
+      S3VersionedObjectLockFunction.pipe(Effect.provide(S3VersionedObjectLockFunctionLive)),
     );
     expect(deployed.functionUrl).toBeTruthy();
     baseUrl = deployed.functionUrl!.replace(/\/+$/, "");
@@ -334,30 +298,21 @@ beforeAll(
             return yield* Effect.fail(new FixtureNotReady());
           }
           if (response.status === 200) return yield* response.json;
-          return yield* Effect.fail(
-            new UnexpectedFixtureStatus({ status: response.status }),
-          );
+          return yield* Effect.fail(new UnexpectedFixtureStatus({ status: response.status }));
         }),
       ),
       Effect.flatMap(Schema.decodeUnknownEffect(bucketInfo)),
       Effect.retry({
         while: (error) =>
           error._tag === "FixtureNotReady" ||
-          (error._tag === "HttpClientError" &&
-            error.reason._tag === "TransportError"),
+          (error._tag === "HttpClientError" && error.reason._tag === "TransportError"),
         schedule: Schedule.spaced("2 seconds"),
         times: 9,
       }),
     );
-    expect(buckets.map((bucket) => bucket.binding).sort()).toEqual(
-      Object.keys(actions).sort(),
-    );
+    expect(buckets.map((bucket) => bucket.binding).sort()).toEqual(Object.keys(actions).sort());
     expect(new Set(buckets.map((bucket) => bucket.bucketName)).size).toBe(5);
-    yield* Core.withProviders(
-      assertPermissions,
-      options,
-      "S3VersionedObjectLock",
-    );
+    yield* Core.withProviders(assertPermissions, options, "S3VersionedObjectLock");
   }),
   { timeout: 120_000, retry: 0 },
 );
@@ -366,11 +321,9 @@ afterAll(
   Effect.gen(function* () {
     yield* stack.destroy();
     yield* Core.withProviders(
-      Effect.forEach(
-        buckets,
-        (bucket) => assertBucketDeleted(bucket.bucketName),
-        { discard: true },
-      ),
+      Effect.forEach(buckets, (bucket) => assertBucketDeleted(bucket.bucketName), {
+        discard: true,
+      }),
       options,
       "S3VersionedObjectLock",
     );
@@ -403,12 +356,7 @@ describe.sequential("versioned object lock bindings", () => {
             yield* Effect.gen(function* () {
               yield* S3.deleteObject({ Bucket, Key, VersionId: versions.old });
               for (const VersionId of [versions.old, "null"]) {
-                yield* rejected(
-                  path,
-                  { ...input, VersionId },
-                  403,
-                  "AccessDeniedException",
-                );
+                yield* rejected(path, { ...input, VersionId }, 403, "AccessDeniedException");
               }
               const marker = yield* S3.deleteObject({ Bucket, Key });
               expect(marker.VersionId).toBeTruthy();
@@ -416,9 +364,7 @@ describe.sequential("versioned object lock bindings", () => {
                 path,
                 { ...input, VersionId: marker.VersionId! },
                 binding === "RestoreObject" ? 405 : 403,
-                binding === "RestoreObject"
-                  ? "MethodNotAllowed"
-                  : "AccessDeniedException",
+                binding === "RestoreObject" ? "MethodNotAllowed" : "AccessDeniedException",
               );
               const current = yield* S3.getObject({
                 Bucket,
@@ -426,19 +372,19 @@ describe.sequential("versioned object lock bindings", () => {
                 VersionId: versions.current,
               });
               expect(current.VersionId).toBe(versions.current);
-              expect(
-                yield* current.Body!.pipe(Stream.decodeText, Stream.mkString),
-              ).toBe(versions.currentBody);
+              expect(yield* current.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(
+                versions.currentBody,
+              );
               const listed = yield* S3.listObjectVersions({
                 Bucket,
                 Prefix: Key,
               });
-              expect(
-                listed.Versions?.map((version) => version.VersionId),
-              ).toEqual([versions.current]);
-              expect(
-                listed.DeleteMarkers?.map((version) => version.VersionId),
-              ).toEqual([marker.VersionId]);
+              expect(listed.Versions?.map((version) => version.VersionId)).toEqual([
+                versions.current,
+              ]);
+              expect(listed.DeleteMarkers?.map((version) => version.VersionId)).toEqual([
+                marker.VersionId,
+              ]);
             }).pipe(
               Effect.ensuring(
                 binding === "PutObjectRetention"
@@ -480,11 +426,7 @@ describe.sequential("versioned object lock bindings", () => {
               { Key, VersionId: versions.old },
               retentionResponse,
             );
-            const current = yield* post(
-              "/get-retention",
-              { Key },
-              retentionResponse,
-            );
+            const current = yield* post("/get-retention", { Key }, retentionResponse);
             expect(old.Retention).toEqual({
               Mode: "GOVERNANCE",
               RetainUntilDate: dates.old.toISOString(),
@@ -508,15 +450,12 @@ describe.sequential("versioned object lock bindings", () => {
                 VersionId: versions.old,
               })).Retention,
             ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.old });
-            expect(
-              (yield* S3.getObjectRetention({ Bucket, Key })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
+            expect((yield* S3.getObjectRetention({ Bucket, Key })).Retention).toEqual({
+              Mode: "GOVERNANCE",
+              RetainUntilDate: dates.current,
+            });
             yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeRetention(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
+          }).pipe(Effect.ensuring(removeRetention(Bucket, Key, [versions.old, versions.current])));
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -573,9 +512,10 @@ describe.sequential("versioned object lock bindings", () => {
                 VersionId: versions.old,
               })).Retention,
             ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.extended });
-            expect(
-              (yield* S3.getObjectRetention({ Bucket, Key })).Retention,
-            ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
+            expect((yield* S3.getObjectRetention({ Bucket, Key })).Retention).toEqual({
+              Mode: "GOVERNANCE",
+              RetainUntilDate: dates.current,
+            });
             expect(
               (yield* S3.getObjectRetention({
                 Bucket,
@@ -584,11 +524,7 @@ describe.sequential("versioned object lock bindings", () => {
               })).Retention,
             ).toEqual({ Mode: "GOVERNANCE", RetainUntilDate: dates.current });
             yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeRetention(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
+          }).pipe(Effect.ensuring(removeRetention(Bucket, Key, [versions.old, versions.current])));
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -616,22 +552,14 @@ describe.sequential("versioned object lock bindings", () => {
               LegalHold: { Status: "OFF" },
             });
             expect(
-              yield* post(
-                "/get-hold",
-                { Key, VersionId: versions.old },
-                holdResponse,
-              ),
+              yield* post("/get-hold", { Key, VersionId: versions.old }, holdResponse),
             ).toEqual({ LegalHold: { Status: "ON" } });
             yield* assertProtectedDelete(Bucket, Key, versions.old);
             expect(yield* post("/get-hold", { Key }, holdResponse)).toEqual({
               LegalHold: { Status: "OFF" },
             });
             expect(
-              yield* post(
-                "/get-hold",
-                { Key, VersionId: versions.current },
-                holdResponse,
-              ),
+              yield* post("/get-hold", { Key, VersionId: versions.current }, holdResponse),
             ).toEqual({ LegalHold: { Status: "OFF" } });
             expect(
               (yield* S3.getObjectLegalHold({
@@ -640,15 +568,9 @@ describe.sequential("versioned object lock bindings", () => {
                 VersionId: versions.old,
               })).LegalHold?.Status,
             ).toBe("ON");
-            expect(
-              (yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold?.Status,
-            ).toBe("OFF");
+            expect((yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold?.Status).toBe("OFF");
             yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeHolds(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
+          }).pipe(Effect.ensuring(removeHolds(Bucket, Key, [versions.old, versions.current])));
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -693,10 +615,7 @@ describe.sequential("versioned object lock bindings", () => {
                   VersionId: versions.old,
                 })).LegalHold?.Status,
               ).toBe(Status);
-              expect(
-                (yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold
-                  ?.Status,
-              ).toBe("OFF");
+              expect((yield* S3.getObjectLegalHold({ Bucket, Key })).LegalHold?.Status).toBe("OFF");
               expect(
                 (yield* S3.getObjectLegalHold({
                   Bucket,
@@ -706,11 +625,7 @@ describe.sequential("versioned object lock bindings", () => {
               ).toBe("OFF");
             }
             yield* assertVersions(Bucket, Key, versions);
-          }).pipe(
-            Effect.ensuring(
-              removeHolds(Bucket, Key, [versions.old, versions.current]),
-            ),
-          );
+          }).pipe(Effect.ensuring(removeHolds(Bucket, Key, [versions.old, versions.current])));
         }),
       { timeout: 120_000, retry: 0 },
     );
@@ -763,9 +678,7 @@ describe.sequential("versioned object lock bindings", () => {
             expect(head.VersionId).toBe(VersionId);
             expect(head.Restore).toBeUndefined();
             const object = yield* S3.getObject({ Bucket, Key, VersionId });
-            expect(
-              yield* object.Body!.pipe(Stream.decodeText, Stream.mkString),
-            ).toBe(expectedBody);
+            expect(yield* object.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(expectedBody);
           }
           const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
           expect(
@@ -791,9 +704,9 @@ describe.sequential("versioned object lock bindings", () => {
           const response = Schema.Struct({
             tag: Schema.Literal("InvalidObjectState"),
           });
-          expect(
-            yield* post("/restore", { Key, VersionId: versions.old }, response),
-          ).toEqual({ tag: "InvalidObjectState" });
+          expect(yield* post("/restore", { Key, VersionId: versions.old }, response)).toEqual({
+            tag: "InvalidObjectState",
+          });
           expect(yield* post("/restore", { Key }, response)).toEqual({
             tag: "InvalidObjectState",
           });
@@ -870,9 +783,9 @@ describe.sequential("versioned object lock bindings", () => {
           const current = yield* S3.getObject({ Bucket, Key });
           expect(current.VersionId).toBe(versions.current);
           expect(current.Body).toBeDefined();
-          expect(
-            yield* current.Body!.pipe(Stream.decodeText, Stream.mkString),
-          ).toBe(versions.currentBody);
+          expect(yield* current.Body!.pipe(Stream.decodeText, Stream.mkString)).toBe(
+            versions.currentBody,
+          );
           const listed = yield* S3.listObjectVersions({ Bucket, Prefix: Key });
           expect(
             listed.Versions?.filter((version) => version.Key === Key)

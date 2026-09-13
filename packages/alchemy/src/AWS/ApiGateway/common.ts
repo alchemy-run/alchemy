@@ -26,8 +26,7 @@ const isApiStatusUpdatingError = (error: unknown): boolean => {
   if ((error as { _tag?: string })._tag !== "BadRequestException") return false;
   const message = (error as { message?: string }).message ?? "";
   return (
-    message.includes("apiStatus is UPDATING") ||
-    message.includes("already an update in progress")
+    message.includes("apiStatus is UPDATING") || message.includes("already an update in progress")
   );
 };
 
@@ -83,19 +82,13 @@ const isRestApiDeleteRetryable = (error: unknown): boolean => {
 // otherwise its 5-second-capped budget expires after about a minute, and then
 // wrapping that exhausted call in another retry schedule creates an opaque,
 // nested multi-minute wait. This is one explicit 90-second wall instead.
-const restApiDeleteSchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(18),
-]);
+const restApiDeleteSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(18)]);
 
 class RestApiStillExists extends Data.TaggedError("RestApiStillExists")<{
   readonly restApiId: string;
 }> {}
 
-const restApiGoneSchedule = Schedule.max([
-  Schedule.spaced("1 second"),
-  Schedule.recurs(8),
-]);
+const restApiGoneSchedule = Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(8)]);
 
 // DeleteRestApi's ~1-per-30s quota is ACCOUNT-wide, so concurrent destroys
 // (parallel test files, parallel stacks in one process) all contend for the
@@ -128,8 +121,7 @@ export const deleteRestApiAndWait = Effect.fn(function* (restApiId: string) {
     Effect.flatMap(() => Effect.fail(new RestApiStillExists({ restApiId }))),
     Effect.retry({
       while: (error) =>
-        error._tag === "TooManyRequestsException" ||
-        error._tag === "RestApiStillExists",
+        error._tag === "TooManyRequestsException" || error._tag === "RestApiStillExists",
       schedule: restApiGoneSchedule,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
@@ -139,11 +131,8 @@ export const deleteRestApiAndWait = Effect.fn(function* (restApiId: string) {
 export const restApiArn = (region: string, restApiId: string) =>
   `arn:aws:apigateway:${region}::/restapis/${restApiId}`;
 
-export const stageArn = (
-  region: string,
-  restApiId: string,
-  stageName: string,
-) => `arn:aws:apigateway:${region}::/restapis/${restApiId}/stages/${stageName}`;
+export const stageArn = (region: string, restApiId: string, stageName: string) =>
+  `arn:aws:apigateway:${region}::/restapis/${restApiId}/stages/${stageName}`;
 
 export const apiKeyArn = (region: string, apiKeyId: string) =>
   `arn:aws:apigateway:${region}::/apikeys/${apiKeyId}`;

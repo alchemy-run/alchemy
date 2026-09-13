@@ -29,12 +29,7 @@ export interface ListDeployments extends Binding.Service<
   () => Effect.Effect<
     (
       request?: greengrassv2.ListDeploymentsRequest,
-    ) => Effect.Effect<
-      greengrassv2.ListDeploymentsResponse,
-      greengrassv2.ListDeploymentsError
-    >
+    ) => Effect.Effect<greengrassv2.ListDeploymentsResponse, greengrassv2.ListDeploymentsError>
   >
 > {}
-export const ListDeployments = Binding.Service<ListDeployments>(
-  "AWS.GreengrassV2.ListDeployments",
-);
+export const ListDeployments = Binding.Service<ListDeployments>("AWS.GreengrassV2.ListDeployments");

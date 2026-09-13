@@ -24,8 +24,7 @@ export const applySqlMigrations: (
     dialect: "sqlite",
     query: (sql, params = []) =>
       Effect.try({
-        try: () =>
-          storage.sql.exec(inlineSqlParams(sql, params, "sqlite")).toArray(),
+        try: () => storage.sql.exec(inlineSqlParams(sql, params, "sqlite")).toArray(),
         catch: (cause) =>
           new MigrationError({
             message: "Failed to query migration history",

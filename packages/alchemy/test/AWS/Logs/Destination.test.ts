@@ -20,9 +20,7 @@ const findDestination = Effect.fn(function* (destinationName: string) {
   );
 });
 
-class DestinationStillExists extends Data.TaggedError(
-  "DestinationStillExists",
-)<{
+class DestinationStillExists extends Data.TaggedError("DestinationStillExists")<{
   readonly destinationName: string;
 }> {}
 

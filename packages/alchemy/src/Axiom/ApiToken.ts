@@ -125,9 +125,7 @@ export const ApiTokenProvider = () =>
           // once; capture it into Redacted state for downstream consumers.
           const result = yield* create(news);
           if (!result.token) {
-            return yield* Effect.die(
-              new Error("Axiom did not return a token on create"),
-            );
+            return yield* Effect.die(new Error("Axiom did not return a token on create"));
           }
           return {
             ...result,
@@ -135,9 +133,7 @@ export const ApiTokenProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* del({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
+          yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

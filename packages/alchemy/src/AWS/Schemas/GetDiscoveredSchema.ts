@@ -34,10 +34,7 @@ export interface GetDiscoveredSchema extends Binding.Service<
       Events?: string[];
       /** The type of schema to infer: `OpenApi3` or `JSONSchemaDraft4`. */
       Type?: string;
-    }) => Effect.Effect<
-      schemas.GetDiscoveredSchemaResponse,
-      schemas.GetDiscoveredSchemaError
-    >
+    }) => Effect.Effect<schemas.GetDiscoveredSchemaResponse, schemas.GetDiscoveredSchemaError>
   >
 > {}
 export const GetDiscoveredSchema = Binding.Service<GetDiscoveredSchema>(

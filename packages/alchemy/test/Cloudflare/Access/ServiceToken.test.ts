@@ -13,10 +13,7 @@ const { test } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create, update duration, and delete service token", (stack) =>
   Effect.gen(function* () {
@@ -57,9 +54,7 @@ test.provider("create, update duration, and delete service token", (stack) =>
     expect(updated.serviceTokenId).toEqual(token.serviceTokenId);
     expect(updated.duration).toEqual("17520h");
     expect(updated.clientSecret).toBeDefined();
-    expect(Redacted.value(updated.clientSecret!)).toEqual(
-      Redacted.value(token.clientSecret!),
-    );
+    expect(Redacted.value(updated.clientSecret!)).toEqual(Redacted.value(token.clientSecret!));
 
     const afterUpdate = yield* zeroTrust.getAccessServiceTokenForAccount({
       accountId,
@@ -74,11 +69,7 @@ test.provider("create, update duration, and delete service token", (stack) =>
         accountId,
         serviceTokenId: token.serviceTokenId,
       })
-      .pipe(
-        Effect.catchTag("AccessServiceTokenNotFound", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
     expect(afterDestroy?.id ?? undefined).toBeUndefined();
   }).pipe(logLevel),
 );
@@ -93,14 +84,10 @@ test.provider("list enumerates the deployed service token", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Access.ServiceToken,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Access.ServiceToken);
     const all = yield* provider.list();
 
-    expect(all.some((t) => t.serviceTokenId === token.serviceTokenId)).toBe(
-      true,
-    );
+    expect(all.some((t) => t.serviceTokenId === token.serviceTokenId)).toBe(true);
     // Enumeration never exposes the one-time secret — it matches read.
     const found = all.find((t) => t.serviceTokenId === token.serviceTokenId);
     expect(found?.clientId).toEqual(token.clientId);
@@ -135,9 +122,7 @@ test.provider("incrementing clientSecretVersion rotates the secret", (stack) =>
     expect(rotated.clientId).toEqual(token.clientId);
     expect(rotated.clientSecretVersion).toEqual(2);
     expect(rotated.clientSecret).toBeDefined();
-    expect(Redacted.value(rotated.clientSecret!)).not.toEqual(
-      Redacted.value(token.clientSecret!),
-    );
+    expect(Redacted.value(rotated.clientSecret!)).not.toEqual(Redacted.value(token.clientSecret!));
 
     // Re-deploying the same version must NOT rotate again.
     const stable = yield* stack.deploy(
@@ -148,9 +133,7 @@ test.provider("incrementing clientSecretVersion rotates the secret", (stack) =>
       }),
     );
     expect(stable.serviceTokenId).toEqual(token.serviceTokenId);
-    expect(Redacted.value(stable.clientSecret!)).toEqual(
-      Redacted.value(rotated.clientSecret!),
-    );
+    expect(Redacted.value(stable.clientSecret!)).toEqual(Redacted.value(rotated.clientSecret!));
 
     const actual = yield* zeroTrust.getAccessServiceTokenForAccount({
       accountId,

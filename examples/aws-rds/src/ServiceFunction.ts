@@ -21,10 +21,7 @@ export default class ServiceFunction extends AWS.Lambda.Function<ServiceFunction
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
 
-        if (
-          request.method === "GET" &&
-          new URL(request.originalUrl).pathname === "/"
-        ) {
+        if (request.method === "GET" && new URL(request.originalUrl).pathname === "/") {
           const response = yield* db
             .query<{
               database: string;

@@ -70,7 +70,6 @@ export interface GetHLSStreamingSessionURL extends Binding.Service<
   >
 > {}
 
-export const GetHLSStreamingSessionURL =
-  Binding.Service<GetHLSStreamingSessionURL>(
-    "AWS.KinesisVideo.GetHLSStreamingSessionURL",
-  );
+export const GetHLSStreamingSessionURL = Binding.Service<GetHLSStreamingSessionURL>(
+  "AWS.KinesisVideo.GetHLSStreamingSessionURL",
+);

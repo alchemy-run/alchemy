@@ -39,7 +39,6 @@ export interface GetCertificateAuthorityCsr extends Binding.Service<
   >
 > {}
 
-export const GetCertificateAuthorityCsr =
-  Binding.Service<GetCertificateAuthorityCsr>(
-    "AWS.ACMPCA.GetCertificateAuthorityCsr",
-  );
+export const GetCertificateAuthorityCsr = Binding.Service<GetCertificateAuthorityCsr>(
+  "AWS.ACMPCA.GetCertificateAuthorityCsr",
+);

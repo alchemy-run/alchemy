@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Thing } from "./Thing.ts";
 
-export interface DescribeThingRequest extends Omit<
-  iot.DescribeThingRequest,
-  "thingName"
-> {}
+export interface DescribeThingRequest extends Omit<iot.DescribeThingRequest, "thingName"> {}
 
 /**
  * Runtime binding for the `DescribeThing` operation (IAM action
@@ -38,6 +35,4 @@ export interface DescribeThing extends Binding.Service<
   >
 > {}
 
-export const DescribeThing = Binding.Service<DescribeThing>(
-  "AWS.IoT.DescribeThing",
-);
+export const DescribeThing = Binding.Service<DescribeThing>("AWS.IoT.DescribeThing");

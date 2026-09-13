@@ -402,7 +402,6 @@
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "catalog:",
     "@cloudflare/workers-types": "catalog:",
-    "@effect/language-service": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",

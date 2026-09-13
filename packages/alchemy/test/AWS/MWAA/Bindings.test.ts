@@ -29,9 +29,7 @@ describe("MWAA data-plane operations (typed-error probes)", () => {
     "createCliToken on a nonexistent environment fails with ResourceNotFoundException",
     () =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          mwaa.createCliToken({ Name: NONEXISTENT_ENVIRONMENT }),
-        );
+        const error = yield* Effect.flip(mwaa.createCliToken({ Name: NONEXISTENT_ENVIRONMENT }));
         expect(error._tag).toBe("ResourceNotFoundException");
       }),
   );
@@ -93,16 +91,11 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );

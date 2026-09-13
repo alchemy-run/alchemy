@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const getHealthcheck = (accountId: string, id: string) =>
   diagnostics.getEndpointHealthcheck({ accountId, id });
@@ -26,10 +23,7 @@ const getHealthcheckLive = (accountId: string, id: string) =>
   getHealthcheck(accountId, id).pipe(
     Effect.retry({
       while: (e) => e._tag === "EndpointHealthcheckNotFound",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -38,16 +32,11 @@ const getHealthcheckLive = (accountId: string, id: string) =>
 // `EndpointHealthcheckNotFound` (code 1022, 404).
 const expectGone = (accountId: string, id: string) =>
   getHealthcheck(accountId, id).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "HealthcheckNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "HealthcheckNotDeleted" } as const)),
     Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "HealthcheckNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -88,12 +77,7 @@ const cleanLeftovers = (accountId: string) =>
           if (hc.name?.startsWith("alchemy-diag-ehc") && hc.id) {
             yield* diagnostics
               .deleteEndpointHealthcheck({ accountId, id: hc.id })
-              .pipe(
-                Effect.catchTag(
-                  "EndpointHealthcheckNotFound",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.void));
           }
         }
       }),
@@ -138,10 +122,7 @@ test.provider(
       expect(updated.endpoint).toEqual("10.77.0.2");
       expect(updated.name).toEqual("alchemy-diag-ehc");
 
-      const liveUpdated = yield* getHealthcheckLive(
-        accountId,
-        check.healthcheckId,
-      );
+      const liveUpdated = yield* getHealthcheckLive(accountId, check.healthcheckId);
       expect(liveUpdated.endpoint).toEqual("10.77.0.2");
       expect(liveUpdated.name).toEqual("alchemy-diag-ehc");
 
@@ -168,10 +149,7 @@ test.provider(
       expect(replaced.name).toEqual("alchemy-diag-ehc-v2");
       yield* expectGone(accountId, check.healthcheckId);
 
-      const liveReplaced = yield* getHealthcheckLive(
-        accountId,
-        replaced.healthcheckId,
-      );
+      const liveReplaced = yield* getHealthcheckLive(accountId, replaced.healthcheckId);
       expect(liveReplaced.name).toEqual("alchemy-diag-ehc-v2");
 
       yield* stack.destroy();
@@ -199,18 +177,12 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Diagnostics.EndpointHealthcheck,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Diagnostics.EndpointHealthcheck);
       const all = yield* provider.list();
 
-      expect(
-        all.some((hc) => hc.healthcheckId === deployed.healthcheckId),
-      ).toBe(true);
+      expect(all.some((hc) => hc.healthcheckId === deployed.healthcheckId)).toBe(true);
       // Each listed item is the full `read` Attributes shape.
-      const found = all.find(
-        (hc) => hc.healthcheckId === deployed.healthcheckId,
-      );
+      const found = all.find((hc) => hc.healthcheckId === deployed.healthcheckId);
       expect(found?.accountId).toEqual(accountId);
       expect(found?.endpoint).toEqual("10.78.0.1");
       expect(found?.checkType).toEqual("icmp");

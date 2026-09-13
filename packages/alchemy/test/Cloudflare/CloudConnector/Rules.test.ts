@@ -11,13 +11,9 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic test constants — same values on every run.
 const HOST_A = "alchemy-cloud-connector-a.s3.amazonaws.com";
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -228,16 +222,12 @@ describe.sequential("Rules", () => {
           }),
         );
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.CloudConnector.Rules,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.CloudConnector.Rules);
         const all = yield* provider.list();
 
         const entry = all.find((r) => r.zoneId === zoneId);
         expect(entry).toBeDefined();
-        expect(
-          entry!.rules.some((rule) => rule.expression === EXPRESSION_V1),
-        ).toBe(true);
+        expect(entry!.rules.some((rule) => rule.expression === EXPRESSION_V1)).toBe(true);
 
         yield* stack.destroy();
         yield* purgeRules(zoneId);

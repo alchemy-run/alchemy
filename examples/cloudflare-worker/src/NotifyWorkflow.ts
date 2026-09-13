@@ -43,9 +43,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
           );
           if (got !== message) {
             return yield* Effect.die(
-              new Error(
-                `KV roundtrip mismatch: expected "${message}", got "${got ?? "null"}"`,
-              ),
+              new Error(`KV roundtrip mismatch: expected "${message}", got "${got ?? "null"}"`),
             );
           }
           return got;

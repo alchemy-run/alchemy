@@ -12,10 +12,7 @@ const { test } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider("create, update rules, and delete group", (stack) =>
   Effect.gen(function* () {
@@ -48,10 +45,7 @@ test.provider("create, update rules, and delete group", (stack) =>
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Access.Group("BasicGroup", {
-          include: [
-            { emailDomain: { domain: "example.com" } },
-            { geo: { countryCode: "US" } },
-          ],
+          include: [{ emailDomain: { domain: "example.com" } }, { geo: { countryCode: "US" } }],
           exclude: [{ email: { email: "intern@example.com" } }],
           require: [{ emailDomain: { domain: "example.com" } }],
         });
@@ -71,9 +65,7 @@ test.provider("create, update rules, and delete group", (stack) =>
 
     const afterDestroy = yield* zeroTrust
       .getAccessGroupForAccount({ accountId, groupId: group.groupId })
-      .pipe(
-        Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)));
     expect(afterDestroy?.id ?? undefined).toBeUndefined();
   }).pipe(logLevel),
 );

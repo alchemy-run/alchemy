@@ -56,11 +56,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER_ENDPOINT)(
       const all = yield* provider.list();
 
       expect(
-        all.some(
-          (e) =>
-            e.dbClusterEndpointIdentifier ===
-            endpoint.dbClusterEndpointIdentifier,
-        ),
+        all.some((e) => e.dbClusterEndpointIdentifier === endpoint.dbClusterEndpointIdentifier),
       ).toBe(true);
 
       yield* stack.destroy();

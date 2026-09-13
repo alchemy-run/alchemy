@@ -10,9 +10,7 @@ import { pinNodeServeModule, type NodeServeEntryOptions } from "./NodeServe.ts";
 export const NEON_SERVE_ENTRY_FILE_NAME = "serve-neon.mjs";
 
 /** Generate a Node 24 Fetch module from a framework's portable handler description. */
-export const makeNeonServeEntrySource = (
-  options: NodeServeEntryOptions,
-): string => {
+export const makeNeonServeEntrySource = (options: NodeServeEntryOptions): string => {
   const handler = options.handler;
   return `import * as fs from "node:fs";
 import * as path from "node:path";
@@ -92,20 +90,14 @@ export const finishNeonOutput = (output: BuildOutput) =>
       return yield* Effect.fail(
         new DeployTargetError({
           platform: "neon",
-          message:
-            "The framework did not provide a portable Node handler description for Neon.",
+          message: "The framework did not provide a portable Node handler description for Neon.",
         }),
       );
     }
-    const name = path.join(
-      path.dirname(entry.name),
-      NEON_SERVE_ENTRY_FILE_NAME,
-    );
+    const name = path.join(path.dirname(entry.name), NEON_SERVE_ENTRY_FILE_NAME);
     let source = makeNeonServeEntrySource(output.nodeServe);
     if (output.nodeServe.handler?.kind === "node") {
-      const adapter = yield* Effect.try(() =>
-        createRequire(import.meta.url).resolve("srvx/node"),
-      );
+      const adapter = yield* Effect.try(() => createRequire(import.meta.url).resolve("srvx/node"));
       const bundle = yield* Effect.tryPromise(() =>
         import("esbuild").then((esbuild) =>
           esbuild.build({
@@ -124,19 +116,14 @@ export const finishNeonOutput = (output: BuildOutput) =>
         "neon-node-adapter.mjs",
       );
       yield* fs.writeFile(adapterPath, bundle.outputFiles[0]!.contents);
-      source = source.replace(
-        'from "srvx/node"',
-        'from "./neon-node-adapter.mjs"',
-      );
+      source = source.replace('from "srvx/node"', 'from "./neon-node-adapter.mjs"');
     }
     yield* fs.writeFileString(path.join(output.distDirectory, name), source);
     const module = yield* toOutputFile(name, source);
     const result = pinNodeServeModule(
       {
         ...output,
-        serverModules: output.serverModules?.filter(
-          (item) => item.name !== entry.name,
-        ),
+        serverModules: output.serverModules?.filter((item) => item.name !== entry.name),
       },
       module,
     );
@@ -162,8 +149,7 @@ export const makeNeonTarget = <T extends DeployTarget>(node: T): T => ({
   platform: "neon",
   ...(node.build
     ? {
-        build: (context) =>
-          node.build!(context).pipe(Effect.flatMap(finishNeonOutput)),
+        build: (context) => node.build!(context).pipe(Effect.flatMap(finishNeonOutput)),
       }
     : {}),
   ...(node.finish

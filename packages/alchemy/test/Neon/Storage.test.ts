@@ -149,23 +149,15 @@ test.provider(
             Body: new TextEncoder().encode("probe"),
           }),
         ),
-        GetObject: yield* outcome(
-          S3.getObject({ Bucket: bucket.bucketName, Key: "probe.txt" }),
-        ),
-        HeadObject: yield* outcome(
-          S3.headObject({ Bucket: bucket.bucketName, Key: "probe.txt" }),
-        ),
-        ListObjectsV2: yield* outcome(
-          S3.listObjectsV2({ Bucket: bucket.bucketName }),
-        ),
+        GetObject: yield* outcome(S3.getObject({ Bucket: bucket.bucketName, Key: "probe.txt" })),
+        HeadObject: yield* outcome(S3.headObject({ Bucket: bucket.bucketName, Key: "probe.txt" })),
+        ListObjectsV2: yield* outcome(S3.listObjectsV2({ Bucket: bucket.bucketName })),
         ListBuckets: yield* outcome(S3.listBuckets({})),
         DeleteObject: yield* outcome(
           S3.deleteObject({ Bucket: bucket.bucketName, Key: "probe.txt" }),
         ),
       };
-      yield* Effect.log(
-        `Neon storage:write-only matrix: ${JSON.stringify(matrix)}`,
-      );
+      yield* Effect.log(`Neon storage:write-only matrix: ${JSON.stringify(matrix)}`);
       yield* stack.destroy();
       expect(
         yield* SDK.getProject({ project_id: credential.projectId }).pipe(

@@ -44,9 +44,7 @@ export default EmrSlowTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole"],
     });
     // EC2 instance role + profile (the job-flow role).
     const ec2Role = yield* IAM.Role("EmrBindingsEc2Role", {
@@ -60,9 +58,7 @@ export default EmrSlowTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role"],
     });
     const instanceProfile = yield* IAM.InstanceProfile("EmrBindingsProfile", {
       roleName: ec2Role.roleName,

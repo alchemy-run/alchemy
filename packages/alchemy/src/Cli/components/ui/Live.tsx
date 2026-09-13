@@ -68,11 +68,7 @@ type ProgressGroupProps = {
   readonly labelWidth?: number;
 };
 
-export function ProgressGroup({
-  rows,
-  width = 20,
-  labelWidth,
-}: ProgressGroupProps) {
+export function ProgressGroup({ rows, width = 20, labelWidth }: ProgressGroupProps) {
   return (
     <Stack>
       {rows.map((row) => {
@@ -96,12 +92,8 @@ export function ProgressGroup({
             <Text bold tone={variant === "error" ? "danger" : variant}>
               {row.completed}/{row.total}
             </Text>
-            {row.failed ? (
-              <Text tone="danger">({row.failed} failed)</Text>
-            ) : null}
-            {row.detail === undefined ? null : (
-              <Text tone="muted">{row.detail}</Text>
-            )}
+            {row.failed ? <Text tone="danger">({row.failed} failed)</Text> : null}
+            {row.detail === undefined ? null : <Text tone="muted">{row.detail}</Text>}
           </Row>
         );
       })}

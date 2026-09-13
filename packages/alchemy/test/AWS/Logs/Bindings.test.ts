@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "LogsBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -41,19 +38,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -75,10 +67,7 @@ const filterUntilVisible = (marker: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "MarkerNotVisible",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -99,9 +88,7 @@ describe("Logs Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/get-events`;
 
-      yield* Effect.logInfo(
-        `Logs test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Logs test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -109,9 +96,7 @@ describe("Logs Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Logs test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Logs test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -156,23 +141,17 @@ describe("Logs Bindings", () => {
           const marker = `get-${crypto.randomUUID()}`;
           yield* putMarker(marker);
 
-          const messages = yield* send(
-            HttpClientRequest.get(`${baseUrl}/get-events`),
-          ).pipe(
+          const messages = yield* send(HttpClientRequest.get(`${baseUrl}/get-events`)).pipe(
             Effect.flatMap((r) => r.json),
             Effect.flatMap((body) => {
-              const found = (body as { messages: (string | undefined)[] })
-                .messages;
+              const found = (body as { messages: (string | undefined)[] }).messages;
               return found.some((message) => message?.includes(marker))
                 ? Effect.succeed(found)
                 : Effect.fail(new MarkerNotVisible({ marker }));
             }),
             Effect.retry({
               while: (e) => e._tag === "MarkerNotVisible",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
             }),
           );
           expect(messages.some((m) => m?.includes(marker))).toBe(true);
@@ -186,9 +165,9 @@ describe("Logs Bindings", () => {
       "starts an Insights query scoped to the bound group",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/query`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/query`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).queryId).toBeTruthy();
         }),
       { timeout: 90_000 },
@@ -200,9 +179,9 @@ describe("Logs Bindings", () => {
       "polls the started query to completion",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/query`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/query`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).status).toBe("Complete");
           expect((response as any).resultCount).toBeGreaterThanOrEqual(0);
         }),
@@ -215,9 +194,9 @@ describe("Logs Bindings", () => {
       "stops (or observes completion of) a started query",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/stop-query`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/stop-query`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           const body = response as {
             ok: boolean;
             stopped: boolean;
@@ -246,29 +225,20 @@ describe("Logs Bindings", () => {
           yield* putMarker(marker);
           // Insights sees freshly-ingested events after a short delay —
           // poll the query route until it returns rows (bounded, ~60s).
-          const ptr = yield* send(
-            HttpClientRequest.get(`${baseUrl}/query`),
-          ).pipe(
+          const ptr = yield* send(HttpClientRequest.get(`${baseUrl}/query`)).pipe(
             Effect.flatMap((r) => r.json),
             Effect.flatMap((body) => {
               const found = (body as { ptr: string | null }).ptr;
-              return found
-                ? Effect.succeed(found)
-                : Effect.fail(new MarkerNotVisible({ marker }));
+              return found ? Effect.succeed(found) : Effect.fail(new MarkerNotVisible({ marker }));
             }),
             Effect.retry({
               while: (e) => e._tag === "MarkerNotVisible",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
             }),
           );
 
           const record = yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/record?ptr=${encodeURIComponent(ptr)}`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/record?ptr=${encodeURIComponent(ptr)}`),
           ).pipe(Effect.flatMap((r) => r.json));
           expect((record as any).message).toBeTruthy();
         }),
@@ -283,9 +253,9 @@ describe("Logs Bindings", () => {
         Effect.gen(function* () {
           const marker = `fields-${crypto.randomUUID()}`;
           yield* putMarker(marker);
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/fields`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/fields`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect(Array.isArray((response as any).fields)).toBe(true);
         }),
       { timeout: 90_000 },
@@ -297,9 +267,9 @@ describe("Logs Bindings", () => {
       "lists the streams of the bound group",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/streams`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/streams`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           const streams = (response as { streams: string[] }).streams;
           expect(streams).toContain("alchemy-test-bindings-stream");
         }),

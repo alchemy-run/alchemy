@@ -12,13 +12,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test label names (Cloudflare caps them at 24 chars).
 const NAME_DEFAULT = "alch-apishield-default";
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -162,34 +156,32 @@ test.provider("renaming a label triggers replacement", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider(
-  "generated name respects Cloudflare's 24-character limit",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+test.provider("generated name respects Cloudflare's 24-character limit", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const label = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ApiShield.Label("GeneratedNameLabel", {
-            zoneId,
-          }).pipe(adopt(true));
-        }),
-      );
+    const label = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.ApiShield.Label("GeneratedNameLabel", {
+          zoneId,
+        }).pipe(adopt(true));
+      }),
+    );
 
-      expect(label.name.length).toBeGreaterThan(0);
-      expect(label.name.length).toBeLessThanOrEqual(24);
-      expect(label.description).toEqual("");
+    expect(label.name.length).toBeGreaterThan(0);
+    expect(label.name.length).toBeLessThanOrEqual(24);
+    expect(label.description).toEqual("");
 
-      const live = yield* getLabel(zoneId, label.name);
-      expect(live?.name).toEqual(label.name);
+    const live = yield* getLabel(zoneId, label.name);
+    expect(live?.name).toEqual(label.name);
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const gone = yield* getLabel(zoneId, label.name);
-      expect(gone).toBeUndefined();
-    }).pipe(logLevel),
+    const gone = yield* getLabel(zoneId, label.name);
+    expect(gone).toBeUndefined();
+  }).pipe(logLevel),
 );
 
 test.provider("list enumerates the deployed label", (stack) =>
@@ -217,14 +209,10 @@ test.provider("list enumerates the deployed label", (stack) =>
     // lags the zone list endpoint. Retry the whole enumeration on either, so
     // the test rides out both instead of asserting on one snapshot.
     const appears = (all: readonly { zoneId: string; name: string }[]) =>
-      all.some(
-        (label) => label.zoneId === zoneId && label.name === deployed.name,
-      );
+      all.some((label) => label.zoneId === zoneId && label.name === deployed.name);
     const all = yield* provider.list().pipe(
       Effect.flatMap((rows) =>
-        appears(rows)
-          ? Effect.succeed(rows)
-          : Effect.fail({ _tag: "LabelNotListed" as const }),
+        appears(rows) ? Effect.succeed(rows) : Effect.fail({ _tag: "LabelNotListed" as const }),
       ),
       Effect.retry({
         while: (e) => e._tag === "Forbidden" || e._tag === "LabelNotListed",

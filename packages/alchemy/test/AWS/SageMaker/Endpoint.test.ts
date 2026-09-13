@@ -10,17 +10,15 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled patch carves EndpointNotFound
 // out of the overloaded ValidationException. Runs in every CI pass.
-test.provider(
-  "describeEndpoint on a nonexistent endpoint fails with EndpointNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        sagemaker.describeEndpoint({
-          EndpointName: "alchemy-nonexistent-sagemaker-endpoint-probe",
-        }),
-      );
-      expect(error._tag).toBe("EndpointNotFound");
-    }),
+test.provider("describeEndpoint on a nonexistent endpoint fails with EndpointNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      sagemaker.describeEndpoint({
+        EndpointName: "alchemy-nonexistent-sagemaker-endpoint-probe",
+      }),
+    );
+    expect(error._tag).toBe("EndpointNotFound");
+  }),
 );
 
 const findEndpoint = (name: string) =>
@@ -34,8 +32,7 @@ const findEndpoint = (name: string) =>
 //   AWS_TEST_SAGEMAKER_IMAGE=<ECR URI of a serving container>
 //   AWS_TEST_SAGEMAKER_MODEL_DATA=<s3://... model.tar.gz> (optional)
 test.provider.skipIf(
-  !process.env.AWS_TEST_SAGEMAKER_ENDPOINT ||
-    !process.env.AWS_TEST_SAGEMAKER_IMAGE,
+  !process.env.AWS_TEST_SAGEMAKER_ENDPOINT || !process.env.AWS_TEST_SAGEMAKER_IMAGE,
 )(
   "create serverless endpoint, wait InService, destroy",
   (stack) =>
@@ -58,9 +55,7 @@ test.provider.skipIf(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"],
           });
           const model = yield* Model("EndpointTestModel", {
             executionRoleArn: role.roleArn,

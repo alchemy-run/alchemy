@@ -14,17 +14,13 @@ import OtelTracedWorker from "./fixtures/otel-traced-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const collectorMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-collector-worker.ts",
-);
+const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/otel-collector-worker.ts");
 
 // The collector must be reachable *from another Worker*: same-account
 // worker-to-worker fetches over workers.dev are blocked (error 1042), so
 // the collector gets a deterministic custom hostname on the standing test
 // zone instead.
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const collectorHost = `otel-collector-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`;
 
 // The OTLP sink both traced fixtures export to. Declared identically in
@@ -151,22 +147,14 @@ describe("Cloudflare Worker Telemetry", () => {
         // arrive if the DurableObjectBridge's flush actually completes
         // before/despite the event's I/O context winding down.
         const flushUrl = flush.url as string;
-        yield* expectUrlContains(
-          `${flushUrl}/`,
-          "worker-saw:durable-object-ok",
-          {
-            timeout: "240 seconds",
-            label: "event-flush worker via DO fetch",
-          },
-        );
-        yield* expectUrlContains(
-          `${flushUrl}/rpc`,
-          "worker-saw:durable-object-rpc-ok",
-          {
-            timeout: "120 seconds",
-            label: "event-flush worker via DO rpc",
-          },
-        );
+        yield* expectUrlContains(`${flushUrl}/`, "worker-saw:durable-object-ok", {
+          timeout: "240 seconds",
+          label: "event-flush worker via DO fetch",
+        });
+        yield* expectUrlContains(`${flushUrl}/rpc`, "worker-saw:durable-object-rpc-ok", {
+          timeout: "120 seconds",
+          label: "event-flush worker via DO rpc",
+        });
         // The DO fetch event's child span…
         yield* expectUrlContains(collected, "otel-event-flush.child", {
           timeout: "120 seconds",

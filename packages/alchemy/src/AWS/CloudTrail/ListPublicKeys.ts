@@ -28,12 +28,7 @@ export interface ListPublicKeys extends Binding.Service<
   () => Effect.Effect<
     (
       request?: cloudtrail.ListPublicKeysRequest,
-    ) => Effect.Effect<
-      cloudtrail.ListPublicKeysResponse,
-      cloudtrail.ListPublicKeysError
-    >
+    ) => Effect.Effect<cloudtrail.ListPublicKeysResponse, cloudtrail.ListPublicKeysError>
   >
 > {}
-export const ListPublicKeys = Binding.Service<ListPublicKeys>(
-  "AWS.CloudTrail.ListPublicKeys",
-);
+export const ListPublicKeys = Binding.Service<ListPublicKeys>("AWS.CloudTrail.ListPublicKeys");

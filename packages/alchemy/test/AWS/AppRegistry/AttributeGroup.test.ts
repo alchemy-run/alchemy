@@ -14,24 +14,17 @@ const serviceLease = makeAppRegistryTestLease();
 beforeAll(serviceLease.acquire, { timeout: 3_600_000 });
 afterAll(serviceLease.release);
 
-class AttributeGroupStillExists extends Data.TaggedError(
-  "AttributeGroupStillExists",
-)<{
+class AttributeGroupStillExists extends Data.TaggedError("AttributeGroupStillExists")<{
   specifier: string;
 }> {}
 
 const assertAttributeGroupGone = (specifier: string) =>
   appregistry.getAttributeGroup({ attributeGroup: specifier }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new AttributeGroupStillExists({ specifier })),
-    ),
+    Effect.flatMap(() => Effect.fail(new AttributeGroupStillExists({ specifier }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "AttributeGroupStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 

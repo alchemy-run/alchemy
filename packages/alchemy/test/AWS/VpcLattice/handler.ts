@@ -56,11 +56,9 @@ export default LatticeTestFunction.make(
         // Register a target (for a LAMBDA group: a function ARN).
         if (request.method === "POST" && pathname === "/register") {
           const body = (yield* request.json) as unknown as { id: string };
-          const { successful = [], unsuccessful = [] } = yield* registerTargets(
-            {
-              targets: [{ id: body.id }],
-            },
-          );
+          const { successful = [], unsuccessful = [] } = yield* registerTargets({
+            targets: [{ id: body.id }],
+          });
           return yield* HttpServerResponse.json({
             successful: successful.map((t) => t.id),
             unsuccessful: unsuccessful.map((t) => ({
@@ -73,10 +71,9 @@ export default LatticeTestFunction.make(
         // Deregister a target.
         if (request.method === "POST" && pathname === "/deregister") {
           const body = (yield* request.json) as unknown as { id: string };
-          const { successful = [], unsuccessful = [] } =
-            yield* deregisterTargets({
-              targets: [{ id: body.id }],
-            });
+          const { successful = [], unsuccessful = [] } = yield* deregisterTargets({
+            targets: [{ id: body.id }],
+          });
           return yield* HttpServerResponse.json({
             successful: successful.map((t) => t.id),
             unsuccessful: unsuccessful.map((t) => ({

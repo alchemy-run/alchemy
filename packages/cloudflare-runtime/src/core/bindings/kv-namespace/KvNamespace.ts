@@ -5,9 +5,7 @@ import * as Path from "effect/Path";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const KvNamespaceWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/kv-namespace/KvNamespace.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/kv-namespace/KvNamespace.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
@@ -17,10 +15,7 @@ import type { BindingHook } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
-import type {
-  KvNamespaceProps,
-  KvServiceProps,
-} from "./KvNamespaceOptions.shared.ts";
+import type { KvNamespaceProps, KvServiceProps } from "./KvNamespaceOptions.shared.ts";
 import {
   BINDING_KV_BLOBS,
   BINDING_KV_ENABLE_CONTROL_ENDPOINTS,
@@ -39,9 +34,7 @@ export class KvNamespace extends Plugin.Service<
      * the binding should target: the shared `kv` service, with the namespace
      * id carried via designator props.
      */
-    readonly register: (
-      props: KvServiceProps,
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    readonly register: (props: KvServiceProps) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
   }
 >()("cloudflare-runtime/plugin/KvNamespace") {}
 
@@ -54,13 +47,11 @@ export const KvNamespaceLive = Layer.effect(
     const enableControlEndpoints = yield* Plugin.UnsafeEnableControlEndpoints;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
         return yield* new ConfigError({
           subtag: "KvNamespace",
-          message:
-            "Cannot configure KV persistence: the Storage service has no disk path.",
+          message: "Cannot configure KV persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
@@ -165,10 +156,7 @@ export const local = (props: KvNamespaceProps): BindingHook<KvNamespace> =>
   );
 
 export const remote = (binding: string, namespaceId: string) =>
-  makeRemoteBinding(
-    { name: binding, type: "kv_namespace", namespaceId, raw: true },
-    (service) => ({
-      name: binding,
-      kvNamespace: service,
-    }),
-  );
+  makeRemoteBinding({ name: binding, type: "kv_namespace", namespaceId, raw: true }, (service) => ({
+    name: binding,
+    kvNamespace: service,
+  }));

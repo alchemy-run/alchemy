@@ -33,7 +33,6 @@ export interface ListResourceProfileDetections extends Binding.Service<
     >
   >
 > {}
-export const ListResourceProfileDetections =
-  Binding.Service<ListResourceProfileDetections>(
-    "AWS.Macie2.ListResourceProfileDetections",
-  );
+export const ListResourceProfileDetections = Binding.Service<ListResourceProfileDetections>(
+  "AWS.Macie2.ListResourceProfileDetections",
+);

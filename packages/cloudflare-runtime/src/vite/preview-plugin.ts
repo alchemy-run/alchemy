@@ -38,9 +38,7 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
         "distilled-cloudflare:options",
       );
       if (!optionsApi) {
-        throw new Error(
-          "Cannot resolve the distilled-cloudflare:options plugin",
-        );
+        throw new Error("Cannot resolve the distilled-cloudflare:options plugin");
       }
       const input = optionsApi.input();
       const inputNames = Object.keys(input);
@@ -61,10 +59,7 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
           `Cannot resolve the "${entryEnvironmentName}" environment from the preview config`,
         );
       }
-      const directory = NodePath.resolve(
-        config.root,
-        entryEnvironment.build.outDir,
-      );
+      const directory = NodePath.resolve(config.root, entryEnvironment.build.outDir);
       const entryModule = findEntryModule(directory, inputNames[0]!);
       const clientEnvironment = config.environments["client"];
       const assetsDirectory = clientEnvironment
@@ -94,20 +89,18 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
       // runs ahead of Vite's internal static-file middlewares and of any
       // middleware a framework appends afterwards (e.g. waku's Node SSG
       // fallback) — the worker handles every request, like in production.
-      server.middlewares.use(
-        function distilledCloudflarePreviewMiddleware(req, res) {
-          const url = new NodeURL(req.url ?? "/", address.toString());
-          const request = NodeHttp.request(url, {
-            method: req.method,
-            headers: proxyRequestHeaders(req, url, handle.proxySharedSecret),
-          });
-          req.pipe(request);
-          request.on("response", (response) => {
-            res.writeHead(response.statusCode ?? 500, response.headers);
-            response.pipe(res);
-          });
-        },
-      );
+      server.middlewares.use(function distilledCloudflarePreviewMiddleware(req, res) {
+        const url = new NodeURL(req.url ?? "/", address.toString());
+        const request = NodeHttp.request(url, {
+          method: req.method,
+          headers: proxyRequestHeaders(req, url, handle.proxySharedSecret),
+        });
+        req.pipe(request);
+        request.on("response", (response) => {
+          res.writeHead(response.statusCode ?? 500, response.headers);
+          response.pipe(res);
+        });
+      });
     },
   };
 }

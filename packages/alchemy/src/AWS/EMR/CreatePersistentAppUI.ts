@@ -23,10 +23,7 @@ export interface CreatePersistentAppUI extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.CreatePersistentAppUIInput, "TargetResourceArn">,
-    ) => Effect.Effect<
-      SVC.CreatePersistentAppUIOutput,
-      SVC.CreatePersistentAppUIError
-    >
+    ) => Effect.Effect<SVC.CreatePersistentAppUIOutput, SVC.CreatePersistentAppUIError>
   >
 > {}
 export const CreatePersistentAppUI = Binding.Service<CreatePersistentAppUI>(

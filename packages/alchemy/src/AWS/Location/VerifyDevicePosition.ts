@@ -45,10 +45,7 @@ export interface VerifyDevicePosition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: VerifyDevicePositionRequest,
-    ) => Effect.Effect<
-      location.VerifyDevicePositionResponse,
-      location.VerifyDevicePositionError
-    >
+    ) => Effect.Effect<location.VerifyDevicePositionResponse, location.VerifyDevicePositionError>
   >
 > {}
 export const VerifyDevicePosition = Binding.Service<VerifyDevicePosition>(

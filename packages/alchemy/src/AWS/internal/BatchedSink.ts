@@ -10,9 +10,7 @@ import * as Sink from "effect/Sink";
  * bounded retry schedule is exhausted. Carries the stranded entries (in input
  * order) so callers can decide what to do with them (DLQ, die, drop).
  */
-export class BatchRetryExhaustedError<In> extends Data.TaggedError(
-  "BatchRetryExhaustedError",
-)<{
+export class BatchRetryExhaustedError<In> extends Data.TaggedError("BatchRetryExhaustedError")<{
   /** The entries that were still unprocessed when retries ran out, in input order. */
   readonly entries: readonly In[];
 }> {}
@@ -73,8 +71,7 @@ export const makeBatchedSink = <In, Out, Err>(
   options: BatchedSinkOptions<In, Out, Err>,
 ): Sink.Sink<void, In, never, Err | BatchRetryExhaustedError<In>> => {
   const schedule =
-    options.retrySchedule ??
-    Schedule.max([Schedule.recurs(5), Schedule.exponential("200 millis")]);
+    options.retrySchedule ?? Schedule.max([Schedule.recurs(5), Schedule.exponential("200 millis")]);
 
   const onRejected =
     options.onRejected ??
@@ -87,9 +84,7 @@ export const makeBatchedSink = <In, Out, Err>(
 
   // One attempt over the currently-pending subset. Returns the entries that
   // are still unprocessed after this attempt (empty = converged).
-  const attempt = (
-    pendingRef: Ref.Ref<readonly In[]>,
-  ): Effect.Effect<readonly In[], Err> =>
+  const attempt = (pendingRef: Ref.Ref<readonly In[]>): Effect.Effect<readonly In[], Err> =>
     Effect.gen(function* () {
       const pending = yield* Ref.get(pendingRef);
       if (pending.length === 0) {
@@ -159,9 +154,7 @@ const packBatches = <In>(
     const size = sizeOf?.(record) ?? 0;
     const overRecords = current.length >= maxRecords;
     const overBytes =
-      maxBytes !== undefined &&
-      current.length > 0 &&
-      currentBytes + size > maxBytes;
+      maxBytes !== undefined && current.length > 0 && currentBytes + size > maxBytes;
     if (overRecords || overBytes) {
       batches.push(current);
       current = [];

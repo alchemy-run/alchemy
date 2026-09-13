@@ -12,18 +12,10 @@ import * as StepFunctions from "@/AWS/StepFunctions";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
-export class SFNTestFunction extends Lambda.Function<Lambda.Function>()(
-  "SFNTestFunction",
-) {}
+export class SFNTestFunction extends Lambda.Function<Lambda.Function>()("SFNTestFunction") {}
 
 export default SFNTestFunction.make(
   {
@@ -94,22 +86,19 @@ export default SFNTestFunction.make(
     // Activity-worker workflow: a Task state that parks on an Activity ARN
     // until a worker polls it with GetActivityTask and completes it.
     const activity = yield* StepFunctions.Activity("PollActivity", {});
-    const activityMachine = yield* StepFunctions.StateMachine(
-      "TestActivityMachine",
-      {
-        definition: {
-          StartAt: "WaitForWorker",
-          States: {
-            WaitForWorker: {
-              Type: "Task",
-              Resource: activity.activityArn,
-              TimeoutSeconds: 300,
-              End: true,
-            },
+    const activityMachine = yield* StepFunctions.StateMachine("TestActivityMachine", {
+      definition: {
+        StartAt: "WaitForWorker",
+        States: {
+          WaitForWorker: {
+            Type: "Task",
+            Resource: activity.activityArn,
+            TimeoutSeconds: 300,
+            End: true,
           },
         },
       },
-    );
+    });
 
     // Distributed Map workflow: produces a Map Run per execution for the
     // ListMapRuns/DescribeMapRun/UpdateMapRun bindings.
@@ -139,11 +128,7 @@ export default SFNTestFunction.make(
       policyStatements: [
         {
           Effect: "Allow",
-          Action: [
-            "states:StartExecution",
-            "states:DescribeExecution",
-            "states:StopExecution",
-          ],
+          Action: ["states:StartExecution", "states:DescribeExecution", "states:StopExecution"],
           Resource: ["*"],
         },
       ],
@@ -156,42 +141,32 @@ export default SFNTestFunction.make(
       { stateMachines: [standard], statuses: ["SUCCEEDED", "FAILED"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `execution ${event.detail.executionArn}: ${event.detail.status}`,
-          ),
+          Effect.log(`execution ${event.detail.executionArn}: ${event.detail.status}`),
         ),
     );
 
     const startSyncExecution = yield* StepFunctions.StartSyncExecution(express);
     const startExecution = yield* StepFunctions.StartExecution(standard);
-    const startCallbackExecution =
-      yield* StepFunctions.StartExecution(callback);
-    const describeStandardExecution =
-      yield* StepFunctions.DescribeExecution(standard);
-    const describeCallbackExecution =
-      yield* StepFunctions.DescribeExecution(callback);
+    const startCallbackExecution = yield* StepFunctions.StartExecution(callback);
+    const describeStandardExecution = yield* StepFunctions.DescribeExecution(standard);
+    const describeCallbackExecution = yield* StepFunctions.DescribeExecution(callback);
     const stopExecution = yield* StepFunctions.StopExecution(callback);
     const sendTaskSuccess = yield* StepFunctions.SendTaskSuccess();
     const sendTaskFailure = yield* StepFunctions.SendTaskFailure();
     const sendTaskHeartbeat = yield* StepFunctions.SendTaskHeartbeat();
-    const validateDefinition =
-      yield* StepFunctions.ValidateStateMachineDefinition();
+    const validateDefinition = yield* StepFunctions.ValidateStateMachineDefinition();
     const testState = yield* StepFunctions.TestState();
     const receiveMessage = yield* SQS.ReceiveMessage(callbackQueue);
     const deleteMessage = yield* SQS.DeleteMessage(callbackQueue);
 
-    const startActivityExecution =
-      yield* StepFunctions.StartExecution(activityMachine);
-    const describeActivityExecution =
-      yield* StepFunctions.DescribeExecution(activityMachine);
+    const startActivityExecution = yield* StepFunctions.StartExecution(activityMachine);
+    const describeActivityExecution = yield* StepFunctions.DescribeExecution(activityMachine);
     const getActivityTask = yield* StepFunctions.GetActivityTask(activity);
     const listExecutions = yield* StepFunctions.ListExecutions(standard);
-    const getExecutionHistory =
-      yield* StepFunctions.GetExecutionHistory(standard);
+    const getExecutionHistory = yield* StepFunctions.GetExecutionHistory(standard);
     const redriveExecution = yield* StepFunctions.RedriveExecution(standard);
     const startMapExecution = yield* StepFunctions.StartExecution(mapMachine);
-    const describeMapExecution =
-      yield* StepFunctions.DescribeExecution(mapMachine);
+    const describeMapExecution = yield* StepFunctions.DescribeExecution(mapMachine);
     const listMapRuns = yield* StepFunctions.ListMapRuns(mapMachine);
     const describeMapRun = yield* StepFunctions.DescribeMapRun(mapMachine);
     const updateMapRun = yield* StepFunctions.UpdateMapRun(mapMachine);

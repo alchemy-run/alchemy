@@ -93,16 +93,11 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(20),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
         }),
       );
 
-      expect(all.some((c) => c.certificateArn === cert.certificateArn)).toBe(
-        true,
-      );
+      expect(all.some((c) => c.certificateArn === cert.certificateArn)).toBe(true);
 
       yield* stack.destroy();
     }),
@@ -187,9 +182,9 @@ test.provider.skipIf(!!process.env.FAST)(
       // Safety net: reclaim the certificate on scope close even if the body
       // fails mid-way (e.g. during the pre-fix crash verification).
       yield* Effect.addFinalizer(() =>
-        withUsEast1(
-          acm.deleteCertificate({ CertificateArn: created.certificateArn }),
-        ).pipe(Effect.ignore),
+        withUsEast1(acm.deleteCertificate({ CertificateArn: created.certificateArn })).pipe(
+          Effect.ignore,
+        ),
       );
 
       // `ListCertificates` is eventually consistent; the recovery redeploy
@@ -207,10 +202,7 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(18),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(18)]),
         }),
       );
 
@@ -221,19 +213,14 @@ test.provider.skipIf(!!process.env.FAST)(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.ACM.Certificate",
+          isResourceState(r.row) && r.row.resourceType === "AWS.ACM.Certificate",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no AWS.ACM.Certificate state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.ACM.Certificate state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,

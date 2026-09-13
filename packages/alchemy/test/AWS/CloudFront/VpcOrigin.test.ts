@@ -38,9 +38,7 @@ describe("AWS.CloudFront.VpcOrigin", () => {
         })
         .pipe(Effect.flip);
 
-      expect(["InvalidArgument", "EntityNotFound", "AccessDenied"]).toContain(
-        result._tag,
-      );
+      expect(["InvalidArgument", "EntityNotFound", "AccessDenied"]).toContain(result._tag);
     }),
   );
 
@@ -102,9 +100,7 @@ describe("AWS.CloudFront.VpcOrigin", () => {
         });
         expect(got.VpcOrigin?.Status).toEqual("Deployed");
         expect(got.VpcOrigin?.VpcOriginEndpointConfig.HTTPPort).toEqual(80);
-        expect(
-          got.VpcOrigin?.VpcOriginEndpointConfig.OriginProtocolPolicy,
-        ).toEqual("http-only");
+        expect(got.VpcOrigin?.VpcOriginEndpointConfig.OriginProtocolPolicy).toEqual("http-only");
 
         yield* stack.destroy();
         yield* assertVpcOriginDeleted(deployed.vpcOrigin.vpcOriginId);
@@ -115,35 +111,27 @@ describe("AWS.CloudFront.VpcOrigin", () => {
     { timeout: 2_700_000 },
   );
 
-  test.provider.skipIf(!runLifecycle)(
-    "list enumerates account VPC origins",
-    () =>
-      Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(VpcOrigin);
-        const all = yield* provider.list();
-        expect(Array.isArray(all)).toBe(true);
-        for (const item of all) {
-          expect(item.vpcOriginId).toBeDefined();
-          expect(item.vpcOriginArn).toBeDefined();
-        }
-      }),
+  test.provider.skipIf(!runLifecycle)("list enumerates account VPC origins", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(VpcOrigin);
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(item.vpcOriginId).toBeDefined();
+        expect(item.vpcOriginArn).toBeDefined();
+      }
+    }),
   );
 });
 
 const assertVpcOriginDeleted = (id: string) =>
   cloudfront.getVpcOrigin({ Id: id }).pipe(
     Effect.flatMap((result) =>
-      result.VpcOrigin
-        ? Effect.fail(new Error("VpcOriginStillExists"))
-        : Effect.void,
+      result.VpcOrigin ? Effect.fail(new Error("VpcOriginStillExists")) : Effect.void,
     ),
     Effect.catchTag("EntityNotFound", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "VpcOriginStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      while: (error) => error instanceof Error && error.message === "VpcOriginStillExists",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
   );

@@ -66,11 +66,7 @@ const insertSql = (
   return `INSERT INTO ${quoted} (hash, created_at, name${appliedColumn}) VALUES (${sqlLiteral(record.hash)}, ${sqlLiteral(record.createdAtMillis ?? null)}, ${sqlLiteral(record.name)}${applied});`;
 };
 
-const renameSql = (
-  from: string,
-  to: string,
-  dialect: MigrationDialect,
-): string =>
+const renameSql = (from: string, to: string, dialect: MigrationDialect): string =>
   dialect === "mysql"
     ? `RENAME TABLE ${quoteIdentifier(from, dialect)} TO ${quoteIdentifier(to, dialect)};`
     : `ALTER TABLE ${quoteIdentifier(from, dialect)} RENAME TO ${quoteIdentifier(to, dialect)};`;
@@ -116,10 +112,7 @@ const rebuildInPlace = (options: {
     const temp = `${table}_alchemy_upgrade`;
     yield* executor.batch([
       `DROP TABLE IF EXISTS ${quoteIdentifier(temp, dialect)};`,
-      createTableSql(temp, dialect).replace(
-        "CREATE TABLE IF NOT EXISTS",
-        "CREATE TABLE",
-      ),
+      createTableSql(temp, dialect).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE"),
       ...matched.map((row) => convertedRowInsertSql(temp, dialect, row)),
       `DROP TABLE ${quoted};`,
       renameSql(temp, table, dialect),
@@ -140,14 +133,10 @@ const ensureTable = (options: {
         // history the previous tool (drizzle-kit / prisma / wrangler) left
         // behind: copy it into our table ONCE and freeze theirs. One-way.
         const history = yield* findForeignHistory({ executor, table });
-        const converted = history
-          ? yield* matchForeignRows({ history, records })
-          : [];
+        const converted = history ? yield* matchForeignRows({ history, records }) : [];
         yield* executor.batch([
           createTableSql(table, executor.dialect),
-          ...converted.map((row) =>
-            convertedRowInsertSql(table, executor.dialect, row),
-          ),
+          ...converted.map((row) => convertedRowInsertSql(table, executor.dialect, row)),
         ]);
         return;
       }
@@ -196,19 +185,17 @@ const ensureTable = (options: {
   });
 
 const appliedNames = (executor: SqlExecutor, table: string) =>
-  executor
-    .query(`SELECT name FROM ${quoteIdentifier(table, executor.dialect)};`)
-    .pipe(
-      Effect.map(
-        (rows) =>
-          new Set(
-            rows
-              .map((row) => row.name)
-              .filter((name) => name !== null && name !== undefined)
-              .map(String),
-          ),
-      ),
-    );
+  executor.query(`SELECT name FROM ${quoteIdentifier(table, executor.dialect)};`).pipe(
+    Effect.map(
+      (rows) =>
+        new Set(
+          rows
+            .map((row) => row.name)
+            .filter((name) => name !== null && name !== undefined)
+            .map(String),
+        ),
+    ),
+  );
 
 /**
  * Apply pending migrations with Alchemy's bookkeeping. Idempotent: each
@@ -237,9 +224,6 @@ export const applyAlchemyFormat = (options: {
       ) {
         continue;
       }
-      yield* executor.batch([
-        ...record.statements,
-        insertSql(table, executor.dialect, record),
-      ]);
+      yield* executor.batch([...record.statements, insertSql(table, executor.dialect, record)]);
     }
   });

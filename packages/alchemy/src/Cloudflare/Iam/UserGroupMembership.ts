@@ -81,9 +81,7 @@ export const UserGroupMembership = Resource<UserGroupMembership>(TypeId);
 /**
  * Returns true if the given value is an UserGroupMembership resource.
  */
-export const isUserGroupMembership = (
-  value: unknown,
-): value is UserGroupMembership =>
+export const isUserGroupMembership = (value: unknown): value is UserGroupMembership =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const UserGroupMembershipProvider = () =>
@@ -98,38 +96,33 @@ export const UserGroupMembershipProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const groups = yield* iam.listUserGroups.pages({ accountId }).pipe(
         Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) => page.result ?? []),
-        ),
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
       );
       const rows = yield* Effect.forEach(
         groups,
         (group) =>
-          iam.listUserGroupMembers
-            .pages({ accountId, userGroupId: group.id })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map(
-                    (member): UserGroupMembershipAttributes =>
-                      toAttributes(member, group.id, accountId),
-                  ),
+          iam.listUserGroupMembers.pages({ accountId, userGroupId: group.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((member): UserGroupMembershipAttributes =>
+                  toAttributes(member, group.id, accountId),
                 ),
               ),
-              // Group removed out-of-band between enumeration and member
-              // listing — skip it.
-              Effect.catchTag("UserGroupNotFound", () =>
-                Effect.succeed([] as UserGroupMembershipAttributes[]),
-              ),
-              // A group whose policy Cloudflare can't validate rejects the
-              // member listing with a 400 ("Policy validation failed"). It's
-              // not ours to enumerate — contribute nothing rather than failing
-              // the whole account-wide listing.
-              Effect.catchTag("PolicyValidationFailed", () =>
-                Effect.succeed([] as UserGroupMembershipAttributes[]),
-              ),
             ),
+            // Group removed out-of-band between enumeration and member
+            // listing — skip it.
+            Effect.catchTag("UserGroupNotFound", () =>
+              Effect.succeed([] as UserGroupMembershipAttributes[]),
+            ),
+            // A group whose policy Cloudflare can't validate rejects the
+            // member listing with a 400 ("Policy validation failed"). It's
+            // not ours to enumerate — contribute nothing rather than failing
+            // the whole account-wide listing.
+            Effect.catchTag("PolicyValidationFailed", () =>
+              Effect.succeed([] as UserGroupMembershipAttributes[]),
+            ),
+          ),
         { concurrency: 10 },
       );
       return rows.flat();
@@ -139,16 +132,10 @@ export const UserGroupMembershipProvider = () =>
       if (!isResolved(news)) return undefined;
       // Identity change — both props are the resource's identity, so any
       // change is a replacement. Compare only once both sides are concrete.
-      if (
-        typeof olds?.userGroup === "string" &&
-        olds.userGroup !== news.userGroup
-      ) {
+      if (typeof olds?.userGroup === "string" && olds.userGroup !== news.userGroup) {
         return { action: "replace" } as const;
       }
-      if (
-        typeof olds?.memberId === "string" &&
-        olds.memberId !== news.memberId
-      ) {
+      if (typeof olds?.memberId === "string" && olds.memberId !== news.memberId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -163,10 +150,8 @@ export const UserGroupMembershipProvider = () =>
       // sibling group's id when state was persisted before reconcile), so
       // only use them as a lookup key once they're concrete strings —
       // otherwise there is nothing to read.
-      const oldGroup =
-        typeof olds?.userGroup === "string" ? olds.userGroup : undefined;
-      const oldMember =
-        typeof olds?.memberId === "string" ? olds.memberId : undefined;
+      const oldGroup = typeof olds?.userGroup === "string" ? olds.userGroup : undefined;
+      const oldMember = typeof olds?.memberId === "string" ? olds.memberId : undefined;
       const userGroupId = output?.userGroupId ?? oldGroup;
       const memberId = output?.memberId ?? oldMember;
       if (userGroupId === undefined || memberId === undefined) {
@@ -193,14 +178,10 @@ export const UserGroupMembershipProvider = () =>
         // are done. A missing *member* (`UserGroupMemberNotFound`) is the
         // expected greenfield state; a missing *group* (`UserGroupNotFound`)
         // bubbles to the retry below.
-        const observed = yield* iam
-          .getUserGroupMember({ accountId, userGroupId, memberId })
-          .pipe(
-            Effect.map((m): ObservedMember | undefined => m),
-            Effect.catchTag("UserGroupMemberNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const observed = yield* iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
+          Effect.map((m): ObservedMember | undefined => m),
+          Effect.catchTag("UserGroupMemberNotFound", () => Effect.succeed(undefined)),
+        );
         if (observed) {
           return toAttributes(observed, userGroupId, accountId);
         }
@@ -261,11 +242,7 @@ type ObservedMember = {
  * (`UserGroupMemberNotFound`) or the group itself missing
  * (`UserGroupNotFound`) — to `undefined`.
  */
-const getMembership = (
-  accountId: string,
-  userGroupId: string,
-  memberId: string,
-) =>
+const getMembership = (accountId: string, userGroupId: string, memberId: string) =>
   iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
     Effect.map((m): ObservedMember | undefined => m),
     Effect.catchTag(["UserGroupMemberNotFound", "UserGroupNotFound"], () =>

@@ -4,10 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryUnavailableEntity,
-  retryUnavailableEntityLong,
-} from "./internal.ts";
+import { retryUnavailableEntity, retryUnavailableEntityLong } from "./internal.ts";
 
 export interface WebACLAssociationProps {
   /**
@@ -73,9 +70,7 @@ export interface WebACLAssociation extends Resource<
  *
  * @resource
  */
-export const WebACLAssociation = Resource<WebACLAssociation>(
-  "AWS.WAFv2.WebACLAssociation",
-);
+export const WebACLAssociation = Resource<WebACLAssociation>("AWS.WAFv2.WebACLAssociation");
 
 export const WebACLAssociationProvider = () =>
   Provider.effect(
@@ -144,9 +139,7 @@ export const WebACLAssociationProvider = () =>
             );
           }
 
-          yield* session.note(
-            `Associated ${news.webAclArn} with ${news.resourceArn}`,
-          );
+          yield* session.note(`Associated ${news.webAclArn} with ${news.resourceArn}`);
           return {
             webAclArn: news.webAclArn,
             resourceArn: news.resourceArn,

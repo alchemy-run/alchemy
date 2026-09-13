@@ -7,9 +7,7 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
-import LogEventSinkFunctionLive, {
-  LogEventSinkFunction,
-} from "./sink-handler.ts";
+import LogEventSinkFunctionLive, { LogEventSinkFunction } from "./sink-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,10 +31,7 @@ const waitForReady = (url: string) =>
     // A fresh function URL can briefly 200 before the captured env (the log
     // group name) has propagated — keep polling until it is a string.
     const json = (yield* response.json) as any;
-    if (
-      typeof json?.logGroupName === "string" &&
-      typeof json?.logStreamName === "string"
-    ) {
+    if (typeof json?.logGroupName === "string" && typeof json?.logStreamName === "string") {
       return {
         logGroupName: json.logGroupName as string,
         logStreamName: json.logStreamName as string,
@@ -46,10 +41,7 @@ const waitForReady = (url: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(75),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
     }),
   );
 
@@ -60,18 +52,13 @@ const postJson = (url: string, body: unknown) =>
       body: yield* HttpBody.json(body),
     });
     if (response.status >= 500) {
-      return yield* Effect.fail(
-        new TransientUpstream({ status: response.status }),
-      );
+      return yield* Effect.fail(new TransientUpstream({ status: response.status }));
     }
     return yield* response.json;
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
@@ -79,11 +66,7 @@ const postJson = (url: string, body: unknown) =>
  * Out-of-band read: poll GetLogEvents until every marker is visible in the
  * stream (ingestion lags a few seconds), returning the observed messages.
  */
-const waitForEvents = (
-  logGroupName: string,
-  logStreamName: string,
-  markers: readonly string[],
-) =>
+const waitForEvents = (logGroupName: string, logStreamName: string, markers: readonly string[]) =>
   Effect.gen(function* () {
     const result = yield* logs.getLogEvents({
       logGroupName,
@@ -102,12 +85,8 @@ const waitForEvents = (
     Effect.retry({
       // Ride out both ingestion lag and the brief post-create window where
       // the stream is not yet describable.
-      while: (e) =>
-        e._tag === "EventsNotVisible" || e._tag === "ResourceNotFoundException",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      while: (e) => e._tag === "EventsNotVisible" || e._tag === "ResourceNotFoundException",
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -125,15 +104,10 @@ test.provider(
       );
       const baseUrl = fn.functionUrl!.replace(/\/+$/, "");
 
-      const { logGroupName, logStreamName } = yield* waitForReady(
-        `${baseUrl}/ready`,
-      );
+      const { logGroupName, logStreamName } = yield* waitForReady(`${baseUrl}/ready`);
 
       // 25 markers through the sink in one request-scoped drain.
-      const markers = Array.from(
-        { length: 25 },
-        (_, i) => `sink-${i}-${crypto.randomUUID()}`,
-      );
+      const markers = Array.from({ length: 25 }, (_, i) => `sink-${i}-${crypto.randomUUID()}`);
       const response = yield* postJson(`${baseUrl}/sink`, {
         messages: markers,
       });
@@ -148,29 +122,17 @@ test.provider(
       // rejection — an event >2h in the future is skipped by the API while
       // the valid events in the same batch are still ingested. The sink must
       // drop it (REJECT, no retry) and complete without error.
-      const validMarkers = Array.from(
-        { length: 3 },
-        (_, i) => `valid-${i}-${crypto.randomUUID()}`,
-      );
+      const validMarkers = Array.from({ length: 3 }, (_, i) => `valid-${i}-${crypto.randomUUID()}`);
       const rejectedMarker = `rejected-${crypto.randomUUID()}`;
-      const rejectedResponse = yield* postJson(
-        `${baseUrl}/sink-with-rejected`,
-        {
-          valid: validMarkers,
-          rejected: rejectedMarker,
-        },
-      );
+      const rejectedResponse = yield* postJson(`${baseUrl}/sink-with-rejected`, {
+        valid: validMarkers,
+        rejected: rejectedMarker,
+      });
       expect((rejectedResponse as any).ok).toBe(true);
 
-      const messages = yield* waitForEvents(
-        logGroupName,
-        logStreamName,
-        validMarkers,
-      );
+      const messages = yield* waitForEvents(logGroupName, logStreamName, validMarkers);
       // The rejected (too-new) event was never ingested.
-      expect(messages.some((message) => message.includes(rejectedMarker))).toBe(
-        false,
-      );
+      expect(messages.some((message) => message.includes(rejectedMarker))).toBe(false);
 
       yield* stack.destroy();
 
@@ -179,11 +141,9 @@ test.provider(
         logGroupNamePrefix: logGroupName,
         limit: 1,
       });
-      expect(
-        (remaining.logGroups ?? []).some(
-          (group) => group.logGroupName === logGroupName,
-        ),
-      ).toBe(false);
+      expect((remaining.logGroups ?? []).some((group) => group.logGroupName === logGroupName)).toBe(
+        false,
+      );
     }),
   { timeout: 240_000 },
 );

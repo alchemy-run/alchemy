@@ -34,10 +34,7 @@ export interface StartJobRun extends Binding.Service<
   "AWS.EMRContainers.StartJobRun",
   (virtualCluster: VirtualCluster) => Effect.Effect<
     (
-      request: Omit<
-        emrc.StartJobRunRequest,
-        "virtualClusterId" | "clientToken"
-      > & {
+      request: Omit<emrc.StartJobRunRequest, "virtualClusterId" | "clientToken"> & {
         /**
          * Idempotency token for the job run submission.
          * @default auto-generated per call
@@ -47,6 +44,4 @@ export interface StartJobRun extends Binding.Service<
     ) => Effect.Effect<emrc.StartJobRunResponse, emrc.StartJobRunError>
   >
 > {}
-export const StartJobRun = Binding.Service<StartJobRun>(
-  "AWS.EMRContainers.StartJobRun",
-);
+export const StartJobRun = Binding.Service<StartJobRun>("AWS.EMRContainers.StartJobRun");

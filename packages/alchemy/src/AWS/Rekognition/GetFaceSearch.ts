@@ -30,12 +30,7 @@ export interface GetFaceSearch extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetFaceSearchRequest,
-    ) => Effect.Effect<
-      rekognition.GetFaceSearchResponse,
-      rekognition.GetFaceSearchError
-    >
+    ) => Effect.Effect<rekognition.GetFaceSearchResponse, rekognition.GetFaceSearchError>
   >
 > {}
-export const GetFaceSearch = Binding.Service<GetFaceSearch>(
-  "AWS.Rekognition.GetFaceSearch",
-);
+export const GetFaceSearch = Binding.Service<GetFaceSearch>("AWS.Rekognition.GetFaceSearch");

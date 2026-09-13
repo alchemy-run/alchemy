@@ -95,13 +95,7 @@ export interface ListAttributes {
   updatedAt: string | undefined;
 }
 
-export type List = Resource<
-  TypeId,
-  ListProps,
-  ListAttributes,
-  never,
-  Providers
->;
+export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust Gateway list — a named set of domains, IPs,
@@ -212,9 +206,7 @@ export const ListProvider = () =>
 
       // 1. Observe — the cached id is a hint, not a guarantee; fall back
       //    to a name scan so out-of-band deletes / lost state converge.
-      let observed = output?.listId
-        ? yield* getList(accountId, output.listId)
-        : undefined;
+      let observed = output?.listId ? yield* getList(accountId, output.listId) : undefined;
       if (!observed) {
         const match = yield* findByName(accountId, name);
         if (match?.id) observed = yield* getList(accountId, match.id);
@@ -238,10 +230,7 @@ export const ListProvider = () =>
         }
         // Create echoes items without count — re-read for a full shape.
         const fresh = yield* getList(accountId, created.id);
-        return toAttributes(
-          fresh ?? { ...created, count: desiredItems.length },
-          accountId,
-        );
+        return toAttributes(fresh ?? { ...created, count: desiredItems.length }, accountId);
       }
 
       // 3. Sync — diff observed name/description/items against desired;
@@ -254,8 +243,7 @@ export const ListProvider = () =>
       }));
       const dirty =
         observed.name !== name ||
-        (news.description !== undefined &&
-          (observed.description ?? "") !== news.description) ||
+        (news.description !== undefined && (observed.description ?? "") !== news.description) ||
         !sameItems(observedItems, desiredItems);
       if (dirty) {
         yield* zeroTrust.updateGatewayList({
@@ -320,10 +308,7 @@ const resolveName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-const sameItems = (
-  observed: ReadonlyArray<ListItem>,
-  desired: ReadonlyArray<ListItem>,
-): boolean =>
+const sameItems = (observed: ReadonlyArray<ListItem>, desired: ReadonlyArray<ListItem>): boolean =>
   arrayEqualsUnordered(
     observed.map((i) => `${i.value} ${i.description ?? ""}`),
     desired.map((i) => `${i.value} ${i.description ?? ""}`),

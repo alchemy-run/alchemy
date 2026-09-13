@@ -15,9 +15,7 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const configuredPassword = yield* Config.Redacted("POSTGRES_PASSWORD").pipe(
-      Config.option,
-    );
+    const configuredPassword = yield* Config.Redacted("POSTGRES_PASSWORD").pipe(Config.option);
     const password = yield* Option.match(configuredPassword, {
       onSome: Effect.succeed,
       onNone: () => Alchemy.makeRandom("PostgresPassword", { bytes: 16 }),

@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import { Branch } from "@/Neon/Branch";
-import {
-  Credential,
-  validateCredential,
-  type CredentialScope,
-} from "@/Neon/Credential";
+import { Credential, validateCredential, type CredentialScope } from "@/Neon/Credential";
 import { Project } from "@/Neon/Project";
 import { providers } from "@/Neon/Providers";
 import * as Test from "@/Test/Alchemy";
@@ -44,9 +40,7 @@ test.provider(
       };
       const listed = yield* SDK.listCredentials(scope);
       expect(
-        listed.credentials.filter(
-          (credential) => credential.token_id === first.credential.tokenId,
-        ),
+        listed.credentials.filter((credential) => credential.token_id === first.credential.tokenId),
       ).toHaveLength(1);
       const revealed = yield* SDK.revealCredential({
         ...scope,
@@ -58,18 +52,14 @@ test.provider(
             ? Redacted.value(revealed.api_token)
             : revealed.api_token),
       ).toBe(true);
-      expect(Redacted.isRedacted(second.credential.s3SecretAccessKey)).toBe(
-        true,
-      );
+      expect(Redacted.isRedacted(second.credential.s3SecretAccessKey)).toBe(true);
       const changed = yield* deploy(["storage:write"]);
       expect(changed.credential.tokenId).not.toBe(first.credential.tokenId);
       expect(changed.named.tokenId).not.toBe(first.named.tokenId);
       expect(changed.named.name).toBe(first.named.name);
       expect(
         (yield* SDK.listCredentials(scope)).credentials.some(
-          (credential) =>
-            credential.token_id === first.named.tokenId &&
-            !credential.revoked_at,
+          (credential) => credential.token_id === first.named.tokenId && !credential.revoked_at,
         ),
       ).toBe(false);
       const old = yield* SDK.revealCredential({
@@ -91,9 +81,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const program = (
-        scopes: CredentialScope[] = ["storage:read", "storage:write"],
-      ) =>
+      const program = (scopes: CredentialScope[] = ["storage:read", "storage:write"]) =>
         Effect.gen(function* () {
           const project = yield* Project("LineageProject", {
             region: "aws-us-east-2",
@@ -116,8 +104,7 @@ test.provider(
         "storage:read",
       ).pipe(Effect.result);
       expect(Result.isFailure(sibling)).toBe(true);
-      if (Result.isFailure(sibling))
-        expect(sibling.failure._tag).toBe("CredentialRecoveryError");
+      if (Result.isFailure(sibling)) expect(sibling.failure._tag).toBe("CredentialRecoveryError");
       const scope = yield* validateCredential(
         first.credential,
         first.left,
@@ -130,9 +117,7 @@ test.provider(
         token_id: first.credential.tokenId,
       });
       // Reordering equal scopes schedules reconciliation without changing permissions.
-      const recovered = yield* stack.deploy(
-        program(["storage:write", "storage:read"]),
-      );
+      const recovered = yield* stack.deploy(program(["storage:write", "storage:read"]));
       expect(recovered.credential.tokenId).not.toBe(first.credential.tokenId);
       expect(recovered.credential.name).toBe(first.credential.name);
       yield* stack.destroy();

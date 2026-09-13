@@ -40,14 +40,12 @@ export const withProviderContext = <R extends ResourceLike>(
         // ops carry the same context. A local variant's own data-plane
         // override is provided closer and still wins.
         return Object.fromEntries(
-          Object.entries(value as Record<string, Effect.Effect<any>>).map(
-            ([mode, build]) => [
-              mode,
-              Effect.map(build, (resolved) =>
-                withProviderContext(resolved as ProviderService<R>, services),
-              ),
-            ],
-          ),
+          Object.entries(value as Record<string, Effect.Effect<any>>).map(([mode, build]) => [
+            mode,
+            Effect.map(build, (resolved) =>
+              withProviderContext(resolved as ProviderService<R>, services),
+            ),
+          ]),
         );
       }
       if (!Predicate.isFunction(value)) return value;
@@ -71,28 +69,28 @@ export const withProviderContext = <R extends ResourceLike>(
  * absent Endpoint is pinned as `undefined` (the SDK default resolver), so
  * a later ambient override cannot leak in.
  */
-export const captureAwsEnvironment: Effect.Effect<
-  Layer.Layer<any, never, never>
-> = Effect.gen(function* () {
-  let ctx = Context.empty();
-  const endpoint = yield* Effect.serviceOption(Endpoint.Endpoint);
-  ctx = Context.add(
-    ctx,
-    Endpoint.Endpoint,
-    Option.getOrElse(endpoint, () => Effect.succeed(undefined)),
-  );
-  const region = yield* Effect.serviceOption(Region);
-  if (Option.isSome(region)) ctx = Context.add(ctx, Region, region.value);
-  const credentials = yield* Effect.serviceOption(Credentials);
-  if (Option.isSome(credentials)) {
-    ctx = Context.add(ctx, Credentials, credentials.value);
-  }
-  const environment = yield* Effect.serviceOption(AWSEnvironment);
-  if (Option.isSome(environment)) {
-    ctx = Context.add(ctx, AWSEnvironment, environment.value);
-  }
-  return Layer.succeedContext(ctx) as Layer.Layer<any, never, never>;
-});
+export const captureAwsEnvironment: Effect.Effect<Layer.Layer<any, never, never>> = Effect.gen(
+  function* () {
+    let ctx = Context.empty();
+    const endpoint = yield* Effect.serviceOption(Endpoint.Endpoint);
+    ctx = Context.add(
+      ctx,
+      Endpoint.Endpoint,
+      Option.getOrElse(endpoint, () => Effect.succeed(undefined)),
+    );
+    const region = yield* Effect.serviceOption(Region);
+    if (Option.isSome(region)) ctx = Context.add(ctx, Region, region.value);
+    const credentials = yield* Effect.serviceOption(Credentials);
+    if (Option.isSome(credentials)) {
+      ctx = Context.add(ctx, Credentials, credentials.value);
+    }
+    const environment = yield* Effect.serviceOption(AWSEnvironment);
+    if (Option.isSome(environment)) {
+      ctx = Context.add(ctx, AWSEnvironment, environment.value);
+    }
+    return Layer.succeedContext(ctx) as Layer.Layer<any, never, never>;
+  },
+);
 
 /**
  * Pin every provider in a collection (and every mode variant it lazily
@@ -136,8 +134,7 @@ export const pinCollectionEnvironment = <
 };
 
 const isProviderService = (value: unknown): value is ProviderService<any> =>
-  Predicate.hasProperty(value, "reconcile") &&
-  Predicate.isFunction(value.reconcile);
+  Predicate.hasProperty(value, "reconcile") && Predicate.isFunction(value.reconcile);
 
 /**
  * Layer-level companion to {@link withProviderContext}: given a provider
@@ -163,11 +160,7 @@ export const provideProviderContext = <ROut, E, RIn>(
       const ambient = yield* Effect.context<never>();
       // Built via the shared MemoMap: a module-memoized `services` reference
       // is deduped to a single instance across every wrapped provider.
-      const servicesCtx = yield* Layer.buildWithMemoMap(
-        services,
-        memoMap,
-        scope,
-      );
+      const servicesCtx = yield* Layer.buildWithMemoMap(services, memoMap, scope);
       const servicesLayer = Layer.succeedContext(servicesCtx);
       const built = yield* Layer.buildWithMemoMap(
         providerLayer.pipe(
@@ -182,9 +175,7 @@ export const provideProviderContext = <ROut, E, RIn>(
       for (const [key, value] of built.mapUnsafe) {
         wrapped.set(
           key,
-          isProviderService(value)
-            ? withProviderContext(value, servicesLayer)
-            : value,
+          isProviderService(value) ? withProviderContext(value, servicesLayer) : value,
         );
       }
       return Context.makeUnsafe(wrapped) as Context.Context<ROut>;

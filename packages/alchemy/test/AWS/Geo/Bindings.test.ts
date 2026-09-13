@@ -13,10 +13,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "GeoBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -31,19 +28,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -64,9 +56,7 @@ describe("Geo Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `Geo test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Geo test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -74,9 +64,7 @@ describe("Geo Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Geo test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Geo test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -91,9 +79,9 @@ describe("Geo Bindings", () => {
       "returns ranked results for a text query",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/search-text`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/search-text`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             firstPosition?: number[];
           };
@@ -111,9 +99,9 @@ describe("Geo Bindings", () => {
       "geocodes an address into coordinates",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/geocode`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/geocode`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             position?: number[];
           };
@@ -131,9 +119,9 @@ describe("Geo Bindings", () => {
       "reverse geocodes coordinates into an address",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/reverse-geocode`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/reverse-geocode`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             label?: string;
           };
@@ -151,9 +139,9 @@ describe("Geo Bindings", () => {
       "computes a route between two points",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/calculate-routes`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/calculate-routes`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             distance?: number;
             duration?: number;
@@ -172,9 +160,9 @@ describe("Geo Bindings", () => {
       "completes a partial address query",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/autocomplete`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/autocomplete`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             count: number;
             firstTitle?: string;
           };
@@ -213,9 +201,9 @@ describe("Geo Bindings", () => {
       "fetches a vector tile at z/x/y",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/get-tile`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/get-tile`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             byteLength: number;
             contentType?: string;
             pricingBucket?: string;
@@ -233,9 +221,9 @@ describe("Geo Bindings", () => {
       "renders a static map image",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/get-static-map`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/get-static-map`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             byteLength: number;
             contentType?: string;
             pricingBucket?: string;

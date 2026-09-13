@@ -31,9 +31,7 @@ const assertChannelGone = (arn: string) =>
   Effect.gen(function* () {
     const channel = yield* ivs.getChannel({ arn }).pipe(
       Effect.map((r) => r.channel),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (channel !== undefined) {
       return yield* Effect.fail(new Error(`channel '${arn}' still exists`));

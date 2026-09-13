@@ -47,13 +47,8 @@ export interface UpdateIPSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateIPSetRequest,
-    ) => Effect.Effect<
-      WAFV2.UpdateIPSetResponse,
-      WAFV2.GetIPSetError | WAFV2.UpdateIPSetError
-    >
+    ) => Effect.Effect<WAFV2.UpdateIPSetResponse, WAFV2.GetIPSetError | WAFV2.UpdateIPSetError>
   >
 > {}
 
-export const UpdateIPSet = Binding.Service<UpdateIPSet>(
-  "AWS.WAFv2.UpdateIPSet",
-);
+export const UpdateIPSet = Binding.Service<UpdateIPSet>("AWS.WAFv2.UpdateIPSet");

@@ -7,10 +7,7 @@ import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "list workspace audit logs",
@@ -51,9 +48,7 @@ test.provider(
       expect(Array.isArray(projectLogs)).toEqual(true);
       expect(
         projectLogs.every(
-          (log) =>
-            log.projectId === undefined ||
-            log.projectId === created.project.projectId,
+          (log) => log.projectId === undefined || log.projectId === created.project.projectId,
         ),
       ).toEqual(true);
 

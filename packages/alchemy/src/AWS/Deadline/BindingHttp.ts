@@ -130,12 +130,7 @@ export const makeDeadlineQueueSearchHttpBinding = <
  * the deploy-time half grants `actions` on the farm's ARN and everything
  * under it (queues/fleets referenced by the aggregation's `resourceIds`).
  */
-export const makeDeadlineFarmHttpBinding = <
-  I extends { farmId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDeadlineFarmHttpBinding = <I extends { farmId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Deadline.GetSessionsStatisticsAggregation`. */
   tag: string;
   /** The distilled operation; `farmId` is injected. */
@@ -156,10 +151,7 @@ export const makeDeadlineFarmHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  farm.farmArn,
-                  farm.farmArn.pipe(Output.map((arn) => `${arn}/*`)),
-                ],
+                Resource: [farm.farmArn, farm.farmArn.pipe(Output.map((arn) => `${arn}/*`))],
               },
             ],
           });

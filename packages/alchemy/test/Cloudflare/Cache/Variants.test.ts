@@ -10,21 +10,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -64,134 +58,128 @@ const resetBaseline = (zoneId: string) =>
   );
 
 describe.sequential("Variants", () => {
-  test.provider(
-    "creates, updates in place, and deletes the variants setting",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("creates, updates in place, and deletes the variants setting", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        // Known baseline: the setting does not exist.
-        yield* resetBaseline(zoneId);
+      yield* stack.destroy();
+      // Known baseline: the setting does not exist.
+      yield* resetBaseline(zoneId);
 
-        const created = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Cache.Variants("ImageVariants", {
-              zoneId,
-              jpeg: ["image/webp"],
-            });
-          }),
-        );
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Cache.Variants("ImageVariants", {
+            zoneId,
+            jpeg: ["image/webp"],
+          });
+        }),
+      );
 
-        expect(created.zoneId).toEqual(zoneId);
-        expect(created.value).toEqual({ jpeg: ["image/webp"] });
-        expect(created.editable).toEqual(true);
+      expect(created.zoneId).toEqual(zoneId);
+      expect(created.value).toEqual({ jpeg: ["image/webp"] });
+      expect(created.editable).toEqual(true);
 
-        // Out-of-band verification via the distilled API.
-        const live = yield* getVariants(zoneId);
-        expect(live).toBeDefined();
-        expect(live!.value.jpeg).toEqual(["image/webp"]);
+      // Out-of-band verification via the distilled API.
+      const live = yield* getVariants(zoneId);
+      expect(live).toBeDefined();
+      expect(live!.value.jpeg).toEqual(["image/webp"]);
 
-        // Update in place — PATCH replaces the full value object.
-        const updated = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Cache.Variants("ImageVariants", {
-              zoneId,
-              jpeg: ["image/webp", "image/avif"],
-              png: ["image/webp"],
-            });
-          }),
-        );
+      // Update in place — PATCH replaces the full value object.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Cache.Variants("ImageVariants", {
+            zoneId,
+            jpeg: ["image/webp", "image/avif"],
+            png: ["image/webp"],
+          });
+        }),
+      );
 
-        expect(updated.value).toEqual({
-          jpeg: ["image/webp", "image/avif"],
-          png: ["image/webp"],
-        });
+      expect(updated.value).toEqual({
+        jpeg: ["image/webp", "image/avif"],
+        png: ["image/webp"],
+      });
 
-        const liveUpdated = yield* getVariants(zoneId);
-        expect(liveUpdated!.value.jpeg).toEqual(["image/webp", "image/avif"]);
-        expect(liveUpdated!.value.png).toEqual(["image/webp"]);
+      const liveUpdated = yield* getVariants(zoneId);
+      expect(liveUpdated!.value.jpeg).toEqual(["image/webp", "image/avif"]);
+      expect(liveUpdated!.value.png).toEqual(["image/webp"]);
 
-        // Removing an extension from props unsets it (full replace).
-        const narrowed = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Cache.Variants("ImageVariants", {
-              zoneId,
-              png: ["image/avif"],
-            });
-          }),
-        );
+      // Removing an extension from props unsets it (full replace).
+      const narrowed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Cache.Variants("ImageVariants", {
+            zoneId,
+            png: ["image/avif"],
+          });
+        }),
+      );
 
-        expect(narrowed.value).toEqual({ png: ["image/avif"] });
-        const liveNarrowed = yield* getVariants(zoneId);
-        expect(liveNarrowed!.value.jpeg ?? undefined).toBeUndefined();
-        expect(liveNarrowed!.value.png).toEqual(["image/avif"]);
+      expect(narrowed.value).toEqual({ png: ["image/avif"] });
+      const liveNarrowed = yield* getVariants(zoneId);
+      expect(liveNarrowed!.value.jpeg ?? undefined).toBeUndefined();
+      expect(liveNarrowed!.value.png).toEqual(["image/avif"]);
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        // Destroy removed the setting entirely — observed via the typed
-        // `VariantsNotConfigured` error (mapped to `undefined`).
-        const gone = yield* getVariants(zoneId);
-        expect(gone).toBeUndefined();
-      }).pipe(logLevel),
+      // Destroy removed the setting entirely — observed via the typed
+      // `VariantsNotConfigured` error (mapped to `undefined`).
+      const gone = yield* getVariants(zoneId);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
   );
 
-  test.provider(
-    "deploy is idempotent and converges out-of-band drift",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("deploy is idempotent and converges out-of-band drift", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        yield* resetBaseline(zoneId);
+      yield* stack.destroy();
+      yield* resetBaseline(zoneId);
 
-        const created = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Cache.Variants("ImageVariants", {
-              zoneId,
-              webp: ["image/avif"],
-            });
-          }),
-        );
-        expect(created.value).toEqual({ webp: ["image/avif"] });
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Cache.Variants("ImageVariants", {
+            zoneId,
+            webp: ["image/avif"],
+          });
+        }),
+      );
+      expect(created.value).toEqual({ webp: ["image/avif"] });
 
-        // Drift the setting out-of-band. The next reconcile (triggered by a
-        // prop change) observes the live cloud state and replaces the full
-        // value — the drifted `gif` entry must not survive.
-        yield* cache
-          .patchVariant({ zoneId, value: { gif: ["image/webp"] } })
-          .pipe(
-            Effect.retry({
-              while: isTokenPropagationError,
-              schedule: tokenPropagationRetrySchedule,
-              times: 8,
-            }),
-          );
+      // Drift the setting out-of-band. The next reconcile (triggered by a
+      // prop change) observes the live cloud state and replaces the full
+      // value — the drifted `gif` entry must not survive.
+      yield* cache.patchVariant({ zoneId, value: { gif: ["image/webp"] } }).pipe(
+        Effect.retry({
+          while: isTokenPropagationError,
+          schedule: tokenPropagationRetrySchedule,
+          times: 8,
+        }),
+      );
 
-        const converged = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Cache.Variants("ImageVariants", {
-              zoneId,
-              webp: ["image/avif"],
-              tiff: ["image/webp"],
-            });
-          }),
-        );
-        expect(converged.value).toEqual({
-          tiff: ["image/webp"],
-          webp: ["image/avif"],
-        });
+      const converged = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Cache.Variants("ImageVariants", {
+            zoneId,
+            webp: ["image/avif"],
+            tiff: ["image/webp"],
+          });
+        }),
+      );
+      expect(converged.value).toEqual({
+        tiff: ["image/webp"],
+        webp: ["image/avif"],
+      });
 
-        const live = yield* getVariants(zoneId);
-        expect(live!.value.webp).toEqual(["image/avif"]);
-        expect(live!.value.tiff).toEqual(["image/webp"]);
-        expect(live!.value.gif ?? undefined).toBeUndefined();
+      const live = yield* getVariants(zoneId);
+      expect(live!.value.webp).toEqual(["image/avif"]);
+      expect(live!.value.tiff).toEqual(["image/webp"]);
+      expect(live!.value.gif ?? undefined).toBeUndefined();
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        const gone = yield* getVariants(zoneId);
-        expect(gone).toBeUndefined();
-      }).pipe(logLevel),
+      const gone = yield* getVariants(zoneId);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
   );
 
   // Canonical `list()` test (zone-scoped singleton with create/delete

@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Load Balancing is a paid add-on subscription. The testing account does
 // not have it: monitor creation is rejected with the degenerate plan limit
@@ -47,10 +44,7 @@ const expectGone = (accountId: string, monitorId: string) =>
     Effect.catchTag("MonitorNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "MonitorNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -163,9 +157,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.Monitor,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.Monitor);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
       for (const monitor of all) {
@@ -198,9 +190,7 @@ test.provider.skipIf(!lbEnabled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.LoadBalancer.Monitor,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer.Monitor);
       const all = yield* provider.list();
 
       expect(all.some((m) => m.monitorId === deployed.monitorId)).toBe(true);

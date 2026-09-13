@@ -8,17 +8,11 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // R2 is eventually consistent — a freshly written object can read back `null`
 // for a moment. Bounded spaced retry so a real failure surfaces fast.
-const readBack = Schedule.max([
-  Schedule.spaced("1 second"),
-  Schedule.recurs(15),
-]);
+const readBack = Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(15)]);
 
 // Binding an R2 bucket inside an Action via `ReadWriteBucketLocal` — the local
 // (current-credentials) implementation of the `ReadWriteBucket` binding.
@@ -49,9 +43,7 @@ test.provider(
 
                 // Read back with bounded retry (eventual consistency).
                 const value = yield* r2.get("hello.txt").pipe(
-                  Effect.flatMap((o) =>
-                    o ? o.text() : Effect.succeed<string | null>(null),
-                  ),
+                  Effect.flatMap((o) => (o ? o.text() : Effect.succeed<string | null>(null))),
                   Effect.orDie,
                   Effect.repeat({
                     schedule: readBack,

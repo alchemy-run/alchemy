@@ -40,9 +40,7 @@ export default OpenSearchBindingsTestFunction.make(
       { kinds: ["cluster-status", "software-update"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `opensearch event: ${event["detail-type"]} -> ${event.resources.join(", ")}`,
-          ),
+          Effect.log(`opensearch event: ${event["detail-type"]} -> ${event.resources.join(", ")}`),
         ),
     );
 
@@ -51,19 +49,15 @@ export default OpenSearchBindingsTestFunction.make(
     const describeDomainConfig = yield* OpenSearch.DescribeDomainConfig();
     const describeDomainHealth = yield* OpenSearch.DescribeDomainHealth();
     const describeDomainNodes = yield* OpenSearch.DescribeDomainNodes();
-    const describeDomainChangeProgress =
-      yield* OpenSearch.DescribeDomainChangeProgress();
+    const describeDomainChangeProgress = yield* OpenSearch.DescribeDomainChangeProgress();
     const listDomainNames = yield* OpenSearch.ListDomainNames();
     const describeDomainAutoTunes = yield* OpenSearch.DescribeDomainAutoTunes();
     const listScheduledActions = yield* OpenSearch.ListScheduledActions();
     const startDomainMaintenance = yield* OpenSearch.StartDomainMaintenance();
-    const getDomainMaintenanceStatus =
-      yield* OpenSearch.GetDomainMaintenanceStatus();
+    const getDomainMaintenanceStatus = yield* OpenSearch.GetDomainMaintenanceStatus();
     const listDomainMaintenances = yield* OpenSearch.ListDomainMaintenances();
-    const startServiceSoftwareUpdate =
-      yield* OpenSearch.StartServiceSoftwareUpdate();
-    const cancelServiceSoftwareUpdate =
-      yield* OpenSearch.CancelServiceSoftwareUpdate();
+    const startServiceSoftwareUpdate = yield* OpenSearch.StartServiceSoftwareUpdate();
+    const cancelServiceSoftwareUpdate = yield* OpenSearch.CancelServiceSoftwareUpdate();
     const getUpgradeStatus = yield* OpenSearch.GetUpgradeStatus();
     const getUpgradeHistory = yield* OpenSearch.GetUpgradeHistory();
     const getCompatibleVersions = yield* OpenSearch.GetCompatibleVersions();
@@ -110,9 +104,7 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -133,9 +125,7 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -149,9 +139,8 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "BaseException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "BaseException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -164,9 +153,8 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "BaseException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "BaseException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -179,9 +167,8 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "BaseException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "BaseException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -201,9 +188,7 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -213,17 +198,12 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/start-maintenance-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/start-maintenance-probe") {
           // Starting maintenance on a nonexistent domain must surface the
           // typed not-found tag — proves the write-side grant without ever
           // rebooting anything.
@@ -232,17 +212,12 @@ export default OpenSearchBindingsTestFunction.make(
             Action: "REBOOT_NODE",
           }).pipe(
             Effect.map(() => "Started"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/maintenance-status-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/maintenance-status-probe") {
           // Missing domain surfaces as the typed `BaseException` here (see
           // /domain-health).
           const tag = yield* getDomainMaintenanceStatus({
@@ -250,9 +225,8 @@ export default OpenSearchBindingsTestFunction.make(
             MaintenanceId: "nonexistent-maintenance-id",
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "BaseException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "BaseException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -265,9 +239,8 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "BaseException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "BaseException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
@@ -278,24 +251,17 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Started"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/cancel-software-update-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/cancel-software-update-probe") {
           const tag = yield* cancelServiceSoftwareUpdate({
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Cancelled"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -305,9 +271,7 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -317,9 +281,7 @@ export default OpenSearchBindingsTestFunction.make(
             DomainName: NONEXISTENT_DOMAIN,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ResourceNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

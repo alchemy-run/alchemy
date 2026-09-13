@@ -127,9 +127,7 @@ export default function PRLifecycle() {
     };
   }, []);
 
-  const anyInFlight = rows.some(
-    (r) => r.status === "creating" || r.status === "deleting",
-  );
+  const anyInFlight = rows.some((r) => r.status === "creating" || r.status === "deleting");
   const spinner = useSpinner(anyInFlight);
 
   const accent =
@@ -154,8 +152,7 @@ export default function PRLifecycle() {
       <ol className="pr-lc__timeline" aria-label="PR lifecycle">
         {PHASES.map((p, i) => {
           const activeIdx = PHASES.findIndex((x) => x.id === phase);
-          const state =
-            i < activeIdx ? "done" : i === activeIdx ? "active" : "todo";
+          const state = i < activeIdx ? "done" : i === activeIdx ? "active" : "todo";
           return (
             <li key={p.id} className={`pr-lc__step pr-lc__step--${state}`}>
               <span className="pr-lc__step-num">{i + 1}</span>
@@ -188,9 +185,7 @@ export default function PRLifecycle() {
           <div className="pr-lc__pr-meta">
             <span className="pr-lc__pr-branch">feature/photo-upload</span>
             <span className="pr-lc__pr-sep">→</span>
-            <span className="pr-lc__pr-branch pr-lc__pr-branch--base">
-              main
-            </span>
+            <span className="pr-lc__pr-branch pr-lc__pr-branch--base">main</span>
           </div>
           <div className="pr-lc__pr-checks">
             <div
@@ -204,9 +199,7 @@ export default function PRLifecycle() {
                 <span className="pr-lc__check-status">success</span>
               )}
             </div>
-            {(phase === "comment" ||
-              phase === "observe" ||
-              phase === "destroy") && (
+            {(phase === "comment" || phase === "observe" || phase === "destroy") && (
               <div className="pr-lc__check pr-lc__check--done">
                 <span className="pr-lc__check-dot" />
                 <span>alchemy-bot commented</span>
@@ -241,17 +234,12 @@ export default function PRLifecycle() {
                 <h3 className="gh-mock__h3">Preview Deployed</h3>
                 <p className="gh-mock__p">
                   <strong>URL:</strong>{" "}
-                  <a
-                    href="#"
-                    className="gh-mock__url"
-                    onClick={(e) => e.preventDefault()}
-                  >
+                  <a href="#" className="gh-mock__url" onClick={(e) => e.preventDefault()}>
                     {PREVIEW_URL}
                   </a>
                 </p>
                 <p className="gh-mock__p">
-                  Built from commit{" "}
-                  <code className="gh-mock__code">a8f3d21</code>
+                  Built from commit <code className="gh-mock__code">a8f3d21</code>
                 </p>
                 <hr className="gh-mock__hr" />
                 <p className="gh-mock__small">
@@ -260,18 +248,11 @@ export default function PRLifecycle() {
               </div>
             </div>
           ) : (
-            <TermChrome
-              title={`ci · ${STAGE}`}
-              badge={badge}
-              badgeColor={accent}
-              maxLines={10}
-            >
+            <TermChrome title={`ci · ${STAGE}`} badge={badge} badgeColor={accent} maxLines={10}>
               <Line>
                 <span style={{ color: accent }}>$ </span>
                 {cmd}
-                {caret && (
-                  <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>
-                )}
+                {caret && <span style={{ color: "var(--alc-fg-invert)" }}>▍</span>}
               </Line>
               {phase === "open" && (
                 <>
@@ -282,9 +263,7 @@ export default function PRLifecycle() {
                     </span>
                   </Line>
                   <Line>
-                    <span style={{ color: "var(--alc-code-comment)" }}>
-                      # workflow queued…
-                    </span>
+                    <span style={{ color: "var(--alc-code-comment)" }}># workflow queued…</span>
                   </Line>
                 </>
               )}
@@ -292,10 +271,8 @@ export default function PRLifecycle() {
                 <>
                   <Line> </Line>
                   {rows.map((r) => {
-                    const isInFlight =
-                      r.status === "creating" || r.status === "deleting";
-                    const isDone =
-                      r.status === "created" || r.status === "deleted";
+                    const isInFlight = r.status === "creating" || r.status === "deleting";
+                    const isDone = r.status === "created" || r.status === "deleted";
                     const icon = isInFlight
                       ? spinner
                       : isDone
@@ -322,13 +299,9 @@ export default function PRLifecycle() {
                         >
                           {r.id}
                         </span>
-                        <span
-                          style={{ color: "var(--alc-code-comment)" }}
-                        >{` (${r.type})`}</span>
+                        <span style={{ color: "var(--alc-code-comment)" }}>{` (${r.type})`}</span>
                         {isInFlight && (
-                          <span style={{ color: accent, marginLeft: 6 }}>
-                            {r.status}
-                          </span>
+                          <span style={{ color: accent, marginLeft: 6 }}>{r.status}</span>
                         )}
                       </Line>
                     );
@@ -341,17 +314,13 @@ export default function PRLifecycle() {
                   <Line>
                     <span style={{ color: accent }}>✓ </span>
                     <span>{done.verb} in </span>
-                    <span
-                      style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}
-                    >
+                    <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>
                       {done.secs}s
                     </span>
                   </Line>
                   {phase === "deploy" && (
                     <Line>
-                      <span style={{ color: "var(--alc-code-comment)" }}>
-                        {"  → "}
-                      </span>
+                      <span style={{ color: "var(--alc-code-comment)" }}>{"  → "}</span>
                       <span style={{ color: accent }}>{PREVIEW_URL}</span>
                     </Line>
                   )}
@@ -381,11 +350,7 @@ function useSeries(seed: number, range: [number, number]): number[] {
     const arr: number[] = [];
     let v = (range[0] + range[1]) / 2;
     for (let i = 0; i < SPARK_POINTS; i++) {
-      v = clamp(
-        v + (pseudo(seed + i) - 0.5) * (range[1] - range[0]) * 0.35,
-        range[0],
-        range[1],
-      );
+      v = clamp(v + (pseudo(seed + i) - 0.5) * (range[1] - range[0]) * 0.35, range[0], range[1]);
       arr.push(v);
     }
     return arr;
@@ -429,18 +394,11 @@ function Sparkline({
   const stepX = SPARK_W / (data.length - 1);
   const yFor = (v: number) => SPARK_H - ((v - lo) / (hi - lo)) * SPARK_H;
   const d = data
-    .map(
-      (v, i) =>
-        `${i === 0 ? "M" : "L"} ${(i * stepX).toFixed(1)} ${yFor(v).toFixed(1)}`,
-    )
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${(i * stepX).toFixed(1)} ${yFor(v).toFixed(1)}`)
     .join(" ");
   const fillD = `${d} L ${SPARK_W} ${SPARK_H} L 0 ${SPARK_H} Z`;
   return (
-    <svg
-      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-      className="pr-lc__spark"
-      preserveAspectRatio="none"
-    >
+    <svg viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} className="pr-lc__spark" preserveAspectRatio="none">
       <path d={fillD} fill={color} fillOpacity={0.12} />
       <path
         d={d}

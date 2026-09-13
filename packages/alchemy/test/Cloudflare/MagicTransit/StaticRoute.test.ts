@@ -10,10 +10,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Transit is an entitlement-gated product — see GreTunnel.test.ts.
 // The probe test always runs and pins the typed gate tag; the lifecycle
@@ -33,10 +30,7 @@ const expectGone = (accountId: string, routeId: string) =>
     Effect.catchTag("RouteNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RouteNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -50,21 +44,15 @@ test.provider(
 
       const canList = yield* magicTransit.listRoutes({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
-          Effect.succeed(false),
-        ),
+        Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () => Effect.succeed(false)),
       );
       if (canList) {
-        yield* Effect.logInfo(
-          "account is Magic Transit-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is Magic Transit-entitled; probe test is a no-op");
         return;
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* magicTransit
-        .listRoutes({ accountId })
-        .pipe(Effect.flip);
+      const error = yield* magicTransit.listRoutes({ accountId }).pipe(Effect.flip);
       expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(error._tag);
 
       const createError = yield* magicTransit
@@ -75,9 +63,7 @@ test.provider(
           priority: 100,
         })
         .pipe(Effect.flip);
-      expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(
-        createError._tag,
-      );
+      expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(createError._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -91,9 +77,7 @@ test.provider("list returns a well-typed array of routes", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.MagicTransit.MagicStaticRoute,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicStaticRoute);
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
     for (const route of all) {
@@ -130,9 +114,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicStaticRoute,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicStaticRoute);
       const all = yield* provider.list();
 
       const found = all.find((r) => r.routeId === route.routeId);

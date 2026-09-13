@@ -23,9 +23,7 @@ const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
 const listZoneIdsByName = route53.listHostedZones.pages({}).pipe(
   Stream.runCollect,
-  Effect.map((chunk) =>
-    Array.from(chunk).flatMap((page) => page.HostedZones ?? []),
-  ),
+  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.HostedZones ?? [])),
   Effect.map((zones) =>
     zones
       .filter((zone) => zone.Name === zoneName)
@@ -41,8 +39,7 @@ const findZoneIdByName = listZoneIdsByName.pipe(Effect.map((ids) => ids[0]));
 // account clean. A short retry absorbs the brief list eventual-consistency
 // right after a first-time create, when a create can race ahead of the zone
 // appearing in `listHostedZones`.
-const zoneNotYetListable =
-  "hosted zone not found after HostedZoneAlreadyExists";
+const zoneNotYetListable = "hosted zone not found after HostedZoneAlreadyExists";
 
 // List first, create only on a genuine miss. The previous create-first design
 // got permanently poisoned whenever the zone was deleted (as the `teardownZone`
@@ -149,9 +146,7 @@ const purgeAndDeleteZone = (zoneId: string) =>
     // Verify the delete actually landed (authoritative read, not the
     // eventually-consistent list) — a silent no-op here would orphan the zone.
     yield* route53.getHostedZone({ Id: zoneId }).pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new Error(`teardown: zone ${zoneId} still exists`)),
-      ),
+      Effect.flatMap(() => Effect.fail(new Error(`teardown: zone ${zoneId} still exists`))),
       Effect.catchTag("NoSuchHostedZone", () => Effect.void),
       Effect.retry({
         while: (e): boolean => e instanceof Error,
@@ -172,10 +167,7 @@ const teardownZone = Effect.gen(function* () {
   const listed = yield* listZoneIdsByName;
   const candidates = [
     ...new Set(
-      [
-        ...(standingZoneId !== undefined ? [standingZoneId] : []),
-        ...listed,
-      ].map(normalizeId),
+      [...(standingZoneId !== undefined ? [standingZoneId] : []), ...listed].map(normalizeId),
     ),
   ];
   yield* Effect.forEach(candidates, purgeAndDeleteZone);
@@ -234,15 +226,10 @@ test.provider(
           ),
         ),
         Effect.flatMap((present) =>
-          present
-            ? Effect.succeed(true)
-            : Effect.fail(new Error("record not yet listable")),
+          present ? Effect.succeed(true) : Effect.fail(new Error("record not yet listable")),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
         }),
         Effect.catch(() => Effect.succeed(false)),
       );
@@ -282,9 +269,7 @@ test.provider(
         }),
       );
       // Attributes carry the RESOLVED zone id.
-      expect(normalizeId(deployed.hostedZoneId as string)).toBe(
-        normalizeId(hostedZoneId),
-      );
+      expect(normalizeId(deployed.hostedZoneId as string)).toBe(normalizeId(hostedZoneId));
 
       // Out-of-band: the record actually landed in the standing zone.
       const live = yield* route53.listResourceRecordSets({
@@ -398,18 +383,14 @@ test.provider(
       const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
           isResourceState(r.row) && r.row.resourceType === "AWS.Route53.Record",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no AWS.Route53.Record state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.Route53.Record state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -430,9 +411,7 @@ test.provider(
       // Before the fix this crashed in plan with
       // `TypeError: undefined is not an object (evaluating 'hostedZoneId.replace')`.
       const recovered = yield* deployRecord();
-      expect(normalizeId(recovered.hostedZoneId)).toBe(
-        normalizeId(hostedZoneId),
-      );
+      expect(normalizeId(recovered.hostedZoneId)).toBe(normalizeId(hostedZoneId));
       expect(recovered.name).toBe(recoveryRecordName);
       expect(recovered.type).toBe("TXT");
 

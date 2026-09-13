@@ -72,9 +72,7 @@ describe("Docker.Volume", { concurrent: false }, () => {
     Effect.gen(function* () {
       const docker = yield* Docker.Docker;
       const volumeName = "alchemy-test-volume-create";
-      yield* Effect.addFinalizer(() =>
-        docker.volume.remove(volumeName).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => docker.volume.remove(volumeName).pipe(Effect.ignore));
       const volume = yield* stack.deploy(
         Docker.Volume("created-volume", {
           name: volumeName,
@@ -93,14 +91,10 @@ describe("Docker.Volume", { concurrent: false }, () => {
     Effect.gen(function* () {
       const docker = yield* Docker.Docker;
       const volumeName = "alchemy-test-volume-adopt-existing";
-      yield* Effect.addFinalizer(() =>
-        docker.volume.remove(volumeName).pipe(Effect.ignore),
-      );
+      yield* Effect.addFinalizer(() => docker.volume.remove(volumeName).pipe(Effect.ignore));
       yield* docker.volume
         .remove(volumeName)
-        .pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
       yield* docker.volume.create({ name: volumeName });
 
       const error = yield* stack
@@ -108,9 +102,7 @@ describe("Docker.Volume", { concurrent: false }, () => {
         .pipe(Effect.flip);
       expect(error).toBeInstanceOf(OwnedBySomeoneElse);
       const volume = yield* stack.deploy(
-        Docker.Volume("existing-volume", { name: volumeName }).pipe(
-          adopt(true),
-        ),
+        Docker.Volume("existing-volume", { name: volumeName }).pipe(adopt(true)),
       );
       expect(volume.name).toBe(volumeName);
       expect(volume.id).toBe(volumeName);
@@ -124,9 +116,7 @@ describe("Docker.Volume", { concurrent: false }, () => {
       const volumeName = "alchemy-test-volume-replace";
       yield* docker.volume
         .remove(volumeName)
-        .pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
       const first = yield* stack.deploy(
         Docker.Volume("replaceable-volume", {
           labels: { generation: "1" },

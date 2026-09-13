@@ -66,12 +66,7 @@ describe("Local.RpcServerEnvironment", () => {
         }),
       );
       const stack = yield* Stack.pipe(
-        Effect.provide(
-          Layer.provide(
-            fromEnv(),
-            Layer.mergeAll(PlatformServices, environment),
-          ),
-        ),
+        Effect.provide(Layer.provide(fromEnv(), Layer.mergeAll(PlatformServices, environment))),
       );
       expect(stack.name).toBe(sessionEnv.stack.name);
       expect(stack.stage).toBe(sessionEnv.stack.stage);

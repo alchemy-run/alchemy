@@ -11,13 +11,9 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Per-hostname TLS settings are gated behind Advanced Certificate Manager
 // (or Cloudflare for SaaS) — on the standard testing zone every PUT/DELETE
@@ -31,9 +27,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -60,9 +54,7 @@ test.provider(
         })
         .pipe(
           Effect.map((settings) =>
-            settings.find(
-              (setting) => setting.hostname === `alchemy-htls-gate.${zoneName}`,
-            ),
+            settings.find((setting) => setting.hostname === `alchemy-htls-gate.${zoneName}`),
           ),
         );
       expect(observed).toBeUndefined();
@@ -105,15 +97,12 @@ test.provider(
       if (acmZoneId && acmHostname) {
         yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting(
-              "ListMinTls",
-              {
-                zoneId: acmZoneId,
-                settingId: "min_tls_version",
-                hostname: acmHostname,
-                value: "1.2",
-              },
-            );
+            return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("ListMinTls", {
+              zoneId: acmZoneId,
+              settingId: "min_tls_version",
+              hostname: acmHostname,
+              value: "1.2",
+            });
           }),
         );
       }
@@ -153,15 +142,12 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting(
-            "MinTls",
-            {
-              zoneId,
-              settingId: "min_tls_version",
-              hostname,
-              value: "1.2",
-            },
-          );
+          return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("MinTls", {
+            zoneId,
+            settingId: "min_tls_version",
+            hostname,
+            value: "1.2",
+          });
         }),
       );
 
@@ -176,26 +162,19 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
           zoneId,
           settingId: "min_tls_version",
         })
-        .pipe(
-          Effect.map((settings) =>
-            settings.find((setting) => setting.hostname === hostname),
-          ),
-        );
+        .pipe(Effect.map((settings) => settings.find((setting) => setting.hostname === hostname)));
       expect(live).toBeDefined();
       expect(live!.value).toEqual("1.2");
 
       // Update in place — PUT upserts the same (settingId, hostname) pair.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting(
-            "MinTls",
-            {
-              zoneId,
-              settingId: "min_tls_version",
-              hostname,
-              value: "1.3",
-            },
-          );
+          return yield* Cloudflare.HostnameTlsSetting.HostnameTlsSetting("MinTls", {
+            zoneId,
+            settingId: "min_tls_version",
+            hostname,
+            value: "1.3",
+          });
         }),
       );
       expect(updated.hostname).toEqual(hostname);
@@ -206,29 +185,21 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
           zoneId,
           settingId: "min_tls_version",
         })
-        .pipe(
-          Effect.map((settings) =>
-            settings.find((setting) => setting.hostname === hostname),
-          ),
-        );
+        .pipe(Effect.map((settings) => settings.find((setting) => setting.hostname === hostname)));
       expect(liveUpdated!.value).toEqual("1.3");
 
       yield* stack.destroy();
 
       // Removal is eventually consistent — poll the GET (bounded) until
       // the override disappears and the hostname reverts to zone defaults.
-      const gone = yield* hostnames
-        .listSettingsTls({ zoneId, settingId: "min_tls_version" })
-        .pipe(
-          Effect.map((settings) =>
-            settings.find((setting) => setting.hostname === hostname),
-          ),
-          Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            until: (entry) => entry === undefined,
-            times: 10,
-          }),
-        );
+      const gone = yield* hostnames.listSettingsTls({ zoneId, settingId: "min_tls_version" }).pipe(
+        Effect.map((settings) => settings.find((setting) => setting.hostname === hostname)),
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (entry) => entry === undefined,
+          times: 10,
+        }),
+      );
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },

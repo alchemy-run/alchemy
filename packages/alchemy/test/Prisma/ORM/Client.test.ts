@@ -42,26 +42,20 @@ test.provider(
           return { branch };
         }),
       );
-      const db = yield* makeDatabase(
-        Effect.succeed(Redacted.make(branch.connectionUri)),
-      );
+      const db = yield* makeDatabase(Effect.succeed(Redacted.make(branch.connectionUri)));
       yield* Effect.scoped(
         Effect.gen(function* () {
           const user = yield* db.orm.public.User.create({
             email: "psl@example.com",
             name: null,
           });
-          const validated = yield* Schema.decodeUnknownEffect(
-            schemas.public.User,
-          )(user);
+          const validated = yield* Schema.decodeUnknownEffect(schemas.public.User)(user);
           expect(validated.id).toBe(user.id);
           yield* db.orm.public.Post.create({
             title: "PSL post",
             authorId: user.id,
           });
-          const loaded = yield* db.orm.public.User.where({ id: user.id })
-            .include("posts")
-            .first();
+          const loaded = yield* db.orm.public.User.where({ id: user.id }).include("posts").first();
           expect(loaded?.posts.map((post) => post.title)).toEqual(["PSL post"]);
           const rollback = yield* db
             .transaction((tx) =>
@@ -74,9 +68,7 @@ test.provider(
             )
             .pipe(Effect.result);
           expect(Result.isFailure(rollback)).toBe(true);
-          expect(
-            (yield* db.orm.public.User.where({ id: user.id }).first())?.name,
-          ).toBeNull();
+          expect((yield* db.orm.public.User.where({ id: user.id }).first())?.name).toBeNull();
           yield* db.orm.public.Post.where({ authorId: user.id }).delete();
           yield* db.orm.public.User.where({ id: user.id }).delete();
           expect(yield* db.orm.public.User.all()).toEqual([]);
@@ -110,9 +102,7 @@ test.provider(
           return { branch };
         }),
       );
-      const db = yield* makeVariantDatabase(
-        Effect.succeed(Redacted.make(branch.connectionUri)),
-      );
+      const db = yield* makeVariantDatabase(Effect.succeed(Redacted.make(branch.connectionUri)));
       yield* Effect.scoped(
         Effect.gen(function* () {
           const assignee = yield* db.orm.public.Assignee.create({
@@ -129,18 +119,14 @@ test.provider(
           });
           expect(bug).toMatchObject({ type: "bug", severity: "critical" });
           expect(feature).toMatchObject({ type: "feature", priority: 3 });
-          const all = yield* db.orm.public.Task.orderBy((task) =>
-            task.id.asc(),
-          ).all();
+          const all = yield* db.orm.public.Task.orderBy((task) => task.id.asc()).all();
           expect(all.map((task) => task.type)).toEqual(["bug", "feature"]);
           const narrowed = yield* db.orm.public.Task.variant("Feature")
             .where((task) => task.priority.gte(3))
             .orderBy((task) => task.priority.desc())
             .first();
           expect(narrowed).toMatchObject({ id: feature.id, priority: 3 });
-          const included = yield* db.orm.public.Task.variant("Bug")
-            .include("assignee")
-            .first();
+          const included = yield* db.orm.public.Task.variant("Bug").include("assignee").first();
           expect(included?.assignee).toEqual(assignee);
           const selected = yield* db.orm.public.Task.variant("Bug")
             .include("assignee", (person) => person.select("name"))
@@ -163,15 +149,9 @@ test.provider(
             )
             .pipe(Effect.result);
           expect(Result.isFailure(rolledBack)).toBe(true);
-          expect(
-            yield* db.orm.public.Task.variant("Feature").all(),
-          ).toHaveLength(1);
-          expect(
-            yield* db.orm.public.Task.variant("Feature").deleteAndCount(),
-          ).toBe(1);
-          expect(
-            yield* db.orm.public.Task.variant("Bug").deleteAndCount(),
-          ).toBe(1);
+          expect(yield* db.orm.public.Task.variant("Feature").all()).toHaveLength(1);
+          expect(yield* db.orm.public.Task.variant("Feature").deleteAndCount()).toBe(1);
+          expect(yield* db.orm.public.Task.variant("Bug").deleteAndCount()).toBe(1);
           expect(yield* db.orm.public.Task.all()).toEqual([]);
         }),
       );
@@ -183,18 +163,11 @@ test.provider(
 const fixtureConfig = Effect.gen(function* () {
   const path = yield* Path.Path;
   const self = yield* path.fromFileUrl(new URL(import.meta.url));
-  return path.join(
-    path.dirname(self),
-    "fixtures",
-    "client",
-    "prisma.config.ts",
-  );
+  return path.join(path.dirname(self), "fixtures", "client", "prisma.config.ts");
 });
 
 /** Deploy the fixture contract onto a fresh Neon branch and hand back a db. */
-const deployDatabase = (stack: {
-  deploy: <A, E, R>(e: Effect.Effect<A, E, R>) => any;
-}) =>
+const deployDatabase = (stack: { deploy: <A, E, R>(e: Effect.Effect<A, E, R>) => any }) =>
   Effect.gen(function* () {
     const configPath = yield* fixtureConfig;
     const { branch } = yield* stack.deploy(
@@ -256,10 +229,7 @@ test.provider(
             { title: "bulk-one", authorId: alice.id },
             { title: "bulk-two", authorId: alice.id },
           ]);
-          expect(bulk.map((post) => post.title)).toEqual([
-            "bulk-one",
-            "bulk-two",
-          ]);
+          expect(bulk.map((post) => post.title)).toEqual(["bulk-one", "bulk-two"]);
           const count = yield* db.orm.public.Post.createAndCount([
             { title: "bulk-count", authorId: alice.id },
           ]);
@@ -292,10 +262,7 @@ test.provider(
           expect(byEmail?.id).toEqual(alice.id);
 
           // select — Row narrows to the projection
-          const projected = yield* db.orm.public.User.select(
-            "id",
-            "email",
-          ).all();
+          const projected = yield* db.orm.public.User.select("id", "email").all();
           expect(projected[0]?.email).toEqual("alice@example.com");
           // @ts-expect-error `name` was not selected — narrowing is real
           projected[0]?.name;
@@ -329,10 +296,7 @@ test.provider(
                 .limit(2),
             )
             .first();
-          expect(refined?.posts).toEqual([
-            { title: "repeat" },
-            { title: "repeat" },
-          ]);
+          expect(refined?.posts).toEqual([{ title: "repeat" }, { title: "repeat" }]);
           const combined = yield* db.orm.public.User.select("id")
             .include("posts", (posts) =>
               posts.combine({
@@ -357,20 +321,13 @@ test.provider(
             .orderBy((post) => post.id.asc())
             .all()
             .stream.pipe(Stream.take(2), Stream.runCollect);
-          expect([...streamedRows]).toEqual([
-            { title: "hello" },
-            { title: "bulk-one" },
-          ]);
-          const page = yield* db.orm.public.Post.orderBy((post) =>
-            post.id.asc(),
-          )
+          expect([...streamedRows]).toEqual([{ title: "hello" }, { title: "bulk-one" }]);
+          const page = yield* db.orm.public.Post.orderBy((post) => post.id.asc())
             .cursor({ id: bulk[0]!.id })
             .limit(1)
             .all();
           expect(page.map((post) => post.title)).toEqual(["bulk-two"]);
-          const distinct = yield* db.orm.public.Post.distinct("title")
-            .select("title")
-            .all();
+          const distinct = yield* db.orm.public.Post.distinct("title").select("title").all();
           expect(distinct).toHaveLength(5);
           const distinctOn = yield* db.orm.public.Post.orderBy([
             (post) => post.title.asc(),
@@ -379,9 +336,7 @@ test.provider(
             .distinctOn("title")
             .all();
           expect(distinctOn).toHaveLength(5);
-          expect(distinctOn.find((post) => post.title === "repeat")?.id).toBe(
-            repeats[0]!.id,
-          );
+          expect(distinctOn.find((post) => post.title === "repeat")?.id).toBe(repeats[0]!.id);
           expect(
             yield* db.orm.public.Post.aggregate((aggregate) => ({
               total: aggregate.count(),
@@ -402,10 +357,7 @@ test.provider(
           const changed = yield* db.orm.public.Post.where({
             title: "repeat",
           }).updateAll({ title: "updated" });
-          expect(changed.map((post) => post.title)).toEqual([
-            "updated",
-            "updated",
-          ]);
+          expect(changed.map((post) => post.title)).toEqual(["updated", "updated"]);
           expect(
             yield* db.orm.public.Post.where({
               title: "updated",
@@ -433,11 +385,7 @@ test.provider(
           }).pipe(
             Effect.as("created" as const),
             Effect.catchTag("Prisma.UniqueViolationError", (error) =>
-              Effect.succeed(
-                error.sqlState === "23505"
-                  ? ("unique" as const)
-                  : ("other" as const),
-              ),
+              Effect.succeed(error.sqlState === "23505" ? ("unique" as const) : ("other" as const)),
             ),
           );
           expect(dup).toEqual("unique");
@@ -459,15 +407,10 @@ test.provider(
           // this call, so the cast is deliberate — the test pins the
           // *runtime* classification of the thrown ORM.* error.)
           const misuse = yield* db
-            .use(
-              (c) =>
-                c.orm.public.User.count() as unknown as PromiseLike<unknown>,
-            )
+            .use((c) => c.orm.public.User.count() as unknown as PromiseLike<unknown>)
             .pipe(
               Effect.as("ok" as const),
-              Effect.catchTag("Prisma.OrmError", (error) =>
-                Effect.succeed(error.code),
-              ),
+              Effect.catchTag("Prisma.OrmError", (error) => Effect.succeed(error.code)),
             );
           expect(misuse).toEqual("ORM.INCLUDE_INVALID");
 
@@ -507,50 +450,35 @@ test.provider(
           const streamed = yield* Stream.runCollect(db.stream(plan));
           expect([...streamed].length).toBe(rows.length);
 
-          const prepared = yield* db.prepare(
-            { email: "pg/text@1" },
-            (sql, params) =>
-              sql.public.user
-                .select("id", "email")
-                .where((fields, fns) => fns.eq(fields.email, params.email))
-                .build(),
+          const prepared = yield* db.prepare({ email: "pg/text@1" }, (sql, params) =>
+            sql.public.user
+              .select("id", "email")
+              .where((fields, fns) => fns.eq(fields.email, params.email))
+              .build(),
           );
           const preparedRead = prepared.query({ email: "bob@example.com" });
-          expect(yield* preparedRead).toEqual([
-            { id: bob.id, email: "bob@example.com" },
-          ]);
-          expect(yield* preparedRead).toEqual([
-            { id: bob.id, email: "bob@example.com" },
-          ]);
+          expect(yield* preparedRead).toEqual([{ id: bob.id, email: "bob@example.com" }]);
+          expect(yield* preparedRead).toEqual([{ id: bob.id, email: "bob@example.com" }]);
           expect([...(yield* Stream.runCollect(preparedRead.stream))]).toEqual([
             { id: bob.id, email: "bob@example.com" },
           ]);
-          expect(
-            yield* prepared.query({ email: "missing@example.com" }),
-          ).toEqual([]);
-          const rename = yield* db.prepare(
-            { id: "pg/int4@1", name: "pg/text@1" },
-            (_sql, params) =>
-              db.raw
-                .sql`UPDATE "user" SET name = ${params.name} WHERE id = ${params.id}`
-                .affectedCount()
-                .build(),
+          expect(yield* prepared.query({ email: "missing@example.com" })).toEqual([]);
+          const rename = yield* db.prepare({ id: "pg/int4@1", name: "pg/text@1" }, (_sql, params) =>
+            db.raw.sql`UPDATE "user" SET name = ${params.name} WHERE id = ${params.id}`
+              .affectedCount()
+              .build(),
           );
-          expect(
-            yield* rename.execute({ id: bob.id, name: "Prepared Bob" }),
-          ).toEqual({ affectedRows: 1 });
-          expect(
-            (yield* db.orm.public.User.where({ id: bob.id }).first())?.name,
-          ).toBe("Prepared Bob");
+          expect(yield* rename.execute({ id: bob.id, name: "Prepared Bob" })).toEqual({
+            affectedRows: 1,
+          });
+          expect((yield* db.orm.public.User.where({ id: bob.id }).first())?.name).toBe(
+            "Prepared Bob",
+          );
           const unused = yield* db
-            .prepare({ unused: "pg/text@1" }, (sql) =>
-              sql.public.user.select("id").build(),
-            )
+            .prepare({ unused: "pg/text@1" }, (sql) => sql.public.user.select("id").build())
             .pipe(
               Effect.as("unexpected success"),
-              Effect.catchTag("Prisma.RuntimeError", (error) =>
-                Effect.succeed(error.code),
-              ),
+              Effect.catchTag("Prisma.RuntimeError", (error) => Effect.succeed(error.code)),
             );
           expect(unused).toBe("RUNTIME.PREPARE_UNUSED_PARAM");
 
@@ -584,41 +512,32 @@ test.provider(
                 const update = yield* tx.prepare(
                   { id: "pg/int4@1", name: "pg/text@1" },
                   (_sql, params) =>
-                    db.raw
-                      .sql`UPDATE "user" SET name = ${params.name} WHERE id = ${params.id}`
+                    db.raw.sql`UPDATE "user" SET name = ${params.name} WHERE id = ${params.id}`
                       .affectedCount()
                       .build(),
                 );
-                expect(
-                  yield* update.execute({ id: bob.id, name: "Rolled back" }),
-                ).toEqual({ affectedRows: 1 });
-                const read = yield* tx.prepare(
-                  { id: "pg/int4@1" },
-                  (sql, params) =>
-                    sql.public.user
-                      .select("name")
-                      .where((fields, fns) => fns.eq(fields.id, params.id))
-                      .build(),
+                expect(yield* update.execute({ id: bob.id, name: "Rolled back" })).toEqual({
+                  affectedRows: 1,
+                });
+                const read = yield* tx.prepare({ id: "pg/int4@1" }, (sql, params) =>
+                  sql.public.user
+                    .select("name")
+                    .where((fields, fns) => fns.eq(fields.id, params.id))
+                    .build(),
                 );
-                expect(yield* read.query({ id: bob.id })).toEqual([
-                  { name: "Rolled back" },
-                ]);
+                expect(yield* read.query({ id: bob.id })).toEqual([{ name: "Rolled back" }]);
                 return yield* tx.rollback();
               }),
             )
             .pipe(
               Effect.as("committed" as const),
-              Effect.catchTag("Prisma.RollbackError", () =>
-                Effect.succeed("rolled-back" as const),
-              ),
+              Effect.catchTag("Prisma.RollbackError", () => Effect.succeed("rolled-back" as const)),
             );
           expect(rolledBack).toEqual("rolled-back");
-          expect(
-            (yield* db.orm.public.User.where({ id: bob.id }).first())?.name,
-          ).toBe("Prepared Bob");
-          expect(
-            yield* db.orm.public.Post.where({ title: "rollback-post" }).all(),
-          ).toHaveLength(0);
+          expect((yield* db.orm.public.User.where({ id: bob.id }).first())?.name).toBe(
+            "Prepared Bob",
+          );
+          expect(yield* db.orm.public.Post.where({ title: "rollback-post" }).all()).toHaveLength(0);
 
           // transaction: a failing effect rolls back too
           const failed = yield* Effect.result(
@@ -636,16 +555,12 @@ test.provider(
             ),
           );
           expect(Result.isFailure(failed)).toBe(true);
-          expect(
-            yield* db.orm.public.Post.where({ title: "failed-post" }).all(),
-          ).toHaveLength(0);
+          expect(yield* db.orm.public.Post.where({ title: "failed-post" }).all()).toHaveLength(0);
           return prepared;
         }),
       );
 
-      const later = yield* statement
-        .query({ email: "bob@example.com" })
-        .pipe(Effect.scoped);
+      const later = yield* statement.query({ email: "bob@example.com" }).pipe(Effect.scoped);
       expect(later.map((row) => row.email)).toEqual(["bob@example.com"]);
       const concurrent = yield* Effect.all(
         ["bob@example.com", "missing@example.com"].map((email) =>

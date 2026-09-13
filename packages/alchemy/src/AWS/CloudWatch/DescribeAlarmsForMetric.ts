@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeAlarmsForMetricRequest
-  extends cloudwatch.DescribeAlarmsForMetricInput {}
+export interface DescribeAlarmsForMetricRequest extends cloudwatch.DescribeAlarmsForMetricInput {}
 
 /**
  * Runtime binding for `cloudwatch:DescribeAlarmsForMetric` — find the

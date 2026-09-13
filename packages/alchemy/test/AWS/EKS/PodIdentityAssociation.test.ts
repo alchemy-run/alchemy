@@ -14,25 +14,23 @@ const { test } = Test.make({ providers: AWS.providers() });
 // proves the enumeration wiring (listClusters -> listPodIdentityAssociations ->
 // describePodIdentityAssociation) compiles and runs live without needing a
 // ~10-minute cluster create.
-test.provider(
-  "list returns a well-formed array of pod identity associations",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("list returns a well-formed array of pod identity associations", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(PodIdentityAssociation);
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(PodIdentityAssociation);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      for (const association of all) {
-        expect(typeof association.associationArn).toBe("string");
-        expect(typeof association.associationId).toBe("string");
-        expect(typeof association.clusterName).toBe("string");
-        expect(typeof association.namespace).toBe("string");
-        expect(typeof association.serviceAccount).toBe("string");
-        expect(typeof association.roleArn).toBe("string");
-      }
-    }),
+    expect(Array.isArray(all)).toBe(true);
+    for (const association of all) {
+      expect(typeof association.associationArn).toBe("string");
+      expect(typeof association.associationId).toBe("string");
+      expect(typeof association.clusterName).toBe("string");
+      expect(typeof association.namespace).toBe("string");
+      expect(typeof association.serviceAccount).toBe("string");
+      expect(typeof association.roleArn).toBe("string");
+    }
+  }),
 );
 
 // Full deploy test: an EKS cluster takes ~10+ minutes to provision, which is far
@@ -63,9 +61,7 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       const provider = yield* Provider.findProvider(PodIdentityAssociation);
       const all = yield* provider.list();
 
-      expect(
-        all.some((a) => a.associationId === association.associationId),
-      ).toBe(true);
+      expect(all.some((a) => a.associationId === association.associationId)).toBe(true);
 
       yield* stack.destroy();
     }),

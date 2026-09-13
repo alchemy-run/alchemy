@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
-export interface CreateLogStreamRequest extends Omit<
-  Logs.CreateLogStreamRequest,
-  "logGroupName"
-> {}
+export interface CreateLogStreamRequest extends Omit<Logs.CreateLogStreamRequest, "logGroupName"> {}
 
 /**
  * Runtime binding for `logs:CreateLogStream`.
@@ -44,6 +41,4 @@ export interface CreateLogStream extends Binding.Service<
     ) => Effect.Effect<Logs.CreateLogStreamResponse, Logs.CreateLogStreamError>
   >
 > {}
-export const CreateLogStream = Binding.Service<CreateLogStream>(
-  "AWS.Logs.CreateLogStream",
-);
+export const CreateLogStream = Binding.Service<CreateLogStream>("AWS.Logs.CreateLogStream");

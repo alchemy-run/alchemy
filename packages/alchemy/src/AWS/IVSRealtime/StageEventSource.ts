@@ -100,20 +100,14 @@ export interface StageEventSourceProps extends EventRouteProps {
  */
 export const consumeStageEvents = <StreamReq = never, Req = never>(
   props: StageEventSourceProps,
-  process: (
-    events: Stream.Stream<StageEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<StageEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "IVSRealtimeStageEvents",
     {
       source: ["aws.ivs"],
-      "detail-type": (props.kinds ?? (["stage-update"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.stageArns !== undefined
-        ? { resources: [...props.stageArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["stage-update"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.stageArns !== undefined ? { resources: [...props.stageArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

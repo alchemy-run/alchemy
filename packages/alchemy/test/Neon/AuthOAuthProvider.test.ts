@@ -25,15 +25,11 @@ test.provider(
             auth,
             provider: "github",
             clientId,
-            clientSecret: Redacted.make(
-              "alchemy-configuration-only-not-a-real-oauth-secret",
-            ),
+            clientSecret: Redacted.make("alchemy-configuration-only-not-a-real-oauth-secret"),
           });
           return { auth, provider };
         });
-      const first = yield* stack.deploy(
-        application("alchemy-configuration-only"),
-      );
+      const first = yield* stack.deploy(application("alchemy-configuration-only"));
       const request = {
         project_id: first.auth.projectId,
         branch_id: first.auth.branchId,
@@ -44,9 +40,7 @@ test.provider(
         )?.client_id,
       ).toBe("alchemy-configuration-only");
       expect(Object.keys(first.provider)).not.toContain("clientSecret");
-      const updated = yield* stack.deploy(
-        application("alchemy-configuration-updated"),
-      );
+      const updated = yield* stack.deploy(application("alchemy-configuration-updated"));
       expect(updated.provider.provider).toBe("github");
       expect(
         (yield* SDK.listBranchNeonAuthOauthProviders(request)).providers.find(

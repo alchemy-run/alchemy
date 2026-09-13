@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Analyzer } from "./Analyzer.ts";
 
 /** `GetFinding` request with `analyzerArn` injected from the bound {@link Analyzer}. */
-export interface GetFindingRequest extends Omit<
-  aa.GetFindingRequest,
-  "analyzerArn"
-> {}
+export interface GetFindingRequest extends Omit<aa.GetFindingRequest, "analyzerArn"> {}
 
 /**
  * Runtime binding for `access-analyzer:GetFinding`.
@@ -30,12 +27,8 @@ export interface GetFinding extends Binding.Service<
   (
     analyzer: Analyzer,
   ) => Effect.Effect<
-    (
-      request: GetFindingRequest,
-    ) => Effect.Effect<aa.GetFindingResponse, aa.GetFindingError>
+    (request: GetFindingRequest) => Effect.Effect<aa.GetFindingResponse, aa.GetFindingError>
   >
 > {}
 
-export const GetFinding = Binding.Service<GetFinding>(
-  "AWS.AccessAnalyzer.GetFinding",
-);
+export const GetFinding = Binding.Service<GetFinding>("AWS.AccessAnalyzer.GetFinding");

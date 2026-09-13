@@ -34,15 +34,10 @@ const readParameterValue = (name: string, parameter: string) =>
 // Deleting can transiently reject while the group settles after an update.
 const assertGroupGone = (name: string) =>
   memorydb.describeParameterGroups({ ParameterGroupName: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`parameter group '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`parameter group '${name}' still exists`))),
     Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -72,10 +67,7 @@ test.provider(
       expect(created.family).toBe("memorydb_valkey7");
 
       // Out-of-band: the override was applied.
-      const applied = yield* readParameterValue(
-        created.parameterGroupName,
-        "maxmemory-policy",
-      );
+      const applied = yield* readParameterValue(created.parameterGroupName, "maxmemory-policy");
       expect(applied).toBe("allkeys-lru");
 
       // 2. Update the override value.
@@ -90,10 +82,7 @@ test.provider(
           return { group };
         }),
       );
-      const updated = yield* readParameterValue(
-        created.parameterGroupName,
-        "maxmemory-policy",
-      );
+      const updated = yield* readParameterValue(created.parameterGroupName, "maxmemory-policy");
       expect(updated).toBe("volatile-lru");
 
       // 3. Remove the override — it resets to the engine default.
@@ -107,10 +96,7 @@ test.provider(
           return { group };
         }),
       );
-      const reset = yield* readParameterValue(
-        created.parameterGroupName,
-        "maxmemory-policy",
-      );
+      const reset = yield* readParameterValue(created.parameterGroupName, "maxmemory-policy");
       expect(reset).toBe("noeviction");
 
       // 4. Destroy and verify out-of-band it is gone.

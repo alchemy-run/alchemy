@@ -10,14 +10,8 @@ import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "trigger-handler.ts");
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const PASSWORD = "Alchemy-Trigger-Passw0rd!";
 
@@ -48,10 +42,7 @@ export default CognitoTriggerFunction.make(
     });
     const client = yield* Cognito.UserPoolClient("TriggerUserPoolClient", {
       userPoolId: pool.userPoolId,
-      explicitAuthFlows: [
-        "ALLOW_USER_PASSWORD_AUTH",
-        "ALLOW_REFRESH_TOKEN_AUTH",
-      ],
+      explicitAuthFlows: ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
     });
 
     // PreSignUp: auto-confirm every sign-up (and mark the email verified)
@@ -93,16 +84,13 @@ export default CognitoTriggerFunction.make(
           const signedUp = yield* auth.signUp({
             Username: username,
             Password: PASSWORD,
-            UserAttributes: [
-              { Name: "email", Value: `${username}@example.com` },
-            ],
+            UserAttributes: [{ Name: "email", Value: `${username}@example.com` }],
           });
 
           const user = yield* admin.adminGetUser({ Username: username });
           const emailVerified = plain(
-            (user.UserAttributes ?? []).find(
-              (attribute) => attribute.Name === "email_verified",
-            )?.Value,
+            (user.UserAttributes ?? []).find((attribute) => attribute.Name === "email_verified")
+              ?.Value,
           );
 
           const signIn = yield* auth.initiateAuth({

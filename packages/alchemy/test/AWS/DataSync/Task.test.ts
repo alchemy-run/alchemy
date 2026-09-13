@@ -36,11 +36,7 @@ const s3Policy = (arn: Output.Output<string>) => ({
   Statement: [
     {
       Effect: "Allow" as const,
-      Action: [
-        "s3:GetBucketLocation",
-        "s3:ListBucket",
-        "s3:ListBucketMultipartUploads",
-      ],
+      Action: ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
       Resource: [arn],
     },
     {
@@ -92,8 +88,7 @@ test.provider(
     Effect.gen(function* () {
       const result = yield* datasync
         .describeTask({
-          TaskArn:
-            "arn:aws:datasync:us-west-2:391965393224:task/task-00000000000000000",
+          TaskArn: "arn:aws:datasync:us-west-2:391965393224:task/task-00000000000000000",
         })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");
@@ -121,16 +116,15 @@ test.provider(
       const observed = yield* datasync.describeTask({ TaskArn: arn });
       expect(observed.SourceLocationArn).toBe(created.task.sourceLocationArn);
       const tags = Object.fromEntries(
-        (
-          (yield* datasync.listTagsForResource({ ResourceArn: arn })).Tags ?? []
-        ).map((t) => [t.Key, t.Value]),
+        ((yield* datasync.listTagsForResource({ ResourceArn: arn })).Tags ?? []).map((t) => [
+          t.Key,
+          t.Value,
+        ]),
       );
       expect(tags["alchemy::id"]).toBe("BackupTask");
 
       // --- update: change transfer options in place ---
-      const updated = yield* stack.deploy(
-        buildStack({ VerifyMode: "ONLY_FILES_TRANSFERRED" }),
-      );
+      const updated = yield* stack.deploy(buildStack({ VerifyMode: "ONLY_FILES_TRANSFERRED" }));
       expect(updated.task.taskArn).toBe(arn);
       const observed2 = yield* datasync.describeTask({ TaskArn: arn });
       expect(observed2.Options?.VerifyMode).toBe("ONLY_FILES_TRANSFERRED");
@@ -151,9 +145,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        buildStack({ VerifyMode: "ONLY_FILES_TRANSFERRED" }),
-      );
+      const created = yield* stack.deploy(buildStack({ VerifyMode: "ONLY_FILES_TRANSFERRED" }));
 
       yield* S3.putObject({
         Bucket: created.src.bucketName,
@@ -164,17 +156,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // The freshly-created IAM role's permissions take a while to propagate
       // to DataSync's location access test (typed LocationAccessTestFailed,
       // patched from InvalidRequestException + "location access test failed").
-      const started = yield* datasync
-        .startTaskExecution({ TaskArn: created.task.taskArn })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "LocationAccessTestFailed",
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(12),
-            ]),
-          }),
-        );
+      const started = yield* datasync.startTaskExecution({ TaskArn: created.task.taskArn }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "LocationAccessTestFailed",
+          schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(12)]),
+        }),
+      );
       const finished = yield* datasync
         .describeTaskExecution({
           TaskExecutionArn: started.TaskExecutionArn!,

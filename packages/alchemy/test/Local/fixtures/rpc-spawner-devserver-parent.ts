@@ -59,9 +59,7 @@ const program = Effect.gen(function* () {
   const session = newWebSocketRpcSession<RpcProxyApi>(sessionUrl.toString());
   const wrapped = yield* Effect.promise(
     () =>
-      session.getProvider("Command.Dev", providersUrl) as ReturnType<
-        RpcProxyApi["getProvider"]
-      >,
+      session.getProvider("Command.Dev", providersUrl) as ReturnType<RpcProxyApi["getProvider"]>,
   );
   const provider = unwrapRpcHandlers(wrapped, []);
 
@@ -95,10 +93,7 @@ const program = Effect.gen(function* () {
 program
   .pipe(
     Effect.provide([
-      Layer.provide(
-        layerServer({ profile: undefined, envFile: undefined }),
-        PlatformServices,
-      ),
+      Layer.provide(layerServer({ profile: undefined, envFile: undefined }), PlatformServices),
       PlatformServices,
       FetchHttpClient.layer,
     ]),

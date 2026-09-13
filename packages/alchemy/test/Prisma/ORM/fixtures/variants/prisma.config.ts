@@ -3,8 +3,8 @@ import { withEffect } from "alchemy/Prisma/ORM/generator";
 import { definePrismaConfig } from "prisma/config";
 
 export default definePrismaConfig({
-  orm: withEffect(
-    ormConfig({ contract: "./contract.psl", output: "./generated" }),
-    { client: true, schemas: false },
-  ),
+  orm: withEffect(ormConfig({ contract: "./contract.psl", output: "./generated" }), {
+    client: true,
+    schemas: false,
+  }),
 });

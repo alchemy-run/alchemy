@@ -47,11 +47,7 @@ test.provider(
 
       expect(all.some((r) => r.ruleName === rule.ruleName)).toBe(true);
       expect(
-        all.some(
-          (r) =>
-            r.ruleName === rule.ruleName &&
-            r.eventBusName === rule.eventBusName,
-        ),
+        all.some((r) => r.ruleName === rule.ruleName && r.eventBusName === rule.eventBusName),
       ).toBe(true);
 
       yield* stack.destroy();

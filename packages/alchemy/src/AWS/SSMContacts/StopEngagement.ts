@@ -33,6 +33,4 @@ export interface StopEngagement extends Binding.Service<
     ) => Effect.Effect<ssm.StopEngagementResult, ssm.StopEngagementError>
   >
 > {}
-export const StopEngagement = Binding.Service<StopEngagement>(
-  "AWS.SSMContacts.StopEngagement",
-);
+export const StopEngagement = Binding.Service<StopEngagement>("AWS.SSMContacts.StopEngagement");

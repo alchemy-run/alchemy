@@ -41,12 +41,7 @@ export interface ACMPCAHttpBindingOptions<
  *
  * @internal
  */
-export const makeACMPCAHttpBinding = <
-  Req extends { CertificateAuthorityArn: string },
-  A,
-  E,
-  R,
->(
+export const makeACMPCAHttpBinding = <Req extends { CertificateAuthorityArn: string }, A, E, R>(
   options: ACMPCAHttpBindingOptions<Req, A, E, R>,
 ) =>
   Effect.gen(function* () {
@@ -57,31 +52,29 @@ export const makeACMPCAHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ACMPCA.${options.action}(${certificateAuthority}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [`acm-pca:${options.action}`],
-                  Resource: [certificateAuthority.certificateAuthorityArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ACMPCA.${options.action}(${certificateAuthority}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [`acm-pca:${options.action}`],
+                Resource: [certificateAuthority.certificateAuthorityArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.ACMPCA.${options.action}(${certificateAuthority.LogicalId})`,
-      )(function* (
-        request: Omit<Req, "CertificateAuthorityArn"> = {} as Omit<
-          Req,
-          "CertificateAuthorityArn"
-        >,
-      ) {
-        return yield* operation({
-          ...request,
-          CertificateAuthorityArn: yield* Arn,
-        } as Req);
-      });
+      return Effect.fn(`AWS.ACMPCA.${options.action}(${certificateAuthority.LogicalId})`)(
+        function* (
+          request: Omit<Req, "CertificateAuthorityArn"> = {} as Omit<
+            Req,
+            "CertificateAuthorityArn"
+          >,
+        ) {
+          return yield* operation({
+            ...request,
+            CertificateAuthorityArn: yield* Arn,
+          } as Req);
+        },
+      );
     });
   });

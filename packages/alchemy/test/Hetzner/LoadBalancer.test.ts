@@ -9,10 +9,7 @@ import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -109,9 +106,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         ]),
       );
       expect(created.lb.privateNetworks).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ networkId: created.networkId }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ networkId: created.networkId })]),
       );
 
       const fetched = yield* Services.loadBalancers.getLoadBalancer({
@@ -124,9 +119,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(fetched.load_balancer.labels.env).toEqual("test");
       expect(fetched.load_balancer.public_net.enabled).toEqual(true);
       expect(fetched.load_balancer.private_net).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ network: created.networkId }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ network: created.networkId })]),
       );
       expect(fetched.load_balancer.targets).toEqual(
         expect.arrayContaining([
@@ -193,9 +186,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const refetched = yield* Services.loadBalancers.getLoadBalancer({
         id: updated.id,
       });
-      expect(refetched.load_balancer.algorithm.type).toEqual(
-        "least_connections",
-      );
+      expect(refetched.load_balancer.algorithm.type).toEqual("least_connections");
       expect(refetched.load_balancer.protection.delete).toEqual(true);
       expect(refetched.load_balancer.labels.env).toEqual("prod");
       expect(refetched.load_balancer.labels.role).toEqual("lb");

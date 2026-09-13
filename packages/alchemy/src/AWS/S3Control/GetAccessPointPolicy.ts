@@ -32,10 +32,7 @@ export interface GetAccessPointPolicy extends Binding.Service<
   (
     accessPoint: AccessPoint,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      s3control.GetAccessPointPolicyResult,
-      s3control.GetAccessPointPolicyError
-    >
+    () => Effect.Effect<s3control.GetAccessPointPolicyResult, s3control.GetAccessPointPolicyError>
   >
 > {}
 export const GetAccessPointPolicy = Binding.Service<GetAccessPointPolicy>(

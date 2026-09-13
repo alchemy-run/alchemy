@@ -40,7 +40,6 @@ export interface GetMetadataGenerationRun extends Binding.Service<
     >
   >
 > {}
-export const GetMetadataGenerationRun =
-  Binding.Service<GetMetadataGenerationRun>(
-    "AWS.DataZone.GetMetadataGenerationRun",
-  );
+export const GetMetadataGenerationRun = Binding.Service<GetMetadataGenerationRun>(
+  "AWS.DataZone.GetMetadataGenerationRun",
+);

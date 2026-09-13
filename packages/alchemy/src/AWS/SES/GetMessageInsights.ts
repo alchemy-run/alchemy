@@ -30,12 +30,7 @@ export interface GetMessageInsights extends Binding.Service<
   () => Effect.Effect<
     (
       request: sesv2.GetMessageInsightsRequest,
-    ) => Effect.Effect<
-      sesv2.GetMessageInsightsResponse,
-      sesv2.GetMessageInsightsError
-    >
+    ) => Effect.Effect<sesv2.GetMessageInsightsResponse, sesv2.GetMessageInsightsError>
   >
 > {}
-export const GetMessageInsights = Binding.Service<GetMessageInsights>(
-  "AWS.SES.GetMessageInsights",
-);
+export const GetMessageInsights = Binding.Service<GetMessageInsights>("AWS.SES.GetMessageInsights");

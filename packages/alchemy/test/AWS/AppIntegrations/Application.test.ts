@@ -10,30 +10,23 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getApplication on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        appintegrations.getApplication({
-          Arn: "00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getApplication on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      appintegrations.getApplication({
+        Arn: "00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertGone = (arn: string) =>
   appintegrations.getApplication({ Arn: arn }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`application '${arn}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`application '${arn}' still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -67,9 +60,9 @@ test.provider(
       expect(observed.Name).toBe(app.applicationName);
       expect(observed.Namespace).toBe("com.alchemy.testapp");
       expect(observed.Description).toBe("alchemy application");
-      expect(
-        observed.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl,
-      ).toBe("https://example.com");
+      expect(observed.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl).toBe(
+        "https://example.com",
+      );
       expect(observed.Tags?.purpose).toBe("alchemy-test");
 
       // Update description, access URL, and permissions in place (arn/id
@@ -93,9 +86,9 @@ test.provider(
         Arn: app.applicationArn,
       });
       expect(reobserved.Description).toBe("alchemy application v2");
-      expect(
-        reobserved.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl,
-      ).toBe("https://updated.example.com");
+      expect(reobserved.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl).toBe(
+        "https://updated.example.com",
+      );
       expect(reobserved.Permissions).toEqual(["User.Details.View"]);
       expect(reobserved.Tags?.phase).toBe("two");
 

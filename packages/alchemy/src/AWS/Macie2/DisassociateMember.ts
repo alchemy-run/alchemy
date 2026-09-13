@@ -27,10 +27,7 @@ export interface DisassociateMember extends Binding.Service<
   () => Effect.Effect<
     (
       request: macie2.DisassociateMemberRequest,
-    ) => Effect.Effect<
-      macie2.DisassociateMemberResponse,
-      macie2.DisassociateMemberError
-    >
+    ) => Effect.Effect<macie2.DisassociateMemberResponse, macie2.DisassociateMemberError>
   >
 > {}
 export const DisassociateMember = Binding.Service<DisassociateMember>(
