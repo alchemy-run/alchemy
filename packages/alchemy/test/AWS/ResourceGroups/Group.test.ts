@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Group } from "@/AWS/ResourceGroups";
-import * as Test from "@/Test/Alchemy";
 import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { Group } from "@/AWS/ResourceGroups";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

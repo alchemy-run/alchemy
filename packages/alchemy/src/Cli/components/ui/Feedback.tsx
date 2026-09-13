@@ -1,7 +1,7 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { useAnimation } from "@alchemy.run/sigil";
-import type { ReactNode } from "react";
 import { stringWidth } from "@alchemy.run/sigil/ansi";
+import type { ReactNode } from "react";
 import {
   spinnerFramesFor,
   statusColor,

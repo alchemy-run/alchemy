@@ -1,5 +1,3 @@
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import {
   getBranch,
   getDatabase,
@@ -10,6 +8,8 @@ import {
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 

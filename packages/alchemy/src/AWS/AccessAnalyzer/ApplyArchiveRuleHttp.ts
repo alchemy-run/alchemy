@@ -1,7 +1,7 @@
 import * as aa from "@distilled.cloud/aws/accessanalyzer";
 import * as Layer from "effect/Layer";
-import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 import { ApplyArchiveRule } from "./ApplyArchiveRule.ts";
+import { makeAnalyzerScopedHttpBinding } from "./BindingHttp.ts";
 
 export const ApplyArchiveRuleHttp = Layer.effect(
   ApplyArchiveRule,

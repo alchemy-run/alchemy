@@ -1,8 +1,8 @@
+import { expect, test as bunTest } from "bun:test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { QueryAIGatewayClient, LanguageModelOptions } from "alchemy/Neon";
 import { FunctionRequest } from "alchemy/Neon";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, test as bunTest } from "bun:test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

@@ -4,16 +4,16 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import {
+  hashDockerBuildInputs,
+  resolveDockerBuildPaths,
+} from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  hashDockerBuildInputs,
-  resolveDockerBuildPaths,
-} from "../../Docker/BuildHash.ts";
 
 /**
  * Docker login credentials for the account's private ECR registry, in the

@@ -2,6 +2,11 @@
   "name": "prisma-website-sveltekit",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/prisma-website-sveltekit"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -21,15 +26,10 @@
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",
+    "@vercel/nft": "catalog:",
     "svelte": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:typescript-classic",
-    "vite": "catalog:",
-    "@vercel/nft": "catalog:"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/prisma-website-sveltekit"
+    "vite": "catalog:"
   }
 }

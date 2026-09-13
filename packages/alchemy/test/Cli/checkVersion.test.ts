@@ -1,5 +1,4 @@
 import { describe, expect, test } from "alchemy-test";
-
 import { _internal } from "../../src/Cli/checkVersion";
 
 const { pickDistTag, compareVersions } = _internal;

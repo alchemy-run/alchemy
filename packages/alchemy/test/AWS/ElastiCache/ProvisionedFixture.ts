@@ -1,12 +1,12 @@
+import * as ElastiCache from "@distilled.cloud/aws/elasticache";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import type { SecurityGroupId } from "@/AWS/EC2/SecurityGroup.ts";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
 import type { VpcId } from "@/AWS/EC2/Vpc.ts";
 import * as Core from "@/Test/Core";
-import * as ElastiCache from "@distilled.cloud/aws/elasticache";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { makeEc2VpcCapacityLease } from "../EC2/VpcCapacity.ts";
 
 export interface ProvisionedNetwork {

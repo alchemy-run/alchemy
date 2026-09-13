@@ -1,3 +1,8 @@
+import { existsSync, readdirSync } from "node:fs";
+import * as path from "node:path";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 /**
  * Repro rig for the "green destroy but leaked state" race (leaked
  * rpchttpteststack-* / rpcworkerbindingstack-* workers in the 2026-08-05
@@ -17,11 +22,6 @@
  */
 import * as Alchemy from "@/index.ts";
 import * as Core from "@/Test/Core.ts";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Scope from "effect/Scope";
-import { existsSync, readdirSync } from "node:fs";
-import * as path from "node:path";
 import { Bucket, TestLayers } from "../test.resources.ts";
 
 const FILES = Number(process.argv[2] ?? 16);

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { Task } from "@/AWS/ECS/Task.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Task } from "@/AWS/ECS/Task.ts";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

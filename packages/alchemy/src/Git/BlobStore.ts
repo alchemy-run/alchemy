@@ -1,3 +1,9 @@
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 /**
  * `Git.BlobStore` — the swappable bulk-byte store (RFC "Git Building
  * Blocks" §3.1).
@@ -29,12 +35,6 @@
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { R2Error, ReadWriteBucketClient } from "../Cloudflare/R2/index.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
 
 /** Failure of a {@link BlobStore} operation. */
 export class BlobStoreError extends Data.TaggedError("BlobStoreError")<{

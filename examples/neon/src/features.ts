@@ -1,7 +1,7 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import Events from "./Events.ts";
 import { ai } from "./ai/index.ts";
+import Events from "./Events.ts";
 import { forms } from "./forms/index.ts";
 
 export const features = Effect.gen(function* () {

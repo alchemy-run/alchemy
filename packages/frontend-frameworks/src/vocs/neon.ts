@@ -1,23 +1,23 @@
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { finishNeonOutput, makeNeonTarget } from "../core/NeonServe.ts";
+import type { Plugin } from "vite";
+import { runBuildChild } from "../core/BuildChild.ts";
 import type { BuildOutput } from "../core/BuildOutput.ts";
 import { DeployTargetError } from "../core/DeployTarget.ts";
-import { FrameworkError, type FrameworkDevOptions } from "../core/Framework.ts";
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
 import { isInsideDevChild, runDevChild } from "../core/DevChild.ts";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { FrameworkError, type FrameworkDevOptions } from "../core/Framework.ts";
 import { Framework } from "../core/Framework.ts";
-import { make as makeVocsLayer } from "./Vocs.ts";
-import type { Plugin } from "vite";
+import { finishNeonOutput, makeNeonTarget } from "../core/NeonServe.ts";
 import {
   make as makeNode,
   makeNodeTarget,
   type VocsNodeFrameworkOptions,
 } from "./node.ts";
+import { make as makeVocsLayer } from "./Vocs.ts";
 
 // Preserve config imports and closures; only the dev-only Vite loader is removed.
 const runtimeConfigPlugin = (): Plugin => ({

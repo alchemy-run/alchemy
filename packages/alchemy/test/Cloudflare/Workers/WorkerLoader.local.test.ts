@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import DynamicLoaderGetWorker from "./fixtures/dynamic-worker-loader/get-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -75,12 +75,18 @@ test.provider(
 
       const first = (yield* getJsonReady(
         `${deployed.worker.url}/?id=local-reuse`,
-      )) as { id: string; hits: number };
+      )) as {
+        id: string;
+        hits: number;
+      };
       expect(first).toEqual({ id: "local-reuse", hits: 1 });
 
       const second = (yield* getJsonReady(
         `${deployed.worker.url}/?id=local-reuse`,
-      )) as { id: string; hits: number };
+      )) as {
+        id: string;
+        hits: number;
+      };
       expect(second).toEqual({ id: "local-reuse", hits: 2 });
 
       const named = (yield* getJsonReady(

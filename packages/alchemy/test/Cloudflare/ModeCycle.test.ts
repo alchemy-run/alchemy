@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
@@ -8,8 +5,11 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { inDev } from "../test.resources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });

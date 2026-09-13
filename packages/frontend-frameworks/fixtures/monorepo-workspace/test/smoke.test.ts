@@ -1,7 +1,7 @@
-import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
-import { expect, test } from "@playwright/test";
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
+import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
+import { expect, test } from "@playwright/test";
 import { greeting, LIB_VERSION } from "../lib/src/greeting.ts";
 
 const FIXTURE_ROOT = NodePath.join(import.meta.dirname, "..");

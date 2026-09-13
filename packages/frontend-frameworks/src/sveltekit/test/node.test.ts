@@ -1,11 +1,11 @@
-import { isDeployTarget } from "../../core/index.ts";
-import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import * as fs from "node:fs/promises";
 import * as net from "node:net";
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { isDeployTarget } from "../../core/index.ts";
+import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
 import { makeProject, run } from "../../core/test/helpers.ts";
 import { makeNodeAdapter, makeNodeTarget, target } from "../node.ts";
 

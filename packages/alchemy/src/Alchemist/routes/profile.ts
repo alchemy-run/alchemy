@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { Interaction } from "../../Interaction.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import {
@@ -10,6 +9,7 @@ import {
 } from "../../Auth/Inspect.ts";
 import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
 import { ProfileStore } from "../../Auth/Profile.ts";
+import type { Interaction } from "../../Interaction.ts";
 import { AlchemistInvalidInput, AlchemistNotFound } from "../Errors.ts";
 import { Progress } from "../Progress.ts";
 import {

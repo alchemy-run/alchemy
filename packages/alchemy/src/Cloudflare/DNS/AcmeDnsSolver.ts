@@ -12,9 +12,9 @@ import {
   type DnsSolverDescriptor,
 } from "../../ACME/DnsSolver.ts";
 import { DnsSolverError } from "../../ACME/Errors.ts";
+import type { Input } from "../../Input.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Credentials } from "../Credentials.ts";
-import type { Input } from "../../Input.ts";
 import type { WriteDnsClient } from "./WriteDns.ts";
 
 /** Solver descriptor: publish `_acme-challenge` TXT records in a Cloudflare zone. */

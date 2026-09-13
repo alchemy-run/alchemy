@@ -1,3 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type * as vite from "vite";
 /**
  * `Framework` implementation driving Vocs on Cloudflare Workers.
  *
@@ -24,11 +29,6 @@
  */
 import * as FrameworkCore from "../core/index.ts";
 import { WAKU_SERVER_ENTRY_MODULE } from "../waku/Waku.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import type * as vite from "vite";
 import {
   selectVocsTargetInput,
   type VocsTarget,

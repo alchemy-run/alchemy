@@ -1,15 +1,15 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "alchemy-test";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command (see
@@ -94,7 +94,9 @@ test.provider(
 
       const sent = (yield* getJsonReady(
         `${deployed.worker.url}/send?text=local-hello`,
-      )) as { sent: string };
+      )) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("local-hello");
 
       // Poll until the broker delivers to the fixture's queue() handler.
@@ -171,7 +173,9 @@ test.provider(
 
       const { batches } = (yield* getJsonReady(
         `${deployed.worker.url}/batches`,
-      )) as { batches: number[] };
+      )) as {
+        batches: number[];
+      };
       expect(Math.max(...batches)).toBe(2);
       expect(batches.reduce((a, b) => a + b, 0)).toBe(5);
 
@@ -220,7 +224,9 @@ test.provider(
       // The worker starts (the DLQ binding resolves) and delivers normally.
       const sent = (yield* getJsonReady(
         `${deployed.worker.url}/send?text=dlq-hello`,
-      )) as { sent: string };
+      )) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("dlq-hello");
 
       const received = yield* getJsonReady(
@@ -279,7 +285,9 @@ test.provider(
       // Produce through the shim into the real queue.
       const sent = (yield* getJsonReady(
         `${deployed.worker.url}/send?text=roundtrip-hello`,
-      )) as { sent: string };
+      )) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("roundtrip-hello");
 
       // The pull loop drains the real queue into the local broker, which
@@ -363,11 +371,15 @@ test.provider(
       // the tail).
       const sent = (yield* getJsonReady(
         `${deployed.worker.url}/send?text=live-hello`,
-      )) as { sent: string };
+      )) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("live-hello");
       const batch = (yield* getJsonReady(
         `${deployed.worker.url}/sendbatch?text=live-batch`,
-      )) as { sent: number };
+      )) as {
+        sent: number;
+      };
       expect(batch.sent).toBe(2);
 
       // Pull the messages back from the REAL queue. Pulled messages are

@@ -36,24 +36,24 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
+import { Request } from "./Request.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type {
   WorkerAccessConfig,
   WorkerAccessIdentity,
 } from "./WorkerAccess.ts";
-import {
-  WorkerEnvironment,
-  WorkerExecutionContext,
-  WorkerTypeId,
-} from "./WorkerRuntime.ts";
-import { Request } from "./Request.ts";
-import type { ModuleRule } from "./Sources/Prebuilt.ts";
-import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
   WorkerBinding,
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
+import {
+  WorkerEnvironment,
+  WorkerExecutionContext,
+  WorkerTypeId,
+} from "./WorkerRuntime.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,

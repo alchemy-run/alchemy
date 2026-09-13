@@ -157,7 +157,9 @@ export const Channel = Resource<Channel>("AWS.IVS.Channel");
  */
 export class IvsChannelIncomplete extends Data.TaggedError(
   "IvsChannelIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export const ChannelProvider = () =>
   Provider.effect(

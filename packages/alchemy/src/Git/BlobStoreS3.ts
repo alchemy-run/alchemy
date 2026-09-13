@@ -65,9 +65,7 @@ const s3Error =
   (what: string) =>
   (error: { readonly _tag?: string; readonly message?: string }) =>
     new BlobStoreError({
-      reason: `${what}: ${error._tag ?? "S3Error"}${
-        error.message ? `: ${error.message}` : ""
-      }`,
+      reason: `${what}: ${error._tag ?? "S3Error"}${error.message ? `: ${error.message}` : ""}`,
     });
 
 const collectBytes = (

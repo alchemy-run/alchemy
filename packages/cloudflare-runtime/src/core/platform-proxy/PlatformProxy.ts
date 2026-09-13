@@ -1,5 +1,3 @@
-import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
-import { loadInternalWorker } from "../internal/internal-worker.ts";
 /**
  * Node-side platform proxy: our reimplementation of wrangler's
  * `getPlatformProxy()` semantics on top of `cloudflare-runtime`.
@@ -46,6 +44,8 @@ import { loadInternalWorker } from "../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
+import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const ProxyWorker = {
   worker: () =>
     loadInternalWorker(

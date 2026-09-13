@@ -1,3 +1,4 @@
+import { useEffect, useState } from "@alchemy.run/sigil/react";
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
@@ -18,8 +19,12 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
-import { useEffect, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
+import {
+  CliKit,
+  theme,
+  type NonInteractiveTerminal,
+} from "../../CliKit/index.ts";
 import {
   Alert,
   Box,
@@ -45,11 +50,6 @@ import {
   useTerminalSize,
   VirtualList,
 } from "../ui/index.ts";
-import {
-  CliKit,
-  theme,
-  type NonInteractiveTerminal,
-} from "../../CliKit/index.ts";
 import {
   type EditState,
   editStateStyle,
@@ -828,7 +828,10 @@ export const runProfileDashboardSession = <R,>(
           const loader = yield* Effect.forEach(
             options.entries,
             (entry) => loadInto(entry.name),
-            { concurrency: 2, discard: true },
+            {
+              concurrency: 2,
+              discard: true,
+            },
           ).pipe(Effect.delay("1 millis"), Effect.forkChild);
 
           yield* Effect.gen(function* () {

@@ -1,10 +1,10 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({
   providers: Docker.providers(),

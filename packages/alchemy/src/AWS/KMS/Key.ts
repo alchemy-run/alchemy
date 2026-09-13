@@ -7,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import {
@@ -15,7 +16,6 @@ import {
 } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import { toWireDays } from "../../Util/Duration.ts";
 
 export type KeyId = string;
 export type KeyArn = `arn:aws:kms:${RegionID}:${AccountID}:key/${KeyId}`;

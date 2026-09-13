@@ -293,11 +293,7 @@ export const createHetznerHostedSupport = ({
     const packageJson =
       install === undefined
         ? undefined
-        : `${JSON.stringify(
-            { private: true, type: "module", dependencies: install },
-            null,
-            2,
-          )}\n`;
+        : `${JSON.stringify({ private: true, type: "module", dependencies: install }, null, 2)}\n`;
     const installFiles =
       packageJson !== undefined
         ? [

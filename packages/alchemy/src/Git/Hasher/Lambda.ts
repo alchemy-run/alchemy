@@ -12,8 +12,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
 import type { Function as LambdaFunction } from "../../AWS/Lambda/Function.ts";
+import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
 import {
   hashBounds,
   resolveDeltas,

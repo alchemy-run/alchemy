@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
@@ -12,9 +15,6 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@/Cloudflare/Workers/WorkerProvider";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 describe("WorkerProvider", () => {
   describe("normalizeStateDomains", () => {

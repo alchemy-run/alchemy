@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { DataSource, KnowledgeBase } from "@/AWS/Bedrock";
-import * as S3 from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { DataSource, KnowledgeBase } from "@/AWS/Bedrock";
+import * as S3 from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 import BedrockKbTestFunctionLive, { BedrockKbTestFunction } from "./kb-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,3 +1,12 @@
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 /**
  * Hosted `AWS.EC2.Instance` under `alchemy dev`: the dualized EC2 providers
  * deploy the whole fleet (VPC network, security group, instance, and the
@@ -24,20 +33,11 @@ import * as AWS from "@/AWS";
 import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { dockerAvailable } from "../Local/fixtures/raw.ts";
-import DevInstance, { MARKER } from "./fixtures/dev-instance.ts";
 import DevProbeFunctionLive, {
   Ec2DevProbeFunction,
 } from "./fixtures/dev-instance-fn.ts";
+import DevInstance, { MARKER } from "./fixtures/dev-instance.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 

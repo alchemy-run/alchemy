@@ -1,11 +1,11 @@
+import * as scheduler from "@distilled.cloud/aws/scheduler";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { every } from "@/AWS/ECS/Schedule.ts";
 import { Task } from "@/AWS/ECS/Task.ts";
 import * as Test from "@/Test/Alchemy";
-import * as scheduler from "@distilled.cloud/aws/scheduler";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -41,7 +41,11 @@ test.provider(
             const schedule = yield* every(
               "alchemy-test-ecs-every-heartbeat",
               "cron(0 3 * * ? *)",
-              { cluster, task, subnets },
+              {
+                cluster,
+                task,
+                subnets,
+              },
             );
             return {
               scheduleName: schedule.scheduleName,

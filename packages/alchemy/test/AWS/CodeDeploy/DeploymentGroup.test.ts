@@ -1,12 +1,12 @@
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Application } from "@/AWS/CodeDeploy/Application.ts";
 import { DeploymentConfig } from "@/AWS/CodeDeploy/DeploymentConfig.ts";
 import { DeploymentGroup } from "@/AWS/CodeDeploy/DeploymentGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as codedeploy from "@distilled.cloud/aws/codedeploy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

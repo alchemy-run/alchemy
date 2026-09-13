@@ -1,3 +1,11 @@
+import { resolve4 } from "node:dns/promises";
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import { SecurityGroupRule, type SecurityGroupId } from "@/AWS/EC2";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
@@ -9,14 +17,6 @@ import {
   TargetGroupAttachment,
 } from "@/AWS/ELBv2";
 import * as Test from "@/Test/Alchemy";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import { resolve4 } from "node:dns/promises";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 import {
   ApiTargetFunction,

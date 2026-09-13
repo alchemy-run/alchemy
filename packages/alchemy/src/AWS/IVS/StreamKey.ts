@@ -75,7 +75,9 @@ export const StreamKey = Resource<StreamKey>("AWS.IVS.StreamKey");
  */
 export class IvsStreamKeyIncomplete extends Data.TaggedError(
   "IvsStreamKeyIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export const StreamKeyProvider = () =>
   Provider.effect(

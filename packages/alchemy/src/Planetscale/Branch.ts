@@ -8,14 +8,6 @@ import { havePropsChanged, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
-import { hashImports, hashMigrations } from "../SQL/SqlFile.ts";
-import { recordsEqual } from "../Util/equal.ts";
-import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
-import {
-  ensurePostgresProductionBranchClusterSize,
-  toPostgresClusterSku,
-  waitForPendingPostgresChanges,
-} from "./Postgres/PostgresClusterSize.ts";
 import {
   diffMigrations,
   migrationsAttrs,
@@ -26,6 +18,14 @@ import {
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
 } from "../SQL/Migrations/index.ts";
+import { hashImports, hashMigrations } from "../SQL/SqlFile.ts";
+import { recordsEqual } from "../Util/equal.ts";
+import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
+import {
+  ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterSku,
+  waitForPendingPostgresChanges,
+} from "./Postgres/PostgresClusterSize.ts";
 import {
   PlanetscaleConflict,
   isKnownError,

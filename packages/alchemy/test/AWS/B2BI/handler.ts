@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import type { PolicyStatement } from "@/AWS/IAM";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -9,6 +7,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import type { PolicyStatement } from "@/AWS/IAM";
 
 // Deterministic bucket for EDI input/output. B2BI accesses the bucket as the
 // service principal, authorized by the bucket policy below.

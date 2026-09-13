@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -98,7 +98,9 @@ describe("Fly.Website.SolidStart local", () => {
         yield* expectUrlContains(
           `${origin}/prerendered`,
           "SOLIDSTART_AWS_PRERENDERED_MARKER",
-          { label: "extra route (dev)" },
+          {
+            label: "extra route (dev)",
+          },
         );
 
         yield* stack.destroy();

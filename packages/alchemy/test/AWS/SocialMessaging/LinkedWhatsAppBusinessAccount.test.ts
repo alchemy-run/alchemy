@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { LinkedWhatsAppBusinessAccount } from "@/AWS/SocialMessaging";
-import * as Test from "@/Test/Alchemy";
 import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { LinkedWhatsAppBusinessAccount } from "@/AWS/SocialMessaging";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

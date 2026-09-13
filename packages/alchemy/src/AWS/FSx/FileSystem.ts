@@ -309,7 +309,10 @@ export const FileSystemProvider = () =>
                 OntapConfiguration: news.ontapConfiguration,
                 OpenZFSConfiguration: news.openZFSConfiguration,
                 Tags: Object.entries({ ...news.tags, ...internalTags }).map(
-                  ([Key, Value]) => ({ Key, Value }),
+                  ([Key, Value]) => ({
+                    Key,
+                    Value,
+                  }),
                 ),
               })
               .pipe(Effect.map((r) => r.FileSystem!));

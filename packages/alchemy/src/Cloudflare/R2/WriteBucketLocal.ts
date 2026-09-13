@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeLocalBucketBinding } from "./BucketLocal.ts";
-import { makeWrite } from "./WriteBucketBinding.ts";
 import { WriteBucket } from "./WriteBucket.ts";
+import { makeWrite } from "./WriteBucketBinding.ts";
 import { makeWriteR2HttpClient } from "./WriteBucketHttp.ts";
 
 /**

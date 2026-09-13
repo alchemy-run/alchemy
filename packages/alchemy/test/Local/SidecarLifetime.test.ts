@@ -1,11 +1,11 @@
-import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
-import { Stack, type StackSpec } from "@/Stack";
-import * as Core from "@/Test/Core.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
+import { Stack, type StackSpec } from "@/Stack";
+import * as Core from "@/Test/Core.ts";
 
 /**
  * The process-wide sidecar HTTP server must outlive the test file whose

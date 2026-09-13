@@ -1,9 +1,9 @@
-import { exec } from "@/Util/exec.ts";
+import { fileURLToPath } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { ChildProcess } from "effect/unstable/process";
-import { fileURLToPath } from "node:url";
+import { exec } from "@/Util/exec.ts";
 
 /**
  * Regression tests for #562: importing alchemy's CLI or provider modules

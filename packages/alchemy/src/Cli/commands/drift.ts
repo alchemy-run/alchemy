@@ -2,12 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
-
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import { Cli } from "../../Report.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
-
 import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 import { renderApply, renderPlanning } from "./render.ts";

@@ -1,3 +1,7 @@
+import * as SSM from "@distilled.cloud/aws/ssm";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 /**
  * Mode-scoped local dev for the AWS serverless data plane.
  *
@@ -24,13 +28,10 @@
  */
 import * as AWS from "@/AWS";
 import * as Alchemy from "@/index.ts";
-import { State, type ResourceState } from "@/State";
 import { Stack } from "@/Stack";
+import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as SSM from "@distilled.cloud/aws/ssm";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import { liveContext } from "./fixtures/live.ts";
 import {
   dockerAvailable,
   rawAwsJson,
@@ -38,7 +39,6 @@ import {
   rawS3GetBucket,
   regionOfArn,
 } from "./fixtures/raw.ts";
-import { liveContext } from "./fixtures/live.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 

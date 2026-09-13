@@ -1,6 +1,6 @@
-import * as Effect from "effect/Effect";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import * as Effect from "effect/Effect";
 import {
   ModuleLoadError,
   resolveProjectPackageDirectory,

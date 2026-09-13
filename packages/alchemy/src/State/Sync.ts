@@ -67,7 +67,9 @@ export const syncState = Effect.fn(function* (
               Effect.forEach(
                 toDelete,
                 (fqn) => destination.delete({ stack, stage, fqn }),
-                { concurrency },
+                {
+                  concurrency,
+                },
               ),
             ],
             { concurrency: "unbounded" },

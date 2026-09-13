@@ -1,10 +1,10 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import {
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
 } from "../../globals/ProxyHeaders.shared.ts";
+import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 layer(localRuntimeLayer, { excludeTestServices: true })((it) => {

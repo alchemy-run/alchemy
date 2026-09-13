@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { startOtlpCollector } from "../Utils/OtlpCollector.ts";
+import { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
 
 /**
  * `Cloudflare.Telemetry()` under `alchemy dev`: the Layer has no

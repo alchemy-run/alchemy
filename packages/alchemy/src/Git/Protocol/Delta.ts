@@ -34,7 +34,9 @@ import { decodeSizeVarint, ObjectParseError } from "./ObjectCodec.ts";
  */
 export class DeltaFormatError extends Schema.TaggedError<DeltaFormatError>()(
   "DeltaFormatError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 /**

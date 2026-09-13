@@ -1,13 +1,13 @@
-import * as GitHub from "@/GitHub/index.ts";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { GitHubCredentials } from "@/GitHub/Credentials.ts";
+import * as GitHub from "@/GitHub/index.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider.ts";
 import { destroy } from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {

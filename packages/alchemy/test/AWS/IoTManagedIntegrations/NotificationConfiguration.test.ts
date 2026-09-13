@@ -1,3 +1,8 @@
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
@@ -8,11 +13,6 @@ import {
 import { Stream } from "@/AWS/Kinesis";
 import { Region } from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -44,7 +44,9 @@ test.provider(
 
 class ConfigurationStillExists extends Data.TaggedError(
   "ConfigurationStillExists",
-)<{ readonly eventType: string }> {}
+)<{
+  readonly eventType: string;
+}> {}
 
 const assertConfigurationGone = (eventType: string) =>
   mi.getNotificationConfiguration({ EventType: eventType }).pipe(

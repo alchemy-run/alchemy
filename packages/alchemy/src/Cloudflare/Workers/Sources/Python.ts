@@ -1,14 +1,14 @@
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
-import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { convertPathToPattern, glob } from "tinyglobby";
 import path from "pathe";
+import { convertPathToPattern, glob } from "tinyglobby";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { exec } from "../../../Util/exec.ts";
+import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import { sha256 } from "../../../Util/sha256.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import {

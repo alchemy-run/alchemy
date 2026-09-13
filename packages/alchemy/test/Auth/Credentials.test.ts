@@ -1,11 +1,11 @@
-import { AuthError } from "@/Auth/AuthProvider.ts";
-import { CredentialsStore, CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
+import { AuthError } from "@/Auth/AuthProvider.ts";
+import { CredentialsStore, CredentialsStoreLive } from "@/Auth/Credentials.ts";
 
 const failingDeleteLayer = CredentialsStoreLive.pipe(
   Layer.provide(

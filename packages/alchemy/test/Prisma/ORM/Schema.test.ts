@@ -1,3 +1,6 @@
+import { expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import {
   defineContract,
   enumType,
@@ -6,9 +9,6 @@ import {
   model,
 } from "@/Prisma/ORM/index.ts";
 import { emitSchemas, makeSchemas, SchemaError } from "@/Prisma/ORM/Schema.ts";
-import { expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { contract } from "./fixtures/client/contract.ts";
 
 it.effect(

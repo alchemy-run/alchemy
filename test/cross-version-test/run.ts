@@ -73,8 +73,8 @@
 
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
-import { fileURLToPath } from "node:url";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..", "..");
@@ -379,9 +379,7 @@ async function deployAndVerify(
   await ensureInstalled(stage);
 
   const cloudflareCommand =
-    stage.kind === "workspace"
-      ? ["provider", "cloudflare"]
-      : ["cloudflare"];
+    stage.kind === "workspace" ? ["provider", "cloudflare"] : ["cloudflare"];
   await alcRetry(
     stage,
     [...cloudflareCommand, "bootstrap", "--profile", PROFILE!],
@@ -391,7 +389,15 @@ async function deployAndVerify(
   const dep = await alcRetry(
     stage,
     // --adopt: take over a pre-existing fixed-name worker instead of failing.
-    ["deploy", "--yes", "--adopt", "--stage", alchemyStage, "--profile", PROFILE!],
+    [
+      "deploy",
+      "--yes",
+      "--adopt",
+      "--stage",
+      alchemyStage,
+      "--profile",
+      PROFILE!,
+    ],
     "deploy",
   );
 
@@ -505,7 +511,10 @@ interface EdgeResult {
   failed: boolean;
 }
 
-async function tryStep(name: string, fn: () => Promise<void>): Promise<StepResult> {
+async function tryStep(
+  name: string,
+  fn: () => Promise<void>,
+): Promise<StepResult> {
   try {
     await fn();
     console.log(`${GREEN}✓ ${name}${RESET}`);
@@ -538,7 +547,9 @@ async function runEdge(edge: Edge): Promise<EdgeResult> {
 
   if (deployStep.status === "ok") {
     steps.push(
-      await tryStep(`upgrade → ${to.dir}`, () => deployAndVerify(to, EDGE_STAGE)),
+      await tryStep(`upgrade → ${to.dir}`, () =>
+        deployAndVerify(to, EDGE_STAGE),
+      ),
     );
   } else {
     steps.push({
@@ -589,7 +600,11 @@ async function main() {
     console.log(`${mark}  [${r.group}] ${r.label}${tag}`);
     for (const s of r.steps) {
       const sym =
-        s.status === "ok" ? `${GREEN}✓${RESET}` : s.status === "skip" ? `${YELLOW}∅${RESET}` : `${RED}✗${RESET}`;
+        s.status === "ok"
+          ? `${GREEN}✓${RESET}`
+          : s.status === "skip"
+            ? `${YELLOW}∅${RESET}`
+            : `${RED}✗${RESET}`;
       console.log(`        ${sym} ${s.name}${s.error ? ` — ${s.error}` : ""}`);
     }
   }

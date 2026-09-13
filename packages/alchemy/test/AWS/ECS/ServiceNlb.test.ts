@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
@@ -10,6 +6,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import { Service } from "@/AWS/ECS/Service.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,16 +1,16 @@
-import * as Data from "effect/Data";
+import http from "node:http";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
-import * as Encoding from "effect/Encoding";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import http from "node:http";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { AUTH_ERROR_URL, AUTH_SUCCESS_URL } from "./AuthProvider.ts";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{
   error: string;

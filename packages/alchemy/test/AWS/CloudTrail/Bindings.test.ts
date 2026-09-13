@@ -1,9 +1,3 @@
-import * as AWS from "@/AWS";
-import { Trail } from "@/AWS/CloudTrail";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,6 +5,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import { Trail } from "@/AWS/CloudTrail";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { Bucket } from "@/AWS/S3/Bucket.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CloudTrailTestFunctionLive, { CloudTrailTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };

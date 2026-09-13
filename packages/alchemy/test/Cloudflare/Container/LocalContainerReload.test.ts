@@ -1,3 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 /**
  * Hot reload for user-supplied Dockerfile/context Cloudflare Containers
  * under `alchemy dev`.
@@ -17,14 +25,6 @@
  */
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { spawnSync } from "node:child_process";
 import {
   RELOAD_CONTAINER_PORT,
   RELOAD_CONTEXT_DIR,

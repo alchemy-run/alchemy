@@ -1,14 +1,14 @@
+import { Database } from "bun:sqlite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, layer } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import {
   applyAlchemyFormat,
   applyMigrations,
   readDrizzleDirRecords,
   readFlatRecords,
 } from "@/SQL/Migrations/index.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Database } from "bun:sqlite";
-import { expect, layer } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";
 
 const fixture = (name: string) =>
@@ -47,7 +47,9 @@ describe("alchemy format", (it) => {
       );
       const columns = db
         .query("PRAGMA table_info(__alchemy_migrations);")
-        .all() as Array<{ name: string }>;
+        .all() as Array<{
+        name: string;
+      }>;
       expect(columns.map((c) => c.name)).toEqual(ALCHEMY_COLUMNS);
 
       const rows = migrationRows(db);
@@ -118,7 +120,10 @@ describe("alchemy format", (it) => {
 
         const columns = db
           .query("PRAGMA table_info(d1_migrations);")
-          .all() as Array<{ name: string; type: string }>;
+          .all() as Array<{
+          name: string;
+          type: string;
+        }>;
         expect(columns.map((c) => c.name)).toEqual(ALCHEMY_COLUMNS);
         const rows = migrationRows(db, "d1_migrations");
         expect(rows.map((r) => r.name)).toEqual([
@@ -186,7 +191,9 @@ describe("alchemy format", (it) => {
         });
         const columns = db
           .query("PRAGMA table_info(d1_migrations);")
-          .all() as Array<{ name: string }>;
+          .all() as Array<{
+          name: string;
+        }>;
         expect(columns.map((c) => c.name)).toEqual(ALCHEMY_COLUMNS);
         expect(migrationRows(db, "d1_migrations").map((r) => r.name)).toEqual([
           "0001_users.sql",
@@ -294,7 +301,9 @@ describe("one-way conversion from foreign tables", (it) => {
         // The wrangler table is frozen — never written, never dropped.
         const wrangler = db
           .query("SELECT name FROM d1_migrations ORDER BY id;")
-          .all() as Array<{ name: string }>;
+          .all() as Array<{
+          name: string;
+        }>;
         expect(wrangler.map((r) => r.name)).toEqual(["0001_users.sql"]);
       }),
   );
@@ -359,7 +368,9 @@ describe("one-way conversion from foreign tables", (it) => {
         // The legacy table is frozen as a source, still 3 columns.
         const legacyColumns = db
           .query("PRAGMA table_info(d1_migrations);")
-          .all() as Array<{ name: string }>;
+          .all() as Array<{
+          name: string;
+        }>;
         expect(legacyColumns.map((c) => c.name)).toEqual([
           "id",
           "name",

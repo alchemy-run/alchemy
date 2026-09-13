@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 /**
  * Run the live AWS suites for services that have a Floci local provider
  * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
@@ -11,8 +13,6 @@
  */
 import { Glob } from "bun";
 import { preferLocalFlociImage } from "./floci-image.ts";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const alchemyRoot = join(repoRoot, "packages/alchemy");

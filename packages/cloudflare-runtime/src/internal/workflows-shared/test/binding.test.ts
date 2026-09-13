@@ -3,17 +3,17 @@
 // Alchemy modifications: tests RPC disposal with a typed stub because the current Vitest pool does not expose methods replaced on a live Durable Object.
 import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import type { WorkflowEvent } from "cloudflare:workers";
 import { describe, it, vi } from "vitest";
-import { InstanceEvent, InstanceStatus } from "../index.ts";
 import { WorkflowBinding, WorkflowHandle } from "../binding.ts";
-import { WorkflowSubscriptionTarget } from "../subscription.ts";
-import { setTestWorkflowCallback } from "./test-entry.ts";
 import type { Engine, EngineLogs } from "../engine.ts";
+import { InstanceEvent, InstanceStatus } from "../index.ts";
+import { WorkflowSubscriptionTarget } from "../subscription.ts";
 import type {
   WorkflowSubscription,
   WorkflowSubscriptionEvent,
 } from "../subscription.ts";
-import type { WorkflowEvent } from "cloudflare:workers";
+import { setTestWorkflowCallback } from "./test-entry.ts";
 
 let instanceCounter = 0;
 function uniqueId(prefix = "instance"): string {

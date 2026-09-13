@@ -92,7 +92,9 @@ export const ComponentVersion = Resource<ComponentVersion>(
  */
 export class GreengrassInvalidRecipe extends Data.TaggedError(
   "GreengrassInvalidRecipe",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Raised when the cloud reports the component version entered the `FAILED`
@@ -100,7 +102,9 @@ export class GreengrassInvalidRecipe extends Data.TaggedError(
  */
 export class GreengrassComponentFailed extends Data.TaggedError(
   "GreengrassComponentFailed",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Internal signal used to poll a freshly created component version until the
@@ -108,7 +112,9 @@ export class GreengrassComponentFailed extends Data.TaggedError(
  */
 export class GreengrassComponentNotReady extends Data.TaggedError(
   "GreengrassComponentNotReady",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 // Explicitly-typed pipeable retry helper — inlining `Effect.retry` in a
 // provider lifecycle op leaks `Retry.Return`'s conditional into declaration

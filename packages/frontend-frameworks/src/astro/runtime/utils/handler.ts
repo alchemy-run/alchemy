@@ -1,3 +1,7 @@
+import type { RouteData } from "astro";
+import type { RenderOptions } from "astro/app";
+import { createApp } from "astro/app/entrypoint";
+import { setGetEnv } from "astro/env/setup";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -8,10 +12,6 @@
  * virtual module served by this package's config plugin.
  */
 import { env as globalEnv } from "cloudflare:workers";
-import type { RouteData } from "astro";
-import type { RenderOptions } from "astro/app";
-import { createApp } from "astro/app/entrypoint";
-import { setGetEnv } from "astro/env/setup";
 import {
   cacheProviderEnabled,
   compileImageConfig,

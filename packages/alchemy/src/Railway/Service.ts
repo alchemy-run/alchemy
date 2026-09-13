@@ -1,24 +1,24 @@
 import type * as railway from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import type { HttpEffect } from "../Http.ts";
 import {
   Platform,
   type Main,
   type MainRpc,
   type PlatformProps,
 } from "../Platform.ts";
-import type { HttpEffect } from "../Http.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
 import {
   createRailwayHostRuntimeContext,
   type ExtraFile,
   type RailwayBuildOptions,
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
+import type { ServiceBinding } from "./MountVolume.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 import { serveRailwayRpc } from "./rpc-server.ts";
 import { mintRpcToken } from "./rpc-token.ts";
 

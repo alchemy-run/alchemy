@@ -449,9 +449,7 @@ export class StackRefExpr<A> extends BaseExpr<A, never> {
     return proxy(this);
   }
   [inspect](): string {
-    return `stackRef(${this.stack}${
-      this.stage ? `, { stage: ${this.stage} }` : ""
-    })`;
+    return `stackRef(${this.stack}${this.stage ? `, { stage: ${this.stage} }` : ""})`;
   }
 }
 

@@ -139,7 +139,9 @@ export const KeyGroupProvider = () =>
             let marker: string | undefined = undefined;
             do {
               const listed: cloudfront.ListKeyGroupsResult =
-                yield* cloudfront.listKeyGroups({ Marker: marker });
+                yield* cloudfront.listKeyGroups({
+                  Marker: marker,
+                });
               for (const summary of listed.KeyGroupList?.Items ?? []) {
                 const id = summary.KeyGroup?.Id;
                 const config = summary.KeyGroup?.KeyGroupConfig;

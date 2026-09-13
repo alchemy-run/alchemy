@@ -1,3 +1,8 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { isResolved } from "@/Diff.ts";
 import * as Plan from "@/Plan";
 import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
@@ -12,11 +17,6 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 // A minimal hosted Platform (like AWS.ECS.Task / AWS.EC2.Instance) whose
 // runtime context is built by the shared `createHostRuntimeContext`. Its

@@ -1,8 +1,8 @@
+import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as crypto from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 

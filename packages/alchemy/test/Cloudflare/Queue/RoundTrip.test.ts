@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import QueueWorker from "./round-trip-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -81,9 +81,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // accumulate state from prior runs (the DO survives across
       // deploys when the namespace logical id is stable).
       const name = `roundtrip-${Math.random().toString(36).slice(2, 8)}`;
-      const secondaryName = `roundtrip-secondary-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      const secondaryName = `roundtrip-secondary-${Math.random().toString(36).slice(2, 8)}`;
       const messages = ["alpha", "beta", "gamma", "delta"];
       const secondaryMessages = ["one", "two"];
 

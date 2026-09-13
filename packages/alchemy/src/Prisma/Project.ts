@@ -1,3 +1,4 @@
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetProjectDatabasesResponse,
   type GetProjectsResponse,
@@ -8,16 +9,14 @@ import {
   createProject,
   createProjectDatabase,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
-import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { extractConnectionSecrets } from "./Client.ts";
 import { destroyProjectApps } from "./ComputeLifecycle.ts";
@@ -26,11 +25,12 @@ import {
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
+import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
 import type { ObservedDatabase, ObservedProject } from "./Internal/Observed.ts";
-import { isInputObject, isPrismaDevId } from "./Refs.ts";
-import type { Providers } from "./Providers.ts";
-import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
 import { PrismaPaginationError } from "./Internal/Pagination.ts";
+import type { Providers } from "./Providers.ts";
+import { isInputObject, isPrismaDevId } from "./Refs.ts";
+import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
 
 export interface ProjectProps {
   /**

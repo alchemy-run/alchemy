@@ -2,7 +2,6 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";

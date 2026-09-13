@@ -1,3 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 /**
  * Mode-scoped local dev for ECS: `Test.make({ dev: true })` routes the
  * dualized `ECS.Cluster` / `ECS.Task` (and `ECS.TaskDefinition` /
@@ -24,17 +32,9 @@
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@/AWS";
-import { State, type ResourceState } from "@/State";
 import { Stack } from "@/Stack";
+import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { spawnSync } from "node:child_process";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
 import { dockerAvailable, rawAwsJson } from "./fixtures/raw.ts";
@@ -421,7 +421,9 @@ describe.sequential("EcsDev", () => {
         // repo tree.
         const clone = yield* cloneFixture(
           `${import.meta.dirname}/fixtures/ecs-reload`,
-          { prefix: "ecs-reload-" },
+          {
+            prefix: "ecs-reload-",
+          },
         );
 
         const outputs = yield* stack.deploy(
@@ -488,7 +490,9 @@ describe.sequential("EcsDev", () => {
 
         const clone = yield* cloneFixture(
           `${import.meta.dirname}/fixtures/ecs-reload-main`,
-          { prefix: "ecs-reload-main-" },
+          {
+            prefix: "ecs-reload-main-",
+          },
         );
         const mainPath = path.join(clone, "server.ts");
 
@@ -571,7 +575,9 @@ describe.sequential("EcsDev", () => {
 
         const clone = yield* cloneFixture(
           `${import.meta.dirname}/fixtures/ecs-svc`,
-          { prefix: "ecs-svc-" },
+          {
+            prefix: "ecs-svc-",
+          },
         );
 
         const outputs = yield* stack.deploy(
@@ -667,7 +673,9 @@ describe.sequential("EcsDev", () => {
 
         const clone = yield* cloneFixture(
           `${import.meta.dirname}/fixtures/ecs-env`,
-          { prefix: "ecs-env-" },
+          {
+            prefix: "ecs-env-",
+          },
         );
 
         const declare = (env: string) =>
@@ -742,7 +750,9 @@ describe.sequential("EcsDev", () => {
 
         const clone = yield* cloneFixture(
           `${import.meta.dirname}/fixtures/ecs-ext`,
-          { prefix: "ecs-ext-" },
+          {
+            prefix: "ecs-ext-",
+          },
         );
 
         const outputs = yield* stack.deploy(

@@ -2,7 +2,6 @@ import * as web3 from "@distilled.cloud/cloudflare/web3";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -299,7 +298,10 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
       identifier: hostnameId,
     });
     const entries = yield* web3.listHostnameIpfsUniversalPathContentListEntries(
-      { zoneId, identifier: hostnameId },
+      {
+        zoneId,
+        identifier: hostnameId,
+      },
     );
     return {
       zoneId,

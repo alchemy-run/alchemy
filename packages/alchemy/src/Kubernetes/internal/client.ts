@@ -1,3 +1,4 @@
+import * as https from "node:https";
 /**
  * Internal Kubernetes API client: transport-agnostic server-side apply and
  * kind discovery for arbitrary (CRD) manifests. Powers
@@ -13,7 +14,6 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as https from "node:https";
 import {
   findClusterAdapter,
   type ClusterTransport,

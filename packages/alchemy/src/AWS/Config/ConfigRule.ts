@@ -210,7 +210,9 @@ export const ConfigRule = Resource<ConfigRule>("AWS.Config.ConfigRule");
  */
 export class ConfigRuleNotVisible extends Data.TaggedError(
   "ConfigRuleNotVisible",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * `PutConfigRule`/`DeleteConfigRule` reject with `ResourceInUseException`

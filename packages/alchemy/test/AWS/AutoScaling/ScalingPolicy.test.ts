@@ -1,3 +1,8 @@
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   AutoScalingGroup,
@@ -8,11 +13,6 @@ import { amazonLinux2023, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

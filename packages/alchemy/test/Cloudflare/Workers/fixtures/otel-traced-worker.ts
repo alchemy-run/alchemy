@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /**
  * Effect-native Worker exercising the built-in `Telemetry.layerOtlp` binding

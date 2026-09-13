@@ -5,8 +5,8 @@ import * as Binding from "../../Binding.ts";
 import { makeBatchedSink } from "../internal/BatchedSink.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import { PutRecords } from "./PutRecords.ts";
-import { StreamSink, type StreamSinkRecord } from "./StreamSink.ts";
 import type { Stream } from "./Stream.ts";
+import { StreamSink, type StreamSinkRecord } from "./StreamSink.ts";
 
 const encoder = new TextEncoder();
 

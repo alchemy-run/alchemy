@@ -14,9 +14,9 @@ import type {
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type { Worker } from "../Workers/Worker.ts";
-import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Worker } from "../Workers/Worker.ts";
 import { type TunnelAuth } from "./TunnelBinding.ts";
 
 /**

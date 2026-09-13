@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 /**
  * The streaming pack source (src/Git/Store/StreamingSource.ts): reads
  * block until bytes arrive, in-slab reads are views, retention drops
@@ -7,9 +10,6 @@
 import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
 import { StoreError } from "@/Git/Protocol/Store.ts";
 import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 
 const bytes = (n: number, seed = 1) => {
   const out = new Uint8Array(n);

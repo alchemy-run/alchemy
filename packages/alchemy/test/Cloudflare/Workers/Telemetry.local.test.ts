@@ -1,16 +1,16 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import {
   startDelayedOtlpCollector,
   startOtlpCollector,
 } from "../Utils/OtlpCollector.ts";
+import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 

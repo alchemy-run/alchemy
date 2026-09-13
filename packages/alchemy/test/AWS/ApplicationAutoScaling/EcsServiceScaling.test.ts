@@ -1,14 +1,14 @@
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import * as ecs from "@distilled.cloud/aws/ecs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { ScalableTarget, ScalingPolicy } from "@/AWS/ApplicationAutoScaling";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as aas from "@distilled.cloud/aws/application-auto-scaling";
-import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { reclaimTaskDefinitionFamily } from "../ECS/reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,8 +1,6 @@
-import { sanitizeLockKey, withLock } from "@/Auth/Lock.ts";
-import { rootDir } from "@/Auth/Paths.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it, layer } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
@@ -14,6 +12,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import { sanitizeLockKey, withLock } from "@/Auth/Lock.ts";
+import { rootDir } from "@/Auth/Paths.ts";
 
 describe("sanitizeLockKey", () => {
   it("leaves conventional keys untouched", () => {

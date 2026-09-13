@@ -1,8 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import { describe, expect } from "alchemy-test";
@@ -14,6 +9,11 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

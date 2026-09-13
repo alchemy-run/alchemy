@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * A service whose Layer performs real async I/O during the isolate build —

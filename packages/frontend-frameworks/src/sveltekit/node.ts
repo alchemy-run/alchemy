@@ -1,3 +1,5 @@
+import * as NodeFs from "node:fs";
+import * as NodePath from "node:path";
 /**
  * `@alchemy.run/frontend-frameworks/sveltekit/node` — the Node container
  * deploy target for `@alchemy.run/frontend-frameworks/sveltekit`.
@@ -19,8 +21,6 @@ import type { Builder } from "@sveltejs/kit";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as NodeFs from "node:fs";
-import * as NodePath from "node:path";
 import { rolldown } from "rolldown";
 import { runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";

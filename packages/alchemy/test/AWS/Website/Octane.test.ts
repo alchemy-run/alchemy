@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -98,12 +98,16 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Octane", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "OCTANE_AWS_API_MARKER",
-          { label: "API route" },
+          {
+            label: "API route",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "roundtrip",
-          { label: "API route query echo" },
+          {
+            label: "API route query echo",
+          },
         );
         // Public file served from S3 via the KV file manifest.
         yield* expectUrlContains(

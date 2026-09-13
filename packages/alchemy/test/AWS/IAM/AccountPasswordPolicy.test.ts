@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AccountPasswordPolicy } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

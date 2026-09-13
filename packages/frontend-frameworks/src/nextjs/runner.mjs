@@ -1,3 +1,4 @@
+import fs from "node:fs";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 // Programmatic @opennextjs/cloudflare build runner — NO wrangler binary, NO
@@ -17,7 +18,6 @@
 //   { appDir, configPath, compatibilityDate, skipNextBuild, minify, debug,
 //     buildCommand }
 import { createRequire } from "node:module";
-import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 

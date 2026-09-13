@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SecretsManager from "@/AWS/SecretsManager";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as SecretsManager from "@/AWS/SecretsManager";
 
 export class GetSecretOnlyTestFunction extends Lambda.Function<GetSecretOnlyTestFunction>()(
   "GetSecretOnlyTestFunction",

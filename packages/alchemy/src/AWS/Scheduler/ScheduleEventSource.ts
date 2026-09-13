@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import type * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
-import { createHash } from "node:crypto";
 import * as Binding from "../../Binding.ts";
 import * as IAM from "../IAM/index.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";

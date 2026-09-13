@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ActiveReceiptRuleSet, ReceiptRuleSet } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as ses from "@distilled.cloud/aws/ses";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ActiveReceiptRuleSet, ReceiptRuleSet } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

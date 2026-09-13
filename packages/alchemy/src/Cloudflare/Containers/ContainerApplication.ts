@@ -1,6 +1,7 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
@@ -10,7 +11,6 @@ import {
 import { Resource } from "../../Resource.ts";
 import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
-import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";

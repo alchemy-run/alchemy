@@ -1,10 +1,10 @@
-import { defineContract, model } from "@/Prisma/ORM/index.ts";
 import {
   defineContract as nativeDefineContract,
   model as nativeModel,
 } from "@prisma/orm-postgres/contract-builder";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { defineContract, model } from "@/Prisma/ORM/index.ts";
 import { contract } from "./fixtures/client/contract.ts";
 
 it.effect("uses native Prisma functions and runtime metadata unchanged", () =>

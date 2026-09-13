@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Domain } from "@/AWS/SimpleDB";
-import * as Test from "@/Test/Alchemy";
 import * as sdb from "@distilled.cloud/aws/simpledb";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Domain } from "@/AWS/SimpleDB";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

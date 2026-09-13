@@ -3,7 +3,6 @@ import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
-import type { Credentials } from "../Credentials.ts";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
@@ -43,9 +42,10 @@ import {
   hasTags,
 } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import type { Credentials } from "../Credentials.ts";
+import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -1317,7 +1317,10 @@ await bootstrap(entrypoint);
                   { type: "MEMORY", value: effective.memory },
                 ],
                 environment: Object.entries(effective.environment).map(
-                  ([key, value]) => ({ name: key, value }),
+                  ([key, value]) => ({
+                    name: key,
+                    value,
+                  }),
                 ),
                 networkConfiguration: platformCapabilities.includes("FARGATE")
                   ? { assignPublicIp: effective.assignPublicIp }

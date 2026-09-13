@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { ApiKey } from "./secret.ts";
+import * as Cloudflare from "@/Cloudflare";
 import { secretRoutes } from "./secret-routes.ts";
+import { ApiKey } from "./secret.ts";
 
 /**
  * Effect-native invocation style: the Secret is bound inside the Worker init

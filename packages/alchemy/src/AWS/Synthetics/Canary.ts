@@ -19,8 +19,8 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
-import { zipFiles } from "../../Util/zip.ts";
 import { sha256Object } from "../../Util/sha256.ts";
+import { zipFiles } from "../../Util/zip.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 

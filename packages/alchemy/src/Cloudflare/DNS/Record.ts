@@ -3,7 +3,6 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";

@@ -1,12 +1,12 @@
 import * as ByteSize from "effect/ByteSize";
-import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { normalizeEntrypoint } from "./ComputeArchive.ts";
@@ -1281,10 +1281,7 @@ function buildBun(options: ComputeAutoBuildOptions) {
         );
       }
 
-      const expected = `${path.basename(
-        absoluteEntrypoint,
-        path.extname(absoluteEntrypoint),
-      )}.js`;
+      const expected = `${path.basename(absoluteEntrypoint, path.extname(absoluteEntrypoint))}.js`;
       return {
         directory: temp.artifactDir,
         entrypoint: outputFiles.includes(expected) ? expected : outputFiles[0]!,

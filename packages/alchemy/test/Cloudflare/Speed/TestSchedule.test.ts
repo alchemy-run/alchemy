@@ -1,3 +1,9 @@
+import * as speed from "@distilled.cloud/cloudflare/speed";
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
@@ -5,12 +11,6 @@ import type { TestScheduleAttributes } from "@/Cloudflare/Speed/TestSchedule";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as speed from "@distilled.cloud/cloudflare/speed";
-import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

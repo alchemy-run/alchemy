@@ -1,3 +1,26 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as Cloudflare from "@/Cloudflare";
+import type { Oid } from "@/Git/Api.ts";
+import {
+  encodeCommit,
+  hashObject,
+  ObjectType,
+  parseCommit,
+  utf8Decode,
+  utf8Encode,
+} from "@/Git/Protocol/ObjectCodec.ts";
 /**
  * THE PRIMARY SUITE — full local dev-mode coverage of git-service.
  *
@@ -19,30 +42,7 @@
  *      and the wire auth matrix.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import type { Oid } from "@/Git/Api.ts";
-import {
-  encodeCommit,
-  hashObject,
-  ObjectType,
-  parseCommit,
-  utf8Decode,
-  utf8Encode,
-} from "@/Git/Protocol/ObjectCodec.ts";
 import ProtectedGitHost from "./fixtures/protected-stack.ts";
 import TestGitHost, {
   TEST_SECRET,

@@ -2,7 +2,6 @@ import * as urlNormalization from "@distilled.cloud/cloudflare/url-normalization
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";

@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";

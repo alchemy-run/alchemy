@@ -1,10 +1,10 @@
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../../../Plan.ts";
+import type { ProviderMode } from "../../../ProviderMode.ts";
 import type {
   ApplyEvent,
   ApplyStatus,
   ResourceStatusChanged,
 } from "../../../Report.ts";
-import type { ProviderMode } from "../../../ProviderMode.ts";
 import {
   buildNamespaceTree,
   buildPlanSummary,

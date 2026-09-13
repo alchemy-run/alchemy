@@ -1,9 +1,3 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Workflow } from "@/AWS/MWAAServerless";
-import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -12,6 +6,12 @@ import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Workflow } from "@/AWS/MWAAServerless";
+import { Bucket } from "@/AWS/S3/Bucket.ts";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

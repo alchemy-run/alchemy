@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as im from "@distilled.cloud/aws/internetmonitor";
@@ -11,6 +8,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import InternetMonitorBindingsFunctionLive, {
   InternetMonitorBindingsFunction,
 } from "./handler";

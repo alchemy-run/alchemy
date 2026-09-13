@@ -207,19 +207,27 @@ const isManagedVpcFlowLog = (
 
 class TelemetryRuleStillExists extends Data.TaggedError(
   "TelemetryRuleStillExists",
-)<{ readonly ruleName: string }> {}
+)<{
+  readonly ruleName: string;
+}> {}
 
 class ManagedVpcFlowLogDeleteFailed extends Data.TaggedError(
   "ManagedVpcFlowLogDeleteFailed",
-)<{ readonly failures: ec2.UnsuccessfulItem[] }> {}
+)<{
+  readonly failures: ec2.UnsuccessfulItem[];
+}> {}
 
 class ManagedVpcFlowLogsStillExist extends Data.TaggedError(
   "ManagedVpcFlowLogsStillExist",
-)<{ readonly flowLogIds: string[] }> {}
+)<{
+  readonly flowLogIds: string[];
+}> {}
 
 class ManagedVpcLogGroupStillExists extends Data.TaggedError(
   "ManagedVpcLogGroupStillExists",
-)<{ readonly logGroupName: string }> {}
+)<{
+  readonly logGroupName: string;
+}> {}
 
 const cleanupObservationSchedule = Schedule.max([
   Schedule.fixed("1 second"),

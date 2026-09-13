@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -91,24 +91,32 @@ describe.skipIf(!runLive)("AWS.Website.TanStackStart", () => {
         yield* expectUrlContains(
           `${url}/`,
           "config:tanstack-start-aws-user-config-loaded",
-          { label: "user vite.config.ts applied" },
+          {
+            label: "user vite.config.ts applied",
+          },
         );
         // Server route through the streaming Function URL origin.
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "TANSTACK_AWS_API_MARKER",
-          { label: "server route" },
+          {
+            label: "server route",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "roundtrip",
-          { label: "server route query echo" },
+          {
+            label: "server route query echo",
+          },
         );
         // Public file served from S3 via the KV file manifest.
         yield* expectUrlContains(
           `${url}/robots.txt`,
           "tanstack-start-aws-robots-marker",
-          { label: "public asset from S3" },
+          {
+            label: "public asset from S3",
+          },
         );
         // Client bundle from S3 — the SSR document modulepreloads it, so a
         // broken asset upload breaks hydration silently otherwise.
@@ -176,7 +184,9 @@ describe.skipIf(!runLive)("AWS.Website.TanStackStart", () => {
         yield* expectUrlContains(
           `${url}/`,
           "env:tanstack-start-aws-live-env-marker",
-          { label: "server.environment on the Lambda" },
+          {
+            label: "server.environment on the Lambda",
+          },
         );
         // The router's defaultTTL-0 cache policy must not cache SSR
         // responses: the server route round-trips with distinct query
@@ -184,18 +194,24 @@ describe.skipIf(!runLive)("AWS.Website.TanStackStart", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=router-one`,
           "router-one",
-          { label: "server route via router (query one)" },
+          {
+            label: "server route via router (query one)",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=router-two`,
           "router-two",
-          { label: "server route via router (query two)" },
+          {
+            label: "server route via router (query two)",
+          },
         );
         // Static asset from S3 through the router's edge function.
         yield* expectUrlContains(
           `${url}/robots.txt`,
           "tanstack-start-aws-robots-marker",
-          { label: "public asset via router" },
+          {
+            label: "public asset via router",
+          },
         );
 
         const distributionId = deployed.router.distributionId as string;

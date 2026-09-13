@@ -1,12 +1,12 @@
 import * as railway from "@distilled.cloud/railway";
-import {
-  ResourceDeletionPending,
-  waitUntilDeleted,
-} from "@/Railway/GraphQL.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
+import {
+  ResourceDeletionPending,
+  waitUntilDeleted,
+} from "@/Railway/GraphQL.ts";
 
 describe("Railway deletion confirmation", () => {
   it.effect(

@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -7,7 +5,9 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /** KV namespace read by `/fanout` so each fiber emits a platform span. */
 export const Store = Cloudflare.KV.Namespace("NativeTracingStore");

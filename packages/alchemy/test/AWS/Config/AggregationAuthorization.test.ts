@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AggregationAuthorization } from "@/AWS/Config";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { AggregationAuthorization } from "@/AWS/Config";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,7 +27,9 @@ const findAuthorization = (accountId: string, region: string) =>
 
 class AuthorizationStillExists extends Data.TaggedError(
   "AuthorizationStillExists",
-)<{ readonly region: string }> {}
+)<{
+  readonly region: string;
+}> {}
 
 const assertAuthorizationDeleted = (accountId: string, region: string) =>
   findAuthorization(accountId, region).pipe(

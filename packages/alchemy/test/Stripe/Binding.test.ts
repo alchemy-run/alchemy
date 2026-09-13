@@ -1,11 +1,11 @@
-import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Stripe from "@/Stripe";
+import * as Test from "@/Test/Alchemy";
 import StripeBindingWorker from "./fixtures/worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

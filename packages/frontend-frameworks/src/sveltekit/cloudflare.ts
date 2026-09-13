@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -17,13 +18,12 @@
  * module's specifier).
  */
 import cloudflare from "@alchemy.run/cloudflare-runtime/rolldown";
-import * as FrameworkCore from "../core/index.ts";
-import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as NodePath from "node:path";
 import * as Path from "effect/Path";
 import { rolldown } from "rolldown";
+import * as FrameworkCore from "../core/index.ts";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import { makeCloudflareAdapter } from "./Adapter.ts";
 import type { SvelteKitTarget, SvelteKitTargetConfig } from "./SvelteKit.ts";
 

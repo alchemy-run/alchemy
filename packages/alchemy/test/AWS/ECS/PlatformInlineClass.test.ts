@@ -1,3 +1,7 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as AWS from "@/AWS";
 import { createContainerRuntimeContext } from "@/AWS/ECS/Task.ts";
 import { isResolved } from "@/Diff.ts";
@@ -7,10 +11,6 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 // Regression for the container-platform serve OOM (fixed in c35217c2b):
 // `createContainerRuntimeContext` wrapped the host `serve`, but the wrapper

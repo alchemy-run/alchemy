@@ -1,10 +1,10 @@
-import { handleWebSocket } from "../websockets.ts";
 import * as NodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
 import * as NodeNet from "node:net";
 import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
+import { handleWebSocket } from "../websockets.ts";
 
 const DEBUG = !!process.env.WS_PROXY_DEBUG;
 const dbg = (...args: Array<unknown>) => {

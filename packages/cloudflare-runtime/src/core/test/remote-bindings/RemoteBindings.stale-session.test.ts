@@ -1,7 +1,7 @@
+import * as http from "node:http";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as http from "node:http";
 import { Service } from "../../bindings/index.ts";
 import * as RemoteBindings from "../../remote-bindings/RemoteBindings.ts";
 import * as RemoteWorker from "../../remote-bindings/RemoteWorker.ts";

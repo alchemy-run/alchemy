@@ -1,7 +1,7 @@
-import { WORKER_ENTRY_PREFIX } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
 import * as NodeFsPromises from "node:fs/promises";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
+import { WORKER_ENTRY_PREFIX } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
 import type * as ViteModule from "vite";
 import { afterEach, describe, expect, it } from "vitest";
 import {

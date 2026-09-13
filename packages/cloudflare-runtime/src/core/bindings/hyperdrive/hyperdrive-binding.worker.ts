@@ -1,7 +1,7 @@
-import type { HyperdriveOrigin } from "./HyperdriveOrigin.shared.ts";
 // Internal extensions resolve internal built-ins. The public wrapper is not
 // visible from this registry under `new_module_registry`.
 import sockets from "cloudflare-internal:sockets";
+import type { HyperdriveOrigin } from "./HyperdriveOrigin.shared.ts";
 
 export default function makeBinding(env: { ORIGIN: HyperdriveOrigin }) {
   let connectionString = `${env.ORIGIN.scheme}://${env.ORIGIN.user}:${env.ORIGIN.password}@${env.ORIGIN.host}:${env.ORIGIN.port}/${env.ORIGIN.database}`;

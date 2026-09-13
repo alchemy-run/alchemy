@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Neon from "@/Neon";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,8 +5,11 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import Stack from "./fixtures/drizzle-workflow/stack.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Neon from "@/Neon";
+import * as Test from "@/Test/Alchemy";
 import type { Widget } from "./fixtures/drizzle-workflow/schema.ts";
+import Stack from "./fixtures/drizzle-workflow/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),

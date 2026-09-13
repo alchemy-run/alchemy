@@ -1,5 +1,3 @@
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,6 +5,8 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Prisma.providers(), dev: true });
 

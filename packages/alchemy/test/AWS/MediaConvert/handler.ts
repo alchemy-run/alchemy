@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as MediaConvert from "@/AWS/MediaConvert";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as MediaConvert from "@/AWS/MediaConvert";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

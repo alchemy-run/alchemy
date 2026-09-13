@@ -1,3 +1,8 @@
+import * as entityresolution from "@distilled.cloud/aws/entityresolution";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   IdMappingWorkflow,
@@ -11,11 +16,6 @@ import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as entityresolution from "@distilled.cloud/aws/entityresolution";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

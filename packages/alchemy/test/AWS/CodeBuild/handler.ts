@@ -1,7 +1,3 @@
-import * as CodeBuild from "@/AWS/CodeBuild";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as Logs from "@/AWS/Logs";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,6 +5,10 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CodeBuild from "@/AWS/CodeBuild";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as Logs from "@/AWS/Logs";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

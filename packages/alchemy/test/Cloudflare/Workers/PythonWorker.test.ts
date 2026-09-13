@@ -1,7 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { readPythonWorkerBundle } from "@/Cloudflare/Workers/Sources/Python";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -9,6 +5,10 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { readPythonWorkerBundle } from "@/Cloudflare/Workers/Sources/Python";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains, HttpAssertionFailed } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 

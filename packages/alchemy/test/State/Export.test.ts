@@ -1,3 +1,5 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import {
   exportState,
   InMemoryService,
@@ -5,8 +7,6 @@ import {
   type ResourceState,
   type StateService,
 } from "@/State";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 /** The store under test is provided as the `State` service for one call. */
 const withState = <A, E, R>(
@@ -115,7 +115,9 @@ describe("exportState", () => {
       });
       expect(
         yield* withState(state, exportState({ stack: "app", stage: "nope" })),
-      ).toEqual({ resources: [] });
+      ).toEqual({
+        resources: [],
+      });
     }),
   );
 

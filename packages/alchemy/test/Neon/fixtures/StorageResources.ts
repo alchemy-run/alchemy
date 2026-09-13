@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { Branch } from "@/Neon/Branch";
 import { Bucket } from "@/Neon/Bucket";
 import { Object as NeonObject } from "@/Neon/Object";
 import { Project } from "@/Neon/Project";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 
 export const StorageProject = Project("StorageBindingProject", {
   region: "aws-us-east-2",

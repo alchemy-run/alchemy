@@ -1,3 +1,4 @@
+import type { ObjectType } from "./Protocol/ObjectCodec.ts";
 /**
  * The Worker ↔ Repo DO push protocol (DESIGN §22.10): the pack never
  * enters the Durable Object. The Worker receives the body, spills it,
@@ -10,7 +11,6 @@
  * metadata and the byte length of its zdata run, in order.
  */
 import type { StagedObject } from "./Store/ObjectStore.ts";
-import type { ObjectType } from "./Protocol/ObjectCodec.ts";
 
 interface RowMeta {
   /** oid */

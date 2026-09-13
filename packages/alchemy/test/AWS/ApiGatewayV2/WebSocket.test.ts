@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -7,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import WebSocket from "ws";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import WebSocketTestFunctionLive, { WebSocketTestFunction } from "./ws-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });

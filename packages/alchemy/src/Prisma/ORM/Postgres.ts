@@ -1,7 +1,7 @@
+import type { Contract } from "@prisma/orm-postgres/contract/types";
 // The Prisma runtime peers are loaded on first use. This module is not
 // re-exported from `alchemy/Prisma`; import `alchemy/Prisma/ORM/Postgres`.
 import type { SqlStorage } from "@prisma/orm-postgres/family-contract/types";
-import type { Contract } from "@prisma/orm-postgres/contract/types";
 import type {
   Runtime,
   RuntimeConnection,

@@ -1,4 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 /**
  * A second application assembly with custom native HTTP handlers: the
  * suite's middleware, plus one branch-protection rule. This is the
@@ -23,9 +26,6 @@ import {
 } from "@/Git/index.ts";
 import * as Http from "@/Http/index.ts";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { GitHubLive } from "./http.ts";
 import { TestAuthLive, TestCaller } from "./test-auth.ts";
 

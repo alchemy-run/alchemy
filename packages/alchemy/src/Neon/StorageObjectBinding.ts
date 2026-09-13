@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { CurrentRuntimeContext } from "../RuntimeContext.ts";
 import { isResource } from "../Resource.ts";
-import type { Bucket } from "./Bucket.ts";
+import { CurrentRuntimeContext } from "../RuntimeContext.ts";
 import { bindBackendEnvironment } from "./BackendConnection.ts";
+import type { Bucket } from "./Bucket.ts";
 import {
   ObjectDecodeError,
   serializeObjectValue,
@@ -12,12 +12,12 @@ import {
   type Object,
 } from "./Object.ts";
 import type { ReadObjectClient, ObjectValue } from "./ReadObject.ts";
-import type { WriteObjectClient } from "./WriteObject.ts";
 import {
   makeStorageBinding,
   StorageBindingError,
   type StorageBindingOptions,
 } from "./StorageBinding.ts";
+import type { WriteObjectClient } from "./WriteObject.ts";
 
 const isBucket = (value: unknown): value is Bucket =>
   isResource(value) && value.Type === "Neon.Bucket";

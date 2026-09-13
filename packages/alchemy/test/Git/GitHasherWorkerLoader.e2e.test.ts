@@ -1,11 +1,3 @@
-/**
- * The pack hasher on dynamically loaded Workers, end to end (DESIGN
- * §22.12): pushes stream through four loaded hasher isolates, and the
- * result clones back byte-identical under `fsck --strict`.
- */
-import * as Cloudflare from "@/Cloudflare";
-import { GitApi } from "@/Git/Api.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -17,6 +9,14 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+/**
+ * The pack hasher on dynamically loaded Workers, end to end (DESIGN
+ * §22.12): pushes stream through four loaded hasher isolates, and the
+ * result clones back byte-identical under `fsck --strict`.
+ */
+import * as Cloudflare from "@/Cloudflare";
+import { GitApi } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeLoaderTestStack, TEST_SECRET } from "./fixtures/loader-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

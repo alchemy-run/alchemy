@@ -1,4 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -9,6 +8,7 @@ import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 export class Journal extends Cloudflare.DurableObject<Journal>()(
   "LifecycleJournal",

@@ -37,7 +37,9 @@ export const StartJobRunHttp = Layer.effect(
         request: Omit<
           emrc.StartJobRunRequest,
           "virtualClusterId" | "clientToken"
-        > & { clientToken?: string },
+        > & {
+          clientToken?: string;
+        },
       ) {
         return yield* op({
           ...request,

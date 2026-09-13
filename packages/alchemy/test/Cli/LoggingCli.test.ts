@@ -1,10 +1,10 @@
+import { describe, expect, it, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import { LoggingCli, formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { Cli } from "@/Report.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import * as Layer from "effect/Layer";
-import { describe, expect, it, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Logger from "effect/Logger";
 import {
   createNode,
   deleteNode,

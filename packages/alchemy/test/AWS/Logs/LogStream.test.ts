@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
-import { LogStream } from "@/AWS/Logs/LogStream.ts";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
+import { LogStream } from "@/AWS/Logs/LogStream.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

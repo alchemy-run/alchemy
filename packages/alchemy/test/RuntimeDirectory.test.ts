@@ -1,25 +1,25 @@
-import { watchBundleDirectory } from "@/Cloudflare/Workers/Sources/shared";
-import * as Stream from "effect/Stream";
-import { isPathWithin } from "@/Util/isPathWithin";
-import { hashDirectory } from "@/Command/Memo";
+import { gunzipSync } from "node:zlib";
 import nextjsSource from "@alchemy.run/frontend-frameworks/nextjs/source";
-import { readPythonWorkerBundle } from "@/Cloudflare/Workers/Sources/Python";
-import { sha256 } from "@/Util/sha256";
+import { expect, layer } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 import { AlchemyContext, dotAlchemyDirectory } from "@/AlchemyContext";
 import { createTempBundleDir, getStableContextDir } from "@/Bundle/TempRoot";
+import { readPythonWorkerBundle } from "@/Cloudflare/Workers/Sources/Python";
 import { WorkerBundle } from "@/Cloudflare/Workers/Sources/Rolldown";
+import { watchBundleDirectory } from "@/Cloudflare/Workers/Sources/shared";
+import { hashDirectory } from "@/Command/Memo";
 import { createComputeArchive } from "@/Prisma/ComputeArchive";
 import { Stack } from "@/Stack";
 import { Stage } from "@/Stage";
 import { localState } from "@/State/LocalState";
 import { State } from "@/State/State";
 import { copyTree, hashExtraFiles } from "@/Util/extraFiles";
+import { isPathWithin } from "@/Util/isPathWithin";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { expect, layer } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { gunzipSync } from "node:zlib";
+import { sha256 } from "@/Util/sha256";
 
 layer(PlatformServices)("runtime directory", (it) => {
   it.effect(

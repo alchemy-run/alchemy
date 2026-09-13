@@ -1,3 +1,12 @@
+import { spawnSync } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 /**
  * Credential-free `alchemy dev` for AWS.
  *
@@ -36,15 +45,6 @@ import { Bucket } from "@/AWS/S3";
 import { Queue } from "@/AWS/SQS";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
 

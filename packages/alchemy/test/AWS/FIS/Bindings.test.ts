@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import FisTestFunctionLive, { FisTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -161,13 +161,17 @@ describe.sequential("FIS Bindings", () => {
 
           const listing = (yield* getJson(
             `/experiments?templateId=${template.id}`,
-          )) as { ids: string[] };
+          )) as {
+            ids: string[];
+          };
           expect(listing.ids).toContain(started.id);
 
           // the wait-only experiment has no targets to resolve.
           const resolved = (yield* getJson(
             `/resolved-targets?id=${started.id}`,
-          )) as { count: number };
+          )) as {
+            count: number;
+          };
           expect(resolved.count).toBe(0);
 
           // stop it so nothing lingers past the test.
@@ -199,7 +203,9 @@ describe.sequential("FIS Bindings", () => {
       Effect.gen(function* () {
         const type = (yield* getJson(
           "/target-resource-type?type=aws:ec2:instance",
-        )) as { resourceType: string };
+        )) as {
+          resourceType: string;
+        };
         expect(type.resourceType).toBe("aws:ec2:instance");
 
         const listing = (yield* getJson("/target-resource-types")) as {

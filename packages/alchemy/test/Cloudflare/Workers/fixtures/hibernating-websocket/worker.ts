@@ -1,3 +1,9 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { DurableObject } from "@/Cloudflare/Workers/DurableObject.ts";
 import { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import {
@@ -6,12 +12,6 @@ import {
   type WebSocketAttachmentError,
 } from "@/Cloudflare/Workers/WebSocket.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as SchemaGetter from "effect/SchemaGetter";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const Attachment = Schema.Struct({
   version: Schema.Literal(1),

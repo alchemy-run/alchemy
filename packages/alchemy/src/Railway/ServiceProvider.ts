@@ -1,25 +1,16 @@
-import { waitUntilDeleted, projectServices } from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
+import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { deepEqual, isResolved, stripEffects } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Stack } from "../Stack.ts";
-import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
-import { ownedProjects } from "./Project.ts";
-import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
-import {
-  deleteOwnedServiceDomain,
-  ensureServiceDomain,
-  findServiceDomainById,
-  type ServiceDomainRecord,
-} from "./ServiceDomain.ts";
+import { tarGzipDirectory } from "../Util/tarGzip.ts";
+import { waitUntilDeleted, projectServices } from "./GraphQL.ts";
 import {
   collectBindingState,
   createRailwayHostedSupport,
@@ -27,8 +18,6 @@ import {
   plainEnvValue,
   toEnvRecord,
 } from "./hosted.ts";
-import { RPC_TOKEN_ENV } from "./rpc-token.ts";
-import { tarGzipDirectory } from "../Util/tarGzip.ts";
 import {
   hashRailwayLocalContext,
   prepareRailwayLocalContext,
@@ -36,8 +25,19 @@ import {
   ServiceSourceInvalid,
   type RailwayLocalContextSource,
 } from "./local-context.ts";
-import { uploadDeployTarball } from "./Up.ts";
+import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
+import { ownedProjects } from "./Project.ts";
+import { RPC_TOKEN_ENV } from "./rpc-token.ts";
 import { Service } from "./Service.ts";
+import {
+  deleteOwnedServiceDomain,
+  ensureServiceDomain,
+  findServiceDomainById,
+  type ServiceDomainRecord,
+} from "./ServiceDomain.ts";
+import { uploadDeployTarball } from "./Up.ts";
+import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
 type Builder = railway.Scalars["Builder"];
 type RestartPolicyType = railway.Scalars["RestartPolicyType"];

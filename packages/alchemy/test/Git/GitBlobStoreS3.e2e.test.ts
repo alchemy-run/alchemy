@@ -1,13 +1,3 @@
-/**
- * Bytes on S3, compute on Cloudflare: the Worker and the Repo DO reach the
- * bucket through the S3 bindings with an identity Alchemy minted. A push
- * that spills, compaction into an S3 pack, and a clone back under
- * `fsck --strict`. Every byte of the clone came back through S3.
- */
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
-import { GitApi } from "@/Git/Api.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -20,6 +10,16 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+/**
+ * Bytes on S3, compute on Cloudflare: the Worker and the Repo DO reach the
+ * bucket through the S3 bindings with an identity Alchemy minted. A push
+ * that spills, compaction into an S3 pack, and a clone back under
+ * `fsck --strict`. Every byte of the clone came back through S3.
+ */
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
+import { GitApi } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeS3TestStack, TEST_SECRET } from "./fixtures/s3-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

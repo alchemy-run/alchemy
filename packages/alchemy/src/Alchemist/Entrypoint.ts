@@ -6,7 +6,9 @@ import { UserFacingError } from "../UserFacingError.ts";
 
 export class StackEntrypointError extends Data.TaggedError(
   "StackEntrypointError",
-)<{ readonly message: string }> {
+)<{
+  readonly message: string;
+}> {
   readonly [UserFacingError] = true;
 }
 

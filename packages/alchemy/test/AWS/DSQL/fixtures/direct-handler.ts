@@ -1,5 +1,3 @@
-import * as DSQL from "@/AWS/DSQL";
-import * as Lambda from "@/AWS/Lambda";
 import * as PgClient from "@effect/sql-pg/PgClient";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -9,6 +7,8 @@ import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DSQL from "@/AWS/DSQL";
+import * as Lambda from "@/AWS/Lambda";
 import { Db } from "./db.ts";
 
 const main = path.resolve(import.meta.dirname, "direct-handler.ts");

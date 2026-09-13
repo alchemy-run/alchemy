@@ -1,11 +1,10 @@
+import * as AI from "alchemy/AI";
+import * as Cloudflare from "alchemy/Cloudflare";
+import { dedent } from "alchemy/Util";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { HttpClientRequest } from "effect/unstable/http";
-
-import * as AI from "alchemy/AI";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { dedent } from "alchemy/Util";
 
 export const code = AI.Parameter("code")(S.String)`
 The JavaScript code to evaluate. 

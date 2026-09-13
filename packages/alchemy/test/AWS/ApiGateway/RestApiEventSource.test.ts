@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { createInternalTags, hasTags } from "@/Tags.ts";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,10 +7,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { createInternalTags, hasTags } from "@/Tags.ts";
 import RestApiEventSourceFunctionLive, {
   RestApiEventSourceFunction,
 } from "./fixtures/rest-api-event-source-handler.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

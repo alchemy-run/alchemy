@@ -14,9 +14,6 @@ import * as Globals from "../../globals/Globals.ts";
 import * as Internet from "../../globals/Internet.ts";
 import * as Storage from "../../globals/Storage.ts";
 import * as Paths from "../../internal/Paths.ts";
-import * as Runtime from "../../Runtime.ts";
-import * as RuntimeServices from "../../RuntimeServices.ts";
-import type { BindingHooks, RuntimeWorker } from "../../RuntimeWorker.ts";
 import * as Registry from "../../registry/Registry.ts";
 import * as RegistryProxy from "../../registry/RegistryProxy.ts";
 import {
@@ -24,6 +21,9 @@ import {
   resolvedTargetKey,
   type Subscriber,
 } from "../../registry/RegistryTypes.shared.ts";
+import * as Runtime from "../../Runtime.ts";
+import * as RuntimeServices from "../../RuntimeServices.ts";
+import type { BindingHooks, RuntimeWorker } from "../../RuntimeWorker.ts";
 import * as Workerd from "../../workerd/Workerd.ts";
 
 export const configProvider = (

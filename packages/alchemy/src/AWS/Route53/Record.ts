@@ -8,8 +8,8 @@ import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { durationToSeconds } from "../IAM/common.ts";
-import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 import type { Providers } from "../Providers.ts";
+import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 
 export interface RecordAliasTarget {
   /**

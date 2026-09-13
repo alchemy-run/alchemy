@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Crl, Profile, TrustAnchor } from "@/AWS/RolesAnywhere";
-import * as Test from "@/Test/Alchemy";
 import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
 import { expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Crl, Profile, TrustAnchor } from "@/AWS/RolesAnywhere";
+import * as Test from "@/Test/Alchemy";
 import {
   CA1_CERTIFICATE_PEM,
   CA2_CERTIFICATE_PEM,

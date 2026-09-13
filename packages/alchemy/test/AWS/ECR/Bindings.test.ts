@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +6,9 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EcrTestFunctionLive, { EcrTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };

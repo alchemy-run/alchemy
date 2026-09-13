@@ -1,3 +1,9 @@
+import * as codebuild from "@distilled.cloud/aws/codebuild";
+import * as sts from "@distilled.cloud/aws/sts";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Project } from "@/AWS/CodeBuild/Project.ts";
 import {
@@ -6,12 +12,6 @@ import {
 } from "@/AWS/IAM/Policy.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as codebuild from "@distilled.cloud/aws/codebuild";
-import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

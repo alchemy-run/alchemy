@@ -546,7 +546,9 @@ export const BranchProvider = () =>
             return yield* Effect.forEach(
               branches,
               (branch) => hydrateBranch(project.id, branch),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
           }).pipe(
             // The project may be deleted between enumeration and listing.

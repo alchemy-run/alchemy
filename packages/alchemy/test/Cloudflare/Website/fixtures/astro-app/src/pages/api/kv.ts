@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import type { APIContext } from "astro";
+import { env } from "cloudflare:workers";
 
 export const prerender = false;
 

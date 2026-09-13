@@ -1,7 +1,7 @@
-import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
-import { expect, test } from "@playwright/test";
 import { readdir, readFile } from "node:fs/promises";
 import * as path from "node:path";
+import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
+import { expect, test } from "@playwright/test";
 
 const FIXTURE_VALUE = "hello-from-astro-binding";
 

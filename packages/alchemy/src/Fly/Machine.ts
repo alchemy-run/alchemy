@@ -10,8 +10,8 @@ import type {
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
 import type { Input } from "../Input.ts";
+import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
 import {

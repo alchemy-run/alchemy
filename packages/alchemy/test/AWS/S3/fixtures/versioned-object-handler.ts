@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 export class VersionedObjectFunction extends Lambda.Function<VersionedObjectFunction>()(
   "VersionedObjectFunction",

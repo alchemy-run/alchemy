@@ -4,48 +4,48 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
-import { App, AppProvider } from "./App.ts";
-import { FlyAuth } from "./AuthProvider.ts";
-import { Bucket, BucketProvider } from "./Bucket.ts";
-import { DeleteObjectHttp } from "./DeleteObjectHttp.ts";
-import { GetObjectHttp } from "./GetObjectHttp.ts";
-import { HeadObjectHttp } from "./HeadObjectHttp.ts";
-import { ListObjectsV2Http } from "./ListObjectsV2Http.ts";
-import { PutObjectHttp } from "./PutObjectHttp.ts";
-import { ReadRedisHttp } from "./ReadRedisHttp.ts";
-import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
-import { WriteRedisHttp } from "./WriteRedisHttp.ts";
-import { Certificate, CertificateProvider } from "./Certificate.ts";
-import { CheckpointHttp } from "./CheckpointHttp.ts";
-import * as Credentials from "./Credentials.ts";
-import { fromCredentials } from "./Environment.ts";
-import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
-import { Machine, MachineProvider } from "./Machine.ts";
-import { ConnectPostgresHttp } from "./ConnectPostgresHttp.ts";
-import { Postgres, PostgresProvider } from "./Postgres.ts";
-import { Redis, RedisProvider } from "./Redis.ts";
-import { DecryptHttp } from "./DecryptHttp.ts";
-import { EncryptHttp } from "./EncryptHttp.ts";
-import { ExecHttp } from "./ExecHttp.ts";
-import { GetSecretHttp } from "./GetSecretHttp.ts";
-import { ListSecretsHttp } from "./ListSecretsHttp.ts";
-import { MountVolumeLive } from "./MountVolume.ts";
-import { Secret, SecretProvider } from "./Secret.ts";
-import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
-import { Service, ServiceProvider } from "./Service.ts";
-import {
-  AssetDeployment,
-  AssetDeploymentProvider,
-} from "./Website/AssetDeployment.ts";
 import {
   Server as WebsiteServer,
   ServerProvider as WebsiteServerProvider,
 } from "../Website/Server.ts";
+import { App, AppProvider } from "./App.ts";
+import { FlyAuth } from "./AuthProvider.ts";
+import { Bucket, BucketProvider } from "./Bucket.ts";
+import { Certificate, CertificateProvider } from "./Certificate.ts";
+import { CheckpointHttp } from "./CheckpointHttp.ts";
+import { ConnectPostgresHttp } from "./ConnectPostgresHttp.ts";
+import * as Credentials from "./Credentials.ts";
+import { DecryptHttp } from "./DecryptHttp.ts";
+import { DeleteObjectHttp } from "./DeleteObjectHttp.ts";
+import { EncryptHttp } from "./EncryptHttp.ts";
+import { fromCredentials } from "./Environment.ts";
+import { ExecHttp } from "./ExecHttp.ts";
+import { GetObjectHttp } from "./GetObjectHttp.ts";
+import { GetSecretHttp } from "./GetSecretHttp.ts";
+import { HeadObjectHttp } from "./HeadObjectHttp.ts";
+import { IpAssignment, IpAssignmentProvider } from "./IpAssignment.ts";
+import { ListObjectsV2Http } from "./ListObjectsV2Http.ts";
+import { ListSecretsHttp } from "./ListSecretsHttp.ts";
+import { Machine, MachineProvider } from "./Machine.ts";
+import { MountVolumeLive } from "./MountVolume.ts";
+import { Postgres, PostgresProvider } from "./Postgres.ts";
+import { PutObjectHttp } from "./PutObjectHttp.ts";
+import { ReadRedisHttp } from "./ReadRedisHttp.ts";
+import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
+import { Redis, RedisProvider } from "./Redis.ts";
+import { Secret, SecretProvider } from "./Secret.ts";
+import { SecretKey, SecretKeyProvider } from "./SecretKey.ts";
+import { Service, ServiceProvider } from "./Service.ts";
 import { SignHttp } from "./SignHttp.ts";
 import { Sprite, SpriteProvider } from "./Sprite.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
 import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
+import {
+  AssetDeployment,
+  AssetDeploymentProvider,
+} from "./Website/AssetDeployment.ts";
 import { WriteCertificatesHttp } from "./WriteCertificatesHttp.ts";
+import { WriteRedisHttp } from "./WriteRedisHttp.ts";
 import { WriteSecretHttp } from "./WriteSecretHttp.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(

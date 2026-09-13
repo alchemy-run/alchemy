@@ -96,7 +96,9 @@ export const EventIntegration = Resource<EventIntegration>(
  */
 export class EventIntegrationIncomplete extends Data.TaggedError(
   "EventIntegrationIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 export const EventIntegrationProvider = () =>
   Provider.effect(

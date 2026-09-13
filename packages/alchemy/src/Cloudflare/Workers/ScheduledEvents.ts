@@ -2,11 +2,11 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
 import {
   ensureAlarmTables,
   reconcileDurableObjectAlarm,
 } from "./DurableObjectAlarmStorage.ts";
+import { DurableObjectState } from "./DurableObjectState.ts";
 import type { SqlStorageValue } from "./DurableObjectStorage.ts";
 
 // ---------------------------------------------------------------------------

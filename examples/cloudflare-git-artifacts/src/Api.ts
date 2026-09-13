@@ -47,12 +47,16 @@ export class CloneToken extends Schema.Class<CloneToken>("CloneToken")({
 
 export class RepoNotFound extends Schema.TaggedErrorClass<RepoNotFound>()(
   "RepoNotFound",
-  { name: Schema.String },
+  {
+    name: Schema.String,
+  },
 ) {}
 
 export class RepoConflict extends Schema.TaggedErrorClass<RepoConflict>()(
   "RepoConflict",
-  { message: Schema.String },
+  {
+    message: Schema.String,
+  },
 ) {}
 
 // ─── Path / payload schemas ──────────────────────────────────────────

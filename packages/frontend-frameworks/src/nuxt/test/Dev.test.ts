@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
 import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
 import type * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 import { describe, expect, it, vi } from "vitest";
 import {
   makeCloudflareDevPlatform,

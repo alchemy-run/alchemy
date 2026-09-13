@@ -1,9 +1,9 @@
+import { detectCapabilities } from "@alchemy.run/sigil/capabilities";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { detectCapabilities } from "@alchemy.run/sigil/capabilities";
 import { isNonInteractive } from "../../Util/interactive.ts";
-import { CliKit } from "./CliKit.ts";
 import type { CliKitCapabilities, CliKitOptions } from "../components/types.ts";
+import { CliKit } from "./CliKit.ts";
 
 export const resolveCapabilities = (
   options: CliKitOptions,

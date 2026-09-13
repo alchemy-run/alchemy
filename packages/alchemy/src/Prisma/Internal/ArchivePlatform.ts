@@ -1,10 +1,10 @@
-import * as Effect from "effect/Effect";
 import { createWriteStream } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { posix } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import * as Effect from "effect/Effect";
 import { verifiedFileChunks, type VerifiedFile } from "./ArtifactFile.ts";
 
 /**

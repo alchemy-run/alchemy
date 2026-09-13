@@ -1,3 +1,12 @@
+import * as nodeFs from "node:fs";
+import * as os from "node:os";
+import * as nodePath from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { rolldown, RolldownMagicString, type RolldownLog } from "rolldown";
 import * as Bundle from "@/Bundle/Bundle";
 import {
   collectPureAnchors,
@@ -6,15 +15,6 @@ import {
   resolvePackageInfo,
   type PackageInfo,
 } from "@/Bundle/PurePlugin";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as nodeFs from "node:fs";
-import * as nodePath from "node:path";
-import * as os from "node:os";
-import { rolldown, RolldownMagicString, type RolldownLog } from "rolldown";
 
 describe("packageNameFromId", () => {
   it("extracts a top-level package name", () => {
@@ -291,7 +291,9 @@ async function callTransform(
     {} as any,
     code,
     id,
-    { moduleType: "js" },
+    {
+      moduleType: "js",
+    },
   )) as TransformOutput | string | null;
 }
 

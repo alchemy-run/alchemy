@@ -1,8 +1,8 @@
-import * as Railway from "@/Railway";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -55,7 +55,9 @@ describe("Railway.Website.Waku local", () => {
         yield* expectUrlContains(
           `${url}/echo?echo=roundtrip`,
           "WAKU_AWS_API_MARKER",
-          { label: "api route (dev)" },
+          {
+            label: "api route (dev)",
+          },
         );
         yield* expectUrlContains(`${url}/about`, "WAKU_AWS_STATIC_MARKER", {
           label: "extra route (dev)",

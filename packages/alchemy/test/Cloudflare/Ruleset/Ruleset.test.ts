@@ -1,3 +1,9 @@
+import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
+import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import { MinimumLogLevel } from "effect/References";
 import * as AdoptPolicy from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
@@ -6,12 +12,6 @@ import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
-import { MinimumLogLevel } from "effect/References";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 // Cloudflare intermittently blocks *all* zone creation on an account with

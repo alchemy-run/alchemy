@@ -2,12 +2,24 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 // Alchemy modifications: uses Array<T> syntax for non-tuple array types to match the repository convention.
 import { RpcTarget } from "cloudflare:workers";
+import type {
+  WorkflowBackoff,
+  WorkflowDelayDuration,
+  WorkflowDelayFunction,
+  WorkflowSleepDuration,
+  WorkflowStepConfig,
+  WorkflowStepEvent,
+  WorkflowStepSensitivity,
+  WorkflowTimeoutDuration,
+} from "cloudflare:workers";
 import { ms } from "itty-time";
+import type { Engine } from "./engine.ts";
 import {
   INSTANCE_METADATA,
   InstanceEvent,
   InstanceStatus,
 } from "./instance.ts";
+import type { InstanceMetadata } from "./instance.ts";
 import { computeHash } from "./lib/cache.ts";
 import {
   DEFAULT_RETRY_DELAY_MS,
@@ -33,6 +45,10 @@ import {
   parseRollbackOptions,
   ROLLBACK_CACHE_KEY_PREFIX,
 } from "./lib/rollback.ts";
+import type {
+  RollbackFn,
+  WorkflowStepRollbackOptions,
+} from "./lib/rollback.ts";
 import { normalizeForStorage } from "./lib/serialization.ts";
 import {
   cleanupPendingStreamOutput,
@@ -44,6 +60,7 @@ import {
   StreamOutputState,
   writeStreamOutput,
 } from "./lib/streams.ts";
+import type { StreamOutputMeta } from "./lib/streams.ts";
 import {
   isValidStepConfig,
   isValidStepName,
@@ -51,23 +68,6 @@ import {
   SENSITIVE_STEP_OUTPUT,
 } from "./lib/validators.ts";
 import { MODIFIER_KEYS } from "./modifier.ts";
-import type { Engine } from "./engine.ts";
-import type { InstanceMetadata } from "./instance.ts";
-import type {
-  RollbackFn,
-  WorkflowStepRollbackOptions,
-} from "./lib/rollback.ts";
-import type { StreamOutputMeta } from "./lib/streams.ts";
-import type {
-  WorkflowBackoff,
-  WorkflowDelayDuration,
-  WorkflowDelayFunction,
-  WorkflowSleepDuration,
-  WorkflowStepConfig,
-  WorkflowStepEvent,
-  WorkflowStepSensitivity,
-  WorkflowTimeoutDuration,
-} from "cloudflare:workers";
 
 export type Event = {
   timestamp: Date;

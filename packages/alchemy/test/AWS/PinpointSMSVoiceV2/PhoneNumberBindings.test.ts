@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SmsVoicePhoneTestFunctionLive, {
   SmsVoicePhoneTestFunction,
 } from "./fixtures/phone-handler.ts";
@@ -107,7 +107,9 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
           Effect.gen(function* () {
             const response = (yield* post("/send-text").pipe(
               Effect.flatMap((r) => r.json),
-            )) as { messageId?: string };
+            )) as {
+              messageId?: string;
+            };
 
             expect(typeof response.messageId).toBe("string");
             expect(response.messageId!.length).toBeGreaterThan(0);
@@ -175,13 +177,18 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
           Effect.gen(function* () {
             const put = (yield* post("/keyword-put").pipe(
               Effect.flatMap((r) => r.json),
-            )) as { keyword?: string; message?: string };
+            )) as {
+              keyword?: string;
+              message?: string;
+            };
             expect(put.keyword).toBe("INFO");
             expect(put.message).toContain("alchemy.run");
 
             const list = (yield* post("/keyword-list").pipe(
               Effect.flatMap((r) => r.json),
-            )) as { keywords: string[] };
+            )) as {
+              keywords: string[];
+            };
             expect(list.keywords).toContain("INFO");
 
             const deleted = (yield* post("/keyword-delete").pipe(
@@ -191,7 +198,9 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
 
             const after = (yield* post("/keyword-list").pipe(
               Effect.flatMap((r) => r.json),
-            )) as { keywords: string[] };
+            )) as {
+              keywords: string[];
+            };
             expect(after.keywords).not.toContain("INFO");
           }),
         { timeout: 120_000 },

@@ -1,13 +1,13 @@
-import * as LicenseManager from "@/AWS/LicenseManager";
-import * as Lambda from "@/AWS/Lambda";
+import { randomUUID } from "node:crypto";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { randomUUID } from "node:crypto";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as LicenseManager from "@/AWS/LicenseManager";
 
 const main = path.resolve(import.meta.dirname, "seller-handler.ts");
 

@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import { Alias, Key } from "@/AWS/KMS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as KMS from "@distilled.cloud/aws/kms";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { Alias, Key } from "@/AWS/KMS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

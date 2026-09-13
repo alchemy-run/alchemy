@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Output from "@/Output.ts";
-import type { ResourceClass } from "@/Resource.ts";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Output from "@/Output.ts";
+import type { ResourceClass } from "@/Resource.ts";
 import type { AsyncWorkflowWorker } from "./fixtures/workflow-async/stack.ts";
 
 type Assert<T extends true> = T;

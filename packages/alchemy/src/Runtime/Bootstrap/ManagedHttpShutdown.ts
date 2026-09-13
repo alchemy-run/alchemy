@@ -1,3 +1,4 @@
+import type { Server } from "node:http";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -5,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
-import type { Server } from "node:http";
 
 /** Internal HTTP and dependency lifetimes, separate from managed run fibers. */
 export class ManagedHttpShutdown extends Context.Service<

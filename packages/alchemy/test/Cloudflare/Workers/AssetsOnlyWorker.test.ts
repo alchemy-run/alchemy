@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
@@ -112,7 +112,9 @@ describe.concurrent("Cloudflare.Worker assets-only", () => {
         yield* expectUrlContains(
           `${url}/does-not-exist`,
           "alchemy-assets-only-script",
-          { label: "script fallback after conversion" },
+          {
+            label: "script fallback after conversion",
+          },
         );
 
         // 4. Convert back to assets-only: the stored bundle hash must not

@@ -7,13 +7,13 @@
 import { RuntimeContext } from "alchemy";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Layer from "effect/Layer";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import * as Redacted from "effect/Redacted";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 import { Auth, Session, Unauthorized } from "./auth.ts";
 

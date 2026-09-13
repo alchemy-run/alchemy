@@ -1,6 +1,6 @@
-import * as AWS from "@/AWS";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 /**
  * Bundled-`main` fixture for the ECS local-dev conformance test: an inline

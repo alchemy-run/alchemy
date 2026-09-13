@@ -5,13 +5,12 @@ import type { MemoOptions } from "../../Command/Memo.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
+import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import {
   Function as LambdaFunction,
   type FunctionProps,
 } from "../Lambda/Function.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
-import { Server, type ServerDevProps } from "../../Website/Server.ts";
-import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -19,6 +18,7 @@ import {
   type WebsiteEdgeProps,
   type WebsiteInvalidationProps,
 } from "./shared.ts";
+import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 
 /**
  * Props shared by every framework website composite (SvelteKit, Nuxt,

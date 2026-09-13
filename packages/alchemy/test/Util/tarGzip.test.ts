@@ -1,10 +1,10 @@
-import { tarGzipDirectory } from "@/Util/tarGzip.ts";
+import * as zlib from "node:zlib";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as zlib from "node:zlib";
+import { tarGzipDirectory } from "@/Util/tarGzip.ts";
 
 describe("tarGzipDirectory", () => {
   it.effect("packs a Dockerfile and nested files into a gzipped ustar", () =>

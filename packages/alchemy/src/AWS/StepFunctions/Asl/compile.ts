@@ -11,8 +11,8 @@
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import type { Input } from "../../../Input.ts";
-import { toSeconds as toWholeSeconds } from "../../../Util/Duration.ts";
 import * as Output from "../../../Output.ts";
+import { toSeconds as toWholeSeconds } from "../../../Util/Duration.ts";
 import type { PolicyStatement } from "../../IAM/Policy.ts";
 import {
   inputExpr,

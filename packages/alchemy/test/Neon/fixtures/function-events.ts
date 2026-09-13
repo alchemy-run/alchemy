@@ -1,3 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Bucket } from "@/Neon/Bucket";
 import { BucketEventSource } from "@/Neon/BucketEventSource";
 import { BucketEventSourceHttp } from "@/Neon/BucketEventSourceHttp";
@@ -8,11 +13,6 @@ import { Project } from "@/Neon/Project";
 import { WriteBucket } from "@/Neon/WriteBucket";
 import { WriteBucketHttp } from "@/Neon/WriteBucketHttp";
 import { Postgres } from "@/SQL/Postgres";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export const project = Project("EventProject", { region: "aws-us-east-2" });
 export const bucket = Bucket(

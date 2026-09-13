@@ -1,3 +1,7 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster } from "@/AWS/RDS/DBCluster.ts";
@@ -5,10 +9,6 @@ import type { DBClusterProps } from "@/AWS/RDS/DBCluster.ts";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

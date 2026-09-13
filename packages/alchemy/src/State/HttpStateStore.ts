@@ -8,7 +8,6 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 import { profileCommandHint } from "../Util/interactive.ts";
 import { StateApi } from "./HttpStateApi.ts";
-
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
   StateStoreError,

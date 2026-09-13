@@ -1,10 +1,10 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import Stack from "./fixtures/env/stack.ts";
 
@@ -99,7 +99,10 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
       const body = yield* expectUrlContains(
         `${effectUrl}/env`,
         '"STR":"hello"',
-        { timeout: "60 seconds", label: "effect env-worker /env" },
+        {
+          timeout: "60 seconds",
+          label: "effect env-worker /env",
+        },
       );
       expect(JSON.parse(body)).toEqual({
         STR: "hello",
@@ -140,7 +143,10 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
       const body = yield* expectUrlContains(
         `${effectUrl}/config-runtime`,
         '"CONFIG_STR"',
-        { timeout: "60 seconds", label: "effect env-worker /config-runtime" },
+        {
+          timeout: "60 seconds",
+          label: "effect env-worker /config-runtime",
+        },
       );
       expect(JSON.parse(body)).toEqual({
         CONFIG_STR: CONFIG_STR_VALUE,
@@ -169,7 +175,10 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
       const body = yield* expectUrlContains(
         `${effectUrl}/config`,
         '"CONFIG_STR"',
-        { timeout: "60 seconds", label: "effect env-worker /config" },
+        {
+          timeout: "60 seconds",
+          label: "effect env-worker /config",
+        },
       );
       expect(JSON.parse(body)).toEqual({
         CONFIG_STR: CONFIG_STR_VALUE,

@@ -1,3 +1,8 @@
+import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { InstanceProfile } from "@/AWS/IAM/InstanceProfile.ts";
@@ -10,11 +15,6 @@ import {
   InfrastructureConfiguration,
 } from "@/AWS/ImageBuilder";
 import * as Test from "@/Test/Alchemy";
-import * as imagebuilder from "@distilled.cloud/aws/imagebuilder";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,6 +1,6 @@
-import { withLock } from "@/Auth/Lock.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import { withLock } from "@/Auth/Lock.ts";
 
 const key = process.argv[2];
 if (!key) throw new Error("Missing lock key");

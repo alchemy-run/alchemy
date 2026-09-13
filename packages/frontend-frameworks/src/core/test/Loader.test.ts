@@ -1,8 +1,8 @@
-import * as Effect from "effect/Effect";
 import * as NodeFsPromises from "node:fs/promises";
 import * as NodePath from "node:path";
-import { describe, expect, it } from "vitest";
+import * as Effect from "effect/Effect";
 import type * as ViteModule from "vite";
+import { describe, expect, it } from "vitest";
 import { loadProjectModule, resolveProjectPackageDirectory } from "../index.ts";
 import { makeProject, run } from "./helpers.ts";
 

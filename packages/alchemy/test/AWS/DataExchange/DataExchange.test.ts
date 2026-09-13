@@ -1,10 +1,10 @@
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DataSet, EventAction, Revision } from "@/AWS/DataExchange";
 import { toTagRecord } from "@/AWS/DataExchange/internal.ts";
 import * as Test from "@/Test/Alchemy";
-import * as dataexchange from "@distilled.cloud/aws/dataexchange";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

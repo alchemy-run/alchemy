@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
@@ -12,6 +9,9 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import S3VersionedMultipartFunctionLive, {
   S3VersionedMultipartFunction,
 } from "./fixtures/versioned-multipart-handler.ts";

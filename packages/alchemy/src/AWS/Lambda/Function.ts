@@ -31,7 +31,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
 import * as Serverless from "../../Serverless/index.ts";
-import { buildEventTelemetry } from "../../Telemetry.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -40,6 +39,7 @@ import {
   hasAlchemyTags,
   hasTags,
 } from "../../Tags.ts";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";

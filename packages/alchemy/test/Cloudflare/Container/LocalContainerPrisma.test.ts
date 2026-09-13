@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 import PrismaHostStack from "./fixtures/prismahost/stack.ts";
 import { expectDatabaseReachable } from "./fixtures/sqlreach/expect.ts";
 

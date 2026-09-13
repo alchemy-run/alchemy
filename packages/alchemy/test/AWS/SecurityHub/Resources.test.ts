@@ -1,3 +1,6 @@
+import * as securityhub from "@distilled.cloud/aws/securityhub";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ActionTarget } from "@/AWS/SecurityHub/ActionTarget.ts";
 import { AutomationRule } from "@/AWS/SecurityHub/AutomationRule.ts";
@@ -5,9 +8,6 @@ import { FindingAggregator } from "@/AWS/SecurityHub/FindingAggregator.ts";
 import { Hub } from "@/AWS/SecurityHub/Hub.ts";
 import { Insight } from "@/AWS/SecurityHub/Insight.ts";
 import * as Test from "@/Test/Alchemy";
-import * as securityhub from "@distilled.cloud/aws/securityhub";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });

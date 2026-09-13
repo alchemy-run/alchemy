@@ -1,27 +1,3 @@
-import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import { type Database, DatabaseProvider } from "@/Cloudflare/D1/Database.ts";
-import {
-  type Connection,
-  ConnectionProvider,
-} from "@/Cloudflare/Hyperdrive/Connection.ts";
-import {
-  type Namespace,
-  NamespaceProvider,
-} from "@/Cloudflare/KV/Namespace.ts";
-import { type Queue, QueueProvider } from "@/Cloudflare/Queues/Queue.ts";
-import { type Bucket, BucketProvider } from "@/Cloudflare/R2/Bucket.ts";
-import {
-  type Index,
-  IndexProvider,
-} from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
-import { AlchemyContext } from "@/AlchemyContext.ts";
-import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
-import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
-import { InstanceId } from "@/InstanceId.ts";
-import { Provider } from "@/Provider.ts";
-import { Stack, type StackSpec } from "@/Stack.ts";
-import { Stage } from "@/Stage.ts";
 import {
   apiTokenCredentials,
   Credentials,
@@ -33,6 +9,30 @@ import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
+import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { type Database, DatabaseProvider } from "@/Cloudflare/D1/Database.ts";
+import {
+  type Connection,
+  ConnectionProvider,
+} from "@/Cloudflare/Hyperdrive/Connection.ts";
+import {
+  type Namespace,
+  NamespaceProvider,
+} from "@/Cloudflare/KV/Namespace.ts";
+import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
+import { type Queue, QueueProvider } from "@/Cloudflare/Queues/Queue.ts";
+import { type Bucket, BucketProvider } from "@/Cloudflare/R2/Bucket.ts";
+import {
+  type Index,
+  IndexProvider,
+} from "@/Cloudflare/Vectorize/VectorizeIndex.ts";
+import { InstanceId } from "@/InstanceId.ts";
+import { Provider } from "@/Provider.ts";
+import { Stack, type StackSpec } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
 // `diff` must never order a replace (or rename) because the physical-name

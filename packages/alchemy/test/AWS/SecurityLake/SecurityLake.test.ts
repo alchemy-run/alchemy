@@ -1,3 +1,8 @@
+import * as securitylake from "@distilled.cloud/aws/securitylake";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
 import {
@@ -9,11 +14,6 @@ import {
   SubscriberNotification,
 } from "@/AWS/SecurityLake";
 import * as Test from "@/Test/Alchemy";
-import * as securitylake from "@distilled.cloud/aws/securitylake";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

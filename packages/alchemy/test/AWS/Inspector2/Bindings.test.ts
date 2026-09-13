@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import Inspector2TestFunctionLive, { Inspector2TestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -160,7 +160,10 @@ describe.sequential("Inspector2 Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/vulnerability?id=CVE-2021-44228",
-        )) as { ids?: string[]; errorTag?: string };
+        )) as {
+          ids?: string[];
+          errorTag?: string;
+        };
         if (response.errorTag) {
           expect(DISABLED_OK).toContain(response.errorTag);
         } else {

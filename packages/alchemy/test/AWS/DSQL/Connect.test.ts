@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +6,9 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { Db } from "./fixtures/db";
 import DsqlDirectFunctionLive, {
   DsqlDirectFunction,

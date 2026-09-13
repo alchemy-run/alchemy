@@ -1,13 +1,13 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as pages from "@distilled.cloud/cloudflare/pages";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -200,11 +200,15 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
           Effect.gen(function* () {
             const project = yield* Cloudflare.Pages.Project(
               "ListDeployProject",
-              { name: LIST_PROJECT_NAME },
+              {
+                name: LIST_PROJECT_NAME,
+              },
             ).pipe(adopt(true));
             const deployment = yield* Cloudflare.Pages.Deployment(
               "ListDeployment",
-              { projectName: project.name },
+              {
+                projectName: project.name,
+              },
             );
             return { deployment };
           }),

@@ -1,9 +1,9 @@
+import * as NodeFs from "node:fs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
-import * as NodeFs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { makeDeployTarget } from "../../core/index.ts";
 import { makeAwsTarget } from "../aws.ts";

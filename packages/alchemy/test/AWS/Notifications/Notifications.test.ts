@@ -1,3 +1,8 @@
+import * as notifications from "@distilled.cloud/aws/notifications";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import {
   ChannelAssociation,
@@ -5,14 +10,9 @@ import {
   NotificationConfiguration,
   NotificationHub,
 } from "@/AWS/Notifications";
-import { EmailContact } from "@/AWS/NotificationsContacts";
 import { pinNotificationsRegion } from "@/AWS/Notifications/internal.ts";
+import { EmailContact } from "@/AWS/NotificationsContacts";
 import * as Test from "@/Test/Alchemy";
-import * as notifications from "@distilled.cloud/aws/notifications";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

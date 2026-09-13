@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { EventBus } from "@/AWS/EventBridge/EventBus.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EventBus } from "@/AWS/EventBridge/EventBus.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

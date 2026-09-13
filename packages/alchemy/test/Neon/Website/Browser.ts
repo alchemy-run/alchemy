@@ -1,12 +1,12 @@
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { initialCwd } from "@/Util/Node.ts";
+import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { initialCwd } from "@/Util/Node.ts";
 
 const command = Effect.fn(
   function* (args: string[]) {

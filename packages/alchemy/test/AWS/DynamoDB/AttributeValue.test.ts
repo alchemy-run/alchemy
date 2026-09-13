@@ -1,5 +1,7 @@
+import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
 import { describe, expect, test } from "alchemy-test";
-
+import * as Effect from "effect/Effect";
+import * as S from "effect/Schema";
 import {
   fromAttributeValue,
   isMapSchemaType,
@@ -8,9 +10,6 @@ import {
   toAttributeType,
   toAttributeValue,
 } from "@/AWS/DynamoDB/AttributeValue";
-import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
-import * as Effect from "effect/Effect";
-import * as S from "effect/Schema";
 
 describe("toAttributeValue", () => {
   test("undefined -> NULL false", async () => {

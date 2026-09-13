@@ -1,8 +1,6 @@
+import { randomBytes } from "node:crypto";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Fly from "@/Fly";
-import { checksPassing, configuredCheckNames } from "@/Fly/replicas";
-import type { ScratchStack } from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -14,7 +12,9 @@ import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { randomBytes } from "node:crypto";
+import * as Fly from "@/Fly";
+import { checksPassing, configuredCheckNames } from "@/Fly/replicas";
+import type { ScratchStack } from "@/Test/Alchemy";
 
 const Receipt = Schema.Struct({
   machineId: Schema.String,

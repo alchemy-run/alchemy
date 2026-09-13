@@ -5,28 +5,28 @@
  * and thin-pack bases from the store are exercised in-process.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import { BlobStore } from "@/Git/BlobStore.ts";
 import { HasherInline, Hasher, type HasherShape } from "@/Git/Hasher/Hasher.ts";
-import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
-import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
-import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import { sliceRandomAccess } from "@/Git/Store/PackSource.ts";
 import {
   hashObject,
   encodeTypeSize,
   makeSha1,
 } from "@/Git/Protocol/ObjectCodec.ts";
+import { bufferRandomAccess } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import * as Fiber from "effect/Fiber";
-import { concat } from "./harness/pack.ts";
-import { describe, expect, test } from "alchemy-test";
-import { BlobStore } from "@/Git/BlobStore.ts";
-import * as Effect from "effect/Effect";
+import { ingestPackFrom, ingestStoreOf } from "@/Git/RepoObject.ts";
+import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
+import { sliceRandomAccess } from "@/Git/Store/PackSource.ts";
+import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Layer from "effect/Layer";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
 const fixture = (name: string) =>

@@ -220,7 +220,9 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
  */
 class AccessPointNotYetDeleted extends Data.TaggedError(
   "AccessPointNotYetDeleted",
-)<{ readonly name: string }> {}
+)<{
+  readonly name: string;
+}> {}
 
 /**
  * Retry while the access point is still observable after a delete attempt.

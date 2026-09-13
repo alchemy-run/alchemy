@@ -1,5 +1,3 @@
-import * as Bedrock from "@/AWS/Bedrock";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +6,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Bedrock from "@/AWS/Bedrock";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -137,7 +137,9 @@ export default BedrockTestFunction.make(
               chunkEvents += 1;
               text += decoder.decode(
                 Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes,
-                { stream: true },
+                {
+                  stream: true,
+                },
               );
             }
           }
@@ -231,7 +233,9 @@ export default BedrockTestFunction.make(
               chunkEvents += 1;
               raw += decoder.decode(
                 Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes,
-                { stream: true },
+                {
+                  stream: true,
+                },
               );
             }
           }

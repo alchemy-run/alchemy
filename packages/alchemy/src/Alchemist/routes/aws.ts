@@ -1,6 +1,6 @@
 import * as Auth from "@distilled.cloud/aws/Auth";
-import * as EffectConsole from "effect/Console";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as EffectConsole from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";

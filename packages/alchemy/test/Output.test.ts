@@ -1,10 +1,3 @@
-import * as Output from "@/Output";
-import { ref as makeRef } from "@/Ref";
-import type { ResourceLike } from "@/Resource";
-import { Stack } from "@/Stack";
-import { Stage } from "@/Stage";
-import { inMemoryState } from "@/State/InMemoryState";
-import type { ResourceState } from "@/State/ResourceState";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -14,6 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Output from "@/Output";
+import { ref as makeRef } from "@/Ref";
+import type { ResourceLike } from "@/Resource";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import { inMemoryState } from "@/State/InMemoryState";
+import type { ResourceState } from "@/State/ResourceState";
 
 const provideState = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(inMemoryState()));
@@ -795,9 +795,7 @@ describe("Output.interpolate", () => {
   it.effect("renders nullish args as empty strings", () =>
     provideState(
       Effect.gen(function* () {
-        const expr = Output.interpolate`a${Output.literal(null)}b${Output.literal(
-          undefined,
-        )}c`;
+        const expr = Output.interpolate`a${Output.literal(null)}b${Output.literal(undefined)}c`;
         expect(yield* Output.evaluate(expr, {})).toBe("abc");
       }),
     ),

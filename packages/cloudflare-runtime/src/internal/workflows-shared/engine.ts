@@ -2,7 +2,17 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 // Alchemy modifications: uses Array<T> syntax for non-tuple array types to match the repository convention.
 import { DurableObject } from "cloudflare:workers";
+import type {
+  WorkflowEntrypoint,
+  WorkflowEvent,
+  WorkflowStep,
+} from "cloudflare:workers";
+import type {
+  RestartFromStep,
+  WorkflowInstanceTerminateOptions,
+} from "./binding.ts";
 import { Context, REDACTED_STEP_OUTPUT } from "./context.ts";
+import type { Event } from "./context.ts";
 import {
   INSTANCE_METADATA,
   InstanceEvent,
@@ -11,6 +21,7 @@ import {
   InstanceTrigger,
   toInstanceStatus,
 } from "./instance.ts";
+import type { InstanceMetadata, RawInstanceLog } from "./instance.ts";
 import { computeHash } from "./lib/cache.ts";
 import {
   ABORT_REASONS,
@@ -39,6 +50,10 @@ import {
   registerRollbackFn,
   ROLLBACK_CACHE_KEY_PREFIX,
 } from "./lib/rollback.ts";
+import type {
+  RollbackRegistration,
+  RollbackRegistryEntry,
+} from "./lib/rollback.ts";
 import { normalizeForStorage } from "./lib/serialization.ts";
 import {
   createReplayReadableStream,
@@ -47,6 +62,7 @@ import {
   getStreamOutputMetaKey,
   StreamOutputState,
 } from "./lib/streams.ts";
+import type { StreamOutputMeta } from "./lib/streams.ts";
 import { TimePriorityQueue } from "./lib/timePriorityQueue.ts";
 import { MODIFIER_KEYS, WorkflowInstanceModifier } from "./modifier.ts";
 import {
@@ -55,26 +71,10 @@ import {
   WorkflowSubscriptionTarget,
 } from "./subscription.ts";
 import type {
-  RestartFromStep,
-  WorkflowInstanceTerminateOptions,
-} from "./binding.ts";
-import type { Event } from "./context.ts";
-import type { InstanceMetadata, RawInstanceLog } from "./instance.ts";
-import type {
-  RollbackRegistration,
-  RollbackRegistryEntry,
-} from "./lib/rollback.ts";
-import type { StreamOutputMeta } from "./lib/streams.ts";
-import type {
   WorkflowSubscriptionEvent,
   WorkflowSubscriptionOptions,
   WorkflowSubscriptionState,
 } from "./subscription.ts";
-import type {
-  WorkflowEntrypoint,
-  WorkflowEvent,
-  WorkflowStep,
-} from "cloudflare:workers";
 
 interface Env {
   ENGINE: DurableObjectNamespace<Engine>;

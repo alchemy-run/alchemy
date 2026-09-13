@@ -1,6 +1,6 @@
-import { $ } from "bun";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { $ } from "bun";
 
 type Channel = "release" | "beta" | "alpha" | "rc" | "tag";
 

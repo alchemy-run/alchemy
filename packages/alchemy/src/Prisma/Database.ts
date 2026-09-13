@@ -1,20 +1,4 @@
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { deepEqual, isResolved } from "../Diff.ts";
-import * as Redacted from "effect/Redacted";
-import { Unowned } from "../AdoptPolicy.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import * as Provider from "../Provider.ts";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type { Scope } from "effect/Scope";
-import type * as Path from "effect/Path";
-import {
-  closePrismaDevDatabase,
-  ensurePrismaDevDatabase,
-} from "./PrismaDevDatabase.ts";
-import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetDatabasesResponse,
   type GetProjectBranchesResponse,
@@ -27,14 +11,36 @@ import {
   updateDatabase,
   createDatabase,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Effect from "effect/Effect";
+import type * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import type { Scope } from "effect/Scope";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { Unowned } from "../AdoptPolicy.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
 import { extractConnectionSecrets } from "./Client.ts";
-import type { Project } from "./Project.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
+import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
+import {
+  type ObservedProjectDatabase,
+  type ObservedSource,
+  narrowDatabaseSource,
+} from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
+import {
+  closePrismaDevDatabase,
+  ensurePrismaDevDatabase,
+} from "./PrismaDevDatabase.ts";
+import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
   concreteIdsChanged,
@@ -43,18 +49,12 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import {
-  type ObservedProjectDatabase,
-  type ObservedSource,
-  narrowDatabaseSource,
-} from "./Internal/Observed.ts";
 import type {
   DatabaseSourceInput,
   PrismaDatabaseRegionId,
   PrismaRegionId,
   PrismaSecretConnection,
 } from "./Types.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface DatabaseDev {
   /**

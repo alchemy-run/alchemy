@@ -5,7 +5,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";

@@ -1,28 +1,28 @@
+import { inspect } from "node:util";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Prompt from "effect/unstable/cli/Prompt";
-import { inspect } from "node:util";
+import { NonInteractiveTerminal } from "../Interaction.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
+import type { ApplyEvent, ApplyStatus } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
-import { NonInteractiveTerminal } from "../Interaction.ts";
+import { formatResourceTag } from "../Util/ResourceOutput.ts";
 import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
-import { formatElapsed } from "./Format.ts";
 import {
   actionStyle,
   applyStatusColor,
   isTerminalStatus as isTerminal,
 } from "./components/view/statusStyle.ts";
-import type { ApplyEvent, ApplyStatus } from "../Report.ts";
+import { formatElapsed } from "./Format.ts";
 import { formatModeNote } from "./ModeTag.ts";
-import { formatResourceTag } from "../Util/ResourceOutput.ts";
+import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
 import {
   formatDeclaredPropertyYaml,
   matchYamlChange,
   matchYamlKey,
 } from "./PropertyDiff.ts";
-import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;

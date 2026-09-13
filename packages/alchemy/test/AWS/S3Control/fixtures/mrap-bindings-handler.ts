@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 // Gated (AWS_TEST_SLOW) fixture: a single-region Multi-Region Access Point
 // plus a Lambda that exercises the two MRAP failover bindings —
@@ -25,7 +25,9 @@ export const BoundMrapLive = Layer.effect(
     const bucket = yield* AWS.S3.Bucket("S3ControlMrapBucket", {});
     const mrap = yield* AWS.S3Control.MultiRegionAccessPoint(
       "S3ControlMrapBindingsMrap",
-      { regions: [{ bucket: bucket.bucketName }] },
+      {
+        regions: [{ bucket: bucket.bucketName }],
+      },
     );
     return { mrap };
   }),

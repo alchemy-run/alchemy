@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CloudMapTestFunctionLive, { CloudMapTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -54,7 +54,9 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
 
 class CloudMapOperationPending extends Data.TaggedError(
   "CloudMapOperationPending",
-)<{ readonly operationId: string }> {}
+)<{
+  readonly operationId: string;
+}> {}
 
 /** Await a Cloud Map async operation out-of-band (bounded). */
 const waitOperation = (operationId: string) =>
@@ -332,7 +334,9 @@ describe("CloudMap Bindings", () => {
           const response = yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/deregister`),
-              { instanceId: "bind-dereg" },
+              {
+                instanceId: "bind-dereg",
+              },
             ),
           );
           expect(response.status).toBe(200);
@@ -455,7 +459,10 @@ describe("CloudMap Bindings", () => {
             send(
               HttpClientRequest.bodyJsonUnsafe(
                 HttpClientRequest.post(`${baseUrl}/custom/health`),
-                { instanceId: "cust-1", status },
+                {
+                  instanceId: "cust-1",
+                  status,
+                },
               ),
             );
 

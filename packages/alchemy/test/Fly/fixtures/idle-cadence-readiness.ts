@@ -1,10 +1,10 @@
 import type * as machines from "@distilled.cloud/fly-io/machines";
-import type { ScratchStack } from "@/Test/Alchemy";
-import { scratchStack } from "@/Test/Core";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import type { ScratchStack } from "@/Test/Alchemy";
+import { scratchStack } from "@/Test/Core";
 import {
   throughProxy,
   transportProxy,

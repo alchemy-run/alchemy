@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -90,7 +90,10 @@ describe("AWS.Website.Waku local", () => {
         yield* expectUrlContains(
           `${url}/echo?echo=dev`,
           "WAKU_AWS_API_MARKER_V2",
-          { timeout: "90 seconds", label: "API route after HMR edit" },
+          {
+            timeout: "90 seconds",
+            label: "API route after HMR edit",
+          },
         );
         // The route still round-trips its query after the reload.
         yield* expectUrlContains(`${url}/echo?echo=post-hmr`, "post-hmr", {

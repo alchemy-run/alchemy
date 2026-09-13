@@ -1,12 +1,12 @@
+import * as inspector2 from "@distilled.cloud/aws/inspector2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { CisScanConfiguration } from "@/AWS/Inspector2/CisScanConfiguration.ts";
 import { Filter } from "@/AWS/Inspector2/Filter.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

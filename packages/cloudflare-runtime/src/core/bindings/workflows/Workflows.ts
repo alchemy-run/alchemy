@@ -1,8 +1,8 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const WorkflowsBindingWorker = {
   worker: () =>
     loadInternalWorker(
@@ -24,9 +24,9 @@ import {
   formatExtensionModule,
   formatInternalWorkerModules,
 } from "../../internal/internal-modules.ts";
+import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
 import { PluginContext } from "../../PluginContext.ts";
-import * as Plugin from "../../Plugin.ts";
 import { RegistryProxy } from "../../registry/RegistryProxy.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";

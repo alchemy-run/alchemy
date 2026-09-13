@@ -3,10 +3,10 @@ import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
-import type { Providers } from "../Providers.ts";
 import type { Namespace } from "../KV/Namespace.ts";
-import { DurableObject } from "../Workers/DurableObject.ts";
+import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
+import { DurableObject } from "../Workers/DurableObject.ts";
 import {
   Self,
   Worker,

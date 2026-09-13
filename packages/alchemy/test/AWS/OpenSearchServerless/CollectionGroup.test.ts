@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { CollectionGroup } from "@/AWS/OpenSearchServerless";
-import * as Test from "@/Test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CollectionGroup } from "@/AWS/OpenSearchServerless";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 /*!
  * Client metadata collection adapted from @octanejs/vite-plugin 0.1.22.
  * MIT License
@@ -25,7 +26,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { InlineConfig, Plugin, PluginOption } from "vite";
-import { createRequire } from "node:module";
 import {
   FrameworkError,
   loadProjectModule,

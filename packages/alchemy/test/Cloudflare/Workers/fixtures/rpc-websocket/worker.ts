@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { SocketObject, SocketObjectLive } from "./object.ts";
 
 export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(

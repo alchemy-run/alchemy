@@ -6,7 +6,6 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
@@ -14,6 +13,7 @@ import {
   normalizePolicyDocument,
   stringifyPolicyDocument,
 } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type RepositoryName = string;

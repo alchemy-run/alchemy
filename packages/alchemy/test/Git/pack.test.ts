@@ -12,6 +12,7 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
@@ -35,7 +36,6 @@ import { writePackBytes } from "@/Git/Protocol/PackWriter.ts";
 import type { ManifestEntry, ObjectSource } from "@/Git/Protocol/Store.ts";
 import { inflate, inflateEntry } from "@/Git/Protocol/Zlib.ts";
 import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import * as Fiber from "effect/Fiber";
 
 // ── manifest shape (test/fixtures/packs/manifest.json) ──────────────────────
 
@@ -404,7 +404,10 @@ describe("PackWriter round-trips", () => {
         const handle = yield* ChildProcess.make(
           "git",
           ["index-pack", "--strict", packPath],
-          { cwd: dir, extendEnv: true },
+          {
+            cwd: dir,
+            extendEnv: true,
+          },
         );
         const [exitCode, stderr] = yield* Effect.all(
           [handle.exitCode, Stream.mkString(Stream.decodeText(handle.stderr))],

@@ -1,10 +1,10 @@
-import * as Fly from "@/Fly";
+import * as http from "node:http";
+import * as https from "node:https";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as http from "node:http";
-import * as https from "node:https";
+import * as Fly from "@/Fly";
 
 export interface TransportEvent {
   sequence: number;

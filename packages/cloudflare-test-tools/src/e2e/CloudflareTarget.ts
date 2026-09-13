@@ -3,14 +3,14 @@ import {
   type DeployTarget,
   type DeployTargetServer,
 } from "@alchemy.run/frontend-frameworks/core";
-import * as Miniflare from "../miniflare/miniflare.ts";
+import * as Effect from "effect/Effect";
+import { cast } from "effect/Function";
+import * as Path from "effect/Path";
 import {
   moduleTypeFromExtension,
   type MiniflareModule,
 } from "../miniflare/miniflare-module.ts";
-import * as Effect from "effect/Effect";
-import { cast } from "effect/Function";
-import * as Path from "effect/Path";
+import * as Miniflare from "../miniflare/miniflare.ts";
 import type * as Options from "./Options.ts";
 
 /**

@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Room } from "../IVSChat/Room.ts";
 import {
   RoomMessageReviewEventSource as IVSChatRoomMessageReviewEventSource,
   type RoomMessageEvent,
@@ -9,7 +10,6 @@ import {
   type RoomMessageReviewHandlerFn,
   type RoomMessageReviewProps,
 } from "../IVSChat/RoomMessageReviewEventSource.ts";
-import type { Room } from "../IVSChat/Room.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 

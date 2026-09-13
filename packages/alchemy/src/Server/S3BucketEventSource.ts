@@ -7,8 +7,8 @@ import type {
   NotificationsProps,
 } from "../AWS/S3/BucketNotifications.ts";
 import * as S3 from "../AWS/S3/index.ts";
-import type { S3EventType } from "../AWS/S3/S3Event.ts";
 import { normalizeBucketNotification } from "../AWS/S3/normalizeBucketNotification.ts";
+import type { S3EventType } from "../AWS/S3/S3Event.ts";
 import * as SQS from "../AWS/SQS/index.ts";
 import { SQSQueueEventSource } from "./SQSQueueEventSource.ts";
 

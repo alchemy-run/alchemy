@@ -1,3 +1,14 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 /**
  * Real-world load: push **this repository** to a deployed git-service.
  *
@@ -20,19 +31,8 @@
  * Slow by construction; skipped under `--fast`.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

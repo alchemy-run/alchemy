@@ -2,25 +2,23 @@
   "name": "@alchemy.run/node-utils",
   "version": "2.0.0-beta.79",
   "description": "Runtime utilities for Alchemy packages.",
-  "homepage": "https://alchemy.run",
-  "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
     "gitignore",
     "node",
     "utilities"
   ],
+  "homepage": "https://alchemy.run",
   "bugs": {
     "url": "https://github.com/alchemy-run/alchemy/issues"
   },
   "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/node-utils"
   },
-  "type": "module",
-  "sideEffects": false,
   "files": [
     "src",
     "lib",
@@ -28,10 +26,8 @@
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
   ],
-  "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts node-utils",
-    "test": "bun test ./test"
-  },
+  "type": "module",
+  "sideEffects": false,
   "exports": {
     "./ignore": {
       "types": "./lib/ignore.d.ts",
@@ -54,12 +50,16 @@
       "import": "./lib/watch-import-bun.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b && bun ../../scripts/copy-package-files.ts node-utils",
+    "test": "bun test ./test"
+  },
   "dependencies": {
     "chokidar": "catalog:",
     "rolldown": "catalog:"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

@@ -164,7 +164,9 @@ export const FunctionProvider = () =>
             let marker: string | undefined = undefined;
             do {
               const listed: cloudfront.ListFunctionsResult =
-                yield* cloudfront.listFunctions({ Marker: marker });
+                yield* cloudfront.listFunctions({
+                  Marker: marker,
+                });
               for (const summary of listed.FunctionList?.Items ?? []) {
                 items.push(toAttrs(summary, undefined, summary.Name ?? ""));
               }

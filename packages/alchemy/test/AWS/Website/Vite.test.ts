@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -88,7 +88,9 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Vite", () => {
         yield* expectUrlContains(
           `${url}/missing/client/route`,
           "VITE_AWS_PAGE_MARKER",
-          { label: "spa fallback" },
+          {
+            label: "spa fallback",
+          },
         );
 
         yield* stack.destroy();

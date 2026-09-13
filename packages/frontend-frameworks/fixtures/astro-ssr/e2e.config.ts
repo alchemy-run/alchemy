@@ -1,7 +1,7 @@
-import * as Astro from "@alchemy.run/frontend-frameworks/astro";
-import cloudflare from "@alchemy.run/frontend-frameworks/astro/cloudflare";
 import { Assets, Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
+import * as Astro from "@alchemy.run/frontend-frameworks/astro";
+import cloudflare from "@alchemy.run/frontend-frameworks/astro/cloudflare";
 
 export const FIXTURE_VALUE = "hello-from-astro-ssr-binding";
 

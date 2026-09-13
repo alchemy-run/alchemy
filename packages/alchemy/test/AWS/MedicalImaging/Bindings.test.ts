@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MedicalImagingTestFunctionLive, {
   IMPORT_PREFIX,
   MedicalImagingTestFunction,
@@ -281,7 +281,10 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
         // GetDICOMImportJob — the job is observable immediately.
         const described = (yield* getJson(
           `/describe-import?jobId=${importJob.jobId}`,
-        )) as { status?: string; errorTag?: string };
+        )) as {
+          status?: string;
+          errorTag?: string;
+        };
         expect(described.errorTag).toBeUndefined();
         expect(described.status).toBeTruthy();
 

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import PipeTargetFunctionLive, { PipeTargetFunction } from "./pipe-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

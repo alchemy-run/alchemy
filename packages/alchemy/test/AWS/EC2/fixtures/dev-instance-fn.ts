@@ -1,3 +1,8 @@
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as AWS from "@/AWS";
 import {
   DescribeInstance,
@@ -5,11 +10,6 @@ import {
   DescribeInstanceStatus,
   DescribeInstanceStatusHttp,
 } from "@/AWS/EC2";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import DevInstance from "./dev-instance.ts";
 
 export class Ec2DevProbeFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(

@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -58,7 +58,10 @@ describe("Tunnel runtime bindings", () => {
       const { effectUrl } = yield* stack;
       const body = (yield* hit(
         `${effectUrl}/write?name=${encodeURIComponent(writeName)}`,
-      )) as { id: string; deleted: boolean };
+      )) as {
+        id: string;
+        deleted: boolean;
+      };
       expect(body.id).toBeTypeOf("string");
       expect(body.id.length).toBeGreaterThan(0);
       expect(body.deleted).toBe(true);

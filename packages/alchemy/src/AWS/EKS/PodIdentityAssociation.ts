@@ -7,8 +7,8 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PodIdentityAssociationProps {
   /**

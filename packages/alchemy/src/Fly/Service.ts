@@ -13,13 +13,14 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { DockerLive, Docker } from "../Docker/Docker.ts";
+import type { Input } from "../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import type { Input } from "../Input.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { App } from "./App.ts";
+import { attachBucketSecrets } from "./Bucket.ts";
 import {
   deploymentPolicy,
   validateDeployment,
@@ -27,18 +28,6 @@ import {
   type MachineShutdown,
   type MachineCheck,
 } from "./Deployment.ts";
-import type {
-  MachineGuest,
-  MachineImageRef,
-  MachineService,
-} from "./Machine.ts";
-import {
-  createFlyResourceName,
-  diffMachineMetadata,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
-import type { MountedDisk, ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
 import {
   collectBindingState,
   createFlyHostedSupport,
@@ -50,8 +39,19 @@ import {
   type FlyHostRuntimeContext,
   type HostedProgramProps,
 } from "./hosted.ts";
-import { attachBucketSecrets } from "./Bucket.ts";
+import type {
+  MachineGuest,
+  MachineImageRef,
+  MachineService,
+} from "./Machine.ts";
+import {
+  createFlyResourceName,
+  diffMachineMetadata,
+  sanitizeFlyAppName,
+} from "./Metadata.ts";
+import type { MountedDisk, ServiceBinding } from "./MountVolume.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
+import type { Providers } from "./Providers.ts";
 import { attachRedisSecrets } from "./Redis.ts";
 import {
   deleteReplicaSet,

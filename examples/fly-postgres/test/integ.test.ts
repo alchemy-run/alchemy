@@ -1,15 +1,15 @@
+import { expect } from "bun:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as Alchemy from "alchemy";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Fly from "alchemy/Fly";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import Stack from "../alchemy.run.ts";
 import type { User } from "../src/schema.ts";
 import { MIGRATE_TOKEN } from "../src/shared.ts";

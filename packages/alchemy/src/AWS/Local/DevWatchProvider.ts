@@ -45,9 +45,9 @@ import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ProviderService } from "../../Provider.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
+import { moduleExtension } from "../../Util/Node.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
-import { moduleExtension } from "../../Util/Node.ts";
 
 /**
  * The AWS provider group module ([Local.ts](./Local.ts)) — every

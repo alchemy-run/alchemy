@@ -1,11 +1,11 @@
-import * as Command from "@/Command/index.ts";
-import * as Provider from "@/Provider.ts";
-import * as Test from "@/Test/Alchemy";
 import { assert, describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Command from "@/Command/index.ts";
+import * as Provider from "@/Provider.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   // DevServer is provider-agnostic — register it directly without dragging

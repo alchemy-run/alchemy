@@ -6,8 +6,9 @@ import { env } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { afterEach, describe, it, vi } from "vitest";
 import workerdUnsafe from "workerd:unsafe";
-import { InstanceEvent } from "../index.ts";
 import { REDACTED_STEP_OUTPUT } from "../context.ts";
+import type { Engine, EngineLogs } from "../engine.ts";
+import { InstanceEvent } from "../index.ts";
 import { computeHash } from "../lib/cache.ts";
 import {
   InvalidStepReadableStreamError,
@@ -23,10 +24,9 @@ import {
   rollbackStreamOutput,
   writeStreamOutput,
 } from "../lib/streams.ts";
+import type { StreamOutputMeta } from "../lib/streams.ts";
 import { MODIFIER_KEYS } from "../modifier.ts";
 import { runWorkflow, runWorkflowAndAwait } from "./utils.ts";
-import type { Engine, EngineLogs } from "../engine.ts";
-import type { StreamOutputMeta } from "../lib/streams.ts";
 
 afterEach(async () => {
   await workerdUnsafe.abortAllDurableObjects();

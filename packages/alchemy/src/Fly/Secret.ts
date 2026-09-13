@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import type { AppSecret } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import { createHash } from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

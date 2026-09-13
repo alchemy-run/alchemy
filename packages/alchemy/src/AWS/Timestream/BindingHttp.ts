@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import type { Table } from "./Table.ts";
 import { discover, withEndpoint } from "./internal.ts";
+import type { Table } from "./Table.ts";
 
 /**
  * Shared scaffolding for Amazon Timestream HTTP bindings.

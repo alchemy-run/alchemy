@@ -1,12 +1,12 @@
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { target as vite } from "../../vite/neon.ts";
 import { target as astro } from "../../astro/neon.ts";
 import { target as nextjs } from "../../nextjs/neon.ts";
+import { target as vite } from "../../vite/neon.ts";
 import type { BuildOutput } from "../BuildOutput.ts";
 
 const fixture = (

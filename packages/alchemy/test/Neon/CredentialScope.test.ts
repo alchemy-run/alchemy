@@ -1,12 +1,12 @@
+import { expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import {
   scopeIdentity,
   usesInjectedCredentials,
 } from "@/Neon/CredentialScope.ts";
 import * as Neon from "@/Neon/index.ts";
 import * as Output from "@/Output.ts";
-import { expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 const branch = { projectId: "project", branchId: "branch" };
 const host = {

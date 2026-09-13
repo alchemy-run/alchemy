@@ -18,15 +18,14 @@ import {
 } from "./EmailOptions.shared.ts";
 import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
 import {
-  PATH_SCHEDULED,
-  PATH_SCHEDULED_LEGACY,
-} from "./ScheduledOptions.shared.ts";
-
-import {
   BINDING_PROXY_SHARED_SECRET,
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
 } from "./ProxyHeaders.shared.ts";
+import {
+  PATH_SCHEDULED,
+  PATH_SCHEDULED_LEGACY,
+} from "./ScheduledOptions.shared.ts";
 
 interface Env {
   [BINDING_PROXY_SHARED_SECRET]: string;

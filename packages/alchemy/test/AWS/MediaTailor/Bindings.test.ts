@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as mediatailor from "@distilled.cloud/aws/mediatailor";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +6,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MediaTailorTestFunctionLive, {
   MediaTailorTestFunction,
 } from "./handler";
@@ -164,7 +164,11 @@ describe.sequential("MediaTailor Bindings", () => {
           // get through the binding
           const got = (yield* getJson(
             `/prefetch/get?name=${PREFETCH_NAME}`,
-          )) as { name?: string; error?: string; detail?: string };
+          )) as {
+            name?: string;
+            error?: string;
+            detail?: string;
+          };
           expect(got.error, got.detail).toBeUndefined();
           expect(got.name).toBe(PREFETCH_NAME);
 
@@ -187,7 +191,10 @@ describe.sequential("MediaTailor Bindings", () => {
           // get after delete surfaces the typed synthetic tag
           const gone = (yield* getJson(
             `/prefetch/get?name=${PREFETCH_NAME}`,
-          )) as { name?: string; error?: string };
+          )) as {
+            name?: string;
+            error?: string;
+          };
           expect(gone.error).toBe("PrefetchScheduleNotFound");
         }),
       { timeout: 120_000 },
@@ -207,7 +214,11 @@ describe.sequential("MediaTailor Bindings", () => {
           // mediatailor:ListAlerts grant reached the API).
           const body = (yield* getJson(
             `/alerts?arn=${encodeURIComponent(configArn!)}`,
-          )) as { count: number; error?: string; detail?: string };
+          )) as {
+            count: number;
+            error?: string;
+            detail?: string;
+          };
           expect(body.error, body.detail).toBe("BadRequestException");
         }),
       { timeout: 120_000 },

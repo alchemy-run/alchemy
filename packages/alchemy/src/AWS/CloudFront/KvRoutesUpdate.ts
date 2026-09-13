@@ -1,14 +1,14 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { Credentials } from "../Credentials.ts";
+import type { Providers } from "../Providers.ts";
 import type { Region } from "../Region.ts";
 import {
   extractValue,

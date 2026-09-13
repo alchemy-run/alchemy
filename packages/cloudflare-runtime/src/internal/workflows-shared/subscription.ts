@@ -2,9 +2,9 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 // Alchemy modifications: uses Effect Schema instead of Zod, preserving strict option validation.
 import { RpcTarget } from "cloudflare:workers";
-import { ms } from "itty-time";
-import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import { ms } from "itty-time";
 import type { ResolvedStepConfig } from "./context.ts";
 
 const WorkflowSubscriptionEventCommonSchema = Schema.Struct({

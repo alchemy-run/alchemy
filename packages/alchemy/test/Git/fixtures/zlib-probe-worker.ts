@@ -1,3 +1,8 @@
+import crypto from "node:crypto";
+import zlib from "node:zlib";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * Probe fixture: what does THIS workerd's `node:zlib` offer for a
  * synchronous, exact-span inflate, and what does each path cost? (See
@@ -6,11 +11,6 @@
  * during synchronous work, so the worker cannot time itself.
  */
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import crypto from "node:crypto";
-import zlib from "node:zlib";
 
 const streamInflate = (z: Uint8Array) =>
   new Promise<number>((resolve, reject) => {

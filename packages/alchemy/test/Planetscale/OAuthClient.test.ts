@@ -1,12 +1,12 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {
   OAUTH_CLIENT_ID,
   exchange,
   usesCurrentClient,
 } from "@/Planetscale/OAuthClient.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 describe("PlanetScale OAuth client credentials", () => {
   it("maps the token response onto stored credentials", async () => {

@@ -1,14 +1,14 @@
-import { generate } from "@/Prisma/ORM/Generate.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
+import { generate } from "@/Prisma/ORM/Generate.ts";
 
 const describe = layer(NodeServices.layer, { excludeTestServices: true });
 

@@ -1,9 +1,9 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import type {
   ClusterCredentials,
   GetClusterResponse,
   ManagedCluster,
 } from "@distilled.cloud/fly-io/mpg";
-import * as machines from "@distilled.cloud/fly-io/machines";
 import * as mpg from "@distilled.cloud/fly-io/mpg";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

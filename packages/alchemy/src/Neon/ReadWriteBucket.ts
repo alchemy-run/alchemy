@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { ReadBucketClient } from "./ReadBucket.ts";
-import type { WriteBucketClient } from "./WriteBucket.ts";
 import type { StorageBindingOptions } from "./StorageBinding.ts";
+import type { WriteBucketClient } from "./WriteBucket.ts";
 
 export interface ReadWriteBucketClient
   extends ReadBucketClient, WriteBucketClient {}

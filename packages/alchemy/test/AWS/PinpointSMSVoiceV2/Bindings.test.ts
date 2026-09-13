@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SmsVoiceOptOutTestFunctionLive, {
   SmsVoiceOptOutTestFunction,
   TEST_DESTINATION,
@@ -145,7 +145,10 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* post("/opt-out").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { optedOutNumber?: string; endUserOptedOut?: boolean };
+          )) as {
+            optedOutNumber?: string;
+            endUserOptedOut?: boolean;
+          };
 
           expect(response.optedOutNumber).toBe(TEST_DESTINATION);
           // Manually opted out (by the API), not by the end user.
@@ -165,7 +168,10 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
           yield* post("/opt-out");
           const response = (yield* post("/opt-out-check").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { count: number; numbers: string[] };
+          )) as {
+            count: number;
+            numbers: string[];
+          };
 
           expect(response.count).toBe(1);
           expect(response.numbers).toContain(TEST_DESTINATION);
@@ -193,7 +199,9 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
 
           const after = (yield* post("/opt-out-check").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { count: number };
+          )) as {
+            count: number;
+          };
           expect(after.count).toBe(0);
         }),
       { timeout: 120_000 },
@@ -237,7 +245,11 @@ describe("PinpointSMSVoiceV2 Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* post("/feedback-probe").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { ok: boolean; tag?: string; message?: string };
+          )) as {
+            ok: boolean;
+            tag?: string;
+            message?: string;
+          };
 
           // The grant is on `*`; an unknown MessageId must surface the
           // typed not-found tag (AccessDenied would mean a broken grant).

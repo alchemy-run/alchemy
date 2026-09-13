@@ -1,10 +1,10 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
 import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
 } from "@/Prisma/Internal/DeploymentActions";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import {
   type Captured,
   dispatchTo,

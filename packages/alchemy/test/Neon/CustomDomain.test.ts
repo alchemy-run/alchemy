@@ -1,12 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import { Project } from "@/Neon/Project";
-import { Function } from "@/Neon/Function";
-import { CustomDomain } from "@/Neon/CustomDomain";
-import { providers } from "@/Neon/Providers";
-import * as AlchemyOutput from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Api from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
@@ -16,6 +7,15 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import { CustomDomain } from "@/Neon/CustomDomain";
+import { Function } from "@/Neon/Function";
+import { Project } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import * as AlchemyOutput from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(providers(), Cloudflare.providers()),

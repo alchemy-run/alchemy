@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/EMR/Cluster.ts";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as emr from "@distilled.cloud/aws/emr";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/EMR/Cluster.ts";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -113,7 +113,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             });
             const instanceProfile = yield* AWS.IAM.InstanceProfile(
               "EmrEc2Profile",
-              { roleName: ec2Role.roleName },
+              {
+                roleName: ec2Role.roleName,
+              },
             );
             const cluster = yield* Cluster("Spark", {
               releaseLabel: "emr-7.5.0",

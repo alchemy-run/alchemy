@@ -291,7 +291,9 @@ export const Job = Resource<Job>("AWS.DataBrew.Job");
 /** The job's props don't satisfy the requirements of its `type`. */
 export class DataBrewJobConfigError extends Data.TaggedError(
   "DataBrewJobConfigError",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validate = (props: JobProps) => {
   if (props.type === "PROFILE") {
@@ -390,7 +392,9 @@ const buildConfiguration = (config: ProfileJobConfiguration | undefined) =>
               EntityTypes: config.entityDetectorConfiguration.entityTypes,
               AllowedStatistics:
                 config.entityDetectorConfiguration.allowedStatistics?.map(
-                  (a) => ({ Statistics: a.statistics }),
+                  (a) => ({
+                    Statistics: a.statistics,
+                  }),
                 ),
             }
           : undefined,

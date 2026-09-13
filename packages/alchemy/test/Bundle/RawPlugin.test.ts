@@ -1,12 +1,12 @@
-import * as Bundle from "@/Bundle/Bundle";
-import { RAW_RE, rawPlugin, splitFileAndPostfix } from "@/Bundle/RawPlugin";
+import * as NodeFs from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
-import * as NodeFs from "node:fs/promises";
+import * as Bundle from "@/Bundle/Bundle";
+import { RAW_RE, rawPlugin, splitFileAndPostfix } from "@/Bundle/RawPlugin";
 
 layer(NodeServices.layer)("Bundle.build with rawPlugin", (it) => {
   it.effect("inlines a sibling file imported with ?raw", () =>

@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import LifecycleWorker, {
   type Scenario,

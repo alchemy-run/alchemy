@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
@@ -10,6 +7,9 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ApplicationAutoScalingTestFunctionLive, {
   ApplicationAutoScalingTestFunction,
 } from "./handler";

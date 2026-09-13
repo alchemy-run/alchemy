@@ -1,3 +1,10 @@
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as AWS from "@/AWS";
 import {
   DefaultSecurityGroup,
@@ -17,15 +24,8 @@ import * as Drift from "@/Drift";
 import * as Output from "@/Output";
 import { isActionState, State } from "@/State/State";
 import * as Core from "@/Test/Core";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Stream from "effect/Stream";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Test from "./VpcTest.ts";
 import { assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() }, 2);
 const logLevel = Effect.provideService(

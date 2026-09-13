@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Async (non-Effect) Worker declaring the Workers AI binding via

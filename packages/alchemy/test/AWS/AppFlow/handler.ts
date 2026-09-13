@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import type { PolicyStatement } from "@/AWS/IAM";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import type { PolicyStatement } from "@/AWS/IAM";
 
 // Deterministic names shared by the fixture and the test (the test seeds the
 // source prefix out-of-band and filters flow events by name).

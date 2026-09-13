@@ -163,7 +163,9 @@ export const VpcOriginProvider = () =>
         let marker: string | undefined;
         do {
           const listed: cloudfront.ListVpcOriginsResult =
-            yield* cloudfront.listVpcOrigins({ Marker: marker });
+            yield* cloudfront.listVpcOrigins({
+              Marker: marker,
+            });
           const summary = listed.VpcOriginList?.Items?.find(
             (item) => item.OriginEndpointArn === arn,
           );
@@ -266,7 +268,9 @@ export const VpcOriginProvider = () =>
             let marker: string | undefined;
             do {
               const listed: cloudfront.ListVpcOriginsResult =
-                yield* cloudfront.listVpcOrigins({ Marker: marker });
+                yield* cloudfront.listVpcOrigins({
+                  Marker: marker,
+                });
               for (const summary of listed.VpcOriginList?.Items ?? []) {
                 if (!summary.Id) continue;
                 const current = yield* getById(summary.Id);

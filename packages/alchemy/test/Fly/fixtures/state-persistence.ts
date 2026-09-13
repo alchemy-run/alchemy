@@ -1,5 +1,3 @@
-import { encodeFqn } from "@/FQN";
-import { localState } from "@/State/LocalState";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,6 +5,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
+import { encodeFqn } from "@/FQN";
+import { localState } from "@/State/LocalState";
 
 /** Only nonsecret row identity and lifecycle fields leave the filesystem barrier. */
 export const ResourceRow = Schema.Struct({

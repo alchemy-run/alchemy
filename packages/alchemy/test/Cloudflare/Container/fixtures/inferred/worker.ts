@@ -1,5 +1,5 @@
-import type * as Cloudflare from "@/Cloudflare";
 import { Container, getContainer } from "@cloudflare/containers";
+import type * as Cloudflare from "@/Cloudflare";
 import type { InferredClassWorker } from "./stack.ts";
 
 /**

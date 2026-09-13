@@ -2,6 +2,11 @@
   "name": "prisma-website-vinext",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/prisma-website-vinext"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -22,6 +27,7 @@
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@vercel/nft": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitejs/plugin-rsc": "^0.5.34",
     "alchemy": "workspace:*",
@@ -29,15 +35,9 @@
     "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
-    "@vercel/nft": "catalog:"
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/prisma-website-vinext"
   }
 }

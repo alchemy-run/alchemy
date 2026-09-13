@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import { isResolved } from "../Diff.ts";
+import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import {
   Platform,
@@ -17,7 +18,6 @@ import {
 import type { HostRuntimeContext } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
-import * as Output from "../Output.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
   findClusterAdapter,

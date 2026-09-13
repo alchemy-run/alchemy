@@ -19,7 +19,6 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
-import type { WorkerExport } from "./WorkerRuntimeContext.ts";
 import { getToolingCompatibility } from "./Compatibility.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
@@ -30,6 +29,7 @@ import type {
   WorkerProps,
   WorkerSourceDescriptor,
 } from "./Worker.ts";
+import type { WorkerExport } from "./WorkerRuntimeContext.ts";
 
 /**
  * The hash slots a Worker source contributes to

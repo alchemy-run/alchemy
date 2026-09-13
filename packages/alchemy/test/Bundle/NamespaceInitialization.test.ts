@@ -1,13 +1,13 @@
-import * as Bundle from "@/Bundle/Bundle";
-import type { FunctionZipProps } from "@/AWS/Lambda/Function";
-import { makeFunctionBundler } from "@/AWS/Lambda/FunctionBundle";
-import { exec } from "@/Util/exec.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/unstable/process";
+import type { FunctionZipProps } from "@/AWS/Lambda/Function";
+import { makeFunctionBundler } from "@/AWS/Lambda/FunctionBundle";
+import * as Bundle from "@/Bundle/Bundle";
+import { exec } from "@/Util/exec.ts";
 
 /**
  * The side-effect-free Cloudflare barrel exposes Flagship through a nested

@@ -1,6 +1,6 @@
-import { validateAccountId } from "@/Cloudflare/Auth/AuthConfig.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { validateAccountId } from "@/Cloudflare/Auth/AuthConfig.ts";
 
 /**
  * Production traces showed 242 distinct users hitting

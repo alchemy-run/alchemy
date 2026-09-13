@@ -1,3 +1,4 @@
+import * as NodeUtil from "node:util";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -7,7 +8,6 @@ import { flow } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as NodeUtil from "node:util";
 import * as Output from "../Output.ts";
 import { isRedactedMarker, type RedactedMarker } from "../RuntimeContext.ts";
 import {

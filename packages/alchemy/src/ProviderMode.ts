@@ -36,7 +36,9 @@ export type ProviderMode = "live" | "local";
  */
 export const ProviderModePolicy = Context.Reference<boolean | undefined>(
   "ProviderModePolicy",
-  { defaultValue: () => undefined },
+  {
+    defaultValue: () => undefined,
+  },
 );
 
 /**

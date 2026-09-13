@@ -4,12 +4,12 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { unpackEnvValue } from "../../RuntimeContext.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
+import type { CacheCluster } from "./CacheCluster.ts";
 import {
   ConnectCacheCluster,
   cacheClusterConnectEnvPrefix,
   type ConnectCacheClusterOptions,
 } from "./ConnectCacheCluster.ts";
-import type { CacheCluster } from "./CacheCluster.ts";
 
 export const ConnectCacheClusterHttp = Layer.effect(
   ConnectCacheCluster,

@@ -1,18 +1,18 @@
+import createIgnore from "@alchemy.run/node-utils/ignore";
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import createIgnore from "@alchemy.run/node-utils/ignore";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -531,16 +531,16 @@ export const uploadAssets = Effect.fn(function* (
       Retry.policy(surfaceGatewayErrors),
       Effect.tapError((error) =>
         isGatewayError(error)
-          ? semaphore
-              .resize(1)
-              .pipe(
-                Effect.andThen(
-                  note(
-                    "Asset upload hit a gateway error, retrying one bucket at a time...",
-                    { kind: "status" },
-                  ),
+          ? semaphore.resize(1).pipe(
+              Effect.andThen(
+                note(
+                  "Asset upload hit a gateway error, retrying one bucket at a time...",
+                  {
+                    kind: "status",
+                  },
                 ),
-              )
+              ),
+            )
           : Effect.void,
       ),
       Effect.retry({

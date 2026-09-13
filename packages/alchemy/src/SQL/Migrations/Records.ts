@@ -1,7 +1,7 @@
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as crypto from "node:crypto";
 import { listSqlFiles, splitSqlStatements } from "../SqlFile.ts";
 import { detectLayout } from "./Detect.ts";
 import { MigrationError, type MigrationRecord } from "./Format.ts";

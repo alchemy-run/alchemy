@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 import * as Port from "../../internal/Port.ts";
 
 export const occupy = (port: number, host?: string) =>

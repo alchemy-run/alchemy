@@ -175,7 +175,9 @@ export const AppMonitor = Resource<AppMonitor>("AWS.RUM.AppMonitor");
  */
 export class RumAppMonitorInvalidDomains extends Data.TaggedError(
   "RumAppMonitorInvalidDomains",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validateDomains = (
   props: Pick<AppMonitorProps, "domain" | "domainList">,

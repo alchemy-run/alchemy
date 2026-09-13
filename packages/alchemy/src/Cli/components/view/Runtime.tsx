@@ -1,11 +1,5 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { stripVTControlCharacters } from "node:util";
-import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Semaphore from "effect/Semaphore";
-import type * as Scope from "effect/Scope";
 import {
   AnsiText,
   Box,
@@ -15,29 +9,19 @@ import {
   useTitle,
 } from "@alchemy.run/sigil";
 import { useSyncExternalStore } from "@alchemy.run/sigil/react";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import type { ReactNode } from "react";
-import { Spinner, Status } from "../ui/Feedback.tsx";
-import { CliEnvironment } from "../ui/Environment.tsx";
-import { useTerminalInput } from "../ui/Interactive.tsx";
-import { LiveStore, useLiveStore } from "../ui/Live.tsx";
-import { CancelledPrompt } from "../ui/Transcript.tsx";
-import { Text } from "../ui/Typography.tsx";
 import {
   NonInteractiveTerminal,
   TerminalCancelled,
 } from "../../../Interaction.ts";
-import {
-  confirmScreen,
-  cycleSelectScreen,
-  awaitExternalScreen,
-  menuScreen,
-  multiSelectScreen,
-  passwordScreen,
-  selectScreen,
-  textScreen,
-} from "./Prompts.tsx";
-import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
 import { setNativeProgress } from "../../../Util/Terminal.ts";
+import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
@@ -51,6 +35,22 @@ import type {
   LiveViewOptions,
   View,
 } from "../types.ts";
+import { CliEnvironment } from "../ui/Environment.tsx";
+import { Spinner, Status } from "../ui/Feedback.tsx";
+import { useTerminalInput } from "../ui/Interactive.tsx";
+import { LiveStore, useLiveStore } from "../ui/Live.tsx";
+import { CancelledPrompt } from "../ui/Transcript.tsx";
+import { Text } from "../ui/Typography.tsx";
+import {
+  confirmScreen,
+  cycleSelectScreen,
+  awaitExternalScreen,
+  menuScreen,
+  multiSelectScreen,
+  passwordScreen,
+  selectScreen,
+  textScreen,
+} from "./Prompts.tsx";
 
 const InApplication = Context.Reference<boolean>(
   "Alchemy::CliKit/InApplication",

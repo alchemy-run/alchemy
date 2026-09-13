@@ -1,7 +1,7 @@
+import * as NodePath from "node:path";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Esbuild from "esbuild";
-import * as NodePath from "node:path";
 
 export class BundleError extends Data.TaggedError<"BundleError">(
   "BundleError",

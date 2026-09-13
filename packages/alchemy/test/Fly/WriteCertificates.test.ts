@@ -1,20 +1,20 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as ACME from "@/ACME";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Fly from "@/Fly";
 import { FlyAuth } from "@/Fly/AuthProvider";
 import { fromAuthProvider } from "@/Fly/Credentials";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Layer from "effect/Layer";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import CertificatesApi, {
   CertIp,
   CertSite,

@@ -1,6 +1,6 @@
+import * as NodeHttp from "node:http";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as NodeHttp from "node:http";
 import { getAddress, toConnectableHost } from "../../internal/get-address.ts";
 
 const listen = (host?: string) =>

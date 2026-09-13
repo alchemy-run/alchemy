@@ -1,7 +1,7 @@
+import { createRequire } from "node:module";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { createRequire } from "node:module";
 import { toOutputFile, type BuildOutput } from "./BuildOutput.ts";
 import { DeployTargetError, type DeployTarget } from "./DeployTarget.ts";
 import { pinNodeServeModule, type NodeServeEntryOptions } from "./NodeServe.ts";

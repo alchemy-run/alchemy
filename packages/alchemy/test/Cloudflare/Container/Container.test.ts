@@ -1,24 +1,24 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { destroy as destroyStack } from "@/Destroy.ts";
-import { State } from "@/State";
-import * as Plan from "@/Plan.ts";
-import { Stage } from "@/Stage.ts";
-import * as Layer from "effect/Layer";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
 import { assert, describe, expect } from "alchemy-test";
-import AttachmentStack, {
-  attachmentStack,
-  stackName as attachmentStackName,
-} from "./fixtures/attachment/stack.ts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
+import { destroy as destroyStack } from "@/Destroy.ts";
+import * as Plan from "@/Plan.ts";
+import { Stage } from "@/Stage.ts";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import AsyncContainerStack from "./fixtures/async/stack.ts";
+import AttachmentStack, {
+  attachmentStack,
+  stackName as attachmentStackName,
+} from "./fixtures/attachment/stack.ts";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import ExternalStack from "./fixtures/external/stack.ts";
 import InferredClassStack from "./fixtures/inferred/stack.ts";

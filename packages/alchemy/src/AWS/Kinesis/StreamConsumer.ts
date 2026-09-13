@@ -177,7 +177,9 @@ const readConsumer = Effect.fn(function* ({
 // confirmed exists. Poll up to ~10s before giving up.
 class ConsumerRegistryNotConsistent extends Data.TaggedError(
   "ConsumerRegistryNotConsistent",
-)<{ consumerName: string }> {}
+)<{
+  consumerName: string;
+}> {}
 
 const adoptExistingConsumer = Effect.fn(function* (
   streamArn: string,

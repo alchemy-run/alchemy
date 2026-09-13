@@ -1,8 +1,3 @@
-import {
-  makeLanguageModel,
-  type LanguageModelOptions,
-} from "@/Neon/LanguageModel.ts";
-import { RuntimeContext } from "@/RuntimeContext.ts";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,6 +8,11 @@ import * as Stream from "effect/Stream";
 import { LanguageModel, Tool, Toolkit } from "effect/unstable/ai";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import {
+  makeLanguageModel,
+  type LanguageModelOptions,
+} from "@/Neon/LanguageModel.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const secret = "nt_live_SECRET_SENTINEL";
 const Sum = Tool.make("sum", {

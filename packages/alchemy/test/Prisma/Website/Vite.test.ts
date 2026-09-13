@@ -1,11 +1,11 @@
-import * as Prisma from "@/Prisma/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Prisma from "@/Prisma/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { bodyContaining, copyViteFixture } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });

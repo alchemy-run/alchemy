@@ -5,19 +5,13 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import type { PlatformError } from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
-import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
-import {
-  type CredentialsRequired,
-  demandPlanCredentials,
-} from "./Auth/Demand.ts";
-import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -25,14 +19,11 @@ import {
   ensureArtifactStore,
   makeScopedArtifacts,
 } from "./Artifacts.ts";
+import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
 import {
-  type PlanDisplayOptions,
-  type PlanStatusSession,
-  type ScopedPlanStatusSession,
-  Cli,
-  noopSession,
-} from "./Report.ts";
-import type { ApplyStatus } from "./Report.ts";
+  type CredentialsRequired,
+  demandPlanCredentials,
+} from "./Auth/Demand.ts";
 import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
@@ -49,7 +40,16 @@ import {
   tryFindProviderByType,
 } from "./Provider.ts";
 import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
+import {
+  type PlanDisplayOptions,
+  type PlanStatusSession,
+  type ScopedPlanStatusSession,
+  Cli,
+  noopSession,
+} from "./Report.ts";
+import type { ApplyStatus } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import {

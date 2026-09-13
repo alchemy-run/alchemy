@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 /**
  * Git object codec: oid hashing, loose headers, commit/tree/tag parsing,
  * tree encoding with git's directory sort rule, and the pack varint codecs
@@ -19,7 +20,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import crypto from "node:crypto";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Oids
@@ -55,7 +55,9 @@ export const isOid = (s: string): boolean => OID_REGEX.test(s);
  */
 export class ObjectParseError extends Schema.TaggedError<ObjectParseError>()(
   "ObjectParseError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 // ─────────────────────────────────────────────────────────────────────────────

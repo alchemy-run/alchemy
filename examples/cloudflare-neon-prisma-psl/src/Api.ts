@@ -1,11 +1,11 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import { makeDatabase } from "./prisma/generated/client.ts";
-import { schemas } from "./prisma/generated/schemas.ts";
-import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
+import { makeDatabase } from "./prisma/generated/client.ts";
+import { schemas } from "./prisma/generated/schemas.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",

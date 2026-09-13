@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import {
   expectUrlAbsent,
@@ -67,7 +67,9 @@ describe.concurrent("Cloudflare.Worker assets config files", () => {
           `${url}/`,
           "x-alchemy-test",
           "assets-config-header",
-          { label: "initial header" },
+          {
+            label: "initial header",
+          },
         );
         // The special files themselves stay excluded from serving.
         yield* expectUrlAbsent(`${url}/_redirects`, "/old-path", {
@@ -112,7 +114,9 @@ describe.concurrent("Cloudflare.Worker assets config files", () => {
           `${url}/`,
           "x-alchemy-test",
           "assets-config-header",
-          { label: "header after keep-assets deploy" },
+          {
+            label: "header after keep-assets deploy",
+          },
         );
 
         yield* stack.destroy();

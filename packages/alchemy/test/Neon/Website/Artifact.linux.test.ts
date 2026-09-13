@@ -1,4 +1,3 @@
-import { stageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { stageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 import { buildPortableExample } from "./Fixture.ts";
 
 for (const slug of ["nextjs", "vocs"] as const) {

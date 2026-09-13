@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as pipes from "@distilled.cloud/aws/pipes";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,3 +1,12 @@
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 /**
  * Event-source-mapping conformance against the floci emulator, driven
  * entirely through OUR client stack (distilled SDK + alchemy providers).
@@ -26,15 +35,6 @@ import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
 import { zipCode } from "@/Util/zip.ts";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as Lambda from "@distilled.cloud/aws/lambda";
-import * as SQS from "@distilled.cloud/aws/sqs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import {
   dockerAvailable,
   FLOCI_ENDPOINT,

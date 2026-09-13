@@ -1,8 +1,3 @@
-import {
-  checkHttpStateStoreAuth,
-  describeStateStoreFailure,
-  makeHttpStateStore,
-} from "@/State/HttpStateStore.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,6 +8,11 @@ import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
+import {
+  checkHttpStateStoreAuth,
+  describeStateStoreFailure,
+  makeHttpStateStore,
+} from "@/State/HttpStateStore.ts";
 
 /**
  * Hermetic tests driven by the production failure modes observed in

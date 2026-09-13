@@ -1,6 +1,3 @@
-import * as Hetzner from "@/Hetzner";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { CredentialsFromEnv, Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -10,6 +7,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Hetzner from "@/Hetzner";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/app/api.ts";
 import {
   API_PORT,

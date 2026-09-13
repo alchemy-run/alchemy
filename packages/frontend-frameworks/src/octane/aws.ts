@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * `@alchemy.run/frontend-frameworks/octane/aws` — the AWS Lambda deploy target
  * for the Octane integration.
@@ -34,7 +35,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { fileURLToPath } from "node:url";
 import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,

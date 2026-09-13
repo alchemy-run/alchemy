@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -8,29 +9,28 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
-import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
+import { isRedactedMarker } from "../../RuntimeContext.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import { isRedactedMarker } from "../../RuntimeContext.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
-import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
+import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import {
   resolveZoneId,
   type Reference as ZoneReference,
@@ -46,6 +46,9 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   isSelfUrl,
@@ -65,9 +68,6 @@ import type {
   WorkerBinding,
   WorkerSettingsBinding,
 } from "./WorkerBinding.ts";
-import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
-import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -1365,7 +1365,9 @@ export const LiveWorkerProvider = () =>
           if (desired.length > 0 || previous.length > 0 || live.length > 0) {
             yield* session.note(
               `Reconciling Cron Triggers (${desired.length}) ...`,
-              { kind: "status" },
+              {
+                kind: "status",
+              },
             );
           }
 
@@ -3163,7 +3165,9 @@ export const LiveWorkerProvider = () =>
         if (traffic > 0) {
           yield* session.note(
             `Deploying version at ${traffic}% of ${parentName}'s traffic ...`,
-            { kind: "status" },
+            {
+              kind: "status",
+            },
           );
           deploymentId = yield* deployVersionTraffic({
             accountId,
@@ -4219,7 +4223,9 @@ export const LiveWorkerProvider = () =>
           }
           yield* session.note(
             `Uploading version of ${name} (${bundleSize}) ...`,
-            { kind: "status" },
+            {
+              kind: "status",
+            },
           );
           const created = yield* workers
             .createScriptVersion({
@@ -4263,7 +4269,9 @@ export const LiveWorkerProvider = () =>
           if (rolloutTraffic > 0) {
             yield* session.note(
               `Deploying version at ${rolloutTraffic}% of traffic ...`,
-              { kind: "status" },
+              {
+                kind: "status",
+              },
             );
             deploymentId = yield* deployVersionTraffic({
               accountId,
@@ -4475,7 +4483,9 @@ export const LiveWorkerProvider = () =>
             : [];
           yield* session.note(
             `Reconciling custom domains (${desiredHostnames.length}) ...`,
-            { kind: "status" },
+            {
+              kind: "status",
+            },
           );
           // Capture hostname → zone for *currently attached* domains before
           // reconcile detaches removed ones — a removed redirect hostname's
@@ -4522,7 +4532,9 @@ export const LiveWorkerProvider = () =>
         if (desiredRoutes.length > 0 || previousRoutes.length > 0) {
           yield* session.note(
             `Reconciling worker routes (${desiredRoutes.length}) ...`,
-            { kind: "status" },
+            {
+              kind: "status",
+            },
           );
         }
         const routes = yield* reconcileRoutes(
@@ -5263,9 +5275,7 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker precreate: starting ${name}`,
           );
           yield* Effect.logInfo(
-            `Cloudflare Worker precreate: durable objects ${JSON.stringify(
-              durableObjects,
-            )}`,
+            `Cloudflare Worker precreate: durable objects ${JSON.stringify(durableObjects)}`,
           );
           const existingSettings = yield* getScriptSettings(
             accountId,
@@ -5761,9 +5771,7 @@ export const LiveWorkerProvider = () =>
             `Cloudflare Worker reconcile: starting ${name}`,
           );
           yield* Effect.logInfo(
-            `Cloudflare Worker reconcile: durable objects ${JSON.stringify(
-              durableObjects,
-            )}`,
+            `Cloudflare Worker reconcile: durable objects ${JSON.stringify(durableObjects)}`,
           );
 
           const dispatchNamespace = resolveNamespaceName(news.namespace);

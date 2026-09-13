@@ -1,10 +1,10 @@
-import type { ExportTypes } from "../rolldown/export-types.ts";
-import { isExportTypes } from "../rolldown/export-types.ts";
-import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 import assert from "node:assert";
 import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
 import type { FetchFunctionOptions } from "vite/module-runner";
+import type { ExportTypes } from "../rolldown/export-types.ts";
+import { isExportTypes } from "../rolldown/export-types.ts";
+import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 import {
   ENVIRONMENT_NAME_HEADER,
   EXPORT_TYPES_EVENT,

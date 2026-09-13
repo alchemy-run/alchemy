@@ -1,7 +1,7 @@
-import * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
 import * as NodeFs from "node:fs";
 import * as NodeTls from "node:tls";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 import type * as Config from "../workerd/Config.ts";
 
 export class Internet extends Context.Service<Internet, Config.Service>()(

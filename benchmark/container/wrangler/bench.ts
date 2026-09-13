@@ -65,7 +65,10 @@ const boot = async (
   try {
     const res = await fetch(
       `${WORKER_URL}/start?name=${encodeURIComponent(name)}`,
-      { headers: { connection: "close" }, signal: controller.signal },
+      {
+        headers: { connection: "close" },
+        signal: controller.signal,
+      },
     );
     const body = await res.text();
     const outside = Date.now() - start;
@@ -134,7 +137,10 @@ const crashAttempt = async (
   try {
     const res = await fetch(
       `${WORKER_URL}/crashloop?name=${encodeURIComponent(name)}`,
-      { headers: { connection: "close" }, signal: controller.signal },
+      {
+        headers: { connection: "close" },
+        signal: controller.signal,
+      },
     );
     const body = await res.text();
     const outside = Date.now() - start;

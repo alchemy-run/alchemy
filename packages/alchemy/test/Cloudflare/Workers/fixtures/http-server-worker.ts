@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 export const readyMarker = "http-server-worker-ready";
 

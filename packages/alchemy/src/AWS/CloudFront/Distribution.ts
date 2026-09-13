@@ -9,11 +9,11 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 
 const CLOUDFRONT_HOSTED_ZONE_ID = "Z2FDTNDATAQYW2" as const;
 

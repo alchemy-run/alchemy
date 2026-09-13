@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 export class FirehoseApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "FirehoseApiFunction",

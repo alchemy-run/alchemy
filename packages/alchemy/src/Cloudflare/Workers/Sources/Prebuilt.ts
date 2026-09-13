@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { glob } from "tinyglobby";
 import path from "pathe";
+import { glob } from "tinyglobby";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { sha256 } from "../../../Util/sha256.ts";

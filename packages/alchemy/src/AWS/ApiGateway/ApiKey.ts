@@ -7,9 +7,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { apiKeyArn, syncTags } from "./common.ts";
 
 export interface ApiKeyProps {

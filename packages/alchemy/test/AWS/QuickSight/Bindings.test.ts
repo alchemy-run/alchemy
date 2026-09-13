@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as quicksight from "@distilled.cloud/aws/quicksight";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import QuickSightBindingsFunctionLive, {
   QuickSightBindingsFunction,
 } from "./bindings-handler";

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -80,7 +80,9 @@ describe("AWS.Website.Foldkit local", () => {
         yield* expectUrlContains(
           `${url}/src/main.ts`,
           "FOLDKIT_AWS_MODULE_MARKER",
-          { label: "dev module source" },
+          {
+            label: "dev module source",
+          },
         );
 
         // ── HMR surface: edit index.html in place. The stack is NOT

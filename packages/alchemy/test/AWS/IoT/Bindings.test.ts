@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import IoTBindingsFunctionLive, {
   IoTBindingsFunction,
   RETAINED_TOPIC,
@@ -345,7 +345,11 @@ describe("IoT Bindings", () => {
         Effect.gen(function* () {
           const result = (yield* getJson(
             "/connection?clientId=alchemy-bindings-nonexistent",
-          )) as { ok: boolean; tag?: string; connected?: boolean };
+          )) as {
+            ok: boolean;
+            tag?: string;
+            connected?: boolean;
+          };
           if (result.ok) {
             // Some accounts report never-connected clients as disconnected
             // instead of missing.
@@ -383,7 +387,10 @@ describe("IoT Bindings", () => {
         Effect.gen(function* () {
           const result = (yield* del(
             "/connection?clientId=alchemy-bindings-nonexistent",
-          )) as { ok: boolean; tag?: string };
+          )) as {
+            ok: boolean;
+            tag?: string;
+          };
           expect(result.ok).toBe(false);
           expect(result.tag).toBe("ResourceNotFoundException");
         }),

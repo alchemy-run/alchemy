@@ -6,12 +6,12 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
-import type { ScopedPlanStatusSession } from "./Report.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
 import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import type { ScopedPlanStatusSession } from "./Report.ts";
 import type {
   ResourceBinding,
   ResourceClass,

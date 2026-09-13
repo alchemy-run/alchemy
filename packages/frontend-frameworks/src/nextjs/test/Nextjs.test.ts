@@ -1,5 +1,5 @@
-import { sortServerModules, type OutputFile } from "../../core/index.ts";
 import { describe, expect, it } from "vitest";
+import { sortServerModules, type OutputFile } from "../../core/index.ts";
 import {
   listEdgeFunctions,
   DEFAULT_COMPATIBILITY_DATE,

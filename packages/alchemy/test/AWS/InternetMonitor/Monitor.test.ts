@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Monitor } from "@/AWS/InternetMonitor";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as im from "@distilled.cloud/aws/internetmonitor";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Monitor } from "@/AWS/InternetMonitor";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

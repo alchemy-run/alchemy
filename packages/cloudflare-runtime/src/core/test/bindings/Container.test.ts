@@ -1,7 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { execFileSync } from "node:child_process";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
 import type { ContainerImage } from "../../Docker.ts";
 import { getFixture } from "../helpers/fixture.ts";

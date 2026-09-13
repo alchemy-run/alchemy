@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -9,6 +6,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Sse from "effect/unstable/encoding/Sse";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { Gateway } from "./fixtures/Gateway.ts";
 import LanguageModelTestWorker from "./fixtures/LanguageModelWorker.ts";
 
@@ -361,9 +361,7 @@ test(
 
     const res = yield* client
       .get(
-        `${out.url}/tool?prompt=${encodeURIComponent(
-          "What's the weather in San Francisco?",
-        )}`,
+        `${out.url}/tool?prompt=${encodeURIComponent("What's the weather in San Francisco?")}`,
       )
       .pipe(
         Effect.retry({
@@ -416,9 +414,7 @@ test(
 
     const res = yield* client
       .get(
-        `${out.url}/tool-stream?prompt=${encodeURIComponent(
-          "What's the weather in Seattle?",
-        )}`,
+        `${out.url}/tool-stream?prompt=${encodeURIComponent("What's the weather in Seattle?")}`,
       )
       .pipe(
         Effect.retry({
@@ -475,9 +471,7 @@ test(
 
     const res = yield* client
       .get(
-        `${out.url}/tool-stream?prompt=${encodeURIComponent(
-          "What's the weather in Portland?",
-        )}`,
+        `${out.url}/tool-stream?prompt=${encodeURIComponent("What's the weather in Portland?")}`,
       )
       .pipe(
         Effect.retry({

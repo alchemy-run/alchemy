@@ -1,8 +1,8 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { Box } from "@alchemy.run/sigil";
-import { makeRuntime } from "../../../src/Cli/components/view/Runtime";
 import { runMain } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
+import { makeRuntime } from "../../../src/Cli/components/view/Runtime";
 
 Effect.gen(function* () {
   const { service } = makeRuntime(

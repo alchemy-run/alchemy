@@ -1,4 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,6 +10,7 @@ import {
   RpcSerialization,
   RpcServer,
 } from "effect/unstable/rpc";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 class Dependency extends Context.Service<Dependency, string>()(
   "RpcSocketDependency",

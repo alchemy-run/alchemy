@@ -1,10 +1,9 @@
-/** Repository operations over storage services. HTTP handlers adapt these results. */
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
 import * as Layer from "effect/Layer";
+/** Repository operations over storage services. HTTP handlers adapt these results. */
+import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import type {
   CompactRepo,
   Compare,
@@ -51,7 +50,6 @@ import {
   TreeEntry,
   type Oid,
 } from "./Api.ts";
-
 import {
   parseCommit,
   parseTree,

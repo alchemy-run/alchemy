@@ -1,9 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { type TunnelAuth } from "./TunnelBinding.ts";
+import type { Worker } from "../Workers/Worker.ts";
 import { readClient, type ReadTunnelClient } from "./ReadTunnel.ts";
+import { type TunnelAuth } from "./TunnelBinding.ts";
 import { writeClient, type WriteTunnelClient } from "./WriteTunnel.ts";
 
 /**

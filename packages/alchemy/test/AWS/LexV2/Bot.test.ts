@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Bot, BotAlias, BotLocale, Intent, SlotType } from "@/AWS/LexV2";
-import * as Test from "@/Test/Alchemy";
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Bot, BotAlias, BotLocale, Intent, SlotType } from "@/AWS/LexV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

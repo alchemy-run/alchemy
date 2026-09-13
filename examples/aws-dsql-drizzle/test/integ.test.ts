@@ -1,12 +1,12 @@
+import { describe, expect } from "bun:test";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import { sign } from "@distilled.cloud/aws/SigV4";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import * as iam from "@distilled.cloud/aws/iam";
+import { sign } from "@distilled.cloud/aws/SigV4";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import * as Core from "alchemy/Test/Core";
-import { describe, expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";

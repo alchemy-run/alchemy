@@ -1,19 +1,19 @@
-import * as Neon from "@/Neon";
-import * as Prisma from "@/Prisma";
-import * as PrismaPostgres from "@/Prisma/ORM/Postgres.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Neon from "@/Neon";
+import * as Prisma from "@/Prisma";
+import * as PrismaPostgres from "@/Prisma/ORM/Postgres.ts";
+import * as Test from "@/Test/Alchemy";
 import { contract } from "./fixtures/client/contract.ts";
 import { makeDatabase } from "./fixtures/psl/generated/client.ts";
-import { makeDatabase as makeVariantDatabase } from "./fixtures/variants/generated/client.ts";
 import { schemas } from "./fixtures/psl/generated/schemas.ts";
-import * as Schema from "effect/Schema";
+import { makeDatabase as makeVariantDatabase } from "./fixtures/variants/generated/client.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Prisma.providers(), Neon.providers()),

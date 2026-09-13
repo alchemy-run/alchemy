@@ -1,8 +1,3 @@
-import {
-  environmentServiceInstances,
-  waitUntilDeleted,
-  projectServices,
-} from "./GraphQL.ts";
 import { randomBytes } from "node:crypto";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
@@ -13,6 +8,11 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  environmentServiceInstances,
+  waitUntilDeleted,
+  projectServices,
+} from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
   ownedProjects,

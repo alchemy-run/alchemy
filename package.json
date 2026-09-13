@@ -43,8 +43,8 @@
     "floci:build": "docker build -t floci:dev -f submodules/floci/docker/Dockerfile submodules/floci",
     "floci:build:native": "docker build -t floci:dev -f submodules/floci/docker/Dockerfile.native submodules/floci",
     "floci:dev": "cd submodules/floci && mvn quarkus:dev",
-    "format": "oxfmt ./packages ./website",
-    "format:check": "bun run format ./packages ./website -- --check",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "install:clean": "rm -rf node_modules examples/**/node_modules alchemy/node_modules && pnpm install",
     "lint:providers": "bun scripts/lint-providers.ts",
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
@@ -83,7 +83,6 @@
     "typescript": "catalog:",
     "typescript-api": "catalog:"
   },
-  "packageManager": "pnpm@11.25.0",
   "devEngines": {
     "runtime": [
       {
@@ -97,5 +96,6 @@
         "onFail": "warn"
       }
     ]
-  }
+  },
+  "packageManager": "pnpm@11.25.0"
 }

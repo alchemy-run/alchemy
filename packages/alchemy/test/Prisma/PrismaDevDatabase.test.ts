@@ -1,7 +1,3 @@
-import {
-  closePrismaDevDatabase,
-  ensurePrismaDevDatabase,
-} from "@/Prisma/PrismaDevDatabase";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -9,6 +5,10 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import { Client } from "pg";
+import {
+  closePrismaDevDatabase,
+  ensurePrismaDevDatabase,
+} from "@/Prisma/PrismaDevDatabase";
 
 const toError = (message: string) => (cause: unknown) =>
   cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);

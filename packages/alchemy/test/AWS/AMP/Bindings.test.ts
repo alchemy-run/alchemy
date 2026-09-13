@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as amp from "@distilled.cloud/aws/amp";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AmpTestFunctionLive, { AmpTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -125,7 +125,11 @@ describe("AMP Bindings", () => {
         const body = (yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/remote-write`),
-            { name: METRIC, labels: { source: "bindings-test" }, value: 1 },
+            {
+              name: METRIC,
+              labels: { source: "bindings-test" },
+              value: 1,
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json))) as { success: boolean };
         expect(body.success).toBe(true);
@@ -142,7 +146,11 @@ describe("AMP Bindings", () => {
           yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/remote-write`),
-              { name: METRIC, labels: { source: "bindings-test" }, value: 2 },
+              {
+                name: METRIC,
+                labels: { source: "bindings-test" },
+                value: 2,
+              },
             ),
           );
 

@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -8,11 +6,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
+import * as AWS from "@/AWS";
+import { assertApiKeyDeleted } from "./assertions.ts";
 import ApiGatewayBindingsFunctionLive, {
   ApiGatewayBindingsFunction,
 } from "./fixtures/bindings-handler.ts";
-import { assertApiKeyDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -130,7 +129,9 @@ test.provider.skipIf(!!process.env.FAST)(
       // GetUsagePlanKey / GetUsagePlanKeys — enrollment is visible.
       const enrollment = (yield* getJson(
         `${baseUrl}/plan-key?id=${created.id}`,
-      )) as { enrolled: boolean };
+      )) as {
+        enrolled: boolean;
+      };
       expect(enrollment.enrolled).toBe(true);
       const planKeys = (yield* getJson(`${baseUrl}/plan-keys`)) as {
         ids: string[];
@@ -141,7 +142,9 @@ test.provider.skipIf(!!process.env.FAST)(
       const today = new Date().toISOString().slice(0, 10);
       const usage = (yield* getJson(
         `${baseUrl}/usage?startDate=${today}&endDate=${today}`,
-      )) as { items: Record<string, unknown> };
+      )) as {
+        items: Record<string, unknown>;
+      };
       expect(usage.items).toBeDefined();
 
       // UpdateUsage — the plan has no quota, so the API answers with a
@@ -172,11 +175,15 @@ test.provider.skipIf(!!process.env.FAST)(
       const deleted = (yield* sendJson(
         "DELETE",
         `${baseUrl}/key?id=${created.id}`,
-      )) as { deleted: boolean };
+      )) as {
+        deleted: boolean;
+      };
       expect(deleted.deleted).toBe(true);
       const afterDelete = (yield* getJson(
         `${baseUrl}/keys?nameQuery=${keyName}`,
-      )) as { ids: string[] };
+      )) as {
+        ids: string[];
+      };
       expect(afterDelete.ids).not.toContain(created.id);
 
       yield* stack.destroy();

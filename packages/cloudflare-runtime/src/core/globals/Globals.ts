@@ -1,4 +1,3 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
 import * as Cause from "effect/Cause";
 import * as Cron from "effect/Cron";
 import * as Effect from "effect/Effect";
@@ -7,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const EntryWorker = {
   worker: () =>
     loadInternalWorker("#cloudflare-runtime-core-worker/globals/entry.worker"),
@@ -21,7 +21,6 @@ import * as Plugin from "../Plugin.ts";
 import { PluginContext } from "../PluginContext.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
-import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
 import * as Cf from "./Cf.ts";
 import {
   BINDING_EMAIL_DIRECTORY,
@@ -30,6 +29,7 @@ import {
 } from "./EmailOptions.shared.ts";
 import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
 import * as Internet from "./Internet.ts";
+import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
 import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
 

@@ -217,7 +217,9 @@ export const ApiKeyProvider = () =>
             const hydrated = yield* Effect.forEach(
               names,
               (name) => readKey(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             return hydrated.filter(
               (attrs): attrs is ApiKey["Attributes"] => attrs !== undefined,

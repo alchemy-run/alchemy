@@ -1,5 +1,3 @@
-import { safeHttpEffect } from "@/Http";
-import * as Rpc from "@/Rpc";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpEffect from "effect/unstable/http/HttpEffect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { safeHttpEffect } from "@/Http";
+import * as Rpc from "@/Rpc";
 
 // ---------------------------------------------------------------------------
 // In-memory loopback: the server `serveRpc` handler is turned into a Web

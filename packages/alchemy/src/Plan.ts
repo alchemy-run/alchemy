@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import { cachedInScope } from "./Util/Memoize.ts";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
@@ -17,7 +16,6 @@ import {
   Unowned,
 } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
-import { demandRemoteCredentials } from "./Auth/Demand.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -25,6 +23,7 @@ import {
   ensureArtifactStore,
   makeScopedArtifacts,
 } from "./Artifacts.ts";
+import { demandRemoteCredentials } from "./Auth/Demand.ts";
 import {
   dedupeBindings,
   diffBindings,
@@ -78,6 +77,7 @@ import {
   type UpdatingReourceState,
 } from "./State/index.ts";
 import { isPlainData, mapPlainData } from "./Util/data.ts";
+import { cachedInScope } from "./Util/Memoize.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 import { hashInput } from "./Util/sha256.ts";
 

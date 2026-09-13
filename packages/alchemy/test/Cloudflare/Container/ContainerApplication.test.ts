@@ -1,31 +1,40 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Drift from "@/Drift.ts";
-import * as Deploy from "@/Deploy.ts";
-import * as Destroy from "@/Destroy.ts";
-import { Docker, DockerLive } from "@/Docker/Docker.ts";
-import * as Layer from "effect/Layer";
+import * as Containers from "@distilled.cloud/cloudflare/containers";
+import { assert, describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { ExternalContainer } from "./fixtures/external/object.ts";
-import ExternalContainerWorker from "./fixtures/external/worker.ts";
-import MyContainerLive, {
-  MyContainer,
-} from "./fixtures/effectful/container.ts";
-import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
+import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts";
+import * as Deploy from "@/Deploy.ts";
+import * as Destroy from "@/Destroy.ts";
+import { Docker, DockerLive } from "@/Docker/Docker.ts";
+import * as Drift from "@/Drift.ts";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
+import {
+  buildHistory,
+  supportsRegistryExport,
+  withBuilder,
+} from "./fixtures/buildx.ts";
+import MyContainerLive, {
+  MyContainer,
+} from "./fixtures/effectful/container.ts";
+import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
+import { ExternalContainer } from "./fixtures/external/object.ts";
+import ExternalContainerWorker from "./fixtures/external/worker.ts";
 import { applications } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
@@ -33,15 +42,6 @@ import {
   recoveryApplications,
   historyApplications,
 } from "./fixtures/publication/applications.ts";
-import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import {
-  buildHistory,
-  supportsRegistryExport,
-  withBuilder,
-} from "./fixtures/buildx.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({

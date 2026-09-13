@@ -4,8 +4,8 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import * as SQLiteD1Drizzle from "drizzle-orm/effect-d1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { D1DatabaseSource } from "../SQL/D1.ts";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
+import type { D1DatabaseSource } from "../SQL/D1.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**

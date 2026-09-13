@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -11,6 +9,8 @@ import {
 } from "effect/unstable/ai";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 import { Gateway } from "./Gateway.ts";
 
 // `@cf/meta/llama-3.1-8b-instruct` was deprecated by Cloudflare on

@@ -1,4 +1,15 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as Cloudflare from "@/Cloudflare";
+import {
+  BlobStoreR2,
+  GIT_WORKER_OPTIONS,
+  ApiHandlersLive,
+  HasherInline,
+  ReposDurableObject,
+  RegistryDurableObject,
+} from "@/Git/index.ts";
 /**
  * Shared test-stack fixture for the git-service suites (DESIGN.md §9).
  *
@@ -15,17 +26,6 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
  * user-land middleware in `test-auth.ts`; the engine sees no credential.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import {
-  BlobStoreR2,
-  GIT_WORKER_OPTIONS,
-  ApiHandlersLive,
-  HasherInline,
-  ReposDurableObject,
-  RegistryDurableObject,
-} from "@/Git/index.ts";
 import { TestRoutes } from "./http.ts";
 import { TestApi, TestAuthLive, TestCaller } from "./test-auth.ts";
 

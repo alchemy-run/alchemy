@@ -1,12 +1,12 @@
-import * as Alchemy from "@/index.ts";
-import { Stage } from "@/Stage.ts";
-import * as State from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect, it } from "alchemy-test";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Alchemy from "@/index.ts";
+import { Stage } from "@/Stage.ts";
+import * as State from "@/State/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 
 // These tests are compile-time assertions: they verify that the
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without

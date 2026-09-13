@@ -1,4 +1,4 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
+import * as NodeCrypto from "node:crypto";
 import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Cause from "effect/Cause";
@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as NodeCrypto from "node:crypto";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const RemoteWorkerScript = {
   worker: () =>
     loadInternalWorker(

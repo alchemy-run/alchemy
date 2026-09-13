@@ -1,10 +1,10 @@
+import * as Schema from "effect/Schema";
 /**
  * The `repos` group: repo CRUD, fork, import, and compaction
  * (DESIGN.md §5). Every route is an Effect `HttpApiEndpoint`. Who may
  * call it is decided by the middleware applied to its route layer.
  */
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 import {

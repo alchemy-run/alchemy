@@ -6,12 +6,12 @@ import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Nuke from "../../Alchemist/routes/nuke.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
-import { formatElapsed } from "../Format.ts";
 import {
   renderNukeScan,
   renderNukeDelete,
   reviewNuke,
 } from "../components/view/Nuke.tsx";
+import { formatElapsed } from "../Format.ts";
 import { exitDeclined, UserInputError } from "./errors.ts";
 import {
   configPath,

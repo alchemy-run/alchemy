@@ -1,11 +1,3 @@
-import { AuthProviders } from "@/Auth/AuthProvider.ts";
-import {
-  PROFILE_FORMAT,
-  profileProviderFilePath,
-  ProfileStore,
-  ProfileStoreLive,
-} from "@/Auth/Profile.ts";
-import { GitHubAuthConfigSchema } from "@/GitHub/AuthProvider.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -14,6 +6,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import path from "pathe";
+import { AuthProviders } from "@/Auth/AuthProvider.ts";
+import {
+  PROFILE_FORMAT,
+  profileProviderFilePath,
+  ProfileStore,
+  ProfileStoreLive,
+} from "@/Auth/Profile.ts";
+import { GitHubAuthConfigSchema } from "@/GitHub/AuthProvider.ts";
 
 const FIXTURE_HOME = path.join(import.meta.dirname, "fixtures/v0-home");
 
@@ -239,7 +239,9 @@ it.live(
         ).toHaveLength(0);
         expect(
           JSON.parse(yield* fs.readFileString(providerFile)).metadata,
-        ).toEqual({ label: "production" });
+        ).toEqual({
+          label: "production",
+        });
       }),
     ),
   { exclusive: true },

@@ -1,3 +1,5 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type {
   CallExpression,
   ExportDefaultDeclaration,
@@ -9,8 +11,6 @@ import type {
   Statement,
   VariableDeclaration,
 } from "@oxc-project/types";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import picomatch from "picomatch";
 import type * as rolldown from "rolldown";
 

@@ -1,7 +1,3 @@
-import * as ApplicationAutoScaling from "@/AWS/ApplicationAutoScaling";
-import { Table } from "@/AWS/DynamoDB";
-import * as Lambda from "@/AWS/Lambda";
-import * as Output from "@/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -9,6 +5,10 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ApplicationAutoScaling from "@/AWS/ApplicationAutoScaling";
+import { Table } from "@/AWS/DynamoDB";
+import * as Lambda from "@/AWS/Lambda";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

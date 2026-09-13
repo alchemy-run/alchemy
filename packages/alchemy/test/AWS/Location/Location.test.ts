@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Location from "@/AWS/Location";
-import * as Test from "@/Test/Alchemy";
 import * as location from "@distilled.cloud/aws/location";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Location from "@/AWS/Location";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

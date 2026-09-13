@@ -1,6 +1,9 @@
+import { expect } from "bun:test";
+import assert from "node:assert";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { cast } from "effect/Function";
@@ -9,9 +12,6 @@ import * as Schema from "effect/Schema";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import assert from "node:assert";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import Stack, { SECRETS_STORE_VALUE } from "../alchemy.run.ts";
 import type { Message } from "../src/AsyncWorker.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
@@ -646,7 +646,9 @@ test(
 
     const body = (yield* (yield* HttpClient.get(
       new URL("/secret", mediaWorker),
-    )).json) as { value: string };
+    )).json) as {
+      value: string;
+    };
     expect(body.value).toBe(SECRETS_STORE_VALUE);
   }),
 );
@@ -767,7 +769,9 @@ test(
 
     const info = (yield* (yield* HttpClient.post(
       new URL("/images/info", mediaWorker),
-      { body: HttpBody.uint8Array(PNG_RED_8X4) },
+      {
+        body: HttpBody.uint8Array(PNG_RED_8X4),
+      },
     )).json) as { format: string; width: number; height: number };
     expect(info.format).toBe("image/png");
     expect(info.width).toBe(8);
@@ -775,7 +779,9 @@ test(
 
     const transformRes = yield* HttpClient.post(
       new URL("/images/transform?width=4", mediaWorker),
-      { body: HttpBody.uint8Array(PNG_RED_8X4) },
+      {
+        body: HttpBody.uint8Array(PNG_RED_8X4),
+      },
     );
     expect(transformRes.status).toBe(200);
     const outputBytes = new Uint8Array(yield* transformRes.arrayBuffer);
@@ -786,7 +792,9 @@ test(
 
     const outputInfo = (yield* (yield* HttpClient.post(
       new URL("/images/info", mediaWorker),
-      { body: HttpBody.uint8Array(outputBytes) },
+      {
+        body: HttpBody.uint8Array(outputBytes),
+      },
     )).json) as { format: string; width: number; height: number };
     expect(outputInfo.width).toBe(4);
     expect(outputInfo.height).toBe(2);
@@ -807,7 +815,9 @@ test(
     const info = (yield* Effect.gen(function* () {
       const res = yield* HttpClient.post(
         new URL("/images/info-remote", mediaWorker),
-        { body: HttpBody.uint8Array(PNG_RED_8X4) },
+        {
+          body: HttpBody.uint8Array(PNG_RED_8X4),
+        },
       );
       if (res.status !== 200) {
         return yield* Effect.fail(new NotYet({ status: res.status }));
@@ -841,7 +851,9 @@ test(
 
     const video = (yield* (yield* HttpClient.post(
       new URL("/stream/upload", mediaWorker),
-      { body: HttpBody.uint8Array(videoBytes) },
+      {
+        body: HttpBody.uint8Array(videoBytes),
+      },
     )).json) as {
       id: string;
       readyToStream: boolean;
@@ -897,7 +909,10 @@ test(
     const value = crypto.randomUUID();
     const put = (yield* getJsonReady(
       new URL(`/kv-live?key=${key}&value=${value}`, asyncWorker),
-      { times: 10, spaced: "2 seconds" },
+      {
+        times: 10,
+        spaced: "2 seconds",
+      },
     )) as { value: string | null };
     expect(put.value).toBe(value);
 

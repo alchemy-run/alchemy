@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import * as Cache from "effect/Cache";
 import type * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -20,10 +21,9 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { fileURLToPath } from "node:url";
-import { pipedColorEnv } from "../Util/Terminal.ts";
 import { nodeLoaderArgs } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
+import { pipedColorEnv } from "../Util/Terminal.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
 import {
   RPC_SERVER_ENVIRONMENT_KEY,

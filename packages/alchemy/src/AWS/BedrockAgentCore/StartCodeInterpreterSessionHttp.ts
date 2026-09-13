@@ -4,11 +4,11 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
+import type { CodeInterpreter } from "./CodeInterpreter.ts";
 import {
   StartCodeInterpreterSession,
   type StartCodeInterpreterSessionRequest,
 } from "./StartCodeInterpreterSession.ts";
-import type { CodeInterpreter } from "./CodeInterpreter.ts";
 
 // Bespoke (not the shared scaffold): converts the ergonomic `sessionTimeout`
 // Duration.Input to the wire `sessionTimeoutSeconds` field.

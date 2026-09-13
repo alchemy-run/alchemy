@@ -1,3 +1,8 @@
+import * as amp from "@distilled.cloud/aws/amp";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   AlertManagerDefinition,
@@ -5,11 +10,6 @@ import {
   Workspace,
 } from "@/AWS/AMP";
 import * as Test from "@/Test/Alchemy";
-import * as amp from "@distilled.cloud/aws/amp";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

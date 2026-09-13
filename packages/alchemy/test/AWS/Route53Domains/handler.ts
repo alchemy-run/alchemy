@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Route53Domains from "@/AWS/Route53Domains";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Route53Domains from "@/AWS/Route53Domains";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -137,7 +137,9 @@ export default Route53DomainsTestFunction.make(
           // and come back as a typed domain-level error, not AccessDenied.
           return yield* errorRoute(
             getDomainDetail({ DomainName: "example.com" }),
-            (detail) => ({ domainName: detail.DomainName }),
+            (detail) => ({
+              domainName: detail.DomainName,
+            }),
           );
         }
 
@@ -159,7 +161,9 @@ export default Route53DomainsTestFunction.make(
           // returns it.
           return yield* errorRoute(
             retrieveDomainAuthCode({ DomainName: "example.com" }),
-            () => ({ hasAuthCode: true }),
+            () => ({
+              hasAuthCode: true,
+            }),
           );
         }
 

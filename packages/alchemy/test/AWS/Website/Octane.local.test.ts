@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -75,7 +75,9 @@ describe("AWS.Website.Octane local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "OCTANE_AWS_API_MARKER",
-          { label: "API route (dev)" },
+          {
+            label: "API route (dev)",
+          },
         );
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
@@ -99,7 +101,9 @@ describe("AWS.Website.Octane local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=post-hmr`,
           "OCTANE_AWS_API_MARKER",
-          { label: "API route after HMR edit" },
+          {
+            label: "API route after HMR edit",
+          },
         );
 
         yield* stack.destroy();

@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index";
 import type { Api } from "./entrypoint-target-worker.ts";
 
 const targetMain = pathe.resolve(

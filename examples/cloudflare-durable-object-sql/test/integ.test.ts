@@ -1,7 +1,7 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";

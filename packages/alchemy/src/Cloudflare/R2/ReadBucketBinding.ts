@@ -2,8 +2,8 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBucketBinding, makeHelpers } from "./BucketBinding.ts";
-import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 import type { GetOptions, ListOptions, Objects } from "./BucketTypes.ts";
+import { ReadBucket, type ReadBucketClient } from "./ReadBucket.ts";
 
 /**
  * Implementation of the {@link ReadBucket} binding that uses a Worker binding.

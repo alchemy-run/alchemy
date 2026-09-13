@@ -1,14 +1,14 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { Stream as KinesisStream } from "@/AWS/Kinesis/Stream.ts";
 import { LogGroup } from "@/AWS/Logs/LogGroup.ts";
 import { SubscriptionFilter } from "@/AWS/Logs/SubscriptionFilter.ts";
 import * as Test from "@/Test/Alchemy";
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,7 +33,9 @@ const describeFilter = Effect.fn(function* (
 
 class SubscriptionFilterStillExists extends Data.TaggedError(
   "SubscriptionFilterStillExists",
-)<{ readonly filterName: string }> {}
+)<{
+  readonly filterName: string;
+}> {}
 
 const assertFilterDeleted = (logGroupName: string, filterName: string) =>
   describeFilter(logGroupName, filterName).pipe(

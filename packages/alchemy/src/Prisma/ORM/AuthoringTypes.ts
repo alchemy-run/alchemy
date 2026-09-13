@@ -3,10 +3,9 @@ import type {
   ScalarFieldBuilder,
   field as nativeField,
 } from "@prisma/orm-postgres/contract-builder";
-
 import type { JsonValue } from "@prisma/orm-postgres/contract/types";
-import type postgresPack from "@prisma/orm-postgres/target/pack";
 import type sqlPack from "@prisma/orm-postgres/family/pack";
+import type postgresPack from "@prisma/orm-postgres/target/pack";
 
 type FieldState = ScalarFieldBuilder["__state"];
 type Set<S, K extends PropertyKey, V> = Omit<S, K> & { readonly [P in K]: V };

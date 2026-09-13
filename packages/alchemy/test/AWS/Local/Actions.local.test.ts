@@ -1,3 +1,15 @@
+import { fileURLToPath } from "node:url";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as S3 from "@distilled.cloud/aws/s3";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import * as SSM from "@distilled.cloud/aws/ssm";
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 /**
  * Actions under `alchemy dev`: the common shapes a deploy-time binding client
  * takes, each proven to land on the floci emulator rather than the real
@@ -33,18 +45,6 @@ import { flociServices } from "@/AWS/Local/FlociServices.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { liveContext } from "./fixtures/live.ts";
-import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import * as S3 from "@distilled.cloud/aws/s3";
-import * as SQS from "@distilled.cloud/aws/sqs";
-import * as SSM from "@distilled.cloud/aws/ssm";
-import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -242,7 +242,10 @@ test.provider(
                 });
                 const result = JSON.parse(
                   yield* readBody(response.Payload!),
-                ) as { echoed: { message: string }; from: string };
+                ) as {
+                  echoed: { message: string };
+                  from: string;
+                };
                 return { statusCode: response.StatusCode, result };
               });
             }).pipe(Effect.provide(AWS.Lambda.InvokeFunctionHttp)),

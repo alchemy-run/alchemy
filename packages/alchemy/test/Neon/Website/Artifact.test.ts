@@ -1,7 +1,5 @@
-import {
-  packageWebsiteArtifact,
-  stageWebsiteArtifact,
-} from "@/Neon/Website/Artifact.ts";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -9,11 +7,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { unzipSync } from "fflate";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { createHash } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import {
+  packageWebsiteArtifact,
+  stageWebsiteArtifact,
+} from "@/Neon/Website/Artifact.ts";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

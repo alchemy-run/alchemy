@@ -1,15 +1,15 @@
-import type { AIGateway } from "@/Neon/AIGateway.ts";
-import { backendEnvKey } from "@/Neon/BackendConnection.ts";
-import { QueryAIGateway, QueryAIGatewayHttp } from "@/Neon/QueryAIGateway.ts";
-import { FunctionEnvironment } from "@/Neon/FunctionEnvironment.ts";
-import * as Output from "@/Output.ts";
-import { RuntimeContext } from "@/RuntimeContext.ts";
 import { expect, test } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import type { AIGateway } from "@/Neon/AIGateway.ts";
+import { backendEnvKey } from "@/Neon/BackendConnection.ts";
+import { FunctionEnvironment } from "@/Neon/FunctionEnvironment.ts";
+import { QueryAIGateway, QueryAIGatewayHttp } from "@/Neon/QueryAIGateway.ts";
+import * as Output from "@/Output.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 const gateway: AIGateway = {
   FQN: "Gateway",

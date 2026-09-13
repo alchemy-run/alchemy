@@ -5,9 +5,7 @@ import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/unstable/observability/OtlpTracer";
-
 import packageJson from "../../package.json" with { type: "json" };
-
 import { collectAttributes, isTelemetryDisabled } from "./Attributes.ts";
 
 const TRACES_URL = "https://otel.alchemy.run/v1/traces";

@@ -1,5 +1,5 @@
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import path from "node:path";
+import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 

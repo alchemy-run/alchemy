@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { Rpc } from "@/Rpc.ts";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import type * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare";
+import type { Rpc } from "@/Rpc.ts";
 
 declare class Api extends WorkerEntrypoint<unknown, Record<string, unknown>> {
   greet(name: string): Promise<string>;

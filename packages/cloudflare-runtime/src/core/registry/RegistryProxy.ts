@@ -1,10 +1,10 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
+import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as NodeCrypto from "node:crypto";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const RegistryProxyWorker = {
   worker: () =>
     loadInternalWorker(

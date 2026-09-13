@@ -1,7 +1,7 @@
-import { fromCloudflareFetcher } from "@/Cloudflare/Fetcher";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { fromCloudflareFetcher } from "@/Cloudflare/Fetcher";
 
 // A Cloudflare fetcher whose first `failures` `.fetch()` calls reject with the
 // given message, then resolve with a 200 — models a Durable Object / service

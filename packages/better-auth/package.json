@@ -2,33 +2,29 @@
   "name": "@alchemy.run/better-auth",
   "version": "2.0.0-beta.79",
   "description": "Better Auth integration for Alchemy.",
-  "homepage": "https://alchemy.run",
-  "license": "Apache-2.0",
-  "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
     "better-auth",
     "effect",
     "infrastructure-as-code"
   ],
-  "type": "module",
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/better-auth"
-  },
-  "bugs": {
-    "url": "https://github.com/alchemy-run/alchemy/issues"
   },
   "files": [
     "lib",
     "src",
     "NOTICE"
   ],
-  "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts better-auth",
-    "test": "alchemy-test"
-  },
+  "type": "module",
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -43,6 +39,33 @@
       "import": "./lib/*.js"
     },
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b && bun ../../scripts/copy-package-files.ts better-auth",
+    "test": "alchemy-test"
+  },
+  "devDependencies": {
+    "@better-auth/drizzle-adapter": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@neondatabase/serverless": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
+    "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
+    "better-auth": "catalog:",
+    "better-auth-1.6": "npm:better-auth@1.6.25",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "kysely": "catalog:",
+    "mysql2": "catalog:",
+    "pathe": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "@better-auth/drizzle-adapter": "catalog:",
@@ -82,28 +105,5 @@
     "pg": {
       "optional": true
     }
-  },
-  "devDependencies": {
-    "@better-auth/drizzle-adapter": "catalog:",
-    "@cloudflare/workers-types": "catalog:",
-    "@distilled.cloud/aws": "workspace:*",
-    "@effect/platform-bun": "catalog:",
-    "@neondatabase/serverless": "catalog:",
-    "@types/bun": "catalog:",
-    "@types/pg": "catalog:",
-    "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
-    "better-auth": "catalog:",
-    "better-auth-1.6": "npm:better-auth@1.6.25",
-    "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "kysely": "catalog:",
-    "mysql2": "catalog:",
-    "pathe": "catalog:",
-    "pg": "catalog:",
-    "typescript": "catalog:"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

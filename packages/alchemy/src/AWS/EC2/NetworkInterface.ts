@@ -3,16 +3,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
+import type { RegionID } from "../Region.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";

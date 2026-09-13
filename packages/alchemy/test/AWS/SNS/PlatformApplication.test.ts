@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as sns from "@distilled.cloud/aws/sns";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +6,8 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import {
   PlatformApiFunction,
   PlatformApiFunctionLive,
@@ -72,7 +72,9 @@ describe.sequential("SNS PlatformApplication", () => {
         const response = yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/endpoint-cycle`),
-            { token: process.env.AWS_TEST_SNS_PLATFORM_TOKEN },
+            {
+              token: process.env.AWS_TEST_SNS_PLATFORM_TOKEN,
+            },
           ),
         ).pipe(
           Effect.retry({

@@ -1,6 +1,6 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const DispatchNamespaceBindingWorker = {
   worker: () =>
     loadInternalWorker(

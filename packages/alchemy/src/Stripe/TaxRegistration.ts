@@ -13,8 +13,8 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;

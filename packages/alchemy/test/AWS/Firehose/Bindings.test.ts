@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Alchemy from "@/index.ts";
-import * as State from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as Firehose from "@distilled.cloud/aws/firehose";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
@@ -11,6 +7,10 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Alchemy from "@/index.ts";
+import * as State from "@/State";
+import * as Test from "@/Test/Alchemy";
 import FirehoseApiFunctionLive, {
   BucketAndDeliveryStream,
   FirehoseApiFunction,

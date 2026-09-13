@@ -1,7 +1,3 @@
-import * as DataBrew from "@/AWS/DataBrew";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import type * as databrew from "@distilled.cloud/aws/databrew";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -11,6 +7,10 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DataBrew from "@/AWS/DataBrew";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

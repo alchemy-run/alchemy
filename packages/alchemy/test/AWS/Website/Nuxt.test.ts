@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -95,12 +95,16 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "NUXT_AWS_API_MARKER",
-          { label: "API route" },
+          {
+            label: "API route",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "roundtrip",
-          { label: "API route query echo" },
+          {
+            label: "API route query echo",
+          },
         );
         // Public file served from S3 via the KV file manifest.
         yield* expectUrlContains(
@@ -115,7 +119,9 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         yield* expectUrlContains(
           `${url}/prerendered`,
           "NUXT_AWS_PRERENDERED_MARKER",
-          { label: "prerendered page" },
+          {
+            label: "prerendered page",
+          },
         );
 
         const distributionId = deployed.site.distribution!.distributionId;
@@ -187,12 +193,16 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=router-one`,
           "router-one",
-          { label: "API via router (query one)" },
+          {
+            label: "API via router (query one)",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=router-two`,
           "router-two",
-          { label: "API via router (query two)" },
+          {
+            label: "API via router (query two)",
+          },
         );
         // Static asset from S3 through the router's edge function.
         yield* expectUrlContains(
@@ -206,7 +216,9 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         yield* expectUrlContains(
           `${url}/prerendered`,
           "NUXT_AWS_PRERENDERED_MARKER",
-          { label: "prerendered page via router" },
+          {
+            label: "prerendered page via router",
+          },
         );
 
         const distributionId = deployed.router.distributionId as string;

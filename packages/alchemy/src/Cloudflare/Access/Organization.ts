@@ -1,6 +1,5 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -189,7 +188,9 @@ export type Organization = Resource<
  */
 export const Organization = Resource<Organization>(
   "Cloudflare.Access.Organization",
-  { aliases: ["Cloudflare.AccessOrganization"] },
+  {
+    aliases: ["Cloudflare.AccessOrganization"],
+  },
 );
 
 export const OrganizationProvider = () =>

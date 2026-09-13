@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 /**
  * Prepend release notes for a tag to CHANGELOG.md. Idempotent: if the tag
  * already appears as a heading in CHANGELOG.md, does nothing.
@@ -9,8 +11,6 @@
  */
 import { $ } from "bun";
 import { generate } from "./changelog.ts";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { repo } from "./config.ts";
 import { renderMarkdown } from "./render.ts";
 

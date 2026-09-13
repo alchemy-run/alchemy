@@ -3,10 +3,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createAlchemyTagFilters,
@@ -16,8 +15,8 @@ import {
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { RegionID } from "../Region.ts";
 import type { Providers } from "../Providers.ts";
+import type { RegionID } from "../Region.ts";
 
 export type VolumeId<ID extends string = string> = `vol-${ID}`;
 export const VolumeId = <ID extends string>(id: ID): ID & VolumeId<ID> =>

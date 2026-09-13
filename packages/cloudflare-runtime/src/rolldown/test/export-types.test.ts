@@ -1,6 +1,6 @@
-import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import type { LoadResult, ResolveIdResult } from "rolldown";
 import { assert, describe, expect, it } from "vitest";
+import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import {
   EXPORT_TYPES_MODULE_ID,
   haveExportTypesChanged,

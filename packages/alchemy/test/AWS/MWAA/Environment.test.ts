@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

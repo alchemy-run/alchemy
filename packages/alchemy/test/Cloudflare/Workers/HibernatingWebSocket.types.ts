@@ -1,11 +1,11 @@
-import type {
-  WebSocket,
-  WebSocketAttachmentError,
-} from "@/Cloudflare/Workers/WebSocket.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SchemaGetter from "effect/SchemaGetter";
+import type {
+  WebSocket,
+  WebSocketAttachmentError,
+} from "@/Cloudflare/Workers/WebSocket.ts";
 
 class DecodeAttachment extends Context.Service<DecodeAttachment, number>()(
   "DecodeAttachment",

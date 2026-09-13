@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
@@ -9,6 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ConfigTestFunctionLive, { ConfigTestFunction } from "./handler";
 import { makeConfigTestLease } from "./TestLease.ts";
 
@@ -221,7 +221,10 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/get-discovered-resource-counts",
-        )) as { total: number; counts: unknown[] };
+        )) as {
+          total: number;
+          counts: unknown[];
+        };
         expect(typeof response.total).toBe("number");
         expect(Array.isArray(response.counts)).toBe(true);
       }),
@@ -268,7 +271,10 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/describe-compliance-by-config-rule",
-        )) as { ruleName: string; compliances: unknown[] };
+        )) as {
+          ruleName: string;
+          compliances: unknown[];
+        };
         expect(response.ruleName).toBeTruthy();
         expect(Array.isArray(response.compliances)).toBe(true);
       }),
@@ -280,7 +286,9 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/describe-compliance-by-resource",
-        )) as { compliances: unknown[] };
+        )) as {
+          compliances: unknown[];
+        };
         expect(Array.isArray(response.compliances)).toBe(true);
       }),
     );
@@ -291,7 +299,9 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/get-compliance-details-by-resource",
-        )) as { evaluations: unknown[] };
+        )) as {
+          evaluations: unknown[];
+        };
         expect(Array.isArray(response.evaluations)).toBe(true);
       }),
     );
@@ -302,7 +312,9 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/get-compliance-summary-by-config-rule",
-        )) as { summary: unknown };
+        )) as {
+          summary: unknown;
+        };
         expect(response).toHaveProperty("summary");
       }),
     );
@@ -313,7 +325,9 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/get-compliance-summary-by-resource-type",
-        )) as { summaries: unknown[] };
+        )) as {
+          summaries: unknown[];
+        };
         expect(Array.isArray(response.summaries)).toBe(true);
       }),
     );
@@ -326,7 +340,10 @@ describe("Config Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* getJson(
             "/get-compliance-details-by-config-rule",
-          )) as { ruleName: string; evaluations: unknown[] };
+          )) as {
+            ruleName: string;
+            evaluations: unknown[];
+          };
           expect(response.ruleName).toBeTruthy();
           expect(Array.isArray(response.evaluations)).toBe(true);
         }),
@@ -340,7 +357,10 @@ describe("Config Bindings", () => {
       Effect.gen(function* () {
         const response = (yield* getJson(
           "/describe-config-rule-evaluation-status",
-        )) as { ruleName: string; statuses: string[] };
+        )) as {
+          ruleName: string;
+          statuses: string[];
+        };
         expect(response.statuses).toContain(response.ruleName);
       }),
     );
@@ -353,7 +373,10 @@ describe("Config Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson(
             "/start-config-rules-evaluation",
-          )) as { ok?: boolean; errorTag?: string };
+          )) as {
+            ok?: boolean;
+            errorTag?: string;
+          };
           if (response.errorTag !== undefined) {
             expect([
               "ResourceInUseException",
@@ -467,7 +490,11 @@ describe("Config Bindings", () => {
 
           const summary = (yield* getJson(
             `/get-resource-evaluation-summary?id=${started.id}`,
-          )) as { id?: string; status?: string; errorTag?: string };
+          )) as {
+            id?: string;
+            status?: string;
+            errorTag?: string;
+          };
           if (summary.errorTag !== undefined) {
             expect(summary.errorTag).toBe("ResourceNotFoundException");
           } else {

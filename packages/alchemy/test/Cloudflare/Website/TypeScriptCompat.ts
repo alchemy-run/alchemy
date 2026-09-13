@@ -1,7 +1,7 @@
+import { spawn } from "node:child_process";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { spawn } from "node:child_process";
 import * as pathe from "pathe";
 import { parse as parseYaml } from "yaml";
 

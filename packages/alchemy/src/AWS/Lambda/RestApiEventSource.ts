@@ -1,7 +1,6 @@
 import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";

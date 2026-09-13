@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as NodeHttp from "node:http";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as NodeHttp from "node:http";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import {
   HOST_PROBE_PORT,
   NEON_URL,

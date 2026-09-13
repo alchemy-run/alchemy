@@ -37,8 +37,7 @@ export const extraWorkerOutput = "      extraUrl: extraWorker.url,\n";
 // The cleanest deterministic APPLY failure available locally: the stack
 // imports and plans fine and exactly one resource cannot reconcile.
 
-export const portSquatterSource =
-  `export default { fetch: async () => new Response("squatter") };\n`;
+export const portSquatterSource = `export default { fetch: async () => new Response("squatter") };\n`;
 
 export const portSquatterDeclaration =
   `    yield* Cloudflare.Worker("PortSquatter", {\n` +
@@ -84,11 +83,9 @@ export const reportFunctionSource = (marker: string) =>
   `  }).pipe(Effect.provide(Layer.mergeAll(S3.GetObjectHttp, S3.PutObjectHttp))),\n` +
   `) {}\n`;
 
-export const reportFunctionImport =
-  `import ReportFunction from "./src/extra/ReportFunction.ts";\n`;
+export const reportFunctionImport = `import ReportFunction from "./src/extra/ReportFunction.ts";\n`;
 
-export const reportFunctionDeclaration =
-  `    const reportFunction = yield* ReportFunction;\n`;
+export const reportFunctionDeclaration = `    const reportFunction = yield* ReportFunction;\n`;
 
 export const reportFunctionOutput =
   "      reportUrl: reportFunction.functionUrl,\n";
@@ -202,15 +199,13 @@ export const secondImageSource = (marker: string) =>
   `  }),\n` +
   `);\n`;
 
-export const secondImageImport =
-  `import WorkerImageLive from "./src/extra/WorkerImage.ts";\n`;
+export const secondImageImport = `import WorkerImageLive from "./src/extra/WorkerImage.ts";\n`;
 
 /** Spliced into the stack's `Layer.mergeAll`, so it ends with a comma. */
 export const secondImageLayer = `        WorkerImageLive,\n`;
 
 /** Bindings + a route on `MicrovmWorker` that drive the SECOND image. */
-export const secondImageWorkerImport =
-  `import { WorkerMicrovm } from "./extra/WorkerImage.ts";\n`;
+export const secondImageWorkerImport = `import { WorkerMicrovm } from "./extra/WorkerImage.ts";\n`;
 
 export const secondImageBindings =
   `    const runWorkerVm = yield* AWS.Lambda.RunMicrovm(WorkerMicrovm);\n` +

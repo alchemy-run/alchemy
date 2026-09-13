@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import type { CacheConnectionInfo } from "@/AWS/ElastiCache";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -8,6 +6,8 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Valkey from "iovalkey";
+import * as AWS from "@/AWS";
+import type { CacheConnectionInfo } from "@/AWS/ElastiCache";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 export class ElastiCacheTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(

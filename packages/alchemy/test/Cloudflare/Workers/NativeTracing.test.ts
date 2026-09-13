@@ -1,25 +1,25 @@
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { describe, expect, test as unit } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import {
   CloudflareTelemetryCompatibilityError,
   MIN_CLOUDFLARE_TRACING_DATE,
 } from "@/Cloudflare/Workers/Telemetry.ts";
-import { resolveObservability } from "@/Cloudflare/Workers/WorkerAsyncBindings.ts";
 import type { Worker } from "@/Cloudflare/Workers/Worker.ts";
+import { resolveObservability } from "@/Cloudflare/Workers/WorkerAsyncBindings.ts";
 import type { ResourceBinding } from "@/Resource.ts";
 import * as Test from "@/Test/Alchemy";
-import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect, test as unit } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
+import { expectUrlContains } from "../Utils/Http.ts";
+import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import NativeTracingWorker, {
   makeTracedWorker,
 } from "./fixtures/native-tracing/worker.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
-import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -296,7 +296,9 @@ test.provider(
       yield* expectUrlContains(
         `${worker.url}/fanout?id=warmup`,
         "native-did-fanout",
-        { timeout: "180 seconds" },
+        {
+          timeout: "180 seconds",
+        },
       );
 
       // Several fan-out invocations in flight at once so fibers from
@@ -325,7 +327,9 @@ test.provider(
           expectUrlContains(
             `${worker.url}/sampled`,
             '"operation":true,"child":true',
-            { timeout: "120 seconds" },
+            {
+              timeout: "120 seconds",
+            },
           ),
         ],
         { concurrency: "unbounded" },

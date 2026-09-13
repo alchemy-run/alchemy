@@ -2,10 +2,9 @@ import type { Contract } from "@prisma/orm-postgres/contract/types";
 import type { SqlStorage } from "@prisma/orm-postgres/family-contract/types";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { emitSchemas, SchemaError } from "./Schema.ts";
 import {
   effectGeneratorKey,
   type EffectGeneratorOptions,
@@ -16,6 +15,7 @@ import {
   runPrismaCli,
   type EmitResult,
 } from "./internal.ts";
+import { emitSchemas, SchemaError } from "./Schema.ts";
 
 interface GeneratorConfig {
   readonly orm?: {

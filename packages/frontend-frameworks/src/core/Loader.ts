@@ -1,9 +1,9 @@
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 
 export class ModuleLoadError extends Data.TaggedError<"ModuleLoadError">(
   "ModuleLoadError",

@@ -1,3 +1,16 @@
+import { fileURLToPath } from "node:url";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 /**
  * `AWS.Lambda.Function` under `alchemy dev`: the dualized provider deploys
  * the function INTO the floci emulator (RPC-sidecar-hosted
@@ -29,19 +42,6 @@ import * as AWS from "@/AWS";
 import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as Lambda from "@distilled.cloud/aws/lambda";
-import * as SQS from "@distilled.cloud/aws/sqs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { fileURLToPath } from "node:url";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import {
   dockerAvailable,

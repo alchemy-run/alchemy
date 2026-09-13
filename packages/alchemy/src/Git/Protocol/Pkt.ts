@@ -36,7 +36,9 @@ export const MAX_PKT_PAYLOAD = 65516;
  */
 export class PktLineError extends Schema.TaggedError<PktLineError>()(
   "PktLineError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 /**
@@ -46,7 +48,9 @@ export class PktLineError extends Schema.TaggedError<PktLineError>()(
  */
 export class ProtocolError extends Schema.TaggedError<ProtocolError>()(
   "ProtocolError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 /**

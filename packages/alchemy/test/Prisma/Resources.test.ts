@@ -1,18 +1,23 @@
-import * as Provider from "@/Provider";
+import { describe, expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
 import { InstanceId } from "@/InstanceId";
+import * as Output from "@/Output";
+import { App as PrismaApp, AppProvider } from "@/Prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
 import {
   PrismaApiError,
   PrismaClient,
   type DatabaseCreateResult,
 } from "@/Prisma/Client";
+import type { PrismaManagementClient } from "@/Prisma/Client";
 import { Compute as PrismaCompute } from "@/Prisma/Compute";
-import { App as PrismaApp, AppProvider } from "@/Prisma/App";
-import {
-  Deployment as PrismaDeployment,
-  DeploymentProvider,
-} from "@/Prisma/Deployment";
 import { Connect, ConnectBinding, connectEnvKeys } from "@/Prisma/Connect";
 import {
   Connection as PrismaConnection,
@@ -27,6 +32,10 @@ import {
   DatabaseProvider,
 } from "@/Prisma/Database";
 import {
+  Deployment as PrismaDeployment,
+  DeploymentProvider,
+} from "@/Prisma/Deployment";
+import {
   EnvironmentVariable as PrismaEnvironmentVariable,
   EnvironmentVariableProvider,
 } from "@/Prisma/EnvironmentVariable";
@@ -36,15 +45,13 @@ import {
   SourceRepository as PrismaSourceRepository,
   SourceRepositoryProvider,
 } from "@/Prisma/SourceRepository";
-import * as Output from "@/Output";
-import type { PrismaManagementClient } from "@/Prisma/Client";
 import type { Database as ApiDatabase } from "@/Prisma/Types";
+import * as Provider from "@/Provider";
 import { RuntimeContext } from "@/RuntimeContext";
 import { Self } from "@/Self";
 import { Stack, type StackSpec } from "@/Stack";
-import { inMemoryState } from "@/State/InMemoryState";
 import { Stage } from "@/Stage";
-import { describe, expect, it } from "alchemy-test";
+import { inMemoryState } from "@/State/InMemoryState";
 import {
   type Captured,
   conflict,
@@ -62,13 +69,6 @@ import {
   wireDatabase,
   wireProject,
 } from "./fixtures/FakeManagementApi.ts";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { AlchemyContext } from "@/AlchemyContext";
 
 type Call = [operation: string, input?: unknown];
 type Equal<A, B> =

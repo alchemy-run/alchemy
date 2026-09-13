@@ -35,10 +35,10 @@
  *                          the new marker; restoring it must swap back
  */
 import { afterAll, expect, test } from "bun:test";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { DevCli, fetchOk } from "alchemy-test/DevCli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const STAGE = "dev-cli-test";
@@ -86,7 +86,10 @@ test.skipIf(!dockerAvailable)(
     const api = await cli.pollUntil(
       "api url in stack outputs",
       () => cli.outputUrl("api"),
-      { tries: 300, delayMs: 1000 },
+      {
+        tries: 300,
+        delayMs: 1000,
+      },
     );
 
     // Dev identity: the function URL is served locally, not by AWS

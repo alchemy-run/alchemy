@@ -1,3 +1,5 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 /**
  * Repro for the workers.dev URL regression under `alchemy dev`:
  * a Worker previously deployed live (stamped `providerMode: "live"`) is
@@ -9,8 +11,6 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { inDev } from "../../test.resources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });

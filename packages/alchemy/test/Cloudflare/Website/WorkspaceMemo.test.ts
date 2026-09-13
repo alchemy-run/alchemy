@@ -1,3 +1,9 @@
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as pathe from "pathe";
 import {
   Artifacts,
   createArtifactStore,
@@ -13,12 +19,6 @@ import {
   makeViteSource,
 } from "@/Cloudflare/Workers/Sources/Vite.ts";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker.ts";
-import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 // ─────────────────────────────────────────────────────────────────────

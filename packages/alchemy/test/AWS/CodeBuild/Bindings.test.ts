@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as codebuild from "@distilled.cloud/aws/codebuild";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CodeBuildTestFunctionLive, {
   CodeBuildTestFunction,
   FIXTURE_PROJECT_NAME,
@@ -350,10 +350,7 @@ describe.sequential("CodeBuild Bindings", () => {
               ),
             );
           expect(groupArn).toBeDefined();
-          const fakeReportArn = `${groupArn!.replace(
-            ":report-group/",
-            ":report/",
-          )}:${FAKE_UUID}`;
+          const fakeReportArn = `${groupArn!.replace(":report-group/", ":report/")}:${FAKE_UUID}`;
 
           const got = (yield* getJson(
             `${baseUrl}/reports/get?arn=${encodeURIComponent(fakeReportArn)}`,

@@ -1,3 +1,6 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * `--force` must refresh stale bound attributes.
  *
@@ -17,9 +20,6 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { InMemoryService, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { BindingTarget, TestLayers, TestResource } from "./test.resources.ts";
 
 const { test } = Test.make({

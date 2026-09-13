@@ -3,13 +3,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type * as Redacted from "effect/Redacted";
-import type { Input } from "../Input.ts";
-import { isPlainData } from "../Util/data.ts";
 import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
-import { arrayEquals } from "../Util/equal.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { isPlainData } from "../Util/data.ts";
+import { arrayEquals } from "../Util/equal.ts";
 import {
   InvalidBranchScope,
   resolveBranchScope,

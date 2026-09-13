@@ -1,10 +1,10 @@
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Connection } from "@/AWS/CodeConnections/Connection.ts";
 import { RepositoryLink } from "@/AWS/CodeConnections/RepositoryLink.ts";
 import * as Test from "@/Test/Alchemy";
-import * as codeconnections from "@distilled.cloud/aws/codeconnections";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

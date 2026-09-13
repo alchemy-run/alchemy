@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 
 /**
  * The process's working directory, captured ONCE at module load.

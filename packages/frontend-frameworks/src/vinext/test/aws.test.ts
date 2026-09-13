@@ -1,11 +1,10 @@
-import { describe, expect, it } from "vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { loadPrerenderPairs, seedStoreFromPrerender } from "../cache/seed.ts";
+import { describe, expect, it } from "vitest";
 import {
   LAMBDA_ADAPTER_FILE_NAME,
   SERVE_ENTRY_NAME,
@@ -13,6 +12,7 @@ import {
   makeLambdaEntrySource,
   target,
 } from "../aws.ts";
+import { loadPrerenderPairs, seedStoreFromPrerender } from "../cache/seed.ts";
 
 describe("makeAwsTarget", () => {
   it(

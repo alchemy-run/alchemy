@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Notifications from "@/AWS/Notifications";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Notifications from "@/AWS/Notifications";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -37,7 +37,9 @@ export default NotificationsTestFunction.make(
     // scoped to it (proving ARN injection + the configuration-scoped grant).
     const config = yield* Notifications.NotificationConfiguration(
       "BindingsConfig",
-      { description: "notifications bindings fixture" },
+      {
+        description: "notifications bindings fixture",
+      },
     );
 
     // --- account-level bindings ---

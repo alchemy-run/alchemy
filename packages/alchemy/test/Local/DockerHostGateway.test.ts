@@ -1,5 +1,5 @@
-import { isLoopbackHost } from "@/Local/DockerHostGateway";
 import { describe, expect, it } from "alchemy-test";
+import { isLoopbackHost } from "@/Local/DockerHostGateway";
 
 describe("Docker loopback hosts", () => {
   it("recognizes loopback and localhost-looking hosts", () => {

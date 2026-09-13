@@ -1,7 +1,7 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Railway from "alchemy/Railway";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

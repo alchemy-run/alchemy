@@ -1,9 +1,9 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
-import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";

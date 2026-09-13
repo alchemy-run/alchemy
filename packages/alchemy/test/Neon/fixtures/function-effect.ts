@@ -2,17 +2,17 @@ import {
   upgradeWebSocket,
   waitUntil as nativeWaitUntil,
 } from "@neon/functions";
-import { Function } from "@/Neon/Function";
-import { FunctionRequest } from "@/Neon/FunctionEnvironment";
-import { waitUntil } from "@/Neon/waitUntil";
-import { upgrade } from "@/Neon/upgrade";
-import { Project } from "@/Neon/Project";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { Postgres } from "@/SQL/Postgres";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Function } from "@/Neon/Function";
+import { FunctionRequest } from "@/Neon/FunctionEnvironment";
+import { Project } from "@/Neon/Project";
+import { upgrade } from "@/Neon/upgrade";
+import { waitUntil } from "@/Neon/waitUntil";
+import { Postgres } from "@/SQL/Postgres";
 
 const diagnosticSql = Effect.gen(function* () {
   return yield* Postgres({

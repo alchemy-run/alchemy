@@ -1,9 +1,9 @@
-import * as ECS from "@/AWS/ECS";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ECS from "@/AWS/ECS";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "nested-ecs-lambda.ts");
 

@@ -1,12 +1,12 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Stack from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { inMemoryState, type State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 const { test } = Test.make({
   providers: Layer.empty,

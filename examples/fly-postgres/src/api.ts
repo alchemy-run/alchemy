@@ -59,13 +59,15 @@ export default class Api extends Fly.Service<Api>()(
             .map((statement) => statement.trim())
             .filter((statement) => statement.length > 0);
           for (const statement of statements) {
-            yield* directDb.execute(sql.raw(statement)).pipe(
-              Effect.catch((error) =>
-                String(error).includes("already exists")
-                  ? Effect.void
-                  : Effect.fail(error),
-              ),
-            );
+            yield* directDb
+              .execute(sql.raw(statement))
+              .pipe(
+                Effect.catch((error) =>
+                  String(error).includes("already exists")
+                    ? Effect.void
+                    : Effect.fail(error),
+                ),
+              );
           }
           return yield* HttpServerResponse.json({
             applied: statements.length,

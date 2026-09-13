@@ -1,5 +1,5 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, test } from "bun:test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

@@ -10,7 +10,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
-
 import type { LogEntry } from "./Model.ts";
 import type { TestEvent } from "./Reporter.ts";
 

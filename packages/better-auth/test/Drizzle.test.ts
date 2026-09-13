@@ -1,11 +1,11 @@
+import * as BunServices from "@effect/platform-bun/BunServices";
 import { RuntimeContext } from "alchemy";
 import { describe, expect, it } from "alchemy-test";
-import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { BetterAuth, Database } from "@/index.ts";
 import { Drizzle } from "@/Drizzle.ts";
+import { BetterAuth, Database } from "@/index.ts";
 import * as schema from "./fixtures/drizzle-auth-schema.ts";
 
 describe("BetterAuth (drizzle)", () => {

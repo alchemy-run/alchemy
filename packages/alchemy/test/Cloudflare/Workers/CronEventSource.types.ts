@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 
 class ScheduledTask extends Context.Service<
   ScheduledTask,

@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,6 +6,9 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 import IncidentsTestFunctionLive, { IncidentsTestFunction } from "./handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -355,13 +355,17 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
 
       const bindings = (yield* json(
         HttpClientRequest.get(`${baseUrl}/bindings`),
-      )) as { bound: string[] };
+      )) as {
+        bound: string[];
+      };
       expect(bindings.bound).toHaveLength(14);
 
       // StartIncident
       const started = (yield* json(
         HttpClientRequest.post(`${baseUrl}/start`),
-      )) as { incidentRecordArn: string };
+      )) as {
+        incidentRecordArn: string;
+      };
       expect(started.incidentRecordArn).toContain(":incident-record/");
       const arn = encodeURIComponent(started.incidentRecordArn);
 
@@ -378,7 +382,10 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // GetIncidentRecord
       const record = (yield* json(
         HttpClientRequest.get(`${baseUrl}/record?arn=${arn}`),
-      )) as { title: string; status: string };
+      )) as {
+        title: string;
+        status: string;
+      };
       expect(record.title).toBe("alchemy bindings test incident");
       expect(record.status).toBe("OPEN");
 
@@ -386,7 +393,9 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       // ListTimelineEvents
       const created = (yield* json(
         HttpClientRequest.post(`${baseUrl}/timeline?arn=${arn}`),
-      )) as { eventId: string };
+      )) as {
+        eventId: string;
+      };
       expect(created.eventId).toBeTruthy();
       const eventId = encodeURIComponent(created.eventId);
       const event = (yield* json(
@@ -409,11 +418,15 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       yield* json(HttpClientRequest.post(`${baseUrl}/related?arn=${arn}`));
       const related = (yield* json(
         HttpClientRequest.get(`${baseUrl}/related?arn=${arn}`),
-      )) as { count: number };
+      )) as {
+        count: number;
+      };
       expect(related.count).toBeGreaterThanOrEqual(1);
       const findings = (yield* json(
         HttpClientRequest.get(`${baseUrl}/findings?arn=${arn}`),
-      )) as { count: number };
+      )) as {
+        count: number;
+      };
       expect(findings.count).toBeGreaterThanOrEqual(0);
 
       // Resolve, clean up the timeline event and the record.

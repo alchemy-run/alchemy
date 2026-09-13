@@ -26,8 +26,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 export type { TerminalReaderDeviceType, TerminalReaderStatus };
 

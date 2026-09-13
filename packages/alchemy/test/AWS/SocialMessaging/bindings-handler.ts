@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SocialMessaging from "@/AWS/SocialMessaging";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SocialMessaging from "@/AWS/SocialMessaging";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -32,7 +32,9 @@ export default SocialMessagingBindingsFunction.make(
     // docs) — stack.destroy() disassociates it, requiring console re-signup.
     const account = yield* SocialMessaging.LinkedWhatsAppBusinessAccount(
       "BindingsWaba",
-      { accountId: WABA_ID },
+      {
+        accountId: WABA_ID,
+      },
     );
 
     const sendMessage = yield* SocialMessaging.SendWhatsAppMessage(account);

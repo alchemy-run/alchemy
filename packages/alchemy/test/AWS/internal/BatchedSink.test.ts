@@ -1,13 +1,13 @@
-import {
-  BatchRetryExhaustedError,
-  makeBatchedSink,
-} from "@/AWS/internal/BatchedSink.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import {
+  BatchRetryExhaustedError,
+  makeBatchedSink,
+} from "@/AWS/internal/BatchedSink.ts";
 
 /**
  * Pure tests of the shared batch-sink engine (`AWS/internal/BatchedSink.ts`)

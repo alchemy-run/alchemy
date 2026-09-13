@@ -198,7 +198,10 @@ export const UserProvider = () =>
                 Username: username,
                 MessageAction: "SUPPRESS",
                 UserAttributes: Object.entries(desiredAttributes).map(
-                  ([Name, Value]) => ({ Name, Value }),
+                  ([Name, Value]) => ({
+                    Name,
+                    Value,
+                  }),
                 ),
               })
               .pipe(

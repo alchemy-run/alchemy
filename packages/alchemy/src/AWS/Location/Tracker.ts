@@ -145,7 +145,9 @@ export const TrackerProvider = () =>
             const hydrated = yield* Effect.forEach(
               names,
               (name) => readTracker(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             return hydrated.filter(
               (attrs): attrs is Tracker["Attributes"] => attrs !== undefined,

@@ -6,8 +6,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DBInstanceProps {
   /**

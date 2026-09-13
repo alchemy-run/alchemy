@@ -15,12 +15,12 @@ import {
 } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
 import {
   retryOnConflict,
   waitUntilAbsent,
   waitUntilStable,
 } from "./internal.ts";
+import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
 
 export interface ServiceProps {
   /**

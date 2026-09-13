@@ -8,9 +8,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
 
 export interface DBClusterProps {
   /**

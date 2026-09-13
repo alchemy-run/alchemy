@@ -3,11 +3,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { makeIvsRealtimeReplicationHttpBinding } from "./BindingHttp.ts";
+import type { Stage } from "./Stage.ts";
 import {
   StartParticipantReplication,
   type StartParticipantReplicationRequest,
 } from "./StartParticipantReplication.ts";
-import type { Stage } from "./Stage.ts";
 
 export const StartParticipantReplicationHttp = Layer.effect(
   StartParticipantReplication,

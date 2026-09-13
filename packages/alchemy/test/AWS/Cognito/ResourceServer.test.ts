@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ResourceServer, UserPool } from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ResourceServer, UserPool } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

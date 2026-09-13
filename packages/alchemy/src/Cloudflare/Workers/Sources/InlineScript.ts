@@ -1,6 +1,6 @@
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 import type * as Bundle from "../../../Bundle/Bundle.ts";
 import type { SourceProvider } from "../Source.ts";
 import { bundleSource } from "./shared.ts";

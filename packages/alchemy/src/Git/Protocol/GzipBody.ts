@@ -25,7 +25,9 @@ import { concatBytes } from "./ObjectCodec.ts";
  */
 export class GzipBodyError extends Schema.TaggedError<GzipBodyError>()(
   "GzipBodyError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 /**

@@ -1,3 +1,13 @@
+import * as NodeFs from "node:fs/promises";
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
+import type {
+  BindingHooks,
+  Module,
+} from "@alchemy.run/cloudflare-runtime/core";
+import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
+import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
+import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -25,13 +35,6 @@
  * node-mode builds never load it.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import type {
-  BindingHooks,
-  Module,
-} from "@alchemy.run/cloudflare-runtime/core";
-import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
-import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
-import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type { AstroConfig, AstroPrerenderer, PathWithRoute } from "astro";
 import { deserializeRouteData, serializeRouteData } from "astro/app/manifest";
@@ -41,9 +44,6 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as NodeFs from "node:fs/promises";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
 import { PlatformServices } from "../Platform.ts";
 import type {
   PrerenderRequest,

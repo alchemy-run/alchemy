@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -10,6 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MwaaServerlessTestFunctionLive, {
   BINDINGS_BUCKET_NAME,
   BINDINGS_WORKFLOW_NAME,
@@ -172,7 +172,9 @@ describe.sequential("MWAAServerless Bindings", () => {
     sharedStack
       .destroy()
       .pipe(Effect.andThen(Effect.orDie(withAws(cleanupOutOfBand)))),
-    { timeout: 240_000 },
+    {
+      timeout: 240_000,
+    },
   );
 
   describe("binding registration", () => {
@@ -251,7 +253,10 @@ describe.sequential("MWAAServerless Bindings", () => {
           Effect.gen(function* () {
             const response = (yield* method === "GET"
               ? getJson(path)
-              : postJson(path)) as { tag: string; detail: string };
+              : postJson(path)) as {
+              tag: string;
+              detail: string;
+            };
             expect(response.detail).not.toContain("not authorized");
             expect(tags).toContain(response.tag);
           }),
@@ -274,7 +279,10 @@ describe.sequential("MWAAServerless Bindings", () => {
           // 2. GetWorkflowRun observes the run through the binding.
           const detail = (yield* getJson(
             `/run-detail?id=${started.runId}`,
-          )) as { runId: string; status?: string };
+          )) as {
+            runId: string;
+            status?: string;
+          };
           expect(detail.runId).toBe(started.runId);
 
           // 3. StopWorkflowRun — a typed outcome either way: `ok` when the

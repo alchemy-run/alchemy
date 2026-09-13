@@ -1,7 +1,6 @@
 import * as managedTransforms from "@distilled.cloud/cloudflare/managed-transforms";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";

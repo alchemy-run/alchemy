@@ -1,28 +1,28 @@
+import type * as NodeChildProcessModule from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
+import type * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as Scope from "effect/Scope";
+import type { Plugin, PluginOption } from "vite";
+import { findEphemeralPort } from "../core/DevPort.ts";
 /**
  * Shared programmatic Vinext builds and native development CLI helpers.
  * Production builds run in the target's isolated Node child so Alchemy can
  * inject deployment adapters without modifying application configuration.
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import type * as Scope from "effect/Scope";
-import type { Plugin, PluginOption } from "vite";
-import { createRequire } from "node:module";
-import { randomBytes } from "node:crypto";
-import { loadVinextBuildConfig } from "./BuildConfig.ts";
-import type * as NodeChildProcessModule from "node:child_process";
-import type * as NodeNet from "node:net";
-import { findEphemeralPort } from "../core/DevPort.ts";
+import { toOutputFile, type BuildOutput } from "../core/index.ts";
 import {
   loadProjectModule,
   resolveProjectPackageDirectory,
 } from "../core/Loader.ts";
+import { loadVinextBuildConfig } from "./BuildConfig.ts";
 import { makeVinextCachePlugin, type VinextCacheKind } from "./cache/plugin.ts";
-import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
 import { loadVinextModule } from "./Modules.ts";
-import { toOutputFile, type BuildOutput } from "../core/index.ts";
+import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
 
 export const failFramework = (message: string) => (cause: unknown) =>
   new FrameworkCore.FrameworkError({ framework: "vinext", message, cause });

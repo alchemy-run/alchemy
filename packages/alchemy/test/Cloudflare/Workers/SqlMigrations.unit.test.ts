@@ -1,5 +1,17 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, layer } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { purePlugin } from "@/Bundle/PurePlugin.ts";
 import type { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
+import { makeEffectVirtualEntry } from "@/Cloudflare/Workers/Sources/Rolldown.ts";
 import {
   SqlMigrations,
   type SqlMigrationsInput,
@@ -8,7 +20,6 @@ import {
   SqlMigrationsRuntime,
   type SqlMigrationSnapshot,
 } from "@/Cloudflare/Workers/SqlMigrationsRuntime.ts";
-import { makeEffectVirtualEntry } from "@/Cloudflare/Workers/Sources/Rolldown.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import {
   makeWorkerRuntimeContext,
@@ -23,17 +34,6 @@ import {
 } from "@/SQL/Migrations/Format.ts";
 import { readMigrationRecords } from "@/SQL/Migrations/Records.ts";
 import { sha256 } from "@/Util/sha256.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { nodePath, nodeSupportsDevMode } from "../../nodeProbe.ts";
 
 type Assert<T extends true> = T;

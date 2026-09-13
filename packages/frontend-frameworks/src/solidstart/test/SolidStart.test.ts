@@ -156,7 +156,9 @@ describe("fromHarnessOptions", () => {
   it("forwards the harness's nitro overrides", () => {
     expect(
       fromHarnessOptions({ solidstart: { nitro: { prerender: {} } } }).nitro,
-    ).toEqual({ prerender: {} });
+    ).toEqual({
+      prerender: {},
+    });
     expect(fromHarnessOptions({}).nitro).toBeUndefined();
   });
 });

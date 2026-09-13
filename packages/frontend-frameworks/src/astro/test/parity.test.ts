@@ -1,3 +1,7 @@
+import * as NodeFsPromises from "node:fs/promises";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
+import { pathToFileURL } from "node:url";
 /**
  * Build-output / option parity with upstream `@astrojs/cloudflare` v14.1.3:
  * zero-config sessions, `_redirects` generation, `_headers` immutable
@@ -6,10 +10,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as NodeFsPromises from "node:fs/promises";
-import * as NodeOs from "node:os";
-import * as NodePath from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import cloudflareTarget, {
   distilledCloudflare,

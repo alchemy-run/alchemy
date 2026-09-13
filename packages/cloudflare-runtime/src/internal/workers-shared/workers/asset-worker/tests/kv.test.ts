@@ -1,9 +1,9 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 import { getAssetWithMetadataFromKV } from "../src/utils/kv.ts";
 import type { AssetMetadata } from "../src/utils/kv.ts";
-import type { MockInstance } from "vitest";
 
 describe("[Asset Worker] Fetching assets from KV", () => {
   describe("getAssetWithMetadataFromKV()", () => {

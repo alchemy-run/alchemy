@@ -1,5 +1,5 @@
-import { makeDeployTarget } from "../../core/index.ts";
 import { describe, expect, it } from "vitest";
+import { makeDeployTarget } from "../../core/index.ts";
 import {
   DEFAULT_TARGET_SPECIFIER,
   isVocsTarget,
@@ -18,7 +18,10 @@ describe("Vocs target selection", () => {
     const worker = { compatibilityDate: "2026-03-10" };
     expect(
       selectVocsTargetInput({ target: { cloudflare: { worker } } }),
-    ).toEqual({ input: DEFAULT_TARGET_SPECIFIER, config: worker });
+    ).toEqual({
+      input: DEFAULT_TARGET_SPECIFIER,
+      config: worker,
+    });
   });
 
   it("preserves an explicit target and its factory configuration", () => {

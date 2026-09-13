@@ -552,7 +552,7 @@ overrides:
   zod: 4.5.4
   rolldown: 1.2.5
 
-pnpmfileChecksum: sha256-elTHWproOlNxhpfqxI523wQRI4DQEVcmXXl5vhr4xWU=
+pnpmfileChecksum: sha256-wIQlJwYyj5wi4eVrhr+/t7Ta4djkIJgkB7qYK84ZXMU=
 
 patchedDependencies:
   '@astrojs/starlight@0.42.0': 3ea8686c3055e8d097b5afa93dcf9e16ebfbebbf006e7493ad5df38e6edbfd19

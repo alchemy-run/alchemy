@@ -1,4 +1,6 @@
 import type { FlyMachineConfig } from "@distilled.cloud/fly-io/machines";
+import { expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { deploymentPolicy, validateDeployment } from "@/Fly/Deployment";
 import {
   predecessorShutdown,
@@ -7,8 +9,6 @@ import {
   toFlyService,
   toFlyServiceCheck,
 } from "@/Fly/replicas";
-import { expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 it.effect("deployment defaults preserve existing behavior", () =>
   Effect.gen(function* () {

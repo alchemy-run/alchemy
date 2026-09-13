@@ -12,17 +12,17 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../Diff.ts";
+import { listOwnedApps } from "./App.ts";
+import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
 import {
   validateDeployment,
   type DeploymentPolicy,
   type MachineCheck,
 } from "./Deployment.ts";
-import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
-import { listOwnedApps } from "./App.ts";
 import type {
   MachineGuest,
   MachineImageRef,

@@ -1,12 +1,12 @@
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetDatabaseResponse,
   getDatabase,
   createConnectionRotate,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { extractConnectionSecrets } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { PrismaSecretConnection } from "../Types.ts";

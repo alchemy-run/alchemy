@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -9,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 export class KinesisApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisApiFunction",

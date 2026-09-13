@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { MultiRegionAccessPoint } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { MultiRegionAccessPoint } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

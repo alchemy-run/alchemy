@@ -1,3 +1,15 @@
+import type * as NodeChildProcessModule from "node:child_process";
+import { createRequire } from "node:module";
+import type * as NodeNet from "node:net";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 /**
  * `@alchemy.run/frontend-frameworks/nextjs/aws` — Next.js on AWS Lambda via
  * `@opennextjs/aws`.
@@ -33,18 +45,6 @@
  * - `dynamodb-provider/` — the tag-cache table seed function
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
-import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { createRequire } from "node:module";
-import type * as NodeChildProcessModule from "node:child_process";
-import type * as NodeNet from "node:net";
 
 const fail = (message: string) => (cause: unknown) =>
   new FrameworkCore.FrameworkError({ framework: "nextjs", message, cause });

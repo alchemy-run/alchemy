@@ -1,3 +1,8 @@
+import * as NodeHttp from "node:http";
+import { URL as NodeURL } from "node:url";
+import type * as Context from "effect/Context";
+import * as vite from "vite";
+import type { RuntimeServices } from "../core/index.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import {
   haveExportTypesChanged,
@@ -8,11 +13,6 @@ import { parseViteEnvironments } from "../rolldown/options.ts";
 import type { OptionsApi } from "../rolldown/plugins/index.ts";
 import { workerEntryId } from "../rolldown/plugins/index.ts";
 import { resolvePluginApi } from "../rolldown/utils.ts";
-import type { RuntimeServices } from "../core/index.ts";
-import type * as Context from "effect/Context";
-import * as NodeHttp from "node:http";
-import { URL as NodeURL } from "node:url";
-import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.ts";
 import type { ServerHandle } from "./dev-server.ts";
 import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";

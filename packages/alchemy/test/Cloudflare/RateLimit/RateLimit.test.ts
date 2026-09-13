@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

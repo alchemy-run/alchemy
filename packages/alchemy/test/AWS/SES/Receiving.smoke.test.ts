@@ -1,3 +1,12 @@
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as ses from "@distilled.cloud/aws/ses";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sts from "@distilled.cloud/aws/sts";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import {
@@ -11,15 +20,6 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as ses from "@distilled.cloud/aws/ses";
-import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),

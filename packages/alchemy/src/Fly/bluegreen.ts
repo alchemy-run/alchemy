@@ -6,8 +6,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../Diff.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import { alchemyMetadataKeys as keys } from "./Metadata.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
+import { alchemyMetadataKeys as keys } from "./Metadata.ts";
 import {
   autostopMode,
   checksPassing,

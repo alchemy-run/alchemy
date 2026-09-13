@@ -1,8 +1,8 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

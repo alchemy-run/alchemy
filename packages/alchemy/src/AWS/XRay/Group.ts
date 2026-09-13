@@ -96,7 +96,9 @@ export const Group = Resource<Group>("AWS.XRay.Group");
  */
 export class XRayReservedGroupName extends Data.TaggedError(
   "XRayReservedGroupName",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validateGroupName = (props: Pick<GroupProps, "groupName">) =>
   props.groupName === "Default"

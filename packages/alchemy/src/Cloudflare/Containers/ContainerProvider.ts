@@ -4,16 +4,17 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
-import { hashDockerBuildInputs } from "../../Docker/BuildHash.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { hashDockerBuildInputs } from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
@@ -26,7 +27,6 @@ import type {
   AnyContainerApplicationProps,
   ContainerApplication,
 } from "./ContainerApplication.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   buildFinalDockerfile,
   bundleContainerProgram,

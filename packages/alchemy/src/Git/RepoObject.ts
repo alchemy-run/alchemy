@@ -1,3 +1,16 @@
+import type * as cf from "@cloudflare/workers-types";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * The per-repo Durable Object (DESIGN.md §2, §3.4, §3.6, §8).
  *
@@ -28,18 +41,6 @@
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { HttpEffect } from "../Http.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   BranchMissing,
   MergeConflict,
@@ -58,9 +59,23 @@ import {
   type Oid as ApiOid,
   type RepoStatus,
 } from "./Api.ts";
+import type { BlobMultipart, UploadedPart } from "./BlobStore.ts";
+import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
+import {
+  Hasher,
+  type HasherShape,
+  type HashPartResult,
+} from "./Hasher/Hasher.ts";
+import { bundleCovers, runBundleJob, type BundleInfo } from "./Jobs/Bundle.ts";
+import {
+  runCompactJob,
+  runGeometricMergeJob,
+  shouldCompact,
+} from "./Jobs/Compact.ts";
+import { runForkJob, snapshotStream, type SnapshotChunk } from "./Jobs/Fork.ts";
+import { runImport, type ImportSource } from "./Jobs/Import.ts";
+import { runPurgeJob } from "./Jobs/Purge.ts";
 import { applyDelta } from "./Protocol/Delta.ts";
-import * as PackParser from "./Protocol/PackParser.ts";
-import type { RandomAccess } from "./Protocol/PackParser.ts";
 import {
   bytesToHex,
   concatBytes,
@@ -83,6 +98,15 @@ import {
   type ObjectTypeName,
   type Oid,
 } from "./Protocol/ObjectCodec.ts";
+import * as PackParser from "./Protocol/PackParser.ts";
+import type { RandomAccess } from "./Protocol/PackParser.ts";
+import * as PartialScan from "./Protocol/PartialScan.ts";
+import type { ScanResult } from "./Protocol/PartialScan.ts";
+import type {
+  DeltaBase,
+  DeltaJob,
+  UnresolvedDelta,
+} from "./Protocol/PartialScan.ts";
 import {
   decodePktLines,
   errPkt,
@@ -109,42 +133,12 @@ import {
   type DiffEntryData,
 } from "./Protocol/TreeDiff.ts";
 import * as Zlib from "./Protocol/Zlib.ts";
-import { runImport, type ImportSource } from "./Jobs/Import.ts";
-import { runForkJob, snapshotStream, type SnapshotChunk } from "./Jobs/Fork.ts";
-import { bundleCovers, runBundleJob, type BundleInfo } from "./Jobs/Bundle.ts";
-import {
-  runCompactJob,
-  runGeometricMergeJob,
-  shouldCompact,
-} from "./Jobs/Compact.ts";
-import { headKey, incomingKey, packKeyOf, wirePackId } from "./Store/Keys.ts";
-import { encodeHeadSnapshot, type HeadSnapshot } from "./Store/HeadSnapshot.ts";
-import { blobRandomAccess, sliceRandomAccess } from "./Store/PackSource.ts";
-import { SPILL_PART_BYTES } from "./Store/IncomingBody.ts";
-import type { BlobMultipart, UploadedPart } from "./BlobStore.ts";
-import type { StreamingFeeder } from "./Store/StreamingSource.ts";
-import {
-  BACKPRESSURE_BYTES,
-  makeStreamingSource,
-  RETAIN_BYTES,
-} from "./Store/StreamingSource.ts";
-import {
-  Hasher,
-  type HasherShape,
-  type HashPartResult,
-} from "./Hasher/Hasher.ts";
-import * as PartialScan from "./Protocol/PartialScan.ts";
-import type { ScanResult } from "./Protocol/PartialScan.ts";
-import type {
-  DeltaBase,
-  DeltaJob,
-  UnresolvedDelta,
-} from "./Protocol/PartialScan.ts";
-import { BlobStore, type BlobStoreShape } from "./BlobStore.ts";
-import { runPurgeJob } from "./Jobs/Purge.ts";
-import { RegistryStore, ulid } from "./RegistryObject.ts";
 import { decodeStagedBatch } from "./PushWire.ts";
+import { RegistryStore, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./Store/Closure.ts";
+import { encodeHeadSnapshot, type HeadSnapshot } from "./Store/HeadSnapshot.ts";
+import { SPILL_PART_BYTES } from "./Store/IncomingBody.ts";
+import { headKey, incomingKey, packKeyOf, wirePackId } from "./Store/Keys.ts";
 import {
   makeObjectStore,
   MAX_OBJECT_SIZE,
@@ -152,7 +146,7 @@ import {
   type StagedObject,
   LIVE_OBJECTS,
 } from "./Store/ObjectStore.ts";
-import type * as cf from "@cloudflare/workers-types";
+import { blobRandomAccess, sliceRandomAccess } from "./Store/PackSource.ts";
 import {
   initRepoSchema,
   makeSqlClient,
@@ -160,6 +154,12 @@ import {
   type PullRow,
   type RefRow,
 } from "./Store/Sql.ts";
+import type { StreamingFeeder } from "./Store/StreamingSource.ts";
+import {
+  BACKPRESSURE_BYTES,
+  makeStreamingSource,
+  RETAIN_BYTES,
+} from "./Store/StreamingSource.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -334,7 +334,9 @@ export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
  */
 export class PackIngestError extends Schema.TaggedError<PackIngestError>()(
   "PackIngestError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 /**
@@ -3830,7 +3832,9 @@ export const GitRepoLive = GitRepo.make(
           if (service !== "git-upload-pack" && service !== "git-receive-pack") {
             return HttpServerResponse.text(
               "smart HTTP only (dumb protocol not supported)",
-              { status: 400 },
+              {
+                status: 400,
+              },
             );
           }
           const refs = yield* listAllRefs(meta.repoId);
@@ -4045,7 +4049,10 @@ export const GitRepoLive = GitRepo.make(
             : concatBytes(head);
           return HttpServerResponse.raw(
             pumpPackBody({ prefix, source, sideband }),
-            { contentType: resultType, headers: noCache },
+            {
+              contentType: resultType,
+              headers: noCache,
+            },
           );
         });
 

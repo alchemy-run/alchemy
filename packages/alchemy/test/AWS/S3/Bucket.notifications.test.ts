@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { normalizePolicyDocument } from "@/AWS/IAM/Policy";
-import * as Output from "@/Output";
-import { isResourceState, State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -10,6 +5,11 @@ import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { normalizePolicyDocument } from "@/AWS/IAM/Policy";
+import * as Output from "@/Output";
+import { isResourceState, State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 const waitPolicy = {

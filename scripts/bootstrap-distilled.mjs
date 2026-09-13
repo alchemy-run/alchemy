@@ -176,8 +176,5 @@ function ensureCommit(checkout, pin) {
 // Run only for post-checkout branch/worktree checkouts, not file checkouts.
 // Hook arguments are old HEAD, new HEAD, and the branch-checkout flag.
 if (import.meta.main && process.argv[4] === "1") {
-  bootstrap(
-    resolve(import.meta.dirname, ".."),
-    process.argv[2],
-  );
+  bootstrap(resolve(import.meta.dirname, ".."), process.argv[2]);
 }

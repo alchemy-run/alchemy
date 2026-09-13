@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -6,16 +7,13 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Argument from "effect/unstable/cli/Argument";
-import { readFileSync } from "node:fs";
-import { formatElapsed } from "../../Format.ts";
-
 import { Progress } from "../../../Alchemist/Progress.ts";
 import * as Profiles from "../../../Alchemist/routes/profile.ts";
 import { getEnv } from "../../../Auth/Env.ts";
-import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
-import * as CliKit from "../../../Cli/CliKit/index.ts";
 import { resolveProfileName } from "../../../Auth/Resolve.ts";
-
+import * as CliKit from "../../../Cli/CliKit/index.ts";
+import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
+import { formatElapsed } from "../../Format.ts";
 import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
 import { config, envFile, profile, yes } from "../flags.ts";
 import { instrumentCommand } from "../instrument.ts";

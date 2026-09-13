@@ -1,3 +1,6 @@
+import { fileURLToPath } from "node:url";
+import { watchImport } from "@alchemy.run/node-utils/watch-import";
+import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -9,13 +12,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { watchImport } from "@alchemy.run/node-utils/watch-import";
-import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
-import { fileURLToPath } from "node:url";
-
-import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { resolveStackEntrypoint } from "../Alchemist/Entrypoint.ts";
+import * as Stacks from "../Alchemist/routes/stack.ts";
 import { StackModuleLoader } from "../Alchemist/Session.ts";
+import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
@@ -25,13 +25,12 @@ import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
-import * as Stacks from "../Alchemist/routes/stack.ts";
-import { DEV_RELOAD_EXIT_CODE, DevOptions } from "./DevOptions.ts";
-import { ConsoleLogLive } from "./GlobalLog.ts";
+import * as CliKit from "./CliKit/index.ts";
 import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderApply, renderPlanning } from "./commands/render.ts";
-import * as CliKit from "./CliKit/index.ts";
 import { stackOutputsView } from "./components/view/StackOutputs.tsx";
+import { DEV_RELOAD_EXIT_CODE, DevOptions } from "./DevOptions.ts";
+import { ConsoleLogLive } from "./GlobalLog.ts";
 import { selectCliServices } from "./selectCli.ts";
 
 // Interactive dev/deploy runs use the Sigil progress UI; CI, redirected output,

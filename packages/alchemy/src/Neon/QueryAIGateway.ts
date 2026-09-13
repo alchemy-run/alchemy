@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
 import { defaultProviderMode } from "../ProviderMode.ts";
-import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { AIGateway } from "./AIGateway.ts";
 import {
@@ -17,6 +16,7 @@ import {
   bindBackendEnvironment,
 } from "./BackendConnection.ts";
 import { Credential, validateCredential } from "./Credential.ts";
+import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import { FunctionEnvironment } from "./FunctionEnvironment.ts";
 import {
   makeLanguageModelLayer,

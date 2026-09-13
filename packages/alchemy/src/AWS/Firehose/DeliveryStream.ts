@@ -16,9 +16,9 @@ import {
   hasAlchemyTags,
   type Tags,
 } from "../../Tags.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 

@@ -1,10 +1,10 @@
+import * as batch from "@distilled.cloud/aws/batch";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ComputeEnvironment } from "@/AWS/Batch/ComputeEnvironment.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as batch from "@distilled.cloud/aws/batch";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

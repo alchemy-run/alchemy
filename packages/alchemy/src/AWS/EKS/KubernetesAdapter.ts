@@ -21,9 +21,9 @@
  * `Kubernetes.*` providers via the connection's `auth.kind`.
  */
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as eks from "@distilled.cloud/aws/eks";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -42,8 +42,8 @@ import {
 import type { Connection } from "../../Kubernetes/Connection.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Self } from "../../Self.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import {
   attachPolicyStatements,
