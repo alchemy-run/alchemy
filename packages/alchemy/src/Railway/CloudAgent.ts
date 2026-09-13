@@ -1,6 +1,5 @@
 import { waitUntilDeleted } from "./GraphQL.ts";
-import type { CloudAgentStatus } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -15,6 +14,8 @@ import {
 } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type CloudAgentStatus = railway.Scalars["CloudAgentStatus"];
 
 const selection = {
   id: true,

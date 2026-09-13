@@ -1,9 +1,5 @@
 import { waitUntilDeleted, environmentVolumes } from "./GraphQL.ts";
-import type {
-  VolumeInstanceBackupScheduleKind,
-  VolumeState,
-} from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +11,10 @@ import { Resource } from "../Resource.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type VolumeInstanceBackupScheduleKind =
+  railway.Scalars["VolumeInstanceBackupScheduleKind"];
+type VolumeState = railway.Scalars["VolumeState"];
 
 const selection = {
   id: true,

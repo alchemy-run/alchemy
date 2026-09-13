@@ -6,11 +6,10 @@
  * walks owned projects) and `pnpm nuke` can reclaim it.
  */
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import { resolveWorkspace } from "@/Railway/Environment.ts";
 import { Environment } from "@/Railway/ProjectEnvironment.ts";
 import { createProject, type Project } from "@/Railway/Project.ts";
-import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -124,16 +123,7 @@ const acquire = Effect.gen(function* () {
     ),
   );
 }).pipe(
-  Effect.provide(
-    // The retry policy matters here: every Railway test file's beforeAll
-    // resolves the suite project at once, and that burst alone can trip
-    // Railway's rate limit — the SDK default gives up after ~20s.
-    Layer.mergeAll(
-      RailwayRetryPolicy,
-      CredentialsFromEnv,
-      FetchHttpClient.layer,
-    ),
-  ),
+  Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
 );
 
 /**

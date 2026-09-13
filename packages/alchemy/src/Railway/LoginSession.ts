@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import { CredentialsFromToken } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -62,11 +62,7 @@ const anonymousRailway = (apiBaseUrl?: string) =>
   );
 
 export const provideAnonymousRailway = <A, E>(
-  effect: Effect.Effect<
-    A,
-    E,
-    import("@distilled.cloud/railway").RailwayOpContext
-  >,
+  effect: Effect.Effect<A, E, railway.GraphQLRequirements>,
   apiBaseUrl?: string,
 ): Effect.Effect<A, E> =>
   effect.pipe(Effect.provide(anonymousRailway(apiBaseUrl)));

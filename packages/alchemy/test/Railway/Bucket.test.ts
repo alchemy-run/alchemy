@@ -2,7 +2,7 @@ import { fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { projectBuckets } from "@/Railway/GraphQL.ts";
