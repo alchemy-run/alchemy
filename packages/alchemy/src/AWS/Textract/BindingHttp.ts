@@ -108,7 +108,7 @@ export const makeTextractAdapterHttpBinding = <
         `AWS.Textract.${options.capability}(${adapter.LogicalId})`,
       )(function* (request?: Omit<I, "AdapterId">) {
         return yield* op({
-          ...(request ?? {}),
+          ...request,
           AdapterId: yield* AdapterId,
         } as I);
       });

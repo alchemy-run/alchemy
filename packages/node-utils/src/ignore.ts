@@ -1,3 +1,5 @@
+// oxlint-disable unicorn/prefer-string-starts-ends-with no-control-regex
+
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 //
@@ -783,9 +785,7 @@ const factory = (options?: IgnoreOptions): Ignore => new Ignore(options);
 const isPathValid = (path: string): boolean =>
   checkPath(path && checkPath.convert(path), path, RETURN_FALSE);
 
-/* istanbul ignore next */
 const setupWindows = () => {
-  /* eslint no-control-regex: "off" */
   const makePosix = (str: string): string =>
     /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str)
       ? str

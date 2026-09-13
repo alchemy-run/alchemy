@@ -402,7 +402,7 @@ const observe = Effect.fn(function* (
     // error and fall through to the list scan.
     const raw = yield* zeroTrust
       .getNetworkRoute({ accountId: acct, routeId })
-      .pipe(Effect.catch((_: unknown) => Effect.succeed(undefined)));
+      .pipe(Effect.catch(() => Effect.succeed(undefined)));
     const got = raw ? toObserved(raw) : undefined;
     if (got) return got;
   }

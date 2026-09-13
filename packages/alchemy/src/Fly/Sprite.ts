@@ -1,7 +1,4 @@
-import type {
-  Sprite as FlySprite,
-  UrlAuth as FlyUrlAuth,
-} from "@distilled.cloud/fly-io/sprites";
+import type { Sprite as FlySprite } from "@distilled.cloud/fly-io/sprites";
 import * as sprites from "@distilled.cloud/fly-io/sprites";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

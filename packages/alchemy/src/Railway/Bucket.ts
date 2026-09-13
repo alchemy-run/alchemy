@@ -448,7 +448,7 @@ const getEnvironmentConfig = (environmentId: string, projectId: string) =>
     ),
   );
 
-const environmentIdsOf = (project: {
+const _environmentIdsOf = (project: {
   projectId: string;
   environmentId: string;
 }) =>

@@ -125,7 +125,7 @@ export const DevProviderLocal = () =>
         // The dev process is spawned into the instance scope the helper
         // provides: it keeps running after `start` returns (readiness) and
         // is killed when the helper closes the scope on restart/delete.
-        start: Effect.fn(function* ({ id, fqn, news: props, invalidate }) {
+        start: Effect.fn(function* ({ fqn, news: props, invalidate }) {
           const child = yield* spawn(props);
           const redactor = makeCommandRedactor(props.env);
           // One log file per process generation, closed with the instance

@@ -148,7 +148,7 @@ export const listEvaluationTypes = (accountId: string) =>
 export const EvaluationProvider = () =>
   Provider.succeed(Evaluation, {
     stables: ["evaluationId", "accountId", "gatewayId", "createdAt"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {

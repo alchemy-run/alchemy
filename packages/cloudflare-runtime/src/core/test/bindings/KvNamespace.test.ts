@@ -610,7 +610,7 @@ layer(KvTestLayer)("KvNamespace binding", (it) => {
   });
 
   kvTest("bulk get: get over size limit", async ({ kv }) => {
-    const bigValue = new Array(1024).fill("x").join("");
+    const bigValue = Array.from({ length: 1024 }, () => "x").join("");
     await kv.put("key1", bigValue);
     await kv.put("key2", bigValue);
     await expect(kv.getWithMetadata(["key1", "key2"])).rejects.toThrow(

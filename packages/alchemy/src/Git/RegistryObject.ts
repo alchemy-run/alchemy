@@ -47,7 +47,7 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const ulid = (): Effect.Effect<string> =>
   Effect.sync(() => {
     let time = Date.now();
-    const chars = new Array<string>(26);
+    const chars = Array.from({ length: 26 }, () => "0");
     // 10 chars of time, most-significant first
     for (let i = 9; i >= 0; i--) {
       chars[i] = CROCKFORD[time % 32]!;

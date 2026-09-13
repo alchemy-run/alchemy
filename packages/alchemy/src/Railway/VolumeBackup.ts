@@ -469,7 +469,7 @@ const listVolumeInstances = (environmentId: string, projectId: string) =>
     ),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>

@@ -20,7 +20,7 @@ import {
 import type { ServiceBinding } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 import type { Server } from "./Server.ts";
-import { SshError, sshClientForServer } from "./Ssh.ts";
+import { sshClientForServer } from "./Ssh.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces

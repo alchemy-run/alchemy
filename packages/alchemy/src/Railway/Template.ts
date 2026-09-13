@@ -310,7 +310,7 @@ class TemplatePending extends Data.TaggedError("Railway.TemplatePending")<{
   state: string;
 }> {}
 
-type CloudTemplate =
+type _CloudTemplate =
   | TemplateResponse
   | CloneTemplateResponse
   | GenerateTemplateResponse

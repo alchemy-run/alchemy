@@ -4,7 +4,6 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

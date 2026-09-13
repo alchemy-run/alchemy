@@ -46,7 +46,7 @@ import path from "node:path";
  * `alchemy dev` never returns on its own — the script drives it like a user
  * would (edit a file, watch the reload) and then sends Ctrl+C.
  */
-import { defineVideo } from "tcut";
+import { defineVideo } from "termcut";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const realHome = path.join(os.homedir(), ".alchemy");

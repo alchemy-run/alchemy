@@ -770,13 +770,13 @@ export const makeWakuSourceProvider = (
         );
       }
       const [entry, ...rest] = output.serverModules;
-      const files: [BundleFile, ...Array<BundleFile>] = [
-        ...[entry!, ...rest].map((file) => ({
+      const files: [BundleFile, ...Array<BundleFile>] = [entry!, ...rest].map(
+        (file) => ({
           path: file.name.replaceAll("\\", "/"),
           content: file.content,
           hash: file.hash,
-        })),
-      ] as [BundleFile, ...Array<BundleFile>];
+        }),
+      ) as [BundleFile, ...Array<BundleFile>];
       const bundle: BundleOutput = {
         files,
         hash: sha256Object(files.map((file) => [file.path, file.hash])),

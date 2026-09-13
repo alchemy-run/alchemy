@@ -1,5 +1,4 @@
 import type { RuntimeContext } from "alchemy";
-import type { Auth } from "better-auth";
 import * as Effect from "effect/Effect";
 import { BetterAuthApiError, isAPIErrorLike } from "./Errors.ts";
 

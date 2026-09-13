@@ -150,7 +150,7 @@ export const ArchiveRuleProvider = () =>
           // filter is mutable → default update path
         }),
 
-        reconcile: Effect.fn(function* ({ news, output, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
           const filter = toFilter(news.filter);
 
           // 1. OBSERVE — cloud state is authoritative

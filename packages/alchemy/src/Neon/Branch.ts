@@ -23,7 +23,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "../SQL/Migrations/index.ts";
-import { hashImports, hashMigrations, readSqlFile } from "../SQL/SqlFile.ts";
+import { hashImports, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { runPgMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";

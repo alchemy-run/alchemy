@@ -27,7 +27,6 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import { WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
 import { Random } from "../../Random.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
@@ -36,7 +35,6 @@ import {
   type BlobStoreShape,
   type UploadedPart,
 } from "../BlobStore.ts";
-import type { Oid, ObjectType } from "../Protocol/ObjectCodec.ts";
 import {
   ObjectTooLargeError,
   PackFormatError,
@@ -67,7 +65,6 @@ import {
   decodeScanResult,
   encodeBoundsRequest,
   encodeDeltaBatch,
-  frame,
   HASH_ROUTE,
   HashError,
   makeFrameReader,

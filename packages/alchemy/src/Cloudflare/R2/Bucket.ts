@@ -1434,14 +1434,6 @@ const r2BucketEndpointConsistencySchedule = Schedule.max([
   Schedule.recurs(5),
 ]);
 
-// R2 sub-resource reads (notably the custom-domain endpoint, which touches the
-// bucket's public-access policy) can return a transient 500 ("Failed to access
-// or modify the bucket policy"). Ride out the blip with a short bounded retry.
-const r2TransientServerErrorSchedule = Schedule.max([
-  Schedule.exponential("500 millis"),
-  Schedule.recurs(6),
-]);
-
 // Distilled widened generated string enums to open unions (`string & {}`); the
 // API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
 type CustomDomainResponse = {

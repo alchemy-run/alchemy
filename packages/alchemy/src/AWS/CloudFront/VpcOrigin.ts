@@ -299,7 +299,7 @@ export const VpcOriginProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           const existing = output?.vpcOriginId
             ? yield* getById(output.vpcOriginId)
             : yield* getByArn((olds ?? ({} as VpcOriginProps)).arn ?? "");

@@ -654,7 +654,7 @@ export const ProviderLocal = () =>
           // SQL, executed through the same gateway. Files whose hash matches
           // previously-imported state are skipped (mirroring `runImports`).
           const importHashes: Record<string, string> = {
-            ...(output?.importHashes ?? {}),
+            ...output?.importHashes,
           };
           if (news.importFiles?.length) {
             const importRootDir = yield* rootDir;

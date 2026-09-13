@@ -256,7 +256,7 @@ export const LicenseConfigurationProvider = () =>
           const name = yield* createName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
 

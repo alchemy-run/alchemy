@@ -144,12 +144,10 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
                 ...nonPrefixedNodeModules,
                 ...nonPrefixedNodeModules.map((module) => `node:${module}`),
                 // New Node.js built-in modules are only published with the `node:` prefix.
-                ...[
-                  "node:sea",
-                  "node:sqlite",
-                  "node:test",
-                  "node:test/reporters",
-                ],
+                "node:sea",
+                "node:sqlite",
+                "node:test",
+                "node:test/reporters",
               ],
               ...(this.meta.rolldownVersion
                 ? {

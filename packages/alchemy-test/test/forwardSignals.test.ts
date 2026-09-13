@@ -71,6 +71,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         try {
           process.kill(childPid, "SIGKILL");
         } catch (error) {
+          // oxlint-disable-next-line no-unsafe-finally, TODO: fix
           if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
         }
       }

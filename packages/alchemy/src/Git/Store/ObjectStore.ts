@@ -23,7 +23,7 @@ import { RuntimeContext } from "../../RuntimeContext.ts";
  * (`staged_push IS NULL`); staged rows become visible to fetches only after
  * the final `transactionSync` flips them live.
  */
-import type { BlobBody, BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
+import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import type { ObjectType, Oid } from "../Protocol/ObjectCodec.ts";
 import {
   concatBytes,

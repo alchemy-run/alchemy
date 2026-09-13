@@ -74,7 +74,6 @@ export function consumeBucketEvents<
   B extends Bucket,
   Req = never,
   StreamReq = never,
-  const Events extends S3EventType[] = S3EventType[],
 >(
   bucket: B,
   handler: (

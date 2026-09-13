@@ -643,7 +643,7 @@ export const QueueProvider = () =>
           // can be removed, so we untag removed keys; internal tags are never
           // user-removable so they survive.
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
           const { upsert, removed } = diffTags(

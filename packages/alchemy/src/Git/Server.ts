@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
@@ -11,7 +10,6 @@ import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as Headers from "effect/unstable/http/Headers";
 import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import type * as HttpServerError from "effect/unstable/http/HttpServerError";
@@ -1321,7 +1319,7 @@ const makeCore = Effect.gen(function* () {
     ),
   };
 
-  const wire401 = HttpServerResponse.empty({
+  const _wire401 = HttpServerResponse.empty({
     status: 401,
     headers: { "www-authenticate": WWW_AUTHENTICATE },
   });
@@ -1947,7 +1945,6 @@ const makeCore = Effect.gen(function* () {
   /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
   const rawRestPrelude = (ownerRaw: string, repoRaw: string) =>
     Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
       const resolved = yield* Effect.result(resolveCached(ownerRaw, repoRaw));
       if (Result.isFailure(resolved)) {
         return { kind: "halt", response: internalError } as const;

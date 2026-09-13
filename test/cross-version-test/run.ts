@@ -258,6 +258,7 @@ function alc(stage: Stage, subArgs: string[]) {
 
 function extractUrl(output: string): string | undefined {
   // Strip ANSI so the regex matches output rendered through the CLI reporter.
+  // oxlint-disable-next-line no-control-regex
   const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
   const match = clean.match(/https:\/\/[a-z0-9.-]+\.workers\.dev[^\s"')]*/i);
   return match?.[0];
@@ -270,6 +271,7 @@ const NOISE = /tsconfig|is available|npm_|Run `bun add`/i;
 const MEANINGFUL =
   /StateStoreError|BadRequest|AuthError|Decode error|Transport error|HttpClientError|ERROR \(#|not found|Unauthorized|Forbidden|version not ready/i;
 function extractError(output: string): string {
+  // oxlint-disable-next-line no-control-regex
   const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
   const lines = clean
     .split("\n")

@@ -74,7 +74,7 @@ export const makeEcrRepositoryHttpBinding = <
         `AWS.ECR.${options.capability}(${repository.LogicalId})`,
       )(function* (request?: Omit<I, keyof RepositoryScopedRequest>) {
         return yield* op({
-          ...(request ?? {}),
+          ...request,
           repositoryName: yield* RepositoryName,
         } as unknown as I);
       });

@@ -12,7 +12,7 @@ import {
   migrationsInputOf,
   stampedOf,
 } from "../../SQL/Migrations/index.ts";
-import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
+import { hashImports } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";

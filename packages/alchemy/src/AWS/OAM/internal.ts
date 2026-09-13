@@ -146,7 +146,7 @@ export const syncOamTags = Effect.fn(function* (
   userTags: Record<string, string> | undefined,
 ) {
   const internalTags = yield* createInternalTags(id);
-  const desired = { ...(userTags ?? {}), ...internalTags };
+  const desired = { ...userTags, ...internalTags };
   const observed = yield* readOamTags(resourceArn);
   const { upsert, removed } = diffTags(observed, desired);
   if (upsert.length > 0) {

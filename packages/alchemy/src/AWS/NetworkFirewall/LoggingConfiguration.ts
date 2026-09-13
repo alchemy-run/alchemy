@@ -113,7 +113,7 @@ export const LoggingConfigurationProvider = () =>
         const desiredByType = new Map(desired.map((d) => [d.LogType, d]));
 
         // Remove log types no longer desired.
-        for (const config of [...current]) {
+        for (const config of current) {
           if (!desiredByType.has(config.LogType)) {
             current = current.filter((c) => c.LogType !== config.LogType);
             yield* applyConfigs(firewallArn, current);

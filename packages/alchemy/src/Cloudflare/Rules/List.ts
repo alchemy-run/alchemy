@@ -308,7 +308,7 @@ export const ListProvider = () =>
         Effect.map((chunk) => Array.from(chunk)),
       );
     }),
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {

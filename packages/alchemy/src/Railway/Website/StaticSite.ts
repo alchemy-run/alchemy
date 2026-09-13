@@ -4,7 +4,6 @@ import {
   writeNodeServeEntry,
 } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -155,7 +154,6 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     const isLocal = ctx.dev && remoted !== true;
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
     if (isLocal && props.dev !== undefined) {

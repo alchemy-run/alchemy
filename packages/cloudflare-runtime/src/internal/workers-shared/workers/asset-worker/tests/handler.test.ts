@@ -154,7 +154,7 @@ describe("[Asset Worker] `handleRequest`", () => {
           return null;
         }
       },
-      async (_: string) => ({
+      async () => ({
         readableStream: new ReadableStream(),
         contentType: "text/html",
         cacheStatus: "HIT",
@@ -178,7 +178,7 @@ describe("[Asset Worker] `handleRequest`", () => {
           return null;
         }
       },
-      async (_: string) => ({
+      async () => ({
         readableStream: new ReadableStream(),
         contentType: "text/html",
         cacheStatus: "HIT",
@@ -202,7 +202,7 @@ describe("[Asset Worker] `handleRequest`", () => {
     const exists = async (pathname: string) => {
       return assets[pathname] ?? null;
     };
-    const getByEtag = async (_: string) => ({
+    const getByEtag = async () => ({
       readableStream: new ReadableStream(),
       contentType: "text/html",
       cachesStatus: "HIT",

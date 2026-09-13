@@ -958,7 +958,7 @@ export const ServiceProvider = () =>
         stables: ["machineId", "name", "region", "appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news, output }) {
           if (news === undefined || output === undefined) return undefined;
           if (isResolved(news)) {
             const desiredAppName = appNameOf(news.app);

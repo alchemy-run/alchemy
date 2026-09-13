@@ -242,7 +242,7 @@ export const AwsAuth = AuthProviderLayer<
         ),
       );
 
-    const loginStored = Effect.fn(function* (profileName: string) {
+    const loginStored = Effect.fn(function* () {
       const accessKeyId = yield* interaction.prompt
         .text({
           message: "AWS Access Key ID",
@@ -291,7 +291,7 @@ export const AwsAuth = AuthProviderLayer<
       };
     });
 
-    const configureInteractive = (profileName: string) =>
+    const configureInteractive = () =>
       interaction.prompt
         .select({
           message: "AWS authentication method",
@@ -335,7 +335,7 @@ export const AwsAuth = AuthProviderLayer<
                   return config;
                 }),
               ),
-              Match.when("stored", () => loginStored(profileName)),
+              Match.when("stored", () => loginStored()),
               Match.exhaustive,
             ),
           ),
@@ -345,9 +345,7 @@ export const AwsAuth = AuthProviderLayer<
     // (ChildProcessSpawner for `aws sso login`) and `configureWith`'s
     // (FileSystem/Path for ~/.aws/config probing) — the contract shares one
     // ConfigureReq type parameter between the two entry points.
-    const configureCredentials = (
-      profileName: string,
-    ): Effect.Effect<
+    const configureCredentials = (): Effect.Effect<
       AwsAuthConfig,
       AuthError,
       | ChildProcessSpawner
@@ -356,7 +354,7 @@ export const AwsAuth = AuthProviderLayer<
       | Path.Path
       | Interaction.Interaction
     > =>
-      configureInteractive(profileName).pipe(
+      configureInteractive().pipe(
         Effect.mapError((e) =>
           e instanceof AuthError
             ? e

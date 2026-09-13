@@ -273,7 +273,7 @@ const findByName = (environmentId: string, name: string) =>
     ),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>

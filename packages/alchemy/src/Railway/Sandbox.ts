@@ -402,7 +402,7 @@ const listSandboxes = (environmentId: string) =>
     ),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>

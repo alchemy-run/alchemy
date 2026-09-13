@@ -428,6 +428,7 @@ function getRpcPropertyCallableThenable(
     return maybeFn(...args);
   } as Promise<unknown> & ((...args: Array<unknown>) => Promise<unknown>);
 
+  // oxlint-disable-next-line unicorn/no-thenable
   fn.then = (onFulfilled, onRejected) => property.then(onFulfilled, onRejected);
   fn.catch = (onRejected) => property.catch(onRejected);
   fn.finally = (onFinally) => property.finally(onFinally);

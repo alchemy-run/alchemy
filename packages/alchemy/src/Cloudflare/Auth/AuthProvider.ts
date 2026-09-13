@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -18,7 +17,6 @@ import {
   refreshHint,
   type ConfigureField,
   type ConfigureMethod,
-  type ProviderDetails,
 } from "../../Auth/AuthProvider.ts";
 import { browserOAuth } from "../../Auth/BrowserOAuth.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
@@ -283,7 +281,7 @@ export const CloudflareAuth = AuthProviderLayer<
         return credentials;
       });
 
-    const loginStored = Effect.fn(function* (profileName: string) {
+    const loginStored = Effect.fn(function* () {
       const credentialType = yield* interaction.prompt
         .select({
           message: "Cloudflare credential type",
@@ -398,7 +396,7 @@ export const CloudflareAuth = AuthProviderLayer<
               Match.when("oauth", () =>
                 configureOAuth(profileName, currentConfig),
               ),
-              Match.when("stored", () => loginStored(profileName)),
+              Match.when("stored", () => loginStored()),
               Match.exhaustive,
             ),
           ),

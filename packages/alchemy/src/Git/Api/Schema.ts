@@ -51,7 +51,7 @@ export const OwnerName = RepoName;
  * (symref to the default branch) and is never a valid `RefName` here.
  */
 export const RefName = Schema.String.check(
-  Schema.isPattern(/^refs\/[^\s~^:?*\[\\]+$/),
+  Schema.isPattern(/^refs\/[^\s~^:?*[\\]+$/),
 );
 
 /**

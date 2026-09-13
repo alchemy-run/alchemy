@@ -489,7 +489,7 @@ const assertAttachTarget = Effect.fn(function* (input: {
   }
 });
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>

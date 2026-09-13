@@ -149,7 +149,7 @@ export const IdentityPoolRoleAttachmentProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({ news, output, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
           const identityPoolId = news.identityPoolId;
           const desired = desiredRoles(news);
 

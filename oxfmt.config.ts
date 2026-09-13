@@ -1,4 +1,4 @@
-import { defineConfig } from "oxfmt";
+import { defineConfig, type OxfmtConfig } from "oxfmt";
 
 export default defineConfig({
   semi: true,
@@ -17,7 +17,7 @@ export default defineConfig({
   },
   ignorePatterns: [
     "dist/**",
-    "./submodules",
+    "./submodules/**",
     "*.min.js",
     "**/lib/**",
     "**/mdx/**",
@@ -31,4 +31,4 @@ export default defineConfig({
     "examples/prisma-tanstack-start/src/prisma/contract.json",
     "**/fixtures/chart/templates/**",
   ],
-});
+} satisfies OxfmtConfig);

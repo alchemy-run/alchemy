@@ -16,10 +16,7 @@ import {
 } from "../../../Bundle/Vite.ts";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
-import {
-  makeResourceLogger,
-  makeResourceOutput,
-} from "../../../Util/ResourceOutput.ts";
+import { makeResourceLogger } from "../../../Util/ResourceOutput.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
@@ -304,7 +301,7 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
             ];
           }),
         ),
-      )).filter(([_, value]) => value !== undefined),
+      )).filter(([, value]) => value !== undefined),
     );
   });
 

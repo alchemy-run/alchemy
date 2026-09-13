@@ -18,7 +18,7 @@ import {
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
 } from "../SQL/Migrations/index.ts";
-import { hashImports, hashMigrations } from "../SQL/SqlFile.ts";
+import { hashImports } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {

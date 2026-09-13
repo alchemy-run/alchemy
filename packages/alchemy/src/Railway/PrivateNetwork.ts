@@ -319,7 +319,7 @@ const findNetwork = (
     Effect.map((networks) => networks.find(match)),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>
@@ -764,7 +764,7 @@ const resolveServiceName = (serviceId: string, hint?: string) =>
         ),
       );
 
-const listProjectServices = (projectId: string) =>
+const _listProjectServices = (projectId: string) =>
   fetchProjectServices(projectId, {
     id: true,
     name: true,

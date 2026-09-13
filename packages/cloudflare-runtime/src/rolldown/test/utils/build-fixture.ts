@@ -35,7 +35,7 @@ export async function buildFixture(
   const fixture = normalizeFixturePath(options.fixture);
   const bundle = await rolldown({
     input: fixture,
-    ...(options.inputOptions ?? {}),
+    ...options.inputOptions,
     plugins: [
       ...(options.plugins ?? []),
       cloudflare(options.pluginOptions ?? DEFAULT_PLUGIN_OPTIONS),
@@ -47,7 +47,7 @@ export async function buildFixture(
       file: defaultOutputPath(fixture),
       format: "esm",
       sourcemap: true,
-      ...(options.generateOptions ?? {}),
+      ...options.generateOptions,
     });
     return {
       fixture,

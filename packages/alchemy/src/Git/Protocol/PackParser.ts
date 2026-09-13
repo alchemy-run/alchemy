@@ -40,7 +40,7 @@ import {
   type Oid,
   type PackEntryType,
 } from "./ObjectCodec.ts";
-import { type ObjectSource, StoreError } from "./Store.ts";
+import { type StoreError } from "./Store.ts";
 import {
   deflate,
   inflate,

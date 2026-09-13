@@ -251,7 +251,7 @@ const findByName = (projectId: string, name: string) =>
       railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
     );
 
-const listProjectEnvironments = (projectId: string) =>
+const _listProjectEnvironments = (projectId: string) =>
   railway.environments
     .items({ projectId, first: 50 }, environmentSelection)
     .pipe(

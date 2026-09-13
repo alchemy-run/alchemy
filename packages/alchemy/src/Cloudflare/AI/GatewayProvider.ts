@@ -190,7 +190,7 @@ export const isGatewayProvider = (value: unknown): value is GatewayProvider =>
 export const GatewayProviderProvider = () =>
   Provider.succeed(GatewayProvider, {
     stables: ["providerConfigId", "accountId", "gatewayId"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {

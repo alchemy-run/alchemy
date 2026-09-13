@@ -49,11 +49,7 @@ import {
   type WorkerExecutionContextAccess,
 } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type {
-  WorkerBinding,
-  WorkerBindingResource,
-  WorkerBindings,
-} from "./WorkerBinding.ts";
+import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,

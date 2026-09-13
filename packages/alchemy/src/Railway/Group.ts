@@ -639,7 +639,7 @@ const getEnvironment = (environmentId: string, projectId: string) =>
     railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
-const getEnvironmentConfig = (environmentId: string, projectId: string) =>
+const _getEnvironmentConfig = (environmentId: string, projectId: string) =>
   getEnvironment(environmentId, projectId).pipe(
     Effect.map((env) =>
       env === undefined
@@ -648,7 +648,7 @@ const getEnvironmentConfig = (environmentId: string, projectId: string) =>
     ),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>

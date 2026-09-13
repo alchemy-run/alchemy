@@ -2386,7 +2386,7 @@ export const LiveWorkerProvider = () =>
                     ];
                   }),
                 ),
-              )).filter(([_, value]) => value !== undefined),
+              )).filter(([, value]) => value !== undefined),
             ),
             {
               // A relative `vite.main` is documented to resolve from the Vite
