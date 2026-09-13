@@ -40,9 +40,11 @@ export const EngineeringChart = Engineering.make`
  * {@link Engineering} chart at their lineage key; spawned engineers
  * (`e-…`) are Engineer sessions at theirs.
  */
-export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.sync(
-  Colleagues,
-  () => {
+// Layer.suspend: this module sits in the Root ↔ Group ↔ Ask import
+// cycle — the tag must not be dereferenced until build time, or the
+// partially-evaluated module order trips the TDZ at boot
+export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
+  Layer.sync(Colleagues, () => {
     // the chart's STATIC refs — the members as declared, no Layer
     // dependency (Colleagues is wired into the members themselves;
     // depending on the built group would cycle)
@@ -80,5 +82,5 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.sync(
           return { name: slug, term: member.name, key: lineage(slug) };
         }),
     });
-  },
+  }),
 );

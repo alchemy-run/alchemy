@@ -1,31 +1,38 @@
 /**
- * THE APP — one page: the ROOT CHANNEL, the conversation between the
- * human and the Head (the `Head:root` session — streaming transcript,
- * tool cards, composer). Everything else is an OVERLAY over it,
- * addressed by query params (lib/routes.ts):
+ * THE HUD — the whole organization on one screen:
  *
- * - a teammate's session (`?agent=`) — any ask card's target, read-only
- * - a workspace's terminal (`?workspace=`) — the machine's door
- * - a call's live thread (`?call=`) — watch the members talk, join in
+ * - LEFT: INBOUND — the valve. Events from the world land here, HELD;
+ *   nothing reaches the manager until a human releases it (or the
+ *   valve is flipped to auto). Always visible: you SEE what's coming.
+ * - CENTER: the ROOT CHANNEL — the one conversation between the human
+ *   and the Head (`Head:root`), streaming.
+ * - RIGHT: ENGINEERING — the manager at work: its live session feed,
+ *   the task ledger moving todo → done, and the proposals awaiting
+ *   the humans' click.
  *
- * The company's structure is CODE (services/root/src); this window is
- * only its conversation.
+ * OVERLAYS (query-param addressed, lib/routes.ts): a teammate's
+ * session (`?agent=`), a workspace's terminal (`?workspace=`), a
+ * call's joinable thread (`?call=`).
+ *
+ * The company's structure is CODE (services/root/src); this screen is
+ * its mission control.
  */
 import { ChatView } from "@/components/chat";
 import { CallThread } from "@/components/call";
-import { TriagePanel, useTriage } from "@/components/triage";
-import { GhosttyTerminal } from "@/components/terminal";
+import { EngineeringPane } from "@/components/engineering";
 import { SessionModelSelect } from "@/components/model-select";
-import { useTheme } from "@/lib/theme";
+import { GhosttyTerminal } from "@/components/terminal";
+import { TriagePanel } from "@/components/triage";
 import {
   OVERLAY_EVENT,
   overlayFromLocation,
   showOverlay,
   type Overlay,
 } from "@/lib/routes";
-import { Moon, Sun, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { Moon, PanelLeft, PanelRight, Sun, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /** The Root channel's session id — the Head's one session. */
 const ROOT_CHAT = "Head:root";
@@ -88,6 +95,7 @@ const OverlayView = ({ overlay }: { overlay: Overlay }) => {
         </OverlayShell>
       );
     case "triage":
+      // the valve lives in the left pane now; the deep link survives
       return (
         <OverlayShell title="triage — the inbound valve">
           <TriagePanel />
@@ -100,9 +108,10 @@ export const App = () => {
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
   );
+  const [showInbound, setShowInbound] = useState(true);
+  const [showEngineering, setShowEngineering] = useState(true);
   const { resolved, toggle } = useTheme();
   const ThemeIcon = resolved === "dark" ? Moon : Sun;
-  const triage = useTriage();
 
   useEffect(() => {
     const sync = () => setOverlay(overlayFromLocation());
@@ -117,40 +126,24 @@ export const App = () => {
   return (
     <div className="relative flex h-dvh flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowInbound((current) => !current)}
+            aria-label="toggle the inbound pane"
+            className={cn(
+              "flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent",
+              !showInbound && "text-muted-foreground",
+            )}
+          >
+            <PanelLeft className="size-4" />
+          </button>
           <span className="text-sm font-semibold tracking-tight">root</span>
           <span className="text-[11px] text-muted-foreground">
-            the company's channel
+            the company
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => showOverlay({ kind: "triage" })}
-            aria-label={
-              triage === undefined
-                ? "triage"
-                : `triage, ${triage.held.length} held`
-            }
-            title="the inbound valve — held events wait for your release"
-            className={cn(
-              "flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-2 py-0.5 font-mono text-[11px] hover:bg-accent",
-              (triage?.held.length ?? 0) > 0 &&
-                "border-moss text-foreground",
-            )}
-          >
-            triage
-            <span
-              className={cn(
-                "rounded px-1",
-                (triage?.held.length ?? 0) > 0
-                  ? "bg-moss/20"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {triage?.held.length ?? "…"}
-            </span>
-          </button>
           <SessionModelSelect sessionId={ROOT_CHAT} label="model" size="sm" />
           <button
             type="button"
@@ -160,14 +153,43 @@ export const App = () => {
           >
             <ThemeIcon className="size-4" />
           </button>
+          <button
+            type="button"
+            onClick={() => setShowEngineering((current) => !current)}
+            aria-label="toggle the engineering pane"
+            className={cn(
+              "flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent",
+              !showEngineering && "text-muted-foreground",
+            )}
+          >
+            <PanelRight className="size-4" />
+          </button>
         </div>
       </header>
-      <main className="flex min-h-0 flex-1 flex-col">
-        <ChatView
-          id={ROOT_CHAT}
-          active={overlay === undefined}
-          placeholder="Talk to the Head…"
-        />
+      <main className="flex min-h-0 flex-1">
+        {showInbound && (
+          <aside
+            aria-label="Inbound"
+            className="flex w-[300px] shrink-0 flex-col border-r border-border"
+          >
+            <TriagePanel />
+          </aside>
+        )}
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <ChatView
+            id={ROOT_CHAT}
+            active={overlay === undefined}
+            placeholder="Talk to the Head…"
+          />
+        </section>
+        {showEngineering && (
+          <aside
+            aria-label="Engineering"
+            className="flex w-[380px] shrink-0 flex-col border-l border-border"
+          >
+            <EngineeringPane active={false} />
+          </aside>
+        )}
       </main>
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>

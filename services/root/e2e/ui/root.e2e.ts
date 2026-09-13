@@ -4,10 +4,19 @@
  * posts into it; an `ask` tool card opens into its nested chain; the
  * `?workspace=` overlay dials the workspace's terminal socket; the
  * `?call=` overlay streams a call's thread and lets the human join;
- * the `?triage` overlay is the inbound valve (held events released by
- * hand); closing any overlay returns to `/`.
+ * the Inbound pane is the triage valve (held events released by
+ * hand); the Engineering pane shows the manager's feed, the task
+ * ledger, and the pending proposals; closing any overlay returns
+ * to `/`.
  */
-import { expect, test, openApp, NOW, ROOT_CHAT } from "./harness";
+import {
+  expect,
+  test,
+  openApp,
+  NOW,
+  ROOT_CHAT,
+  MANAGER_CHAT,
+} from "./harness";
 
 test.describe("the Root channel", () => {
   test("renders the seeded conversation", async ({ page, api }) => {
@@ -160,24 +169,23 @@ test.describe("the call overlay", () => {
   });
 });
 
-test.describe("the triage valve", () => {
-  test("the header badge counts the held and opens the panel", async ({
-    page,
-    api,
-  }) => {
+/** The left pane — the valve lives HERE now (the `?triage` deep link
+ *  survives, but the HUD shows the queue without a click). */
+const inbound = (page: import("@playwright/test").Page) =>
+  page.locator("aside[aria-label='Inbound']");
+
+test.describe("the triage valve (the Inbound pane)", () => {
+  test("the pane counts and lists the held", async ({ page, api }) => {
     api.seedHeld({ kind: "issue", ref: "acme/app#42", text: "login breaks on Safari" });
     api.seedHeld({ kind: "pull", ref: "acme/app#43", text: "fix: retry backoff fencepost" });
     await openApp(page);
 
-    const badge = page.getByRole("button", { name: "triage, 2 held" });
-    await expect(badge).toBeVisible();
-    await expect(badge).toContainText("2");
-
-    await badge.click();
-    await expect(page).toHaveURL("/?triage");
-    await expect(page.getByText("login breaks on Safari")).toBeVisible();
+    const pane = inbound(page);
+    await expect(pane).toBeVisible();
+    await expect(pane).toContainText("2 inbound held");
+    await expect(pane.getByText("login breaks on Safari")).toBeVisible();
     await expect(
-      page.getByText("fix: retry backoff fencepost"),
+      pane.getByText("fix: retry backoff fencepost"),
     ).toBeVisible();
   });
 
@@ -187,19 +195,20 @@ test.describe("the triage valve", () => {
   }) => {
     const first = api.seedHeld({ text: "login breaks on Safari" });
     api.seedHeld({ text: "fix: retry backoff fencepost" });
-    await openApp(page, "/?triage");
+    await openApp(page);
 
-    await expect(page.locator(`[data-held='${first.seq}']`)).toBeVisible();
-    await page
+    const pane = inbound(page);
+    await expect(pane.locator(`[data-held='${first.seq}']`)).toBeVisible();
+    await pane
       .getByRole("button", { name: `release inbound ${first.seq}` })
       .click();
 
     await expect.poll(() => api.triage.released).toEqual([[first.seq]]);
     // the panel reloads right after the POST — the row is gone, the
     // other stays held
-    await expect(page.locator(`[data-held='${first.seq}']`)).toHaveCount(0);
+    await expect(pane.locator(`[data-held='${first.seq}']`)).toHaveCount(0);
     await expect(
-      page.getByText("fix: retry backoff fencepost"),
+      pane.getByText("fix: retry backoff fencepost"),
     ).toBeVisible();
   });
 
@@ -209,28 +218,126 @@ test.describe("the triage valve", () => {
   }) => {
     api.seedHeld({ text: "login breaks on Safari" });
     api.seedHeld({ text: "fix: retry backoff fencepost" });
-    await openApp(page, "/?triage");
+    await openApp(page);
 
-    await expect(page.getByText("login breaks on Safari")).toBeVisible();
-    await page.getByRole("button", { name: "release all" }).click();
+    const pane = inbound(page);
+    await expect(pane.getByText("login breaks on Safari")).toBeVisible();
+    await pane.getByRole("button", { name: "release all" }).click();
 
     await expect.poll(() => api.triage.released).toEqual(["all"]);
-    await expect(page.locator("[data-held]")).toHaveCount(0);
+    await expect(pane.locator("[data-held]")).toHaveCount(0);
     await expect(
-      page.getByText("The queue is empty — the world is quiet."),
+      pane.getByText("The queue is empty — the world is quiet."),
     ).toBeVisible();
   });
 
   test("the mode toggle PUTs the new mode", async ({ page, api }) => {
-    await openApp(page, "/?triage");
+    await openApp(page);
 
-    await page.getByRole("button", { name: "auto mode" }).click();
+    const pane = inbound(page);
+    await pane.getByRole("button", { name: "auto mode" }).click();
     await expect.poll(() => api.triage.modeSets).toEqual(["auto"]);
     expect(api.triage.mode).toBe("auto");
     // the panel reloads and shows the flipped valve on its empty state
     await expect(
-      page.getByText("(auto: releases flow through)"),
+      pane.getByText("(auto: releases flow through)"),
     ).toBeVisible();
+  });
+});
+
+const engineering = (page: import("@playwright/test").Page) =>
+  page.locator("aside[aria-label='Engineering']");
+
+test.describe("the engineering pane", () => {
+  test("shows the manager's feed and the ledger, chips open overlays", async ({
+    page,
+    api,
+  }) => {
+    api.seedTurn(
+      MANAGER_CHAT,
+      "inbound: acme/app#42",
+      "Filed as t-1 and assigned.",
+    );
+    api.seedTask({
+      id: "t-1",
+      title: "fix Safari login",
+      status: "working",
+      assignee: "e-1",
+      workspace: "pr-9",
+      items: [{ ref: "acme/app#42", kind: "issue" }],
+    });
+    await openApp(page);
+
+    const pane = engineering(page);
+    await expect(pane).toBeVisible();
+    // the manager's live feed — its own transcript, read-only
+    await expect(
+      pane.getByText("Filed as t-1 and assigned."),
+    ).toBeVisible();
+    // the ledger, grouped with status counts
+    await expect(pane.locator("[data-pane='tasks']")).toContainText(
+      "working 1",
+    );
+    const task = pane.locator("[data-task='t-1']");
+    await expect(task).toBeVisible();
+    await expect(task).toContainText("fix Safari login");
+
+    // the workspace chip dials the workspace's terminal
+    await task.getByRole("button", { name: "pr-9" }).click();
+    await expect(page).toHaveURL("/?workspace=pr-9");
+    await expect.poll(() => api.terminal.opened.length).toBe(1);
+    expect(decodeURIComponent(api.terminal.sockets[0]!)).toContain(
+      "/terminal/Workspace/root::ws-pr-9",
+    );
+
+    // …and the assignee chip opens the engineer's session
+    await page.getByRole("button", { name: "close overlay" }).click();
+    await task.getByRole("button", { name: "e-1" }).click();
+    await expect(page).toHaveURL(
+      `/?agent=${encodeURIComponent("Engineer:root::e-1")}`,
+    );
+    await expect(page.getByText("Engineer:root::e-1")).toBeVisible();
+  });
+
+  test("approving a pending proposal posts the decision and the row leaves", async ({
+    page,
+    api,
+  }) => {
+    api.seedProposal({
+      id: "p-1",
+      kind: "merge",
+      summary: "merge acme/app#43",
+      detail: "CI green, review approved — merge the backoff fix.",
+    });
+    await openApp(page);
+
+    const pane = engineering(page);
+    const row = pane.locator("[data-proposal='p-1']");
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("merge acme/app#43");
+
+    await pane
+      .getByRole("button", { name: "approve merge acme/app#43" })
+      .click();
+    await expect
+      .poll(() => api.decisions)
+      .toEqual([{ id: "p-1", decision: "approve" }]);
+    // the pane reloads ?status=pending — the executed row is gone
+    await expect(row).toHaveCount(0);
+    await expect(pane.getByText("Nothing awaits you.")).toBeVisible();
+  });
+
+  test("the pane toggles away and back", async ({ page }) => {
+    await openApp(page);
+
+    await expect(engineering(page)).toBeVisible();
+    const toggle = page.getByRole("button", {
+      name: "toggle the engineering pane",
+    });
+    await toggle.click();
+    await expect(engineering(page)).toHaveCount(0);
+    await toggle.click();
+    await expect(engineering(page)).toBeVisible();
   });
 });
 

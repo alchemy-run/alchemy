@@ -13,7 +13,27 @@ export const NOW = new Date("2026-08-21T12:00:00Z");
 /** The Root channel's session id — the Head's one session. */
 export const ROOT_CHAT = "Head:root";
 
+/** The engineering manager's session id — the right pane's feed
+ *  (mirrors `MANAGER_CHAT` in ui/components/engineering.tsx; the
+ *  component keeps its constant un-importable here because the module
+ *  pulls the whole chat surface through vite-only aliases). */
+export const MANAGER_CHAT = "EngineeringManager:root::engineering-manager";
+
 type WebSocketRoute = Parameters<Parameters<Page["routeWebSocket"]>[1]>[0];
+
+/* ── the task ledger (engineering.tsx, shape mirrored — the
+ *    component keeps its Task interface private) ─────────────────── */
+
+export interface TaskRow {
+  id: string;
+  title: string;
+  items: Array<{ ref: string; kind: "issue" | "pull" | "request" }>;
+  status: "todo" | "working" | "review" | "done";
+  assignee?: string;
+  workspace?: string;
+  notes: string[];
+  updatedAt: number;
+}
 
 /* ── proposals (src/proposals/Proposals.ts, shape mirrored) ───────── */
 
@@ -329,6 +349,26 @@ export class FakeApi {
     return item;
   }
 
+  /* ── the task ledger ── */
+
+  /** Seedable ledger rows — `GET /api/tasks` serves them verbatim;
+   *  the engineering pane groups them by status itself. */
+  tasks: TaskRow[] = [];
+
+  seedTask(
+    partial: Partial<TaskRow> & { id: string; title: string },
+  ): TaskRow {
+    const row: TaskRow = {
+      items: [],
+      status: "todo",
+      notes: [],
+      updatedAt: NOW.getTime() - 120_000,
+      ...partial,
+    };
+    this.tasks = [...this.tasks.filter((task) => task.id !== row.id), row];
+    return row;
+  }
+
   /* ── proposals ── */
 
   proposals: Record<string, ProposalRow> = {};
@@ -575,6 +615,11 @@ export class FakeApi {
       this.triage.modeSets.push(body.mode);
       this.triage.mode = body.mode;
       return this.json(route, { mode: body.mode });
+    }
+
+    // the engineering ledger
+    if (path === "/api/tasks" && method === "GET") {
+      return this.json(route, { tasks: this.tasks });
     }
 
     // proposals: the queue, one row, the decision
