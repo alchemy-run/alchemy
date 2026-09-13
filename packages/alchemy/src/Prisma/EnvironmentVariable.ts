@@ -1,16 +1,4 @@
-import * as Effect from "effect/Effect";
-import { Unowned } from "../AdoptPolicy.ts";
-import { isResolved } from "../Diff.ts";
-import * as Redacted from "effect/Redacted";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetEnvironmentVariablesResponse,
   deleteEnvironmentVariable,
@@ -19,7 +7,21 @@ import {
   updateEnvironmentVariable,
   createEnvironmentVariable,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { Unowned } from "../AdoptPolicy.ts";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import type { ObservedEnvironmentVariable } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -29,8 +31,6 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { ObservedEnvironmentVariable } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface EnvironmentVariableProps {
   /**

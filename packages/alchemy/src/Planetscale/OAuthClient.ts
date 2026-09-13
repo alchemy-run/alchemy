@@ -1,5 +1,5 @@
-import { makeOAuthClient } from "../Auth/OAuthFlow.ts";
 import * as Redacted from "effect/Redacted";
+import { makeOAuthClient } from "../Auth/OAuthFlow.ts";
 
 export {
   OAuthCredentials,

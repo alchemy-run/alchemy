@@ -8,14 +8,6 @@ import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as UrlParams from "effect/unstable/http/UrlParams";
-import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
-import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
-import { Policy } from "../src/Registry.ts";
-import {
-  installTag,
-  parseInstallPath,
-  tagsFor,
-} from "../src/Registry/Handler.ts";
 import {
   dependencyLevels,
   expandBraces,
@@ -24,6 +16,14 @@ import {
   tarballFile,
 } from "../src/cli/pack.ts";
 import { publish } from "../src/cli/publish.ts";
+import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
+import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
+import { Policy } from "../src/Registry.ts";
+import {
+  installTag,
+  parseInstallPath,
+  tagsFor,
+} from "../src/Registry/Handler.ts";
 
 describe("registry", () => {
   const run = {

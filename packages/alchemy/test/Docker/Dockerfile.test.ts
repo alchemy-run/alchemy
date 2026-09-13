@@ -1,3 +1,6 @@
+import { describe, expect, it, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { imageSourceKind, validateImageSource } from "@/AWS/ECR/ImageSource.ts";
 import {
   buildFinalDockerfile,
@@ -6,9 +9,6 @@ import {
 } from "@/Cloudflare/Containers/ContainerBundle.ts";
 import * as Dockerfile from "@/Docker/Dockerfile.ts";
 import * as Output from "@/Output.ts";
-import { describe, expect, it, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 describe("Dockerfile.inline", () => {
   test("no interpolations produce plain string content", () => {

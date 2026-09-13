@@ -11,9 +11,9 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { bindFlyApiToken } from "./Credentials.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { App } from "./App.ts";
+import { bindFlyApiToken } from "./Credentials.ts";
 import type { Secret } from "./Secret.ts";
 import type { SecretKey } from "./SecretKey.ts";
 

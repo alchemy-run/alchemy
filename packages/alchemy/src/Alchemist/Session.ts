@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -12,7 +13,6 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { pathToFileURL } from "node:url";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
@@ -29,18 +29,17 @@ import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
 import { RailwayAuth } from "../Railway/AuthProvider.ts";
-import { StripeAuth } from "../Stripe/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
-import { Progress } from "./Progress.ts";
+import { StripeAuth } from "../Stripe/AuthProvider.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { fileLogger } from "../Util/FileLogger.ts";
-
 import {
   DEFAULT_ENTRYPOINT,
   resolveStackEntrypoint,
   StackEntrypointError,
 } from "./Entrypoint.ts";
+import { Progress } from "./Progress.ts";
 
 export { DEFAULT_ENTRYPOINT, resolveStackEntrypoint, StackEntrypointError };
 

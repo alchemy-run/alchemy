@@ -1,3 +1,9 @@
+import { Octokit as RestOctokit } from "@octokit/rest";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as GitHub from "@/GitHub";
 import { GitHubCredentials } from "@/GitHub/Credentials";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -5,12 +11,6 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
-import { Octokit as RestOctokit } from "@octokit/rest";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 
 const testOwner = (value: string) => {
   if (value !== "alchemy-run-test" && value !== "alchemy-run-test-2") {

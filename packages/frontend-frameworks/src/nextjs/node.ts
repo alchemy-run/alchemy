@@ -1,3 +1,16 @@
+import type * as NodeChildProcessModule from "node:child_process";
+import { createRequire } from "node:module";
+import type * as NodeNet from "node:net";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { runBuildChild } from "../core/BuildChild.ts";
 /**
  * `@alchemy.run/frontend-frameworks/nextjs/node` — Next.js on a Node
  * container (`next build` + a custom `next({ dev: false })` server).
@@ -18,24 +31,6 @@
  * "@alchemy.run/frontend-frameworks/nextjs/node"`.
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
-import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { createRequire } from "node:module";
-import type * as NodeChildProcessModule from "node:child_process";
-import type * as NodeNet from "node:net";
-import { runBuildChild } from "../core/BuildChild.ts";
-import {
-  NODE_BUNDLE_CONDITIONS,
-  NODE_DEFAULT_PORT,
-  NODE_SERVE_ENTRY_FILE_NAME,
-} from "../core/NodeServe.ts";
 import {
   DeployTargetError,
   makeDeployTarget,
@@ -43,6 +38,11 @@ import {
   type BuildOutput,
   type DeployTarget,
 } from "../core/index.ts";
+import {
+  NODE_BUNDLE_CONDITIONS,
+  NODE_DEFAULT_PORT,
+  NODE_SERVE_ENTRY_FILE_NAME,
+} from "../core/NodeServe.ts";
 
 const failFramework = (message: string) => (cause: unknown) =>
   new FrameworkCore.FrameworkError({ framework: "nextjs", message, cause });

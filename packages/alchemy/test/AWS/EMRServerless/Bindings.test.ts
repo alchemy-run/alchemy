@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as sts from "@distilled.cloud/aws/sts";
@@ -12,6 +9,9 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EmrServerlessTestFunctionLive, {
   BINDINGS_APP_NAME,
   BINDINGS_ROLE_NAME,
@@ -290,7 +290,10 @@ describe.sequential("EMRServerless Bindings", () => {
           Effect.gen(function* () {
             const response = (yield* method === "GET"
               ? getJson(path)
-              : postJson(path)) as { tag: string; detail: string };
+              : postJson(path)) as {
+              tag: string;
+              detail: string;
+            };
             expect(response.detail).not.toContain("not authorized");
             expect(tags).toContain(response.tag);
           }),
@@ -349,14 +352,19 @@ describe.sequential("EMRServerless Bindings", () => {
           const roleArn = `arn:aws:iam::${Account}:role/${BINDINGS_ROLE_NAME}`;
           const run = (yield* postJson(
             `/jobrun-run?roleArn=${encodeURIComponent(roleArn)}`,
-          )) as { jobRunId: string; arn: string };
+          )) as {
+            jobRunId: string;
+            arn: string;
+          };
           expect(run.jobRunId).toBeTruthy();
           expect(run.arn).toContain("/jobruns/");
 
           // 3. Cancel it immediately (no workers ever run).
           const cancelled = (yield* postJson(
             `/jobrun-cancel?id=${run.jobRunId}`,
-          )) as { jobRunId: string };
+          )) as {
+            jobRunId: string;
+          };
           expect(cancelled.jobRunId).toBe(run.jobRunId);
 
           // 4. GetJobRun observes the cancellation through a terminal state.

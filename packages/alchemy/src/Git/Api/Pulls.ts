@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 /**
  * The `pulls` group: pull-request lifecycle + merge (DESIGN.md §5).
  *
@@ -9,7 +10,6 @@
  * server never writes conflict markers.
  */
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
   BranchMissing,

@@ -1,4 +1,3 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -7,6 +6,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const tarball = process.env.ALCHEMY_CLI_PACKAGE;
 const tarballDirectory = process.env.ALCHEMY_CLI_PACKAGES;

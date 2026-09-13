@@ -1,8 +1,3 @@
-import {
-  parseDeploymentLogRecord,
-  tailDeploymentLogs,
-} from "@/Prisma/PrismaLogs";
-import { Credentials } from "@/Prisma/Credentials";
 import { createServer, type Server, type Socket } from "node:net";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -12,6 +7,11 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import { WebSocketServer } from "ws";
+import { Credentials } from "@/Prisma/Credentials";
+import {
+  parseDeploymentLogRecord,
+  tailDeploymentLogs,
+} from "@/Prisma/PrismaLogs";
 
 describe("Prisma deployment logs", () => {
   it.effect("decodes compute log records into Alchemy log lines", () =>

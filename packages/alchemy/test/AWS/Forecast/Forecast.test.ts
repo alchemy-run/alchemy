@@ -1,18 +1,20 @@
-import * as AWS from "@/AWS";
-import { Dataset, DatasetGroup } from "@/AWS/Forecast";
-import { toTagRecord } from "@/AWS/Forecast/internal.ts";
-import * as Test from "@/Test/Alchemy";
 import * as forecast from "@distilled.cloud/aws/forecast";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Dataset, DatasetGroup } from "@/AWS/Forecast";
+import { toTagRecord } from "@/AWS/Forecast/internal.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 class DatasetGroupStillExists extends Data.TaggedError(
   "DatasetGroupStillExists",
-)<{ readonly arn: string }> {}
+)<{
+  readonly arn: string;
+}> {}
 
 const assertDatasetGroupDeleted = (arn: string) =>
   forecast.describeDatasetGroup({ DatasetGroupArn: arn }).pipe(

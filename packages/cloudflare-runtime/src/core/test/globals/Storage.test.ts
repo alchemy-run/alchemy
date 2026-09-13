@@ -1,11 +1,11 @@
+import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as NodeFs from "node:fs";
-import * as NodeOs from "node:os";
 import * as Predicate from "effect/Predicate";
-import * as NodePath from "node:path";
 import * as Storage from "../../globals/Storage.ts";
 import { makeTempDirectory } from "../helpers/runtime.ts";
 

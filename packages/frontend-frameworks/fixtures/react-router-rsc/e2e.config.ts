@@ -1,5 +1,5 @@
-import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 import path from "node:path";
+import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 
 export default Options.make({
   vite: {

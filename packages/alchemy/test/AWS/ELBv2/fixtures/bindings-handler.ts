@@ -1,3 +1,9 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as AWS from "@/AWS";
 import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
 import {
@@ -20,12 +26,6 @@ import {
   TrustStore,
 } from "@/AWS/ELBv2";
 import { Bucket } from "@/AWS/S3";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * An RFC1918 IP outside the default VPC's CIDR. RegisterTargets accepts

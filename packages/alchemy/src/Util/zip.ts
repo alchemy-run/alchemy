@@ -1,6 +1,6 @@
+import { Buffer } from "node:buffer";
 import * as Effect from "effect/Effect";
 import type { Zippable } from "fflate";
-import { Buffer } from "node:buffer";
 
 export interface ZipFile {
   path: string;

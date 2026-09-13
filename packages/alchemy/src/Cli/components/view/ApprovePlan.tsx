@@ -1,6 +1,8 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
+import type { Plan as AlchemyPlan } from "../../../Plan.ts";
+import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
 import {
   ChoiceGroup,
   Box,
@@ -10,8 +12,6 @@ import {
   useKeyGlyphs,
   useTerminalInput,
 } from "../ui/index.ts";
-import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
-import type { Plan as AlchemyPlan } from "../../../Plan.ts";
 import { Plan, PlanTree } from "./PlanView.tsx";
 
 export interface ApprovePlanProps {

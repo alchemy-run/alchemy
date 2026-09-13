@@ -1,6 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RDS from "@/AWS/RDS";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -8,6 +5,9 @@ import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RDS from "@/AWS/RDS";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { RDSDataInfra } from "./infra.ts";
 
 const main = path.resolve(import.meta.dirname, "drizzle-iam-handler.ts");

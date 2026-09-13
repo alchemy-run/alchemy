@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { InvestigationGroup } from "@/AWS/AIOps";
-import type { PolicyStatement } from "@/AWS/IAM/Policy.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as aiops from "@distilled.cloud/aws/aiops";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { InvestigationGroup } from "@/AWS/AIOps";
+import type { PolicyStatement } from "@/AWS/IAM/Policy.ts";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

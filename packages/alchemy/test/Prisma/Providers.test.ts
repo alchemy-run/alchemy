@@ -1,9 +1,3 @@
-import { AlchemyContext } from "@/AlchemyContext";
-import { AuthProviders } from "@/Auth/AuthProvider";
-import * as CliKit from "@/Cli/CliKit";
-import * as Provider from "@/Provider";
-import * as Prisma from "@/Prisma";
-import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -13,6 +7,12 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { v4 as uuidv4 } from "uuid";
+import { AlchemyContext } from "@/AlchemyContext";
+import { AuthProviders } from "@/Auth/AuthProvider";
+import * as CliKit from "@/Cli/CliKit";
+import * as Prisma from "@/Prisma";
+import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
+import * as Provider from "@/Provider";
 
 const devAlchemyContext = Layer.succeed(AlchemyContext, {
   dotAlchemy: ".alchemy-test",

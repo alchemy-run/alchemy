@@ -129,9 +129,9 @@ export default function StackOutputsTerminal({
                 >
                   {r.id}
                 </span>
-                <span style={{ color: "var(--alc-code-comment)" }}>
-                  {` (${r.type})`}
-                </span>
+                <span
+                  style={{ color: "var(--alc-code-comment)" }}
+                >{` (${r.type})`}</span>
                 {inFlight && (
                   <span style={{ color: accent, marginLeft: 6 }}>
                     {r.status}

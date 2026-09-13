@@ -1,12 +1,12 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as AWS from "@/AWS";
 import { RouteTable, Vpc, VpcEndpoint } from "@/AWS/EC2";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 import { assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

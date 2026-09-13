@@ -1,3 +1,4 @@
+import type { AssetConfig } from "../types.ts";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import {
@@ -8,14 +9,13 @@ import {
   PLACEHOLDER_REGEX,
   SPLAT_REGEX,
 } from "./constants.ts";
-import { urlHasHost, validateUrl } from "./validateURL.ts";
-import type { AssetConfig } from "../types.ts";
 import type {
   InvalidRedirectRule,
   ParsedRedirects,
   RedirectLine,
   RedirectRule,
 } from "./types.ts";
+import { urlHasHost, validateUrl } from "./validateURL.ts";
 
 export function parseRedirects(
   input: string,

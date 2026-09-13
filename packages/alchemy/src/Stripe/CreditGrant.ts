@@ -28,8 +28,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const NAME_MAX_LENGTH = 250;
 const LIST_PAGE_SIZE = 100;

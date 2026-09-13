@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { PlaybackRestrictionPolicy } from "@/AWS/IVS";
-import * as Test from "@/Test/Alchemy";
 import * as ivs from "@distilled.cloud/aws/ivs";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { PlaybackRestrictionPolicy } from "@/AWS/IVS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

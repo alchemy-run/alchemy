@@ -1,7 +1,7 @@
+import type { StaticRouting } from "../types.ts";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { MAX_ROUTES_RULE_LENGTH, MAX_ROUTES_RULES } from "./constants.ts";
-import type { StaticRouting } from "../types.ts";
 
 // copy of what EWC does. Wrangler uploads the rules in one array (so the API is consistent with Wrangler config),
 // but router Worker expects the rules to be split into two arrays, which we do here.

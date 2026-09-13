@@ -5,17 +5,19 @@ import {
   useState,
   useSyncExternalStore,
 } from "@alchemy.run/sigil/react";
-import type { JSX } from "react";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import type * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import type { JSX } from "react";
 import type {
   InvalidStatePath,
   StateStoreError,
 } from "../../../State/index.ts";
+import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
+import { formatYamlLines, matchYamlKey } from "../../PropertyDiff.ts";
 import {
   Box,
   KeyBar,
@@ -29,8 +31,6 @@ import {
   useTerminalInput,
   useTerminalSize,
 } from "../ui/index.ts";
-import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
-import { formatYamlLines, matchYamlKey } from "../../PropertyDiff.ts";
 
 export type StateFileRef =
   | {

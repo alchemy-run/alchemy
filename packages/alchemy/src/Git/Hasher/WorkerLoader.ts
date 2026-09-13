@@ -28,11 +28,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { WorkerLoader } from "../../Cloudflare/Workers/WorkerLoader.ts";
 import type {
   Worker,
   WorkerEnvironment,
 } from "../../Cloudflare/Workers/Worker.ts";
+import { WorkerLoader } from "../../Cloudflare/Workers/WorkerLoader.ts";
 import {
   hashBounds,
   resolveDeltas,

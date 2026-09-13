@@ -1,17 +1,27 @@
-import { Action } from "@/Action";
-import { isResolved } from "@/Diff";
-import * as ProviderLayer from "@/Local/ProviderLayer";
-import { Resource } from "@/Resource";
+import { assert, describe, expect } from "alchemy-test";
+import { Data, Layer } from "effect";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import { Action } from "@/Action";
 import { adopt, Unowned } from "@/AdoptPolicy";
 import { apply, DestroyError } from "@/Apply";
-import { Cli } from "@/Report.ts";
+import { isResolved } from "@/Diff";
+import * as ProviderLayer from "@/Local/ProviderLayer";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
+import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { remote } from "@/ProviderMode.ts";
+import { Cli } from "@/Report.ts";
+import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import {
   type CreatingResourceState,
@@ -22,16 +32,6 @@ import {
   StateStoreError,
 } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { assert, describe, expect } from "alchemy-test";
-import { Data, Layer } from "effect";
-import * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
   aliasedWidgetDeletes,

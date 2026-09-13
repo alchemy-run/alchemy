@@ -1,3 +1,10 @@
+import { spawnSync } from "node:child_process";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { strFromU8, unzipSync } from "fflate";
 import {
   hashPackageInstallIdentity,
   installPackages,
@@ -12,13 +19,6 @@ import {
   resolveInstallTargets,
   resolvePackageInstallIdentity,
 } from "@/Bundle/InstalledPackages";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { strFromU8, unzipSync } from "fflate";
-import { spawnSync } from "node:child_process";
 import { zipCode } from "@/Util/zip";
 
 const integrationEnabled =

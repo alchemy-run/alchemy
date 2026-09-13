@@ -61,8 +61,7 @@ export default ShellMicrovm.make(
           const body = (yield* request.json.pipe(
             Effect.orElseSucceed(() => undefined),
           )) as { command?: unknown } | undefined;
-          const command =
-            typeof body?.command === "string" ? body.command : "";
+          const command = typeof body?.command === "string" ? body.command : "";
           if (!command.trim()) {
             return HttpServerResponse.text("empty command", { status: 400 });
           }

@@ -22,9 +22,9 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
+import { isMissingStripeResource } from "./missing.ts";
 import type { Product } from "./Product.ts";
 import type { Providers } from "./Providers.ts";
-import { isMissingStripeResource } from "./missing.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;

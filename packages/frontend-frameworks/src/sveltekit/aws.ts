@@ -1,3 +1,11 @@
+import * as NodeFs from "node:fs";
+import * as NodePath from "node:path";
+import type { Builder } from "@sveltejs/kit";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { rolldown } from "rolldown";
+import { runBuildChild } from "../core/BuildChild.ts";
 /**
  * `@alchemy.run/frontend-frameworks/sveltekit/aws` — the AWS Lambda deploy
  * target for `@alchemy.run/frontend-frameworks/sveltekit`.
@@ -26,14 +34,6 @@
  */
 import * as FrameworkCore from "../core/index.ts";
 import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
-import type { Builder } from "@sveltejs/kit";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as NodeFs from "node:fs";
-import * as NodePath from "node:path";
-import * as Path from "effect/Path";
-import { rolldown } from "rolldown";
-import { runBuildChild } from "../core/BuildChild.ts";
 import {
   make,
   type SvelteKitAdapter,

@@ -1,15 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-
 import DocDBElasticTestFunctionLive, {
   DocDBElasticTestFunction,
 } from "./handler";
@@ -313,7 +312,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         // Take an on-demand snapshot of the live cluster.
         const snapshot = (yield* get(
           `/snapshot?name=${SLOW_SNAPSHOT_NAME}`,
-        )) as { snapshotArn: string; status: string };
+        )) as {
+          snapshotArn: string;
+          status: string;
+        };
         expect(snapshot.snapshotArn).toContain(":cluster-snapshot/");
         snapshotArn = snapshot.snapshotArn;
 

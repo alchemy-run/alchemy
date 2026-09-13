@@ -1,6 +1,3 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as LexV2 from "@/AWS/LexV2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -8,6 +5,9 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as LexV2 from "@/AWS/LexV2";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -207,7 +207,9 @@ export default LexTestFunction.make(
         if (request.method === "DELETE" && url.pathname === "/session") {
           return yield* respond(
             deleteSession({ localeId: "en_US", sessionId }),
-            (reply) => ({ sessionId: reply.sessionId ?? null }),
+            (reply) => ({
+              sessionId: reply.sessionId ?? null,
+            }),
           );
         }
 

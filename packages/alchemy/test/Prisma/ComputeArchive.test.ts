@@ -1,14 +1,14 @@
+import { gunzipSync } from "node:zlib";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import {
   createComputeArchive,
   normalizeEntrypoint,
 } from "@/Prisma/ComputeArchive";
 import { closeDirectoryHandle } from "@/Prisma/Internal/ArchivePlatform";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { gunzipSync } from "node:zlib";
 
 interface TarEntry {
   name: string;

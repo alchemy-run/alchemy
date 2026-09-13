@@ -3,9 +3,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as nodePath from "node:path";
-
 import * as Effect from "effect/Effect";
-
 import packageJson from "../../package.json" with { type: "json" };
 
 const ALCHEMY_DIR = nodePath.join(os.homedir(), ".alchemy");

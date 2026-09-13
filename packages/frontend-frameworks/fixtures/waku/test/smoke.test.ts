@@ -1,7 +1,7 @@
-import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
-import { expect, test } from "@playwright/test";
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
+import * as Playwright from "@alchemy.run/cloudflare-test-tools/e2e/Playwright";
+import { expect, test } from "@playwright/test";
 
 for (const mode of Playwright.SERVER_METHODS) {
   test.describe(mode, () => {

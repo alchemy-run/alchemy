@@ -1,8 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
+import * as Cloudflare from "@/Cloudflare";
 import { Counter } from "./object.ts";
 import { WorkerA } from "./workerA.ts";
 

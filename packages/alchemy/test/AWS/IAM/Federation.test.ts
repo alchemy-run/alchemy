@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { OpenIDConnectProvider, Role, SAMLProvider } from "@/AWS/IAM";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { OpenIDConnectProvider, Role, SAMLProvider } from "@/AWS/IAM";
+import * as Test from "@/Test/Alchemy";
 import {
   testOidcGithubHost,
   testOidcGithubUrl,

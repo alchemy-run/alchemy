@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 // End-to-end Pipe fixture: an EventBridge Pipe (created at deploy time via
 // the `AWS.Pipes.from(...).toLambda(...)` builder, which synthesizes the
@@ -67,7 +67,9 @@ export default PipeTargetFunction.make(
             return Effect.forEach(
               event,
               (record) => sendMessage({ MessageBody: record.body }),
-              { discard: true },
+              {
+                discard: true,
+              },
             ).pipe(Effect.orDie);
           }
         };

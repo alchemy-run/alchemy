@@ -1,10 +1,10 @@
+import * as NodeFsPromises from "node:fs/promises";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
-import * as NodeFsPromises from "node:fs/promises";
-import * as NodeOs from "node:os";
-import * as NodePath from "node:path";
 import { afterAll } from "vitest";
 
 export const run = <A, E>(

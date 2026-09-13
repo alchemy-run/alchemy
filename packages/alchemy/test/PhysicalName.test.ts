@@ -1,10 +1,10 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { InstanceId } from "@/InstanceId.ts";
 import { createPhysicalName } from "@/PhysicalName.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 type StackShape = Omit<StackSpec, "output">;
 

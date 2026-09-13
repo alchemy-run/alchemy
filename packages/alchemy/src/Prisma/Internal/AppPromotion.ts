@@ -1,14 +1,14 @@
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import {
   getService,
   createServicePromote,
   createServiceRollback,
 } from "@distilled.cloud/prisma/management";
-import type { ObservedApp } from "./Observed.ts";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import type { PromoteAppResult } from "../Types.ts";
+import type { ObservedApp } from "./Observed.ts";
 
 export interface AppDeploymentTargetObservationOptions {
   readonly timeoutSeconds?: number;

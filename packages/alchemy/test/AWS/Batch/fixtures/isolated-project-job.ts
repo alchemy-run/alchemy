@@ -1,5 +1,5 @@
-import * as AWS from "@/AWS";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
 import { isolatedProject } from "../../../IsolatedProject.ts";
 
 /**

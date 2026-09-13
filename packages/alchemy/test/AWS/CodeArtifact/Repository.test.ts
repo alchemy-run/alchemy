@@ -1,11 +1,11 @@
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Domain } from "@/AWS/CodeArtifact/Domain.ts";
 import { Repository } from "@/AWS/CodeArtifact/Repository.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as codeartifact from "@distilled.cloud/aws/codeartifact";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

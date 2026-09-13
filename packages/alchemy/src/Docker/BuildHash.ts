@@ -6,12 +6,12 @@
  * image packaging; NOT exported from the Docker barrel.
  */
 
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 
 export interface DockerBuildSource {
   context: string;

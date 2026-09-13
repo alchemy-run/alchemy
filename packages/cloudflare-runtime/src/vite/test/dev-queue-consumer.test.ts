@@ -1,9 +1,9 @@
-import * as Queue from "../../core/bindings/queue/Queue.ts";
-import cloudflareVitePlugin from "../plugin.ts";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vite from "vite";
 import { afterEach, describe, expect, test } from "vitest";
+import * as Queue from "../../core/bindings/queue/Queue.ts";
+import cloudflareVitePlugin from "../plugin.ts";
 
 /**
  * A Worker that both produces to and consumes from one queue.

@@ -38,6 +38,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 import type { RegistryEntry } from "./RegistryObject.ts";
 import type {
   CommitData,
@@ -53,7 +54,6 @@ import type {
   CommitLogPage,
   SignatureData,
 } from "./RepoObject.ts";
-import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dependencies injected by the Worker

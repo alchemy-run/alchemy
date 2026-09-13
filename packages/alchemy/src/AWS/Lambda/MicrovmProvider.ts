@@ -1,3 +1,4 @@
+import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -6,14 +7,12 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import * as Artifacts from "../../Artifacts.ts";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Assets } from "../Assets.ts";
@@ -473,7 +472,9 @@ export const MicrovmImageProvider = () =>
         const images = yield* Effect.forEach(
           summaries,
           (summary) => getImage(summary.imageArn),
-          { concurrency: 10 },
+          {
+            concurrency: 10,
+          },
         );
         return images.flatMap((image) => (image ? [toAttrs(image)] : []));
       }),

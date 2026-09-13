@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import { bindFlyApiToken } from "./Credentials.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import { bindFlyApiToken } from "./Credentials.ts";
 import type { Sprite } from "./Sprite.ts";
 
 /**

@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -56,7 +56,9 @@ describe("Fly.Website.Astro local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "ASTRO_AWS_API_MARKER",
-          { label: "api route (dev)" },
+          {
+            label: "api route (dev)",
+          },
         );
 
         yield* stack.destroy();

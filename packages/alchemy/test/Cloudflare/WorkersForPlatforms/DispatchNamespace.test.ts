@@ -1,8 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import { poll } from "@/Util/poll.ts";
-import * as Test from "@/Test/Alchemy";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -10,6 +5,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -213,7 +213,9 @@ const assetsProgram = (assetsDir: string) =>
   Effect.gen(function* () {
     const namespace = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace(
       "AssetsNs",
-      { name: assetsNamespaceName },
+      {
+        name: assetsNamespaceName,
+      },
     );
     const worker = yield* Cloudflare.Worker("WfpAssetsWorker", {
       namespace: namespace.name,

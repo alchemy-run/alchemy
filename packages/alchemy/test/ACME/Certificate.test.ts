@@ -1,8 +1,3 @@
-import * as ACME from "@/ACME";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import { Jose } from "@distilled.cloud/acme";
 import * as acme from "@distilled.cloud/acme/acme";
 import * as dns from "@distilled.cloud/cloudflare/dns";
@@ -12,6 +7,11 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import * as ACME from "@/ACME";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(ACME.providers(), Cloudflare.providers()),

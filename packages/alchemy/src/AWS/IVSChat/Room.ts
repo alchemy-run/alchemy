@@ -161,7 +161,9 @@ export const Room = Resource<Room>("AWS.IVSChat.Room");
  */
 export class IvsChatRoomIncomplete extends Data.TaggedError(
   "IvsChatRoomIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Two different Lambda functions were registered as the same room's message

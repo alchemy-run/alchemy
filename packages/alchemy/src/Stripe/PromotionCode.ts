@@ -1,5 +1,4 @@
 import { withRequestOptions } from "@distilled.cloud/stripe";
-import { isMissingStripeResource } from "./missing.ts";
 import {
   GetPromotionCodes,
   GetPromotionCode,
@@ -26,6 +25,7 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
+import { isMissingStripeResource } from "./missing.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface PromotionCodeCurrencyOption {

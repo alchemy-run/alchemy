@@ -1,3 +1,11 @@
+import * as kms from "@distilled.cloud/aws/kms";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 /**
  * KMS binding tests (Encrypt / Decrypt / GenerateDataKey* / ReEncrypt /
  * Sign / Verify / GenerateMac / VerifyMac / GetPublicKey /
@@ -32,16 +40,8 @@
  * The fixture stack (Lambda only) is destroyed normally.
  */
 import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Alchemy";
-import * as kms from "@distilled.cloud/aws/kms";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Core from "@/Test/Core";
 import KMSTestFunctionLive, {
   KMSTestFunction,
   STANDING_AGREEMENT_KEY_ALIAS,
@@ -567,7 +567,10 @@ describe("KMS Bindings", () => {
           const generated = (yield* postJson(
             "/generate-data-key-without-plaintext",
             {},
-          )) as { keyId?: string; ciphertextBase64?: string };
+          )) as {
+            keyId?: string;
+            ciphertextBase64?: string;
+          };
 
           expect(generated.ciphertextBase64).toBeTruthy();
           expect(generated.keyId).toContain(standingKeyId);

@@ -2,6 +2,8 @@ import type { FlyMachineService } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
@@ -17,8 +19,6 @@ import {
   getStableContextDir,
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import type { Docker } from "../Docker/Docker.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import {
@@ -308,11 +308,7 @@ const generateDockerfile = (
 };
 
 const installManifest = (dependencies: Record<string, string>) =>
-  `${JSON.stringify(
-    { private: true, type: "module", dependencies },
-    null,
-    2,
-  )}\n`;
+  `${JSON.stringify({ private: true, type: "module", dependencies }, null, 2)}\n`;
 
 export const createFlyHostedSupport = ({
   stackName,

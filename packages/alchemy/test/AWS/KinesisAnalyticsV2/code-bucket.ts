@@ -1,3 +1,7 @@
+import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 /**
  * Out-of-band S3 code-bucket helpers for the KinesisAnalyticsV2 tests.
  *
@@ -13,10 +17,6 @@
  * `test/AWS/RDSData/reap.ts`.
  */
 import { AWSEnvironment } from "@/AWS/Environment.ts";
-import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { makeDummyFlinkCodeZip } from "./dummy-zip.ts";
 
 /** Key of the staged code object inside the code bucket. */

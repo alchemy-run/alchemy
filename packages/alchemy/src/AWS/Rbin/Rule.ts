@@ -197,7 +197,9 @@ export const Rule = Resource<Rule>("AWS.Rbin.Rule");
  */
 export class RbinLockUnsupported extends Data.TaggedError(
   "RbinLockUnsupported",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validateLock = (props: RuleProps) =>
   props.lockConfiguration !== undefined &&

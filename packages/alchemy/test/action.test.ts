@@ -1,3 +1,9 @@
+import { describe, expect } from "alchemy-test";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import { Action } from "@/Action";
 import * as Plan from "@/Plan";
 import * as Stack from "@/Stack";
@@ -10,12 +16,6 @@ import {
   type RanActionState,
 } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
 import { Bucket, TestLayers } from "./test.resources";
 
 const TEST_STACK = "task-test";

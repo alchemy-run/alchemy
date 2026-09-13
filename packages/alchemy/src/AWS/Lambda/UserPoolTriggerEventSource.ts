@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
+import type { UserPool, UserPoolTriggerName } from "../Cognito/UserPool.ts";
 import {
   UserPoolTriggerEventSource as CognitoUserPoolTriggerEventSource,
   type UserPoolTriggerEvent,
@@ -9,7 +10,6 @@ import {
   type UserPoolTriggerProps,
   userPoolTriggerSourcePrefixes,
 } from "../Cognito/UserPoolTriggerEventSource.ts";
-import type { UserPool, UserPoolTriggerName } from "../Cognito/UserPool.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 

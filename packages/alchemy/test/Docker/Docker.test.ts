@@ -1,17 +1,17 @@
-import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "alchemy-test";
-import { PlatformError, SystemError } from "effect/PlatformError";
-import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
-import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Redacted from "effect/Redacted";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { PlatformError, SystemError } from "effect/PlatformError";
+import * as Redacted from "effect/Redacted";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import { Docker, DockerLive } from "@/Docker";
+import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
 
 const describe = layer(Layer.provideMerge(DockerLive, NodeServices.layer));
 

@@ -1,5 +1,5 @@
-import * as AWS from "alchemy/AWS";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as AWS from "alchemy/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,9 +11,9 @@ import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { BunMicrovm } from "./bun-image.ts";
-import { ExternalMicrovm } from "./external-image.ts";
 import { EffectfulBun } from "./effectful-bun.ts";
 import { EffectfulNode } from "./effectful-node.ts";
+import { ExternalMicrovm } from "./external-image.ts";
 import { NodeMicrovm } from "./node-image.ts";
 import { OpencodeMicrovm } from "./opencode-image.ts";
 
@@ -66,15 +66,17 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
   Effect.gen(function* () {
     // Plain-HTTP reachable check shared by every non-effectful (raw) image:
     // hit `GET /` with the MicroVM auth headers and read the body.
-    const rawReachable =
-      (endpoint: string, authToken: AWS.Lambda.MicrovmConnection["authToken"]) =>
-        Effect.gen(function* () {
-          const client = yield* HttpClient.HttpClient;
-          const res = yield* client.get(`https://${endpoint}/`, {
-            headers: AWS.Lambda.microvmAuthHeaders(authToken),
-          });
-          return yield* res.text;
+    const rawReachable = (
+      endpoint: string,
+      authToken: AWS.Lambda.MicrovmConnection["authToken"],
+    ) =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const res = yield* client.get(`https://${endpoint}/`, {
+          headers: AWS.Lambda.microvmAuthHeaders(authToken),
         });
+        return yield* res.text;
+      });
 
     const effectfulBun: Variant = {
       run: yield* AWS.Lambda.RunMicrovm(EffectfulBun),
@@ -181,7 +183,8 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
       external,
       opencode,
     };
-    const pick = (v: string | null): Variant => variants[v ?? ""] ?? effectfulBun;
+    const pick = (v: string | null): Variant =>
+      variants[v ?? ""] ?? effectfulBun;
 
     // Run one fresh MicroVM and time RunMicrovm → service-reachable (readyMs).
     // Leaves it running for an explicit /shutdown; self-terminates only if boot

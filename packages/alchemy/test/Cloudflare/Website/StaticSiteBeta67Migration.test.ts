@@ -1,3 +1,10 @@
+import { spawn } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as pathe from "pathe";
 /**
  * Cross-version FQN-migration regression test for the beta.68 StaticSite
  * incident (#1053 / #1108).
@@ -13,13 +20,6 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { Credentials } from "@/Cloudflare/Credentials.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import { spawn } from "node:child_process";
-import * as pathe from "pathe";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,

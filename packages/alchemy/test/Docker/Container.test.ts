@@ -1,3 +1,6 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import {
@@ -7,9 +10,6 @@ import {
   type ResourceState,
 } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import { findAvailablePort } from "./Runtime.ts";
 
 const { test } = Test.make({

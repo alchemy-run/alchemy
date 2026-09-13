@@ -322,9 +322,9 @@ export default function PRLifecycle() {
                         >
                           {r.id}
                         </span>
-                        <span style={{ color: "var(--alc-code-comment)" }}>
-                          {` (${r.type})`}
-                        </span>
+                        <span
+                          style={{ color: "var(--alc-code-comment)" }}
+                        >{` (${r.type})`}</span>
                         {isInFlight && (
                           <span style={{ color: accent, marginLeft: 6 }}>
                             {r.status}

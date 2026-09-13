@@ -1,11 +1,11 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "alchemy-test";
-import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as FileSystem from "effect/FileSystem";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 
@@ -197,7 +197,9 @@ describe("CLI exit codes", () => {
             "--provider",
             "neon",
           ],
-          { NEON_API_KEY: "napi_test_key" },
+          {
+            NEON_API_KEY: "napi_test_key",
+          },
         ),
       ).toBe(0);
     }),

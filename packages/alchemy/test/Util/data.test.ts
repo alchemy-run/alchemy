@@ -1,3 +1,9 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import {
   isPlainData,
   isPlainObject,
@@ -6,12 +12,6 @@ import {
   stripUndefinedFields,
   unwrapRedacted,
 } from "@/Util/data";
-import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { describe, expect, test } from "alchemy-test";
 
 describe("data utilities", () => {
   test("isPlainObject accepts object literals", () => {

@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { Blueprint, DataAutomationProject } from "@/AWS/BedrockDataAutomation";
-import * as Test from "@/Test/Alchemy";
 import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
@@ -8,6 +5,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Blueprint, DataAutomationProject } from "@/AWS/BedrockDataAutomation";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

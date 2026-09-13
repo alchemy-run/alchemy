@@ -284,7 +284,9 @@ export const Queue = Resource<Queue>("AWS.SQS.Queue");
  */
 export class SqsEncryptionConflict extends Data.TaggedError(
   "SqsEncryptionConflict",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validateEncryption = (props: QueueProps) =>
   props.kmsMasterKeyId !== undefined && props.sqsManagedSseEnabled

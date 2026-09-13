@@ -6,10 +6,10 @@
  * as braille dots (2x4 subpixels per cell) via signed distance functions, so
  * it scales to any column width.
  */
-import { Box, Text } from "../ui/index.ts";
 import { useMemo } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
 import { theme } from "../../CliKit/index.ts";
+import { Box, Text } from "../ui/index.ts";
 
 const CENTER = 12;
 const CIRCLE_R = 9.5;

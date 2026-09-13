@@ -6,11 +6,11 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
 import { exec } from "../Util/exec.ts";
 import { GitHubCredentials } from "./Credentials.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
 import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 

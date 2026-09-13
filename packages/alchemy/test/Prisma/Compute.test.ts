@@ -1,24 +1,5 @@
-import * as Provider from "@/Provider";
-import {
-  Compute,
-  ComputeDevProvider,
-  ComputeProvider,
-  syncComputeEnvironment,
-  waitForDeploymentUrl,
-  type ComputeProps,
-} from "@/Prisma/Compute";
-import { Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
-import {
-  PrismaApiError,
-  PrismaClient,
-  type PrismaManagementClient,
-} from "@/Prisma/Client";
-import * as Output from "@/Output";
-import type { ResourceBinding } from "@/Resource";
-import { Stack } from "@/Stack";
-import { PlatformServices } from "@/Util/PlatformServices";
-import type { Branch as ApiBranch } from "@/Prisma/Types";
+import { gunzipSync } from "node:zlib";
+import { fromApiToken } from "@distilled.cloud/prisma";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -31,10 +12,29 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
-import { fromApiToken } from "@distilled.cloud/prisma";
+import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
+import * as Output from "@/Output";
+import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
+import {
+  Compute,
+  ComputeDevProvider,
+  ComputeProvider,
+  syncComputeEnvironment,
+  waitForDeploymentUrl,
+  type ComputeProps,
+} from "@/Prisma/Compute";
 import { Credentials } from "@/Prisma/Credentials";
+import type { Branch as ApiBranch } from "@/Prisma/Types";
+import * as Provider from "@/Provider";
+import type { ResourceBinding } from "@/Resource";
+import { Stack } from "@/Stack";
+import { PlatformServices } from "@/Util/PlatformServices";
 import {
   type Captured,
   data,

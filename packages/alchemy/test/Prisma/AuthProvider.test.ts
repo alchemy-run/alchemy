@@ -1,3 +1,9 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider";
 import { ProfileStore } from "@/Auth/Profile";
 import * as Interaction from "@/Interaction.ts";
@@ -7,12 +13,6 @@ import {
   type PrismaAuthConfig,
   type PrismaResolvedCredentials,
 } from "@/Prisma/AuthProvider";
-import { describe, expect, it } from "alchemy-test";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import { makeFakeProfileStore } from "./fakes.ts";
 
 const fakeProfile = makeFakeProfileStore();

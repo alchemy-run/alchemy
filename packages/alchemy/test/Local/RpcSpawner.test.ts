@@ -1,3 +1,15 @@
+import { describe, expect, it } from "alchemy-test";
+import { newWebSocketRpcSession, type RpcStub } from "capnweb";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
 import type { RpcProxyApi } from "@/Local/RpcServer.ts";
 import {
@@ -12,18 +24,6 @@ import {
   type RpcSpawnPayload,
 } from "@/Local/RpcSpawner.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "alchemy-test";
-import { newWebSocketRpcSession, type RpcStub } from "capnweb";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import {
   assertPidExited,
   canOpenWebSocket,

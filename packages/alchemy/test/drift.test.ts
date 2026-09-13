@@ -1,15 +1,15 @@
-import { Unowned } from "@/AdoptPolicy";
-import { Progress, type ApplyEvent, type ProgressEvent } from "@/Report.ts";
-import * as Namespace from "@/Namespace.ts";
-import { Stack } from "@/Stack";
-import { State, type ResourceState } from "@/State";
-import * as Drift from "@/Drift";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import { Unowned } from "@/AdoptPolicy";
+import * as Drift from "@/Drift";
+import * as Namespace from "@/Namespace.ts";
+import { Progress, type ApplyEvent, type ProgressEvent } from "@/Report.ts";
+import { Stack } from "@/Stack";
+import { State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import {
   Bucket,
   DriftResource,
@@ -720,7 +720,10 @@ describe("plan", () => {
           Object.fromEntries(
             nodes.map((event) => [event.logicalId, event.action]),
           ),
-        ).toEqual({ Clean: "noop", Drifted: "update" });
+        ).toEqual({
+          Clean: "noop",
+          Drifted: "update",
+        });
         for (const event of nodes) {
           expect(event).toMatchObject({
             _tag: "plan.resource.completed",

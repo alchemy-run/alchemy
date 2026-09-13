@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Output from "@/Output";
-import * as Test from "./VpcTest.ts";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
@@ -10,9 +6,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
+import * as Core from "@/Test/Core";
 import Ec2BindingsFunctionLive, {
   Ec2BindingsFunction,
 } from "./fixtures/bindings-handler.ts";
+import * as Test from "./VpcTest.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);

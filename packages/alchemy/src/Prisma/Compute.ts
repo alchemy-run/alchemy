@@ -1,37 +1,3 @@
-import * as Effect from "effect/Effect";
-import * as Duration from "effect/Duration";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
-import type * as rolldown from "rolldown";
-import { AlchemyContext } from "../AlchemyContext.ts";
-import { Unowned } from "../AdoptPolicy.ts";
-import * as Bundle from "../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../Bundle/TempRoot.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import { isResolved } from "../Diff.ts";
-import { HttpServer, type HttpEffect } from "../Http.ts";
-import type { InputProps } from "../Input.ts";
-import * as Output from "../Output.ts";
-import { Platform, type Main, type PlatformProps } from "../Platform.ts";
-import * as Provider from "../Provider.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource, type ResourceBinding } from "../Resource.ts";
-import { RuntimeContext } from "../RuntimeContext.ts";
-import type * as Server from "../Server/index.ts";
-import { Stack } from "../Stack.ts";
-import { sha256Object } from "../Util/sha256.ts";
 import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServicesResponse,
@@ -50,23 +16,54 @@ import {
   createServiceRollback,
   createEnvironmentVariable,
 } from "@distilled.cloud/prisma/management";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
+import type * as rolldown from "rolldown";
+import { Unowned } from "../AdoptPolicy.ts";
+import { AlchemyContext } from "../AlchemyContext.ts";
+import * as Bundle from "../Bundle/Bundle.ts";
+import { findCwdForBundle } from "../Bundle/TempRoot.ts";
+import { isResolved } from "../Diff.ts";
+import { HttpServer, type HttpEffect } from "../Http.ts";
+import type { InputProps } from "../Input.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Output from "../Output.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import { Platform, type Main, type PlatformProps } from "../Platform.ts";
+import * as Provider from "../Provider.ts";
+import { Resource, type ResourceBinding } from "../Resource.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
+import type * as Server from "../Server/index.ts";
+import { Stack } from "../Stack.ts";
+import { sha256Object } from "../Util/sha256.ts";
+import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
   runBuildCommand,
   runComputeAutoBuild,
   runComputeStaticBuild,
   type ComputeAutoBuildFramework,
 } from "./ComputeBuild.ts";
-import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
   destroyApp,
   destroyDeployment,
   toDeploymentUrl,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
-import {
-  startDeploymentIdempotent,
-  stopDeploymentIdempotent,
-} from "./Internal/DeploymentActions.ts";
+import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import {
   promoteAppObserved,
@@ -74,8 +71,18 @@ import {
 } from "./Internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./Internal/BundlePaths.ts";
 import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
+import {
+  startDeploymentIdempotent,
+  stopDeploymentIdempotent,
+} from "./Internal/DeploymentActions.ts";
 import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
+import type {
+  ObservedApp,
+  ObservedDeployment,
+  ObservedEnvironmentVariable,
+} from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -87,13 +94,6 @@ import {
   unresolvedProjectIdOf,
 } from "./Refs.ts";
 import type { PrismaRegionId } from "./Types.ts";
-import type {
-  ObservedApp,
-  ObservedDeployment,
-  ObservedEnvironmentVariable,
-} from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
 
 const ComputeTypeId = "Prisma.Compute" as const;
 type ComputeTypeId = typeof ComputeTypeId;

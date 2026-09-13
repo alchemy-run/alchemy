@@ -2,8 +2,8 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import { retryOrganizations } from "./common.ts";
 
 export interface OrganizationResourcePolicyProps {

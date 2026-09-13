@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import {
   InternetGateway,
   Route,
@@ -7,7 +8,6 @@ import {
   Subnet,
   Vpc,
 } from "@/AWS/EC2";
-import * as Effect from "effect/Effect";
 
 /**
  * A stack-owned public network for Batch tests.

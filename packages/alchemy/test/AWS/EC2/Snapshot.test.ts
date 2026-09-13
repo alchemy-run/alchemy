@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Snapshot, Volume } from "@/AWS/EC2";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Snapshot, Volume } from "@/AWS/EC2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

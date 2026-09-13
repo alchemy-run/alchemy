@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { createServer, type Server } from "node:http";
+import * as Effect from "effect/Effect";
 
 export interface OtlpCollector {
   readonly server: Server;

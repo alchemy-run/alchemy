@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
+import type { Connection } from "../../Kubernetes/Connection.ts";
 import {
   deleteObjects,
   reconcileObjects,
@@ -15,12 +16,9 @@ import {
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
 } from "../../Kubernetes/internal/objects.ts";
-import type { Connection } from "../../Kubernetes/Connection.ts";
-import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   diffTags,
@@ -28,7 +26,9 @@ import {
   hasTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
 
 export type ClusterName = string;
 export type ClusterArn =

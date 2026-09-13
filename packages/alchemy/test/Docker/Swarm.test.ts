@@ -1,11 +1,11 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Docker from "@/Docker";
-import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Docker from "@/Docker";
+import { inMemoryState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Docker.providers(),

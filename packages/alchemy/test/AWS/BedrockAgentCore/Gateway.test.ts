@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Gateway } from "@/AWS/BedrockAgentCore";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Gateway } from "@/AWS/BedrockAgentCore";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

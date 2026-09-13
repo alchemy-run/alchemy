@@ -5,10 +5,10 @@ import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { PlatformProps } from "../../Platform.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import {
   createHostRuntimeContext,
@@ -342,10 +342,7 @@ systemctl enable --now ${unitName}.service
     if (!userData) {
       return hosted;
     }
-    return `${hosted}\n\n# User supplied bootstrap\n${userData.replace(
-      /^#!\/bin\/bash\s*/,
-      "",
-    )}`;
+    return `${hosted}\n\n# User supplied bootstrap\n${userData.replace(/^#!\/bin\/bash\s*/, "")}`;
   };
 
   const listAttachedPolicyArns = (roleName: string) =>

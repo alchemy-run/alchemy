@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 
 export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObject>()(
   "LegacyAlarmObject",

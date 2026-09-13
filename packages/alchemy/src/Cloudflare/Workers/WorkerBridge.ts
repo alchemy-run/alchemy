@@ -31,6 +31,7 @@ import {
   encodeRpcError,
   toRpcStream,
 } from "./Rpc.ts";
+import type { Worker } from "./Worker.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
@@ -38,7 +39,6 @@ import {
   deferredExecutionContext,
   fromExecutionContext,
 } from "./WorkerRuntime.ts";
-import type { Worker } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 /**

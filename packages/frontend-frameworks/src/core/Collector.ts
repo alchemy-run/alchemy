@@ -1,9 +1,9 @@
+import * as NodePath from "node:path";
 import * as Cache from "effect/Cache";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
-import * as NodePath from "node:path";
 
 /**
  * Module names in a BuildOutput are always POSIX-separated — they become

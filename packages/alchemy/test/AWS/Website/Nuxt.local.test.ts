@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -74,7 +74,9 @@ describe("AWS.Website.Nuxt local", () => {
         yield* expectUrlContains(
           `${url}/`,
           "config:nuxt-aws-user-config-loaded",
-          { label: "user nuxt.config.ts applied (dev)" },
+          {
+            label: "user nuxt.config.ts applied (dev)",
+          },
         );
         // server.environment reaches the dev server's process env — the
         // same values the Lambda gets on deploy (dev/live parity).
@@ -85,7 +87,9 @@ describe("AWS.Website.Nuxt local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NUXT_AWS_API_MARKER",
-          { label: "API route (dev)" },
+          {
+            label: "API route (dev)",
+          },
         );
 
         // ── HMR: edit the API route in place. The stack is NOT re-applied —
@@ -100,7 +104,10 @@ describe("AWS.Website.Nuxt local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NUXT_AWS_API_MARKER_V2",
-          { timeout: "90 seconds", label: "API route after HMR edit" },
+          {
+            timeout: "90 seconds",
+            label: "API route after HMR edit",
+          },
         );
         // server.environment survived the dev rebuild — the injected env
         // still reaches SSR after the reload (dev/live parity holds across

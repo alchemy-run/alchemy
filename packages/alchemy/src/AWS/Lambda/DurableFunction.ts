@@ -12,8 +12,8 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { toSeconds, toWireDays } from "../../Util/Duration.ts";
-import type { DistributiveOmit } from "../../Util/types.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
+import type { DistributiveOmit } from "../../Util/types.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import {
   DURABLE_SDK_MODULE,

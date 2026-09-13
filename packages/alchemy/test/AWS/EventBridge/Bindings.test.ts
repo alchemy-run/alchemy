@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
@@ -10,6 +7,9 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EventBridgeTestFunctionLive, {
   BusAndQueues,
   BusAndQueuesLive,
@@ -208,7 +208,9 @@ describe("EventBridge Bindings", () => {
         const response = (yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/publish-custom`),
-            { marker: "put-events-custom-direct" },
+            {
+              marker: "put-events-custom-direct",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           failedEntryCount: number;
@@ -226,7 +228,9 @@ describe("EventBridge Bindings", () => {
         const response = (yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/publish-default`),
-            { marker: "put-events-default-direct" },
+            {
+              marker: "put-events-default-direct",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json))) as {
           failedEntryCount: number;
@@ -342,7 +346,9 @@ describe("EventBridge Bindings", () => {
         const matching = (yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/test-pattern`),
-            { source: "alchemy.test.pattern" },
+            {
+              source: "alchemy.test.pattern",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json))) as { matches: boolean };
         expect(matching.matches).toBe(true);
@@ -350,7 +356,9 @@ describe("EventBridge Bindings", () => {
         const nonMatching = (yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/test-pattern`),
-            { source: "other.source" },
+            {
+              source: "other.source",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json))) as { matches: boolean };
         expect(nonMatching.matches).toBe(false);

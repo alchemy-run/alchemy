@@ -1,16 +1,16 @@
-import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
-import type { BindingHooks, Module } from "../core/index.ts";
-import * as Runtime from "../core/Runtime.ts";
-import * as RuntimeServices from "../core/RuntimeServices.ts";
-import { PlatformServices } from "../Platform.ts";
+import * as NodeFs from "node:fs/promises";
+import * as NodePath from "node:path";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as NodeFs from "node:fs/promises";
-import * as NodePath from "node:path";
+import type { BindingHooks, Module } from "../core/index.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
+import * as Runtime from "../core/Runtime.ts";
+import * as RuntimeServices from "../core/RuntimeServices.ts";
+import { PlatformServices } from "../Platform.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 
 /**

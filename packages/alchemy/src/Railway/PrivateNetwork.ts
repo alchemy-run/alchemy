@@ -1,4 +1,3 @@
-import { projectServices as fetchProjectServices } from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,10 +6,11 @@ import * as Schema from "effect/Schema";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { projectServices as fetchProjectServices } from "./GraphQL.ts";
 import { sanitizeRailwayName } from "./Metadata.ts";
-import { withEnvironmentConfigLock } from "./transient.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 
 type PrivateNetworkEndpointSyncStatus =
   railway.Scalars["PrivateNetworkEndpointSyncStatus"];

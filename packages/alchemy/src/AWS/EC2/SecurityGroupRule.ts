@@ -3,13 +3,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
-import { canonicalCidr } from "../../Utils/ip-address.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
+import { canonicalCidr } from "../../Utils/ip-address.ts";
+import type { Providers } from "../Providers.ts";
 import {
   getDefaultVpcDefaultSecurityGroupId,
   getDefaultVpcScope,

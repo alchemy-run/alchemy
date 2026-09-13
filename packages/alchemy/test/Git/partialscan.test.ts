@@ -1,3 +1,8 @@
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 /**
  * The partial-pack scanner (src/Git/Protocol/PartialScan.ts): the hashing
  * Worker's unit of work. Entries are settled inside a buffer that starts
@@ -10,19 +15,14 @@ import {
   makeSha1,
   type Oid,
 } from "@/Git/Protocol/ObjectCodec.ts";
+import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import {
   findBoundary,
   hashBounds,
   scanBounds,
   scanPart,
 } from "@/Git/Protocol/PartialScan.ts";
-import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import * as BunServices from "@effect/platform-bun/BunServices";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import { concat } from "./harness/pack.ts";
 
 const buildPack = (n: number) =>

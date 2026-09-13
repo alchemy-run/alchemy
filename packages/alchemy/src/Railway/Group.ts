@@ -1,10 +1,3 @@
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-  projectBuckets as fetchProjectBuckets,
-  projectGroups as fetchProjectGroups,
-  environmentVolumes,
-} from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -14,6 +7,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  waitUntilDeleted,
+  projectServices as fetchProjectServices,
+  projectBuckets as fetchProjectBuckets,
+  projectGroups as fetchProjectGroups,
+  environmentVolumes,
+} from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";

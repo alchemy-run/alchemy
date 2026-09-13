@@ -1,32 +1,30 @@
-import * as Cause from "effect/Cause";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Command from "effect/unstable/cli/Command";
-import * as CliConfig from "effect/unstable/cli/CliConfig";
-import * as CliError from "effect/unstable/cli/CliError";
-import * as Flag from "effect/unstable/cli/Flag";
-import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
-import { PlatformServices } from "alchemy/Util/PlatformServices";
 import { moduleExtension } from "alchemy/Util/Node";
+import { PlatformServices } from "alchemy/Util/PlatformServices";
+import * as Cause from "effect/Cause";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as CliConfig from "effect/unstable/cli/CliConfig";
+import * as CliError from "effect/unstable/cli/CliError";
+import * as Command from "effect/unstable/cli/Command";
+import * as Flag from "effect/unstable/cli/Flag";
+import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import packageJson from "../../package.json" with { type: "json" };
-
-import * as CliKit from "./CliKit/index.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
-import { GlobalLogLive, logRunHeader } from "./GlobalLog.ts";
-import { handleCliErrors } from "./commands/errors.ts";
+import * as CliKit from "./CliKit/index.ts";
 import {
   compatibilityCommand,
   compatibilityCommands,
   type CompatibilityCommand,
 } from "./commands/compat.ts";
+import { handleCliErrors } from "./commands/errors.ts";
+import { GlobalLogLive, logRunHeader } from "./GlobalLog.ts";
 import { selectCliServices } from "./selectCli.ts";
 
 const commandMetadata = [

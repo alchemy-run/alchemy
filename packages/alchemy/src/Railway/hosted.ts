@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../Bundle/Bundle.ts";
 import {
@@ -18,15 +20,13 @@ import {
   getStableContextDir,
   resolveMainPath,
 } from "../Bundle/TempRoot.ts";
-import type { ResourceBinding } from "../Resource.ts";
 import { safeHttpEffect } from "../Http.ts";
+import type { ResourceBinding } from "../Resource.ts";
 import { Self } from "../Self.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
 } from "../Server/Process.ts";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   copyExtraFiles,
   contextRootOf,
@@ -747,11 +747,7 @@ const generateDockerfile = (
 };
 
 const installManifest = (dependencies: Record<string, string>) =>
-  `${JSON.stringify(
-    { private: true, type: "module", dependencies },
-    null,
-    2,
-  )}\n`;
+  `${JSON.stringify({ private: true, type: "module", dependencies }, null, 2)}\n`;
 
 export const createRailwayHostedSupport = ({
   stackName,

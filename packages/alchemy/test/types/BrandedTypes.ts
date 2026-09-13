@@ -1,9 +1,9 @@
-import { Action } from "@/Action.ts";
-import type { Input } from "@/Input.ts";
-import type * as Output from "@/Output.ts";
 import type * as Brand from "effect/Brand";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
+import { Action } from "@/Action.ts";
+import type { Input } from "@/Input.ts";
+import type * as Output from "@/Output.ts";
 
 // Branded primitives (effect/Brand or Schema.brand) must stay opaque
 // Outputs. Before the `[A] extends [Primitive]` short-circuit in

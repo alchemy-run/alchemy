@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import * as NodeV8 from "node:v8";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -7,11 +9,8 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { fileURLToPath } from "node:url";
-import * as NodeV8 from "node:v8";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { BundleError } from "../../Bundle/Bundle.ts";
-import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   fromProcessEnv,
   RPC_SERVER_ENVIRONMENT_KEY,
@@ -21,6 +20,7 @@ import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { moduleExtension } from "../../Util/Node.ts";
+import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,

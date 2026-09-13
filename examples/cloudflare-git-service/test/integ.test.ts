@@ -1,3 +1,4 @@
+import { expect } from "bun:test";
 /**
  * The example, end to end: a user signs up with Better Auth, creates a
  * repository through the app's API, mints an API key, and pushes with it.
@@ -6,11 +7,10 @@
  */
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

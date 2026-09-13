@@ -1,3 +1,14 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as Cloudflare from "@/Cloudflare";
+import { GitApi } from "@/Git/Api.ts";
 /**
  * Push-ingest profile against the LOCAL workerd (no cloud deploy): pushes
  * the repository at `GIT_PROFILE_REPO` and prints the server's per-phase
@@ -11,18 +22,7 @@
  * and rewrites ~/.alchemy/profiles.json.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import TestGitHost, { TEST_SECRET } from "./fixtures/stack.ts";
 
 const PROFILE_REPO = process.env.GIT_PROFILE_REPO;

@@ -1,10 +1,10 @@
+import { fileURLToPath } from "node:url";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { fileURLToPath } from "node:url";
 
 export class RunnerError extends Data.TaggedError<"RunnerError">(
   "RunnerError",

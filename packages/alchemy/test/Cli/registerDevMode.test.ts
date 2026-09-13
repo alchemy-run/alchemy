@@ -1,9 +1,9 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 // Pins buildless node dev end to end: the register-dev-mode hooks must

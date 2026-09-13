@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { Index, VectorBucket } from "@/AWS/S3Vectors";
-import type { ScopedPlanStatusSession } from "@/Report.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as s3vectors from "@distilled.cloud/aws/s3vectors";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Index, VectorBucket } from "@/AWS/S3Vectors";
+import * as Provider from "@/Provider";
+import type { ScopedPlanStatusSession } from "@/Report.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 const stubSession = {

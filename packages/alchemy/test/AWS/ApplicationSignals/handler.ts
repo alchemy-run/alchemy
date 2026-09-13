@@ -1,11 +1,11 @@
-import * as ApplicationSignals from "@/AWS/ApplicationSignals";
-import * as Lambda from "@/AWS/Lambda";
 import type * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ApplicationSignals from "@/AWS/ApplicationSignals";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

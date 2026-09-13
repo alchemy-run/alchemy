@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -7,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import LogEventSinkFunctionLive, {
   LogEventSinkFunction,
 } from "./sink-handler.ts";
@@ -155,7 +155,10 @@ test.provider(
       const rejectedMarker = `rejected-${crypto.randomUUID()}`;
       const rejectedResponse = yield* postJson(
         `${baseUrl}/sink-with-rejected`,
-        { valid: validMarkers, rejected: rejectedMarker },
+        {
+          valid: validMarkers,
+          rejected: rejectedMarker,
+        },
       );
       expect((rejectedResponse as any).ok).toBe(true);
 

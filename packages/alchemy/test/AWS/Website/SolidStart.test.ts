@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -94,24 +94,32 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         yield* expectUrlContains(
           `${url}/`,
           "config:solidstart-aws-user-config-loaded",
-          { label: "user vite.config.ts applied" },
+          {
+            label: "user vite.config.ts applied",
+          },
         );
         // API route through the streaming Function URL origin.
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "SOLIDSTART_AWS_API_MARKER",
-          { label: "API route" },
+          {
+            label: "API route",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "roundtrip",
-          { label: "API route query echo" },
+          {
+            label: "API route query echo",
+          },
         );
         // Public file served from S3 via the KV file manifest.
         yield* expectUrlContains(
           `${url}/robots.txt`,
           "solidstart-aws-robots-marker",
-          { label: "public asset from S3" },
+          {
+            label: "public asset from S3",
+          },
         );
         // Prerendered into `.output/public` at build time (via the `nitro`
         // prop's `prerender.routes`) and served from S3 by exact match at
@@ -119,7 +127,9 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         yield* expectUrlContains(
           `${url}/prerendered`,
           "SOLIDSTART_AWS_PRERENDERED_MARKER",
-          { label: "prerendered page from S3" },
+          {
+            label: "prerendered page from S3",
+          },
         );
 
         const distributionId = deployed.site.distribution!.distributionId;
@@ -182,7 +192,9 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         yield* expectUrlContains(
           `${url}/`,
           "env:solidstart-aws-live-env-marker",
-          { label: "server.environment on the Lambda" },
+          {
+            label: "server.environment on the Lambda",
+          },
         );
         // The router's defaultTTL-0 cache policy must not cache SSR
         // responses: the API route round-trips with distinct query strings,
@@ -190,18 +202,24 @@ describe.skipIf(!runLive)("AWS.Website.SolidStart", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=router-one`,
           "router-one",
-          { label: "API via router (query one)" },
+          {
+            label: "API via router (query one)",
+          },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=router-two`,
           "router-two",
-          { label: "API via router (query two)" },
+          {
+            label: "API via router (query two)",
+          },
         );
         // Static asset from S3 through the router's edge function.
         yield* expectUrlContains(
           `${url}/robots.txt`,
           "solidstart-aws-robots-marker",
-          { label: "public asset via router" },
+          {
+            label: "public asset via router",
+          },
         );
 
         const distributionId = deployed.router.distributionId as string;

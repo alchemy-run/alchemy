@@ -1,5 +1,16 @@
-import * as GitHub from "@/GitHub/index.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { layer } from "alchemy-test";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fromToken } from "@/GitHub/Credentials.ts";
+import * as GitHub from "@/GitHub/index.ts";
 import type { WikiPage, WikiPageProps } from "@/GitHub/WikiPage.ts";
 import { WikiPageProvider } from "@/GitHub/WikiPage.ts";
 import {
@@ -9,21 +20,10 @@ import {
   wikiRepository,
   type WikiRepository,
 } from "@/GitHub/WikiPage.ts";
-import * as Provider from "@/Provider.ts";
-import { exec } from "@/Util/exec.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { layer } from "alchemy-test";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as Output from "@/Output.ts";
+import * as Provider from "@/Provider.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { exec } from "@/Util/exec.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {

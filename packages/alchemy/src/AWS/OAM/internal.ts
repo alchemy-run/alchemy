@@ -38,11 +38,16 @@ export const retryOamMutation = <A, E, R>(
 
 class SinkLinksStillAttached extends Data.TaggedError(
   "SinkLinksStillAttached",
-)<{ readonly sinkArn: string; readonly count: number }> {}
+)<{
+  readonly sinkArn: string;
+  readonly count: number;
+}> {}
 
 class OamResourceStillExists extends Data.TaggedError(
   "OamResourceStillExists",
-)<{ readonly arn: string }> {}
+)<{
+  readonly arn: string;
+}> {}
 
 const dependencySchedule = Schedule.max([
   Schedule.spaced("2 seconds"),

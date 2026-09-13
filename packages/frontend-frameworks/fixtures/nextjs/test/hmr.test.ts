@@ -1,3 +1,7 @@
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFs from "node:fs/promises";
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
 /**
  * Dev v2 ("hmr" mode) spec: spawns `scripts/hmr-server.mjs` — the Framework
  * service driving the real `next dev` (Turbopack) with proxied Cloudflare
@@ -13,10 +17,6 @@
  *   retry; the file is restored in a finally)
  */
 import { expect, test } from "@playwright/test";
-import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs/promises";
-import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const probePage = NodePath.join(root, "app", "hmr-probe", "page.jsx");

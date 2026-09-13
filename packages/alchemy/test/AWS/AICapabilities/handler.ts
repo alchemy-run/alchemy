@@ -1,9 +1,3 @@
-import * as Comprehend from "@/AWS/Comprehend";
-import * as Lambda from "@/AWS/Lambda";
-import * as Polly from "@/AWS/Polly";
-import * as Rekognition from "@/AWS/Rekognition";
-import * as Textract from "@/AWS/Textract";
-import * as Translate from "@/AWS/Translate";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,6 +5,12 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Comprehend from "@/AWS/Comprehend";
+import * as Lambda from "@/AWS/Lambda";
+import * as Polly from "@/AWS/Polly";
+import * as Rekognition from "@/AWS/Rekognition";
+import * as Textract from "@/AWS/Textract";
+import * as Translate from "@/AWS/Translate";
 import {
   HELLO_PNG_BASE64,
   SENTIMENT_TEXT,

@@ -1,3 +1,8 @@
+import { expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { AuthError } from "@/Auth/AuthProvider.ts";
 import {
   getEnv,
   getEnvRedacted,
@@ -5,12 +10,7 @@ import {
   getEnvRequired,
   mapPromptCancellation,
 } from "@/Auth/Env.ts";
-import { AuthError } from "@/Auth/AuthProvider.ts";
 import { TerminalCancelled } from "@/Cli/CliKit/index.ts";
-import { expect, it } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 
 const provideConfig = (values: Record<string, unknown>) =>
   Effect.provideService(

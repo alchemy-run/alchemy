@@ -1,5 +1,5 @@
-import { canonicalCidr } from "@/Utils/ip-address.ts";
 import { describe, expect, test } from "alchemy-test";
+import { canonicalCidr } from "@/Utils/ip-address.ts";
 
 const valid: [string, string][] = [
   ["10.0.0.7/16", "10.0.0.0/16"],

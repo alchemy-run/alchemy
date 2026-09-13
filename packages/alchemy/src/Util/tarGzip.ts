@@ -1,3 +1,4 @@
+import * as zlib from "node:zlib";
 /**
  * Gzipped ustar of a directory. Used to upload a generated Docker
  * context (Railway `/up`, and any other gzip-tarball consumer).
@@ -5,7 +6,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as zlib from "node:zlib";
 
 const encoder = new TextEncoder();
 

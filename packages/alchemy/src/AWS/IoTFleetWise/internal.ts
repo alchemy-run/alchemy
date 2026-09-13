@@ -1,5 +1,5 @@
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { diffTags } from "../../Tags.ts";

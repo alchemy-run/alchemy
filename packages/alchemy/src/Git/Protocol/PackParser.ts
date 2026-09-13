@@ -121,7 +121,9 @@ export const bufferRandomAccess = (buf: Uint8Array): RandomAccess => ({
  */
 export class PackFormatError extends Schema.TaggedError<PackFormatError>()(
   "PackFormatError",
-  { reason: Schema.String },
+  {
+    reason: Schema.String,
+  },
 ) {}
 
 /**
@@ -157,7 +159,9 @@ export class ObjectTooLargeError extends Schema.TaggedError<ObjectTooLargeError>
  */
 export class BaseEvictedError extends Schema.TaggedError<BaseEvictedError>()(
   "BaseEvictedError",
-  { offset: Schema.Number },
+  {
+    offset: Schema.Number,
+  },
 ) {}
 
 export class MissingDeltaBaseError extends Schema.TaggedError<MissingDeltaBaseError>()(

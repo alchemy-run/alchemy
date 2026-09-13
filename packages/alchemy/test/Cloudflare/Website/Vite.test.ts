@@ -1,8 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { isLocalId } from "@/Cloudflare/LocalRuntime";
-import * as Test from "@/Test/Alchemy";
-import { initialCwd } from "@/Util/Node.ts";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -15,6 +10,11 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
+import * as Test from "@/Test/Alchemy";
+import { initialCwd } from "@/Util/Node.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -909,7 +909,10 @@ if (el) {
         yield* expectUrlContains(
           `${site.url!}/some/page`,
           "worker-first-rendered:/some/page",
-          { timeout: "60 seconds", label: "worker-first render deep" },
+          {
+            timeout: "60 seconds",
+            label: "worker-first render deep",
+          },
         );
 
         // Real static files still serve, through the worker's own ASSETS
@@ -917,7 +920,10 @@ if (el) {
         yield* expectUrlContains(
           `${site.url!}/robots.txt`,
           "worker-first-static-asset",
-          { timeout: "60 seconds", label: "worker-first ASSETS delegation" },
+          {
+            timeout: "60 seconds",
+            label: "worker-first ASSETS delegation",
+          },
         );
 
         yield* stack.destroy();

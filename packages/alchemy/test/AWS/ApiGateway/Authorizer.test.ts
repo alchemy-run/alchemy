@@ -1,13 +1,13 @@
+import * as ag from "@distilled.cloud/aws/api-gateway";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
-import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

@@ -1,3 +1,11 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as LocalProvider from "@/Local/LocalProvider.ts";
+import * as Provider from "@/Provider.ts";
+import { remote, type ProviderMode } from "@/ProviderMode.ts";
 /**
  * First-class local vs live provider modes.
  *
@@ -18,18 +26,10 @@
  */
 import { Cli } from "@/Report.ts";
 import type { ResourceAnnotated, ResourceStatusChanged } from "@/Report.ts";
-import * as LocalProvider from "@/Local/LocalProvider.ts";
-import * as Provider from "@/Provider.ts";
-import { remote, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import {
   Bucket,
   inDev,

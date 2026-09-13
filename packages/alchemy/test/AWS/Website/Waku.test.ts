@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -86,7 +86,9 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Waku", () => {
         yield* expectUrlContains(
           `${url}/echo?echo=roundtrip`,
           "WAKU_AWS_API_MARKER",
-          { label: "API route" },
+          {
+            label: "API route",
+          },
         );
         yield* expectUrlContains(`${url}/echo?echo=roundtrip`, "roundtrip", {
           label: "API route query echo",

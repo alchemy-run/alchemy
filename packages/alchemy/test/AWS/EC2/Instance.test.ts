@@ -1,3 +1,7 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as AWS from "@/AWS";
 import {
   amazonLinux2023,
@@ -8,12 +12,8 @@ import {
 } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
 import { State } from "@/State/State";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as Test from "./VpcTest.ts";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 // The fixed-IP fixture keeps two VPCs to verify allocation scope. Tests run
 // sequentially so the file holds at most these two VPCs.

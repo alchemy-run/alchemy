@@ -12,17 +12,17 @@ import {
   ensureArtifactStore,
   makeScopedArtifacts,
 } from "./Artifacts.ts";
+import { deepEqual } from "./Diff.ts";
+import { InstanceId } from "./InstanceId.ts";
+import type { Apply, Plan } from "./Plan.ts";
+import { findProviderByType, Provider } from "./Provider.ts";
+import { stampedMode } from "./ProviderMode.ts";
 import {
   noopSession,
   Progress,
   type PlanStatusSession,
   type ScopedPlanStatusSession,
 } from "./Report.ts";
-import { deepEqual } from "./Diff.ts";
-import { InstanceId } from "./InstanceId.ts";
-import type { Apply, Plan } from "./Plan.ts";
-import { findProviderByType, Provider } from "./Provider.ts";
-import { stampedMode } from "./ProviderMode.ts";
 import type { ResourceLike } from "./Resource.ts";
 import {
   isActionState,

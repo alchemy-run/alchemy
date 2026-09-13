@@ -1,8 +1,8 @@
-import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
-import { assert, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
-import { toPosixPath } from "../utils.ts";
+import { assert, describe, expect, it } from "vitest";
+import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import cloudflare from "../plugin.ts";
+import { toPosixPath } from "../utils.ts";
 import { buildFixture } from "./utils/build-fixture.ts";
 
 describe("nodejs_compat", () => {

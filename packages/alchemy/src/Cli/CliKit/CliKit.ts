@@ -1,7 +1,7 @@
+import type { TerminalProgressState } from "@alchemy.run/sigil/ansi";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import type { TerminalProgressState } from "@alchemy.run/sigil/ansi";
 import type { NonInteractiveTerminal } from "../../Interaction.ts";
 import type {
   ConfirmOptions,

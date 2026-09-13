@@ -1,4 +1,4 @@
-import * as AWS from "@/AWS";
+import * as net from "node:net";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Valkey from "iovalkey";
-import * as net from "node:net";
+import * as AWS from "@/AWS";
 import { getProvisionedNetwork } from "./ProvisionedFixture.ts";
 
 export class ProvisionedCacheDataPlaneFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(

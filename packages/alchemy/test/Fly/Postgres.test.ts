@@ -1,14 +1,14 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as mpg from "@distilled.cloud/fly-io/mpg";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });

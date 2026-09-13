@@ -1,6 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
-
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,15 +7,14 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-
 import { HttpServerResponse } from "effect/unstable/http";
+import { RuntimeContext } from "../../RuntimeContext.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
   makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import type {
   DurableObjectExport,
   DurableObjectShape,

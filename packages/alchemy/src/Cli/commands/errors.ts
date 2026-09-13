@@ -2,8 +2,8 @@ import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Runtime from "effect/Runtime";
+import * as Schema from "effect/Schema";
 import * as CliError from "effect/unstable/cli/CliError";
 import { isUserFacing, UserFacingError } from "../../UserFacingError.ts";
 import {

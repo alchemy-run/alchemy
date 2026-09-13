@@ -127,7 +127,9 @@ export const Stage = Resource<Stage>("AWS.IVSRealtime.Stage");
  */
 export class IvsRealtimeStageIncomplete extends Data.TaggedError(
   "IvsRealtimeStageIncomplete",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Convert the recording configuration prop shape (Duration-typed reconnect

@@ -15,9 +15,9 @@
  *                       HMR without a redeploy
  */
 import { afterAll, expect, test } from "bun:test";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { DevCli, fetchOk } from "alchemy-test/DevCli";
 
 const root = path.resolve(import.meta.dirname, "..");
 // Isolated stage so this suite never fights integ.test.ts (same stack
@@ -68,7 +68,9 @@ test(
     // Nitro API route serves through the dev server.
     const hello = (await (
       await fetchOk(new URL("/api/hello", url))
-    ).json()) as { greeting: string | null };
+    ).json()) as {
+      greeting: string | null;
+    };
     expect(hello).toEqual({ greeting: "Hello from Nuxt on AWS!" });
 
     // Static asset from public/.

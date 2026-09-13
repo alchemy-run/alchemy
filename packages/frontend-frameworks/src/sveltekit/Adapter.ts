@@ -1,3 +1,6 @@
+import * as NodeFs from "node:fs";
+import * as NodePath from "node:path";
+import { pathToFileURL } from "node:url";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -30,9 +33,6 @@
  */
 import type { BindingHooks } from "@alchemy.run/cloudflare-runtime/core";
 import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
-import * as NodeFs from "node:fs";
-import * as NodePath from "node:path";
-import { pathToFileURL } from "node:url";
 import { generateWorkerShim } from "./WorkerShim.ts";
 
 export interface CloudflareAdapterResult {

@@ -1,17 +1,3 @@
-import { AlchemyContext } from "@/AlchemyContext.ts";
-import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
-import * as Cloudflare from "@/Cloudflare";
-import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Drift from "@/Drift.ts";
-import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
-import { InstanceId } from "@/InstanceId.ts";
-import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import { Provider } from "@/Provider.ts";
-import { Stack, type StackSpec } from "@/Stack.ts";
-import { Stage } from "@/Stage.ts";
-import { type ResourceState, State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   apiTokenCredentials,
   Credentials,
@@ -30,6 +16,20 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
+import * as Cloudflare from "@/Cloudflare";
+import type { CloudflareResolvedCredentials } from "@/Cloudflare/Auth/AuthConfig.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { LocalRuntimeState } from "@/Cloudflare/LocalRuntime.ts";
+import * as Drift from "@/Drift.ts";
+import { InstanceId } from "@/InstanceId.ts";
+import { Provider } from "@/Provider.ts";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
+import { Stack, type StackSpec } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
+import { type ResourceState, State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -434,7 +434,10 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     expect(initialRules.rules?.[0]?.id).toEqual("expire-after-30d");
     expect(initialRules.rules?.[0]?.enabled).toEqual(true);
     expect(initialRules.rules?.[0]?.deleteObjectsTransition?.condition).toEqual(
-      { type: "Age", maxAge: 60 * 60 * 24 * 30 },
+      {
+        type: "Age",
+        maxAge: 60 * 60 * 24 * 30,
+      },
     );
 
     // Update: change the prefix and add a storage class transition.

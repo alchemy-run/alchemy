@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ACMPCATestFunctionLive, { ACMPCATestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -132,7 +132,9 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
         Effect.gen(function* () {
           const body = (yield* send(
             HttpClientRequest.get(`${baseUrl}/ca-certificate`),
-          )) as { certificate: string };
+          )) as {
+            certificate: string;
+          };
           expect(body.certificate).toContain("BEGIN CERTIFICATE");
         }),
       { timeout: 60_000 },
@@ -146,14 +148,19 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
         Effect.gen(function* () {
           const issued = (yield* send(
             HttpClientRequest.post(`${baseUrl}/issue`),
-          )) as { certificateArn: string; certificate: string };
+          )) as {
+            certificateArn: string;
+            certificate: string;
+          };
           expect(issued.certificateArn).toContain("/certificate/");
           expect(issued.certificate).toContain("BEGIN CERTIFICATE");
 
           const revoked = (yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/revoke`),
-              { certificateArn: issued.certificateArn },
+              {
+                certificateArn: issued.certificateArn,
+              },
             ),
           )) as { revoked: boolean; serial: string };
           expect(revoked.revoked).toBe(true);
@@ -170,7 +177,11 @@ describe.skipIf(!process.env.AWS_TEST_ACMPCA)("ACMPCA Bindings", () => {
         Effect.gen(function* () {
           const body = (yield* send(
             HttpClientRequest.post(`${baseUrl}/audit`),
-          )) as { auditReportId: string; s3Key: string; status: string };
+          )) as {
+            auditReportId: string;
+            s3Key: string;
+            status: string;
+          };
           expect(body.auditReportId).toBeTruthy();
           expect(body.status).toBe("SUCCESS");
         }),

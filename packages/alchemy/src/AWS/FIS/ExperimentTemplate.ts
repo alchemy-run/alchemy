@@ -1,9 +1,9 @@
+import * as crypto from "node:crypto";
 import * as fis from "@distilled.cloud/aws/fis";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";

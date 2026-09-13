@@ -1,5 +1,5 @@
-import type * as EntrySsr from "./entry.ssr";
 import { fetchServer } from "./entry.rsc";
+import type * as EntrySsr from "./entry.ssr";
 
 // The distilled Cloudflare worker wrapper expects a `{ fetch }` default export.
 // The worker runs in the `rsc` environment and loads the `ssr` environment at

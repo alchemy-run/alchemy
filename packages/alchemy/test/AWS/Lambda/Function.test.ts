@@ -1,6 +1,4 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
@@ -10,7 +8,9 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const timeoutHandlerPath = fileURLToPath(

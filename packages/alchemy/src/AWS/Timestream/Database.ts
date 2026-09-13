@@ -174,7 +174,9 @@ export const DatabaseProvider = () =>
             const hydrated = yield* Effect.forEach(
               names,
               (name) => readDatabase(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             return hydrated.filter(
               (attrs): attrs is Database["Attributes"] => attrs !== undefined,

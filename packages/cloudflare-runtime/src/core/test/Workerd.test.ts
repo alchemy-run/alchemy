@@ -1,3 +1,4 @@
+import * as NodeNet from "node:net";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -6,7 +7,6 @@ import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
 import * as Schedule from "effect/Schedule";
-import * as NodeNet from "node:net";
 import * as Workerd from "../workerd/Workerd.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);

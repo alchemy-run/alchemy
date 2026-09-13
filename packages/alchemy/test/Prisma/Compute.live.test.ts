@@ -1,5 +1,3 @@
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -11,6 +9,8 @@ import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 

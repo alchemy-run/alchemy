@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Neon from "@/Neon/index.ts";
-import * as Effect from "effect/Effect";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Neon from "@/Neon/index.ts";
 
 /**
  * Neon + Cloudflare wiring for the Drizzle-in-Workflow regression test. A

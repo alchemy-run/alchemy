@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AutoScalingConfiguration, Service } from "@/AWS/AppRunner";
-import * as Test from "@/Test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AutoScalingConfiguration, Service } from "@/AWS/AppRunner";
+import * as Test from "@/Test/Alchemy";
 import {
   awaitLogGroups,
   deleteLogGroups,

@@ -1,12 +1,12 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { PrismaApiError } from "@/Prisma/Client";
+import { Credentials } from "@/Prisma/Credentials";
 import {
   getBuildLogsRequest,
   getDeploymentLogsRequest,
 } from "@/Prisma/Internal/LogsClient";
-import { Credentials } from "@/Prisma/Credentials";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 
 const provideEnv = Effect.provideService(
   Credentials,

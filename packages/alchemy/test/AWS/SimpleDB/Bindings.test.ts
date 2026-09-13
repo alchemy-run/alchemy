@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SimpleDBTestFunctionLive, { SimpleDBTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -163,7 +163,9 @@ describe("SimpleDB Bindings", () => {
 
         const response = (yield* getJson(
           `/get?item=${encodeURIComponent("get-test#1")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
 
         const byName = Object.fromEntries(
           response.attributes.map((a) => [a.Name, a.Value]),
@@ -223,14 +225,18 @@ describe("SimpleDB Bindings", () => {
 
         const first = (yield* getJson(
           `/get?item=${encodeURIComponent("batch-test#1")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
         expect(first.attributes).toContainEqual({
           Name: "batch",
           Value: "one",
         });
         const second = (yield* getJson(
           `/get?item=${encodeURIComponent("batch-test#2")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
         expect(second.attributes).toContainEqual({
           Name: "batch",
           Value: "two",
@@ -254,7 +260,9 @@ describe("SimpleDB Bindings", () => {
 
         const after = (yield* getJson(
           `/get?item=${encodeURIComponent("delete-test#1")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
         expect(after.attributes).toEqual([]);
       }),
     );
@@ -276,7 +284,9 @@ describe("SimpleDB Bindings", () => {
 
         const after = (yield* getJson(
           `/get?item=${encodeURIComponent("delete-test#2")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
         expect(after.attributes).toContainEqual({ Name: "keep", Value: "me" });
         expect(after.attributes.map((a) => a.Name)).not.toContain("drop");
       }),
@@ -306,11 +316,15 @@ describe("SimpleDB Bindings", () => {
 
         const first = (yield* getJson(
           `/get?item=${encodeURIComponent("batch-delete#1")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
         expect(first.attributes).toEqual([]);
         const second = (yield* getJson(
           `/get?item=${encodeURIComponent("batch-delete#2")}`,
-        )) as { attributes: Attribute[] };
+        )) as {
+          attributes: Attribute[];
+        };
         expect(second.attributes).toEqual([]);
       }),
     );

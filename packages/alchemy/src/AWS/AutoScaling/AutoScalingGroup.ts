@@ -8,10 +8,10 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { toSeconds } from "../../Util/Duration.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
+import type { Providers } from "../Providers.ts";
 import type {
   LaunchTemplateId,
   LaunchTemplateName,
