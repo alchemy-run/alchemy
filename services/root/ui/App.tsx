@@ -13,6 +13,7 @@
  */
 import { ChatView } from "@/components/chat";
 import { CallThread } from "@/components/call";
+import { TriagePanel, useTriage } from "@/components/triage";
 import { GhosttyTerminal } from "@/components/terminal";
 import { SessionModelSelect } from "@/components/model-select";
 import { useTheme } from "@/lib/theme";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/routes";
 import { Moon, Sun, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 /** The Root channel's session id — the Head's one session. */
 const ROOT_CHAT = "Head:root";
@@ -85,6 +87,12 @@ const OverlayView = ({ overlay }: { overlay: Overlay }) => {
           <CallThread id={overlay.id} />
         </OverlayShell>
       );
+    case "triage":
+      return (
+        <OverlayShell title="triage — the inbound valve">
+          <TriagePanel />
+        </OverlayShell>
+      );
   }
 };
 
@@ -94,6 +102,7 @@ export const App = () => {
   );
   const { resolved, toggle } = useTheme();
   const ThemeIcon = resolved === "dark" ? Moon : Sun;
+  const triage = useTriage();
 
   useEffect(() => {
     const sync = () => setOverlay(overlayFromLocation());
@@ -115,6 +124,33 @@ export const App = () => {
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => showOverlay({ kind: "triage" })}
+            aria-label={
+              triage === undefined
+                ? "triage"
+                : `triage, ${triage.held.length} held`
+            }
+            title="the inbound valve — held events wait for your release"
+            className={cn(
+              "flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-2 py-0.5 font-mono text-[11px] hover:bg-accent",
+              (triage?.held.length ?? 0) > 0 &&
+                "border-moss text-foreground",
+            )}
+          >
+            triage
+            <span
+              className={cn(
+                "rounded px-1",
+                (triage?.held.length ?? 0) > 0
+                  ? "bg-moss/20"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {triage?.held.length ?? "…"}
+            </span>
+          </button>
           <SessionModelSelect sessionId={ROOT_CHAT} label="model" size="sm" />
           <button
             type="button"

@@ -1,9 +1,10 @@
 import { expect, test as base, type Page, type Route } from "@playwright/test";
 import type { AskNode } from "../../ui/components/ask-thread.tsx";
 import type { CallView } from "../../ui/components/call.tsx";
+import type { HeldInbound } from "../../ui/components/triage.tsx";
 
 export { expect };
-export type { AskNode, CallView };
+export type { AskNode, CallView, HeldInbound };
 
 /** The wall clock every `ui` test runs under — relative timestamps
  *  are computed against this, never against now. */
@@ -299,6 +300,35 @@ export class FakeApi {
     }
   }
 
+  /* ── triage (src/engineering/TriageApi.ts) ── */
+
+  /** The valve: the mode, the held queue (oldest first), and what the
+   *  UI did to it — each release records its seqs (or `"all"` for a
+   *  bodyless release), each mode PUT records the requested mode. */
+  triage: {
+    mode: "manual" | "auto";
+    held: HeldInbound[];
+    released: Array<number[] | "all">;
+    modeSets: Array<"manual" | "auto">;
+  } = { mode: "manual", held: [], released: [], modeSets: [] };
+
+  private nextHeldSeq = 1;
+
+  seedHeld(
+    partial: Partial<HeldInbound> & { text: string },
+  ): HeldInbound {
+    const seq = partial.seq ?? this.nextHeldSeq++;
+    this.nextHeldSeq = Math.max(this.nextHeldSeq, seq + 1);
+    const item: HeldInbound = {
+      kind: "issue",
+      at: NOW.getTime() - 3_600_000 + seq * 60_000,
+      ...partial,
+      seq,
+    };
+    this.triage.held = [...this.triage.held, item];
+    return item;
+  }
+
   /* ── proposals ── */
 
   proposals: Record<string, ProposalRow> = {};
@@ -502,6 +532,49 @@ export class FakeApi {
         return this.json(route, next);
       }
       return this.json(route, view);
+    }
+
+    // the triage valve: the held queue, the release, the mode
+    if (path === "/api/triage" && method === "GET") {
+      return this.json(route, {
+        mode: this.triage.mode,
+        held: this.triage.held,
+      });
+    }
+    if (path === "/api/triage/release" && method === "POST") {
+      const body = (request.postDataJSON() ?? {}) as { seqs?: unknown };
+      const seqs = Array.isArray(body.seqs)
+        ? body.seqs.filter((seq): seq is number => typeof seq === "number")
+        : undefined;
+      if (seqs === undefined) {
+        // none named = release EVERYTHING held
+        this.triage.released.push("all");
+        const released = this.triage.held.length;
+        this.triage.held = [];
+        return this.json(route, { released });
+      }
+      this.triage.released.push(seqs);
+      const drop = new Set(seqs);
+      const released = this.triage.held.filter((item) =>
+        drop.has(item.seq),
+      ).length;
+      this.triage.held = this.triage.held.filter(
+        (item) => !drop.has(item.seq),
+      );
+      return this.json(route, { released });
+    }
+    if (path === "/api/triage/mode" && method === "PUT") {
+      const body = (request.postDataJSON() ?? {}) as { mode?: unknown };
+      if (body.mode !== "manual" && body.mode !== "auto") {
+        return this.json(
+          route,
+          { error: 'mode must be "manual" or "auto"' },
+          400,
+        );
+      }
+      this.triage.modeSets.push(body.mode);
+      this.triage.mode = body.mode;
+      return this.json(route, { mode: body.mode });
     }
 
     // proposals: the queue, one row, the decision

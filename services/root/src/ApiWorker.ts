@@ -8,32 +8,33 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Api } from "./Api.ts";
-import { Calls } from "./chat/Call.ts";
-import { ColleaguesLive, EngineeringChart } from "./engineering/Group.ts";
-import { GeneralEngineer } from "./engineering/Engineer.ts";
-import { EngineeringManagerLive } from "./engineering/Manager.ts";
-import { TriageLive, TasksLive } from "./engineering/TriageDO.ts";
-import { TriagePump } from "./engineering/Triage.ts";
-import { AsksLive, CallsLive } from "./chat/ChatDO.ts";
-import { HeadLive } from "./Head.ts";
-import { OrgDoctrine } from "./OrgGuidance.ts";
-import { ProposalsLive } from "./proposals/ProposalsDO.ts";
-import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
 import { ArtifactsSandbox } from "./artifacts/ArtifactsSandbox.ts";
 import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
+import { AskLive, TellLive } from "./chat/Ask.ts";
+import { Calls, CallToolLive } from "./chat/Call.ts";
+import { AsksLive, CallsLive } from "./chat/ChatDO.ts";
 import { WriteTools } from "./coding/Editor.ts";
 import { OpenPullRequestLive } from "./coding/OpenPullRequest.ts";
 import { PushBranchLive } from "./coding/PushBranch.ts";
 import { ReadTools, RunTools } from "./coding/Toolbox.ts";
+import { GeneralEngineer } from "./engineering/Engineer.ts";
+import { ColleaguesLive, EngineeringChart } from "./engineering/Group.ts";
+import { EngineeringManagerLive } from "./engineering/Manager.ts";
+import { TriagePump } from "./engineering/Triage.ts";
+import { TasksLive, TriageLive } from "./engineering/TriageDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
+import { HeadLive } from "./Head.ts";
+import { OrgDoctrine } from "./OrgGuidance.ts";
+import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
 import { AwsEmulationGeneral } from "./process/AwsEmulation.ts";
 import { CloudflareEmulationGeneral } from "./process/CloudflareEmulation.ts";
 import { DistillationGeneral } from "./process/Distillation.ts";
 import { ProviderEngineeringGeneral } from "./process/ProviderEngineering.ts";
 import { VerificationGeneral } from "./process/Verification.ts";
+import { ProposalsLive } from "./proposals/ProposalsDO.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
 
@@ -67,9 +68,6 @@ const Spill = SpillingTools.pipe(
   Layer.provide(SandboxSession),
 );
 
-import { AskLive, TellLive } from "./chat/Ask.ts";
-import { CallToolLive } from "./chat/Call.ts";
-
 /** What every CONVERSING member holds: the ask/tell/call physics over
  *  the colleague addresses and the call store. */
 const Conversation = Layer.mergeAll(AskLive, TellLive, CallToolLive).pipe(
@@ -81,11 +79,8 @@ const Conversation = Layer.mergeAll(AskLive, TellLive, CallToolLive).pipe(
 /** The ENGINEER — the team's worker: read + run + editor, the publish
  *  pair behind the human gate, the conversation seams. */
 const EngineerWorker = GeneralEngineer.pipe(
-  Layer.provide(
-    Layer.mergeAll(PushBranchLive, OpenPullRequestLive).pipe(
-      Layer.provide(PublishTokenLive),
-    ),
-  ),
+  Layer.provide([PushBranchLive, OpenPullRequestLive]),
+  Layer.provide(PublishTokenLive),
   Layer.provide(Conversation),
   Layer.provide(ProposalsLive),
   Layer.provide(Editor),
@@ -100,7 +95,7 @@ const EngineerWorker = GeneralEngineer.pipe(
  *  the task ledger, spawn/workspaces, proposals, conversation. */
 const ManagerWorker = EngineeringManagerLive.pipe(
   Layer.provide(EngineerWorker),
-  Layer.provide(Layer.mergeAll(TriageLive, TasksLive)),
+  Layer.provide([TriageLive, TasksLive]),
   Layer.provide(Conversation),
   Layer.provide(ProposalsLive),
   Layer.provide(WorkspaceAgentLive),
@@ -178,7 +173,7 @@ const Company = Layer.mergeAll(
   SandboxSession,
   PublishTokenLive,
 ).pipe(
-  Layer.provideMerge(Layer.mergeAll(TriageLive, TasksLive)),
+  Layer.provideMerge([TriageLive, TasksLive]),
   Layer.provideMerge(ProposalsLive),
   Layer.provideMerge(CallsLive),
   Layer.provideMerge(AsksLive),

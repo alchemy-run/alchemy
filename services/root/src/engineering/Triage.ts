@@ -1,3 +1,4 @@
+import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -5,31 +6,66 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { connected } from "../github/Repos.ts";
+import { inWorker } from "../platform/Database.ts";
 import { lineage } from "../Root.ts";
-import { EngineeringManager } from "./Manager.ts";
 
 /**
- * TRIAGE — the pump that turns the outside world into the
- * EngineeringManager's inbound stream.
+ * TRIAGE — the VALVE between the outside world and the
+ * EngineeringManager.
  *
- * THE SESSION IS THE QUEUE. A session's inbox is already a durable,
- * seq-ordered, crash-consistent mailbox whose engine DRIVES the agent:
- * a waking input opens a round, inputs that arrive mid-round open the
- * next one, and an interrupted round recovers over the thread where
- * every admitted event already sits. So triage adds only what the
- * mailbox lacks: DEDUPE (webhooks redeliver; the dev poller
- * re-synthesizes) — one row per event key, in TriageDO beside the task
- * ledger — and RENDERING (one `[inbound]` line per event). Everything
- * else — ordering, durability, waking, redelivery — is the driver's.
+ * THE SESSION IS STILL THE QUEUE the manager consumes (a durable,
+ * seq-ordered inbox whose driver wakes it); triage sits IN FRONT of it
+ * so the humans control the FLOW: every GitHub event lands HELD in the
+ * triage queue (deduped — webhooks redeliver, the dev poller
+ * re-synthesizes), and only a RELEASE delivers it into the manager's
+ * inbox. Two modes, one delivery path:
+ *
+ * - `manual` (the default, while the company is young): items wait;
+ *   the UI's triage panel releases them one by one or all at once —
+ *   the human decides when a message may be processed.
+ * - `auto`: the pump releases immediately on arrival — the valve is
+ *   open; flip it in the UI when the company has earned it.
  */
 
 export type InboundKind = "issue" | "pull" | "request";
 
+export type TriageMode = "manual" | "auto";
+
+/** One held inbound item. */
+export interface HeldInbound {
+  readonly seq: number;
+  /** `owner/repo#N` when the item concerns a GitHub entity. */
+  readonly ref?: string;
+  readonly kind: InboundKind;
+  /** One rendered line — who did what. */
+  readonly text: string;
+  readonly at: number;
+}
+
 export class Triage extends Context.Service<
   Triage,
   {
-    /** Record one event key; answers whether it was already seen. */
-    readonly delivered: (key: string) => Effect.Effect<boolean>;
+    /** Hold one inbound item (deduped on `key`); in `auto` mode it is
+     *  released in the same breath. Answers whether it was fresh. */
+    readonly enqueue: (input: {
+      readonly key: string;
+      readonly ref?: string;
+      readonly kind: InboundKind;
+      readonly text: string;
+    }) => Effect.Effect<{ duplicate: boolean }>;
+    /** The held items, oldest first — the UI's triage panel. */
+    readonly held: () => Effect.Effect<ReadonlyArray<HeldInbound>>;
+    /**
+     * RELEASE held items (specific seqs, or the whole queue), oldest
+     * first: each is delivered into the manager's session inbox as one
+     * waking input and leaves the held queue. Answers what was
+     * released.
+     */
+    readonly release: (
+      seqs?: ReadonlyArray<number>,
+    ) => Effect.Effect<ReadonlyArray<HeldInbound>>;
+    readonly mode: () => Effect.Effect<TriageMode>;
+    readonly setMode: (mode: TriageMode) => Effect.Effect<void>;
   }
 >()("Triage") {}
 
@@ -85,17 +121,26 @@ export const inboundOf = (
   };
 };
 
+/** The one line a released item becomes in the manager's inbox. */
+export const renderInbound = (item: HeldInbound): string =>
+  `[inbound${item.ref === undefined ? "" : ` ${item.ref}`}] ${item.text}`;
+
+/** Where releases deliver: the manager's session. */
+export const MANAGER_ADDRESS = {
+  term: "EngineeringManager",
+  key: lineage("engineering-manager"),
+} as const;
+
 /**
  * The PUMP: every GitHub event of every connected repository, deduped,
- * delivered straight into the manager's SESSION as one waking input —
- * the engine does the queueing and the driving. The webhook handler
- * answers after the send commits; processing is the manager's own
- * pace, never the webhook's timeout.
+ * HELD in triage (and released in the same breath when the valve is
+ * open). The webhook handler answers after the hold commits;
+ * processing is the humans' valve and the manager's pace, never the
+ * webhook's timeout.
  */
 export const TriagePump = Layer.effectDiscard(
   Effect.gen(function* () {
     const triage = yield* Triage;
-    const manager = yield* EngineeringManager;
     const secret = yield* Config.option(
       Config.Redacted("GITHUB_WEBHOOK_SECRET"),
     );
@@ -125,16 +170,14 @@ export const TriagePump = Layer.effectDiscard(
             ...(Option.isSome(secret) ? { secret: secret.value } : {}),
           },
           Effect.fn(function* (event) {
-            const inbound = inboundOf(event);
-            if (yield* triage.delivered(inbound.key)) return;
-            yield* manager
-              .send(
-                `[inbound${inbound.ref === undefined ? "" : ` ${inbound.ref}`}] ${inbound.text}`,
-                { key: lineage("engineering-manager"), wake: true },
-              )
+            yield* triage
+              .enqueue(inboundOf(event))
               .pipe(
                 Effect.catchCause((cause) =>
-                  Effect.logWarning("inbound delivery failed", cause),
+                  Effect.as(
+                    Effect.logWarning("triage hold failed", cause),
+                    { duplicate: true },
+                  ),
                 ),
               );
           }),
@@ -143,3 +186,32 @@ export const TriagePump = Layer.effectDiscard(
     );
   }),
 );
+
+/**
+ * The RELEASE delivery, shared by the manual button and the auto
+ * valve — ONE code path: each released item becomes one waking input
+ * in the manager's session inbox.
+ */
+export const deliverReleased = (
+  released: ReadonlyArray<HeldInbound>,
+): Effect.Effect<void, never, AI.Sessions> =>
+  Effect.gen(function* () {
+    const sessions = yield* AI.Sessions;
+    yield* Effect.forEach(
+      released,
+      (item) =>
+        inWorker(
+          sessions.send(
+            MANAGER_ADDRESS.term,
+            MANAGER_ADDRESS.key,
+            renderInbound(item),
+            { wake: true },
+          ),
+        ).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("inbound delivery failed", cause),
+          ),
+        ),
+      { discard: true },
+    );
+  });

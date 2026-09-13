@@ -4,7 +4,8 @@
  * posts into it; an `ask` tool card opens into its nested chain; the
  * `?workspace=` overlay dials the workspace's terminal socket; the
  * `?call=` overlay streams a call's thread and lets the human join;
- * closing any overlay returns to `/`.
+ * the `?triage` overlay is the inbound valve (held events released by
+ * hand); closing any overlay returns to `/`.
  */
 import { expect, test, openApp, NOW, ROOT_CHAT } from "./harness";
 
@@ -155,6 +156,80 @@ test.describe("the call overlay", () => {
       .toEqual([{ id: "c-1", text: "try a longer backoff while the fix bakes" }]);
     await expect(
       page.getByText("try a longer backoff while the fix bakes"),
+    ).toBeVisible();
+  });
+});
+
+test.describe("the triage valve", () => {
+  test("the header badge counts the held and opens the panel", async ({
+    page,
+    api,
+  }) => {
+    api.seedHeld({ kind: "issue", ref: "acme/app#42", text: "login breaks on Safari" });
+    api.seedHeld({ kind: "pull", ref: "acme/app#43", text: "fix: retry backoff fencepost" });
+    await openApp(page);
+
+    const badge = page.getByRole("button", { name: "triage, 2 held" });
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText("2");
+
+    await badge.click();
+    await expect(page).toHaveURL("/?triage");
+    await expect(page.getByText("login breaks on Safari")).toBeVisible();
+    await expect(
+      page.getByText("fix: retry backoff fencepost"),
+    ).toBeVisible();
+  });
+
+  test("releasing one item posts its seq and the row leaves", async ({
+    page,
+    api,
+  }) => {
+    const first = api.seedHeld({ text: "login breaks on Safari" });
+    api.seedHeld({ text: "fix: retry backoff fencepost" });
+    await openApp(page, "/?triage");
+
+    await expect(page.locator(`[data-held='${first.seq}']`)).toBeVisible();
+    await page
+      .getByRole("button", { name: `release inbound ${first.seq}` })
+      .click();
+
+    await expect.poll(() => api.triage.released).toEqual([[first.seq]]);
+    // the panel reloads right after the POST — the row is gone, the
+    // other stays held
+    await expect(page.locator(`[data-held='${first.seq}']`)).toHaveCount(0);
+    await expect(
+      page.getByText("fix: retry backoff fencepost"),
+    ).toBeVisible();
+  });
+
+  test("release all posts without seqs and empties the list", async ({
+    page,
+    api,
+  }) => {
+    api.seedHeld({ text: "login breaks on Safari" });
+    api.seedHeld({ text: "fix: retry backoff fencepost" });
+    await openApp(page, "/?triage");
+
+    await expect(page.getByText("login breaks on Safari")).toBeVisible();
+    await page.getByRole("button", { name: "release all" }).click();
+
+    await expect.poll(() => api.triage.released).toEqual(["all"]);
+    await expect(page.locator("[data-held]")).toHaveCount(0);
+    await expect(
+      page.getByText("The queue is empty — the world is quiet."),
+    ).toBeVisible();
+  });
+
+  test("the mode toggle PUTs the new mode", async ({ page, api }) => {
+    await openApp(page, "/?triage");
+
+    await page.getByRole("button", { name: "auto mode" }).click();
+    await expect.poll(() => api.triage.modeSets).toEqual(["auto"]);
+    expect(api.triage.mode).toBe("auto");
+    // the panel reloads and shows the flipped valve on its empty state
+    await expect(
+      page.getByText("(auto: releases flow through)"),
     ).toBeVisible();
   });
 });

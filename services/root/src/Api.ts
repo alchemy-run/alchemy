@@ -7,6 +7,7 @@ import { Models } from "./chat/Models.ts";
 import { PostMessage } from "./chat/PostMessage.ts";
 import { Transcript } from "./chat/Transcript.ts";
 import { TasksApi } from "./engineering/TasksApi.ts";
+import { TriageApi } from "./engineering/TriageApi.ts";
 import { StatusApi } from "./github/StatusApi.ts";
 import { DecideApi } from "./proposals/DecideApi.ts";
 import { ExecApi } from "./sandbox/ExecApi.ts";
@@ -32,6 +33,7 @@ export const Api = Effect.gen(function* () {
     yield* CallsApi,
     yield* AsksApi,
     yield* TasksApi,
+    yield* TriageApi,
     yield* DecideApi,
     yield* ExecApi,
     yield* StatusApi,
