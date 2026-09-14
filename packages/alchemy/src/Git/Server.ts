@@ -3,7 +3,7 @@
  *
  * ApiLive registers the public REST, smart-HTTP, and GitHub routes on the
  * application's HttpRouter. InternalApiLive registers internal hashing.
- * HandlersLive shares the registry, repository clients, and cache across groups.
+ * ApiHandlersLive shares the registry, repository clients, and cache across groups.
  * The application owns its API, authentication, HTTP server, and CORS policy.
  *
  * ```typescript
@@ -11,7 +11,7 @@
  *   Layer.provide(Authentication.layer),
  * );
  * const Routes = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
- *   Layer.provide(Git.HandlersLive),
+ *   Layer.provide(Git.ApiHandlersLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
  *   Layer.provide(Git.HasherInline),
@@ -2199,10 +2199,10 @@ export class Handlers extends Context.Service<
  * ```typescript
  * const ReposLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
  *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
- * ).pipe(Layer.provide(Git.HandlersLive));
+ * ).pipe(Layer.provide(Git.ApiHandlersLive));
  * ```
  */
-export const HandlersLive = Layer.effect(Handlers, makeCore);
+export const ApiHandlersLive = Layer.effect(Handlers, makeCore);
 
 /**
  * The internal hash group for {@link InternalApi}. {@link InternalApiLive}

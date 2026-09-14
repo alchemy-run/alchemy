@@ -245,7 +245,7 @@ const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
 );
 
 export const HttpLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject), // owner/name → repo
   Layer.provide(Git.HasherInline), // push verification in this Worker

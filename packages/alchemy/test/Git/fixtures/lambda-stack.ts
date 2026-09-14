@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  HandlersLive,
+  ApiHandlersLive,
   ReposDurableObject,
   RegistryDurableObject,
 } from "@/Git/index.ts";
@@ -28,7 +28,7 @@ const GitObjects = Cloudflare.R2.Bucket("GitLambdaObjects", {
 });
 
 const GitLive = TestRoutes.pipe(
-  Layer.provide(HandlersLive),
+  Layer.provide(ApiHandlersLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   Layer.provide(HasherLambda(HasherFunction)),

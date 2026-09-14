@@ -70,7 +70,7 @@ import * as Http from "alchemy/Http";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 
 const HttpLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
@@ -84,7 +84,7 @@ return { fetch };
 
 `Http.Platform` provides the platform services needed on a Worker or Lambda.
 The application chooses CORS and any other middleware with Effect's HTTP APIs.
-`Git.HandlersLive` builds the shared storage clients, resolve cache, and handlers.
+`Git.ApiHandlersLive` builds the shared storage clients, resolve cache, and handlers.
 
 ## Replace a Git handler
 

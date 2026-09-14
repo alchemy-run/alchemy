@@ -3,7 +3,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
  * Shared test-stack fixture for the git-service suites (DESIGN.md §9).
  *
  * git-service ships no Worker of its own — the package exports building
- * blocks (`ApiLive`, `HandlersLive`, `ReposDurableObject`,
+ * blocks (`ApiLive`, `ApiHandlersLive`, `ReposDurableObject`,
  * `RegistryDurableObject`, …) that users assemble into their own
  * `Cloudflare.Worker`. This fixture is exactly that assembly: the same
  * shape the example app and the RFC's headline snippet use.
@@ -21,7 +21,7 @@ import * as Layer from "effect/Layer";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  HandlersLive,
+  ApiHandlersLive,
   HasherInline,
   ReposDurableObject,
   RegistryDurableObject,
@@ -47,7 +47,7 @@ const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
 
 /** Storage and implementation layers for the application router. */
 const GitLive = TestRoutes.pipe(
-  Layer.provide(HandlersLive),
+  Layer.provide(ApiHandlersLive),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
   // In-process hashing: service-binding fan-out runs on the caller's

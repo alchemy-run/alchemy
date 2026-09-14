@@ -107,7 +107,7 @@ every other ref; only the owner moves `main`.
 +import { ProtectedMain } from "./hooks.ts";
 
 const HttpLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
 +  Layer.provide(ProtectedMain),
   Layer.provide(Git.ReposDurableObject),
 ```

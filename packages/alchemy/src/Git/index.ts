@@ -6,7 +6,7 @@
  * - The HTTP contract ({@link GitApi}, aliased {@link Api}): every plane as
  *   one `HttpApi`, each endpoint an `HttpApiEndpoint`, each group a
  *   class, with the schemas and tagged errors.
- * - {@link Handlers} and {@link HandlersLive}: shared handler implementations.
+ * - {@link Handlers} and {@link ApiHandlersLive}: shared handler implementations.
  *   {@link ApiLive} registers public routes; merge it beside application routes.
  *   {@link GroupsLive} exposes native group implementations for overrides.
  * - {@link Hooks}, git's pre-receive hook as a service. There is no auth
@@ -40,7 +40,7 @@ export {
   type BlobMultipart,
   type BlobStoreShape,
 } from "./BlobStore.ts";
-export { BlobStoreS3, type BlobStoreS3Options } from "./BlobStoreS3.ts";
+export { BlobStoreS3 } from "./BlobStoreS3.ts";
 export { RegistryD1 } from "./RegistryD1.ts";
 export {
   GitRepo,

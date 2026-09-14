@@ -23,13 +23,14 @@ import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as Http from "alchemy/Http";
 
+const GitObjects = AWS.S3.Bucket("GitObjects");
+
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreS3()),
-  // or: Git.BlobStoreS3({ bucket: AWS.S3.Bucket("GitObjects", { bucketName: "git-objects" }) })
+  Layer.provide(Git.BlobStoreS3(GitObjects)),
   Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),
   Layer.provide(AWS.Lambda.InvokeFunctionHttp),
 );
@@ -116,7 +117,7 @@ time:
 
 ```diff lang="typescript"
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),

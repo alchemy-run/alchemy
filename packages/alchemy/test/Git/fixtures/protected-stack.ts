@@ -19,7 +19,7 @@ import * as Option from "effect/Option";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
-  HandlersLive,
+  ApiHandlersLive,
   HasherInline,
   Hooks,
   ReposDurableObject,
@@ -54,7 +54,7 @@ const ProtectedMain: Layer.Layer<Hooks> = Layer.succeed(Hooks, {
 const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
 const ProtectedGitLive = TestRoutes.pipe(
-  Layer.provide(HandlersLive),
+  Layer.provide(ApiHandlersLive),
   Layer.provide(ProtectedMain),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),

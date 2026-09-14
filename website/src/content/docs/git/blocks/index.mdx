@@ -14,7 +14,7 @@ graph:
 
 ```typescript
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
@@ -51,7 +51,7 @@ Your middleware and `Git.Hooks` run at the Worker, in the request.
 
 | Block | Decides | Ships with |
 | --- | --- | --- |
-| [HTTP routes](/git/blocks/server) | the HTTP surface: every plane as one `HttpApi` of routes you can replace, behind your middleware | `HandlersLive`, `ApiLive`, `InternalApiLive` |
+| [HTTP routes](/git/blocks/server) | the HTTP surface: every plane as one `HttpApi` of routes you can replace, behind your middleware | `ApiHandlersLive`, `ApiLive`, `InternalApiLive` |
 | [Repository](/git/blocks/repositories) | where refs and objects live, the jobs that keep a repository small | `ReposDurableObject` |
 | [Registry](/git/blocks/registry) | how `owner/name` resolves, and listings | `RegistryDurableObject`, `RegistryD1` |
 | [Blob Store](/git/blocks/blob-store) | where packs, bundles, and large pushes go | `BlobStoreR2`, `BlobStoreS3` |
@@ -65,7 +65,7 @@ the graph knows:
 
 ```diff lang="typescript"
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
 -  Layer.provide(Git.RegistryDurableObject),
@@ -80,7 +80,7 @@ the service, and the compiler says which:
 
 ```typescript
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),

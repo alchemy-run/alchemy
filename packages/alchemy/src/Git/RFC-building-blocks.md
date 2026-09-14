@@ -11,7 +11,7 @@ const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
   Layer.provide(Authentication.layer),
 );
 const Routes = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   // repository, registry, hasher, blob, and platform layers
 );
 const fetch = yield* HttpRouter.toHttpEffect(Routes);
@@ -396,7 +396,7 @@ store" is now a layer, not a fork.
 - **HTTP groups** — `Git.Protocol`, `Git.Repos`, `Git.Refs`, `Git.Objects`,
   `Git.Pulls`, and `Git.GitHub`. Each is independently mountable in an
   Effect `HttpApi`. `Git.Handlers` exposes the corresponding handler
-  objects; `Git.HandlersLive` builds them over `RegistryStore`,
+  objects; `Git.ApiHandlersLive` builds them over `RegistryStore`,
   `RepoStore`, `BlobStore`, and `Hasher`.
 
 ## 4. `Git.Server` — the top-level block
@@ -423,7 +423,7 @@ const ManagementLive = HttpApiBuilder.group(ManagementApi, "repos", (h) =>
 );
 
 const ManagementServer = Git.Server.layer(ManagementApi, ManagementLive).pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(AuthenticatedLive),
   // provide the storage and hasher layers as above
 );

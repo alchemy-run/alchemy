@@ -678,7 +678,7 @@ declare no middleware and no auth errors.
 
 Every endpoint in `Api/*.ts` is an Effect `HttpApiEndpoint`.
 The user defines their own API and composes its routes beside Git. `Git.ApiLive` is a native HttpRouter route layer,
-merged beside `HttpApiBuilder.layer(AppApi)` by the application. `Git.HandlersLive`
+merged beside `HttpApiBuilder.layer(AppApi)` by the application. `Git.ApiHandlersLive`
 supplies the shared implementation. `Git.GroupsLive` exposes default native
 group layers for applications that override a Git handler with
 `HttpApiBuilder.group(Git.Api, ...)` and ordinary `Layer.mergeAll`.

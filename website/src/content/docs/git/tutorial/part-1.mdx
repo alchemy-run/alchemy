@@ -15,11 +15,11 @@ import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
 );
 ```
 
-`ApiLive` registers the public endpoints. `HandlersLive` supplies the shared
+`ApiLive` registers the public endpoints. `ApiHandlersLive` supplies the shared
 implementation, which needs repository storage, a registry, a hasher, and blob storage.
 
 ## Supply storage and hashing
@@ -29,7 +29,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 
 const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
@@ -72,7 +72,7 @@ const PublicRoutes = Git.ApiLive.pipe(
 );
 
 const GitLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),

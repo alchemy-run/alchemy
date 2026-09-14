@@ -24,7 +24,7 @@ import * as Http from "alchemy/Http";
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
@@ -91,7 +91,7 @@ no traffic costs its storage.
 
 ```diff lang="typescript"
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
@@ -108,7 +108,7 @@ one region:
 +export const RepoIndex = Cloudflare.D1.Database("RepoIndex");
 +
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
 -  Layer.provide(Git.RegistryDurableObject),

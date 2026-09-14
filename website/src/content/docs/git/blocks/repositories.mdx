@@ -11,7 +11,7 @@ provides `Git.RepoStore`, the service every route reaches it through:
 
 ```typescript
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   // ReposDurableObject requires:
@@ -147,7 +147,7 @@ export const ReposWithHooks = Layer.effect(
 
 ```diff lang="typescript"
 const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.HandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
 -  Layer.provide(Git.ReposDurableObject),
 +  Layer.provide(ReposWithHooks),
