@@ -24,7 +24,7 @@ packages:
   - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 catalog:
-  "@alchemy.run/sigil": "0.0.0-alpha.10"
+  "@alchemy.run/sigil": "0.0.0-alpha.11"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.10.1"
   "@astrojs/mdx": "8.0.0"
@@ -106,8 +106,8 @@ catalog:
   "@types/node": "26.2.0"
   "@types/pg": "^8.20.0"
   "@types/picomatch": "^4.0.0"
-  "@types/react": "^19.2.17"
-  "@types/react-dom": "^19.2.7"
+  "@types/react": "^19.3.0"
+  "@types/react-dom": "^19.3.0"
   "@types/ws": "^8.18.1"
   "@vercel/nft": "^1.10.2"
   "@vitejs/plugin-react": "^6.0.2"
@@ -159,11 +159,11 @@ catalog:
   picomatch: "^4.0.4"
   postal-mime: "^2.4.3"
   postcss: "^8.4.49"
-  react: "^19.2.7"
+  react: "^19.3.0"
   react-devtools-core: "^7.0.1"
-  react-dom: "^19.2.7"
+  react-dom: "^19.3.0"
   react-router: "^7.16.0"
-  react-server-dom-webpack: "~19.2.6"
+  react-server-dom-webpack: "~19.3.0"
   rolldown: "1.2.5"
   satteri: "^0.10.5"
   sharp: "^0.35.3"
@@ -213,8 +213,8 @@ catalogs:
     "@types/node": "^24.12.0"
   # React patch line required by react-server-dom-webpack consumers.
   react-rsc:
-    react: "~19.2.6"
-    react-dom: "~19.2.6"
+    react: "~19.3.0"
+    react-dom: "~19.3.0"
   solid-v1:
     "@solidjs/router": "^0.15.0"
     "@solidjs/start": "2.0.0-alpha.2"
@@ -238,7 +238,7 @@ patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
-  - "@alchemy.run/sigil@0.0.0-alpha.10"
+  - "@alchemy.run/sigil@0.0.0-alpha.11"
   - "@effect/atom-react@4.0.0-rc.115"
   - "@effect/platform-bun@4.0.0-rc.115"
   - "@effect/platform-node-shared@4.0.0-rc.115"

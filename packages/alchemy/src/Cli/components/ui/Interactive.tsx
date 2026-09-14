@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import {
   measureElement,
   useCursor,
@@ -8,13 +8,12 @@ import {
   type DOMElement,
 } from "@alchemy.run/sigil";
 import {
-  type JSX,
-  type ReactNode,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-} from "react";
+} from "@alchemy.run/sigil/react";
+import type { JSX, ReactNode } from "react";
 import stringWidth from "string-width";
 import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
 import { theme } from "../../../Util/Theme.ts";
