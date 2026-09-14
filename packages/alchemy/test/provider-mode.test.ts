@@ -1,3 +1,10 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as LocalProvider from "@/Local/LocalProvider.ts";
+import * as Provider from "@/Provider.ts";
+import { remote, type ProviderMode } from "@/ProviderMode.ts";
 /**
  * First-class local vs live provider modes.
  *
@@ -18,17 +25,10 @@
  */
 import { Cli } from "@/Report.ts";
 import type { ResourceAnnotated, ResourceStatusChanged } from "@/Report.ts";
-import * as LocalProvider from "@/Local/LocalProvider.ts";
-import * as Provider from "@/Provider.ts";
-import { remote, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import {
   Bucket,
   inDev,
@@ -574,7 +574,9 @@ test(
     // same config → diff noop, reconcile joins the running instance
     expect(
       yield* provider.diff!(lifecycleInput("i1", { value: "v1" })),
-    ).toEqual({ action: "noop" });
+    ).toEqual({
+      action: "noop",
+    });
     yield* provider.reconcile(lifecycleInput("i1", { value: "v1" }));
     expect(localThingEvents).toEqual(["start:A:v1"]);
 
@@ -584,12 +586,16 @@ test(
       yield* provider.diff!(
         lifecycleInput("i1", { value: "v1", ignored: "x" }),
       ),
-    ).toEqual({ action: "noop" });
+    ).toEqual({
+      action: "noop",
+    });
 
     // real config change → update; reconcile kills then restarts
     expect(
       yield* provider.diff!(lifecycleInput("i1", { value: "v2" })),
-    ).toEqual({ action: "update" });
+    ).toEqual({
+      action: "update",
+    });
     yield* provider.reconcile(lifecycleInput("i1", { value: "v2" }));
     expect(localThingEvents).toEqual(["start:A:v1", "kill:A", "start:A:v2"]);
 
@@ -602,7 +608,9 @@ test(
     yield* capturedInvalidate!;
     expect(
       yield* provider.diff!(lifecycleInput("i1", { value: "v2" })),
-    ).toEqual({ action: "update" });
+    ).toEqual({
+      action: "update",
+    });
     yield* provider.reconcile(lifecycleInput("i1", { value: "v2" }));
 
     // matching delete tears down and runs stop

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import IdentityCenterBindingsFunctionLive, {
   IdentityCenterBindingsFunction,
 } from "./handler";

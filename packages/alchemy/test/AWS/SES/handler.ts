@@ -1,6 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SES from "@/AWS/SES";
-import * as Output from "@/Output";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SES from "@/AWS/SES";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -248,7 +248,9 @@ export default SESTestFunction.make(
         if (request.method === "POST" && pathname === "/suppress") {
           return yield* respond(
             suppress({ EmailAddress: email!, Reason: "BOUNCE" }),
-            () => ({ suppressed: email }),
+            () => ({
+              suppressed: email,
+            }),
           );
         }
 
@@ -405,7 +407,9 @@ export default SESTestFunction.make(
           const ip = url.searchParams.get("ip") ?? "192.0.2.1";
           return yield* respond(
             getBlacklistReports({ BlacklistItemNames: [ip] }),
-            (result) => ({ ips: Object.keys(result.BlacklistReport) }),
+            (result) => ({
+              ips: Object.keys(result.BlacklistReport),
+            }),
           );
         }
 

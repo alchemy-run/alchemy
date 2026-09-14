@@ -1,11 +1,11 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const FIXTURE = fileURLToPath(
   new URL("./fixtures/shutdown-feedback-fixture.ts", import.meta.url),

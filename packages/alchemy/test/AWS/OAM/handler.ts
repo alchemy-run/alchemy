@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as OAM from "@/AWS/OAM";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as OAM from "@/AWS/OAM";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 

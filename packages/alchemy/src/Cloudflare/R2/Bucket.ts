@@ -2,7 +2,6 @@ import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -1433,14 +1432,6 @@ export const BucketProvider = () =>
 const r2BucketEndpointConsistencySchedule = Schedule.max([
   Schedule.exponential(100),
   Schedule.recurs(5),
-]);
-
-// R2 sub-resource reads (notably the custom-domain endpoint, which touches the
-// bucket's public-access policy) can return a transient 500 ("Failed to access
-// or modify the bucket policy"). Ride out the blip with a short bounded retry.
-const r2TransientServerErrorSchedule = Schedule.max([
-  Schedule.exponential("500 millis"),
-  Schedule.recurs(6),
 ]);
 
 // Distilled widened generated string enums to open unions (`string & {}`); the

@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SageMakerTestFunctionLive, { SageMakerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -160,7 +160,9 @@ describe("SageMaker FeatureStore Bindings", () => {
         Effect.gen(function* () {
           const body = (yield* getJson(
             "/get-record?userId=user-never-written",
-          )) as { record: unknown[] };
+          )) as {
+            record: unknown[];
+          };
           expect(body.record).toEqual([]);
         }),
       { timeout: 60_000 },

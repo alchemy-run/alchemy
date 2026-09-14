@@ -1,13 +1,3 @@
-/**
- * The pack hasher on AWS Lambda, end to end (DESIGN §22.11): the Git host
- * Worker binds `InvokeFunction` cross-cloud, pushes stream through Lambda
- * chunks, and the result clones back byte-identical under `fsck --strict`.
- * Needs BOTH provider sets (`--profile testing`; AWS via SSO).
- */
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
-import { GitApi } from "@/Git/Api.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -20,6 +10,16 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
+/**
+ * The pack hasher on AWS Lambda, end to end (DESIGN §22.11): the Git host
+ * Worker binds `InvokeFunction` cross-cloud, pushes stream through Lambda
+ * chunks, and the result clones back byte-identical under `fsck --strict`.
+ * Needs BOTH provider sets (`--profile testing`; AWS via SSO).
+ */
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
+import { GitApi } from "@/Git/Api.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeLambdaTestStack, TEST_SECRET } from "./fixtures/lambda-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

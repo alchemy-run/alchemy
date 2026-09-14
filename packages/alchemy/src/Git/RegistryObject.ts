@@ -1,3 +1,6 @@
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * The singleton Registry Durable Object (DESIGN.md §2.1, §3.1).
  *
@@ -20,10 +23,7 @@
  * ```
  */
 import * as Cloudflare from "../Cloudflare/index.ts";
-import * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
 import { StoreError } from "./Protocol/Store.ts";
 import {
@@ -47,7 +47,7 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const ulid = (): Effect.Effect<string> =>
   Effect.sync(() => {
     let time = Date.now();
-    const chars = new Array<string>(26);
+    const chars = Array.from({ length: 26 }, () => "0");
     // 10 chars of time, most-significant first
     for (let i = 9; i >= 0; i--) {
       chars[i] = CROCKFORD[time % 32]!;

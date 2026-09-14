@@ -15,8 +15,8 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import type { ScopedPlanStatusSession } from "../Report.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
+import type { ScopedPlanStatusSession } from "../Report.ts";
 
 export class Docker extends Context.Service<
   Docker,
@@ -714,7 +714,9 @@ export const DockerLive = Layer.effect(
           }
           return yield* run(
             [...formatArgs({ context }), "push", "--platform", platform, ref],
-            { DOCKER_CONFIG: dir },
+            {
+              DOCKER_CONFIG: dir,
+            },
           ).pipe(
             // Engines without the containerd image store reject `--platform`
             // on push; their local tag is already narrowed to the requested

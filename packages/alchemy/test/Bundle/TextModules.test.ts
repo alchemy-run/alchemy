@@ -1,9 +1,9 @@
-import * as Bundle from "@/Bundle/Bundle";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Bundle from "@/Bundle/Bundle";
 
 layer(NodeServices.layer)("Bundle.build default text module types", (it) => {
   it.effect("inlines a bare .sql import as a string default export", () =>

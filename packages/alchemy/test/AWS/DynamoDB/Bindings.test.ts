@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DynamoDBTestFunctionLive, { DynamoDBTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -113,7 +113,11 @@ describe("DynamoDB Bindings", () => {
         const response = yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "put-test#1", sk: "item", data: "test data" },
+            {
+              pk: "put-test#1",
+              sk: "item",
+              data: "test data",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json));
 
@@ -128,7 +132,11 @@ describe("DynamoDB Bindings", () => {
         yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "get-test#1", sk: "item", data: "get test data" },
+            {
+              pk: "get-test#1",
+              sk: "item",
+              data: "get test data",
+            },
           ),
         );
 
@@ -281,7 +289,10 @@ describe("DynamoDB Bindings", () => {
         const response = yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/update-ttl`),
-            { attributeName: "expiresAt", enabled: true },
+            {
+              attributeName: "expiresAt",
+              enabled: true,
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json));
 
@@ -301,14 +312,21 @@ describe("DynamoDB Bindings", () => {
           yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/put`),
-              { pk: "statement#1", sk: "item", data: "statement data" },
+              {
+                pk: "statement#1",
+                sk: "item",
+                data: "statement data",
+              },
             ),
           );
 
           const response = yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/execute-statement`),
-              { pk: "statement#1", sk: "item" },
+              {
+                pk: "statement#1",
+                sk: "item",
+              },
             ),
           ).pipe(Effect.flatMap((r) => r.json));
 
@@ -380,13 +398,21 @@ describe("DynamoDB Bindings", () => {
           yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/put`),
-              { pk: "tx#1", sk: "item1", data: "first" },
+              {
+                pk: "tx#1",
+                sk: "item1",
+                data: "first",
+              },
             ),
           );
           yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/put`),
-              { pk: "tx#1", sk: "item2", data: "second" },
+              {
+                pk: "tx#1",
+                sk: "item2",
+                data: "second",
+              },
             ),
           );
 
@@ -521,14 +547,22 @@ describe("DynamoDB Bindings", () => {
         yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "update-test#1", sk: "item", data: "original" },
+            {
+              pk: "update-test#1",
+              sk: "item",
+              data: "original",
+            },
           ),
         );
 
         const response = yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/update`),
-            { pk: "update-test#1", sk: "item", data: "updated" },
+            {
+              pk: "update-test#1",
+              sk: "item",
+              data: "updated",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json));
 
@@ -550,14 +584,21 @@ describe("DynamoDB Bindings", () => {
         yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "delete-test#1", sk: "item", data: "to delete" },
+            {
+              pk: "delete-test#1",
+              sk: "item",
+              data: "to delete",
+            },
           ),
         );
 
         const response = yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.delete(`${baseUrl}/delete`),
-            { pk: "delete-test#1", sk: "item" },
+            {
+              pk: "delete-test#1",
+              sk: "item",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json));
 
@@ -578,13 +619,21 @@ describe("DynamoDB Bindings", () => {
         yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "query-test#1", sk: "item1", data: "first" },
+            {
+              pk: "query-test#1",
+              sk: "item1",
+              data: "first",
+            },
           ),
         );
         yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "query-test#1", sk: "item2", data: "second" },
+            {
+              pk: "query-test#1",
+              sk: "item2",
+              data: "second",
+            },
           ),
         );
 
@@ -767,7 +816,11 @@ describe("DynamoDB Bindings", () => {
         yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "scan-test#1", sk: "item", data: "scan data" },
+            {
+              pk: "scan-test#1",
+              sk: "item",
+              data: "scan data",
+            },
           ),
         );
 
@@ -789,7 +842,9 @@ describe("DynamoDB Bindings", () => {
           const created = (yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/create-backup`),
-              { name: "bindings-test-backup" },
+              {
+                name: "bindings-test-backup",
+              },
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             backupArn?: string;

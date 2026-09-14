@@ -549,7 +549,8 @@ export const RepositoryProvider = () =>
             // not exist yet. Drop it and retry so the rest of the settings
             // still converge.
             if (error.status === 422 && updateInput.default_branch) {
-              const { default_branch, ...withoutBranch } = updateInput;
+              const { default_branch: _default_branch, ...withoutBranch } =
+                updateInput;
               const { data } = await octokit.rest.repos.update(
                 withoutBranch as Parameters<
                   typeof octokit.rest.repos.update

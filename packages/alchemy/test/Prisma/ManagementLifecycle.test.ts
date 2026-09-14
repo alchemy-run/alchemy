@@ -1,11 +1,19 @@
+import { expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as TestClock from "effect/testing/TestClock";
 import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
 import { InstanceId } from "@/InstanceId";
 import * as Output from "@/Output";
 import { createPhysicalName } from "@/PhysicalName";
-import * as Provider from "@/Provider";
 import type { App } from "@/Prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
 import { PrismaApiError, PrismaClient } from "@/Prisma/Client";
+import type { PrismaManagementClient } from "@/Prisma/Client";
 import {
   CustomDomain as PrismaCustomDomain,
   CustomDomainProvider,
@@ -18,21 +26,12 @@ import {
   EnvironmentVariable as PrismaEnvironmentVariable,
   EnvironmentVariableProvider,
 } from "@/Prisma/EnvironmentVariable";
-import { Project as PrismaProject, ProjectProvider } from "@/Prisma/Project";
 import { recoverDatabaseConnectionSecrets } from "@/Prisma/Internal/DatabaseSecrets";
+import { Project as PrismaProject, ProjectProvider } from "@/Prisma/Project";
 import {
   SourceRepository as PrismaSourceRepository,
   SourceRepositoryProvider,
 } from "@/Prisma/SourceRepository";
-import * as Test from "@/Test/Alchemy";
-import { expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as TestClock from "effect/testing/TestClock";
-import type { PrismaManagementClient } from "@/Prisma/Client";
 import type {
   Branch as ApiBranch,
   CustomDomain as ApiCustomDomain,
@@ -41,7 +40,8 @@ import type {
   Project as ApiProject,
   SourceRepository as ApiSourceRepository,
 } from "@/Prisma/Types";
-import { AlchemyContext } from "@/AlchemyContext";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 

@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { NotificationChannel } from "@/AWS/DevOpsGuru/NotificationChannel.ts";
-import { Topic } from "@/AWS/SNS/Topic.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "alchemy-test";
@@ -10,6 +5,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { NotificationChannel } from "@/AWS/DevOpsGuru/NotificationChannel.ts";
+import { Topic } from "@/AWS/SNS/Topic.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

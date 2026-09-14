@@ -8,7 +8,6 @@ import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest"
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
 import type { ResourceClassLike } from "../../Resource.ts";
@@ -18,10 +17,7 @@ import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
 import { type WorkerShape } from "../Workers/Worker.ts";
-import type {
-  ContainerApplication,
-  ContainerApplicationProps,
-} from "./ContainerApplication.ts";
+import type { ContainerApplication } from "./ContainerApplication.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";

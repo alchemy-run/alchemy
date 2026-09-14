@@ -1,11 +1,10 @@
 import * as Alchemy from "alchemy";
+import { expect } from "alchemy-test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Alchemy";
-import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import HyperdriveAuthWorker from "./fixtures/hyperdrive-worker.ts";
 import {
   AuthHttpError,
   edgeRetry,
@@ -13,6 +12,7 @@ import {
   postJson,
   toCookieHeader,
 } from "../http.ts";
+import HyperdriveAuthWorker from "./fixtures/hyperdrive-worker.ts";
 
 const providers = Layer.mergeAll(Cloudflare.providers(), Neon.providers());
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

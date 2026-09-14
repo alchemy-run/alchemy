@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const timeoutHandlerPath = fileURLToPath(
   new URL("./timeout-handler.ts", import.meta.url),

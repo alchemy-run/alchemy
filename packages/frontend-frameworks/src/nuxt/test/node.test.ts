@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
-import type { NitroConfigSlice } from "../UserConfig.ts";
 import {
   NITRO_HANDLER_SPECIFIER,
   NITRO_PRESET,
   makeNodeTarget,
   target,
 } from "../node.ts";
+import type { NitroConfigSlice } from "../UserConfig.ts";
 
 describe("makeNodeTarget", () => {
   it("declares the node platform, the node nitro preset, and a finish pass", () => {

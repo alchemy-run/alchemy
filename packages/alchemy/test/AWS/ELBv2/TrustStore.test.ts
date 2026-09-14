@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { TrustStore } from "@/AWS/ELBv2";
-import * as Test from "@/Test/Alchemy";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { TrustStore } from "@/AWS/ELBv2";
+import { Bucket } from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

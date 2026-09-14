@@ -1,3 +1,8 @@
+import { execFile } from "node:child_process";
+import * as fs from "node:fs/promises";
+import * as net from "node:net";
+import * as os from "node:os";
+import * as path from "node:path";
 /**
  * `@alchemy.run/floci` — Effect-native manager for the
  * [floci](https://floci.io) local cloud emulator.
@@ -25,11 +30,6 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import { execFile } from "node:child_process";
-import * as fs from "node:fs/promises";
-import * as net from "node:net";
-import * as os from "node:os";
-import * as path from "node:path";
 
 /**
  * The pinned floci release alchemy ships: upstream + the alchemy patch

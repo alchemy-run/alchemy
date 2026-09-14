@@ -19,18 +19,7 @@ import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { App } from "./App.ts";
-import type {
-  MachineGuest,
-  MachineImageRef,
-  MachineService,
-} from "./Machine.ts";
-import {
-  createFlyResourceName,
-  diffMachineMetadata,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
-import type { MountedDisk, ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
+import { attachBucketSecrets } from "./Bucket.ts";
 import {
   collectBindingState,
   createFlyHostedSupport,
@@ -42,8 +31,19 @@ import {
   type FlyHostRuntimeContext,
   type HostedProgramProps,
 } from "./hosted.ts";
-import { attachBucketSecrets } from "./Bucket.ts";
+import type {
+  MachineGuest,
+  MachineImageRef,
+  MachineService,
+} from "./Machine.ts";
+import {
+  createFlyResourceName,
+  diffMachineMetadata,
+  sanitizeFlyAppName,
+} from "./Metadata.ts";
+import type { MountedDisk, ServiceBinding } from "./MountVolume.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
+import type { Providers } from "./Providers.ts";
 import { attachRedisSecrets } from "./Redis.ts";
 import {
   deleteReplicaSet,
@@ -958,7 +958,7 @@ export const ServiceProvider = () =>
         stables: ["machineId", "name", "region", "appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news, output }) {
           if (news === undefined || output === undefined) return undefined;
           if (isResolved(news)) {
             const desiredAppName = appNameOf(news.app);

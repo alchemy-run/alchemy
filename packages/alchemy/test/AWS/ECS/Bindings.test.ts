@@ -1,16 +1,16 @@
-import * as AWS from "@/AWS";
-import { Subnet } from "@/AWS/EC2";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import OneShotTask from "./fixtures/oneshot-task.ts";
+import * as AWS from "@/AWS";
+import { Subnet } from "@/AWS/EC2";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import OneShotTask from "./fixtures/oneshot-task.ts";
 import EcsBindingsTestFunctionLive, {
   EcsBindingsTestFunction,
 } from "./handler.ts";
@@ -352,7 +352,9 @@ describe("ECS Bindings", () => {
           const protect = (yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/protect`),
-              { taskArn: run.taskArn },
+              {
+                taskArn: run.taskArn,
+              },
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as ProtectionResponse;
           expect(isTaskNotValid(protect)).toBe(true);
@@ -368,7 +370,10 @@ describe("ECS Bindings", () => {
           yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/stop`),
-              { taskArn: run.taskArn, reason: "protection test done" },
+              {
+                taskArn: run.taskArn,
+                reason: "protection test done",
+              },
             ),
           );
         }),
@@ -392,7 +397,10 @@ describe("ECS Bindings", () => {
           const stop = yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/stop`),
-              { taskArn: run.taskArn, reason: "alchemy stop test" },
+              {
+                taskArn: run.taskArn,
+                reason: "alchemy stop test",
+              },
             ),
           ).pipe(Effect.flatMap((r) => r.json));
           expect((stop as { taskArn?: string }).taskArn).toBe(run.taskArn);

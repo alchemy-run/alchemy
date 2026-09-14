@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ChatbotTestFunctionLive, { ChatbotTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -138,7 +138,10 @@ describe.sequential("Chatbot Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson(
             "/account-preferences-roundtrip",
-          )) as { ok: boolean; tag?: string };
+          )) as {
+            ok: boolean;
+            tag?: string;
+          };
           expect(response.ok).toBe(true);
         }),
     );
@@ -223,7 +226,10 @@ describe.sequential("Chatbot Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* postJson(
             "/delete-slack-workspace-authorization",
-          )) as { ok: boolean; tag?: string };
+          )) as {
+            ok: boolean;
+            tag?: string;
+          };
           if (!response.ok) {
             expect([
               "DeleteSlackWorkspaceAuthorizationFault",
@@ -263,7 +269,10 @@ describe.sequential("Chatbot Bindings", () => {
           // for this operation — patched in distilled patches/chatbot.json.
           const response = (yield* postJson(
             "/delete-teams-configured-team",
-          )) as { ok: boolean; tag?: string };
+          )) as {
+            ok: boolean;
+            tag?: string;
+          };
           if (!response.ok) {
             expect([
               "DeleteTeamsConfiguredTeamException",

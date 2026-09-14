@@ -1,3 +1,12 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import {
+  runCompactJob,
+  runGeometricMergeJob,
+  shouldCompact,
+  BLOB_TYPE,
+} from "@/Git/Jobs/Compact.ts";
 /**
  * Object store unit tests (src/Git/Store/ObjectStore.ts, Jobs/Compact.ts)
  * over the bun:sqlite + in-memory blob harness. Every emitted pack is
@@ -15,12 +24,6 @@ import { bufferRandomAccess, ingestPack } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import type { ManifestEntry } from "@/Git/Protocol/Store.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import {
-  runCompactJob,
-  runGeometricMergeJob,
-  shouldCompact,
-  BLOB_TYPE,
-} from "@/Git/Jobs/Compact.ts";
 import { packKey, packKeyOf, wirePackId } from "@/Git/Store/Keys.ts";
 import {
   makeObjectStore,
@@ -28,10 +31,7 @@ import {
   WINDOW_BYTES,
   WINDOW_CACHE_BYTES,
 } from "@/Git/Store/ObjectStore.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Stream from "effect/Stream";
 import { concat, verifyPack } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
@@ -220,7 +220,10 @@ describe("compaction is blob-only", () => {
         ]);
         expect(
           yield* runCompactJob({ repoId: REPO, sql, blobs }),
-        ).toMatchObject({ moved: 0, more: false });
+        ).toMatchObject({
+          moved: 0,
+          more: false,
+        });
         expect(fixtures.length).toBe(55);
       }),
     );

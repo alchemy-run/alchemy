@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SecretsManagerTestFunctionLive, {
   SecretsManagerTestFunction,
 } from "./handler";
@@ -140,7 +140,9 @@ describe.sequential("SecretsManager Bindings", () => {
         const put = yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put-string`),
-            { value: "alchemy-sm-rotated-value" },
+            {
+              value: "alchemy-sm-rotated-value",
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json));
 
@@ -165,7 +167,9 @@ describe.sequential("SecretsManager Bindings", () => {
         const put = yield* send(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put-binary`),
-            { base64: BINARY_BASE64 },
+            {
+              base64: BINARY_BASE64,
+            },
           ),
         ).pipe(Effect.flatMap((r) => r.json));
 

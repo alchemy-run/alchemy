@@ -1,11 +1,11 @@
-import * as Kubernetes from "@/Kubernetes";
-import { connectCluster } from "@/Kubernetes/internal/client.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Kubernetes from "@/Kubernetes";
+import { connectCluster } from "@/Kubernetes/internal/client.ts";
 
 // The kubeconfig adapter resolved against a REAL kubeconfig file on disk,
 // including a REAL exec credential plugin invocation (`echo` prints the

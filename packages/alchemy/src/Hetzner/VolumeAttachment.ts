@@ -311,7 +311,7 @@ export const VolumeAttachmentProvider = () =>
       }
       return toAttrs(found, output?.automount ?? olds?.automount ?? false);
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const volumeId = volumeIdOf(news.volume);
       const serverId = serverIdOf(news.server);
       if (volumeId === undefined || serverId === undefined) {

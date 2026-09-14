@@ -208,7 +208,10 @@ export class PipeStateTimeout extends Data.TaggedError("PipeStateTimeout")<{
 /** Internal poll signal: the pipe is still in a transitional state. */
 class PipeStillTransitioning extends Data.TaggedError(
   "PipeStillTransitioning",
-)<{ pipeName: string; state: string }> {}
+)<{
+  pipeName: string;
+  state: string;
+}> {}
 
 /** Internal poll signal: the pipe still exists after a delete. */
 class PipeStillPresent extends Data.TaggedError("PipeStillPresent")<{

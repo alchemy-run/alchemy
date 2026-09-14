@@ -37,11 +37,12 @@ function extractBlogId(href: string): string | undefined {
 export const onRequest = defineRouteMiddleware(async (context, next) => {
   await next();
 
-  const { starlightRoute, t } = context.locals;
+  // TODO: fix types
+  const { starlightRoute, t } = context.locals as Record<string, any>;
   const recentLabel = t("starlightBlog.sidebar.recent");
 
   const recentIndex = starlightRoute.sidebar.findIndex(
-    (item): item is SidebarGroup =>
+    (item: any): item is SidebarGroup =>
       item.type === "group" && item.label === recentLabel,
   );
   if (recentIndex === -1) return;

@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import {
   Credentials,
   apiTokenCredentials,
@@ -12,6 +9,9 @@ import * as Layer from "effect/Layer";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -82,7 +82,10 @@ const errorResponse = (
 ) =>
   new Response(
     JSON.stringify({ success: false, errors, messages: [], result: null }),
-    { status, headers: { "content-type": "application/json" } },
+    {
+      status,
+      headers: { "content-type": "application/json" },
+    },
   );
 
 it.live(

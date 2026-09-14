@@ -1,14 +1,14 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/EKS";
 import { VirtualCluster } from "@/AWS/EMRContainers";
 import { Role } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as emrc from "@distilled.cloud/aws/emr-containers";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

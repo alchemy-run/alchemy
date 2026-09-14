@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as deadline from "@distilled.cloud/aws/deadline";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
@@ -11,6 +7,10 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DeadlineTestFunctionLive, { DeadlineTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -259,13 +259,18 @@ describe.sequential("Deadline Bindings", () => {
 
           const step = (yield* getJson(
             `/step?jobId=${jobId}&stepId=${stepId}`,
-          )) as { stepId: string; name: string };
+          )) as {
+            stepId: string;
+            name: string;
+          };
           expect(step.stepId).toBe(stepId);
           expect(step.name).toBe("Echo");
 
           const tasks = (yield* getJson(
             `/tasks?jobId=${jobId}&stepId=${stepId}`,
-          )) as { ids: string[] };
+          )) as {
+            ids: string[];
+          };
           expect(tasks.ids.length).toBeGreaterThanOrEqual(1);
 
           const task = (yield* getJson(
@@ -322,7 +327,9 @@ describe.sequential("Deadline Bindings", () => {
         Effect.gen(function* () {
           const tasks = (yield* getJson(
             `/tasks?jobId=${jobId}&stepId=${stepId}`,
-          )) as { ids: string[] };
+          )) as {
+            ids: string[];
+          };
           const taskId = tasks.ids[0]!;
 
           // Cancel the single task and watch it converge to CANCELED. (The
@@ -378,7 +385,9 @@ describe.sequential("Deadline Bindings", () => {
           // the job's single task.
           const tasks = (yield* getJson(
             `/tasks?jobId=${jobId}&stepId=${stepId}`,
-          )) as { ids: string[] };
+          )) as {
+            ids: string[];
+          };
           const actions = (yield* getJson(
             `/session-actions?jobId=${jobId}&taskId=${tasks.ids[0]}`,
           )) as { ids: string[] };

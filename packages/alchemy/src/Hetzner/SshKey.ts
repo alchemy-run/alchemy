@@ -11,7 +11,6 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,

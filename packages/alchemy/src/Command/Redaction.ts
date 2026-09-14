@@ -1,6 +1,6 @@
+import { BadArgument, SystemError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { BadArgument, SystemError } from "effect/PlatformError";
 import type { CommandProps } from "./Command.ts";
 
 const DEFAULT_REDACTION_MARKER = "[REDACTED]";

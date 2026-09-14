@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Policy } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -134,7 +134,9 @@ test.provider(
       });
       const decoded = JSON.parse(
         decodeURIComponent(document.PolicyVersion?.Document ?? ""),
-      ) as { Statement: [{ Action: string[] }] };
+      ) as {
+        Statement: [{ Action: string[] }];
+      };
       expect(decoded.Statement[0].Action).toEqual(["s3:GetBucketLocation"]);
 
       yield* stack.destroy();

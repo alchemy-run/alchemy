@@ -18,7 +18,6 @@ import { Resource } from "../Resource.ts";
 import { tagRecord } from "../Tags.ts";
 import { waitForAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,

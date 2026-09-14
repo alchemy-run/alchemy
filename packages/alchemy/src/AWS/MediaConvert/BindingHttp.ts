@@ -69,7 +69,9 @@ export const makeMediaConvertHttpBinding = <I, A, E, R>(options: {
             });
           }
           yield* host.bind`Allow(${host}, AWS.MediaConvert.${options.capability}())`(
-            { policyStatements },
+            {
+              policyStatements,
+            },
           );
         }
       }

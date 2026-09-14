@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command. The
@@ -113,7 +113,9 @@ test.provider(
       for (const binding of ["VPC", "VPC_LOOKUP"]) {
         const body = (yield* getJsonReady(
           `${deployed.worker.url}/type?binding=${binding}`,
-        )) as { type: string };
+        )) as {
+          type: string;
+        };
         expect(body.type).toBe("function");
       }
 
@@ -124,7 +126,10 @@ test.provider(
       // produces one.
       const proxied = (yield* getJsonReady(
         `${deployed.worker.url}/proxy?binding=VPC`,
-      )) as { status?: number; error?: string };
+      )) as {
+        status?: number;
+        error?: string;
+      };
       expect(proxied.status !== undefined || proxied.error !== undefined).toBe(
         true,
       );

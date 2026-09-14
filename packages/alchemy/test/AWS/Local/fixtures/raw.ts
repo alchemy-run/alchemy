@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 /**
  * Raw (non-distilled) HTTP helpers against the floci emulator gateway —
  * out-of-band proof that a resource exists IN THE EMULATOR, not the real
@@ -9,7 +10,6 @@ import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 export const FLOCI_ENDPOINT = "http://localhost:4566";
 

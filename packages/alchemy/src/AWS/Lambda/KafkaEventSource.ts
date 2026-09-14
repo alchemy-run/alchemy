@@ -41,8 +41,6 @@ export const KafkaEventSource = Layer.effect(
         stream: Stream.Stream<MSKRecord, never, StreamReq>,
       ) => Effect.Effect<void, never, Req>,
     ) {
-      const ClusterArn = yield* cluster.clusterArn;
-
       // Deploy-time: grant the IAM actions MSK IAM authentication requires and
       // create the event-source mapping. Skipped once running inside the
       // deployed Function (the global guard). Namespaced under the host so the

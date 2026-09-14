@@ -2,19 +2,13 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import {
   AuthError,
   getAuthProvider,
   presentEnvironment,
 } from "./AuthProvider.ts";
-import {
-  ALCHEMY_PROFILE,
-  DEFAULT_PROFILE_NAME,
-  ProfileError,
-  ProfileStore,
-  SuppressMissingProviderConfig,
-} from "./Profile.ts";
-import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import { ProfileStore, SuppressMissingProviderConfig } from "./Profile.ts";
 
 /**
  * Resolve the selected Alchemy profile after the command's dotenv provider is

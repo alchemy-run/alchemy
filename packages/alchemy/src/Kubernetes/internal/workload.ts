@@ -15,7 +15,6 @@ import { sha256Object } from "../../Util/sha256.ts";
 import type {
   ClusterAdapterService,
   IdentityState,
-  RegistryState,
   WorkloadBindingContract,
   WorkloadImageSource,
 } from "../ClusterAdapter.ts";

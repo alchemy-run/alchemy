@@ -1,10 +1,10 @@
+import assert from "node:assert";
+import { createRequire } from "node:module";
+import path from "node:path";
 import {
   getCloudflarePreset,
   nonPrefixedNodeModules,
 } from "@cloudflare/unenv-preset";
-import assert from "node:assert";
-import { createRequire } from "node:module";
-import path from "node:path";
 import { defineEnv } from "unenv";
 import { createPlugin } from "../factory.ts";
 import { isSkippedEnvironment } from "../options.ts";
@@ -144,12 +144,10 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
                 ...nonPrefixedNodeModules,
                 ...nonPrefixedNodeModules.map((module) => `node:${module}`),
                 // New Node.js built-in modules are only published with the `node:` prefix.
-                ...[
-                  "node:sea",
-                  "node:sqlite",
-                  "node:test",
-                  "node:test/reporters",
-                ],
+                "node:sea",
+                "node:sqlite",
+                "node:test",
+                "node:test/reporters",
               ],
               ...(this.meta.rolldownVersion
                 ? {

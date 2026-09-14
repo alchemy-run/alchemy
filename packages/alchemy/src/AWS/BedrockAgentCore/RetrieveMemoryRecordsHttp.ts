@@ -1,8 +1,8 @@
 import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Layer from "effect/Layer";
 import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
-import { RetrieveMemoryRecords } from "./RetrieveMemoryRecords.ts";
 import type { Memory } from "./Memory.ts";
+import { RetrieveMemoryRecords } from "./RetrieveMemoryRecords.ts";
 
 export const RetrieveMemoryRecordsHttp = Layer.effect(
   RetrieveMemoryRecords,

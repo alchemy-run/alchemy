@@ -1,6 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { Region } from "@distilled.cloud/aws/Region";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -26,9 +26,9 @@ const retryWhileIncorrectState = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]),
   });
 
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { InstanceId } from "./Instance.ts";

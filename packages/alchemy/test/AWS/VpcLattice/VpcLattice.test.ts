@@ -1,6 +1,10 @@
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import type { ScopedPlanStatusSession } from "@/Report.ts";
-import * as Provider from "@/Provider";
 import { Vpc } from "@/AWS/EC2";
 import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import {
@@ -10,13 +14,9 @@ import {
   ServiceNetwork,
   ServiceNetworkVpcAssociation,
 } from "@/AWS/VpcLattice";
+import * as Provider from "@/Provider";
+import type { ScopedPlanStatusSession } from "@/Report.ts";
 import * as Test from "@/Test/Alchemy";
-import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -1,6 +1,4 @@
-import * as AWS from "@/AWS";
-import { UserPool } from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -8,7 +6,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schedule from "effect/Schedule";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import { UserPool } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const customEmailSenderPath = fileURLToPath(
   new URL("./custom-email-sender-handler.ts", import.meta.url),

@@ -1,3 +1,4 @@
+import { expect, test } from "alchemy-test";
 import {
   Config,
   type InferZarazEcommerceEvents,
@@ -6,7 +7,6 @@ import {
   type Track,
   type WebApi,
 } from "@/Cloudflare/Zaraz";
-import { expect, test } from "alchemy-test";
 
 const checkZarazEventTypes = () => {
   const zaraz = Config.events<{

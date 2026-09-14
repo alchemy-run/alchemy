@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AcmTestFunctionLive, {
   AcmTestFunction,
   FIXTURE_DOMAIN,
@@ -264,7 +264,9 @@ describe.sequential("ACM Bindings", () => {
           const reimported = (yield* send(
             HttpClientRequest.bodyJsonUnsafe(
               HttpClientRequest.post(`${baseUrl}/import`),
-              { reimportArn: imported.arn },
+              {
+                reimportArn: imported.arn,
+              },
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as any;
 

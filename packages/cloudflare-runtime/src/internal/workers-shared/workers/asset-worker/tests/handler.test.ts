@@ -2,11 +2,11 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { describe, it, vi } from "vitest";
 import { mockJaegerBinding } from "../../../shared/tracing.ts";
+import type { AssetConfig } from "../../../shared/types.ts";
 import { Analytics } from "../src/analytics.ts";
 import { SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING } from "../src/compatibility-flags.ts";
 import { normalizeConfiguration } from "../src/configuration.ts";
 import { canFetch, handleRequest } from "../src/handler.ts";
-import type { AssetConfig } from "../../../shared/types.ts";
 
 const mockEnv = {
   JAEGER: mockJaegerBinding(),
@@ -154,7 +154,7 @@ describe("[Asset Worker] `handleRequest`", () => {
           return null;
         }
       },
-      async (_: string) => ({
+      async () => ({
         readableStream: new ReadableStream(),
         contentType: "text/html",
         cacheStatus: "HIT",
@@ -178,7 +178,7 @@ describe("[Asset Worker] `handleRequest`", () => {
           return null;
         }
       },
-      async (_: string) => ({
+      async () => ({
         readableStream: new ReadableStream(),
         contentType: "text/html",
         cacheStatus: "HIT",
@@ -202,7 +202,7 @@ describe("[Asset Worker] `handleRequest`", () => {
     const exists = async (pathname: string) => {
       return assets[pathname] ?? null;
     };
-    const getByEtag = async (_: string) => ({
+    const getByEtag = async () => ({
       readableStream: new ReadableStream(),
       contentType: "text/html",
       cachesStatus: "HIT",

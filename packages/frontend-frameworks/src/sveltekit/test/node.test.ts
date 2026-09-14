@@ -1,6 +1,6 @@
+import { describe, expect, it } from "vitest";
 import { isDeployTarget } from "../../core/index.ts";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
-import { describe, expect, it } from "vitest";
 import { makeNodeAdapter, makeNodeTarget, target } from "../node.ts";
 
 describe("makeNodeTarget", () => {

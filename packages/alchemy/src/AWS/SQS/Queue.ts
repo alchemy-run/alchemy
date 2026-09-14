@@ -284,7 +284,9 @@ export const Queue = Resource<Queue>("AWS.SQS.Queue");
  */
 export class SqsEncryptionConflict extends Data.TaggedError(
   "SqsEncryptionConflict",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 const validateEncryption = (props: QueueProps) =>
   props.kmsMasterKeyId !== undefined && props.sqsManagedSseEnabled
@@ -641,7 +643,7 @@ export const QueueProvider = () =>
           // can be removed, so we untag removed keys; internal tags are never
           // user-removable so they survive.
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
           const { upsert, removed } = diffTags(

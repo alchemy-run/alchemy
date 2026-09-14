@@ -14,7 +14,7 @@
  */
 import * as Stream from "effect/Stream";
 import { concatBytes, utf8Encode } from "./ObjectCodec.ts";
-import { flushPkt, pktLine } from "./Pkt.ts";
+import { flushPkt } from "./Pkt.ts";
 
 /**
  * Maximum data bytes per side-band-64k frame (65520 − 4 length − 1 band).

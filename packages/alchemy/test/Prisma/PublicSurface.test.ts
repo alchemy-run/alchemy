@@ -1,10 +1,10 @@
-import * as Prisma from "@/Prisma";
-import * as PrismaPackage from "alchemy/Prisma";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
+import * as PrismaPackage from "alchemy/Prisma";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Prisma from "@/Prisma";
 
 const publicExports = [
   "providers",

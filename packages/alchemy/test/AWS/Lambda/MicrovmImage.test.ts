@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,8 +5,12 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import EffectfulStack from "./fixtures/microvm/stack.ts";
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import ExternalStack from "./fixtures/microvm/external/stack.ts";
+import EffectfulStack from "./fixtures/microvm/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   // The effectful stack deploys an AWS Lambda AND a Cloudflare Worker driving

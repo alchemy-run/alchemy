@@ -1,3 +1,8 @@
+import * as NodeFs from "node:fs";
+import * as NodeHttp from "node:http";
+import { createRequire } from "node:module";
+import type * as NodeNet from "node:net";
+import type * as NodeVm from "node:vm";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -32,14 +37,9 @@ import type {
 } from "@alchemy.run/cloudflare-runtime/core";
 import * as PlatformProxy from "@alchemy.run/cloudflare-runtime/core/platform-proxy/PlatformProxy";
 import type * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
-import * as FrameworkCore from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import * as NodeFs from "node:fs";
-import * as NodeHttp from "node:http";
-import { createRequire } from "node:module";
-import type * as NodeNet from "node:net";
-import type * as NodeVm from "node:vm";
+import * as FrameworkCore from "../core/index.ts";
 
 /** The symbol OpenNext uses to store/read the Cloudflare context. Must stay
  * in sync with `@opennextjs/cloudflare`'s `cloudflareContextSymbol`. */

@@ -58,7 +58,10 @@ export const MANIFEST_CAP = 1_000_000;
  */
 export class ManifestTooLarge extends Schema.TaggedError<ManifestTooLarge>()(
   "ManifestTooLarge",
-  { count: Schema.Number, cap: Schema.Number },
+  {
+    count: Schema.Number,
+    cap: Schema.Number,
+  },
 ) {}
 
 // ─────────────────────────────────────────────────────────────────────────────

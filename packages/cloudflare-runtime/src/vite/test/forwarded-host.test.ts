@@ -1,9 +1,9 @@
 import type { IncomingMessage } from "node:http";
+import { describe, expect, test } from "vitest";
 import {
   proxyRequestHeaders,
   resolveForwardedHost,
 } from "../forwarded-host.ts";
-import { describe, expect, test } from "vitest";
 
 describe("resolveForwardedHost", () => {
   test("prefers the forwarded host over the immediate proxy host", () => {

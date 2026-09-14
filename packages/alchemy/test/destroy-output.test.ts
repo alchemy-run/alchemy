@@ -1,10 +1,10 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Alchemy from "@/index.ts";
 import { Stack } from "@/Stack";
 import { InMemoryService, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
 // Regression coverage for https://github.com/alchemy-run/alchemy/issues/961:
@@ -30,7 +30,9 @@ describe("destroy clears the persisted stack output", () => {
 
       expect(
         yield* state.getOutput({ stack: stk.name, stage: stk.stage }),
-      ).toEqual({ url: "test-string" });
+      ).toEqual({
+        url: "test-string",
+      });
 
       yield* stack.destroy();
 

@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { glob } from "tinyglobby";
 import path from "pathe";
+import { glob } from "tinyglobby";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { exec } from "../../../Util/exec.ts";
@@ -241,7 +240,10 @@ const resolvePythonModulesDir = Effect.fn(function* (
       "--preview-features",
       "pylock",
     ],
-    { cwd: options.root, env: { VIRTUAL_ENV: venv } },
+    {
+      cwd: options.root,
+      env: { VIRTUAL_ENV: venv },
+    },
   );
 
   // 3. The venv's site-packages IS the vendored python_modules directory.

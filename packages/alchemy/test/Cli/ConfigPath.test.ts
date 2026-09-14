@@ -1,8 +1,8 @@
-import { UserInputError } from "@/Cli/commands/errors.ts";
-import { resolveConfig } from "@/Cli/commands/flags.ts";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { describe, expect, it } from "alchemy-test";
+import { UserInputError } from "@/Cli/commands/errors.ts";
+import { resolveConfig } from "@/Cli/commands/flags.ts";
 
 describe("stack command config paths", () => {
   it.effect("uses the positional config path", () =>

@@ -1,14 +1,9 @@
-import {
-  environmentServiceInstances,
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-} from "./GraphQL.ts";
 import { createHash } from "node:crypto";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type * as Redacted from "effect/Redacted";
 import * as FileSystem from "effect/FileSystem";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
@@ -24,23 +19,11 @@ import * as Provider from "../Provider.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
-import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import {
-  assertHostDisk,
-  type MountSpec,
-  type ServiceBinding,
-} from "./MountVolume.ts";
-import { attachVolumeToService } from "./Volume.ts";
-import {
-  ownedProjects,
-  projectEnvironmentIds,
-  type Project,
-} from "./Project.ts";
-import type { Providers } from "./Providers.ts";
-import {
-  ensureServiceDomain,
-  type ServiceDomainRecord,
-} from "./ServiceDomain.ts";
+  environmentServiceInstances,
+  waitUntilDeleted,
+  projectServices as fetchProjectServices,
+} from "./GraphQL.ts";
 import {
   collectBindingState,
   createRailwayFunctionSupport,
@@ -52,7 +35,24 @@ import {
   type RailwayBuildOptions,
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
+import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
+import {
+  assertHostDisk,
+  type MountSpec,
+  type ServiceBinding,
+} from "./MountVolume.ts";
+import {
+  ownedProjects,
+  projectEnvironmentIds,
+  type Project,
+} from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
+import {
+  ensureServiceDomain,
+  type ServiceDomainRecord,
+} from "./ServiceDomain.ts";
+import { attachVolumeToService } from "./Volume.ts";
 
 type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
 

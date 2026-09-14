@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { TestQueue } from "./queue.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { producerRoutes } from "./producer-routes.ts";
+import { TestQueue } from "./queue.ts";
 
 /** Producer (send) access via a scoped HTTP API token (`WriteQueueHttp`). */
 export default class QueueWriteHttpWorker extends Cloudflare.Worker<QueueWriteHttpWorker>()(

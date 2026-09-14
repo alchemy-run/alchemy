@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
 import * as NodeFs from "node:fs";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
+import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   bundleWorker,

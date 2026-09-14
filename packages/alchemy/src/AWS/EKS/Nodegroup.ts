@@ -528,7 +528,7 @@ export const NodegroupProvider = () =>
             ? state
             : Unowned(state);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const clusterName = news.clusterName as string;
           const nodegroupName = yield* toNodegroupName(id, news);
           const desiredTags = {

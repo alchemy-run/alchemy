@@ -1,12 +1,12 @@
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { ScalableTarget } from "@/AWS/ApplicationAutoScaling";
 import { Table } from "@/AWS/DynamoDB";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as aas from "@distilled.cloud/aws/application-auto-scaling";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

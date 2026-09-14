@@ -1,3 +1,14 @@
+import * as NodePath from "node:path";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
+import type * as ViteModule from "vite";
+import type { Config as WakuConfig } from "waku/config";
+import type * as WakuInternals from "waku/internals";
+import type * as WakuVitePlugins from "waku/vite-plugins";
 import * as FrameworkCore from "../core/index.ts";
 import type {
   BuildOutput,
@@ -7,17 +18,6 @@ import type {
   DeployTargetInput,
   DeployTargetServices,
 } from "../core/index.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
-import * as NodePath from "node:path";
-import type * as ViteModule from "vite";
-import type { Config as WakuConfig } from "waku/config";
-import type * as WakuInternals from "waku/internals";
-import type * as WakuVitePlugins from "waku/vite-plugins";
 
 type WakuInternalsModule = typeof WakuInternals;
 type WakuVitePluginsModule = typeof WakuVitePlugins;

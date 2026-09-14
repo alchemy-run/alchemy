@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Chat } from "effect/unstable/ai";
+import * as Cloudflare from "@/Cloudflare";
 import { Gateway } from "./Gateway.ts";
 
 // One DurableObject instance == one conversation thread. The thread's

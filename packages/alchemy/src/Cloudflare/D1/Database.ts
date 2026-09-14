@@ -5,7 +5,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
@@ -655,7 +654,7 @@ export const ProviderLocal = () =>
           // SQL, executed through the same gateway. Files whose hash matches
           // previously-imported state are skipped (mirroring `runImports`).
           const importHashes: Record<string, string> = {
-            ...(output?.importHashes ?? {}),
+            ...output?.importHashes,
           };
           if (news.importFiles?.length) {
             const importRootDir = yield* rootDir;

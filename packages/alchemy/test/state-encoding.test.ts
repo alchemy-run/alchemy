@@ -1,3 +1,5 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Duration from "effect/Duration";
 import { deepEqual } from "@/Diff";
 import {
   DATE_MARKER,
@@ -7,8 +9,6 @@ import {
   reviveState,
   reviveStateRecursive,
 } from "@/State/StateEncoding";
-import { describe, expect, test } from "alchemy-test";
-import * as Duration from "effect/Duration";
 
 // Dates in persisted props must ROUND-TRIP: a provider's `diff`/`delete`/
 // `read` receive `olds` from the state store on a later run, and a

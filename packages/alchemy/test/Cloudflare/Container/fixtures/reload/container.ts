@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * The build context lives at a FIXED path under the suite's `.tmp` dir; the

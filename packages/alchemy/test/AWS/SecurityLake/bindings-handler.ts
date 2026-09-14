@@ -1,12 +1,12 @@
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Lambda from "@/AWS/Lambda";
-import * as SecurityLake from "@/AWS/SecurityLake";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Lambda from "@/AWS/Lambda";
+import * as SecurityLake from "@/AWS/SecurityLake";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 

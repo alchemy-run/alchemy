@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ConnectorProfile } from "@/AWS/AppFlow";
-import * as Test from "@/Test/Alchemy";
 import * as appflow from "@distilled.cloud/aws/appflow";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ConnectorProfile } from "@/AWS/AppFlow";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

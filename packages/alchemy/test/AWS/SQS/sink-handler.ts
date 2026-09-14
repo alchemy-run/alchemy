@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -8,6 +7,7 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 

@@ -1,5 +1,5 @@
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -28,7 +28,7 @@ import { IngestToken } from "./IngestToken.ts";
  */
 export default class Ingester extends Cloudflare.Worker<Ingester>()(
   "OtelWorker",
-  Stack.useSync(({ stage }) => ({
+  Alchemy.Stack.useSync(({ stage }) => ({
     main: import.meta.url,
     observability: { enabled: true },
     domain:
@@ -115,7 +115,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
         const headers = new Headers(raw.headers);
         headers.delete("host");
         headers.delete("cookie");
-        for (const key of [...headers.keys()]) {
+        for (const key of headers.keys()) {
           if (key.startsWith("cf-")) headers.delete(key);
         }
         const cfIp =

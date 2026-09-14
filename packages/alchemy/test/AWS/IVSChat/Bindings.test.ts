@@ -1,7 +1,4 @@
 import * as ivschat from "@distilled.cloud/aws/ivschat";
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,7 +6,9 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import WebSocket from "ws";
-
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import IVSChatTestFunctionLive, {
   IVSChatTestFunction,
 } from "./fixtures/handler.ts";
@@ -136,7 +135,9 @@ describe("IVSChat Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* post("/send-event").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { id?: string };
+          )) as {
+            id?: string;
+          };
 
           expect(typeof response.id).toBe("string");
           expect(response.id!.length).toBeGreaterThan(0);
@@ -152,7 +153,9 @@ describe("IVSChat Bindings", () => {
         Effect.gen(function* () {
           const response = (yield* post("/delete-message").pipe(
             Effect.flatMap((r) => r.json),
-          )) as { deleted?: string };
+          )) as {
+            deleted?: string;
+          };
 
           expect(typeof response.deleted).toBe("string");
           expect(response.deleted!.length).toBeGreaterThan(0);
@@ -238,7 +241,11 @@ describe("IVSChat Bindings", () => {
     const wsInfo = Effect.gen(function* () {
       const info = (yield* post("/ws-info").pipe(
         Effect.flatMap((r) => r.json),
-      )) as { token?: string; endpoint?: string; roomArn?: string };
+      )) as {
+        token?: string;
+        endpoint?: string;
+        roomArn?: string;
+      };
       expect(info.token).toBeTruthy();
       expect(info.endpoint).toContain("wss://edge.ivschat.");
       return info as { token: string; endpoint: string; roomArn: string };

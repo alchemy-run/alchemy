@@ -1,7 +1,7 @@
+import { createHash } from "node:crypto";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { createHash } from "node:crypto";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";

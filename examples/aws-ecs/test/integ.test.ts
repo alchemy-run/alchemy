@@ -1,3 +1,4 @@
+import { expect } from "bun:test";
 /**
  * LIVE counterpart to test/dev.test.ts: deploys the exact same orders app
  * to real AWS (Test.make + deploy, no CLI) — VPC, shared ALB, Fargate
@@ -11,7 +12,6 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";

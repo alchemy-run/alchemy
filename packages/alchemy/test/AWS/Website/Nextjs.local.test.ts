@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
-import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -74,7 +74,9 @@ describe("AWS.Website.Nextjs local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NEXTJS_AWS_API_MARKER",
-          { label: "API route (dev)" },
+          {
+            label: "API route (dev)",
+          },
         );
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
@@ -92,7 +94,10 @@ describe("AWS.Website.Nextjs local", () => {
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NEXTJS_AWS_API_MARKER_V2",
-          { timeout: "120 seconds", label: "API route after HMR edit" },
+          {
+            timeout: "120 seconds",
+            label: "API route after HMR edit",
+          },
         );
         // The route still round-trips its query after the recompile.
         yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "post-hmr", {

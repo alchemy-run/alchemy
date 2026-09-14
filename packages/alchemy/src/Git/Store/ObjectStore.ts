@@ -1,3 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The concrete object store: DO SQLite rows + R2 overflow (DESIGN.md §3.3).
  *
@@ -19,11 +23,7 @@
  * (`staged_push IS NULL`); staged rows become visible to fetches only after
  * the final `transactionSync` flips them live.
  */
-import type { BlobBody, BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import type { BlobStoreError, BlobStoreShape } from "../BlobStore.ts";
 import type { ObjectType, Oid } from "../Protocol/ObjectCodec.ts";
 import {
   concatBytes,

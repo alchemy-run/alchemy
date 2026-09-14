@@ -1,8 +1,7 @@
+import { gunzipSync } from "node:zlib";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { gunzipSync } from "node:zlib";
-
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import type { LogGroup } from "../Logs/LogGroup.ts";

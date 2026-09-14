@@ -17,7 +17,6 @@ import { tagRecord } from "../Tags.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { waitForZoneAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   hasAlchemyLabels,

@@ -1,5 +1,4 @@
 import * as path from "node:path";
-
 import * as ts from "typescript-api/unstable/ast";
 import {
   API,

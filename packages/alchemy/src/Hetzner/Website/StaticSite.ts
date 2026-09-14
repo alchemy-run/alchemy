@@ -4,7 +4,6 @@ import {
   writeNodeServeEntry,
 } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -185,7 +184,6 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       env: props.env,
     }).pipe(Namespace.push(id));
 
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const outdir = path.resolve(cwd, props.outdir);

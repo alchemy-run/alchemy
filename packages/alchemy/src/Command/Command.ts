@@ -17,13 +17,13 @@ import { BadArgument, SystemError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { initialCwd } from "../Util/Node.ts";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { ScopedPlanStatusSession } from "../Report.ts";
 import { isNonInteractive } from "../Util/interactive.ts";
+import { initialCwd } from "../Util/Node.ts";
 import {
   makeCommandRedactor,
   redactPlatformReason,

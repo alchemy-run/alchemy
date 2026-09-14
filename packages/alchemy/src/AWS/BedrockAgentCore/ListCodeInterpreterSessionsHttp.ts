@@ -1,8 +1,8 @@
 import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Layer from "effect/Layer";
 import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
-import { ListCodeInterpreterSessions } from "./ListCodeInterpreterSessions.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
+import { ListCodeInterpreterSessions } from "./ListCodeInterpreterSessions.ts";
 
 export const ListCodeInterpreterSessionsHttp = Layer.effect(
   ListCodeInterpreterSessions,

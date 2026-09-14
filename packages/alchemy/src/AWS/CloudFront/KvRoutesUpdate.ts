@@ -1,11 +1,10 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { Credentials } from "../Credentials.ts";
+import type { Providers } from "../Providers.ts";
 import type { Region } from "../Region.ts";
 import {
   extractValue,

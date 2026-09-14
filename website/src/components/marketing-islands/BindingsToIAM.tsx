@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@iconify/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const tok =
   (color: string) =>
@@ -11,11 +11,6 @@ const S = tok("var(--alc-code-string)");
 const F = tok("var(--alc-code-fn)");
 const T = tok("var(--alc-code-type)");
 const V = tok("var(--alc-code-var)");
-const C = ({ children }: { children: ReactNode }) => (
-  <span style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>
-    {children}
-  </span>
-);
 
 interface BindRow {
   id: string;

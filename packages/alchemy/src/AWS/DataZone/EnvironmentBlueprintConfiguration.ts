@@ -6,7 +6,6 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { unredact } from "./internal.ts";
 
 /**
  * Lake Formation provisioning configuration for a blueprint.

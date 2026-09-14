@@ -1,3 +1,9 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import {
   deepEqual,
   hasUnresolvedInputs,
@@ -6,12 +12,6 @@ import {
   stripUnresolved,
 } from "@/Diff";
 import * as Output from "@/Output";
-import { describe, expect, test } from "alchemy-test";
-import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 
 describe("Diff", () => {
   describe("havePropsChanged with Redacted values", () => {

@@ -1,3 +1,4 @@
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 /**
  * The `protocol` group: git smart HTTP v0 at the repository's root path.
  * The routes are streaming binary (pkt-lines in, sideband packs out),
@@ -6,7 +7,6 @@
  * `:repo` may carry a `.git` suffix; the handlers strip it.
  */
 import * as Http from "../../Http/index.ts";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
 /** `GET /:owner/:repo/info/refs?service=…`: the ref advertisement. */
 export class InfoRefs extends Http.get<InfoRefs>()(

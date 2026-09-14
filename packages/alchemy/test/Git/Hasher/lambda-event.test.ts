@@ -1,3 +1,5 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import {
   boundScan,
   decodeHashResponse,
@@ -13,8 +15,6 @@ import {
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import { scanPart } from "@/Git/Protocol/PartialScan.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { concat } from "../harness/pack.ts";
 
 const buildPack = (n: number) =>

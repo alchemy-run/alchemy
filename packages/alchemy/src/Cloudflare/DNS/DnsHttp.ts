@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Output from "../../Output.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";

@@ -216,7 +216,7 @@ const toWireMemoryConfiguration = (
       };
 
 /** Agent status values from which no further transition is pending. */
-const AGENT_SETTLED = new Set(["NOT_PREPARED", "PREPARED", "FAILED"]);
+const _AGENT_SETTLED = new Set(["NOT_PREPARED", "PREPARED", "FAILED"]);
 
 /** Agent status values indicating an in-flight transition to wait out. */
 const AGENT_TRANSIENT = new Set([

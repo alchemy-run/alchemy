@@ -1,3 +1,14 @@
+import { fileURLToPath } from "node:url";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 /**
  * `AWS.Lambda.MicrovmImage` under `alchemy dev`: the dev provider builds the
  * image with a plain HOST-side `docker build` (BuildKit layer cache against
@@ -28,17 +39,6 @@ import * as AWS from "@/AWS";
 import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as microvms from "@distilled.cloud/aws/lambda-microvms";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import { fileURLToPath } from "node:url";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { dockerAvailable, FLOCI_ENDPOINT } from "../Local/fixtures/raw.ts";
 

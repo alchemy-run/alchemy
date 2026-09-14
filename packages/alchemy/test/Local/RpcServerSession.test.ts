@@ -1,10 +1,10 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import {
   makeServerRpcSession,
   type ServerWebSocketLike,
 } from "@/Local/RpcServerSession.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 
 describe("Local.RpcServerSession", () => {
   it.effect("happy path: paired sessions round-trip a method call", () =>

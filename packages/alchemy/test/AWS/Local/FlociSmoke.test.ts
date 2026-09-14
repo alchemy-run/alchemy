@@ -1,3 +1,9 @@
+import { spawnSync } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 /**
  * Floci local-emulator smoke test.
  *
@@ -33,12 +39,6 @@ import { Table } from "@/AWS/DynamoDB";
 import { Bucket } from "@/AWS/S3";
 import { Queue } from "@/AWS/SQS";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
 

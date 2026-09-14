@@ -1,6 +1,6 @@
-import * as Effect from "effect/Effect";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 
 const swarmLocalNodeState = (): string | undefined => {
   const result = NodeChildProcess.spawnSync(

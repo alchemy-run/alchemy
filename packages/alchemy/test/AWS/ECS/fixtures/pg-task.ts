@@ -1,6 +1,6 @@
-import { Task } from "@/AWS/ECS/Task.ts";
 import * as Effect from "effect/Effect";
 import pg from "pg";
+import { Task } from "@/AWS/ECS/Task.ts";
 
 /**
  * Regression fixture for CommonJS dual-package resolution in bundled

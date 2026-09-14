@@ -131,7 +131,9 @@ export const GeofenceCollectionProvider = () =>
             const hydrated = yield* Effect.forEach(
               names,
               (name) => readCollection(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
             return hydrated.filter(
               (attrs): attrs is GeofenceCollection["Attributes"] =>

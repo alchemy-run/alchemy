@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SFNTestFunctionLive, { SFNTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -252,7 +252,9 @@ describe("StepFunctions Bindings", () => {
             const started = (yield* postJson(
               `${baseUrl}/start-callback`,
               {},
-            )) as { executionArn: string };
+            )) as {
+              executionArn: string;
+            };
 
             const token = yield* receiveTokenFor(started.executionArn);
             expect(token).toBeTruthy();
@@ -288,7 +290,9 @@ describe("StepFunctions Bindings", () => {
             const started = (yield* postJson(
               `${baseUrl}/start-callback`,
               {},
-            )) as { executionArn: string };
+            )) as {
+              executionArn: string;
+            };
 
             const token = yield* receiveTokenFor(started.executionArn);
 
@@ -318,7 +322,9 @@ describe("StepFunctions Bindings", () => {
             const started = (yield* postJson(
               `${baseUrl}/start-callback`,
               {},
-            )) as { executionArn: string };
+            )) as {
+              executionArn: string;
+            };
 
             // consume this execution's token first so it never pollutes the
             // queue for other flows
@@ -367,7 +373,9 @@ describe("StepFunctions Bindings", () => {
             const started = (yield* postJson(
               `${baseUrl}/start-activity`,
               {},
-            )) as { executionArn: string };
+            )) as {
+              executionArn: string;
+            };
 
             // GetActivityTask long-polls; repeat until the scheduled task's
             // token arrives.

@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as ddb from "@distilled.cloud/aws/dynamodb";
@@ -17,6 +13,10 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SmokeApiFunctionLive, {
   SmokeApiFunction,
 } from "./fixtures/api-handler.ts";
@@ -160,7 +160,9 @@ const deployProgram = Effect.gen(function* () {
 
   const { api, integration, url } = yield* AWS.ApiGatewayV2.HttpApi(
     "SmokeHttpApi",
-    { handler: apiFn },
+    {
+      handler: apiFn,
+    },
   );
 
   // JWT authorizer wired to the Cognito user pool. The pool id embeds its

@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Effect-native Worker whose fetch handler uses `loader.get()` — not

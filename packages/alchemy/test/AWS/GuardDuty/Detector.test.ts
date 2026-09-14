@@ -1,10 +1,10 @@
+import * as guardduty from "@distilled.cloud/aws/guardduty";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Detector } from "@/AWS/GuardDuty/Detector.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as guardduty from "@distilled.cloud/aws/guardduty";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeGuardDutyTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({

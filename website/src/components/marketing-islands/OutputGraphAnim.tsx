@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { tint } from "../marketing/diagrams/_colors";
 
-const ACCENT = "var(--alc-accent-deep)";
 const ACCENT_TINT = tint("#B88A4A", 0.18);
 
 const tok =
@@ -13,7 +12,6 @@ const K = tok("var(--alc-code-keyword)");
 const S = tok("var(--alc-code-string)");
 const F = tok("var(--alc-code-fn)");
 const V = tok("var(--alc-code-var)");
-const T = tok("var(--alc-code-type)");
 const C = ({ children }: { children: ReactNode }) => (
   <span style={{ color: "var(--alc-code-comment)", fontStyle: "italic" }}>
     {children}

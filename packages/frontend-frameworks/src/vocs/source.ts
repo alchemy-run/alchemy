@@ -1,6 +1,5 @@
-import * as FrameworkCore from "../core/index.ts";
 import * as Effect from "effect/Effect";
-import vocsCloudflareTarget from "./cloudflare.ts";
+import * as FrameworkCore from "../core/index.ts";
 import {
   makeWakuSourceProvider,
   SourceProviderError,
@@ -8,6 +7,7 @@ import {
   type WakuBuildChildConfig,
   type WakuSourceOptions,
 } from "../waku/source.ts";
+import vocsCloudflareTarget from "./cloudflare.ts";
 import { make as vocsFrameworkLayer } from "./Vocs.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/vocs/source";

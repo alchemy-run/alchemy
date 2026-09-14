@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import type { Bucket } from "./Bucket.ts";
 import { BucketEventSource } from "./BucketEventSource.ts";
 import type { S3EventType } from "./S3Event.ts";
@@ -75,7 +74,6 @@ export function consumeBucketEvents<
   B extends Bucket,
   Req = never,
   StreamReq = never,
-  const Events extends S3EventType[] = S3EventType[],
 >(
   bucket: B,
   handler: (

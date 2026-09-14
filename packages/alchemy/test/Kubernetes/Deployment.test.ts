@@ -1,18 +1,18 @@
-import * as AWS from "@/AWS";
-import { Network } from "@/AWS/EC2/Network.ts";
-import { Cluster } from "@/AWS/EKS/Cluster.ts";
-import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
-import * as Kubernetes from "@/Kubernetes";
-import { readObject } from "@/Kubernetes/internal/client.ts";
-import * as Core from "@/Test/Core";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { Network } from "@/AWS/EC2/Network.ts";
+import { Cluster } from "@/AWS/EKS/Cluster.ts";
+import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
+import * as Kubernetes from "@/Kubernetes";
+import { readObject } from "@/Kubernetes/internal/client.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EksHostApi from "./fixtures/deployment.ts";
 
 const testOptions = {

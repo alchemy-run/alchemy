@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SnapshotFunctionLive, {
   SnapshotFunction,
 } from "./fixtures/snapshot-handler";
@@ -137,7 +137,9 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
           // ListSnapshots filtered by the bound namespace sees it.
           const listed = (yield* json(
             HttpClientRequest.get(`${baseUrl}/snapshots`),
-          )) as { names: (string | undefined)[] };
+          )) as {
+            names: (string | undefined)[];
+          };
           expect(listed.names).toContain(SNAPSHOT_NAME);
 
           // UpdateSnapshot extends the retention period.
@@ -152,11 +154,15 @@ describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
           // for a fresh, never-computed namespace).
           const recovery = (yield* json(
             HttpClientRequest.get(`${baseUrl}/recovery-points`),
-          )) as { count: number };
+          )) as {
+            count: number;
+          };
           expect(recovery.count).toBeGreaterThanOrEqual(0);
           const restores = (yield* json(
             HttpClientRequest.get(`${baseUrl}/table-restores`),
-          )) as { count: number };
+          )) as {
+            count: number;
+          };
           expect(restores.count).toBeGreaterThanOrEqual(0);
 
           // DeleteSnapshot removes it; out-of-band read confirms it is gone.

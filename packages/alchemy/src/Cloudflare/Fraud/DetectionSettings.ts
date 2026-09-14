@@ -1,7 +1,6 @@
 import * as fraud from "@distilled.cloud/cloudflare/fraud";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";

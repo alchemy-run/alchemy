@@ -1,4 +1,3 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -6,6 +5,7 @@ import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const ClientWorker = {
   worker: () =>
     loadInternalWorker(

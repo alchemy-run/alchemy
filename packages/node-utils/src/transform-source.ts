@@ -106,7 +106,7 @@ const fileSourceMapComment = (mapFile: string) =>
  * loads the module pay for it.
  */
 const withoutSourcesContent = ({
-  sourcesContent: _,
+  sourcesContent: _sourcesContent,
   ...map
 }: NonNullable<ReturnType<typeof transformSync>["map"]>) => map;
 

@@ -14,7 +14,6 @@ import { tagRecord } from "../Tags.ts";
 import { arrayEqualsUnordered } from "../Util/equal.ts";
 import { waitForAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,

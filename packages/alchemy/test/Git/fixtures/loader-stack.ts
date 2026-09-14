@@ -1,12 +1,12 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * The Git host with its pack hasher on dynamically loaded Workers (DESIGN
  * §22.12): the same building-block assembly as `stack.ts`, with
  * `HasherWorkerLoader` in place of the in-process hasher.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
@@ -15,8 +15,7 @@ import {
   RegistryDurableObject,
   Server,
 } from "@/Git/index.ts";
-import { HasherWorkerLoader } from "@/Git/Hasher/index.ts";
-
+import * as Alchemy from "@/index.ts";
 import { TEST_SECRET, TestApi, TestAuthLive } from "./stack.ts";
 export { TEST_SECRET };
 

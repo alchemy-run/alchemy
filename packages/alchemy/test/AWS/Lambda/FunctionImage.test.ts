@@ -1,16 +1,16 @@
-import {
-  decodeFunctionImageSource,
-  functionImagePlatform,
-  hashFunctionImageBuild,
-  parseFunctionImageUri,
-} from "@/AWS/Lambda/FunctionImage.ts";
-import { validateFunctionPackageProps } from "@/AWS/Lambda/Function.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import { validateFunctionPackageProps } from "@/AWS/Lambda/Function.ts";
+import {
+  decodeFunctionImageSource,
+  functionImagePlatform,
+  hashFunctionImageBuild,
+  parseFunctionImageUri,
+} from "@/AWS/Lambda/FunctionImage.ts";
 
 const describe = layer(NodeServices.layer);
 

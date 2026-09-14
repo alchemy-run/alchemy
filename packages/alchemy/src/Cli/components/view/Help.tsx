@@ -4,7 +4,6 @@ import { stripVTControlCharacters } from "node:util";
 import * as Option from "effect/Option";
 import * as CliOutput from "effect/unstable/cli/CliOutput";
 import type { HelpDoc } from "effect/unstable/cli/HelpDoc";
-import { Box, Heading, Text, useGlyphs } from "../ui/index.ts";
 import type { JSX } from "react";
 import packageJson from "../../../../package.json" with { type: "json" };
 import type { CliKit } from "../../CliKit/CliKit.ts";
@@ -17,6 +16,7 @@ import {
   truncate,
   theme,
 } from "../../CliKit/index.ts";
+import { Box, Heading, Text, useGlyphs } from "../ui/index.ts";
 import { Logo } from "./Logo.tsx";
 
 const commandLabel = (command: {

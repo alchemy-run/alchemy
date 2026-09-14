@@ -29,6 +29,7 @@ export const stripChildEffectPrefix = (line: string): string => {
   let offset = 0;
   while (offset < line.length && visible < match[0].length) {
     if (line[offset] === "\x1b") {
+      // oxlint-disable-next-line no-control-regex
       const ansi = line.slice(offset).match(/^\x1b\[[0-?]*[ -/]*[@-~]/);
       if (ansi !== null) {
         offset += ansi[0].length;

@@ -1,10 +1,10 @@
+import * as NodePath from "node:path";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import type * as Scope from "effect/Scope";
-import * as NodePath from "node:path";
 import type { BuildOutput } from "./BuildOutput.ts";
 import { loadProjectModule } from "./Loader.ts";
 

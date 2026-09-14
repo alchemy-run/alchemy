@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import type { IPSet } from "./IPSet.ts";
 import { type WafScope, withWafScope } from "./internal.ts";
+import type { IPSet } from "./IPSet.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
 import type { WebACL } from "./WebACL.ts";
 

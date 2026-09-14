@@ -4,7 +4,6 @@ import {
   writeNodeServeEntry,
 } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";

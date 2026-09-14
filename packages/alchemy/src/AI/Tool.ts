@@ -88,7 +88,7 @@ export const Tool: {
 
 const makeTool = (name: string, template: TemplateStringsArray, refs: any[]) =>
   Object.assign(
-    function (impl: (props: any) => Effect.Effect<any, any, any>) {},
+    function (_impl: (props: any) => Effect.Effect<any, any, any>) {},
     {
       "~alchemy/Kind": "Tool",
       "~alchemy/Name": name,

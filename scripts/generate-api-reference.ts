@@ -1,6 +1,5 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-
 import * as ts from "typescript-api/unstable/ast";
 import type { Node, SourceFile } from "typescript-api/unstable/ast";
 import { createSyntaxProject } from "./typescript-source.ts";
@@ -758,9 +757,7 @@ function renderPage(doc: PageDoc, resolve: LinkResolver): string {
     }
     if (doc.peers.length > 0) {
       meta.push(
-        `**Peer dependencies:** ${doc.peers
-          .map((peer) => `\`${peer}\``)
-          .join(", ")}`,
+        `**Peer dependencies:** ${doc.peers.map((peer) => `\`${peer}\``).join(", ")}`,
       );
     }
     headerLines.push(`> ${meta.join(" · ")}`);
@@ -1027,9 +1024,7 @@ async function main() {
         resource: primary.name,
         category: primary.category,
         product: primary.product,
-        link: `/providers/${normalizeSlashes(outputRelative)
-          .replace(/\.md$/, "")
-          .toLowerCase()}`,
+        link: `/providers/${normalizeSlashes(outputRelative).replace(/\.md$/, "").toLowerCase()}`,
         dir: normalizeSlashes(relDir),
         exports: exportNames,
       });

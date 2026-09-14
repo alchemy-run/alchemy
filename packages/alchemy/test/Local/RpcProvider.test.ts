@@ -1,3 +1,7 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import * as Artifacts from "@/Artifacts.ts";
 import { InstanceId } from "@/InstanceId.ts";
@@ -6,10 +10,6 @@ import type { ProviderService } from "@/Provider.ts";
 import { Resource } from "@/Resource.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 
 interface TestResource extends Resource<
   "Local.RpcProvider.Test",

@@ -1,4 +1,8 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import {
   parseHeaders,
   parseRedirects,
@@ -27,17 +31,13 @@ import type {
   RouterConfig,
   StaticRouting,
 } from "../../../internal/workers-shared/shared/types.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
 import type { RuntimeWorker } from "../../RuntimeWorker.ts";
-import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
-import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 
 const AssetsKvWorker = {
   worker: () =>

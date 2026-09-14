@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 /**
  * The Git host with its pack hasher on AWS Lambda (DESIGN §22.11): the
  * same building-block assembly as `stack.ts`, with `HasherLambda` in place
@@ -6,9 +8,7 @@
  */
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { HasherFunction, HasherLambda } from "@/Git/Hasher/index.ts";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
@@ -17,8 +17,7 @@ import {
   RegistryDurableObject,
   Server,
 } from "@/Git/index.ts";
-import { HasherFunction, HasherLambda } from "@/Git/Hasher/index.ts";
-
+import * as Alchemy from "@/index.ts";
 import { TEST_SECRET, TestApi, TestAuthLive } from "./stack.ts";
 export { TEST_SECRET };
 

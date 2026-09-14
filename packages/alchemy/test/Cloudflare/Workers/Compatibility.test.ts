@@ -1,10 +1,10 @@
+import { describe, expect, test } from "alchemy-test";
 import {
   getCompatibility,
   getToolingCompatibility,
 } from "@/Cloudflare/Workers/Compatibility";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker";
 import * as Output from "@/Output";
-import { describe, expect, test } from "alchemy-test";
 
 describe("getCompatibility", () => {
   // Cloudflare enables both Node.js compatibility modes by date from

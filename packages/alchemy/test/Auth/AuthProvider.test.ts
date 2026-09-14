@@ -1,3 +1,9 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import {
   AuthProvider,
   AuthProviders,
@@ -6,12 +12,6 @@ import {
 } from "@/Auth/AuthProvider.ts";
 import { getEnvRedactedRequired } from "@/Auth/Env.ts";
 import { Interaction } from "@/Interaction.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Schema from "effect/Schema";
-import { expect, it } from "alchemy-test";
 
 const implementation = {
   configSchema: Schema.Struct({ method: Schema.Literal("custom") }),

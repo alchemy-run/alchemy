@@ -3,16 +3,11 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
+import type { App } from "./App.ts";
 import {
   PrismaClient,
   isNotFound,
@@ -22,19 +17,24 @@ import {
   destroyDeployment,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
-import { executeArtifactUpload } from "./Internal/ArtifactUpload.ts";
-import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
+import { promoteAppObserved } from "./Internal/AppPromotion.ts";
 import {
   inspectArtifactFile,
   readArtifactFile,
   type ArtifactFile,
 } from "./Internal/ArtifactFile.ts";
-import { promoteAppObserved } from "./Internal/AppPromotion.ts";
+import { executeArtifactUpload } from "./Internal/ArtifactUpload.ts";
+import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
 import { startDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
 import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
-import type { App } from "./App.ts";
 import type { Providers } from "./Providers.ts";
 import {
   concreteIdsChanged,

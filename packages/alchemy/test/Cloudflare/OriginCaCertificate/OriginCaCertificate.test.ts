@@ -1,14 +1,13 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as originCa from "@distilled.cloud/cloudflare/origin-ca-certificates";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { TEST_CSR } from "./fixtures/csr.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });

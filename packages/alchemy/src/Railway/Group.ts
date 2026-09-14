@@ -1,10 +1,3 @@
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-  projectBuckets as fetchProjectBuckets,
-  projectGroups as fetchProjectGroups,
-  environmentVolumes,
-} from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -14,6 +7,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  waitUntilDeleted,
+  projectServices as fetchProjectServices,
+  projectBuckets as fetchProjectBuckets,
+  projectGroups as fetchProjectGroups,
+  environmentVolumes,
+} from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -639,7 +639,7 @@ const getEnvironment = (environmentId: string, projectId: string) =>
     railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
-const getEnvironmentConfig = (environmentId: string, projectId: string) =>
+const _getEnvironmentConfig = (environmentId: string, projectId: string) =>
   getEnvironment(environmentId, projectId).pipe(
     Effect.map((env) =>
       env === undefined
@@ -648,7 +648,7 @@ const getEnvironmentConfig = (environmentId: string, projectId: string) =>
     ),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>

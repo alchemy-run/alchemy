@@ -117,6 +117,7 @@ export type ParsedReceivePack =
   | { readonly _tag: "request"; readonly request: ReceivePackRequest };
 
 // control chars, space, DEL, and git's forbidden refname metacharacters
+// oxlint-disable-next-line no-control-regex
 const REFNAME_FORBIDDEN = new RegExp("[\\x00-\\x20\\x7f\\\\~^:?*\\[]");
 
 const validRefName = (name: string): boolean =>

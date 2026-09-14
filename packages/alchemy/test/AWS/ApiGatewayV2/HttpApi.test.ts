@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -7,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import HttpApiTestFunctionLive, { HttpApiTestFunction } from "./http-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -44,7 +44,10 @@ test.provider(
           );
           const { api, stage, url } = yield* AWS.ApiGatewayV2.HttpApi(
             "TestHttpApi",
-            { handler: fn, timeout: "29 seconds" },
+            {
+              handler: fn,
+              timeout: "29 seconds",
+            },
           );
           return {
             url,

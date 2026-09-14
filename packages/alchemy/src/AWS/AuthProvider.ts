@@ -1,3 +1,5 @@
+import * as NodeCrypto from "node:crypto";
+import * as NodeOs from "node:os";
 import * as Floci from "@alchemy.run/floci";
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
@@ -23,8 +25,6 @@ import * as Stream from "effect/Stream";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ChildProcess } from "effect/unstable/process";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeCrypto from "node:crypto";
-import * as NodeOs from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
@@ -242,7 +242,7 @@ export const AwsAuth = AuthProviderLayer<
         ),
       );
 
-    const loginStored = Effect.fn(function* (profileName: string) {
+    const loginStored = Effect.fn(function* () {
       const accessKeyId = yield* interaction.prompt
         .text({
           message: "AWS Access Key ID",
@@ -291,7 +291,7 @@ export const AwsAuth = AuthProviderLayer<
       };
     });
 
-    const configureInteractive = (profileName: string) =>
+    const configureInteractive = () =>
       interaction.prompt
         .select({
           message: "AWS authentication method",
@@ -335,7 +335,7 @@ export const AwsAuth = AuthProviderLayer<
                   return config;
                 }),
               ),
-              Match.when("stored", () => loginStored(profileName)),
+              Match.when("stored", () => loginStored()),
               Match.exhaustive,
             ),
           ),
@@ -345,9 +345,7 @@ export const AwsAuth = AuthProviderLayer<
     // (ChildProcessSpawner for `aws sso login`) and `configureWith`'s
     // (FileSystem/Path for ~/.aws/config probing) — the contract shares one
     // ConfigureReq type parameter between the two entry points.
-    const configureCredentials = (
-      profileName: string,
-    ): Effect.Effect<
+    const configureCredentials = (): Effect.Effect<
       AwsAuthConfig,
       AuthError,
       | ChildProcessSpawner
@@ -356,7 +354,7 @@ export const AwsAuth = AuthProviderLayer<
       | Path.Path
       | Interaction.Interaction
     > =>
-      configureInteractive(profileName).pipe(
+      configureInteractive().pipe(
         Effect.mapError((e) =>
           e instanceof AuthError
             ? e
@@ -893,7 +891,9 @@ const loginSSO = (
       const process = Effect.gen(function* () {
         const [exitCode] = yield* Effect.all(
           [handle.exitCode, collectStdout, collectStderr],
-          { concurrency: 3 },
+          {
+            concurrency: 3,
+          },
         );
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();

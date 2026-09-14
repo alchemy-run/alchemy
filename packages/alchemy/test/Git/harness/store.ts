@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { BlobBody, BlobMeta, BlobStoreShape } from "@/Git/BlobStore.ts";
 import { BlobStoreError } from "@/Git/BlobStore.ts";
+import { StoreError } from "@/Git/Protocol/Store.ts";
 import {
   chunk,
   MAX_IN_PARAMS,
@@ -16,7 +17,6 @@ import {
   REPO_DDL,
   type SqlClient,
 } from "@/Git/Store/Sql.ts";
-import { StoreError } from "@/Git/Protocol/Store.ts";
 
 type Value = string | number | ArrayBuffer | Uint8Array | null;
 

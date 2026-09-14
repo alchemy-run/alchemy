@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { AuthError } from "@/Auth/AuthProvider";
 import type { CredentialsStore } from "@/Auth/Credentials";
 import type { ProfileStore } from "@/Auth/Profile";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 
 export const makeFakeProfileStore = (
   overrides?: Partial<ProfileStore["Service"]>,

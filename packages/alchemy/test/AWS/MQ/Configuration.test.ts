@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Configuration } from "@/AWS/MQ";
-import * as Test from "@/Test/Alchemy";
 import * as mq from "@distilled.cloud/aws/mq";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Configuration } from "@/AWS/MQ";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

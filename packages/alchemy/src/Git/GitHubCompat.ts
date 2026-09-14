@@ -32,12 +32,11 @@
  */
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 import type { RegistryEntry } from "./RegistryObject.ts";
 import type {
   CommitData,
@@ -53,7 +52,6 @@ import type {
   CommitLogPage,
   SignatureData,
 } from "./RepoObject.ts";
-import type { DiffEntryData } from "./Protocol/TreeDiff.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dependencies injected by the Worker
@@ -548,7 +546,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
       ),
     /** `GET /api/v3/repos/:owner/:repo/pulls` */
     pulls: () =>
-      withRepo(({ repo, entry, origin, repoUrl, url }) =>
+      withRepo(({ repo, origin, repoUrl, url }) =>
         Effect.gen(function* () {
           // GitHub's `closed` includes merged; our store distinguishes.
           const requested = url.searchParams.get("state") ?? "open";

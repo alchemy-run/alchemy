@@ -1,13 +1,13 @@
+import { expect } from "bun:test";
+import { createHash } from "node:crypto";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { createHash } from "node:crypto";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -373,7 +373,9 @@ test(
       project,
       hash,
       ["pr-1"],
-      { "Alchemy-Pull-Request": "not-a-pr" },
+      {
+        "Alchemy-Pull-Request": "not-a-pr",
+      },
     );
     expect(invalid.status).toBe(400);
 
@@ -431,7 +433,9 @@ test(
           project,
           hash,
           ["pr-99", "deadbeef"],
-          { "Alchemy-Pull-Request": "alchemy-run/alchemy#99" },
+          {
+            "Alchemy-Pull-Request": "alchemy-run/alchemy#99",
+          },
         ),
         200,
       )).status,
@@ -448,7 +452,9 @@ test(
           project,
           hash,
           ["pr-100", "deadbeef"],
-          { "Alchemy-Pull-Request": "alchemy-run/alchemy#100" },
+          {
+            "Alchemy-Pull-Request": "alchemy-run/alchemy#100",
+          },
         ),
         200,
       )).status,

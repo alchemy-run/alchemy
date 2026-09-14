@@ -1,8 +1,8 @@
+import { expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { strFromU8, unzipSync } from "fflate";
 import { sha256 } from "@/Util/sha256";
 import { zipCode, zipFiles } from "@/Util/zip";
-import { strFromU8, unzipSync } from "fflate";
-import * as Effect from "effect/Effect";
-import { expect, test } from "alchemy-test";
 
 test("zipCode is deterministic for identical inputs", async () => {
   const hash = () =>

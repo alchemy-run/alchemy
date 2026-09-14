@@ -4,9 +4,6 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { CredentialsFromEnv } from "@distilled.cloud/railway";
 import * as railway from "@distilled.cloud/railway";
-import * as Alchemy from "@/index.ts";
-import * as Railway from "@/Railway";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -17,13 +14,16 @@ import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Alchemy from "@/index.ts";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
+import { Site } from "./fixtures/bindings-shared.ts";
 import BucketApi, {
   Data as BucketData,
   OBJECT_BODY,
   OBJECT_KEY,
 } from "./fixtures/bucket-api.ts";
 import RedisApi, { Cache, REDIS_VALUE } from "./fixtures/redis-api.ts";
-import { Site } from "./fixtures/bindings-shared.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Railway.providers(),

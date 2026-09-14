@@ -1,6 +1,6 @@
-import { mergeWithObservedConfig } from "@/AWS/CloudFront/Distribution";
 import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect, test } from "alchemy-test";
+import { mergeWithObservedConfig } from "@/AWS/CloudFront/Distribution";
 
 /**
  * A live distribution config as returned by `GetDistributionConfig` for a

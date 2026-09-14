@@ -1,19 +1,14 @@
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { deepEqual, isResolved } from "../Diff.ts";
+import type * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import type { Scope } from "effect/Scope";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { Unowned } from "../AdoptPolicy.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type { Scope } from "effect/Scope";
-import type * as Path from "effect/Path";
-import {
-  closePrismaDevDatabase,
-  ensurePrismaDevDatabase,
-} from "./PrismaDevDatabase.ts";
-import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -22,12 +17,17 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
-import type { Project } from "./Project.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
+import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
+import {
+  closePrismaDevDatabase,
+  ensurePrismaDevDatabase,
+} from "./PrismaDevDatabase.ts";
+import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
   concreteIdsChanged,

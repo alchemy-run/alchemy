@@ -38,8 +38,8 @@
  * so this suite pins only the cheap ones on the CLI path.
  */
 import { afterAll, expect, test } from "bun:test";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import * as path from "node:path";
+import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -157,7 +157,9 @@ test(
     const cacheOnce = async () =>
       (await (
         await fetchOk(new URL(`/cache?key=${cacheKey}`, asyncWorker))
-      ).json()) as { hit: boolean };
+      ).json()) as {
+        hit: boolean;
+      };
     expect((await cacheOnce()).hit).toBe(false);
     expect((await cacheOnce()).hit).toBe(true);
 
@@ -166,7 +168,9 @@ test(
     const limitOnce = async () =>
       (await (
         await fetchOk(new URL(`/ratelimit?key=${rlKey}`, asyncWorker))
-      ).json()) as { success: boolean };
+      ).json()) as {
+        success: boolean;
+      };
     expect((await limitOnce()).success).toBe(true);
     expect((await limitOnce()).success).toBe(true);
     expect((await limitOnce()).success).toBe(false);
@@ -174,7 +178,9 @@ test(
     // Version metadata: locally stubbed with a random id.
     const version = (await (
       await fetchOk(new URL("/version", asyncWorker))
-    ).json()) as { id: string };
+    ).json()) as {
+      id: string;
+    };
     expect(typeof version.id).toBe("string");
     expect(version.id.length).toBeGreaterThan(0);
 
@@ -191,7 +197,9 @@ test(
     // Secrets Store: the seeded value round-trips through the binding.
     const secret = (await (
       await fetchOk(new URL("/secret", mediaWorker))
-    ).json()) as { value: string };
+    ).json()) as {
+      value: string;
+    };
     expect(secret.value).toBe("store-secret-abc123");
 
     // KV via the Effect-style binding: EffectWorker's root route lists the

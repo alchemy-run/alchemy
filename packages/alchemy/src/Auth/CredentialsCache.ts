@@ -34,7 +34,7 @@ export const cacheUntilExpiry = <A, E>(
 ) =>
   Effect.gen(function* () {
     const cache = yield* Cache.makeWith(
-      (_: void) =>
+      () =>
         Effect.gen(function* () {
           const resolvedAt = yield* Clock.currentTimeMillis;
           const credentials = yield* resolve;

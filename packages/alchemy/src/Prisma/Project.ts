@@ -1,12 +1,11 @@
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
-import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -21,8 +20,9 @@ import {
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
-import { isInputObject, isPrismaDevId } from "./Refs.ts";
+import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
 import type { Providers } from "./Providers.ts";
+import { isInputObject, isPrismaDevId } from "./Refs.ts";
 import type {
   Database,
   PrismaSecretConnection,

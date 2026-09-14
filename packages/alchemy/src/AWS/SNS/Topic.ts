@@ -203,7 +203,7 @@ export const TopicProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news = {}, olds, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, session }) {
       const topicName = yield* toTopicName(id, news);
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
@@ -384,7 +384,6 @@ const findTopicArnByName = Effect.fn(function* (topicName: string) {
 });
 
 const readTopic = Effect.fn(function* ({
-  id,
   topicArn,
   topicName,
 }: {

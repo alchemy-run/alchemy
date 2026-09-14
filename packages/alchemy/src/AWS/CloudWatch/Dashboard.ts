@@ -325,7 +325,9 @@ export const DashboardProvider = () =>
             const states = yield* Effect.forEach(
               names,
               (name) => readDashboard(name),
-              { concurrency: 10 },
+              {
+                concurrency: 10,
+              },
             );
 
             return states.filter(

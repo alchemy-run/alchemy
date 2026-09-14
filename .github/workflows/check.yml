@@ -81,14 +81,14 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Build
+        run: pnpm tsc -b
+
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
 
       - name: Run PR Package tests
         run: pnpm -C packages/pr-package test
-
-      - name: Run Typecheck
-        run: pnpm tsc -b
 
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc
@@ -102,3 +102,6 @@ jobs:
           github.event.pull_request.head.repo.full_name != github.repository ||
           !contains(github.event.pull_request.labels.*.name, 'deploy-website')
         run: pnpm docs:check
+
+      - name: Run Lint
+        run: pnpm lint

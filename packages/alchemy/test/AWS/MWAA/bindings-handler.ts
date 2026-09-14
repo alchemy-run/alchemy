@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 export class MWAATestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(

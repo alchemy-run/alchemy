@@ -1,3 +1,5 @@
+import * as NodeChildProcess from "node:child_process";
+import { fileURLToPath } from "node:url";
 /**
  * Child-process isolation for framework DEV servers.
  *
@@ -31,8 +33,6 @@
  */
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import * as NodeChildProcess from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**

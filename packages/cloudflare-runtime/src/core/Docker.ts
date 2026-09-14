@@ -1,3 +1,5 @@
+import * as NodeHttp from "node:http";
+import * as NodeStream from "node:stream";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -9,8 +11,6 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeHttp from "node:http";
-import * as NodeStream from "node:stream";
 import {
   attachLoopbackNetnsForwarder,
   CONTAINER_LOOPBACK_ALIAS,

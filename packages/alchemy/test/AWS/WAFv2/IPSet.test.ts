@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { IPSet } from "@/AWS/WAFv2";
-import * as Test from "@/Test/Alchemy";
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { IPSet } from "@/AWS/WAFv2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

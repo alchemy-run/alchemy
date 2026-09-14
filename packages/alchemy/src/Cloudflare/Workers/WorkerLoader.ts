@@ -1,3 +1,4 @@
+import type { WorkerLoader as _WorkerLoader } from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,8 +9,6 @@ import { asEffect } from "../../Util/index.ts";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
-
-import type { WorkerLoader as _WorkerLoader } from "@cloudflare/workers-types";
 
 type WorkerLoaderTypeId = "Cloudflare.DynamicWorker";
 const WorkerLoaderTypeId: WorkerLoaderTypeId = "Cloudflare.DynamicWorker";

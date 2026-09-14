@@ -122,7 +122,7 @@ describe("encode()", () => {
 const makePathForId = (id: number) => `/path${id}`;
 
 const makeManifestOfLength = async (length: number) => {
-  const entries = new Array(length).fill(undefined).map((_, i) => ({
+  const entries = Array.from({ length }, (_, i) => ({
     path: makePathForId(i),
     contentHash: String(i).padEnd(32, "f"),
   }));

@@ -1,3 +1,4 @@
+import * as NodeNet from "node:net";
 import * as ByteSize from "effect/ByteSize";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -7,7 +8,6 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as NodeNet from "node:net";
 import * as Port from "../internal/Port.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";

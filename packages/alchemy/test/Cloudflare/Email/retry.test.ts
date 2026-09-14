@@ -1,6 +1,6 @@
-import { retryWorkerScriptNotFound } from "@/Cloudflare/Email/retry";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { retryWorkerScriptNotFound } from "@/Cloudflare/Email/retry";
 
 // Cloudflare rejects a rule whose `worker` action names a script it cannot see
 // yet with code 2016 / `WorkerScriptNotFound`. Distilled surfaces that as a

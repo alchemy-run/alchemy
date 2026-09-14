@@ -1,12 +1,12 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {
   checkHttpStateStoreAuth,
   describeStateStoreFailure,
   makeHttpStateStore,
 } from "@/State/HttpStateStore.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 /**
  * Hermetic tests driven by the production failure modes observed in

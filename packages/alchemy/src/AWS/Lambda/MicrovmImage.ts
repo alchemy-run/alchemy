@@ -1,7 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { Region } from "@distilled.cloud/aws/Region";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
-
+import type { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { Platform } from "../../Platform.ts";

@@ -14,9 +14,9 @@
  * arrows, em-dashes, fancy quotes, etc. all render verbatim.
  */
 
+import { createHash } from "node:crypto";
 import type { APIRoute, GetStaticPaths } from "astro";
 import { getCollection } from "astro:content";
-import { createHash } from "node:crypto";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { jsx } from "react/jsx-runtime";

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Subnet } from "@/AWS/EC2";
-import { LoadBalancer } from "@/AWS/ELBv2";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { Subnet } from "@/AWS/EC2";
+import { LoadBalancer } from "@/AWS/ELBv2";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });

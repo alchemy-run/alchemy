@@ -8,13 +8,13 @@ import {
   NODE_BUNDLE_CONDITIONS,
   NODE_SERVE_ENTRY_FILE_NAME,
 } from "../../core/NodeServe.ts";
-import type { NitroConfigSlice } from "../UserConfig.ts";
 import {
   NITRO_HANDLER_SPECIFIER,
   NITRO_PRESET,
   makeNodeTarget,
   target,
 } from "../node.ts";
+import type { NitroConfigSlice } from "../UserConfig.ts";
 
 const runWithNode = <A, E>(
   effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>,

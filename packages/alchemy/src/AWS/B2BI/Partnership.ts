@@ -7,7 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import { readB2biTags, syncB2biTags, toWireTags } from "./internal.ts";
+import { readB2biTags, syncB2biTags } from "./internal.ts";
 
 export interface PartnershipProps {
   /**

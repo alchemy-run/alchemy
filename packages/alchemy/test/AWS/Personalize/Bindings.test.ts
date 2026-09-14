@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as personalize from "@distilled.cloud/aws/personalize";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import PersonalizeTestFunctionLive, {
   PersonalizeTestFunction,
 } from "./handler";
@@ -179,7 +179,9 @@ describe.sequential("Personalize Bindings", () => {
 
   afterAll(
     sharedStack.destroy().pipe(Effect.andThen(assertPersonalizeResourcesGone)),
-    { timeout: 420_000 },
+    {
+      timeout: 420_000,
+    },
   );
 
   describe("binding registration", () => {

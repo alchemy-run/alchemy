@@ -1,11 +1,11 @@
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { makeS3State } from "@/AWS";
 import { createStateBucketName } from "@/AWS/StateStore/State.ts";
 import type { ResourceState, StateService } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

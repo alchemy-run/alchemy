@@ -111,7 +111,9 @@ export { ViewResource as View };
  */
 export class ViewUnobservable extends Data.TaggedError(
   "ResourceExplorerViewUnobservable",
-)<{ message: string }> {}
+)<{
+  message: string;
+}> {}
 
 /**
  * Resource Explorer answers `GetView`/`DeleteView` for a nonexistent or

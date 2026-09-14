@@ -38,11 +38,16 @@ export const retryOamMutation = <A, E, R>(
 
 class SinkLinksStillAttached extends Data.TaggedError(
   "SinkLinksStillAttached",
-)<{ readonly sinkArn: string; readonly count: number }> {}
+)<{
+  readonly sinkArn: string;
+  readonly count: number;
+}> {}
 
 class OamResourceStillExists extends Data.TaggedError(
   "OamResourceStillExists",
-)<{ readonly arn: string }> {}
+)<{
+  readonly arn: string;
+}> {}
 
 const dependencySchedule = Schedule.max([
   Schedule.spaced("2 seconds"),
@@ -141,7 +146,7 @@ export const syncOamTags = Effect.fn(function* (
   userTags: Record<string, string> | undefined,
 ) {
   const internalTags = yield* createInternalTags(id);
-  const desired = { ...(userTags ?? {}), ...internalTags };
+  const desired = { ...userTags, ...internalTags };
   const observed = yield* readOamTags(resourceArn);
   const { upsert, removed } = diffTags(observed, desired);
   if (upsert.length > 0) {

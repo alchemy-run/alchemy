@@ -1,7 +1,3 @@
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-} from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,6 +7,10 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  waitUntilDeleted,
+  projectServices as fetchProjectServices,
+} from "./GraphQL.ts";
 import {
   createRailwayName,
   matchesAlchemyPhysicalName,
@@ -319,7 +319,7 @@ const findNetwork = (
     Effect.map((networks) => networks.find(match)),
   );
 
-const listEnvironmentIds = (project: {
+const _listEnvironmentIds = (project: {
   projectId: string;
   environmentId: string;
 }) =>
@@ -764,7 +764,7 @@ const resolveServiceName = (serviceId: string, hint?: string) =>
         ),
       );
 
-const listProjectServices = (projectId: string) =>
+const _listProjectServices = (projectId: string) =>
   fetchProjectServices(projectId, {
     id: true,
     name: true,

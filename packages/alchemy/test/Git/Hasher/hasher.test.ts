@@ -1,3 +1,15 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { BlobStore } from "@/Git/BlobStore.ts";
+import {
+  decodeScanResult,
+  encodeScanResult,
+  Hasher,
+  HasherInline,
+  frame,
+  makeFrameReader,
+} from "@/Git/Hasher/Hasher.ts";
 /**
  * The hasher protocol (src/Git/Hasher/Hasher.ts): a scan result survives the
  * binary encoding byte for byte, and the inline layer scans in-process.
@@ -10,20 +22,8 @@ import {
 } from "@/Git/Protocol/ObjectCodec.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import {
-  decodeScanResult,
-  encodeScanResult,
-  Hasher,
-  HasherInline,
-  frame,
-  makeFrameReader,
-} from "@/Git/Hasher/Hasher.ts";
-import { describe, expect, test } from "alchemy-test";
-import { BlobStore } from "@/Git/BlobStore.ts";
-import * as Effect from "effect/Effect";
-import { makeMemoryBlobStore } from "../harness/store.ts";
-import * as Layer from "effect/Layer";
 import { concat } from "../harness/pack.ts";
+import { makeMemoryBlobStore } from "../harness/store.ts";
 
 describe("Hasher", () => {
   test("encode/decode round-trips entries, blob references, unresolved deltas and coordinates", async () => {

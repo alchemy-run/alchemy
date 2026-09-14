@@ -67,7 +67,9 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
             });
           }
           yield* host.bind`Allow(${host}, AWS.ComprehendMedical.${options.capability}())`(
-            { policyStatements },
+            {
+              policyStatements,
+            },
           );
         }
       }

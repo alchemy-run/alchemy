@@ -2,15 +2,15 @@
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
 import type { Plan } from "../../../Plan.ts";
+import { Screen, type ScreenController } from "../../CliKit/index.ts";
 import {
   PromptFrame,
   ChoiceGroup,
   useKeyGlyphs,
   useTerminalInput,
 } from "../ui/index.ts";
-import { Screen, type ScreenController } from "../../CliKit/index.ts";
-import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
 import type { PlanTreeData } from "./PlanTree.ts";
+import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
 
 export interface PlanDecisionChoice<Value> {
   readonly value: Value;

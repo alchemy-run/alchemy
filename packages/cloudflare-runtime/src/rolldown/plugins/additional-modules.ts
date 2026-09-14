@@ -1,5 +1,5 @@
-import MagicString from "magic-string";
 import path from "node:path";
+import MagicString from "magic-string";
 import type {
   Plugin,
   PluginContext,

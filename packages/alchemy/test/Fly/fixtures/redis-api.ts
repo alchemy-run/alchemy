@@ -1,7 +1,7 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 export const REDIS_PORT = 3000;
 export const REDIS_KEY = "alchemy-marker";

@@ -9,16 +9,16 @@
  */
 import * as Effect from "effect/Effect";
 import {
+  scanPart,
+  type ScanResult,
+  type UnresolvedDelta,
+} from "../Protocol/PartialScan.ts";
+import {
   decodeScanResult,
   encodeScanResult,
   HashError,
   type HashPartOptions,
 } from "./Hasher.ts";
-import {
-  scanPart,
-  type ScanResult,
-  type UnresolvedDelta,
-} from "../Protocol/PartialScan.ts";
 
 /** Chunk size the Lambda hasher asks the pump for (4 MiB → ~5.6 MB base64). */
 export const LAMBDA_CHUNK_BYTES = 4 * 1024 * 1024;

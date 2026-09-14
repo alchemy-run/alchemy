@@ -1,13 +1,13 @@
-import * as GitHub from "@/GitHub";
-import { Octokit } from "@/GitHub/Octokit.ts";
-import * as Provider from "@/Provider";
-import { destroy } from "@/RemovalPolicy";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as GitHub from "@/GitHub";
+import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Provider from "@/Provider";
+import { destroy } from "@/RemovalPolicy";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 

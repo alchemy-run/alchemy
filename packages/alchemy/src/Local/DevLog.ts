@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 /**
  * Per-resource dev log files.
  *
@@ -16,15 +17,14 @@
  * swallowed so it can never break dev startup.
  */
 import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
-import { stripVTControlCharacters } from "node:util";
 
 const LOG_RETENTION = Duration.days(7);
 const LOG_RETENTION_GENERATIONS = 10;

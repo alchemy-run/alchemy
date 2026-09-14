@@ -30,8 +30,8 @@ import {
   ansiFg,
   colorsEnabled,
 } from "./Util/Terminal.ts";
-import { glyphsFor, statusColor, type StatusVariant } from "./Util/Theme.ts";
 import { unicodeEnabled } from "./Util/Terminal.ts";
+import { glyphsFor, statusColor, type StatusVariant } from "./Util/Theme.ts";
 
 /** The user dismissed the active terminal interaction. */
 export class TerminalCancelled extends Data.TaggedError("TerminalCancelled") {}
