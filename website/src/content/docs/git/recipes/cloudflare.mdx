@@ -3,9 +3,8 @@ title: All on Cloudflare
 description: A git host on one Cloudflare account. One Worker, one bucket, two Durable Object namespaces, and dynamically loaded Workers hashing large pushes.
 ---
 
-The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
-layers, and its middleware.
+The examples use `Api` and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the application API and its middleware.
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
@@ -22,7 +21,7 @@ import * as Layer from "effect/Layer";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -89,7 +88,7 @@ no traffic costs its storage.
 `HasherInline` is enough until pushes of tens of megabytes matter:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -106,7 +105,7 @@ one region:
 ```diff lang="typescript"
 +export const RepoIndex = Cloudflare.D1.Database("RepoIndex");
 +
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),

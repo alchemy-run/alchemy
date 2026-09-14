@@ -52,8 +52,8 @@
  * );
  * ```
  *
- * `ServerLive` serves the open API. To add authentication, build groups
- * against an API with your middleware and use `Server.layer(api, groups)`.
+ * `ServerLive` serves the open API. To add authentication, pass an API
+ * with your middleware to `Server.layer(api)`.
  *
  * ### Using the deployed service
  * **Example:** Create a repo and push to the open host
@@ -2263,39 +2263,118 @@ export const InternalLive = HttpApiBuilder.group(InternalApi, "internal", (h) =>
   Effect.map(Handlers, (git) => h.handleAll(git.internal)),
 );
 
+type GitGroups = typeof GitApi.groups;
+type EndpointContract<E> = Pick<
+  E,
+  Extract<
+    keyof E,
+    | "identifier"
+    | "method"
+    | "~Params"
+    | "~Query"
+    | "~Payload"
+    | "~Headers"
+    | "~Success"
+    | "~Error"
+  >
+>;
+
+// Built-in implementations cover unchanged Git contracts, including copies
+// with middleware or prefixes. Other groups require native group layers.
+type DefaultGroups<G extends HttpApiGroup.Constraint> = G extends {
+  readonly identifier: infer Id extends keyof GitGroups;
+}
+  ? G extends {
+      readonly endpoints: {
+        readonly [E in keyof GitGroups[Id]["endpoints"]]: EndpointContract<
+          GitGroups[Id]["endpoints"][E]
+        >;
+      };
+    }
+    ? Exclude<
+        keyof G["endpoints"],
+        keyof GitGroups[Id]["endpoints"]
+      > extends never
+      ? G
+      : never
+    : never
+  : never;
+
+const makeApiLive = (api: typeof GitApi) =>
+  Layer.mergeAll(
+    Layer.empty,
+    ...(api.groups.repos
+      ? [
+          HttpApiBuilder.group(api, "repos", (h) =>
+            Effect.map(Handlers, (git) => h.handleAll(git.repos)),
+          ),
+        ]
+      : []),
+    ...(api.groups.refs
+      ? [
+          HttpApiBuilder.group(api, "refs", (h) =>
+            Effect.map(Handlers, (git) => h.handleAll(git.refs)),
+          ),
+        ]
+      : []),
+    ...(api.groups.objects
+      ? [
+          HttpApiBuilder.group(api, "objects", (h) =>
+            Effect.map(Handlers, (git) => h.handleAll(git.objects)),
+          ),
+        ]
+      : []),
+    ...(api.groups.pulls
+      ? [
+          HttpApiBuilder.group(api, "pulls", (h) =>
+            Effect.map(Handlers, (git) => h.handleAll(git.pulls)),
+          ),
+        ]
+      : []),
+    ...(api.groups.protocol
+      ? [
+          HttpApiBuilder.group(api, "protocol", (h) =>
+            Effect.map(Handlers, (git) => h.handleAll(git.protocol)),
+          ),
+        ]
+      : []),
+    ...(api.groups.github
+      ? [
+          HttpApiBuilder.group(api, "github", (h) =>
+            Effect.map(Handlers, (git) => h.handleAll(git.github)),
+          ),
+        ]
+      : []),
+  );
+
 /**
- * Default group implementations for the unmodified {@link GitApi}.
- * For an API with application middleware, prefixes, or additional endpoints,
- * build groups against that API with `HttpApiBuilder.group` instead.
+ * Native group implementations for the unmodified {@link GitApi}. This is an
+ * ordinary Effect layer. `Server.layer(api)` registers Git's defaults against
+ * the supplied API automatically, including its middleware and prefixes.
+ * Use this layer when composing the base API's router directly.
  *
- * ### Serving the default API
- * **Example:** Open Git server
  * ```typescript
- * const GitLive = Git.Server.layer(Git.Api, Git.ApiLive).pipe(
- *   Layer.provide(Git.HandlersLive),
- * );
+ * const GitApiLive = Git.ApiLive.pipe(Layer.provide(Git.HandlersLive));
  * ```
  */
-export const ApiLive = Layer.mergeAll(
-  HttpApiBuilder.group(GitApi, "repos", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.repos)),
-  ),
-  HttpApiBuilder.group(GitApi, "refs", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.refs)),
-  ),
-  HttpApiBuilder.group(GitApi, "objects", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.objects)),
-  ),
-  HttpApiBuilder.group(GitApi, "pulls", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.pulls)),
-  ),
-  HttpApiBuilder.group(GitApi, "protocol", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.protocol)),
-  ),
-  HttpApiBuilder.group(GitApi, "github", (h) =>
-    Effect.map(Handlers, (git) => h.handleAll(git.github)),
-  ),
-);
+export const ApiLive = makeApiLive(GitApi);
+
+type DefaultRequirements<Groups extends HttpApiGroup.Constraint> =
+  | Layer.Services<typeof ApiLive>
+  | HttpApiEndpoint.Middleware<HttpApiGroup.Endpoints<DefaultGroups<Groups>>>
+  | HttpApiGroup.MiddlewareServices<DefaultGroups<Groups>>;
+
+const defaultsFor = <Id extends string, Groups extends HttpApiGroup.Constraint>(
+  api: HttpApi.HttpApi<Id, Groups>,
+) =>
+  // Keep the actual API (and all its metadata). Erase its type only while
+  // registering the known handler sets, then retain middleware requirements
+  // and restrict provided services to compatible contracts in the layer type.
+  makeApiLive(api as unknown as typeof GitApi) as unknown as Layer.Layer<
+    HttpApiGroup.ToService<Id, DefaultGroups<Groups>>,
+    never,
+    DefaultRequirements<Groups>
+  >;
 
 /** What {@link Server} exposes: the composed HTTP handler for every plane. */
 export interface ServerShape {
@@ -2309,18 +2388,19 @@ export interface ServerShape {
 const makeServer = <
   Id extends string,
   Groups extends HttpApiGroup.Constraint,
+  Provided,
   E,
   R,
 >(
   api: HttpApi.HttpApi<Id, Groups>,
-  groups: Layer.Layer<HttpApiGroup.ToService<Id, Groups>, E, R>,
+  groups: Layer.Layer<Provided, E, R>,
 ) =>
   Layer.mergeAll(
     HttpApiBuilder.layer(api),
     // The engine's own routes, outside whatever middleware `api` carries.
     HttpApiBuilder.layer(InternalApi),
   ).pipe(
-    Layer.provide(groups),
+    Layer.provide(Layer.mergeAll(defaultsFor(api), groups)),
     Layer.provide(InternalLive),
     Layer.provide(Http.Platform),
     // Middleware lists RuntimeContext among its group requirements, but the
@@ -2352,11 +2432,11 @@ const makeServer = <
  * Blocks" §4): a `Context.Service` exposing the composed HTTP handler
  * for all three planes (git smart-HTTP wire, `/api/v1` REST, `/api/v3`
  * GitHub compat). The package ships no Worker — construct your own and
- * wire `fetch` in. `Server.layer(api, groups)` serves an API derived from
- * {@link GitApi}: yours, with your middleware in front of every route
- * and your own routes beside them. Implement each group with
- * `HttpApiBuilder.group(api, ...)`, using {@link Handlers} for the engine's
- * default handlers.
+ * wire `fetch` in. `Server.layer(api)` registers Git’s default groups
+ * against your API, including its middleware and prefixes. Pass native
+ * `HttpApiBuilder.group` layers as the optional second argument to add
+ * application endpoints or override Git groups. Explicit groups take
+ * precedence over the defaults.
  * {@link ServerLive} is the open default: `Git.Api`, {@link ApiLive}, {@link HandlersLive}, nothing
  * in front.
  *
@@ -2364,11 +2444,7 @@ const makeServer = <
  * class AppApi extends HttpApi.make("git-management")
  *   .add(Git.Repos)
  *   .middleware(Session) {}
- * const AppApiLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
- *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
- * );
- *
- * const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+ * const GitLive = Git.Server.layer(AppApi).pipe(
  *   Layer.provide(Git.HandlersLive),
  *   Layer.provide(SessionLive),
  *   Layer.provide(Git.ReposDurableObject),
@@ -2389,17 +2465,23 @@ export class Server extends Context.Service<Server, ServerShape>()(
   "alchemy/Git/Server",
 ) {
   /**
-   * `Git.Server` over an API and its `HttpApiBuilder.group` layers.
-   * Provide {@link HandlersLive} and the API's middleware to the result.
+   * Serves an API with Git’s default handlers. The optional group layer adds
+   * application endpoints or overrides matching Git groups. Provide
+   * {@link HandlersLive} and the API's middleware to the result.
    */
   static readonly layer = <
     Id extends string,
     Groups extends HttpApiGroup.Constraint,
-    E,
-    R,
+    Provided = never,
+    E = never,
+    R = never,
   >(
     api: HttpApi.HttpApi<Id, Groups>,
-    groups: Layer.Layer<HttpApiGroup.ToService<Id, Groups>, E, R>,
+    groups: Layer.Layer<Provided, E, R> = Layer.empty as unknown as Layer.Layer<
+      Provided,
+      E,
+      R
+    >,
   ) => Layer.effect(Server, makeServer(api, groups));
 }
 
@@ -2412,7 +2494,7 @@ export class Server extends Context.Service<Server, ServerShape>()(
  * @layer
  * @provides Git.Server
  */
-export const ServerLive = Server.layer(GitApi, ApiLive).pipe(
+export const ServerLive = Server.layer(GitApi).pipe(
   Layer.provide(HandlersLive),
 );
 

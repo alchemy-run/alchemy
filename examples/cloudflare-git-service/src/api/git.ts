@@ -19,37 +19,17 @@ export const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
   forceDestroy: process.env.NODE_ENV === "test",
 });
 
-const AppApiLive = Layer.mergeAll(
-  HttpApiBuilder.group(AppApi, "repos", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
-  ),
-  HttpApiBuilder.group(AppApi, "refs", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
-  ),
-  HttpApiBuilder.group(AppApi, "objects", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
-  ),
-  HttpApiBuilder.group(AppApi, "pulls", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
-  ),
-  HttpApiBuilder.group(AppApi, "protocol", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
-  ),
-  HttpApiBuilder.group(AppApi, "github", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.github)),
-  ),
-  HttpApiBuilder.group(AppApi, "app", (h) =>
-    h.handle("me", () =>
-      Effect.gen(function* () {
-        const { user } = yield* Session;
-        if (user === null) return yield* new Unauthorized();
-        return user;
-      }),
-    ),
+const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
+  h.handle("me", () =>
+    Effect.gen(function* () {
+      const { user } = yield* Session;
+      if (user === null) return yield* new Unauthorized();
+      return user;
+    }),
   ),
 );
 
-export const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+export const GitLive = Git.Server.layer(AppApi, MeLive).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),

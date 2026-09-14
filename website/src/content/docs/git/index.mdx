@@ -14,12 +14,12 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Api, ApiLive, AuthenticatedLive } from "./api.ts";
+import { Api, AuthenticatedLive } from "./api.ts";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const GitLive = Git.Server.layer(Api, ApiLive).pipe( // Api: Git.Api behind your middleware
-  Layer.provide(Git.HandlersLive), // shared implementations used by ApiLive
+const GitLive = Git.Server.layer(Api).pipe( // Api: Git.Api behind your middleware
+  Layer.provide(Git.HandlersLive), // shared Git handlers
   Layer.provide(AuthenticatedLive), // your middleware: who may call what
   Layer.provide(Git.ReposDurableObject), // refs, objects, pull requests
   Layer.provide(Git.RegistryDurableObject), // owner/name → repo
@@ -37,15 +37,14 @@ export default Cloudflare.Worker(
 );
 ```
 
-`Api`, `ApiLive`, and `AuthenticatedLive` are the application API, its
-group implementations, and its middleware. [Getting Started](/git/getting-started)
+`Api` and `AuthenticatedLive` are the application API and its middleware. [Getting Started](/git/getting-started)
 defines all three; [Server](/git/blocks/server#handlers) explains their composition.
 
 Each line of the graph is one decision with its own implementations.
 Changing a line changes the decision and nothing else:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
 +  Layer.provide(ProtectedMain),

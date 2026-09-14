@@ -11,7 +11,7 @@
  * import * as Git from "alchemy/Git";
  * import * as GitHasher from "alchemy/Git/Hasher";
  *
- * const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+ * const GitLive = Git.Server.layer(Api).pipe(
  *   Layer.provide(Git.HandlersLive),
  *   Layer.provide(AuthenticatedLive),
  *   Layer.provide(Git.ReposDurableObject),

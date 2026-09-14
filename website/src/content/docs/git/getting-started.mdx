@@ -75,28 +75,7 @@ export const AuthenticatedLive = Layer.effect(
 /** The git API, every route behind the middleware. */
 export class Api extends Git.Api.middleware(Authenticated) {}
 
-export const ApiLive = Layer.mergeAll(
-  HttpApiBuilder.group(Api, "repos", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
-  ),
-  HttpApiBuilder.group(Api, "refs", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
-  ),
-  HttpApiBuilder.group(Api, "objects", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
-  ),
-  HttpApiBuilder.group(Api, "pulls", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
-  ),
-  HttpApiBuilder.group(Api, "protocol", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
-  ),
-  HttpApiBuilder.group(Api, "github", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.github)),
-  ),
-);
-
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -115,10 +94,9 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ) {}
 ```
 
-`ApiLive` implements all six groups against `Api`, so each group sees its
-middleware. `Git.HandlersLive` builds the shared storage clients and handlers.
-`Server.layer(Api, ApiLive)` mounts those groups and the internal hash route;
-the internal route stays outside the application middleware.
+`Server.layer(Api)` registers the Git routes with your API’s middleware.
+`Git.HandlersLive` builds their shared storage clients and handlers. The
+internal hash route stays outside the application middleware.
 
 The engine holds no users and no credentials. Who may call a route is
 decided by the middleware of the API that mounts it, and `Git.Api`

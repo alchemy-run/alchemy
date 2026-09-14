@@ -678,12 +678,13 @@ declare no middleware and no auth errors.
 
 Every endpoint in `Api/*.ts` is an Effect `HttpApiEndpoint`.
 The user derives an API from `Git.Api` — `Git.Api.middleware(Session)`,
-plus their own routes — and implements its groups with
-`HttpApiBuilder.group(api, group, ...)`. `Git.HandlersLive` builds a shared
+plus their own routes. `Server.layer(api)` registers Git’s default groups
+against that API. Application endpoints and overrides use native
+`HttpApiBuilder.group(api, group, ...)` layers passed as the second argument. `Git.HandlersLive` builds a shared
 `Git.Handlers` service whose handler objects can be registered with
 `h.handleAll(git.repos)` (and the corresponding objects for other groups).
 Applications can override a handler with object spread before registration.
-`Server.layer(api, groups)` serves those groups and mounts `InternalLive` separately,
+Explicit group layers override the matching defaults. The server mounts `InternalLive` separately,
 outside application middleware. `ServerLive` provides `ApiLive` and
 `HandlersLive` for the unmodified `Git.Api`: the open default.
 

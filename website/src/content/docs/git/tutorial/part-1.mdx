@@ -185,35 +185,14 @@ read it.
 
 The middleware goes on the API, and the API is what `Git.Server`
 serves. `Git.Api.middleware(Authenticated)` puts it in front of every
-git route. Register each group against that API with `HttpApiBuilder.group`;
+git route. `Server.layer(Api)` registers the Git groups automatically;
 `Git.Handlers` holds the engine's reusable handlers:
 
 ```diff lang="typescript"
 +export class Api extends Git.Api.middleware(Authenticated) {}
 +
-+export const ApiLive = Layer.mergeAll(
-+  HttpApiBuilder.group(Api, "repos", (h) =>
-+    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
-+  ),
-+  HttpApiBuilder.group(Api, "refs", (h) =>
-+    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
-+  ),
-+  HttpApiBuilder.group(Api, "objects", (h) =>
-+    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
-+  ),
-+  HttpApiBuilder.group(Api, "pulls", (h) =>
-+    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
-+  ),
-+  HttpApiBuilder.group(Api, "protocol", (h) =>
-+    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
-+  ),
-+  HttpApiBuilder.group(Api, "github", (h) =>
-+    Effect.map(Git.Handlers, (git) => h.handleAll(git.github)),
-+  ),
-+);
-+
 -const GitLive = Git.ServerLive.pipe(
-+const GitLive = Git.Server.layer(Api, ApiLive).pipe(
++const GitLive = Git.Server.layer(Api).pipe(
 +  Layer.provide(Git.HandlersLive),
 +  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -225,7 +204,7 @@ git route. Register each group against that API with `HttpApiBuilder.group`;
 
 The file compiles. Each line is a Layer you can replace later without
 touching the others. `Git.ServerLive`, the line you started with, is
-`Server.layer(Git.Api, Git.ApiLive)` with `Git.HandlersLive` and no middleware. Part 3 replaces the
+`Server.layer(Git.Api)` with `Git.HandlersLive` and no middleware. Part 3 replaces the
 secret with Better Auth, and Part 4 adds rules about which refs may
 move.
 

@@ -107,7 +107,7 @@ every other ref; only the owner moves `main`.
 // src/git.ts
 +import { ProtectedMain } from "./hooks.ts";
 
-const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+const GitLive = Git.Server.layer(AppApi, Layer.mergeAll(MeLive, GitHubLive)).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
 +  Layer.provide(ProtectedMain),

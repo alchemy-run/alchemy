@@ -323,37 +323,16 @@ export class AppRoutes extends HttpApiGroup.make("app").add(Me) {}
 export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
 ```
 
-Implement each group against `AppApi`. This replaces the `ApiLive`
-assembly from Part 1. `Git.Handlers` supplies the Git handlers, while
-`handle("me", ...)` implements the new endpoint:
+`Server.layer` supplies Git’s default groups. Implement only the new
+application endpoint, using `AppApi` so its middleware provides `Session`:
 
 ```typescript
-export const AppApiLive = Layer.mergeAll(
-  HttpApiBuilder.group(AppApi, "repos", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
-  ),
-  HttpApiBuilder.group(AppApi, "refs", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
-  ),
-  HttpApiBuilder.group(AppApi, "objects", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
-  ),
-  HttpApiBuilder.group(AppApi, "pulls", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
-  ),
-  HttpApiBuilder.group(AppApi, "protocol", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
-  ),
-  HttpApiBuilder.group(AppApi, "github", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.github)),
-  ),
-  HttpApiBuilder.group(AppApi, "app", (h) =>
-    h.handle("me", () => Effect.gen(function* () {
-      const { user } = yield* Session;
-      if (user === null) return yield* new Unauthorized();
-      return user;
-    })),
-  ),
+export const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
+  h.handle("me", () => Effect.gen(function* () {
+    const { user } = yield* Session;
+    if (user === null) return yield* new Unauthorized();
+    return user;
+  })),
 );
 ```
 
@@ -363,13 +342,13 @@ group builder when your own handlers need storage clients or bindings.
 
 ## The host
 
-Pass the API and its group layers to `Git.Server.layer`. Provide
+Pass the API and your `MeLive` group to `Git.Server.layer`. Provide
 `Git.HandlersLive` to build the shared Git handlers, and provide the
 middleware and storage layers as before:
 
 ```diff lang="typescript"
--const GitLive = Git.Server.layer(Api, ApiLive).pipe(
-+const GitLive = Git.Server.layer(AppApi, AppApiLive).pipe(
+-const GitLive = Git.Server.layer(Api).pipe(
++const GitLive = Git.Server.layer(AppApi, MeLive).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -379,8 +358,8 @@ middleware and storage layers as before:
 );
 ```
 
-Delete the old `Api` and `ApiLive` declarations; `AppApi` and
-`AppApiLive` now include both the Git groups and the application group.
+Replace the old `Api` declaration with `AppApi`. The server registers
+Git’s groups and adds the application group from `MeLive`.
 
 Better Auth needs a database and its own routes under `/api/auth`.
 Declare the database, and serve the auth routes in front of the git
@@ -467,12 +446,11 @@ engine never saw a credential.
 ## Replacing one of the engine's routes
 
 `gh` validates its credential against `GET /api/v3/user`. The engine
-has no user to answer with. In `AppApiLive`, replace the `github` group
-registration with this one. Spread the default handlers and supply a
-new `user` handler:
+has no user to answer with. Add a replacement `github` group. Spread the
+default handlers and supply a new `user` handler:
 
 ```typescript
-HttpApiBuilder.group(AppApi, "github", (h) =>
+const GitHubLive = HttpApiBuilder.group(AppApi, "github", (h) =>
   Effect.map(Git.Handlers, (git) => h.handleAll({
     ...git.github,
     user: () => Effect.gen(function* () {
@@ -495,7 +473,21 @@ HttpApiBuilder.group(AppApi, "github", (h) =>
 
 The group is built against `AppApi`, so its middleware supplies `Session`
 directly. All the other handlers come from `git.github`. Any Git handler
-can be replaced this way; `GitLive` still receives the same `AppApiLive`.
+can be replaced this way. Pass the replacement alongside your application group:
+
+```typescript
+const GitLive = Git.Server.layer(
+  AppApi,
+  Layer.mergeAll(MeLive, GitHubLive),
+).pipe(
+  Layer.provide(Git.HandlersLive),
+  Layer.provide(AuthenticatedLive),
+  Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.RegistryDurableObject),
+  Layer.provide(Git.HasherInline),
+  Layer.provide(Git.BlobStoreR2(GitObjects)),
+);
+```
 
 ## Your application on the same origin
 

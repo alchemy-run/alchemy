@@ -125,8 +125,7 @@ export const AppRoutesLive = HttpApiBuilder.group(AppApi, "app", (h) =>
 );
 ```
 
-Merge this group layer with Git's group implementations and pass them to
-`Git.Server.layer(AppApi, AppApiLive)` as shown in
+Pass your group to `Git.Server.layer(AppApi, AppRoutesLive)` as shown in
 [Server](/git/blocks/server#handlers). A replacement handler registered
 against `AppApi` can also yield `Session` directly.
 

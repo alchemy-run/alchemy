@@ -8,6 +8,9 @@ import * as Schema from "effect/Schema";
 import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import { HASH_ROUTE } from "@/Git/Hasher/Protocol.ts";
@@ -106,41 +109,49 @@ const AuthLive = Layer.succeed(Auth, (httpEffect) =>
   }),
 );
 class AppApi extends Git.Api.middleware(Auth) {}
-const AppApiLive = Layer.mergeAll(
-  HttpApiBuilder.group(AppApi, "repos", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
-  ),
-  HttpApiBuilder.group(AppApi, "refs", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
-  ),
-  HttpApiBuilder.group(AppApi, "objects", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.objects)),
-  ),
-  HttpApiBuilder.group(AppApi, "pulls", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.pulls)),
-  ),
-  HttpApiBuilder.group(AppApi, "protocol", (h) =>
-    Effect.map(Git.Handlers, (git) => h.handleAll(git.protocol)),
-  ),
-  HttpApiBuilder.group(AppApi, "github", (h) =>
-    Effect.map(Git.Handlers, (git) =>
-      h.handleAll({
-        ...git.github,
-        user: () =>
-          Effect.succeed(
-            HttpServerResponse.jsonUnsafe({ login: "application" }),
-          ),
-      }),
-    ),
+const AppApiLive = HttpApiBuilder.group(AppApi, "github", (h) =>
+  Effect.map(Git.Handlers, (git) =>
+    h.handleAll({
+      ...git.github,
+      user: () =>
+        Effect.succeed(HttpServerResponse.jsonUnsafe({ login: "application" })),
+    }),
   ),
 );
-const OpenServer = Git.Server.layer(Git.Api, Git.ApiLive).pipe(
-  Layer.provide(FakeHandlers),
-);
+const OpenServer = Git.Server.layer(Git.Api).pipe(Layer.provide(FakeHandlers));
 const ProtectedServer = Git.Server.layer(AppApi, AppApiLive).pipe(
   Layer.provide(AuthLive),
   Layer.provide(FakeHandlers),
 );
+
+class AppRoutes extends HttpApiGroup.make("app").add(
+  HttpApiEndpoint.get("health", "/health", { success: Schema.String }),
+) {}
+class PrefixedApi extends HttpApi.make("custom-git")
+  .add(Git.Refs)
+  .prefix("/git")
+  .add(AppRoutes)
+  .middleware(Auth) {}
+const HealthLive = HttpApiBuilder.group(PrefixedApi, "app", (h) =>
+  h.handle("health", () => Effect.succeed("ok")),
+);
+const PrefixedLive = Git.Server.layer(PrefixedApi, HealthLive);
+const PrefixedServer = PrefixedLive.pipe(
+  Layer.provide(AuthLive),
+  Layer.provide(FakeHandlers),
+);
+
+// Check that automatic defaults preserve middleware and missing-group requirements.
+const checked: Layer.Layer<Git.Server, never, Git.Handlers | Auth> =
+  PrefixedLive;
+// @ts-expect-error Auth must still be provided.
+const missingAuth: Layer.Layer<Git.Server, never, Git.Handlers> = PrefixedLive;
+// @ts-expect-error Application endpoints still need a native group implementation.
+const missingApp: Layer.Layer<Git.Server, never, Git.Handlers | Auth> =
+  Git.Server.layer(PrefixedApi);
+void checked;
+void missingAuth;
+void missingApp;
 
 const request = (server: Git.ServerShape, path: string, init?: RequestInit) =>
   server.fetch.pipe(
@@ -240,5 +251,38 @@ describe("Git HTTP composition", () => {
         expect(internal.status).toBe(200);
         expect(yield* Effect.promise(() => internal.text())).toBe("hash input");
       }).pipe(Effect.provide(ProtectedServer), Effect.scoped),
+  );
+  it.effect(
+    "adds app endpoints beside prefixed Git defaults on a subset API",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* Git.Server;
+        const init = { headers: { authorization: "Bearer test" } };
+        const denied = yield* request(
+          server,
+          "/git/api/v1/repos/acme/repo/ref?name=refs/heads/main",
+        );
+        expect(denied.status).toBe(401);
+        const ref = yield* request(
+          server,
+          "/git/api/v1/repos/acme/repo/ref?name=refs/heads/main",
+          init,
+        );
+        expect(ref.status).toBe(200);
+        expect(yield* Effect.promise(() => ref.json())).toEqual({
+          name: "refs/heads/main",
+          oid,
+        });
+        expect(ref.headers.get("x-runtime-id")).toBe("request-runtime");
+        const health = yield* request(server, "/health", init);
+        expect(health.status).toBe(200);
+        expect(yield* Effect.promise(() => health.json())).toBe("ok");
+        const unprefixed = yield* request(
+          server,
+          "/api/v1/repos/acme/repo/ref?name=refs/heads/main",
+          init,
+        );
+        expect(unprefixed.status).toBe(404);
+      }).pipe(Effect.provide(PrefixedServer), Effect.scoped),
   );
 });

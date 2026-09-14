@@ -30,10 +30,11 @@ never stripped (see §3.2 enforcement). Remaining (Phase B):
 the remaining store extractions. HTTP planes are now exported as native API groups.
 
 **Current HTTP composition:** endpoints use Effect `HttpApiEndpoint`, and
-applications register groups with `HttpApiBuilder.group` / `handleAll`.
+`Server.layer(api)` registers Git’s groups automatically. Applications use
+`HttpApiBuilder.group` / `handleAll` for their own endpoints and overrides.
 `Git.HandlersLive` builds the shared `Git.Handlers` service;
-`Git.Server.layer(api, groups)` serves an application API and its group
-layers. `Git.ApiLive` implements the unmodified `Git.Api`, and
+`Git.Server.layer(api, groups?)` serves an application API, merging optional
+group layers over the defaults. `Git.ApiLive` implements the unmodified `Git.Api`, and
 `Git.ServerLive` combines it with `HandlersLive`. Authentication now lives
 in application HTTP middleware; the original phase notes below retain the
 history of the earlier auth proposal. See [DESIGN.md §8](./DESIGN.md#8-auth-model-nothing-inside-the-engine)

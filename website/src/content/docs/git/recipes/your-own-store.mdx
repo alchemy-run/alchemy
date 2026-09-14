@@ -3,9 +3,8 @@ title: Bring your own store
 description: Bytes have to live somewhere that is neither R2 nor S3. Implement the five operations of Git.BlobStore and provide it in place of the shipped Layers.
 ---
 
-The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
-layers, and its middleware.
+The examples use `Api` and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the application API and its middleware.
 
 Your packs have to live in a store the package does not ship for: a
 different object store, an on-premises S3 clone with its own signing,
@@ -13,7 +12,7 @@ a store behind a private gateway. `Git.BlobStore` is a contract of five
 operations, and a Layer that implements them drops into the graph:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),

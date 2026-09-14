@@ -3,15 +3,14 @@ title: Overview
 description: Requirements pick lines. One table from what you need to the line that changes, the stack shape for one cloud or two, and complete files to copy.
 ---
 
-The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
-layers, and its middleware.
+The examples use `Api` and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the application API and its middleware.
 
 Start from the graph the tutorial built and change the lines your
 requirements touch:
 
 ```typescript
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),

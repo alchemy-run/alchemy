@@ -3,9 +3,8 @@ title: Overview
 description: One layer graph, provided once, builds the Worker and every Durable Object behind it. Each line is a decision with implementations you choose or write.
 ---
 
-The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
-layers, and its middleware.
+The examples use `Api` and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the application API and its middleware.
 
 A git host is six decisions: what serves HTTP and who may call it,
 where refs and objects live, how names resolve, where bulk bytes go,
@@ -14,7 +13,7 @@ what verifies a push, and which refs may move. Each is a
 graph:
 
 ```typescript
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -65,7 +64,7 @@ Every block is a `Context.Service`. Swap the Layer and nothing else in
 the graph knows:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -80,7 +79,7 @@ Leave one out and the Worker does not compile. The graph still requires
 the service, and the compiler says which:
 
 ```typescript
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),

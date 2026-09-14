@@ -3,9 +3,8 @@ title: Bytes in S3, hashing on Lambda
 description: Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
 ---
 
-The examples use `Api`, `ApiLive`, and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the API, its `HttpApiBuilder.group`
-layers, and its middleware.
+The examples use `Api` and `AuthenticatedLive` from
+[Getting Started](/git/getting-started): the application API and its middleware.
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
@@ -22,7 +21,7 @@ import * as GitHasher from "alchemy/Git/Hasher";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
@@ -114,7 +113,7 @@ Lambda hashes every chunk at once. The loaded Workers hash four at a
 time:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api, ApiLive).pipe(
+const GitLive = Git.Server.layer(Api).pipe(
   Layer.provide(Git.HandlersLive),
   Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
