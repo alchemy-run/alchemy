@@ -43,14 +43,14 @@ test.provider("list enumerates the deployed Security Group", (stack) =>
   }).pipe(logLevel),
 );
 
-const securityGroupStack = (egress?: []) =>
+const securityGroupStack = (props: { egress?: [] }) =>
   Effect.gen(function* () {
     const vpc = yield* Vpc("EmptyEgressVpc", {
       cidrBlock: "10.0.0.0/16",
     });
     const sg = yield* SecurityGroup("EmptyEgressSg", {
       vpcId: vpc.vpcId,
-      ...(egress === undefined ? {} : { egress }),
+      ...props,
     });
     return { sg, vpc };
   });
@@ -70,24 +70,34 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const initial = yield* stack.deploy(securityGroupStack([]));
-      expect(yield* describeEgress(initial.sg.groupId)).toEqual([]);
+      // Creating with explicitly empty egress removes AWS's default allow-all rule.
+      const noOutbound = yield* stack.deploy(
+        securityGroupStack({ egress: [] }),
+      );
+      expect(yield* describeEgress(noOutbound.sg.groupId)).toEqual([]);
 
-      const unchanged = yield* stack.deploy(securityGroupStack([]));
-      expect(yield* describeEgress(unchanged.sg.groupId)).toEqual([]);
+      // Redeploying the same configuration must keep outbound access disabled.
+      const stillNoOutbound = yield* stack.deploy(
+        securityGroupStack({ egress: [] }),
+      );
+      expect(yield* describeEgress(stillNoOutbound.sg.groupId)).toEqual([]);
 
-      const defaulted = yield* stack.deploy(securityGroupStack());
-      const defaultEgress = yield* describeEgress(defaulted.sg.groupId);
+      // Omitting the egress property restores default allow-all IPv4 access.
+      const defaultOutbound = yield* stack.deploy(securityGroupStack({}));
+      const defaultEgress = yield* describeEgress(defaultOutbound.sg.groupId);
       expect(defaultEgress).toHaveLength(1);
       expect(defaultEgress[0]?.IpProtocol).toEqual("-1");
       expect(defaultEgress[0]?.CidrIpv4).toEqual("0.0.0.0/0");
 
-      const restored = yield* stack.deploy(securityGroupStack([]));
-      expect(yield* describeEgress(restored.sg.groupId)).toEqual([]);
+      // Switching back to explicitly empty egress removes allow-all again.
+      const outboundDisabledAgain = yield* stack.deploy(
+        securityGroupStack({ egress: [] }),
+      );
+      expect(yield* describeEgress(outboundDisabledAgain.sg.groupId)).toEqual([]);
 
       yield* stack.destroy();
-      yield* assertSecurityGroupGone(restored.sg.groupId);
-      yield* assertVpcGone(restored.vpc.vpcId);
+      yield* assertSecurityGroupGone(outboundDisabledAgain.sg.groupId);
+      yield* assertVpcGone(outboundDisabledAgain.vpc.vpcId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
