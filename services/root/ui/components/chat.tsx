@@ -95,6 +95,13 @@ import {
 } from "lucide-react";
 import { showTask, taskPath } from "@/lib/routes";
 import {
+  Avatar,
+  HUMAN,
+  KindBadge,
+  sessionAuthor,
+  type Author,
+} from "@/components/avatar";
+import {
   createContext,
   useCallback,
   useContext,
@@ -466,6 +473,18 @@ export const MarkdownText = ({
  *  result — mirrors DriverCore's STOPPED_TEXT (not imported: the
  *  server module must stay out of the browser bundle). */
 const STOPPED_TEXT = "stopped — the round ended before this call answered";
+
+/** The world's event feed speaks as its own member — inbound rows
+ *  wear it the way discord webhooks wear an app identity. */
+const WORLD: Author = { name: "github", kind: "world" };
+
+/** A message's first text part — what author detection reads. */
+const firstTextOf = (message: UIMessage): string | undefined => {
+  for (const part of message.parts) {
+    if (part.type === "text") return part.text;
+  }
+  return undefined;
+};
 
 /* ── long prose: clamp + read more ────────────────────────────────── */
 
@@ -1223,6 +1242,9 @@ const ChatTranscript = ({
     persist: true,
   });
 
+  // the author every assistant row of THIS session speaks as
+  const agentAuthor = sessionAuthor(id);
+
   // A selected chat is a chat you're about to TALK to — put the caret
   // in the prompt (first visit and every return).
   const promptRef = useRef<HTMLDivElement | null>(null);
@@ -1385,7 +1407,9 @@ const ChatTranscript = ({
     <>
       {/* initial="instant": open AT the end, no scroll animation */}
       <Conversation className="min-h-0 flex-1" initial="instant">
-        <ConversationContent className="mx-auto max-w-3xl">
+        {/* discord-shaped: LEFT-justified, full width — no centered
+            reading column */}
+        <ConversationContent className="max-w-none">
           {/* ONE menu for the transcript; the row under the pointer
               picks the ids (its own, or the selection it belongs to) */}
           <ContextMenu
@@ -1464,7 +1488,16 @@ const ChatTranscript = ({
                   const newDay =
                     day !== undefined &&
                     (messageIndex === 0 || day !== dayOf(previousAt));
-                  const bare = isBare(message);
+                  // WHO speaks (discord rows): assistant rows are the
+                  // session's agent; inbound events are the world's
+                  // feed; everything else typed is the human
+                  const author: Author =
+                    message.role === "assistant"
+                      ? agentAuthor
+                      : kind !== undefined ||
+                          firstTextOf(message)?.startsWith("[inbound") === true
+                        ? WORLD
+                        : HUMAN;
                   // "running…" forever is a lie: the only call that
                   // can truly be running rides the LAST message while
                   // the agent is working. A dangling open part in any
@@ -1479,13 +1512,27 @@ const ChatTranscript = ({
                     !burstLive &&
                     (state === "input-available" ||
                       state === "input-streaming");
-                  // consecutive timeline rows STACK like the channel's — the
-                  // conversation's message gap is for speech, not for a log
-                  const stacked =
-                    bare &&
+                  // discord GROUPING: consecutive rows by the same
+                  // author within a few minutes share one avatar +
+                  // header; the run reads as one turn of speech
+                  const previous = messages[messageIndex - 1];
+                  const previousAuthor =
+                    previous === undefined || deleted.has(previous.id)
+                      ? undefined
+                      : previous.role === "assistant"
+                        ? agentAuthor
+                        : (previous.metadata as { kind?: string } | undefined)
+                              ?.kind !== undefined ||
+                            firstTextOf(previous)?.startsWith("[inbound") ===
+                              true
+                          ? WORLD
+                          : HUMAN;
+                  const grouped =
                     !newDay &&
-                    messageIndex > 0 &&
-                    isBare(messages[messageIndex - 1]!);
+                    previousAuthor?.name === author.name &&
+                    meta?.at !== undefined &&
+                    previousAt !== undefined &&
+                    meta.at - previousAt < 7 * 60_000;
                   return (
                     <div key={message.id} className="contents">
                       {newDay && meta?.at !== undefined && (
@@ -1517,8 +1564,8 @@ const ChatTranscript = ({
                           setMenuIds(selection.target(message.id))
                         }
                         className={cn(
-                          "-mx-2 -my-1.5 flex items-start gap-2 rounded-md border-l-2 border-transparent px-1.5 py-1.5 transition-colors",
-                          stacked && "-mt-8",
+                          "group/row -mx-2 flex items-start gap-3 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
+                          !grouped && "mt-2.5",
                           // the row under the pointer lifts; a selected one stays lit
                           selection.has(message.id) ||
                             menuIds.includes(message.id)
@@ -1526,19 +1573,36 @@ const ChatTranscript = ({
                             : "hover:bg-accent/70",
                         )}
                       >
-                        {/* wall-clock gutter — the observation's `at` */}
-                        <div className="w-12 shrink-0 select-none pt-1 text-right font-mono text-[10px] leading-4 text-muted-foreground/60">
-                          {meta?.at !== undefined ? (
-                            <AtTooltip at={meta.at}>
-                              <span className="cursor-default hover:text-foreground">
-                                {formatAt(meta.at)}
+                        {/* the AVATAR column — a grouped row swaps it
+                            for the wall clock, visible on hover */}
+                        {grouped ? (
+                          <div className="w-9 shrink-0 select-none pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 opacity-0 group-hover/row:opacity-100">
+                            {meta?.at !== undefined
+                              ? formatAt(meta.at)
+                              : null}
+                          </div>
+                        ) : (
+                          <Avatar {...author} className="mt-0.5" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          {!grouped && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-[13px] font-semibold leading-5">
+                                {author.name}
                               </span>
-                            </AtTooltip>
-                          ) : null}
-                        </div>
+                              <KindBadge kind={author.kind} />
+                              {meta?.at !== undefined && (
+                                <AtTooltip at={meta.at}>
+                                  <span className="cursor-default font-mono text-[10px] text-muted-foreground/70 hover:text-foreground">
+                                    {formatAt(meta.at)}
+                                  </span>
+                                </AtTooltip>
+                              )}
+                            </div>
+                          )}
                         <Message
                           from={message.role}
-                          className={cn("min-w-0 flex-1", bare && "max-w-full")}
+                          className="ml-0 w-full max-w-full min-w-0"
                         >
                           <MessageContent
                             className={cn(
@@ -1546,8 +1610,9 @@ const ChatTranscript = ({
                               // height-squeezed `overflow-hidden` card
                               // collapses into an empty border pill
                               "*:shrink-0",
-                              bare &&
-                                "w-full max-w-full group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
+                              // discord rows are FLAT and LEFT — no
+                              // right-aligned bubble for the human
+                              "w-full max-w-full group-[.is-user]:ml-0 group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
                             )}
                           >
                             {foldToolRuns(message.parts, (part, index) =>
@@ -1674,6 +1739,7 @@ const ChatTranscript = ({
                             )}
                           </MessageContent>
                         </Message>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1722,14 +1788,16 @@ const ChatTranscript = ({
         <ConversationScrollButton />
       </Conversation>
       {!readOnly && (
-        <div ref={promptRef} className="mx-auto w-full max-w-3xl p-4">
+        <div ref={promptRef} className="w-full px-4 pb-4 pt-2">
           <PromptInput onSubmit={onSubmit}>
             <PromptInputBody>
               {composerExtra}
               {/* ONE line tall by default (field-sizing grows it as
-                  you type) — the composer is a bar, not a canvas */}
+                  you type) — the composer is a bar, not a canvas.
+                  basis-0: field-sizing must never set the WIDTH, or
+                  a narrow pane collapses the textarea to a sliver */}
               <PromptInputTextarea
-                className="min-h-0 py-2.5"
+                className="min-h-0 min-w-0 basis-0 py-2.5"
                 placeholder={placeholder ?? "Say something…"}
               />
             </PromptInputBody>
@@ -1744,12 +1812,15 @@ const ChatTranscript = ({
               className="gap-0.5 self-end py-1.5"
             >
               {/* ghost, not a chip — the pick should not shout next
-                  to what you're typing (the header keeps the chip) */}
+                  to what you're typing (the header keeps the chip);
+                  the label truncates so a narrow pane keeps room to
+                  type */}
               <SessionModelSelect
                 sessionId={id}
                 label="The agent's model"
                 size="sm"
                 variant="ghost"
+                className="max-w-36 min-w-0 [&_span]:truncate"
               />
               {/* while the agent works the button is STOP: abort the
                   round on the server (the session lives on); the turn's

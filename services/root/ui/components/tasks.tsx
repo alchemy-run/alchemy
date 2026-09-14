@@ -11,6 +11,7 @@
  *   tweet-permalink move): the post, then the work below it; a
  *   breadcrumb walks up to the channel.
  */
+import { Avatar, KindBadge } from "@/components/avatar";
 import { ChatView, MarkdownText } from "@/components/chat";
 import { showOverlay, showTask } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,6 @@ import {
   CircleDot,
   GitPullRequestArrow,
   Hash,
-  MessageSquare,
   Search,
   SquareTerminal,
   UserRound,
@@ -76,7 +76,7 @@ const ago = (at: number): string => {
   return `${Math.round(s / 86_400)}d`;
 };
 
-const useTasks = () => {
+export const useTasks = () => {
   const [tasks, setTasks] = useState<ReadonlyArray<Task>>([]);
   const load = useCallback(() => {
     fetch("/api/tasks")
@@ -315,13 +315,14 @@ export const TaskThread = ({
           {/* the ROOT POST — an authored message, not a rendered
               ledger row: the manager's words first, the item refs as
               attached pills, the bookkeeping as quiet chips */}
-          <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pt-3">
+          <div className="w-full max-w-3xl shrink-0 px-4 pt-3">
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 px-4 py-3">
               <div className="flex items-center gap-2">
-                <MessageSquare className="size-3.5 text-muted-foreground" />
-                <span className="text-[12px] font-medium">
+                <Avatar name="engineering-manager" kind="agent" size={28} />
+                <span className="text-[13px] font-semibold">
                   engineering-manager
                 </span>
+                <KindBadge kind="agent" />
                 <span className="font-mono text-[10px] text-muted-foreground/70">
                   {ago(task.createdAt)} ago
                 </span>

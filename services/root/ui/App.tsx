@@ -17,6 +17,7 @@
 import { ChatView } from "@/components/chat";
 import { CallThread } from "@/components/call";
 import { SessionModelSelect } from "@/components/model-select";
+import { MembersPanel } from "@/components/members";
 import { ChannelThreads, TaskThread } from "@/components/tasks";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
@@ -29,7 +30,16 @@ import {
 } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Hash, Moon, Pause, Play, Search, Sun, X } from "lucide-react";
+import {
+  Hash,
+  Moon,
+  Pause,
+  Play,
+  Search,
+  Sun,
+  Users,
+  X,
+} from "lucide-react";
 import {
   useEffect,
   useState,
@@ -162,6 +172,10 @@ export const App = () => {
   );
   /** The transcript search, per channel — cleared on channel switch. */
   const [search, setSearch] = useState("");
+  /** The members panel — who's in the channel; remembered. */
+  const [members, setMembers] = useState(
+    () => window.localStorage.getItem("root:members") !== "0",
+  );
   /** The rail's width — draggable, remembered. */
   const [railWidth, setRailWidth] = useState(() => {
     const stored = Number(window.localStorage.getItem("root:rail-width"));
@@ -339,6 +353,25 @@ export const App = () => {
                 size="sm"
                 className="max-md:hidden"
               />
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !members;
+                  setMembers(next);
+                  window.localStorage.setItem(
+                    "root:members",
+                    next ? "1" : "0",
+                  );
+                }}
+                aria-label="toggle the member list"
+                aria-pressed={members}
+                className={cn(
+                  "flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent",
+                  members ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                <Users className="size-3.5" />
+              </button>
             </div>
           </header>
           <ChatView
@@ -350,6 +383,9 @@ export const App = () => {
           />
         </section>
         )}
+
+        {/* WHO is here — humans and agents, discord's member list */}
+        {members && <MembersPanel channel={channel.name} />}
       </div>
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>
