@@ -24,6 +24,7 @@ const TABLES = [
   `CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    post TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'todo',
     assignee TEXT,
     workspace TEXT,
@@ -42,6 +43,7 @@ const TABLES = [
 interface TaskRow extends Record<string, Cloudflare.SqlStorageValue> {
   id: string;
   title: string;
+  post: string;
   status: string;
   assignee: string | null;
   workspace: string | null;
@@ -57,6 +59,7 @@ interface EngineeringRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly taskUpsert: (input: {
     readonly id?: string;
     readonly title?: string;
+    readonly post?: string;
     readonly status?: TaskStatus;
     readonly assignee?: string | null;
     readonly workspace?: string | null;
@@ -97,6 +100,7 @@ const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
       return {
         id: row.id,
         title: row.title,
+        post: row.post,
         status: row.status as TaskStatus,
         ...(row.assignee === null ? {} : { assignee: row.assignee }),
         ...(row.workspace === null ? {} : { workspace: row.workspace }),
@@ -146,12 +150,13 @@ const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
             `t-${at.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
           if (existing === undefined) {
             yield* sql.exec(
-              `INSERT INTO tasks (id, title, status, assignee, workspace, notes, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO tasks (id, title, post, status, assignee, workspace, notes, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 .trim()
                 .replaceAll(/\s+/g, " "),
               id,
               input.title ?? "(untitled)",
+              input.post ?? "",
               input.status ?? "todo",
               input.assignee ?? null,
               input.workspace ?? null,
@@ -165,11 +170,12 @@ const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
                 ? existing.notes
                 : [...existing.notes, input.note];
             yield* sql.exec(
-              `UPDATE tasks SET title = ?, status = ?, assignee = ?, workspace = ?, notes = ?, updated_at = ?
+              `UPDATE tasks SET title = ?, post = ?, status = ?, assignee = ?, workspace = ?, notes = ?, updated_at = ?
                WHERE id = ?`
                 .trim()
                 .replaceAll(/\s+/g, " "),
               input.title ?? existing.title,
+              input.post ?? existing.post,
               input.status ?? existing.status,
               input.assignee === undefined
                 ? (existing.assignee ?? null)

@@ -11,13 +11,16 @@
  *   tweet-permalink move): the post, then the work below it; a
  *   breadcrumb walks up to the channel.
  */
-import { ChatView } from "@/components/chat";
+import { ChatView, MarkdownText } from "@/components/chat";
 import { showOverlay, showTask } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
   ChevronRight,
+  CircleDot,
+  GitPullRequestArrow,
   Hash,
+  MessageSquare,
   Search,
   SquareTerminal,
   UserRound,
@@ -35,6 +38,8 @@ type TaskStatus = "todo" | "working" | "review" | "done";
 interface Task {
   readonly id: string;
   readonly title: string;
+  /** The root POST the manager authored when filing (markdown). */
+  readonly post: string;
   readonly items: ReadonlyArray<TaskItem>;
   readonly status: TaskStatus;
   readonly assignee?: string;
@@ -307,10 +312,33 @@ export const TaskThread = ({
       )}
       {task != null && (
         <>
-          {/* the POST: what this thread is about */}
+          {/* the ROOT POST — an authored message, not a rendered
+              ledger row: the manager's words first, the item refs as
+              attached pills, the bookkeeping as quiet chips */}
           <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pt-3">
-            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/20 px-4 py-3">
-              <div className="text-sm font-medium">{task.title}</div>
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="size-3.5 text-muted-foreground" />
+                <span className="text-[12px] font-medium">
+                  engineering-manager
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground/70">
+                  {ago(task.createdAt)} ago
+                </span>
+                <span className="ml-auto font-mono text-[10px] text-muted-foreground/70">
+                  updated {ago(task.updatedAt)} ago
+                </span>
+              </div>
+              {task.post.trim().length > 0 ? (
+                <div className="text-sm">
+                  <MarkdownText text={task.post} />
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  {task.title}
+                </div>
+              )}
+              {/* ATTACHMENTS: the items ride the post as pills */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {task.items.map((item) => (
                   <a
@@ -318,8 +346,13 @@ export const TaskThread = ({
                     href={refUrl(item.ref)}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+                    className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
+                    {item.kind === "pull" ? (
+                      <GitPullRequestArrow className="size-3 text-moss" />
+                    ) : (
+                      <CircleDot className="size-3 text-moss" />
+                    )}
                     {item.ref}
                   </a>
                 ))}
@@ -329,9 +362,6 @@ export const TaskThread = ({
                 {task.workspace !== undefined && (
                   <WorkspaceChip name={task.workspace} />
                 )}
-                <span className="ml-auto font-mono text-[10px] text-muted-foreground/70">
-                  updated {ago(task.updatedAt)} ago
-                </span>
               </div>
               {task.notes.length > 0 && (
                 <div className="flex flex-col gap-0.5 border-l-2 border-border/60 pl-2">

@@ -26,6 +26,9 @@ export interface TaskItem {
 export interface Task {
   readonly id: string;
   readonly title: string;
+  /** The ROOT POST — the filing message the manager authored (markdown).
+   *  The thread renders it first; the items attach as pills. */
+  readonly post: string;
   readonly items: ReadonlyArray<TaskItem>;
   readonly status: TaskStatus;
   /** The engineer working it — a lineage name (`e-4f2a`). */
@@ -43,6 +46,7 @@ export class Tasks extends Context.Service<
     readonly upsert: (input: {
       readonly id?: string;
       readonly title?: string;
+      readonly post?: string;
       readonly status?: TaskStatus;
       readonly assignee?: string | null;
       readonly workspace?: string | null;

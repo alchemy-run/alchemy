@@ -1,5 +1,6 @@
 import * as AI from "alchemy/AI";
 import * as PersistentRef from "alchemy/PersistentRef";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { Ask, Tell } from "../chat/Ask.ts";
@@ -60,6 +61,23 @@ const taskId = AI.Thing("task", S.optionalKey(S.String))`
 
 const title = AI.Thing("title", S.optionalKey(S.String))`
   The task's one-line title.`;
+
+const post = AI.Thing("post", S.optionalKey(S.String))`
+  The thread's ROOT POST — your words, markdown. Filing IS posting:
+  say what this is, why it matters, and what happens next, the way
+  you'd post to the team. The item refs attach as pills — never paste
+  raw URLs into the post. REQUIRED when creating.`;
+
+/** Filing without a post is refused — a thread starts with words. */
+export class PostRequired extends Data.TaggedError("PostRequired") {
+  override get message(): string {
+    return (
+      "REFUSED: a new task is a POST — write `post` (markdown, your " +
+      "words: what this is, why it matters, what happens next) and " +
+      "file again. Item refs attach as pills; don't paste raw URLs."
+    );
+  }
+}
 
 const status = AI.Thing(
   "status",
@@ -143,9 +161,11 @@ export const EngineeringManagerLive = EngineeringManager.make(
     const chosen = PersistentRef.of<string | null>("model", () => null);
 
     const taskUpsert = yield* AI.Tool("task_upsert")`
-      Create or update a task — the unit of work. A task holds 1..*
-      items (an issue, a PR, both — a late PR JOINS the issue's task,
-      never forks a duplicate: check task_covering first). Move status
+      Create or update a task — the unit of work, and a THREAD in the
+      channel. Filing is POSTING: a new task REQUIRES ${post} (refused
+      with ${PostRequired} otherwise). A task holds 1..* items (an
+      issue, a PR, both — a late PR JOINS the issue's task, never
+      forks a duplicate: check task_covering first). Move status
       todo → working → review → done as the work moves; record the
       assignee ("e-…") and the workspace when work starts; append a
       note for anything the ledger should remember: ${AI.in(
@@ -161,6 +181,7 @@ export const EngineeringManagerLive = EngineeringManager.make(
       Effect.fn(function* (p: {
         task?: string;
         title?: string;
+        post?: string;
         status?: TaskStatus;
         assignee?: string;
         workspace?: string;
@@ -168,9 +189,17 @@ export const EngineeringManagerLive = EngineeringManager.make(
         removeItems?: ReadonlyArray<string>;
         note?: string;
       }) {
+        // the FORCING: a thread starts with words, not bookkeeping
+        if (
+          p.task === undefined &&
+          (p.post === undefined || p.post.trim().length === 0)
+        ) {
+          return yield* new PostRequired();
+        }
         const next = yield* tasks.upsert({
           ...(p.task !== undefined ? { id: p.task } : {}),
           ...(p.title !== undefined ? { title: p.title } : {}),
+          ...(p.post !== undefined ? { post: p.post } : {}),
           ...(p.status !== undefined ? { status: p.status } : {}),
           ...(p.assignee !== undefined ? { assignee: p.assignee } : {}),
           ...(p.workspace !== undefined ? { workspace: p.workspace } : {}),
@@ -264,8 +293,12 @@ export const EngineeringManagerLive = EngineeringManager.make(
         carry several. FILE each one before anything else:
         ${taskCovering} first (a PR for an issue you track JOINS that
         task, never a duplicate), then ${taskUpsert} (a task holds
-        1..* items and persists as items join and leave). Reply with
-        one line per item filed.
+        1..* items and persists as items join and leave). FILING IS
+        POSTING: a task is a THREAD in your channel and its post is
+        the root everyone reads — write it in your own words (what
+        this is, why it matters, what happens next; markdown). The
+        item refs attach to the post as pills — never paste raw URLs.
+        Reply with one line per item filed.
 
         Your second responsibility is MOVING the ledger (${taskList}):
         todo → working — ${workspace} one workspace per task (a pull
