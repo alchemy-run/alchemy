@@ -11,6 +11,8 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import { flushSync } from "react-dom";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import {
   Message,
   MessageContent,
@@ -411,6 +413,89 @@ export const MarkdownText = ({
   </MessageResponse>
 );
 
+/* ── long prose: clamp + read more ────────────────────────────────── */
+
+/** Collapsed height for long messages — roughly a dozen lines. */
+const PROSE_CLAMP = 300;
+
+/**
+ * Long prose collapses to a window with a "read more" toggle; an
+ * expanded message can be collapsed again. Short messages render
+ * untouched — the toggle only appears when the content overflows.
+ */
+const CollapsibleProse = ({ children }: { children: ReactNode }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const { scrollRef, stopScroll } = useStickToBottomContext();
+
+  // scrollHeight reports the full content height even while clipped,
+  // and the observer keeps the verdict fresh as streaming appends.
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const check = () => setOverflows(el.scrollHeight > PROSE_CLAMP + 60);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // The toggle must not move the reader: stick-to-bottom would treat
+  // the growth as new content and animate to the bottom of the
+  // expansion. Escape the bottom lock (what a user's scroll-up does —
+  // the resize re-stick and any in-flight animation both bail), then
+  // hold an anchor still across the reflow: expanding pins the
+  // content's TOP (the reader's place — the rest unfolds below);
+  // collapsing pins the BUTTON (it stays under the cursor).
+  const toggle = () => {
+    const scroller = scrollRef.current;
+    const expanding = !expanded;
+    const anchor = expanding ? ref.current : buttonRef.current;
+    const before = anchor?.getBoundingClientRect().top;
+    stopScroll();
+    flushSync(() => setExpanded(expanding));
+    const after = anchor?.getBoundingClientRect().top;
+    if (scroller != null && before !== undefined && after !== undefined) {
+      scroller.scrollTop += after - before;
+    }
+  };
+
+  return (
+    <div className="min-w-0">
+      <div
+        ref={ref}
+        style={expanded ? undefined : { maxHeight: PROSE_CLAMP }}
+        className={cn(
+          "relative min-w-0 overflow-hidden",
+          !expanded &&
+            overflows &&
+            "[mask-image:linear-gradient(to_bottom,black_calc(100%-56px),transparent)]",
+        )}
+      >
+        {children}
+      </div>
+      {overflows && (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            toggle();
+          }}
+          className="mt-1 flex cursor-pointer items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <ChevronDown
+            className={cn("size-3 transition-transform", expanded && "rotate-180")}
+          />
+          {expanded ? "collapse" : "read more"}
+        </button>
+      )}
+    </div>
+  );
+};
+
 /* ── transcript parts ─────────────────────────────────────────────── */
 
 /**
@@ -470,7 +555,11 @@ const TextPart = ({
   }
   const world = parseWorldEvent(text);
   if (world === undefined) {
-    return <MarkdownText text={text} repo={repo} />;
+    return (
+      <CollapsibleProse>
+        <MarkdownText text={text} repo={repo} />
+      </CollapsibleProse>
+    );
   }
   const { event, raw } = world;
   return <EventCard event={event} raw={raw} />;
