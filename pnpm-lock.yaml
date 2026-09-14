@@ -4483,6 +4483,9 @@ importers:
       '@effect/language-service':
         specifier: 'catalog:'
         version: 0.87.2
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)
