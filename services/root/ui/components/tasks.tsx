@@ -1,18 +1,28 @@
 /**
- * The TASK LEDGER, inside the channel + thread experience — there is
- * deliberately NO separate board:
+ * The TASK LEDGER, as POSTS in a tree — everything is messaging:
+ * a channel is a feed, a task is a thread (post) in it, an ask is a
+ * reply that spawns a sub-thread, and every node deep-links like a
+ * tweet permalink. There is deliberately NO separate board:
  *
  * - {@link ChannelThreads} — the channel's threads as rail items
- *   nested under the channel entry (hot set first, backlog folded).
- * - {@link TaskPanel} — a task's THREAD, the right-side panel beside
- *   the center view (a Slack thread panel, not a modal): the ledger
- *   row whole — items, assignee, workspace, notes — and, when an
- *   engineer is on it, the engineer's live session: the work itself.
+ *   nested under the channel entry: the whole list, scrollable,
+ *   narrowed by a text filter.
+ * - {@link TaskThread} — a thread FOCUSED in the center (the
+ *   tweet-permalink move): the post, then the work below it; a
+ *   breadcrumb walks up to the channel.
  */
 import { ChatView } from "@/components/chat";
 import { showOverlay, showTask } from "@/lib/routes";
 import { cn } from "@/lib/utils";
-import { SquareTerminal, UserRound, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Hash,
+  Search,
+  SquareTerminal,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 interface TaskItem {
@@ -112,30 +122,70 @@ const WorkspaceChip = ({ name }: { name: string }) => (
 
 /* ── the rail — threads "under" their channel ─────────────────────── */
 
-/** How many threads the rail shows before folding into "+N more". */
-const RAIL_FOLD = 12;
+/** Everything a thread is findable by — one lowercase haystack. */
+const haystack = (task: Task): string =>
+  [
+    task.id,
+    task.title,
+    task.status,
+    task.assignee ?? "",
+    task.workspace ?? "",
+    ...task.items.map((item) => item.ref),
+  ]
+    .join("\n")
+    .toLowerCase();
 
 /**
- * The channel's THREADS, as rail items nested under the channel entry
- * (Slack's thread list, Discord's active threads): the hot set first
- * (working, review), then the freshest of the backlog, folded behind
- * "+N more". Clicking one opens its thread panel beside the channel.
+ * The channel's THREADS, as rail items nested under the channel
+ * entry: the hot set first (working, review), then the backlog — the
+ * WHOLE list, scrollable, narrowed by the text filter above it (no
+ * fold, no "+N more"). Clicking one focuses the thread in the center.
  */
 export const ChannelThreads = ({ selected }: { selected?: string }) => {
   const tasks = useTasks();
-  const [unfolded, setUnfolded] = useState(false);
+  const [query, setQuery] = useState("");
 
-  const sorted = [...tasks].sort(
-    (a, b) =>
-      STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
-      b.updatedAt - a.updatedAt,
-  );
-  const shown = unfolded ? sorted : sorted.slice(0, RAIL_FOLD);
-  const folded = sorted.length - shown.length;
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = tasks
+    .filter(
+      (task) =>
+        words.length === 0 ||
+        words.every((word) => haystack(task).includes(word)),
+    )
+    .sort(
+      (a, b) =>
+        STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
+        b.updatedAt - a.updatedAt,
+    );
 
   if (tasks.length === 0) return null;
   return (
-    <div className="ml-4 flex flex-col gap-px border-l border-border/60 pl-1.5">
+    <div className="ml-4 flex min-h-0 flex-col gap-px border-l border-border/60 pl-1.5">
+      <div className="mb-0.5 flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 focus-within:border-border">
+        <Search className="size-2.5 shrink-0 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="filter threads…"
+          aria-label="filter threads"
+          className="w-full min-w-0 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/60"
+        />
+        {query.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="clear the thread filter"
+            className="flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-2.5" />
+          </button>
+        )}
+      </div>
+      {shown.length === 0 && (
+        <div className="px-1.5 py-0.5 text-[11px] text-muted-foreground/60">
+          nothing matches
+        </div>
+      )}
       {shown.map((task) => (
         <button
           key={task.id}
@@ -144,7 +194,7 @@ export const ChannelThreads = ({ selected }: { selected?: string }) => {
           onClick={() => showTask(task.id)}
           title={`${task.id} · ${task.status} — ${task.title}`}
           className={cn(
-            "flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-[12px]",
+            "flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-[12px]",
             task.id === selected
               ? "bg-accent text-foreground"
               : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -159,22 +209,30 @@ export const ChannelThreads = ({ selected }: { selected?: string }) => {
           <span className="min-w-0 flex-1 truncate">{task.title}</span>
         </button>
       ))}
-      {(folded > 0 || unfolded) && (
-        <button
-          type="button"
-          onClick={() => setUnfolded(!unfolded)}
-          className="cursor-pointer rounded px-1.5 py-0.5 text-left text-[11px] text-muted-foreground/70 hover:bg-accent/60 hover:text-foreground"
-        >
-          {unfolded ? "show less" : `+${folded} more`}
-        </button>
-      )}
     </div>
   );
 };
 
-/* ── the panel — a task's THREAD, beside the center view ──────────── */
+/* ── the thread — a task, FOCUSED in the center ───────────────────── */
 
-export const TaskPanel = ({ id }: { id: string }) => {
+/**
+ * A task's THREAD as the center focus — the tweet-permalink move:
+ * clicking a thread anywhere (rail, chip, reply pill) swaps the
+ * channel feed for the thread itself. The breadcrumb walks UP the
+ * tree (thread → its channel); the work below walks down — the
+ * assigned engineer's session, whose asks open sub-threads.
+ */
+export const TaskThread = ({
+  id,
+  channel,
+  onUp,
+}: {
+  id: string;
+  /** The channel this thread lives in — the breadcrumb's parent. */
+  channel: string;
+  /** Walk up: focus the channel feed again. */
+  onUp: () => void;
+}) => {
   const [task, setTask] = useState<Task | undefined | null>(undefined);
 
   useEffect(() => {
@@ -201,44 +259,41 @@ export const TaskPanel = ({ id }: { id: string }) => {
   }, [id]);
 
   return (
-    <aside
-      aria-label={`task ${id}`}
-      className={cn(
-        "flex w-[26rem] shrink-0 flex-col border-l border-border bg-background",
-        // narrow viewports: the panel OVERLAYS the center from the
-        // right (Slack's phone behavior) instead of crushing it
-        "max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:max-w-[85vw] max-lg:shadow-2xl",
-      )}
+    <section
+      aria-label={`thread ${id}`}
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-2">
-          {task != null && (
-            <span
-              className={cn(
-                "size-2 shrink-0 rounded-full",
-                STATUS_DOT[task.status],
-              )}
-              title={task.status}
-            />
-          )}
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {id}
-          </span>
-          {task != null && (
-            <span className="text-[11px] text-muted-foreground">
-              {task.status}
-            </span>
-          )}
-        </div>
+      {/* walk UP the tree: thread → channel */}
+      <header className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-1.5">
         <button
           type="button"
-          onClick={() => showTask(undefined)}
-          aria-label="close the task panel"
-          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-accent"
+          onClick={onUp}
+          aria-label={`back to the ${channel} channel`}
+          className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <X className="size-3.5" />
+          <ChevronLeft className="size-3.5" />
+          <Hash className="size-3.5" />
+          {channel}
         </button>
-      </div>
+        <ChevronRight className="size-3 text-muted-foreground/50" />
+        {task != null && (
+          <span
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              STATUS_DOT[task.status],
+            )}
+            title={task.status}
+          />
+        )}
+        <span className="truncate font-mono text-xs text-muted-foreground">
+          {id}
+        </span>
+        {task != null && (
+          <span className="text-[11px] text-muted-foreground">
+            {task.status}
+          </span>
+        )}
+      </header>
 
       {task === undefined && (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -247,49 +302,54 @@ export const TaskPanel = ({ id }: { id: string }) => {
       )}
       {task === null && (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          no such task
+          no such thread
         </div>
       )}
       {task != null && (
         <>
-          <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-3 py-2">
-            <div className="text-[13px] font-medium">{task.title}</div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {task.items.map((item) => (
-                <a
-                  key={item.ref}
-                  href={refUrl(item.ref)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-                >
-                  {item.ref}
-                </a>
-              ))}
-              {task.assignee !== undefined && (
-                <AssigneeChip name={task.assignee} />
-              )}
-              {task.workspace !== undefined && (
-                <WorkspaceChip name={task.workspace} />
-              )}
-              <span className="ml-auto font-mono text-[10px] text-muted-foreground/70">
-                updated {ago(task.updatedAt)} ago
-              </span>
-            </div>
-            {task.notes.length > 0 && (
-              <div className="flex flex-col gap-0.5 border-l-2 border-border/60 pl-2">
-                {task.notes.map((note, index) => (
-                  <div
-                    key={index}
-                    className="text-[11px] text-muted-foreground"
+          {/* the POST: what this thread is about */}
+          <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pt-3">
+            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/20 px-4 py-3">
+              <div className="text-sm font-medium">{task.title}</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {task.items.map((item) => (
+                  <a
+                    key={item.ref}
+                    href={refUrl(item.ref)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
                   >
-                    {note}
-                  </div>
+                    {item.ref}
+                  </a>
                 ))}
+                {task.assignee !== undefined && (
+                  <AssigneeChip name={task.assignee} />
+                )}
+                {task.workspace !== undefined && (
+                  <WorkspaceChip name={task.workspace} />
+                )}
+                <span className="ml-auto font-mono text-[10px] text-muted-foreground/70">
+                  updated {ago(task.updatedAt)} ago
+                </span>
               </div>
-            )}
+              {task.notes.length > 0 && (
+                <div className="flex flex-col gap-0.5 border-l-2 border-border/60 pl-2">
+                  {task.notes.map((note, index) => (
+                    <div
+                      key={index}
+                      className="text-[11px] text-muted-foreground"
+                    >
+                      {note}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* the THREAD below the post: the work itself — the
+              engineer's session (its asks open sub-threads) */}
           {task.assignee !== undefined ? (
             <ChatView
               key={task.assignee}
@@ -299,12 +359,12 @@ export const TaskPanel = ({ id }: { id: string }) => {
             />
           ) : (
             <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
-              unassigned — no thread yet; when the channel spawns an
+              unassigned — no replies yet; when the channel spawns an
               engineer on it, the work streams here
             </div>
           )}
         </>
       )}
-    </aside>
+    </section>
   );
 };

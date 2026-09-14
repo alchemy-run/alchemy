@@ -17,19 +17,25 @@
 import { ChatView } from "@/components/chat";
 import { CallThread } from "@/components/call";
 import { SessionModelSelect } from "@/components/model-select";
-import { ChannelThreads, TaskPanel } from "@/components/tasks";
+import { ChannelThreads, TaskThread } from "@/components/tasks";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
   OVERLAY_EVENT,
   overlayFromLocation,
   showOverlay,
+  showTask,
   taskFromLocation,
   type Overlay,
 } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Hash, Moon, Pause, Play, Search, Sun, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 interface Channel {
   readonly name: string;
@@ -144,6 +150,9 @@ const StopResume = ({ chat }: { chat: string }) => {
   );
 };
 
+const RAIL_MIN = 160;
+const RAIL_MAX = 480;
+
 export const App = () => {
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
@@ -153,6 +162,11 @@ export const App = () => {
   );
   /** The transcript search, per channel — cleared on channel switch. */
   const [search, setSearch] = useState("");
+  /** The rail's width — draggable, remembered. */
+  const [railWidth, setRailWidth] = useState(() => {
+    const stored = Number(window.localStorage.getItem("root:rail-width"));
+    return Number.isFinite(stored) && stored >= RAIL_MIN ? stored : 208;
+  });
   const [channels, setChannels] = useState<ReadonlyArray<Channel>>(FALLBACK);
   const [selected, setSelected] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -196,13 +210,38 @@ export const App = () => {
   const channel =
     channels.find((entry) => entry.name === selected) ?? channels[0]!;
 
+  useEffect(() => {
+    window.localStorage.setItem("root:rail-width", String(railWidth));
+  }, [railWidth]);
+
+  /** Drag the rail's right edge to resize it. */
+  const startRailDrag = (down: ReactPointerEvent) => {
+    down.preventDefault();
+    const startX = down.clientX;
+    const startWidth = railWidth;
+    const move = (event: PointerEvent) =>
+      setRailWidth(
+        Math.min(
+          RAIL_MAX,
+          Math.max(RAIL_MIN, startWidth + event.clientX - startX),
+        ),
+      );
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
     <div className="relative flex h-dvh flex-col bg-background text-foreground">
       <div className="relative flex min-h-0 flex-1">
         {/* the rail: one channel per group — the org chart, as rooms */}
         <nav
           aria-label="Channels"
-          className="flex w-[200px] shrink-0 flex-col border-r border-border bg-muted/20"
+          style={{ width: railWidth }}
+          className="relative flex shrink-0 flex-col border-r border-border bg-muted/20"
         >
           <div className="flex items-center justify-between px-3 py-2">
             <span className="text-sm font-semibold tracking-tight">root</span>
@@ -240,9 +279,27 @@ export const App = () => {
               </div>
             ))}
           </div>
+          {/* the resize handle — drag the rail's edge */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="resize the sidebar"
+            onPointerDown={startRailDrag}
+            className="absolute inset-y-0 -right-0.5 z-10 w-1.5 cursor-col-resize hover:bg-border active:bg-border"
+          />
         </nav>
 
-        {/* the channel */}
+        {/* the center: the focused THREAD (the tweet-permalink move —
+            a thread opens as the main view, not a side panel), or the
+            channel feed */}
+        {task !== undefined ? (
+          <TaskThread
+            key={task}
+            id={task}
+            channel={channel.name}
+            onUp={() => showTask(undefined)}
+          />
+        ) : (
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
             <div className="flex min-w-0 shrink-0 items-center gap-1.5">
@@ -292,9 +349,7 @@ export const App = () => {
             filter={search}
           />
         </section>
-
-        {/* a task's THREAD — the Slack thread panel, beside the center */}
-        {task !== undefined && <TaskPanel key={task} id={task} />}
+        )}
       </div>
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>
