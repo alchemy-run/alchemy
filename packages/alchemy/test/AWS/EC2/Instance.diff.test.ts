@@ -14,7 +14,23 @@ const props = (overrides: Partial<InstanceProps> = {}): InstanceProps => ({
   ...overrides,
 });
 
-const diff = (olds: InstanceProps, news: InstanceProps) =>
+const output = (privateIpAddress?: string): Instance["Attributes"] => ({
+  instanceId: "i-0123456789abcdef0",
+  instanceArn:
+    "arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0",
+  imageId: "ami-0123456789abcdef0",
+  instanceType: "t3.micro",
+  state: "running",
+  securityGroupIds: [],
+  privateIpAddress,
+  tags: {},
+});
+
+const diff = (
+  olds: InstanceProps,
+  news: InstanceProps,
+  current: Instance["Attributes"] | undefined = undefined,
+) =>
   Effect.gen(function* () {
     const provider = yield* Provider.findProvider(Instance);
     return yield* provider.diff!({
@@ -25,7 +41,7 @@ const diff = (olds: InstanceProps, news: InstanceProps) =>
       news,
       oldBindings: [],
       newBindings: [],
-      output: undefined,
+      output: current,
     });
   });
 
@@ -42,7 +58,24 @@ test.provider(
         userData: "generation-two",
       });
 
-      expect(yield* diff(olds, news)).toEqual({
+      expect(yield* diff(olds, news, output("10.0.1.10"))).toEqual({
+        action: "replace",
+        deleteFirst: true,
+      });
+    }),
+);
+
+test.provider(
+  "uses the current instance address when old inputs predate fixed IP intent",
+  () =>
+    Effect.gen(function* () {
+      const olds = props({ userData: "generation-one" });
+      const news = props({
+        privateIpAddress: "10.0.1.10",
+        userData: "generation-two",
+      });
+
+      expect(yield* diff(olds, news, output("10.0.1.10"))).toEqual({
         action: "replace",
         deleteFirst: true,
       });

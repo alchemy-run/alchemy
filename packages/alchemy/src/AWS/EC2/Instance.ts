@@ -692,7 +692,8 @@ export const InstanceProvider = () =>
             // Preserve create-first behavior when no fixed IP is requested,
             // or when the replacement moves to a different address.
             return news.privateIpAddress !== undefined &&
-              olds.privateIpAddress === news.privateIpAddress
+              (output?.privateIpAddress ?? olds.privateIpAddress) ===
+                news.privateIpAddress
               ? ({ action: "replace", deleteFirst: true } as const)
               : ({ action: "replace" } as const);
           }
