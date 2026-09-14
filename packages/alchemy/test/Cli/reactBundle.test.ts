@@ -8,16 +8,13 @@ type PackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-const packageJsonPath = fileURLToPath(
-  new URL("../../package.json", import.meta.url),
-);
+const packageDir = fileURLToPath(new URL("../..", import.meta.url));
+const manifest = JSON.parse(
+  readFileSync(`${packageDir}/package.json`, "utf8"),
+) as PackageManifest;
 
-it("shares React with Sigil and consumer applications", () => {
-  const manifest = JSON.parse(
-    readFileSync(packageJsonPath, "utf8"),
-  ) as PackageManifest;
-
+it("does not expose the CLI's React runtime to consumers", () => {
   expect(manifest.dependencies?.react).toBeUndefined();
-  expect(manifest.peerDependencies?.react).toBe(">=19.2.0");
+  expect(manifest.peerDependencies?.react).toBeUndefined();
   expect(manifest.devDependencies?.react).toBe("catalog:");
 });

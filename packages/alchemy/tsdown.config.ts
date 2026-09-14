@@ -1,17 +1,37 @@
-import { defineConfig } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
 
-// Bundle the dev-mode entrypoint at the .js path used by the published package.
-export default defineConfig({
-  entry: ["bin/exec.ts"],
-  format: ["esm"],
+const cliBundle = (entry: string): UserConfig => ({
+  entry: [entry],
+  format: "esm",
   fixedExtension: false,
   clean: false,
   shims: true,
   outDir: "bin",
   dts: false,
   sourcemap: true,
+  deps: {
+    alwaysBundle: [
+      /^react(?:\/|$)/,
+      /^@alchemy\.run\/sigil(?:\/|$)/,
+      /^react-reconciler(?:\/|$)/,
+      /^scheduler(?:\/|$)/,
+      /^react-devtools-core(?:\/|$)/,
+    ],
+    onlyBundle: [
+      /^react(?:\/|$)/,
+      /^@alchemy\.run\/sigil(?:\/|$)/,
+      /^react-reconciler(?:\/|$)/,
+      /^scheduler(?:\/|$)/,
+      /^react-devtools-core(?:\/|$)/,
+    ],
+  },
   outputOptions: {
-    inlineDynamicImports: true,
+    codeSplitting: false,
   },
   tsconfig: "tsconfig.bundle.json",
 });
+
+export default defineConfig([
+  cliBundle("bin/alchemy.ts"),
+  cliBundle("bin/exec.ts"),
+]);

@@ -35,7 +35,7 @@
     "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
     "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle && bun ../../scripts/copy-package-files.ts alchemy",
-    "bundle": "tsdown",
+    "bundle": "tsdown && bun scripts/verify-cli-bundle.ts",
     "bundle:watch": "tsdown --watch",
     "test": "alchemy-test --exclude test/Railway",
     "nuke": "cd ../../ && bun nuke"
@@ -554,7 +554,6 @@
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
-    "react": ">=19.2.0",
     "vite": "catalog:",
     "ws": "catalog:"
   },
