@@ -59,7 +59,7 @@ Import the check:
 
 ```diff lang="typescript"
 // src/middleware.ts
- import { GitSecret } from "./secret.ts";
+import { GitSecret } from "./secret.ts";
 +import { PublicRead } from "./public-read.ts";
 ```
 
@@ -67,7 +67,7 @@ Acquire it alongside the credential:
 
 ```diff lang="typescript"
 // src/middleware.ts
-     const secret = yield* (yield* GitSecret).text;
+    const secret = yield* (yield* GitSecret).text;
 +    const publicRead = yield* PublicRead;
 ```
 
@@ -75,11 +75,11 @@ Before returning `401`, allow requests that pass the public-read check:
 
 ```diff lang="typescript"
 // src/middleware.ts
-         if (Redacted.value(password) === Redacted.value(yield* secret)) {
-           return yield* httpEffect;
-         }
+        if (Redacted.value(password) === Redacted.value(yield* secret)) {
+          return yield* httpEffect;
+        }
 +        if (yield* publicRead) return yield* httpEffect;
-         return HttpServerResponse.empty({
+        return HttpServerResponse.empty({
 ```
 
 The existing `Git.RegistryDurableObject` layer supplies this new dependency.

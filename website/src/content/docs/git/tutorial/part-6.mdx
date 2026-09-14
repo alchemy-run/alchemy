@@ -47,7 +47,7 @@ Import it:
 
 ```diff lang="typescript"
 // src/git.ts
- import { AppApiLive } from "./api.ts";
+import { AppApiLive } from "./api.ts";
 +import { ProtectedMain } from "./hooks.ts";
 ```
 
@@ -55,9 +55,9 @@ Provide the hook after the handler layer that consumes it:
 
 ```diff lang="typescript"
 // src/git.ts
-   Layer.provide(Git.ApiHandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
 +  Layer.provide(ProtectedMain),
-   Layer.provide(Git.ReposDurableObject),
+  Layer.provide(Git.ReposDurableObject),
 ```
 
 The hook is optional. Providing this layer activates your rule for ref writes,

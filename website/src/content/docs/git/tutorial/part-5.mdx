@@ -35,7 +35,7 @@ Add the API imports:
 
 ```diff lang="typescript"
 // src/api.ts
- import * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 +import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 +import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 +import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
@@ -63,7 +63,7 @@ Add these imports:
 
 ```diff lang="typescript"
 // src/api.ts
- import * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 +import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";
 +import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
@@ -98,7 +98,7 @@ Import the new route layer in `src/git.ts`:
 
 ```diff lang="typescript"
 // src/git.ts
- import { Authentication } from "./middleware.ts";
+import { Authentication } from "./middleware.ts";
 +import { AppApiLive } from "./api.ts";
 ```
 
@@ -108,8 +108,8 @@ Merge it beside Git before applying the middleware:
 // src/git.ts
 -const PublicRoutes = Git.ApiLive.pipe(
 +const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
-   Layer.provide(Authentication.layer),
- );
+  Layer.provide(Authentication.layer),
+);
 ```
 
 Both sets of routes now run with the same access policy and request session.

@@ -72,7 +72,7 @@ that service in the middleware's type.
 
 ```diff lang="typescript"
 // src/git.ts
- import * as Layer from "effect/Layer";
+import * as Layer from "effect/Layer";
 +import { Authentication } from "./middleware.ts";
 ```
 
@@ -86,7 +86,7 @@ Replace the start of the route assembly:
 +);
 +
 +export const GitLive = PublicRoutes.pipe(
-   Layer.provide(Git.ApiHandlersLive),
+  Layer.provide(Git.ApiHandlersLive),
 ```
 
 `PublicRoutes` means the routes exposed to Git and API clients. They now all pass
@@ -98,7 +98,7 @@ Add these imports to `alchemy.run.ts`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
- import * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 +import * as Output from "alchemy/Output";
 +import * as Redacted from "effect/Redacted";
 +import { GitSecret } from "./src/secret.ts";
@@ -108,7 +108,7 @@ Then include the generated value in the stack's outputs:
 
 ```diff lang="typescript"
 // alchemy.run.ts
-     const host = yield* GitHost;
+    const host = yield* GitHost;
 -    return { url: host.url.as<string>() };
 +    const secret = yield* GitSecret;
 +    return {

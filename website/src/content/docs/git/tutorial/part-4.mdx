@@ -57,7 +57,7 @@ D1 as the database implementation later in this part.
 
 ```diff lang="typescript"
 // src/auth.ts
- import { BetterAuth } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 +import { apiKey } from "@better-auth/api-key";
 ```
 
@@ -65,9 +65,9 @@ Register the plugin:
 
 ```diff lang="typescript"
 // src/auth.ts
-   emailAndPassword: { enabled: true },
+  emailAndPassword: { enabled: true },
 +  plugins: [apiKey()],
- });
+});
 ```
 
 A signed-in user can now mint an API key for a Git client. That key replaces the
@@ -134,7 +134,7 @@ Add the HTTP Basic decoder imports:
 
 ```diff lang="typescript"
 // src/credentials.ts
- import * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
 +import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 +import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
@@ -144,8 +144,8 @@ Check for an API key before looking for a session cookie:
 
 ```diff lang="typescript"
 // src/credentials.ts
-   const auth = yield* Auth;
-   return Effect.gen(function* () {
+  const auth = yield* Auth;
+  return Effect.gen(function* () {
 +    const { password } = yield* HttpApiBuilder.securityDecode(HttpApiSecurity.basic);
 +    const key = Redacted.value(password);
 +    if (key !== "") {
@@ -158,7 +158,7 @@ Check for an API key before looking for a session cookie:
 +        ? { id: verified.key.referenceId.toLowerCase() }
 +        : null;
 +    }
-     const session = yield* auth.getSession().pipe(
+    const session = yield* auth.getSession().pipe(
 ```
 
 The key identifies its owner. An invalid key produces an anonymous caller, so
@@ -211,7 +211,7 @@ Add the auth imports to `src/host.ts`:
 
 ```diff lang="typescript"
 // src/host.ts
- import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 +import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 +import { Auth, AuthDb } from "./auth.ts";
@@ -221,9 +221,9 @@ Initialize Better Auth beside the Git router:
 
 ```diff lang="typescript"
 // src/host.ts
-   Effect.gen(function* () {
+  Effect.gen(function* () {
 +    const auth = yield* Auth;
-     const fetch = yield* HttpRouter.toHttpEffect(
+    const fetch = yield* HttpRouter.toHttpEffect(
 ```
 
 Send `/api/auth` requests to Better Auth. They must be reachable before a user
@@ -250,7 +250,7 @@ Supply the D1 database on the Worker's initialization effect:
 // src/host.ts
 -  }),
 +  }).pipe(Effect.provide(CloudflareD1(AuthDb))),
- ) {}
+) {}
 ```
 
 The adapter binds D1 to the Worker and runs Better Auth's schema migrations at
@@ -271,7 +271,7 @@ Return only the URL again:
 
 ```diff lang="typescript"
 // alchemy.run.ts
-     const host = yield* GitHost;
+    const host = yield* GitHost;
 -    const secret = yield* GitSecret;
 -    return {
 -      url: host.url.as<string>(),
