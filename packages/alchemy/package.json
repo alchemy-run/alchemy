@@ -465,7 +465,6 @@
     "libsodium-wrappers": "catalog:",
     "pathe": "catalog:",
     "picomatch": "catalog:",
-    "react": "catalog:",
     "rolldown": "catalog:",
     "string-width": "catalog:",
     "tinyglobby": "catalog:",
@@ -522,6 +521,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",
@@ -554,6 +554,7 @@
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
+    "react": ">=19.2.0",
     "vite": "catalog:",
     "ws": "catalog:"
   },
