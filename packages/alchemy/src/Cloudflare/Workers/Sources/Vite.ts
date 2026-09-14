@@ -24,7 +24,8 @@ import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
-import type { ViteOptions } from "../Worker.ts";
+import { isSelfUrl, type ViteOptions } from "../Worker.ts";
+import { isContainerDecl } from "../WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
 /**
@@ -280,7 +281,10 @@ async function loadVite(projectRoot: string = initialCwd): Promise<ViteModule> {
  * are unwrapped, env-bound Effects are evaluated, and `WorkerLoader`s
  * (bindings that happen to be Effects) are skipped.
  */
-const resolveViteEnv = (env: Record<string, unknown>) =>
+const resolveViteEnv = (
+  env: Record<string, unknown>,
+  selfUrl: string | undefined,
+) =>
   Effect.gen(function* () {
     return Object.fromEntries(
       (yield* Effect.all(
@@ -293,15 +297,27 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
                 : Redacted.isRedacted(value) &&
                     typeof Redacted.value(value) === "string"
                   ? Redacted.value(value)
-                  : // A `WorkerLoader` is a real Effect that also carries
-                    // the `~alchemy/Kind` marker — it is a binding, not a
-                    // runnable env value. Check it before `Effect.isEffect`
-                    // so we don't execute it as an inlined env entry.
-                    isWorkerLoader(value)
-                    ? undefined
-                    : Effect.isEffect(value)
-                      ? yield* value as any as Effect.Effect<any>
-                      : undefined,
+                  : // `Worker.URL` (bare tag or called) — resolved to this
+                    // Worker's own URL. The bare tag is Effect-shaped, so
+                    // check before `Effect.isEffect`.
+                    isSelfUrl(value)
+                    ? selfUrl
+                    : // A `WorkerLoader` is a real Effect that also carries
+                      // the `~alchemy/Kind` marker — it is a binding, not a
+                      // runnable env value. Check it before `Effect.isEffect`
+                      // so we don't execute it as an inlined env entry.
+                      isWorkerLoader(value)
+                      ? undefined
+                      : // A `Cloudflare.Container` declaration is likewise
+                        // Effect-shaped but is a binding (DO namespace +
+                        // ContainerApplication) — yielding it would resolve
+                        // the started-instance tag, which only exists inside
+                        // a Durable Object (#997).
+                        isContainerDecl(value)
+                        ? undefined
+                        : Effect.isEffect(value)
+                          ? yield* value as any as Effect.Effect<any>
+                          : undefined,
             ];
           }),
         ),
@@ -383,17 +399,25 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   ownsAssets: true,
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
-    const env = yield* resolveViteEnv(ctx.env ?? {});
+    const env = yield* resolveViteEnv(ctx.env ?? {}, ctx.selfUrl);
     const {
       clientDirectory,
       serverDirectory,
+      base,
       serverBundle,
       externalWorkspaces,
     } = yield* viteBuild(
       vite.rootDir,
       env,
       {
-        main: vite.main,
+        // A relative `vite.main` is documented to resolve from the Vite
+        // root. The rolldown plugin resolves the worker entry with no
+        // importer (i.e. against `process.cwd()`), which breaks when the
+        // deploy runs from a different directory (e.g. a monorepo infra
+        // package) — absolutize before handing it over (#796).
+        main: vite.main
+          ? path.resolve(initialCwd, vite.rootDir ?? ".", vite.main)
+          : undefined,
         compatibilityDate: ctx.compatibility.date,
         compatibilityFlags: ctx.compatibility.flags,
         viteEnvironments: vite.viteEnvironments,
@@ -420,12 +444,16 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
               ...derivedAssets,
               ...declaredAssets,
               // `clientDirectory` from the build child is absolute; the
-              // base only matters for the in-process legacy shape.
+              // rootDir only matters as a legacy fallback.
               directory: path.resolve(
                 initialCwd,
                 vite.rootDir ?? ".",
                 clientDirectory,
               ),
+              // The resolved Vite `base` is what rewrote the URLs in the
+              // emitted HTML, so it is the only prefix the manifest can
+              // agree with.
+              base,
             })
           : Effect.undefined,
         serverBundle,
