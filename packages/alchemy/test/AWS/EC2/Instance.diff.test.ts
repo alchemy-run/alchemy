@@ -82,6 +82,20 @@ test.provider(
     }),
 );
 
+test.provider("restarts an interrupted fixed-IP replacement delete-first", () =>
+  Effect.gen(function* () {
+    const interrupted = props({
+      privateIpAddress: "10.0.1.10",
+      userData: "generation-two",
+    });
+
+    expect(yield* diff(interrupted, interrupted)).toEqual({
+      action: "replace",
+      deleteFirst: true,
+    });
+  }),
+);
+
 test.provider(
   "keeps create-first replacement when no fixed private IP is requested",
   () =>
