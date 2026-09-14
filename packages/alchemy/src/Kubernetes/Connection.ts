@@ -2,12 +2,11 @@
  * The cluster-agnostic Kubernetes connection model.
  *
  * Every `Kubernetes.*` workload (`Deployment`, `Job`, `Manifest`,
- * `HelmChart`) targets a cluster through a serializable {@link Connection}:
- * the API server endpoint (or enough information to discover it) plus an
- * {@link ConnectionAuth} descriptor whose `kind` selects the
- * {@link ClusterAdapter} that knows how to authenticate requests — and,
- * for managed clouds, how to provision workload identity and container
- * images.
+ * `HelmChart`, and `Secret`) targets a cluster through a serializable
+ * {@link Connection}: the API server endpoint (or enough information to
+ * discover it) plus an {@link ConnectionAuth} descriptor whose `kind` selects
+ * the {@link ClusterAdapter} that knows how to authenticate requests — and, for
+ * managed clouds, how to provision workload identity and container images.
  *
  * A `Connection` is plain data on purpose: it is resolved from resource
  * attributes at reconcile time and persisted on workload attributes so
