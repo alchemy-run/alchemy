@@ -3,6 +3,8 @@ title: "Part 6: Protect a branch"
 description: Add a pre-receive hook that prevents deleting main, then verify accepted and rejected ref updates.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 The middleware decides who may push. Now add a rule about what an authorized
 push may do: it may update `main`, but it may not delete it.
 
@@ -63,9 +65,20 @@ including Git pushes and the REST API.
 
 ## Deploy the rule
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npx alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn alchemy deploy`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 Use Dana's `$KEY` when Git prompts during the checks below. Keep the remote
 pointed at `$HOST/$OWNER/web.git` from Part 4.
@@ -109,9 +122,20 @@ accepted the caller; the hook rejected the proposed change.
 
 When you finish experimenting:
 
-```sh
-bun alchemy destroy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun alchemy destroy`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npx alchemy destroy`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm alchemy destroy`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn alchemy destroy`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 This removes the Worker, repositories' storage, R2 bucket contents, and account
 database from this tutorial stack. Keep your local `work` checkout if you want

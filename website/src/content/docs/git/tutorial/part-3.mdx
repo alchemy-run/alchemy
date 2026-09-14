@@ -3,6 +3,8 @@ title: "Part 3: Publish a repository"
 description: Allow anonymous clones of public repositories while preserving authenticated writes.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 The credential from [Part 2](/git/tutorial/part-2) protects every request.
 Now make `acme/web` readable by anyone while keeping writes protected.
 
@@ -86,9 +88,20 @@ the public reads you just defined.
 
 ## Deploy the policy
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npx alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn alchemy deploy`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 This updates the Worker. The public flag you set earlier remains stored in the
 registry.

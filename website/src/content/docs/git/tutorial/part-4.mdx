@@ -3,6 +3,8 @@ title: "Part 4: Give users their own credentials"
 description: Replace the shared credential with Better Auth accounts and individual Git API keys.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
 One shared credential cannot distinguish one caller from another. Replace it
 with Better Auth accounts and API keys, then use the authenticated user's ID
 when checking access to a named repository.
@@ -13,9 +15,20 @@ transfer the existing `acme/web` repository to a user.
 
 ## Install Better Auth
 
-```sh
-bun add @alchemy.run/better-auth better-auth @better-auth/api-key
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add @alchemy.run/better-auth better-auth @better-auth/api-key`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install @alchemy.run/better-auth better-auth @better-auth/api-key`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add @alchemy.run/better-auth better-auth @better-auth/api-key`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add @alchemy.run/better-auth better-auth @better-auth/api-key`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 Better Auth will manage accounts and credentials. Git will continue to store
 repositories.
@@ -272,9 +285,20 @@ longer authorize requests after the next deploy.
 
 ## Deploy accounts and credentials
 
-```sh
-bun alchemy deploy
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npx alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm alchemy deploy`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn alchemy deploy`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 Install `jq` for the following shell checks if you do not already have it.
 Continue using the same `$HOST`.
