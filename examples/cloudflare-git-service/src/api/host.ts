@@ -3,13 +3,15 @@
  * the git server for everything else. `src/worker.ts` fronts it on the
  * website's origin.
  */
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import { Auth, AuthDb } from "./auth.ts";
-import { GitLive } from "./git.ts";
+import { HttpLive } from "./git.ts";
 
 export default class GitHost extends Cloudflare.Worker<GitHost>()(
   "GitHost",
@@ -20,13 +22,13 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
   },
   Effect.gen(function* () {
     const auth = yield* Auth;
-    const git = yield* Git.Server;
+    const fetch = yield* HttpRouter.toHttpEffect(HttpLive);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         if (request.url.startsWith("/api/auth")) return yield* auth.fetch;
-        return yield* git.fetch;
+        return yield* fetch;
       }),
     };
-  }).pipe(Effect.provide(GitLive), Effect.provide(CloudflareD1(AuthDb))),
+  }).pipe(Effect.provide(CloudflareD1(AuthDb))),
 ) {}

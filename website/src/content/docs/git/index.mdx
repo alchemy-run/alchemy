@@ -14,13 +14,15 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Api, AuthenticatedLive } from "./api.ts";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as Http from "alchemy/Http";
+import { Authentication } from "./api.ts";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const GitLive = Git.Server.layer(Api).pipe( // Api: Git.Api behind your middleware
+const GitLive = Git.ApiLive.pipe( // ordinary routes beside your application API
   Layer.provide(Git.HandlersLive), // shared Git handlers
-  Layer.provide(AuthenticatedLive), // your middleware: who may call what
+  Layer.provide(Authentication.layer), // your middleware: who may call what
   Layer.provide(Git.ReposDurableObject), // refs, objects, pull requests
   Layer.provide(Git.RegistryDurableObject), // owner/name → repo
   Layer.provide(Git.HasherInline), // push verification
@@ -31,22 +33,22 @@ export default Cloudflare.Worker(
   "Git",
   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
   Effect.gen(function* () {
-    const git = yield* Git.Server;
-    return { fetch: git.fetch };
-  }).pipe(Effect.provide(GitLive)),
+    const fetch = yield* HttpRouter.toHttpEffect(GitLive.pipe(Layer.provide(Http.Platform)));
+    return { fetch };
+  }),
 );
 ```
 
-`Api` and `AuthenticatedLive` are the application API and its middleware. [Getting Started](/git/getting-started)
-defines all three; [Server](/git/blocks/server#handlers) explains their composition.
+`Authentication` is the application's route middleware. [Getting Started](/git/getting-started)
+defines it; [HTTP routes](/git/blocks/server#add-git-to-your-application) explains their composition.
 
 Each line of the graph is one decision with its own implementations.
 Changing a line changes the decision and nothing else:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
+const GitLive = Git.ApiLive.pipe(
   Layer.provide(Git.HandlersLive),
-  Layer.provide(AuthenticatedLive),
+  Layer.provide(Authentication.layer),
 +  Layer.provide(ProtectedMain),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
@@ -60,7 +62,7 @@ Bytes now live in S3 and `main` only moves for its owner. A missing
 line is a type error.
 
 The engine holds no users, no credentials, and no policy. Who may call
-a route is the middleware of the API that mounts it, so the same host
+a route is the middleware applied to its route layer, so the same host
 runs behind a shared secret, behind Better Auth, or behind any other
 authentication, and which refs may move is git's pre-receive hook as a
 service. Endpoints use Effect's `HttpApiEndpoint`; implementations use

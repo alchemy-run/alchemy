@@ -60,13 +60,12 @@ and `git-upload-pack`, which is what a clone is:
 +import * as HttpRouter from "effect/unstable/http/HttpRouter";
 +import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
-export const AuthenticatedLive = Layer.effect(
-  Authenticated,
+export const Authentication = HttpRouter.middleware(
   Effect.gen(function* () {
     const secret = yield* (yield* GitSecret).text;
 +    const registry = yield* Git.RegistryStore;
 -    return (httpEffect) =>
-+    return (httpEffect, { endpoint }) =>
++    return (httpEffect) =>
       Effect.gen(function* () {
         const { password } = yield* HttpApiBuilder.securityDecode(
           HttpApiSecurity.basic,
@@ -79,14 +78,14 @@ export const AuthenticatedLive = Layer.effect(
 +        const entry = yield* registry
 +          .resolve(owner.toLowerCase(), repo.toLowerCase().replace(/\.git$/, ""))
 +          .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
-+        if (Git.isRead(endpoint, request) && entry?.public) {
++        if (Git.isRead(request) && entry?.public) {
 +          return yield* httpEffect;
 +        }
         return HttpServerResponse.empty({
           status: 401,
           headers: { "www-authenticate": 'Basic realm="git"' },
         });
-      });
+      }).pipe(Effect.provide(Alchemy.RuntimeContext.phantom));
   }),
 );
 ```

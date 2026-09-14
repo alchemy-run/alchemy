@@ -1,6 +1,6 @@
 /**
  * The engine's internal API: routes the engine calls on itself, never a
- * user. Mounted by `Git.Server` next to your API, outside your middleware.
+ * user. Register `Git.InternalApiLive` beside public routes, outside user middleware.
  */
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
@@ -21,8 +21,7 @@ export class Internal extends HttpApiGroup.make("internal", {
 }).add(HashPart) {}
 
 /**
- * The internal API. `Git.Server` mounts it for you; a host that builds
- * its router by hand and uses a fan-out hasher mounts it too:
+ * The internal API schema. `Git.InternalApiLive` registers its routes using
  * `HttpApiBuilder.layer(Git.InternalApi)` with `Git.InternalLive`.
  */
 export class InternalApi extends HttpApi.make("git-internal").add(Internal) {}

@@ -1,44 +1,32 @@
 # RFC: Git Building Blocks
 
-**Status: partially implemented.** Landed: `BlobStore` contract +
-`BlobStoreR2`/`BlobStoreMemory` with every consumer refactored (Phase A);
-`Git.Server`/`Git.ServerLive`/`Git.ReposDurableObject`/
-`Git.RegistryDurableObject` with `GitService()` and the shipped Worker
-deleted, tests and the example running on the block assembly (Phase C
-core). Also landed: DO-side BlobStore graph
-inheritance — both runtime contexts consume `yield* BlobStore`, the
-`GitObjectsBucket` package resource is deleted, and users own the bucket
-(`Git.BlobStoreR2(MyBucket)` provided once serves the Worker splice and
-the DO; a missing BlobStore is a compile error). `BlobStoreMemory` was
-dropped by decision — two runtime contexts mean two Maps, so it could
-never serve a full assembly honestly. `Git.BlobStoreS3` landed:
-distilled's S3 client (SigV4 over Effect HttpClient) runs identically in
-the Worker and the DO, credentials ride Config→worker-secret bindings —
-type-checked and suite-green, not yet exercised against live S3.
-**Phase B auth landed**: `Git.Auth` (`authenticate` + `authorize` over
-the `GitAction` union) with `Git.AuthTokens` as the default layer — the
-scope ladder is now internal to `AuthTokens`, every plane asks the Auth
-block (worker: registry actions with `repo: null`; DO: per-repo actions
-incl. the post-parse `Push { updates }`), and the local suite pins a
-custom wrapped layer enforcing a protected `main`
-(`test/fixtures/protected-stack.ts`). Landing it surfaced and fixed an
-alchemy `Fetcher` bug: `HttpServerRequest.toWeb` returns the raw source
-`Request`, silently dropping `modify({ headers })` — so Worker-minted
-trust headers never reached DOs and, worse, client-forged ones were
-never stripped (see §3.2 enforcement). Remaining (Phase B):
-`AuthBetterAuth`, `PullStore`/`RefStore`/`TokenStore` extraction, and
-the remaining store extractions. HTTP planes are now exported as native API groups.
+## Current implementation
 
-**Current HTTP composition:** endpoints use Effect `HttpApiEndpoint`, and
-`Server.layer(api)` registers Git’s groups automatically. Applications use
-`HttpApiBuilder.group` / `handleAll` for their own endpoints and overrides.
-`Git.HandlersLive` builds the shared `Git.Handlers` service;
-`Git.Server.layer(api, groups?)` serves an application API, merging optional
-group layers over the defaults. `Git.ApiLive` implements the unmodified `Git.Api`, and
-`Git.ServerLive` combines it with `HandlersLive`. Authentication now lives
-in application HTTP middleware; the original phase notes below retain the
-history of the earlier auth proposal. See [DESIGN.md §8](./DESIGN.md#8-auth-model-nothing-inside-the-engine)
-for the current boundary.
+Git contributes native Effect route and storage layers. Applications own their
+API schema and server. The public `Git.ApiLive` is composed beside application
+routes; `Git.InternalApiLive` is mounted separately from user authentication.
+
+```ts
+const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+  Layer.provide(Authentication.layer),
+);
+const Routes = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
+  Layer.provide(Git.HandlersLive),
+  // repository, registry, hasher, blob, and platform layers
+);
+const fetch = yield* HttpRouter.toHttpEffect(Routes);
+```
+
+For overrides, merge a native group after `Git.GroupsLive` and provide the result
+to `HttpApiBuilder.layer(Git.Api)`. See [DESIGN.md §8](./DESIGN.md#8-auth-model-nothing-inside-the-engine)
+and the [HTTP routes documentation](https://alchemy.run/git/blocks/server).
+
+## Historical proposal
+
+The original proposal below is retained as design history. Its `Git.Server`,
+`Git.ServerLive`, and Git-specific authentication services were removed; those
+examples are superseded by the composition above. The storage design discussion
+remains useful, but the historical API names are not current exports.
 
 **On an AWS-native assembly (the DynamoDB question):** a `RefStore` on
 DynamoDB pay-per-request is *conditionally* feasible — conditional writes

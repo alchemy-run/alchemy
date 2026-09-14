@@ -1,72 +1,29 @@
 /**
- * The stateless git-service Worker (DESIGN.md §2.1, §2.2, §5, §8).
+ * Git's HTTP handlers and native Effect route layers.
  *
- * The Worker is the front door for both planes:
+ * ApiLive registers the public REST, smart-HTTP, and GitHub routes on the
+ * application's HttpRouter. InternalApiLive registers internal hashing.
+ * HandlersLive shares the registry, repository clients, and cache across groups.
+ * The application owns its API, authentication, HTTP server, and CORS policy.
  *
- * - `/api/v1/**` — the typed REST management plane (`GitApi` from
- *   `Api.ts`). Handlers resolve `owner/name → repoId` through the
- *   singleton Registry DO (with a 60 s in-isolate LRU cache) and call
- *   typed Repo-DO RPCs.
- * - `/:owner/:repo[.git]/**` — the git smart-HTTP wire endpoints
- *   (`info/refs`, `git-upload-pack`, `git-receive-pack`), routes on the
- *   same API, proxied untouched to the Repo DO's `fetch` (the protocol
- *   runs inside the DO, §2.1) or served from the head snapshot.
- *
- * The Worker holds no credentials and asks no auth questions: the
- * middleware of the API that mounts the routes decided who may call them
- * before the engine saw the request (DESIGN.md §8). `Git.Hooks`, when
- * provided, runs before refs move.
- *
- * ### Deploying
- * **Example:** Compose the Worker into a Stack
  * ```typescript
- * import * as Alchemy from "alchemy";
- * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as Git from "alchemy/Git";
- * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
- *
- * const GitObjects = Cloudflare.R2.Bucket("GitObjects");
- * const GitLive = Git.ServerLive.pipe(
+ * const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+ *   Layer.provide(Authentication.layer),
+ * );
+ * const Routes = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
+ *   Layer.provide(Git.HandlersLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
  *   Layer.provide(Git.HasherInline),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),
+ *   Layer.provide(Http.Platform),
  * );
- * const GitHost = Cloudflare.Worker(
- *   "Git",
- *   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
- *   Effect.gen(function* () {
- *     const git = yield* Git.Server;
- *     return { fetch: git.fetch };
- *   }).pipe(Effect.provide(GitLive)),
- * );
- *
- * export default Alchemy.Stack(
- *   "GitService",
- *   { providers: Cloudflare.providers(), state: Cloudflare.state() },
- *   Effect.gen(function* () {
- *     const worker = yield* GitHost;
- *     return { url: worker.url.as<string>() };
- *   }),
- * );
- * ```
- *
- * `ServerLive` serves the open API. To add authentication, pass an API
- * with your middleware to `Server.layer(api)`.
- *
- * ### Using the deployed service
- * **Example:** Create a repo and push to the open host
- * ```sh
- * curl -X POST "$URL/api/v1/repos" \
- *   -H "Content-Type: application/json" \
- *   -d '{"owner":"acme","name":"web"}'
- * # → { repo, remote }
- *
- * git remote add origin "$URL/acme/web.git"
- * git push origin main
+ * const fetch = yield* HttpRouter.toHttpEffect(Routes);
+ * return { fetch };
  * ```
  */
+import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+
 import * as Cloudflare from "../Cloudflare/index.ts";
 import crypto from "node:crypto";
 import * as Config from "effect/Config";
@@ -80,15 +37,9 @@ import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import type * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import * as Http from "../Http/index.ts";
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import type {
   CreateRepo,
   GetRepo,
@@ -386,7 +337,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
  * the free plan's 10 ms budget (DESIGN.md §1).
  */
 /**
- * Worker options every `Git.Server` host needs: `nodejs_compat` (zlib +
+ * Worker options every Git host needs: `nodejs_compat` (zlib +
  * crypto in the codec layer) and a generous CPU ceiling for pack ingest.
  * Spread into your `Cloudflare.Worker` definition.
  */
@@ -1495,8 +1446,7 @@ const makeCore = Effect.gen(function* () {
    * instead of one single-threaded object.
    *
    * `undefined` = not eligible; the caller forwards to the DO. Access
-   * was decided before the route ran, by the middleware of the API
-   * that mounts it — this changes WHERE the bytes come from, never who
+   * was decided before the route ran, by the middleware applied to its route layer — this changes WHERE the bytes come from, never who
    * gets them.
    */
   const headSnapshotFastPath = Effect.fn(function* (
@@ -2255,255 +2205,61 @@ export class Handlers extends Context.Service<
 export const HandlersLive = Layer.effect(Handlers, makeCore);
 
 /**
- * The internal hash group for {@link InternalApi}. `Server.layer` mounts this
- * separately from application middleware. A host that owns its router can
- * provide it to `HttpApiBuilder.layer(Git.InternalApi)` directly.
+ * The internal hash group for {@link InternalApi}. {@link InternalApiLive}
+ * registers it with the application router, separately from public middleware.
  */
 export const InternalLive = HttpApiBuilder.group(InternalApi, "internal", (h) =>
   Effect.map(Handlers, (git) => h.handleAll(git.internal)),
 );
 
-type GitGroups = typeof GitApi.groups;
-type EndpointContract<E> = Pick<
-  E,
-  Extract<
-    keyof E,
-    | "identifier"
-    | "method"
-    | "~Params"
-    | "~Query"
-    | "~Payload"
-    | "~Headers"
-    | "~Success"
-    | "~Error"
-  >
->;
-
-// Built-in implementations cover unchanged Git contracts, including copies
-// with middleware or prefixes. Other groups require native group layers.
-type DefaultGroups<G extends HttpApiGroup.Constraint> = G extends {
-  readonly identifier: infer Id extends keyof GitGroups;
-}
-  ? G extends {
-      readonly endpoints: {
-        readonly [E in keyof GitGroups[Id]["endpoints"]]: EndpointContract<
-          GitGroups[Id]["endpoints"][E]
-        >;
-      };
-    }
-    ? Exclude<
-        keyof G["endpoints"],
-        keyof GitGroups[Id]["endpoints"]
-      > extends never
-      ? G
-      : never
-    : never
-  : never;
-
-const makeApiLive = (api: typeof GitApi) =>
-  Layer.mergeAll(
-    Layer.empty,
-    ...(api.groups.repos
-      ? [
-          HttpApiBuilder.group(api, "repos", (h) =>
-            Effect.map(Handlers, (git) => h.handleAll(git.repos)),
-          ),
-        ]
-      : []),
-    ...(api.groups.refs
-      ? [
-          HttpApiBuilder.group(api, "refs", (h) =>
-            Effect.map(Handlers, (git) => h.handleAll(git.refs)),
-          ),
-        ]
-      : []),
-    ...(api.groups.objects
-      ? [
-          HttpApiBuilder.group(api, "objects", (h) =>
-            Effect.map(Handlers, (git) => h.handleAll(git.objects)),
-          ),
-        ]
-      : []),
-    ...(api.groups.pulls
-      ? [
-          HttpApiBuilder.group(api, "pulls", (h) =>
-            Effect.map(Handlers, (git) => h.handleAll(git.pulls)),
-          ),
-        ]
-      : []),
-    ...(api.groups.protocol
-      ? [
-          HttpApiBuilder.group(api, "protocol", (h) =>
-            Effect.map(Handlers, (git) => h.handleAll(git.protocol)),
-          ),
-        ]
-      : []),
-    ...(api.groups.github
-      ? [
-          HttpApiBuilder.group(api, "github", (h) =>
-            Effect.map(Handlers, (git) => h.handleAll(git.github)),
-          ),
-        ]
-      : []),
-  );
-
-/**
- * Native group implementations for the unmodified {@link GitApi}. This is an
- * ordinary Effect layer. `Server.layer(api)` registers Git's defaults against
- * the supplied API automatically, including its middleware and prefixes.
- * Use this layer when composing the base API's router directly.
- *
- * ```typescript
- * const GitApiLive = Git.ApiLive.pipe(Layer.provide(Git.HandlersLive));
- * ```
- */
-export const ApiLive = makeApiLive(GitApi);
-
-type DefaultRequirements<Groups extends HttpApiGroup.Constraint> =
-  | Layer.Services<typeof ApiLive>
-  | HttpApiEndpoint.Middleware<HttpApiGroup.Endpoints<DefaultGroups<Groups>>>
-  | HttpApiGroup.MiddlewareServices<DefaultGroups<Groups>>;
-
-const defaultsFor = <Id extends string, Groups extends HttpApiGroup.Constraint>(
-  api: HttpApi.HttpApi<Id, Groups>,
-) =>
-  // Keep the actual API (and all its metadata). Erase its type only while
-  // registering the known handler sets, then retain middleware requirements
-  // and restrict provided services to compatible contracts in the layer type.
-  makeApiLive(api as unknown as typeof GitApi) as unknown as Layer.Layer<
-    HttpApiGroup.ToService<Id, DefaultGroups<Groups>>,
-    never,
-    DefaultRequirements<Groups>
-  >;
-
-/** What {@link Server} exposes: the composed HTTP handler for every plane. */
-export interface ServerShape {
-  readonly fetch: Effect.Effect<
-    HttpServerResponse.HttpServerResponse,
-    HttpServerError.HttpServerError,
-    Scope.Scope | HttpServerRequest.HttpServerRequest | RuntimeContext
-  >;
-}
-
-const makeServer = <
-  Id extends string,
-  Groups extends HttpApiGroup.Constraint,
-  Provided,
-  E,
-  R,
->(
-  api: HttpApi.HttpApi<Id, Groups>,
-  groups: Layer.Layer<Provided, E, R>,
-) =>
-  Layer.mergeAll(
-    HttpApiBuilder.layer(api),
-    // The engine's own routes, outside whatever middleware `api` carries.
-    HttpApiBuilder.layer(InternalApi),
-  ).pipe(
-    Layer.provide(Layer.mergeAll(defaultsFor(api), groups)),
-    Layer.provide(InternalLive),
-    Layer.provide(Http.Platform),
-    // Middleware lists RuntimeContext among its group requirements, but the
-    // Worker supplies it per request. The phantom layer adds no captured value.
-    Layer.provide(RuntimeContext.phantom),
-    HttpRouter.toHttpEffect,
-    // Browser clients (e.g. the example SPA) call the REST plane
-    // cross-origin with a bearer token. Tokens are sent explicitly via
-    // `Authorization` (never cookies), so echoing any origin without
-    // credentials is safe. `toHttpEffect` yields the handler effect, so
-    // the middleware wraps via `Effect.map`.
-    Effect.map(
-      HttpMiddleware.cors({
-        allowedMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allowedHeaders: ["Authorization", "Content-Type"],
-        maxAge: 86_400,
-      }),
-    ),
-    // The route effects' request-scoped needs are all served by the
-    // Worker's request (a scope, the request, the runtime): the deferred
-    // exclusions above cannot say so for a generic `api`.
-    Effect.map((fetch): ServerShape => ({
-      fetch: fetch as ServerShape["fetch"],
-    })),
-  );
-
-/**
- * `Git.Server` — the top-level building block (RFC "Git Building
- * Blocks" §4): a `Context.Service` exposing the composed HTTP handler
- * for all three planes (git smart-HTTP wire, `/api/v1` REST, `/api/v3`
- * GitHub compat). The package ships no Worker — construct your own and
- * wire `fetch` in. `Server.layer(api)` registers Git’s default groups
- * against your API, including its middleware and prefixes. Pass native
- * `HttpApiBuilder.group` layers as the optional second argument to add
- * application endpoints or override Git groups. Explicit groups take
- * precedence over the defaults.
- * {@link ServerLive} is the open default: `Git.Api`, {@link ApiLive}, {@link HandlersLive}, nothing
- * in front.
- *
- * ```ts
- * class AppApi extends HttpApi.make("git-management")
- *   .add(Git.Repos)
- *   .middleware(Session) {}
- * const GitLive = Git.Server.layer(AppApi).pipe(
- *   Layer.provide(Git.HandlersLive),
- *   Layer.provide(SessionLive),
- *   Layer.provide(Git.ReposDurableObject),
- *   Layer.provide(Git.RegistryDurableObject),
- * );
- *
- * export default class GitHost extends Cloudflare.Worker<GitHost>()(
- *   "git",
- *   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
- *   Effect.gen(function* () {
- *     const git = yield* Git.Server;
- *     return { fetch: git.fetch };
- *   }).pipe(Effect.provide(GitLive)),
- * ) {}
- * ```
- */
-export class Server extends Context.Service<Server, ServerShape>()(
-  "alchemy/Git/Server",
-) {
-  /**
-   * Serves an API with Git’s default handlers. The optional group layer adds
-   * application endpoints or overrides matching Git groups. Provide
-   * {@link HandlersLive} and the API's middleware to the result.
-   */
-  static readonly layer = <
-    Id extends string,
-    Groups extends HttpApiGroup.Constraint,
-    Provided = never,
-    E = never,
-    R = never,
-  >(
-    api: HttpApi.HttpApi<Id, Groups>,
-    groups: Layer.Layer<Provided, E, R> = Layer.empty as unknown as Layer.Layer<
-      Provided,
-      E,
-      R
-    >,
-  ) => Layer.effect(Server, makeServer(api, groups));
-}
-
-/**
- * The default `Git.Server` assembly: {@link GitApi} with {@link ApiLive}
- * and nothing in front of the routes. Provide {@link ReposDurableObject}
- * and {@link RegistryDurableObject} (or your own implementations of the
- * underlying namespaces) in the same layer graph.
- *
- * @layer
- * @provides Git.Server
- */
-export const ServerLive = Server.layer(GitApi).pipe(
-  Layer.provide(HandlersLive),
+/** Native Effect group implementations. Merge an overriding group after these when needed. */
+export const GroupsLive = Layer.mergeAll(
+  HttpApiBuilder.group(GitApi, "repos", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.repos)),
+  ),
+  HttpApiBuilder.group(GitApi, "refs", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.refs)),
+  ),
+  HttpApiBuilder.group(GitApi, "objects", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.objects)),
+  ),
+  HttpApiBuilder.group(GitApi, "pulls", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.pulls)),
+  ),
+  HttpApiBuilder.group(GitApi, "protocol", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.protocol)),
+  ),
+  HttpApiBuilder.group(GitApi, "github", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.github)),
+  ),
 );
 
 /**
- * Hosts the `GitRegistry` Durable Object (owner/name → repoId) and
- * provides its namespace service.
+ * Git's public routes as an ordinary HttpRouter layer. Merge this with your
+ * application's routes and provide your route middleware to the result.
+ * The application owns its API, HTTP server, platform, and CORS policy.
+ *
+ * ```typescript
+ * const Routes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+ *   Layer.provide(Authentication.layer),
+ * );
+ * ```
  *
  * @layer
  */
+export const ApiLive = HttpApiBuilder.layer(GitApi).pipe(
+  Layer.provide(GroupsLive),
+);
+
+/**
+ * The authenticated internal hashing route. Mount beside public routes,
+ * outside application authentication; the handler checks InternalSecret.
+ *
+ * @layer
+ */
+export const InternalApiLive = HttpApiBuilder.layer(InternalApi).pipe(
+  Layer.provide(InternalLive),
+);
 
 /**
  * Hosts the `GitRepo` Durable Object (refs, objects, pulls, the wire

@@ -3,16 +3,16 @@ title: Overview
 description: Requirements pick lines. One table from what you need to the line that changes, the stack shape for one cloud or two, and complete files to copy.
 ---
 
-The examples use `Api` and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the application API and its middleware.
+The examples use `Authentication` from
+[Getting Started](/git/getting-started): the application's request middleware.
 
 Start from the graph the tutorial built and change the lines your
 requirements touch:
 
 ```typescript
-const GitLive = Git.Server.layer(Api).pipe(
+const GitLive = Git.ApiLive.pipe(
   Layer.provide(Git.HandlersLive),
-  Layer.provide(AuthenticatedLive),
+  Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
@@ -28,7 +28,7 @@ const GitLive = Git.Server.layer(Api).pipe(
 | The widest push parallelism | `HasherLambda(HasherFunction)` | [Bytes in S3, hashing on Lambda](/git/recipes/cloudflare-aws) |
 | Bytes somewhere that is neither R2 nor S3 | your own `BlobStore` | [Bring your own store](/git/recipes/your-own-store) |
 | Registry reads near users everywhere, SQL over the index | `RegistryD1(RepoIndex)` | [Registry](/git/blocks/registry) |
-| Your own users and credentials | your `HttpApi` middleware | [Tutorial Part 3](/git/tutorial/part-3) |
+| Your own users and credentials | your `HttpRouter` middleware | [Tutorial Part 3](/git/tutorial/part-3) |
 | Branch rules, teams | `Git.Hooks` | [Tutorial Part 4](/git/tutorial/part-4) |
 | Your web app and git on one domain | a front-door Worker | [Tutorial Part 3](/git/tutorial/part-3) |
 

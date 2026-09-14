@@ -18,8 +18,7 @@ data decides who is on a team. Read it there:
 
 ```diff lang="typescript"
 // src/git.ts
-export const AuthenticatedLive = Layer.effect(
-  Authenticated,
+export const Authentication = HttpRouter.middleware<{ provides: Session }>()(
   Effect.gen(function* () {
     const auth = yield* Auth;
     const registry = yield* Git.RegistryStore;
@@ -27,7 +26,7 @@ export const AuthenticatedLive = Layer.effect(
 
     // …
 
-    return (httpEffect, { endpoint }) =>
+    return (httpEffect) =>
       Effect.gen(function* () {
         const user = yield* resolve;
         const { owner } = yield* HttpRouter.params;
@@ -42,7 +41,7 @@ export const AuthenticatedLive = Layer.effect(
           return yield* Effect.provideService(httpEffect, Session, { user });
         }
         // …
-      });
+      }).pipe(Effect.provide(Alchemy.RuntimeContext.phantom));
   }),
 );
 ```
@@ -83,7 +82,7 @@ import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { Session } from "./git.ts";
+import { Session } from "./auth.ts";
 
 export const ProtectedMain: Layer.Layer<Git.Hooks> = Layer.succeed(Git.Hooks, {
   preReceive: ({ repo, updates }) =>
@@ -107,9 +106,8 @@ every other ref; only the owner moves `main`.
 // src/git.ts
 +import { ProtectedMain } from "./hooks.ts";
 
-const GitLive = Git.Server.layer(AppApi, Layer.mergeAll(MeLive, GitHubLive)).pipe(
+const HttpLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
   Layer.provide(Git.HandlersLive),
-  Layer.provide(AuthenticatedLive),
 +  Layer.provide(ProtectedMain),
   Layer.provide(Git.ReposDurableObject),
 ```

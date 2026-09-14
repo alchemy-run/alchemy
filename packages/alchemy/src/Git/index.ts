@@ -7,12 +7,12 @@
  *   one `HttpApi`, each endpoint an `HttpApiEndpoint`, each group a
  *   class, with the schemas and tagged errors.
  * - {@link Handlers} and {@link HandlersLive}: shared handler implementations.
- *   `Server.layer(api)` registers the defaults; native `HttpApiBuilder.group`
- *   layers add application endpoints or override individual Git groups.
+ *   {@link ApiLive} registers public routes; merge it beside application routes.
+ *   {@link GroupsLive} exposes native group implementations for overrides.
  * - {@link Hooks}, git's pre-receive hook as a service. There is no auth
- *   in the engine: the middleware of the API that mounts the routes decides
+ *   in the engine: the middleware applied to the route layers decides
  *   who gets in.
- * - The deployable pieces: {@link Server} + {@link ServerLive}, the
+ * - The deployable pieces: {@link ApiLive} + {@link InternalApiLive}, the
  *   {@link GitRepo} / {@link Registry} Durable Objects, and the storage and
  *   hasher blocks.
  *

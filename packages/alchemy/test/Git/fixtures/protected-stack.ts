@@ -1,4 +1,5 @@
-import { TestApiLive } from "./http.ts";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import { TestRoutes } from "./http.ts";
 /**
  * A SECOND building-block assembly with a `Git.Hooks` in the graph: the
  * suite's middleware, plus one branch-protection rule. This is the
@@ -23,7 +24,6 @@ import {
   Hooks,
   ReposDurableObject,
   RegistryDurableObject,
-  Server,
 } from "@/Git/index.ts";
 import { TestApi, TestAuthLive, TestCaller } from "./test-auth.ts";
 
@@ -53,9 +53,8 @@ const ProtectedMain: Layer.Layer<Hooks> = Layer.succeed(Hooks, {
 /** This assembly's bucket (its own stack, so no clash with `stack.ts`). */
 const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const ProtectedGitLive = Server.layer(TestApi, TestApiLive).pipe(
+const ProtectedGitLive = TestRoutes.pipe(
   Layer.provide(HandlersLive),
-  Layer.provide(TestAuthLive),
   Layer.provide(ProtectedMain),
   Layer.provide(ReposDurableObject),
   Layer.provide(RegistryDurableObject),
@@ -71,9 +70,9 @@ export default class ProtectedGitHost extends Cloudflare.Worker<ProtectedGitHost
     ...GIT_WORKER_OPTIONS,
   },
   Effect.gen(function* () {
-    const git = yield* Server;
-    return { fetch: git.fetch };
-  }).pipe(Effect.provide(ProtectedGitLive)),
+    const fetch = yield* HttpRouter.toHttpEffect(ProtectedGitLive);
+    return { fetch };
+  }),
 ) {}
 
 /** Deployable stack for the protected-branch test. */

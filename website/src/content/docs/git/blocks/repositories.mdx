@@ -3,16 +3,16 @@ title: Repository
 description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, wrap it to hook pushes and ref updates, or implement its shape over another store.
 ---
 
-The examples use `Api` and `AuthenticatedLive` from
-[Getting Started](/git/getting-started): the application API and its middleware.
+The examples use `Authentication` from
+[Getting Started](/git/getting-started): the application's request middleware.
 
 `Git.ReposDurableObject` hosts one Durable Object per repository and
 provides `Git.RepoStore`, the service every route reaches it through:
 
 ```typescript
-const GitLive = Git.Server.layer(Api).pipe(
+const GitLive = Git.ApiLive.pipe(
   Layer.provide(Git.HandlersLive),
-  Layer.provide(AuthenticatedLive),
+  Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   // ReposDurableObject requires:
   Layer.provide(Git.HasherInline),            // push verification
@@ -72,6 +72,7 @@ Resolve the id through the registry, then talk to the object. A route
 that answers the default branch's tip:
 
 ```typescript
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
@@ -83,7 +84,7 @@ export const Tip = HttpApiEndpoint.get("tip", "/api/v1/repos/:owner/:repo/tip", 
 });
 
 export class AppRoutes extends HttpApiGroup.make("app").add(Tip) {}
-export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
+export class AppApi extends HttpApi.make("app").add(AppRoutes) {}
 
 export const AppRoutesLive = HttpApiBuilder.group(AppApi, "app", (h) =>
   Effect.gen(function* () {
@@ -107,11 +108,11 @@ export const AppRoutesLive = HttpApiBuilder.group(AppApi, "app", (h) =>
 );
 ```
 
-Pass `AppRoutesLive` to `Git.Server.layer(AppApi, AppRoutesLive)`.
-The server registers the Git groups automatically.
-[Server](/git/blocks/server#handlers) shows the full assembly. The registry
+Provide `AppRoutesLive` to `HttpApiBuilder.layer(AppApi)`, then merge that route layer beside `Git.ApiLive`.
+`Git.ApiLive` registers the Git groups.
+[HTTP routes](/git/blocks/server#add-git-to-your-application) shows the full assembly. The registry
 and repository clients are resolved when the group builds; the handler
-runs once per request behind the API's middleware.
+runs once per request behind the route middleware.
 
 ## Wrap it
 
@@ -145,9 +146,9 @@ export const ReposWithHooks = Layer.effect(
 ```
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
+const GitLive = Git.ApiLive.pipe(
   Layer.provide(Git.HandlersLive),
-  Layer.provide(AuthenticatedLive),
+  Layer.provide(Authentication.layer),
 -  Layer.provide(Git.ReposDurableObject),
 +  Layer.provide(ReposWithHooks),
 ```

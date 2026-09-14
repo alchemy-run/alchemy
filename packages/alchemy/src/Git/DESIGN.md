@@ -672,24 +672,24 @@ Codec inventory: pkt-line reader/writer (65516 payload cap, flush/delim/ERR), si
 ## 8. Auth model: nothing inside the engine
 
 The engine holds no credentials, no users, and no policy. Who may call
-which route is decided by the `HttpApi` middleware the user puts in front
+which route is decided by the `HttpRouter` middleware the user puts in front
 of the routes, before the engine sees a request; the engine's routes
 declare no middleware and no auth errors.
 
 Every endpoint in `Api/*.ts` is an Effect `HttpApiEndpoint`.
-The user derives an API from `Git.Api` — `Git.Api.middleware(Session)`,
-plus their own routes. `Server.layer(api)` registers Git’s default groups
-against that API. Application endpoints and overrides use native
-`HttpApiBuilder.group(api, group, ...)` layers passed as the second argument. `Git.HandlersLive` builds a shared
-`Git.Handlers` service whose handler objects can be registered with
-`h.handleAll(git.repos)` (and the corresponding objects for other groups).
-Applications can override a handler with object spread before registration.
-Explicit group layers override the matching defaults. The server mounts `InternalLive` separately,
-outside application middleware. `ServerLive` provides `ApiLive` and
-`HandlersLive` for the unmodified `Git.Api`: the open default.
+The user defines their own API and composes its routes beside Git. `Git.ApiLive` is a native HttpRouter route layer,
+merged beside `HttpApiBuilder.layer(AppApi)` by the application. `Git.HandlersLive`
+supplies the shared implementation. `Git.GroupsLive` exposes default native
+group layers for applications that override a Git handler with
+`HttpApiBuilder.group(Git.Api, ...)` and ordinary `Layer.mergeAll`.
 
-The one decision a middleware cannot make is about the refs a push wants
-to move, because the pack has not been parsed yet. That is git's own
+The application owns authentication and the HTTP server. Its
+`HttpRouter.middleware` layer applies to whichever public route layers it
+chooses. Schema composition (`addHttpApi`) is independent of route registration.
+There is no Git server wrapper and no application API argument.
+
+The request middleware decides who may call routes; it cannot inspect ref
+updates before the push is parsed. That is git's own
 pre-receive hook, and **`Git.Hooks`** is that hook as an optional
 service: `preReceive({ repo, updates })` runs in the Worker, inside the
 request (so whatever the middleware put in context is readable with
@@ -699,7 +699,7 @@ and before a merge; the wire reports the reason per ref, REST answers a
 typed 403 (`HookRejected`).
 
 The push pipeline's internal hash route is not part of `Git.Api`: it is
-`Git.InternalApi`, mounted by `Server.layer` beside the user's API and
+`Git.InternalApi`, registered by `Git.InternalApiLive` beside public routes and
 outside the user's middleware; it authenticates with `InternalSecret`, a
 deploy-time `Alchemy.Random` value no user holds.
 

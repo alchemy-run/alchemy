@@ -12,7 +12,8 @@ import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as Http from "@/Http/index.ts";
 import { HASH_ROUTE } from "@/Git/Hasher/Protocol.ts";
 
 const oid = "a".repeat(40) as Git.Oid;
@@ -84,32 +85,32 @@ const FakeHandlers = Layer.succeed(Git.Handlers, {
   internal: { hashPart: echoBody },
 });
 
-class Unauthorized extends Schema.TaggedError<Unauthorized>()(
-  "Unauthorized",
-  {},
-  { httpApiStatus: 401 },
-) {}
-class Auth extends HttpApiMiddleware.Service<
-  Auth,
-  { requires: RuntimeContext }
->()("test/GitHttp/Auth", {
-  error: Unauthorized,
-}) {}
-const AuthLive = Layer.succeed(Auth, (httpEffect) =>
+const Authentication = HttpRouter.middleware((httpEffect) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    if (request.headers.authorization !== "Bearer test")
-      return yield* new Unauthorized();
+    if (request.headers.authorization !== "Bearer test") {
+      return HttpServerResponse.empty({ status: 401 });
+    }
     const runtime = yield* RuntimeContext;
     return HttpServerResponse.setHeader(
       yield* httpEffect,
       "x-runtime-id",
       runtime.id,
     );
-  }),
+  }).pipe(Effect.provide(RuntimeContext.phantom)),
 );
-class AppApi extends Git.Api.middleware(Auth) {}
-const AppApiLive = HttpApiBuilder.group(AppApi, "github", (h) =>
+class AppRoutes extends HttpApiGroup.make("app").add(
+  HttpApiEndpoint.get("health", "/health", { success: Schema.String }),
+) {}
+class AppApi extends HttpApi.make("app").add(AppRoutes) {}
+const AppApiLive = HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(
+    HttpApiBuilder.group(AppApi, "app", (h) =>
+      h.handle("health", () => Effect.succeed("ok")),
+    ),
+  ),
+);
+const GitHubLive = HttpApiBuilder.group(Git.Api, "github", (h) =>
   Effect.map(Git.Handlers, (git) =>
     h.handleAll({
       ...git.github,
@@ -118,43 +119,43 @@ const AppApiLive = HttpApiBuilder.group(AppApi, "github", (h) =>
     }),
   ),
 );
-const OpenServer = Git.Server.layer(Git.Api).pipe(Layer.provide(FakeHandlers));
-const ProtectedServer = Git.Server.layer(AppApi, AppApiLive).pipe(
-  Layer.provide(AuthLive),
+const OpenRoutes = Git.ApiLive.pipe(
   Layer.provide(FakeHandlers),
+  Layer.provide(Http.Platform),
 );
-
-class AppRoutes extends HttpApiGroup.make("app").add(
-  HttpApiEndpoint.get("health", "/health", { success: Schema.String }),
-) {}
+const ProtectedRoutes = Layer.mergeAll(
+  Layer.mergeAll(
+    AppApiLive,
+    HttpApiBuilder.layer(Git.Api).pipe(
+      Layer.provide(Layer.mergeAll(Git.GroupsLive, GitHubLive)),
+    ),
+  ).pipe(Layer.provide(Authentication.layer)),
+  Git.InternalApiLive,
+).pipe(Layer.provide(FakeHandlers), Layer.provide(Http.Platform));
 class PrefixedApi extends HttpApi.make("custom-git")
   .add(Git.Refs)
-  .prefix("/git")
-  .add(AppRoutes)
-  .middleware(Auth) {}
-const HealthLive = HttpApiBuilder.group(PrefixedApi, "app", (h) =>
-  h.handle("health", () => Effect.succeed("ok")),
-);
-const PrefixedLive = Git.Server.layer(PrefixedApi, HealthLive);
-const PrefixedServer = PrefixedLive.pipe(
-  Layer.provide(AuthLive),
+  .prefix("/git") {}
+const PrefixedRoutes = Layer.mergeAll(
+  AppApiLive,
+  HttpApiBuilder.layer(PrefixedApi).pipe(
+    Layer.provide(
+      HttpApiBuilder.group(PrefixedApi, "refs", (h) =>
+        Effect.map(Git.Handlers, (git) => h.handleAll(git.refs)),
+      ),
+    ),
+  ),
+).pipe(
+  Layer.provide(Authentication.layer),
   Layer.provide(FakeHandlers),
+  Layer.provide(Http.Platform),
 );
 
-// Check that automatic defaults preserve middleware and missing-group requirements.
-const checked: Layer.Layer<Git.Server, never, Git.Handlers | Auth> =
-  PrefixedLive;
-// @ts-expect-error Auth must still be provided.
-const missingAuth: Layer.Layer<Git.Server, never, Git.Handlers> = PrefixedLive;
-// @ts-expect-error Application endpoints still need a native group implementation.
-const missingApp: Layer.Layer<Git.Server, never, Git.Handlers | Auth> =
-  Git.Server.layer(PrefixedApi);
-void checked;
-void missingAuth;
-void missingApp;
-
-const request = (server: Git.ServerShape, path: string, init?: RequestInit) =>
-  server.fetch.pipe(
+const request = (
+  fetch: Http.HttpEffect<RuntimeContext>,
+  path: string,
+  init?: RequestInit,
+) =>
+  fetch.pipe(
     Effect.provideService(
       HttpServerRequest.HttpServerRequest,
       HttpServerRequest.fromWeb(new Request(`http://git.test${path}`, init)),
@@ -180,7 +181,7 @@ describe("Git HTTP composition", () => {
     "registers every default group and preserves decoded requests and typed errors",
     () =>
       Effect.gen(function* () {
-        const server = yield* Git.Server;
+        const server = yield* HttpRouter.toHttpEffect(OpenRoutes);
         const ref = yield* request(
           server,
           "/api/v1/repos/acme/repo/ref?name=refs%2Fheads%2Fmain",
@@ -201,12 +202,12 @@ describe("Git HTTP composition", () => {
 
         const invalid = yield* request(server, "/api/v1/repos/acme/repo/ref");
         expect(invalid.status).toBe(400);
-      }).pipe(Effect.provide(OpenServer), Effect.scoped),
+      }).pipe(Effect.scoped),
   );
 
   it.effect("preserves binary protocol responses", () =>
     Effect.gen(function* () {
-      const server = yield* Git.Server;
+      const server = yield* HttpRouter.toHttpEffect(OpenRoutes);
       const bytes = new Uint8Array([0, 255, 1, 128, 10]);
       const response = yield* request(
         server,
@@ -220,14 +221,14 @@ describe("Git HTTP composition", () => {
       expect(
         new Uint8Array(yield* Effect.promise(() => response.arrayBuffer())),
       ).toEqual(bytes);
-    }).pipe(Effect.provide(OpenServer), Effect.scoped),
+    }).pipe(Effect.scoped),
   );
 
   it.effect(
     "applies app middleware and handler overrides while keeping internal routes separate",
     () =>
       Effect.gen(function* () {
-        const server = yield* Git.Server;
+        const server = yield* HttpRouter.toHttpEffect(ProtectedRoutes);
         const denied = yield* request(server, "/api/v3/user");
         expect(denied.status).toBe(401);
         const wireDenied = yield* request(
@@ -244,19 +245,24 @@ describe("Git HTTP composition", () => {
         expect(yield* Effect.promise(() => allowed.json())).toEqual({
           login: "application",
         });
+        const health = yield* request(server, "/health", {
+          headers: { authorization: "Bearer test" },
+        });
+        expect(health.status).toBe(200);
+        expect(yield* Effect.promise(() => health.json())).toBe("ok");
         const internal = yield* request(server, HASH_ROUTE, {
           method: "POST",
           body: "hash input",
         });
         expect(internal.status).toBe(200);
         expect(yield* Effect.promise(() => internal.text())).toBe("hash input");
-      }).pipe(Effect.provide(ProtectedServer), Effect.scoped),
+      }).pipe(Effect.scoped),
   );
   it.effect(
     "adds app endpoints beside prefixed Git defaults on a subset API",
     () =>
       Effect.gen(function* () {
-        const server = yield* Git.Server;
+        const server = yield* HttpRouter.toHttpEffect(PrefixedRoutes);
         const init = { headers: { authorization: "Bearer test" } };
         const denied = yield* request(
           server,
@@ -283,6 +289,6 @@ describe("Git HTTP composition", () => {
           init,
         );
         expect(unprefixed.status).toBe(404);
-      }).pipe(Effect.provide(PrefixedServer), Effect.scoped),
+      }).pipe(Effect.scoped),
   );
 });

@@ -1,6 +1,6 @@
 /**
  * The engine holds no auth. Who may call which route is decided by the
- * `HttpApi` middleware you put in front of the routes, before the engine
+ * `HttpRouter` middleware you put in front of the routes, before the engine
  * sees a request. The one decision a middleware cannot make is about the
  * refs a push wants to move, because the pack has not been parsed yet.
  * That is what git's own pre-receive hook is for, and {@link Hooks} is

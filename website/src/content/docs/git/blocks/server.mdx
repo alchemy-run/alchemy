@@ -1,254 +1,140 @@
 ---
-title: Server
-description: Compose Git with Effect HttpApiEndpoint and HttpApiBuilder.group, add application routes, replace handlers, and serve the result with Server.layer.
+title: HTTP routes
+description: Compose Git route layers beside your application's Effect HTTP API, with your middleware and server.
 ---
 
-`Git.Server` is the composed HTTP surface behind one `fetch`.
-`Git.Server.layer(api, groups)` serves an API derived from `Git.Api`, yours,
-with your middleware in front of every route; `ServerLive` is the open
-default, `Git.Api` with nothing in front:
+`Git.ApiLive` is an ordinary route layer. Your application owns its `HttpApi`,
+its route implementations, and its server. Git receives none of those.
+
+## Add Git to your application
 
 ```typescript
-export default Cloudflare.Worker(
-  "Git",
-  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
-  Effect.gen(function* () {
-    const git = yield* Git.Server;
-    return { fetch: git.fetch };
-  }).pipe(Effect.provide(GitLive)),
+import * as Git from "alchemy/Git";
+import * as Layer from "effect/Layer";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+
+const AppApiLive = HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(MeLive),
+);
+
+const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+  Layer.provide(Authentication.layer),
 );
 ```
 
-It is not a Worker. You write the Worker, so you choose its name, its
-domain, its compatibility date, and what else runs beside it. And
-`Server.layer` is not the only way in: everything it composes is an
-ordinary Effect `HttpApi`, exported piece by piece.
+`AppApi` and `MeLive` belong to the application. `MeLive` is the native
+`HttpApiBuilder.group(AppApi, "app", ...)` implementation for its own group.
+`Git.ApiLive` registers the six public Git groups without manual registration.
+`Authentication` is your `HttpRouter.middleware` descriptor; its layer applies
+to both sets of public routes.
 
-## Three planes, one API
-
-| Group | Path | Client |
-| --- | --- | --- |
-| `Git.Protocol` | `/:owner/:repo.git/info/refs`, `git-upload-pack`, `git-receive-pack` | `git` |
-| `Git.Repos`, `Git.Refs`, `Git.Objects`, `Git.Pulls` | `/api/v1/**` | your code, `curl`, the typed client |
-| `Git.GitHub` | `/api/v3/**` | `gh api`, Octokit |
-
-`Git.Api` is all six groups. Derive yours from it, with your
-middleware in front and your routes beside, or build one from a
-subset:
+## Define an application endpoint
 
 ```typescript
-export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
-
-// or: no pull requests, no GitHub facade
-export class SmallApi extends HttpApi.make("git")
-  .add(Git.Repos).add(Git.Refs).add(Git.Objects).add(Git.Protocol)
-  .middleware(Authenticated) {}
-```
-
-No git route carries middleware of its own, and none decides who may
-call it: that is the middleware of the API that mounts it, and
-[Auth](/git/blocks/auth) is the pattern.
-
-## Endpoints
-
-Every endpoint is an Effect `HttpApiEndpoint`. The same schemas drive
-request decoding, response encoding, the typed client, and OpenAPI:
-
-```typescript
+import * as Effect from "effect/Effect";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 
-export const GetRepo = HttpApiEndpoint.get("get", "/repos/:owner/:repo", {
-  params: Git.RepoPath,
-  success: Git.Repo,
-  error: [Git.RepoNotFound],
-});
-```
+class AppRoutes extends HttpApiGroup.make("app").add(
+  HttpApiEndpoint.get("me", "/api/v1/me", {
+    success: User,
+    error: Unauthorized,
+  }),
+) {}
+class AppApi extends HttpApi.make("app").add(AppRoutes) {}
 
-Your own endpoints follow the same pattern. Add them to a group and add
-that group to your API. Apply `.middleware(Authenticated)` to the endpoint,
-group, or API whose requests it should protect:
-
-```typescript
-export const Me = HttpApiEndpoint.get("me", "/api/v1/me", {
-  success: User,
-  error: Unauthorized,
-}).middleware(Authenticated);
-
-export class AppRoutes extends HttpApiGroup.make("app").add(Me) {}
-export class AppApi extends Git.Api.add(AppRoutes).middleware(Authenticated) {}
-```
-
-## Handlers
-
-`Git.Handlers` is a service containing handler objects for `repos`, `refs`,
-`objects`, `pulls`, `protocol`, `github`, and `internal`. `Git.HandlersLive`
-builds those handlers once, sharing the registry cache, storage clients,
-and push admission gate across the groups.
-
-`Server.layer(AppApi)` registers the Git groups automatically. Implement
-your own endpoints with `HttpApiBuilder.group` and pass that layer to the
-server. The group builder checks that every endpoint is implemented:
-
-```typescript
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-
-export const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
+const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
   h.handle("me", () => Effect.gen(function* () {
     const { user } = yield* Session;
     if (user === null) return yield* new Unauthorized();
     return user;
   })),
 );
+```
 
-const GitLive = Git.Server.layer(AppApi, MeLive).pipe(
+The application schema is independent of Git. To describe both APIs to a client
+or OpenAPI generator, compose their schemas with native `addHttpApi`:
+
+```typescript
+class CombinedApi extends AppApi.addHttpApi(Git.Api) {}
+```
+
+Schema composition does not register routes or apply middleware to already-built
+route layers. Use the router-layer composition above to serve them.
+
+## Build the HTTP server
+
+```typescript
+import * as Http from "alchemy/Http";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+
+const HttpLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
   Layer.provide(Git.HandlersLive),
-  Layer.provide(AuthenticatedLive),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
   Layer.provide(Git.BlobStoreR2(GitObjects)),
+  Layer.provide(Http.Platform),
 );
+
+const fetch = yield* HttpRouter.toHttpEffect(HttpLive);
+return { fetch };
 ```
 
-The handler receives decoded `params`, `query`, `payload`, and `headers`,
-along with the raw `request`. It returns the declared success value or an
-`HttpServerResponse`. Binary endpoints read the request body directly and
-return their own response.
+`Http.Platform` provides the platform services needed on a Worker or Lambda.
+The application chooses CORS and any other middleware with Effect's HTTP APIs.
+`Git.HandlersLive` builds the shared storage clients, resolve cache, and handlers.
 
-`Server.layer` uses `AppApi` for Git’s defaults, preserving its middleware
-and prefixes. Supply only application groups or Git groups you want to override.
-`Git.ServerLive` is the open default:
+## Replace a Git handler
 
-```typescript
-const GitLive = Git.ServerLive.pipe(
-  Layer.provide(Git.ReposDurableObject),
-  Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.HasherInline),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
-);
-// ServerLive = Server.layer(Git.Api)
-//   .pipe(Layer.provide(Git.HandlersLive))
-```
-
-## Replace a handler
-
-Pass a replacement `github` group to the server to answer
-`GET /api/v3/user` from your own session. Object spread keeps the other
-GitHub handlers. Because this group is built against `AppApi`, the
-handler can directly use the `Session` its middleware provides:
+Most applications use `Git.ApiLive`. For an override, use the native API builder
+and merge your replacement group after the default `Git.GroupsLive`:
 
 ```typescript
-const GitHubLive = HttpApiBuilder.group(AppApi, "github", (h) =>
+const GitHubLive = HttpApiBuilder.group(Git.Api, "github", (h) =>
   Effect.map(Git.Handlers, (git) => h.handleAll({
     ...git.github,
     user: () => Effect.gen(function* () {
       const { user } = yield* Session;
-      if (user === null) {
-        return HttpServerResponse.jsonUnsafe(
-          { message: "Requires authentication" },
-          { status: 401 },
-        );
-      }
-      return HttpServerResponse.jsonUnsafe({ login: user.id, type: "User" });
+      return HttpServerResponse.jsonUnsafe({ login: user?.id });
     }),
   })),
-)
-```
+);
 
-There are no per-endpoint implementation tags or `.make()` layers.
-Customization happens in the ordinary Effect group builder. Explicit group
-layers replace the matching defaults; the remaining Git groups stay registered:
-
-```typescript
-const GitLive = Git.Server.layer(
-  AppApi,
-  Layer.mergeAll(MeLive, GitHubLive),
-).pipe(Layer.provide(Git.HandlersLive));
-```
-
-Provide the same middleware and storage layers shown above.
-
-## Build the router directly
-
-`Server.layer` mounts Git’s defaults, your group layers, and `Git.InternalLive`, the
-engine's hash endpoint outside your application's middleware. It also
-provides the HTTP platform services and applies CORS. To manage the
-router yourself, `Git.ApiLive` is an ordinary layer for the base `Git.Api`:
-
-```typescript
-import * as Alchemy from "alchemy";
-import * as Http from "alchemy/Http";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-
-const http = yield* Layer.mergeAll(
-  HttpApiBuilder.layer(Git.Api),
-  HttpApiBuilder.layer(Git.InternalApi),
-).pipe(
-  Layer.provide(Git.ApiLive),
-  Layer.provide(Git.InternalLive),
-  Layer.provide(Git.HandlersLive),
-  Layer.provide(Http.Platform),
-  Layer.provide(Alchemy.RuntimeContext.phantom),
-  HttpRouter.toHttpEffect,
+const CustomGitRoutes = HttpApiBuilder.layer(Git.Api).pipe(
+  Layer.provide(Layer.mergeAll(Git.GroupsLive, GitHubLive)),
+);
+const PublicRoutes = Layer.mergeAll(AppApiLive, CustomGitRoutes).pipe(
+  Layer.provide(Authentication.layer),
 );
 ```
 
-Provide the storage and hasher layers in the surrounding graph, as in
-`GitLive` above. `RuntimeContext.phantom` adds no captured value: the
-Worker supplies the real context for each request, including middleware.
-Mount `InternalApi` when using a fan-out [Hasher](/git/blocks/hasher);
-`Server.layer` always mounts it for you.
+Every other Git handler remains supplied by `GroupsLive`. No Git-specific
+server factory or application API argument is involved.
 
-## Worker options
+## Serve selected groups or prefixes
 
-```typescript
-{ main: import.meta.url, ...Git.GIT_WORKER_OPTIONS }
-```
-
-`nodejs_compat` for zlib and crypto, a 300 s CPU ceiling so a large
-push can be verified, and a service binding to the Worker itself for
-the hasher. Spread it first and put your own options after it.
-
-## Under your own routes
-
-`git.fetch` is an Effect that reads the request from context and
-returns a response, so it composes with anything else you serve:
+For a subset or modified endpoint schema, use `HttpApiBuilder.group` against
+the schema you are serving:
 
 ```typescript
-Effect.gen(function* () {
-  const git = yield* Git.Server;
+class ManagementApi extends HttpApi.make("management")
+  .add(Git.Repos).prefix("/git") {}
 
-  return {
-    fetch: Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      if (request.url === "/healthz") {
-        return HttpServerResponse.text("ok");
-      }
-      return yield* git.fetch;
-    }),
-  };
-});
+const ManagementRoutes = HttpApiBuilder.layer(ManagementApi).pipe(
+  Layer.provide(HttpApiBuilder.group(ManagementApi, "repos", (h) =>
+    Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+  )),
+);
 ```
 
-To put a whole application on the same domain, keep the git host as
-its own Worker and forward the git paths to it over a service binding.
-[Part 3 of the tutorial](/git/tutorial/part-3) shows the front door.
+A group built against a schema uses that schema's paths and API middleware.
+Changing a different API schema later does not change those registered routes.
 
-## The typed client
+## Internal hashing
 
-The API is a value, so the same schema types the server, the client,
-and your tests:
-
-```typescript
-import { GitApi } from "alchemy/Git";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-
-const client = yield* HttpApiClient.make(GitApi, { baseUrl: host });
-
-const repo = yield* client.repos.get({
-  params: { owner: "acme", repo: "web" },
-});
-```
-
-[Repositories](/git/repositories) and [Pull requests](/git/pull-requests)
-use it throughout.
+`Git.InternalApiLive` registers the internal hashing endpoint separately.
+The self-binding hasher calls it with a deploy-time internal secret. Mount it
+outside user authentication, as in the server assembly above. `Git.ApiLive`
+contains only the public Git surface and does not mount internal routes.

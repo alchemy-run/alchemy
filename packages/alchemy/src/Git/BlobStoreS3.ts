@@ -19,7 +19,8 @@
  * ### Providing the store
  * **Example:** Packs on S3, compute on Cloudflare
  * ```typescript
- * const GitLive = Git.ServerLive.pipe(
+ * const GitLive = Git.ApiLive.pipe(
+ *   Layer.provide(Git.HandlersLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
  *   Layer.provide(Git.BlobStoreS3()),

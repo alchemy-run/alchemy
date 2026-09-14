@@ -20,9 +20,9 @@
  * ```typescript
  * const RepoIndex = Cloudflare.D1.Database("RepoIndex");
  *
- * const GitLive = Git.Server.layer(Api).pipe(
+ * const GitLive = Git.ApiLive.pipe(
  *   Layer.provide(Git.HandlersLive),
- *   Layer.provide(AuthenticatedLive),
+ *   Layer.provide(Authentication.layer),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryD1(RepoIndex)),
  *   Layer.provide(Git.BlobStoreR2(GitObjects)),

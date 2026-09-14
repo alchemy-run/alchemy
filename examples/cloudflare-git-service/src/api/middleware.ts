@@ -1,27 +1,19 @@
 /**
- * Who may call what. One `HttpApi` middleware in front of every route,
+ * Who may call what. One `HttpRouter` middleware in front of every route,
  * git's and ours: REST, the wire, the raw reads, and the GitHub facade.
  * A user owns the repositories under their own name; anyone may read a
  * public one.
  */
-import type { RuntimeContext } from "alchemy";
+import { RuntimeContext } from "alchemy";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
-import { Auth, Session, Unauthorized } from "./auth.ts";
-
-/** The middleware in front of every route. Provides {@link Session}. */
-export class Authenticated extends HttpApiMiddleware.Service<
-  Authenticated,
-  { provides: Session; requires: RuntimeContext }
->()("app/Authenticated", { error: Unauthorized }) {}
+import { Auth, Session } from "./auth.ts";
 
 /** A 401 that makes `git` ask for credentials. */
 const unauthorized = HttpServerResponse.jsonUnsafe(
@@ -35,8 +27,7 @@ const unauthorized = HttpServerResponse.jsonUnsafe(
  * do anything under their own owner name and use the routes that have no
  * owner (create, list, import); anyone may read a public repository.
  */
-export const AuthenticatedLive = Layer.effect(
-  Authenticated,
+export const Authentication = HttpRouter.middleware<{ provides: Session }>()(
   Effect.gen(function* () {
     const auth = yield* Auth;
     const registry = yield* Git.RegistryStore;
@@ -83,7 +74,7 @@ export const AuthenticatedLive = Layer.effect(
       return entry === undefined || entry.public;
     });
 
-    return (httpEffect, { endpoint }) =>
+    return (httpEffect) =>
       Effect.gen(function* () {
         const user = yield* resolve;
         const { owner } = yield* HttpRouter.params;
@@ -93,12 +84,12 @@ export const AuthenticatedLive = Layer.effect(
           return yield* Effect.provideService(httpEffect, Session, { user });
         }
         const request = yield* HttpServerRequest;
-        if (Git.isRead(endpoint, request) && (yield* publicRead)) {
+        if (Git.isRead(request) && (yield* publicRead)) {
           return yield* Effect.provideService(httpEffect, Session, {
             user: user ?? null,
           });
         }
         return unauthorized;
-      });
+      }).pipe(Effect.provide(RuntimeContext.phantom));
   }),
 );
