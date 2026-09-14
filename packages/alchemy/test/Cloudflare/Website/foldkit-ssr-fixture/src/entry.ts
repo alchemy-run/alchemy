@@ -13,6 +13,4 @@ const application = Runtime.makeApplication({
 
 // The document arrives rendered: adopt it rather than rebuild it. The build
 // id is what hydration compares against the one the server stamped.
-Runtime.hydrate(application, {
-  buildId: (import.meta.env as { FOLDKIT_BUILD_ID: string }).FOLDKIT_BUILD_ID,
-});
+Runtime.hydrate(application, { buildId: import.meta.env.FOLDKIT_BUILD_ID });
