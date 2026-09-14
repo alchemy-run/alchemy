@@ -32,7 +32,10 @@ const getProject = (accountId: string, projectName: string) =>
   pages.getProject({ accountId, projectName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -46,7 +49,10 @@ const expectGone = (accountId: string, projectName: string) =>
     Effect.retry({
       while: (e) => e._tag === "ProjectNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),
@@ -59,7 +65,10 @@ const purgeProject = (accountId: string, projectName: string) =>
     Effect.catchTag("ProjectNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -273,4 +282,78 @@ test.provider("changing the name triggers replacement", (stack) =>
 
     yield* expectGone(accountId, NAME_REPLACE_B);
   }).pipe(logLevel),
+);
+
+test.provider(
+  "updates extended build settings and removes typed queue bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const deploy = (extended: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const queue = yield* Cloudflare.Queues.Queue("PagesQueue", {});
+            const bucket = yield* Cloudflare.R2.Bucket("PagesBucket", {
+              jurisdiction: "eu",
+              forceDestroy: true,
+            });
+            return yield* Cloudflare.Pages.Project("ExtendedProject", {
+              name: "alchemy-audit-pages-extended",
+              buildConfig: {
+                webAnalyticsTag: extended ? "audit-tag-v2" : "audit-tag-v1",
+              },
+              deploymentConfigs: {
+                preview: {
+                  alwaysUseLatestCompatibilityDate: extended,
+                  buildImageMajorVersion: extended ? 3 : 2,
+                  r2Buckets: {
+                    AUDIT_BUCKET: {
+                      name: bucket.bucketName,
+                      jurisdiction: "eu",
+                    },
+                  },
+                  queueProducers: extended
+                    ? {}
+                    : { AUDIT_QUEUE: { name: queue.queueName } },
+                  envVars: {
+                    AUDIT_SECRET: {
+                      type: "secret_text",
+                      value: extended ? "secret-v2" : "secret-v1",
+                    },
+                  },
+                },
+              },
+            });
+          }),
+        );
+      const first = yield* deploy(false);
+      const initial = yield* getProject(accountId, first.name);
+      expect(
+        initial.deploymentConfigs.preview?.r2Buckets?.AUDIT_BUCKET,
+      ).toMatchObject({ jurisdiction: "eu" });
+      expect(initial.buildConfig?.webAnalyticsTag).toEqual("audit-tag-v1");
+      expect(initial.deploymentConfigs.preview?.buildImageMajorVersion).toEqual(
+        2,
+      );
+      expect(
+        initial.deploymentConfigs.preview?.queueProducers?.AUDIT_QUEUE,
+      ).toBeDefined();
+      const second = yield* deploy(true);
+      expect(second.projectId).toEqual(first.projectId);
+      const updated = yield* getProject(accountId, second.name);
+      expect(updated.buildConfig?.webAnalyticsTag).toEqual("audit-tag-v2");
+      expect(updated.deploymentConfigs.preview?.buildImageMajorVersion).toEqual(
+        3,
+      );
+      expect(
+        updated.deploymentConfigs.preview?.alwaysUseLatestCompatibilityDate,
+      ).toEqual(true);
+      expect(
+        updated.deploymentConfigs.preview?.queueProducers?.AUDIT_QUEUE == null,
+      ).toBe(true);
+      yield* stack.destroy();
+      yield* expectGone(accountId, first.name);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

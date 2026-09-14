@@ -277,9 +277,9 @@ const sameWarpDevices = (
 
 const serializeWarpDevices = (devices: readonly WarpDevice[]) =>
   devices
-    .map((d) => `${d.id}|${d.name}|${d.routerIp}`)
+    .map((d) => JSON.stringify([d.id, d.name, d.routerIp]))
     .sort()
-    .join(",");
+    .join("\n");
 
 const toAttributes = (
   config: ObservedConfig,

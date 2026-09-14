@@ -32,6 +32,8 @@ export type AttackMitigation = {
 };
 
 export type FirewallProps = {
+  /** Number of IPv4 addresses to allocate. Immutable; changing it replaces the cluster. */
+  dnsFirewallIpCount?: number;
   /**
    * DNS Firewall cluster name. Changing the name triggers a replacement —
    * the name is the identity used for cold-state recovery. If omitted, a
@@ -258,6 +260,9 @@ export const FirewallProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
+      if (news.dnsFirewallIpCount !== olds.dnsFirewallIpCount) {
+        return { action: "replace" } as const;
+      }
       // The name is the cold-state recovery identity — renames replace.
       const oldName = output?.name ?? (yield* createClusterName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
@@ -336,6 +341,7 @@ export const FirewallProvider = () =>
           accountId,
           name,
           upstreamIps: news.upstreamIps,
+          dnsFirewallIpCount: news.dnsFirewallIpCount,
           attackMitigation: news.attackMitigation,
           deprecateAnyRequests: news.deprecateAnyRequests,
           ecsFallback: news.ecsFallback,

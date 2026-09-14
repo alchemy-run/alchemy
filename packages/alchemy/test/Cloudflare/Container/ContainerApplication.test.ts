@@ -54,7 +54,7 @@ const waitForImage = (
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
       until: (app) => app.image === image,
-      times: 30,
+      times: 8,
     }),
   );
 
@@ -87,9 +87,9 @@ describe("ContainerApplication", () => {
   // Canonical `list()` test (Cloudflare account collection, pattern (b)).
   // `listContainerApplications` returns the full application objects in one
   // (non-paginated) response, so `list()` maps each into the exact `read`
-  // Attributes shape. Deploying a real container application requires a Docker
-  // build + push to the Cloudflare registry (not feasible in this harness), so
-  // this is a read-only enumeration assertion: the result is a well-typed array
+  // Attributes shape. The deployment fixtures below cover the Docker build
+  // and registry push paths. This complementary read-only enumeration assertion
+  // checks that the result is a well-typed array
   // (possibly empty on an account with no container applications) and every
   // element carries the full Attributes shape.
   test.provider("list enumerates container applications", (stack) =>
@@ -165,7 +165,7 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 600_000 },
+    { timeout: 120_000 },
   );
 
   // #1282: the image tag is `<repo>:<sourceHash>`, so any change to the
@@ -226,7 +226,7 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 900_000 },
+    { timeout: 120_000 },
   );
 
   // State written before #1282 carries only `hash.image`, and its live
@@ -294,7 +294,7 @@ describe("ContainerApplication", () => {
           Effect.repeat({
             schedule: Schedule.spaced("3 seconds"),
             until: (app) => app.version > legacy.version,
-            times: 30,
+            times: 8,
           }),
         );
         expect(after.image).toBe(taggedRef);
@@ -314,7 +314,7 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 900_000 },
+    { timeout: 120_000 },
   );
 
   // The Durable Object attachment is immutable, so a reconcile that finds an
@@ -352,7 +352,7 @@ describe("ContainerApplication", () => {
             schedule: Schedule.spaced("3 seconds"),
             until: (apps) =>
               apps.every((app) => app.id !== first.app.applicationId),
-            times: 30,
+            times: 8,
           }),
         );
         const detached = yield* Containers.createContainerApplication({
@@ -386,6 +386,6 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 900_000 },
+    { timeout: 120_000 },
   );
 });

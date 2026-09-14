@@ -11,7 +11,10 @@ import type { Providers } from "../Providers.ts";
 
 export type Store = Resource<
   "Cloudflare.SecretsStore",
-  {},
+  {
+    /** Name used when creating the account's first store. Existing shared stores retain their name. */
+    name?: string;
+  },
   {
     storeId: string;
     storeName: string;
@@ -40,11 +43,12 @@ export type Store = Resource<
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
  * ```
  *
- * **Example:** Adopt a specific named store
+ * **Example:** Name the account's first store
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore", {
  *   name: "production-secrets",
  * });
+ * // If the account already has a store, it is reused with its existing name.
  * ```
  *
  * @resource
@@ -56,6 +60,11 @@ export const Store = Resource<Store>("Cloudflare.SecretsStore");
 export const StoreProviderLive = () =>
   Provider.succeed(Store, {
     stables: ["storeId", "storeName", "accountId"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
     // The engine calls `read` whenever there's no prior state. Cloudflare
     // allows exactly one Secrets Store per account, so any account that's
     // ever provisioned one must reuse it. Returning the existing store as
@@ -74,7 +83,7 @@ export const StoreProviderLive = () =>
         accountId: acct,
       };
     }),
-    reconcile: Effect.fn(function* ({ output }) {
+    reconcile: Effect.fn(function* ({ output, news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -102,36 +111,22 @@ export const StoreProviderLive = () =>
           accountId: acct,
           // `default_secrets_store` is the name Cloudflare uses for an
           // account's default Secrets Store.
-          name: "default_secrets_store",
+          name: news?.name ?? "default_secrets_store",
         })
         .pipe(
-          Effect.catchTag("MaximumStoresExceeded", () =>
-            Effect.succeed(undefined),
+          Effect.catchTag("MaximumStoresExceeded", (error) =>
+            firstStore(acct).pipe(
+              Effect.flatMap((store) =>
+                store ? Effect.succeed(store) : Effect.fail(error),
+              ),
+            ),
           ),
         );
-
-      if (response) {
-        return {
-          storeId: response.id,
-          storeName: response.name,
-          accountId: acct,
-        };
-      }
-
-      const first = yield* firstStore(acct);
-      if (first) {
-        return {
-          storeId: first.id,
-          storeName: first.name,
-          accountId: acct,
-        };
-      }
-
-      return yield* Effect.die(
-        new Error(
-          `Cloudflare reported MaximumStoresExceeded for account ${acct} but no store could be listed.`,
-        ),
-      );
+      return {
+        storeId: response.id,
+        storeName: response.name,
+        accountId: acct,
+      };
     }),
     // Account-scoped collection. Cloudflare exposes a paginated
     // `secrets_store/stores` list op; enumerate every page and hydrate each
@@ -184,12 +179,12 @@ export const StoreProviderLocal = () =>
       // Purely virtual — the persisted state row is the source of truth.
       return output ?? undefined;
     }),
-    reconcile: Effect.fn(function* ({ output }) {
+    reconcile: Effect.fn(function* ({ output, news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return {
         storeId: output?.storeId ?? generateLocalId(),
         // Mirror the name Cloudflare uses for an account's default store.
-        storeName: output?.storeName ?? "default_secrets_store",
+        storeName: output?.storeName ?? news?.name ?? "default_secrets_store",
         accountId: output?.accountId ?? accountId,
       };
     }),

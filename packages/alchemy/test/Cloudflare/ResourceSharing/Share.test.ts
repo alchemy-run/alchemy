@@ -31,7 +31,10 @@ const getShare = (accountId: string, shareId: string) =>
   resourceSharing.getResourceSharing({ accountId, shareId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -50,7 +53,10 @@ const expectGone = (accountId: string, shareId: string) =>
     Effect.retry({
       while: (e) => e._tag === "ShareNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),
@@ -189,7 +195,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!recipientAccountId)(
@@ -280,7 +286,7 @@ test.provider.skipIf(!recipientAccountId)(
 
       yield* expectGone(accountId, share.shareId);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!recipientAccountId)(
@@ -343,5 +349,5 @@ test.provider.skipIf(!recipientAccountId)(
 
       yield* expectGone(accountId, share.shareId);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

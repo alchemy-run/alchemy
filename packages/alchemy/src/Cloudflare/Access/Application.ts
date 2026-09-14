@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { deepEqual } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
@@ -137,6 +138,64 @@ export interface InlineApplicationPolicy {
 }
 
 export interface ApplicationProps {
+  /** Allow WARP sessions to authenticate to the application. */
+  allowAuthenticateViaWarp?: zeroTrust.CreateAccessApplicationForAccountRequest["allowAuthenticateViaWarp"];
+  /** Allow application content in an iframe. */
+  allowIframe?: zeroTrust.CreateAccessApplicationForAccountRequest["allowIframe"];
+  /** Logo URL for the App Launcher header. */
+  appLauncherLogoUrl?: zeroTrust.CreateAccessApplicationForAccountRequest["appLauncherLogoUrl"];
+  /** App Launcher background color. */
+  bgColor?: zeroTrust.CreateAccessApplicationForAccountRequest["bgColor"];
+  /** CORS response header configuration. */
+  corsHeaders?: zeroTrust.CreateAccessApplicationForAccountRequest["corsHeaders"];
+  /** Custom message for identity-based access denials. */
+  customDenyMessage?: zeroTrust.CreateAccessApplicationForAccountRequest["customDenyMessage"];
+  /** Redirect URL for identity-based access denials. */
+  customDenyUrl?: zeroTrust.CreateAccessApplicationForAccountRequest["customDenyUrl"];
+  /** Redirect URL for non-identity access denials. */
+  customNonIdentityDenyUrl?: zeroTrust.CreateAccessApplicationForAccountRequest["customNonIdentityDenyUrl"];
+  /** Custom pages displayed by Access. */
+  customPages?: zeroTrust.CreateAccessApplicationForAccountRequest["customPages"];
+  /** Set session cookies eagerly across all application hostnames. */
+  eagerRedirectCookieSetting?: zeroTrust.CreateAccessApplicationForAccountRequest["eagerRedirectCookieSetting"];
+  /** Enable a binding cookie for session protection. */
+  enableBindingCookie?: zeroTrust.CreateAccessApplicationForAccountRequest["enableBindingCookie"];
+  /** Links displayed in the App Launcher footer. */
+  footerLinks?: zeroTrust.CreateAccessApplicationForAccountRequest["footerLinks"];
+  /** App Launcher header background color. */
+  headerBgColor?: zeroTrust.CreateAccessApplicationForAccountRequest["headerBgColor"];
+  /** Enable the HttpOnly cookie attribute. */
+  httpOnlyCookieAttribute?: zeroTrust.CreateAccessApplicationForAccountRequest["httpOnlyCookieAttribute"];
+  /** App Launcher landing page design. */
+  landingPageDesign?: zeroTrust.CreateAccessApplicationForAccountRequest["landingPageDesign"];
+  /** Application logo URL. */
+  logoUrl?: zeroTrust.CreateAccessApplicationForAccountRequest["logoUrl"];
+  /** Application multi-factor authentication configuration. */
+  mfaConfig?: zeroTrust.CreateAccessApplicationForAccountRequest["mfaConfig"];
+  /** Let CORS preflight requests bypass authentication. */
+  optionsPreflightBypass?: zeroTrust.CreateAccessApplicationForAccountRequest["optionsPreflightBypass"];
+  /** Scope session cookies to the application path. */
+  pathCookieAttribute?: zeroTrust.CreateAccessApplicationForAccountRequest["pathCookieAttribute"];
+  /** Header accepting a service token in a single value. */
+  readServiceTokensFromHeader?: zeroTrust.CreateAccessApplicationForAccountRequest["readServiceTokensFromHeader"];
+  /** SAML or OIDC SaaS application configuration. */
+  saasApp?: zeroTrust.CreateAccessApplicationForAccountRequest["saasApp"];
+  /** SameSite attribute applied to session cookies. */
+  sameSiteCookieAttribute?: zeroTrust.CreateAccessApplicationForAccountRequest["sameSiteCookieAttribute"];
+  /** SCIM provisioning configuration; requires Cloudflare beta access. */
+  scimConfig?: zeroTrust.CreateAccessApplicationForAccountRequest["scimConfig"];
+  /** Legacy public domains; prefer destinations. */
+  selfHostedDomains?: zeroTrust.CreateAccessApplicationForAccountRequest["selfHostedDomains"];
+  /** Return HTTP 401 for requests blocked by a service authentication policy. */
+  service_auth_401_redirect?: zeroTrust.CreateAccessApplicationForAccountRequest["service_auth_401_redirect"];
+  /** Skip the App Launcher login page. */
+  skipAppLauncherLoginPage?: zeroTrust.CreateAccessApplicationForAccountRequest["skipAppLauncherLoginPage"];
+  /** Enable automatic authentication through cloudflared. */
+  skipInterstitial?: zeroTrust.CreateAccessApplicationForAccountRequest["skipInterstitial"];
+  /** Criteria identifying protected infrastructure targets. */
+  targetCriteria?: zeroTrust.CreateAccessApplicationForAccountRequest["targetCriteria"];
+  /** Use a clientless browser isolation launcher URL. */
+  useClientlessIsolationAppLauncherUrl?: zeroTrust.CreateAccessApplicationForAccountRequest["useClientlessIsolationAppLauncherUrl"];
   /**
    * The Access application type.
    *
@@ -478,7 +537,7 @@ const retryTransientAccessError = <A, E extends { _tag: string }, R>(
           Schedule.exponential("1 second", 1.5),
           Schedule.spaced("5 seconds"),
         ]),
-        Schedule.recurs(12),
+        Schedule.recurs(8),
       ]),
     }),
   );
@@ -607,6 +666,7 @@ export const ApplicationProvider = () =>
         const created = yield* zeroTrust
           .createAccessApplicationForAccount({
             accountId,
+            ...applicationSettings(news),
             domain: body.domain,
             type: news.type,
             name: resolvedName,
@@ -655,11 +715,15 @@ export const ApplicationProvider = () =>
           ),
         );
       }
-      if (!bodyEqualsObserved(body, observed)) {
+      if (
+        !bodyEqualsObserved(body, observed) ||
+        !applicationSettingsEqual(news, observed.settings)
+      ) {
         const updated = yield* zeroTrust
           .updateAccessApplicationForAccount({
             accountId,
             appId: observed.id,
+            ...applicationSettings(news),
             domain: body.domain ?? observed.domain,
             type: news.type,
             name: resolvedName,
@@ -766,7 +830,7 @@ export const ApplicationProvider = () =>
           accountId: output.accountId,
           appId: output.applicationId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(Effect.catchTag("AccessApplicationNotFound", () => Effect.void));
     }),
   });
 
@@ -874,6 +938,7 @@ interface ObservedPolicy {
 }
 
 interface ObservedApp {
+  readonly settings: Partial<Record<ApplicationSettingKey, unknown>>;
   readonly id?: string;
   readonly aud?: string;
   readonly name?: string;
@@ -944,23 +1009,28 @@ const narrowOAuthConfiguration = (
               },
       };
 
-const narrowApp = (raw: {
-  id?: string | null;
-  aud?: string | null;
-  name?: string | null;
-  type?: ApplicationType | null | string;
-  domain?: string | null;
-  destinations?: ReadonlyArray<unknown> | null;
-  oauthConfiguration?: RawOAuthConfiguration | null;
-  allowedIdps?: ReadonlyArray<string> | null;
-  autoRedirectToIdentity?: boolean | null;
-  appLauncherVisible?: boolean | null;
-  sessionDuration?: string | null;
-  tags?: ReadonlyArray<string> | null;
-  policies?: ReadonlyArray<unknown> | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-}): ObservedApp => ({
+const narrowApp = (
+  raw: Partial<Record<ApplicationSettingKey, unknown>> & {
+    id?: string | null;
+    aud?: string | null;
+    name?: string | null;
+    type?: ApplicationType | null | string;
+    domain?: string | null;
+    destinations?: ReadonlyArray<unknown> | null;
+    oauthConfiguration?: RawOAuthConfiguration | null;
+    allowedIdps?: ReadonlyArray<string> | null;
+    autoRedirectToIdentity?: boolean | null;
+    appLauncherVisible?: boolean | null;
+    sessionDuration?: string | null;
+    tags?: ReadonlyArray<string> | null;
+    policies?: ReadonlyArray<unknown> | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  },
+): ObservedApp => ({
+  settings: Object.fromEntries(
+    APPLICATION_SETTING_KEYS.map((key) => [key, raw[key]]),
+  ),
   id: undef(raw.id),
   aud: undef(raw.aud),
   name: undef(raw.name),
@@ -1491,4 +1561,104 @@ const bodyEqualsObserved = (
     return false;
   }
   return true;
+};
+
+const APPLICATION_SETTING_KEYS = [
+  "allowAuthenticateViaWarp",
+  "allowIframe",
+  "appLauncherLogoUrl",
+  "bgColor",
+  "corsHeaders",
+  "customDenyMessage",
+  "customDenyUrl",
+  "customNonIdentityDenyUrl",
+  "customPages",
+  "eagerRedirectCookieSetting",
+  "enableBindingCookie",
+  "footerLinks",
+  "headerBgColor",
+  "httpOnlyCookieAttribute",
+  "landingPageDesign",
+  "logoUrl",
+  "mfaConfig",
+  "optionsPreflightBypass",
+  "pathCookieAttribute",
+  "readServiceTokensFromHeader",
+  "saasApp",
+  "sameSiteCookieAttribute",
+  "scimConfig",
+  "selfHostedDomains",
+  "service_auth_401_redirect",
+  "skipAppLauncherLoginPage",
+  "skipInterstitial",
+  "targetCriteria",
+  "useClientlessIsolationAppLauncherUrl",
+] as const;
+type ApplicationSettingKey = (typeof APPLICATION_SETTING_KEYS)[number];
+
+const applicationSettings = (props: ApplicationProps) => ({
+  allowAuthenticateViaWarp: props.allowAuthenticateViaWarp,
+  allowIframe: props.allowIframe,
+  appLauncherLogoUrl: props.appLauncherLogoUrl,
+  bgColor: props.bgColor,
+  corsHeaders: props.corsHeaders,
+  customDenyMessage: props.customDenyMessage,
+  customDenyUrl: props.customDenyUrl,
+  customNonIdentityDenyUrl: props.customNonIdentityDenyUrl,
+  customPages: props.customPages,
+  eagerRedirectCookieSetting: props.eagerRedirectCookieSetting,
+  enableBindingCookie: props.enableBindingCookie,
+  footerLinks: props.footerLinks,
+  headerBgColor: props.headerBgColor,
+  httpOnlyCookieAttribute: props.httpOnlyCookieAttribute,
+  landingPageDesign: props.landingPageDesign,
+  logoUrl: props.logoUrl,
+  mfaConfig: props.mfaConfig,
+  optionsPreflightBypass: props.optionsPreflightBypass,
+  pathCookieAttribute: props.pathCookieAttribute,
+  readServiceTokensFromHeader: props.readServiceTokensFromHeader,
+  saasApp: props.saasApp,
+  sameSiteCookieAttribute: props.sameSiteCookieAttribute,
+  scimConfig: props.scimConfig,
+  selfHostedDomains: props.selfHostedDomains,
+  service_auth_401_redirect: props.service_auth_401_redirect,
+  skipAppLauncherLoginPage: props.skipAppLauncherLoginPage,
+  skipInterstitial: props.skipInterstitial,
+  targetCriteria: props.targetCriteria,
+  useClientlessIsolationAppLauncherUrl:
+    props.useClientlessIsolationAppLauncherUrl,
+});
+
+const applicationSettingsEqual = (
+  props: ApplicationProps,
+  observed: Partial<Record<ApplicationSettingKey, unknown>>,
+) =>
+  APPLICATION_SETTING_KEYS.every(
+    (key) =>
+      props[key] === undefined ||
+      (key === "allowIframe" &&
+        props[key] === false &&
+        observed[key] == null) ||
+      deepEqual(
+        normalizeApplicationSetting(key, props[key]),
+        normalizeApplicationSetting(key, observed[key]),
+        { stripNullish: true },
+      ),
+  );
+
+const normalizeApplicationSetting = (
+  key: ApplicationSettingKey,
+  value: unknown,
+): unknown => {
+  if (key !== "corsHeaders" || typeof value !== "object" || value === null)
+    return value;
+  const headers = value as Record<string, unknown>;
+  // Cloudflare omits false CORS booleans from GET responses.
+  return {
+    ...headers,
+    allowAllHeaders: headers.allowAllHeaders ?? false,
+    allowAllMethods: headers.allowAllMethods ?? false,
+    allowAllOrigins: headers.allowAllOrigins ?? false,
+    allowCredentials: headers.allowCredentials ?? false,
+  };
 };

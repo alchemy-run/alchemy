@@ -262,8 +262,9 @@ export const StreamLive = Layer.effect(
  * unmodified at `{entryUrl}/cdn-cgi/mf/stream/<id>/watch` (each
  * `StreamVideo.preview` URL): this is a local video store only — no
  * transcoding or HLS ladder (the `hlsPlaybackUrl`/`dashPlaybackUrl` point at
- * a placeholder host), no signed URLs, and no direct creator uploads
- * (`createDirectUpload` throws), matching Miniflare's local fidelity limits.
+ * a placeholder host) and no signed URLs. Direct creator uploads accept
+ * one multipart file through an expiring URL. Duration limits are recorded
+ * without media processing.
  */
 export const local = (
   props: StreamProps,

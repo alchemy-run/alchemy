@@ -1,7 +1,7 @@
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -20,6 +20,10 @@ export type Action =
   | { type: "worker"; value: string[] };
 
 export type RuleProps = {
+  /** Rule manager. Wrangler-managed rules require ownerWorkerTag. @default "api" */
+  source?: "api" | "wrangler";
+  /** Public script tag of the Worker owning a Wrangler-managed rule. */
+  ownerWorkerTag?: string;
   /**
    * Zone the rule lives on.
    */
@@ -55,6 +59,10 @@ export type Rule = Resource<
   "Cloudflare.Email.Rule",
   RuleProps,
   {
+    /** Rule manager reported by Cloudflare. */
+    source: string;
+    /** Last configured Worker tag; the API does not return this field. */
+    ownerWorkerTag: string | undefined;
     ruleId: string;
     zoneId: string;
     name: string;
@@ -141,13 +149,17 @@ export const RuleProvider = () =>
           ruleIdentifier: output.ruleId,
         })
         .pipe(
-          Effect.map((r) => normalize(r, output.zoneId)),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.map((r) => normalize(r, output.zoneId, output.ownerWorkerTag)),
+          Effect.catchTag("EmailRoutingRuleNotFound", () =>
+            Effect.succeed(undefined),
+          ),
         );
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
       const body = {
+        source: news.source ?? "api",
+        ownerWorkerTag: news.ownerWorkerTag,
         actions: news.actions.map((a) =>
           a.type === "drop"
             ? { type: a.type }
@@ -167,28 +179,52 @@ export const RuleProvider = () =>
         priority: news.priority ?? 0,
       };
 
-      if (output?.ruleId) {
+      // Observe before updating: an authentication/validation failure is
+      // never evidence that the rule is missing and must not create a
+      // duplicate. Only a typed missing-rule result falls through to create.
+      const observed = output?.ruleId
+        ? yield* emailRouting
+            .getRule({
+              zoneId,
+              ruleIdentifier: output.ruleId,
+            })
+            .pipe(
+              Effect.catchTag("EmailRoutingRuleNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+        : undefined;
+      if (observed) {
+        const current = normalize(observed, zoneId, output?.ownerWorkerTag);
+        if (
+          deepEqual(
+            {
+              source: current.source,
+              ownerWorkerTag: current.ownerWorkerTag,
+              actions: current.actions,
+              matchers: current.matchers,
+              enabled: current.enabled,
+              name: current.name,
+              priority: current.priority,
+            },
+            body,
+          )
+        )
+          return current;
         const result = yield* emailRouting
           .updateRule({
             zoneId,
-            ruleIdentifier: output.ruleId,
+            ruleIdentifier: current.ruleId,
             ...body,
           })
-          .pipe(
-            retryWorkerScriptNotFound,
-            Effect.catch(() =>
-              emailRouting
-                .createRule({ zoneId, ...body })
-                .pipe(retryWorkerScriptNotFound),
-            ),
-          );
-        return normalize(result, zoneId);
+          .pipe(retryWorkerScriptNotFound);
+        return normalize(result, zoneId, news.ownerWorkerTag);
       }
 
       const result = yield* emailRouting
         .createRule({ zoneId, ...body })
         .pipe(retryWorkerScriptNotFound);
-      return normalize(result, zoneId);
+      return normalize(result, zoneId, news.ownerWorkerTag);
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!output?.ruleId) return;
@@ -217,6 +253,7 @@ const isCatchAllRule = (rule: {
 
 const normalize = (
   rule: {
+    source?: string | null;
     id?: string | null;
     name?: string | null;
     enabled?: boolean | null;
@@ -233,7 +270,10 @@ const normalize = (
     actions?: { type: string; value?: string[] | null }[] | null;
   },
   zoneId: string,
+  ownerWorkerTag?: string,
 ) => ({
+  source: rule.source ?? "api",
+  ownerWorkerTag,
   ruleId: rule.id ?? "",
   zoneId,
   name: rule.name ?? "",

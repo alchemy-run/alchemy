@@ -90,6 +90,26 @@ test.provider(
 
       const live = yield* findSnippet(zoneId, initial.name);
       expect(live?.snippetName).toEqual(initial.name);
+      const content = yield* snippets.getContent({
+        zoneId,
+        snippetName: initial.name,
+      });
+      expect(content.body).toContain(codeV1.trim());
+      // Spelling out the default changes props but must preserve the live
+      // modified timestamp when the full uploaded module still matches.
+      const noop = yield* stack.deploy(
+        Cloudflare.Snippets.Snippet("GeneratedSnippet", {
+          zoneId,
+          code: codeV1,
+          mainModule: "snippet.js",
+        }).pipe(adopt(true)),
+      );
+      expect(noop.modifiedOn).toEqual(initial.modifiedOn);
+      const noopLive = yield* snippets.getSnippet({
+        zoneId,
+        snippetName: initial.name,
+      });
+      expect(noopLive.modifiedOn).toEqual(live?.modifiedOn);
 
       // Update the code — same identity, upserted in place.
       const updated = yield* stack.deploy(
@@ -158,48 +178,99 @@ test.provider("renaming an explicit snippet triggers replacement", (stack) =>
 
 const NAME_LIST = "alchemy_snippet_list_test";
 
-// `list()` fans out over every zone in the account. Zones with zero
-// snippets return `{ "success": true, "result": null }`, which the
-// distilled `ListSnippetsResponse` schema rejected because `result` was a
-// non-nullable array — surfacing as:
-//   CloudflareHttpError (status 200, "Schema decode failed",
-//   body {"success":true,"result":null,"result_info":{...}})
-// Fixed by the response-schema patch
-//   submodules/distilled/packages/cloudflare/patches/snippets/listSnippets.json
-//   -> { "response": { "properties": { "result": { "nullable": true } } } }
-// which makes `result` accept `null`. The patch regenerates the distilled
-// `src`, but vitest loads distilled from `lib/`, so this test only passes
-// once the cloudflare `lib` is rebuilt (coordinator watcher / `bun run
-// build`). Gated until then; set CLOUDFLARE_TEST_SNIPPETS_LIST=1 to run.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SNIPPETS_LIST)(
-  "list enumerates the deployed snippet",
+// Enumerate snippets across every accessible zone.
+test.provider("list enumerates the deployed snippet", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Snippets.Snippet("ListSnippet", {
+          zoneId,
+          name: NAME_LIST,
+          code: codeV1,
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Snippets.Snippet);
+    const all = yield* provider.list();
+
+    const found = all.find(
+      (s) => s.zoneId === zoneId && s.name === deployed.name,
+    );
+    expect(found).toBeDefined();
+    expect(found?.mainModule).toEqual("snippet.js");
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider(
+  "uploads multiple modules, updates imported content and removes obsolete modules",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       const zoneId = yield* resolveZoneId;
-
+      const main = 'import handler from "./helper.js"; export default handler;';
+      const files = (helper: string) => [
+        { name: "snippet.js", content: main },
+        { name: "helper.js", content: helper },
+      ];
+      const initial = yield* stack.deploy(
+        Cloudflare.Snippets.Snippet("Modules", {
+          zoneId,
+          files: files(codeV1),
+        }).pipe(adopt(true)),
+      );
+      const content = () =>
+        snippets.getContent({ zoneId, snippetName: initial.name }).pipe(
+          Effect.flatMap((download) =>
+            Effect.tryPromise(() =>
+              new Response(download.body, {
+                headers: { "Content-Type": download.contentType! },
+              }).formData(),
+            ),
+          ),
+        );
+      const uploaded = yield* content();
+      expect([...uploaded.keys()].sort()).toEqual(["helper.js", "snippet.js"]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          (uploaded.get("helper.js") as Blob).text(),
+        ),
+      ).toEqual(codeV1);
+      const noop = yield* stack.deploy(
+        Cloudflare.Snippets.Snippet("Modules", {
+          zoneId,
+          mainModule: "snippet.js",
+          files: files(codeV1),
+        }).pipe(adopt(true)),
+      );
+      expect(noop.modifiedOn).toEqual(initial.modifiedOn);
+      const updated = yield* stack.deploy(
+        Cloudflare.Snippets.Snippet("Modules", {
+          zoneId,
+          files: files(codeV2),
+        }).pipe(adopt(true)),
+      );
+      expect(updated.name).toEqual(initial.name);
+      const changed = yield* content();
+      expect(
+        yield* Effect.tryPromise(() =>
+          (changed.get("helper.js") as Blob).text(),
+        ),
+      ).toEqual(codeV2);
+      yield* stack.deploy(
+        Cloudflare.Snippets.Snippet("Modules", { zoneId, code: codeV1 }).pipe(
+          adopt(true),
+        ),
+      );
+      expect([...(yield* content()).keys()]).toEqual(["snippet.js"]);
       yield* stack.destroy();
-
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Snippets.Snippet("ListSnippet", {
-            zoneId,
-            name: NAME_LIST,
-            code: codeV1,
-          }).pipe(adopt(true));
-        }),
-      );
-
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Snippets.Snippet,
-      );
-      const all = yield* provider.list();
-
-      const found = all.find(
-        (s) => s.zoneId === zoneId && s.name === deployed.name,
-      );
-      expect(found).toBeDefined();
-      expect(found?.mainModule).toEqual("snippet.js");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+      expect(yield* findSnippet(zoneId, initial.name)).toBeUndefined();
+    }),
+  { timeout: 90_000 },
 );

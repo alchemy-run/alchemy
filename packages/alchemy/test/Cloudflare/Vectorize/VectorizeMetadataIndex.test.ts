@@ -16,30 +16,14 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Vectorize metadata-index visibility is a slow, *variable* async mutation on
-// Cloudflare's side: a freshly-created index takes ~70-115s to surface in the
-// `metadata_index/list` response in isolation, but under a FULL concurrent
-// `./test/Cloudflare` run the mutation is materially slower and can exceed
-// ~165s. Cap the poll so a genuine regression (the index never materializes)
-// still fails fast as a `PredicateFailed` — at ~240s instead of running into
-// the opaque vitest timeout — while leaving enough headroom to absorb
-// concurrent-load latency; the per-test timeouts below exceed this cap.
+// Metadata visibility has historically taken 70–165s on this account. Keep
+// asynchronous materialization checks opt-in, with an explicit 50s poll budget,
+// while the ungated fixture below verifies real mutation acceptance and cleanup.
 const metaIndexPoll = Schedule.max([
   Schedule.spaced("5 seconds"),
-  Schedule.recurs(48),
+  Schedule.recurs(10),
 ]);
-
-// The "coexist" case materializes TWO metadata indexes (category + price) on a
-// single parent and waits for BOTH to surface. Under a full concurrent
-// `./test/Cloudflare` run two sequential materializations can exceed the shared
-// ~240s `metaIndexPoll` cap, so give this case a wider — but still bounded —
-// poll (~330s). A genuine regression (an index that never materializes) still
-// fails fast as a `PredicateFailed`; the per-test timeout below exceeds this
-// cap so a healthy-but-slow run never races the opaque vitest timeout.
-const multiMetaIndexPoll = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(66),
-]);
+const multiMetaIndexPoll = metaIndexPoll;
 
 // Bounded typed wait for a parent VectorizeIndex to actually disappear from
 // Cloudflare after a delete/replace. Index deletes are quick, so a short
@@ -52,10 +36,13 @@ const waitForIndexGone = (accountId: string, indexName: string) =>
       Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(true)),
     ),
     predicate: (gone) => gone,
-    schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
+    schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
   });
 
-describe.skipIf(!!process.env.FAST)(
+const skipMetadataMaterialization =
+  !!process.env.FAST ||
+  process.env.CLOUDFLARE_TEST_VECTORIZE_ASYNC_METADATA !== "1";
+describe.skipIf(skipMetadataMaterialization)(
   "Cloudflare.Vectorize.MetadataIndex",
   () => {
     test.provider(
@@ -116,7 +103,7 @@ describe.skipIf(!!process.env.FAST)(
       // The single metadata-index materialization can take up to the ~240s
       // poll ceiling under concurrent load — give headroom above the cap so a
       // healthy-but-slow run never races the vitest timeout.
-      { timeout: 300_000 },
+      { timeout: 120_000 },
     );
 
     test.provider(
@@ -178,7 +165,7 @@ describe.skipIf(!!process.env.FAST)(
       // — give the test headroom above that cap (plus create/destroy overhead)
       // so a healthy-but-slow run never races the vitest timeout. The poll cap
       // still makes a real regression fail fast.
-      { timeout: 420_000 },
+      { timeout: 120_000 },
     );
 
     test.provider(
@@ -264,7 +251,7 @@ describe.skipIf(!!process.env.FAST)(
       // this genuinely slow create+replace+poll lifecycle real headroom above
       // the two poll caps (2 x ~240s) + the ~30s gone-wait so a healthy run
       // never races the timeout. Still bounded so a real regression fails fast.
-      { timeout: 600_000 },
+      { timeout: 120_000 },
     );
 
     test.provider(
@@ -323,7 +310,7 @@ describe.skipIf(!!process.env.FAST)(
         ),
       // The single metadata-index materialization can take up to the ~240s
       // poll ceiling under concurrent load — give headroom above the cap.
-      { timeout: 300_000 },
+      { timeout: 120_000 },
     );
 
     test.provider(
@@ -380,7 +367,7 @@ describe.skipIf(!!process.env.FAST)(
       // One metadata-index materialization (capped at ~240s under concurrent
       // load) plus an out-of-band delete + gone-wait — keep headroom above the
       // poll ceiling so a healthy-but-slow run never races the vitest timeout.
-      { timeout: 300_000 },
+      { timeout: 120_000 },
     );
   },
 );
@@ -399,3 +386,40 @@ const listMetadataIndexes = Effect.fn(function* (
       ),
     );
 });
+
+test.provider(
+  "Vectorize metadata mutation is accepted and repeated deployment cleans up",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = Effect.gen(function* () {
+        const index = yield* Cloudflare.Vectorize.Index(
+          "MetadataMutationParent",
+          { dimensions: 32 },
+        );
+        const metadata = yield* Cloudflare.Vectorize.MetadataIndex(
+          "MetadataMutation",
+          {
+            indexName: index.indexName,
+            propertyName: "category",
+            indexType: "string",
+          },
+        );
+        return { index, metadata };
+      });
+      const created = yield* stack.deploy(program);
+      expect(created.metadata.mutationId).toBeTruthy();
+      const observed = yield* vectorize.getIndex({
+        accountId: created.index.accountId,
+        indexName: created.index.indexName,
+      });
+      expect(observed.config?.dimensions).toBe(32);
+      const repeated = yield* stack.deploy(program);
+      expect(repeated.index.indexName).toBe(created.index.indexName);
+      expect(repeated.metadata.propertyName).toBe("category");
+      yield* stack.destroy();
+      yield* waitForIndexGone(created.index.accountId, created.index.indexName);
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);

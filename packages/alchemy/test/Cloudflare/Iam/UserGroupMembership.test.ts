@@ -44,7 +44,10 @@ const getMembership = (
   iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -60,7 +63,10 @@ const expectGone = (accountId: string, userGroupId: string, memberId: string) =>
       () => Effect.succeedNone,
     ),
     Effect.repeat({
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       until: (m) => m._tag === "None",
       times: 8,
     }),

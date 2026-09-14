@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -125,36 +126,21 @@ export const UserSchemaProvider = () =>
     stables: ["zoneId", "name", "kind"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
-      const o = olds as UserSchemaProps | undefined;
-      const n = news as UserSchemaProps;
-      if (o === undefined) return undefined;
-      // The name is part of the schema's identity — compare the resolved
-      // physical names (an omitted name resolves deterministically).
-      const oldName = output?.name ?? (yield* createSchemaName(id, o.name));
-      // Auto-generated names are engine-owned: the deployed name stays
-      // authoritative even if the generator would name this id differently
-      // today. Only an explicit user-provided name can force a replace.
-      const newName = n.name ?? oldName;
-      if (oldName !== newName) {
-        return { action: "replace" } as const;
-      }
-      // The uploaded source cannot be modified in place.
-      if (o.schema !== n.schema) {
-        return { action: "replace" } as const;
-      }
-      // Cloudflare forbids disabling validation on an enabled schema.
-      if ((o.validationEnabled ?? false) && !(n.validationEnabled ?? false)) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
+      if (!isResolved(news) || (olds === undefined && output === undefined))
+        return;
+      const oldName = output?.name ?? (yield* createSchemaName(id, olds?.name));
+      if (oldName !== (news.name ?? oldName)) return { action: "replace" };
+      const oldSchema = output?.source ?? olds?.schema;
+      if (oldSchema !== undefined && oldSchema !== news.schema)
+        return { action: "replace" };
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
-        return { action: "replace" } as const;
-      }
-      return undefined;
+        (output?.validationEnabled ?? olds?.validationEnabled ?? false) &&
+        !(news.validationEnabled ?? false)
+      )
+        return { action: "replace" };
+      const oldZoneId = output?.zoneId ?? olds?.zoneId;
+      if (oldZoneId !== undefined && oldZoneId !== news.zoneId)
+        return { action: "replace" };
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {

@@ -90,6 +90,8 @@ export interface DetectionSettingsAttributes extends DetectionSettingsValues {
    * fields this resource managed.
    */
   initialSettings: DetectionSettingsValues;
+  /** Fields managed during this resource lifetime, including removed props. */
+  managedKeys?: SettingsKey[];
 }
 
 export type DetectionSettings = Resource<
@@ -234,14 +236,19 @@ export const DetectionSettingsProvider = () =>
       // nothing to "own", so a cold read adopts freely (never `Unowned`).
       // The observed values at adoption time become the snapshot restored
       // on destroy.
-      return toAttributes(
-        zoneId,
-        observed,
-        output?.initialSettings ?? pickSettings(observed),
-      );
+      return {
+        ...toAttributes(
+          zoneId,
+          observed,
+          output?.initialSettings ?? pickSettings(observed),
+        ),
+        managedKeys:
+          output?.managedKeys ??
+          SETTINGS_KEYS.filter((key) => olds?.[key] !== undefined),
+      };
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news, output, olds }) {
       // Inputs are resolved to concrete strings by Plan.
       const zoneId = (output?.zoneId ?? news.zoneId) as string;
 
@@ -263,7 +270,16 @@ export const DetectionSettingsProvider = () =>
       }
 
       // 4. Return fresh attributes.
-      return toAttributes(zoneId, observed, initialSettings);
+      return {
+        ...toAttributes(zoneId, observed, initialSettings),
+        managedKeys: [
+          ...new Set([
+            ...(output?.managedKeys ??
+              SETTINGS_KEYS.filter((key) => olds?.[key] !== undefined)),
+            ...SETTINGS_KEYS.filter((key) => news[key] !== undefined),
+          ]),
+        ],
+      };
     }),
 
     delete: Effect.fn(function* ({ output, olds }) {
@@ -274,13 +290,15 @@ export const DetectionSettingsProvider = () =>
       // our first write) cannot be restored and are left as-is.
       const observed = yield* observe(output.zoneId);
       if (!observed) return; // zone is gone — nothing to restore
-      const managed = pickSettings(olds ?? {});
+      const managed =
+        output.managedKeys ??
+        SETTINGS_KEYS.filter((key) => olds?.[key] !== undefined);
       const current = pickSettings(observed);
       const restore: DetectionSettingsValues = {};
       for (const key of SETTINGS_KEYS) {
         const snapshot = output.initialSettings?.[key];
         if (
-          managed[key] !== undefined &&
+          managed.includes(key) &&
           snapshot !== undefined &&
           !deepEqual(current[key], snapshot)
         ) {

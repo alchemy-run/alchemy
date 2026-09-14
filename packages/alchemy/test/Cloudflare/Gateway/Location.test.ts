@@ -185,3 +185,39 @@ test.provider("list enumerates deployed gateway locations", (stack) =>
     yield* expectGone(location.accountId, location.locationId);
   }).pipe(logLevel),
 );
+
+test.provider("updates and removes the DNS cache TTL override", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    yield* stack.destroy();
+    const fixture = (
+      maxTtl?: zeroTrust.CreateGatewayLocationRequest["maxTtl"],
+    ) =>
+      Cloudflare.Gateway.Location("TtlLocation", {
+        name: "alchemy-zt-location-ttl",
+        ecsSupport: false,
+        maxTtl,
+      });
+    const initial = yield* stack.deploy(
+      fixture({ mode: "override", ttlSecs: 300 }),
+    );
+    expect((yield* getLocation(accountId, initial.locationId)).maxTtl).toEqual({
+      mode: "override",
+      ttlSecs: 300,
+    });
+    const updated = yield* stack.deploy(
+      fixture({ mode: "override", ttlSecs: 600 }),
+    );
+    expect(updated.locationId).toEqual(initial.locationId);
+    expect((yield* getLocation(accountId, initial.locationId)).maxTtl).toEqual({
+      mode: "override",
+      ttlSecs: 600,
+    });
+    yield* stack.deploy(fixture());
+    expect(
+      (yield* getLocation(accountId, initial.locationId)).maxTtl?.mode,
+    ).toEqual("inherit");
+    yield* stack.destroy();
+    yield* expectGone(accountId, initial.locationId);
+  }).pipe(logLevel),
+);

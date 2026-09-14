@@ -1,5 +1,6 @@
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
 import * as Predicate from "effect/Predicate";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -15,6 +16,10 @@ const CatchAllTypeId = "Cloudflare.Email.CatchAll" as const;
 type CatchAllTypeId = typeof CatchAllTypeId;
 
 export type CatchAllProps = {
+  /** Rule manager. Wrangler-managed rules require ownerWorkerTag. @default "api" */
+  source?: "api" | "wrangler";
+  /** Public script tag of the Worker owning a Wrangler-managed rule. */
+  ownerWorkerTag?: string;
   /**
    * Zone whose catch-all rule to manage. Accepts a zone id, a zone name
    * (`example.com`), or a `{ zoneId, name? }` object. Stable — the
@@ -43,6 +48,14 @@ export type CatchAllProps = {
 };
 
 export type CatchAllAttributes = {
+  /** Rule manager reported by Cloudflare. */
+  source: string;
+  /** Last configured public Worker tag. The API does not return this field. */
+  ownerWorkerTag: string | undefined;
+  /** Original manager restored on destroy. */
+  initialSource?: "api" | "wrangler";
+  /** Original owning Worker, if retained in state; the API cannot recover it. */
+  initialOwnerWorkerTag?: string;
   /** Routing rule identifier of the zone's catch-all rule. */
   ruleId: string;
   /** Zone the catch-all rule belongs to. */
@@ -91,6 +104,11 @@ export type CatchAll = Resource<
  * Email Routing must be enabled on the zone first (see
  * `Cloudflare.Email.Routing`), and `forward` actions require the destination
  * address to be verified (see `Cloudflare.Email.Address`).
+ *
+ * The API does not return `ownerWorkerTag`. Alchemy retains the last written
+ * tag in state. Adopting an existing Wrangler-managed catch-all cannot capture
+ * its original owner; destroy fails explicitly if restoring that owner would
+ * be required. Retain the resource when the original ownership is unavailable.
  * ### Catching unmatched mail
  * **Example:** Forward everything else to a verified destination
  * ```typescript
@@ -187,21 +205,17 @@ export const CatchAllProvider = () =>
         output?.zoneId ??
         (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
-      const observed = yield* emailRouting.getRuleCatchAll({ zoneId }).pipe(
-        // Zone deleted out-of-band (or the token can no longer see it) —
-        // the catch-all rule is gone with it.
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+      const observed = yield* emailRouting.getRuleCatchAll({ zoneId });
       if (observed === undefined) return undefined;
       // The catch-all rule is a singleton that always exists once Email
       // Routing is enabled — there is nothing to "own", so a cold read
       // adopts freely (never `Unowned`). The observed state at adoption
       // time becomes the initial* baseline restored on destroy.
       const initial = output ?? observedInitial(observed);
-      return toAttributes(zoneId, observed, initial);
+      return toAttributes(zoneId, observed, initial, output?.ownerWorkerTag);
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news, olds, output }) {
       // 1. Observe — the catch-all rule always exists once Email Routing
       //    is enabled on the zone; read its live state.
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
@@ -217,11 +231,14 @@ export const CatchAllProvider = () =>
       const desiredEnabled = news.enabled ?? true;
       const desiredName = news.name ?? observed.name ?? "";
       if (
+        (observed.source ?? "api") === (news.source ?? "api") &&
+        olds !== undefined &&
+        olds.ownerWorkerTag === news.ownerWorkerTag &&
         (observed.enabled ?? false) === desiredEnabled &&
         (observed.name ?? "") === desiredName &&
         actionsEqual(normalizeActions(observed.actions), news.actions)
       ) {
-        return toAttributes(zoneId, observed, initial);
+        return toAttributes(zoneId, observed, initial, news.ownerWorkerTag);
       }
       const result = yield* emailRouting
         .putRuleCatchAll({
@@ -232,28 +249,45 @@ export const CatchAllProvider = () =>
               ? { type: a.type }
               : { type: a.type, value: a.value },
           ),
+          source: news.source ?? "api",
+          ownerWorkerTag: news.ownerWorkerTag,
           enabled: desiredEnabled,
           name: desiredName,
         })
         .pipe(retryWorkerScriptNotFound);
-      return toAttributes(zoneId, result, initial);
+      return toAttributes(zoneId, result, initial, news.ownerWorkerTag);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const { zoneId, initialName, initialEnabled, initialActions } = output;
+      const {
+        zoneId,
+        initialName,
+        initialEnabled,
+        initialActions,
+        initialSource,
+        initialOwnerWorkerTag,
+      } = output;
       // Observe — if the zone itself is gone, so is the catch-all rule.
-      const observed = yield* emailRouting
-        .getRuleCatchAll({ zoneId })
-        .pipe(Effect.catchTag("Forbidden", () => Effect.succeed(undefined)));
+      const observed = yield* emailRouting.getRuleCatchAll({ zoneId });
       if (observed === undefined) return;
       // Restore the pre-management state; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
       if (
+        (observed.source ?? "api") === (initialSource ?? "api") &&
+        (initialSource !== "wrangler" ||
+          output.ownerWorkerTag === initialOwnerWorkerTag) &&
         (observed.enabled ?? false) === initialEnabled &&
         (observed.name ?? "") === initialName &&
         actionsEqual(normalizeActions(observed.actions), initialActions)
       ) {
         return;
+      }
+      // The API never returns owner_worker_tag. Without persisted original
+      // metadata we cannot faithfully restore a Wrangler-owned catch-all.
+      if (initialSource === "wrangler" && !initialOwnerWorkerTag) {
+        return yield* Effect.fail(
+          new CatchAllRestoreOwnerUnavailable({ zoneId }),
+        );
       }
       yield* emailRouting
         .putRuleCatchAll({
@@ -264,11 +298,12 @@ export const CatchAllProvider = () =>
               ? { type: a.type }
               : { type: a.type, value: a.value },
           ),
+          source: initialSource ?? "api",
+          ownerWorkerTag: initialOwnerWorkerTag,
           enabled: initialEnabled,
           name: initialName,
         })
         .pipe(
-          Effect.catchTag("Forbidden", () => Effect.void),
           // The captured action may name something that no longer exists:
           // an unverified/removed destination address, or — after the
           // Worker it pointed at was replaced or deleted — a missing
@@ -278,19 +313,24 @@ export const CatchAllProvider = () =>
           Effect.catchTag(
             ["DestinationNotVerified", "WorkerScriptNotFound"],
             () =>
-              emailRouting
-                .putRuleCatchAll({
-                  zoneId,
-                  matchers: [{ type: "all" }],
-                  actions: [{ type: "drop" }],
-                  enabled: false,
-                  name: initialName,
-                })
-                .pipe(Effect.catchTag("Forbidden", () => Effect.void)),
+              emailRouting.putRuleCatchAll({
+                zoneId,
+                matchers: [{ type: "all" }],
+                actions: [{ type: "drop" }],
+                enabled: false,
+                name: initialName,
+              }),
           ),
         );
     }),
   });
+
+/** The API omitted the original write-only Worker owner required for restore. */
+export class CatchAllRestoreOwnerUnavailable extends Data.TaggedError(
+  "CatchAllRestoreOwnerUnavailable",
+)<{
+  readonly zoneId: string;
+}> {}
 
 type ObservedCatchAll =
   | emailRouting.GetRuleCatchAllResponse
@@ -316,6 +356,9 @@ const actionsEqual = (a: Action[], b: Action[]): boolean =>
   });
 
 const observedInitial = (observed: ObservedCatchAll) => ({
+  initialSource:
+    observed.source === "wrangler" ? ("wrangler" as const) : ("api" as const),
+  initialOwnerWorkerTag: undefined,
   initialName: observed.name ?? "",
   initialEnabled: observed.enabled ?? false,
   initialActions: normalizeActions(observed.actions),
@@ -325,11 +368,18 @@ const toAttributes = (
   zoneId: string,
   observed: ObservedCatchAll,
   initial: {
+    initialSource?: "api" | "wrangler";
+    initialOwnerWorkerTag?: string;
     initialName: string;
     initialEnabled: boolean;
     initialActions: Action[];
   },
+  ownerWorkerTag?: string,
 ): CatchAllAttributes => ({
+  source: observed.source ?? "api",
+  ownerWorkerTag,
+  initialSource: initial.initialSource,
+  initialOwnerWorkerTag: initial.initialOwnerWorkerTag,
   ruleId: observed.id ?? "",
   zoneId,
   name: observed.name ?? "",

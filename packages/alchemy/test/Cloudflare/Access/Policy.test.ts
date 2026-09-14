@@ -5,6 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({
@@ -46,10 +47,12 @@ test.provider("create and delete basic allow policy", (stack) =>
 
     yield* stack.destroy();
 
-    const afterDestroy = yield* zeroTrust
-      .getAccessPolicy({ accountId, policyId: policy.policyId })
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    expect(afterDestroy).toBeUndefined();
+    const afterDestroy = yield* zeroTrust.listAccessPolicies
+      .items({ accountId })
+      .pipe(Stream.runCollect);
+    expect(afterDestroy.some((item) => item.id === policy.policyId)).toBe(
+      false,
+    );
   }).pipe(logLevel),
 );
 
@@ -128,10 +131,10 @@ test.provider("adopts an out-of-band reusable policy", (stack) =>
 
     yield* stack.destroy();
 
-    const afterDestroy = yield* zeroTrust
-      .getAccessPolicy({ accountId, policyId: preExisting.id! })
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    expect(afterDestroy).toBeUndefined();
+    const afterDestroy = yield* zeroTrust.listAccessPolicies
+      .items({ accountId })
+      .pipe(Stream.runCollect);
+    expect(afterDestroy.some((item) => item.id === preExisting.id)).toBe(false);
   }).pipe(logLevel),
 );
 
@@ -160,4 +163,59 @@ test.provider("list enumerates the deployed reusable policy", (stack) =>
 
     yield* stack.destroy();
   }).pipe(logLevel),
+);
+
+test.provider(
+  "updates purpose prompts and recovers after an out-of-band deletion",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const fixture = (prompt: string) =>
+        Cloudflare.Access.Policy("PurposePolicy", {
+          decision: "allow",
+          include: [{ emailDomain: { domain: "example.com" } }],
+          purposeJustificationRequired: true,
+          purposeJustificationPrompt: prompt,
+        });
+      const initial = yield* stack.deploy(
+        fixture("Explain why access is needed"),
+      );
+      expect(
+        (yield* zeroTrust.getAccessPolicy({
+          accountId,
+          policyId: initial.policyId,
+        })).purposeJustificationPrompt,
+      ).toEqual("Explain why access is needed");
+      const updated = yield* stack.deploy(
+        fixture("Provide the incident identifier"),
+      );
+      expect(updated.policyId).toEqual(initial.policyId);
+      expect(
+        (yield* zeroTrust.getAccessPolicy({
+          accountId,
+          policyId: initial.policyId,
+        })).purposeJustificationPrompt,
+      ).toEqual("Provide the incident identifier");
+      yield* zeroTrust.deleteAccessPolicy({
+        accountId,
+        policyId: initial.policyId,
+      });
+      const recreated = yield* stack.deploy(
+        fixture("Provide the change identifier"),
+      );
+      expect(recreated.policyId).not.toEqual(initial.policyId);
+      expect(
+        (yield* zeroTrust.getAccessPolicy({
+          accountId,
+          policyId: recreated.policyId,
+        })).purposeJustificationPrompt,
+      ).toEqual("Provide the change identifier");
+      yield* zeroTrust.deleteAccessPolicy({
+        accountId,
+        policyId: recreated.policyId,
+      });
+      // Destroy must remain idempotent when a previous delete already succeeded.
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

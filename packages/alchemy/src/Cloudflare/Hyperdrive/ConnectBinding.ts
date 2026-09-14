@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
+import { defaultProviderMode } from "../../ProviderMode.ts";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
 import type { Connection } from "./Connection.ts";
@@ -24,7 +25,10 @@ export const ConnectBinding = Layer.effect(
               id: connection.hyperdriveId as unknown as string,
             },
           ],
-          hyperdrives: getHyperdriveDevOrigin(connection),
+          hyperdrives:
+            (host.Mode ?? (yield* defaultProviderMode)) === "local"
+              ? getHyperdriveDevOrigin(connection)
+              : undefined,
         });
       }
 
@@ -63,9 +67,9 @@ export const getHyperdriveDevOrigin = (connection: Connection) => {
           sslmode: dev.sslmode ?? "prefer",
         };
       }
-      if ("accessClientId" in origin) {
+      if ("accessClientId" in origin || "serviceId" in origin) {
         throw new Error(
-          `Hyperdrive instance ${connection.LogicalId} has an origin that requires Cloudflare Access. This is not supported in development mode. ` +
+          `Hyperdrive instance ${connection.LogicalId} has an origin that requires Cloudflare Access or Workers VPC. This is not supported in development mode. ` +
             "Select a different origin or set the `dev` property to an origin that does not require Cloudflare Access.",
         );
       }

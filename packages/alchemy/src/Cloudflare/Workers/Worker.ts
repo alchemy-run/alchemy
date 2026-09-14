@@ -719,6 +719,17 @@ export interface WorkerProps<
    */
   namespace?: string | DispatchNamespace;
   /**
+   * Require every inherited binding to resolve during upload. With `"strict"`,
+   * Cloudflare rejects missing inherited bindings instead of dropping them.
+   */
+  bindingsInherit?: "strict";
+  /**
+   * Binding types to preserve from the previous deployed version when omitted
+   * from this program, for example `["secret_text"]` for externally managed
+   * secrets. Bindings explicitly supplied by this program take precedence.
+   */
+  keepBindings?: string[];
+  /**
    * Worker versions & gradual deployments. Set `version.parent` to upload
    * this Worker as a canary *version* of another Worker's script
    * instead of creating its own; set `version.traffic` below 100 to

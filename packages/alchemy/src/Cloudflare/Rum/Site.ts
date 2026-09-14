@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -161,8 +162,12 @@ export const SiteProvider = () =>
     stables: ["siteTag", "siteToken", "accountId", "rulesetId", "created"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      if (!isResolved(news)) return;
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const o = olds as SiteProps;
+      const o = {
+        ...olds,
+        zoneTag: output?.zoneTag ?? olds.zoneTag,
+      } as SiteProps;
       const n = news as SiteProps;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -230,7 +235,7 @@ export const SiteProvider = () =>
           accountId,
           host: news.host,
           zoneTag,
-          autoInstall: news.autoInstall,
+          autoInstall: news.autoInstall ?? false,
         });
         const siteTag = created.siteTag ?? "";
         observed = yield* rum.getSiteInfo({ accountId, siteId: siteTag }).pipe(
@@ -265,7 +270,7 @@ export const SiteProvider = () =>
         siteId: observed.siteTag ?? "",
         host: news.host,
         zoneTag,
-        autoInstall: news.autoInstall,
+        autoInstall: news.autoInstall ?? false,
         enabled: news.enabled,
         lite: news.lite,
       });

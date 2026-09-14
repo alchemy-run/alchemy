@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -73,6 +74,58 @@ test.provider.skipIf(!entitled)(
 
       expect(all.some((p) => p.profileId === deployed.profileId)).toBe(true);
 
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider.skipIf(!entitled)(
+  "updates DLP context and inline entry descriptions",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const fixture = (enabled: boolean) =>
+        Cloudflare.Dlp.Profile("ContextProfile", {
+          name: "alchemy-test-dlp-context",
+          aiContextEnabled: enabled,
+          dataClasses: [],
+          dataTags: [],
+          sensitivityLevels: [],
+          sharedEntries: [],
+          contextAwareness: { enabled, skip: { files: true } },
+          entries: [
+            {
+              name: "employee",
+              enabled: true,
+              description: enabled ? "Employee identifier" : undefined,
+              pattern: { regex: "EMP-[0-9]{6}" },
+            },
+          ],
+        });
+      const initial = yield* stack.deploy(fixture(true));
+      const created = yield* zeroTrust.getDlpProfileCustom({
+        accountId: initial.accountId,
+        profileId: initial.profileId,
+      });
+      if (created.type !== "custom")
+        throw new Error("Expected a custom DLP profile");
+      expect(created.aiContextEnabled).toBe(true);
+      expect(created.contextAwareness?.enabled).toBe(true);
+      const updated = yield* stack.deploy(fixture(false));
+      expect(updated.profileId).toEqual(initial.profileId);
+      const actual = yield* zeroTrust.getDlpProfileCustom({
+        accountId: initial.accountId,
+        profileId: initial.profileId,
+      });
+      if (actual.type !== "custom")
+        throw new Error("Expected a custom DLP profile");
+      expect(actual.aiContextEnabled).toBe(false);
+      expect(actual.contextAwareness?.enabled).toBe(false);
+      expect(
+        actual.entries
+          ?.filter((entry) => entry.type === "custom")
+          .find((entry) => entry.name === "employee")?.description ?? "",
+      ).toEqual("");
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },

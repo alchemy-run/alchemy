@@ -143,6 +143,12 @@ export const isDeviceDexTest = (value: unknown): value is DeviceDexTest =>
 
 export const DeviceDexTestProvider = () =>
   Provider.succeed(DeviceDexTest, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     stables: ["testId", "accountId"],
 
     // Account-scoped collection: paginate the DEX tests list and hydrate each
@@ -184,7 +190,7 @@ export const DeviceDexTestProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createTestName(id, news.name);
+      const name = yield* createTestName(id, news.name ?? output?.name);
 
       // 1. Observe — cached id is a hint; fall back to a name scan.
       let observed = output?.testId

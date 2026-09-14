@@ -470,22 +470,19 @@ const getCertificate = (zoneId: string, customCertificateId: string) =>
  * Find a certificate in the zone whose `expires_on` matches the desired
  * PEM's parsed expiry. Uploading the same certificate always produces the
  * same expiry, making it the best identity available (the API neither
- * echoes the PEM nor exposes the serial number). If several match, pick the
- * oldest upload for determinism.
+ * echoes the PEM nor exposes the serial number). Several certificates can share an expiry; ambiguous matches must not
+ * select an unrelated certificate for rotation.
  */
 const findByExpiry = (zoneId: string, expiresAtMs: number) =>
   customCertificates.listCustomCertificates.items({ zoneId }).pipe(
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk)
-        .filter(
-          (cert) =>
-            cert.expiresOn != null &&
-            Date.parse(cert.expiresOn) === expiresAtMs,
-        )
-        .sort((a, b) => (a.uploadedOn ?? "").localeCompare(b.uploadedOn ?? ""))
-        .at(0),
-    ),
+    Effect.map((chunk) => {
+      const matches = [...chunk].filter(
+        (cert) =>
+          cert.expiresOn != null && Date.parse(cert.expiresOn) === expiresAtMs,
+      );
+      return matches.length === 1 ? matches[0] : undefined;
+    }),
   );
 
 /**
@@ -504,7 +501,7 @@ const parseCertificate = (pem: string) =>
   });
 
 /**
- * SHA-256 over the write-only inputs (certificate, private key, CSR id).
+ * SHA-256 over the write-only inputs (certificate, private key, CSR id, deployment choice).
  * Persisted in the attributes as the rotation diff baseline because the API
  * never returns the PEM contents.
  */
@@ -517,6 +514,8 @@ const hashContent = (news: Props) =>
       .update(news.privateKey ? Redacted.value(news.privateKey) : "")
       .update("\n")
       .update((news.customCsrId as string | undefined) ?? "")
+      .update("\n")
+      .update(news.deploy ?? "production")
       .digest("hex"),
   );
 

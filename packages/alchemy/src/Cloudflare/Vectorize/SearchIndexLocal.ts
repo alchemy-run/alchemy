@@ -42,7 +42,7 @@ import type { Index } from "./VectorizeIndex.ts";
  * provides around the body), so `SearchIndex(index)` works even though the
  * index is created in the same deploy.
  *
- * `raw` and `queryById` have no Cloudflare HTTP equivalent and `Effect.die` —
+ * `raw` has no Cloudflare HTTP equivalent and `Effect.die`s —
  * see {@link makeHttpSearchIndexClient}.
  */
 export const SearchIndexLocal = Layer.effect(

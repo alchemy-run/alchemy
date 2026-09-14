@@ -1430,13 +1430,13 @@ layer(StreamTestLayer)("Stream binding", (it) => {
     );
   });
 
-  describe("Stream unsupported binding operations", () => {
-    it.effect("createDirectUpload is not supported", () =>
+  describe("Stream direct upload validation", () => {
+    it.effect("createDirectUpload requires a positive duration", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
         const message = yield* sendCmdError(worker, "createDirectUpload");
         expect(message).toContain(
-          "createDirectUpload is not supported in local mode",
+          "maxDurationSeconds must be between 1 and 36000",
         );
       }),
     );
@@ -1625,6 +1625,42 @@ describe("Stream videos list", () => {
             params: { limit: 2 },
           });
           expect(limited).toHaveLength(2);
+        }),
+      ),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "direct uploads reject an expired token without completing the video",
+    () =>
+      isolated((worker) =>
+        Effect.gen(function* () {
+          const object = new ControlStub(worker.baseUrl);
+          yield* Effect.promise(() => object.enableFakeTimers(FAKE_TIME_START));
+          const created = yield* sendCmd<{ id: string; uploadURL: string }>(
+            worker,
+            "createDirectUpload",
+            {
+              params: {
+                maxDurationSeconds: 10,
+                expiry: new Date(FAKE_TIME_START + 1000).toISOString(),
+              },
+            },
+          );
+          yield* Effect.promise(() => object.advanceFakeTime(1000));
+          const response = yield* Effect.promise(() => {
+            const body = new FormData();
+            body.set("file", new Blob([TEST_VIDEO_BYTES]), "video.mp4");
+            return fetch(created.uploadURL, { method: "POST", body });
+          });
+          expect(response.status).toBe(400);
+          expect(yield* Effect.promise(() => response.text())).toContain(
+            "expired",
+          );
+          const video = yield* sendCmd<Video>(worker, "video.details", {
+            id: created.id,
+          });
+          expect(video.readyToStream).toBe(false);
         }),
       ),
     { timeout: 30_000 },

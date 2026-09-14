@@ -9,8 +9,8 @@
  * .output(...)` / `info(...)`), so this suite adds cases pinning the
  * documented local-mode fidelity of the ported fetcher
  * (`workers-sdk/packages/miniflare/src/plugins/images/fetcher.ts`):
- * resize/rotate/transcode happy paths, the 415 GIF and RGB/RGBA output
- * errors (code 9520), draws/overlays being ignored, and info() for bitmap
+ * resize/rotate/transcode happy paths, GIF and RGB/RGBA output,
+ * ordered draws/overlays, and info() for bitmap
  * and SVG inputs. A file-system persistence case is added for parity with
  * the other binding suites.
  *
@@ -53,7 +53,7 @@ const PNG_RED_8X4 =
 const JPEG_GREEN_8X4 =
   "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAEAAgDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAB//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/ALoAfAr/2Q==";
 
-/** 4x4 solid blue GIF (used as an overlay for the draws-ignored case). */
+/** 4x4 solid blue GIF (used as an overlay fixture). */
 const GIF_BLUE_4X4 =
   "R0lGODlhBAAEAIAAAExpcQAA/yH5BAUAAAAALAAAAAAEAAQAAAIEjI8ZBQA7";
 
@@ -153,8 +153,7 @@ export default {
       }
 
       if (url.pathname === "/draw") {
-        // Draw a 4x4 blue overlay onto the input; local mode documents that
-        // draws are ignored (only the root image's transforms apply).
+        // Draw a 4x4 blue overlay onto the resized input.
         const overlay = new Blob([decodeBase64(OVERLAY_GIF)]).stream();
         const result = await env.IMAGES.input(request.body)
           .transform({ width: 4 })
@@ -316,51 +315,36 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
       }),
     );
 
-    it.effect(
-      "GIF output fails with the documented local-mode 415 (code 9520)",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startImagesTestWorker("images-gif-415");
-          const body = yield* worker.fetchJson<{
-            error: true;
-            code: number;
-            message: string;
-          }>("/transform?format=image/gif", {
-            method: "POST",
-            body: decodeBase64(PNG_RED_8X4),
-          });
-          expect(body.error).toBe(true);
-          expect(body.code).toBe(9520);
-          expect(body.message).toContain(
-            "GIF output is not supported in local mode",
-          );
-        }),
-    );
-
-    it.effect(
-      "RGB/RGBA output fails with the documented local-mode 415 (code 9520)",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startImagesTestWorker("images-rgb-415");
-          const body = yield* worker.fetchJson<{
-            error: true;
-            code: number;
-            message: string;
-          }>("/transform?format=rgba", {
-            method: "POST",
-            body: decodeBase64(PNG_RED_8X4),
-          });
-          expect(body.error).toBe(true);
-          expect(body.code).toBe(9520);
-          expect(body.message).toContain(
-            "RGB/RGBA output is not supported in local mode",
-          );
-        }),
-    );
-
-    it.effect("draws/overlays are ignored in local mode", () =>
+    it.effect("encodes GIF and raw RGB/RGBA output", () =>
       Effect.gen(function* () {
-        const worker = yield* startImagesTestWorker("images-draw-ignored");
+        const worker = yield* startImagesTestWorker("images-output-formats");
+        const gif = yield* postBytes(
+          worker,
+          "/transform?format=image/gif",
+          decodeBase64(PNG_RED_8X4),
+        );
+        expect(
+          (yield* metadataOf(yield* Effect.promise(() => gif.arrayBuffer())))
+            .format,
+        ).toBe("gif");
+        for (const format of ["rgb", "rgba"]) {
+          const response = yield* postBytes(
+            worker,
+            `/transform?format=${format}`,
+            decodeBase64(PNG_RED_8X4),
+          );
+          const bytes = new Uint8Array(
+            yield* Effect.promise(() => response.arrayBuffer()),
+          );
+          expect(bytes.length).toBe(8 * 4 * (format === "rgb" ? 3 : 4));
+          expect([...bytes.slice(0, 3)]).toEqual([255, 0, 0]);
+        }
+      }),
+    );
+
+    it.effect("draws overlays after applying the root transform", () =>
+      Effect.gen(function* () {
+        const worker = yield* startImagesTestWorker("images-draw");
         const res = yield* postBytes(
           worker,
           "/draw",
@@ -369,13 +353,10 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
         expect(res.status).toBe(200);
         const buffer = yield* Effect.promise(() => res.arrayBuffer());
         const metadata = yield* metadataOf(buffer);
-        // Only the root image's resize applied (8x4 -> 4x2); the 4x4 overlay
-        // was skipped entirely, so the output stays solid red.
-        expect(metadata.format).toBe("png");
         expect(metadata.width).toBe(4);
         expect(metadata.height).toBe(2);
         const raw = yield* Effect.promise(() => sharp(buffer).raw().toBuffer());
-        expect([raw[0], raw[1], raw[2]]).toEqual([255, 0, 0]);
+        expect([raw[0], raw[1], raw[2]]).toEqual([0, 0, 255]);
       }),
     );
 

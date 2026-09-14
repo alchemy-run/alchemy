@@ -156,16 +156,19 @@ export const RegistryLive = Layer.effect(
           Stream.changes,
         ),
       write: (entry) => {
+        const registryKey = entry.namespace
+          ? JSON.stringify([entry.namespace, entry.scriptName])
+          : entry.scriptName;
         const entryPath = path.join(
           directory,
-          `${encodeURIComponent(entry.scriptName)}.json`,
+          `${encodeURIComponent(registryKey)}.json`,
         );
         const serialized = JSON.stringify(entry, null, 2);
         return fs.writeFileString(entryPath, serialized).pipe(
           Effect.andThen(
             // Immediately update the in-memory registry so it's available without waiting on IO.
             SubscriptionRef.update(ref, (map) =>
-              MutableHashMap.set(map, entry.scriptName, entry),
+              MutableHashMap.set(map, registryKey, entry),
             ),
           ),
           updateLock.withPermits(1),
@@ -218,12 +221,14 @@ const pickSubscriberServices =
       for (const entry of MutableHashMap.values(registry)) {
         const service = extractSubscriberService(subscriber, entry);
         if (service) {
-          resolved[resolvedTargetKey(subscriber)] = {
+          const target = {
             ...service,
             scriptName: entry.scriptName,
+            namespace: entry.namespace,
             debugPortAddress: entry.debugPortAddress,
           };
-          break;
+          resolved[resolvedTargetKey(target)] = target;
+          if (!(subscriber.kind === "worker" && subscriber.dispatch)) break;
         }
       }
     }
@@ -236,7 +241,8 @@ const extractSubscriberService = (
 ) => {
   switch (subscriber.kind) {
     case "worker":
-      return entry.scriptName === subscriber.scriptName
+      return entry.namespace === subscriber.namespace &&
+        (subscriber.dispatch || entry.scriptName === subscriber.scriptName)
         ? entry.services[0]
         : undefined;
     case "durable-object":

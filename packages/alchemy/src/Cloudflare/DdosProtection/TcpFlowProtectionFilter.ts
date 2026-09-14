@@ -108,6 +108,11 @@ export const isTcpFlowProtectionFilter = (
 export const TcpFlowProtectionFilterProvider = () =>
   Provider.succeed(TcpFlowProtectionFilter, {
     stables: ["filterId", "accountId", "createdOn"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -142,6 +147,8 @@ export const TcpFlowProtectionFilterProvider = () =>
       // 2. Ensure — create when missing. Expressions are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
       //    tolerate.
+      if (!observed)
+        observed = yield* findByExpression(accountId, news.expression);
       if (!observed) {
         observed =
           yield* ddos.createAdvancedTcpProtectionTcpFlowProtectionFilter({

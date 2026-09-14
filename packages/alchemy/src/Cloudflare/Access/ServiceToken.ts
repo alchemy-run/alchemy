@@ -219,7 +219,7 @@ export const ServiceTokenProvider = () =>
       output,
     }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createTokenName(id, news.name);
+      const name = yield* createTokenName(id, news.name ?? output?.name);
       const acct = output?.accountId ?? accountId;
       const desiredVersion = news.clientSecretVersion ?? 1;
 
@@ -370,7 +370,6 @@ const findTokenByName = (acct: string, name: string) =>
     Stream.filter((t): t is ObservedToken => t.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
   );
 
 // Skip no-op PUTs while treating an unset prop as "keep whatever Cloudflare

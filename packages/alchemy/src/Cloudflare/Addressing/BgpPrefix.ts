@@ -131,10 +131,13 @@ export const BgpPrefixProvider = () =>
     stables: ["bgpPrefixId", "prefixId", "accountId", "cidr", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      if (olds === undefined) return undefined;
-      if (!isResolved(news) || !isResolved(olds)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!output && !olds) return undefined;
+      if (!isResolved(news)) return undefined;
       // prefixId is Input<string>; by diff time both sides are concrete.
-      const oldPrefixId = output?.prefixId ?? olds.prefixId;
+      const oldPrefixId = output?.prefixId ?? olds?.prefixId;
       if (
         typeof oldPrefixId === "string" &&
         typeof news.prefixId === "string" &&
@@ -142,7 +145,7 @@ export const BgpPrefixProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (news.cidr !== (output?.cidr ?? olds.cidr)) {
+      if (news.cidr !== (output?.cidr ?? olds?.cidr)) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -153,7 +156,7 @@ export const BgpPrefixProvider = () =>
       const acct = output?.accountId ?? accountId;
       const prefixId =
         output?.prefixId ??
-        (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
+        (typeof olds?.prefixId === "string" ? olds?.prefixId : undefined);
       if (!prefixId) return undefined;
 
       if (output?.bgpPrefixId) {
@@ -240,30 +243,24 @@ export const BgpPrefixProvider = () =>
       //    propagating; retry (bounded) while locked.
       const desiredAdvertised = news.advertised ?? false;
       const dirty =
-        (news.advertised !== undefined &&
-          (observed.onDemand?.advertised ?? false) !== desiredAdvertised) ||
-        (news.asnPrependCount !== undefined &&
-          (observed.asnPrependCount ?? 0) !== news.asnPrependCount) ||
-        (news.autoAdvertiseWithdraw !== undefined &&
-          (observed.autoAdvertiseWithdraw ?? false) !==
-            news.autoAdvertiseWithdraw);
+        (observed.onDemand?.advertised ?? false) !== desiredAdvertised ||
+        (observed.asnPrependCount ?? 0) !== (news.asnPrependCount ?? 0) ||
+        (observed.autoAdvertiseWithdraw ?? false) !==
+          (news.autoAdvertiseWithdraw ?? false);
       if (dirty) {
         const patched = yield* addressing
           .patchPrefixBgpPrefix({
             accountId: acct,
             prefixId,
             bgpPrefixId,
-            asnPrependCount: news.asnPrependCount,
-            autoAdvertiseWithdraw: news.autoAdvertiseWithdraw,
-            onDemand:
-              news.advertised !== undefined
-                ? { advertised: news.advertised }
-                : undefined,
+            asnPrependCount: news.asnPrependCount ?? 0,
+            autoAdvertiseWithdraw: news.autoAdvertiseWithdraw ?? false,
+            onDemand: { advertised: desiredAdvertised },
           })
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "BgpPrefixNotFound",
-              schedule: Schedule.exponential("2 seconds"),
+              schedule: Schedule.spaced("2 seconds"),
               times: 5,
             }),
           );
@@ -277,7 +274,12 @@ export const BgpPrefixProvider = () =>
       // No delete API exists — BGP prefixes live as long as the parent
       // BYOIP prefix. Withdraw the advertisement (best effort) and drop
       // the state.
-      if (output.onDemand.advertised) {
+      const observed = yield* getBgpPrefix(
+        output.accountId,
+        output.prefixId,
+        output.bgpPrefixId,
+      );
+      if (observed?.onDemand?.advertised) {
         yield* addressing
           .patchPrefixBgpPrefix({
             accountId: output.accountId,

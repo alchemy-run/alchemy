@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -320,21 +321,14 @@ export const CustomHostnameProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Props;
-      const n = news as Props;
-      if (o.hostname !== undefined && o.hostname !== n.hostname) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      if (zoneId !== undefined && zoneId !== news.zoneId)
         return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both sides are
-      // concrete strings.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      const hostname = output?.hostname ?? olds?.hostname;
+      if (hostname !== undefined && hostname !== news.hostname)
         return { action: "replace" } as const;
-      }
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -357,9 +351,10 @@ export const CustomHostnameProvider = () =>
         observed = yield* findByHostname(zoneId, news.hostname);
       }
 
-      // 3. Ensure. A create that races another writer (hostname already
-      //    exists) is converged by re-observing; if the hostname still
-      //    cannot be found the original error is re-raised.
+      // 3. Ensure. Read-by-hostname above recovers an earlier successful
+      // create whose state was not persisted. A failed create must retain
+      // its actual API error; silently converting auth/validation failures
+      // into success can leave an existing hostname only partly managed.
       let justCreated = false;
       if (!observed) {
         observed = yield* customHostnames
@@ -369,19 +364,7 @@ export const CustomHostnameProvider = () =>
             ssl: desiredSsl,
             customMetadata: news.customMetadata,
           })
-          .pipe(
-            Effect.map(narrowHostname),
-            Effect.catch((originalError) =>
-              Effect.gen(function* () {
-                const existing = yield* findByHostname(
-                  zoneId,
-                  news.hostname,
-                ).pipe(Effect.catch(() => Effect.succeed(undefined)));
-                if (!existing) return yield* Effect.fail(originalError);
-                return existing;
-              }),
-            ),
-          );
+          .pipe(Effect.map(narrowHostname));
         justCreated = true;
       }
 

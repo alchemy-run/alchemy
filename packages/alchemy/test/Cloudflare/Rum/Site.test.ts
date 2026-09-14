@@ -150,7 +150,7 @@ test.provider(
       const toggled = yield* stack.deploy(
         Cloudflare.Rum.Site("FlipSite", {
           zoneTag: zone.id,
-          autoInstall: false,
+          // Omission restores the documented false default.
         }),
       );
       expect(toggled.siteTag).toEqual(zoneSite.siteTag);

@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -75,6 +76,10 @@ export interface MagicSiteAclProps {
 }
 
 export interface MagicSiteAclAttributes {
+  /** Observed lan1 configuration. */
+  lan1?: magicTransit.GetSiteAclResponse["lan_1"];
+  /** Observed lan2 configuration. */
+  lan2?: magicTransit.GetSiteAclResponse["lan_2"];
   /** Cloudflare-assigned identifier of the ACL. */
   aclId: string;
   /** The site the ACL belongs to. */
@@ -153,7 +158,31 @@ export const MagicSiteAclProvider = () =>
   Provider.succeed(MagicSiteAcl, {
     stables: ["aclId", "siteId", "accountId"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        [
+          "description",
+          "forwardLocally",
+          "protocols",
+          "unidirectional",
+          "lan1",
+          "lan2",
+        ].some((key) =>
+          removedConfiguration(
+            olds[key as keyof typeof olds],
+            news[key as keyof typeof news],
+          ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+      if ((output || olds) && (output?.siteId ?? olds?.siteId) !== news.siteId)
+        return { action: "replace", deleteFirst: true } as const;
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // ACLs cannot move between sites.
@@ -233,8 +262,8 @@ export const MagicSiteAclProvider = () =>
           (observed.unidirectional ?? false) !== news.unidirectional) ||
         (news.protocols !== undefined &&
           !sameList(observed.protocols, news.protocols)) ||
-        lanDirty(observed.lan_1, lan1) ||
-        lanDirty(observed.lan_2, lan2);
+        !sameConfiguration(observed.lan_1, lan1) ||
+        !sameConfiguration(observed.lan_2, lan2);
       if (dirty) {
         const updated = yield* magicTransit.updateSiteAcl({
           accountId,
@@ -317,16 +346,7 @@ interface ObservedAclLan {
   subnets?: string[] | null;
 }
 
-interface ObservedAcl {
-  id?: string | null;
-  name?: string | null;
-  description?: string | null;
-  forwardLocally?: boolean | null;
-  protocols?: string[] | null;
-  unidirectional?: boolean | null;
-  lan_1?: ObservedAclLan | null;
-  lan_2?: ObservedAclLan | null;
-}
+type ObservedAcl = magicTransit.GetSiteAclResponse;
 
 interface AclLanRequest {
   lanId: string;
@@ -351,9 +371,10 @@ const getAcl = (accountId: string, siteId: string, aclId: string) =>
  * pick the first match deterministically by id.
  */
 const findByName = (accountId: string, siteId: string, name: string) =>
-  magicTransit.listSiteAcls({ accountId, siteId }).pipe(
+  magicTransit.listSiteAcls.items({ accountId, siteId }).pipe(
+    Stream.runCollect,
     Effect.map((r): ObservedAcl | undefined =>
-      r.result
+      Array.from(r)
         .filter((acl) => acl.name === name)
         .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
         .at(0),
@@ -391,6 +412,8 @@ const toAttributes = (
   siteId: string,
   accountId: string,
 ): MagicSiteAclAttributes => ({
+  lan1: acl.lan_1 ?? undefined,
+  lan2: acl.lan_2 ?? undefined,
   aclId: acl.id ?? "",
   siteId,
   accountId,

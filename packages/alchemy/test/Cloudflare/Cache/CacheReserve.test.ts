@@ -36,7 +36,10 @@ const resolveZoneId = Effect.gen(function* () {
   return zone.id;
 });
 
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("5 seconds"),
+]);
 
 const getCacheReserve = (zoneId: string) =>
   cache.getCacheReserve({ zoneId }).pipe(
@@ -127,6 +130,32 @@ describe.sequential("Reserve", () => {
         const restored = yield* getCacheReserve(zoneId);
         expect(restored.value).toEqual("off");
       }).pipe(logLevel),
+  );
+
+  // A dedicated disposable entitled zone is required: clearing is asynchronous
+  // and intentionally leaves Reserve off until Cloudflare completes the clear.
+  test.provider.skipIf(
+    !process.env.CLOUDFLARE_TEST_CACHE_RESERVE_CLEAR_ZONE_ID,
+  )(
+    "clearOnDelete disables Reserve and starts its asynchronous clear",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const zoneId = process.env.CLOUDFLARE_TEST_CACHE_RESERVE_CLEAR_ZONE_ID!;
+        yield* stack.deploy(
+          Cloudflare.Cache.Reserve("Clear", {
+            zoneId,
+            enabled: false,
+            clearOnDelete: true,
+          }),
+        );
+        yield* stack.destroy();
+        expect((yield* getCacheReserve(zoneId)).value).toEqual("off");
+        const status = yield* cache.statusCacheReserve({ zoneId });
+        expect(["In-progress", "Completed"]).toContain(status.state);
+        yield* stack.destroy();
+      }),
+    { timeout: 90_000 },
   );
 
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide

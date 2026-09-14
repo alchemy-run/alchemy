@@ -1,8 +1,19 @@
+import * as Layer from "effect/Layer";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import {
+  LOCAL_ENTRY_URL,
+  generateLocalId,
+  isLocalId,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
+import { localStore } from "./LocalStore.ts";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -301,7 +312,7 @@ export const Flag = Resource<Flag>(TypeId);
 export const isFlag = (value: unknown): value is Flag =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const FlagProvider = () =>
+const FlagProviderLive = () =>
   Provider.succeed(Flag, {
     stables: ["appId", "accountId", "key"],
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -341,18 +352,22 @@ export const FlagProvider = () =>
       // ID), so a cold read and a warm read are the same lookup.
       const key = output?.key ?? (yield* createFlagKey(id, olds?.key));
       const observed = yield* getFlag(acct, appId, key);
-      return observed ? toAttributes(observed, acct, appId) : undefined;
+      return observed
+        ? output
+          ? toAttributes(observed, acct, appId)
+          : Unowned(toAttributes(observed, acct, appId))
+        : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const appId = news.appId as string;
-      const key = yield* createFlagKey(id, news.key);
+      const key = yield* createFlagKey(id, news.key ?? output?.key);
       const desired = {
         enabled: news.enabled ?? true,
         defaultVariation: news.defaultVariation,
         variations: news.variations,
         rules: news.rules ?? [],
-        description: news.description,
+        description: news.description ?? "",
       };
 
       // Observe — flag identity is (appId, key); a missing flag falls
@@ -395,13 +410,16 @@ export const FlagProvider = () =>
           defaultVariation: live.defaultVariation,
           variations: live.variations,
           rules: normalizeRules(live.rules),
-          description: live.description ?? undefined,
+          description: live.description ?? "",
         };
         const desiredShape = {
           ...desired,
           rules: normalizeRules(desired.rules),
         };
-        if (deepEqual(observedShape, desiredShape)) {
+        if (
+          deepEqual(observedShape, desiredShape) &&
+          (news.type === undefined || news.type === live.type)
+        ) {
           return toAttributes(live, accountId, appId);
         }
       }
@@ -564,3 +582,120 @@ const toAttributes = (
   updatedAt: flag.updatedAt ?? undefined,
   updatedBy: flag.updatedBy ?? undefined,
 });
+
+/** Persistent offline flag definitions, visible immediately to local Workers. */
+export const FlagProviderLocal = () =>
+  RpcProvider.effect(
+    Flag,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      const store = yield* localStore;
+      return {
+        stables: ["appId", "accountId", "key"],
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!isResolved(news)) return;
+          if (
+            output &&
+            (!isLocalId(output.appId) ||
+              news.appId !== output.appId ||
+              (news.key !== undefined && news.key !== output.key))
+          )
+            return { action: "replace" } as const;
+        }),
+        read: Effect.fn(function* ({ output }) {
+          return output && isLocalId(output.appId)
+            ? yield* store.read<FlagAttributes>(output.appId, output.key)
+            : output;
+        }),
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          if (!isLocalId(news.appId))
+            return yield* Effect.die(
+              new Error(
+                "Local Flagship flags require a local App; use remote() for a cloud App",
+              ),
+            );
+          if (!(yield* store.read(news.appId)))
+            return yield* Effect.die(
+              new Error("Local Flagship App does not exist"),
+            );
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const key = yield* createFlagKey(id, news.key ?? output?.key);
+          const values = Object.values(news.variations);
+          const valueType = (value: unknown): FlagType =>
+            value !== null && typeof value === "object"
+              ? "json"
+              : (typeof value as FlagType);
+          const type = news.type ?? valueType(values[0]);
+          if (
+            !Object.hasOwn(news.variations, news.defaultVariation) ||
+            !["boolean", "number", "string", "json"].includes(type) ||
+            values.some(
+              (value) =>
+                valueType(value) !== type ||
+                new TextEncoder().encode(JSON.stringify(value)).byteLength >
+                  10240 ||
+                (typeof value === "number" && !Number.isFinite(value)),
+            )
+          )
+            return yield* Effect.die(
+              new Error("Invalid Flagship variations or default variation"),
+            );
+          const rules = news.rules ?? [];
+          if (
+            rules.some(
+              (rule) =>
+                !Object.hasOwn(news.variations, rule.serveVariation) ||
+                (rule.rollout &&
+                  (!Number.isFinite(rule.rollout.percentage) ||
+                    rule.rollout.percentage < 0 ||
+                    rule.rollout.percentage > 100)),
+            )
+          )
+            return yield* Effect.die(
+              new Error(
+                "Invalid Flagship rule variation or rollout percentage",
+              ),
+            );
+          const desired = {
+            appId: news.appId,
+            accountId,
+            key,
+            enabled: news.enabled ?? true,
+            defaultVariation: news.defaultVariation,
+            variations: news.variations,
+            rules,
+            description: news.description,
+            type,
+          };
+          const observed = yield* store.read<FlagAttributes>(news.appId, key);
+          if (
+            observed &&
+            deepEqual(
+              { ...observed, updatedAt: undefined, updatedBy: undefined },
+              { ...desired, updatedAt: undefined, updatedBy: undefined },
+            )
+          )
+            return observed;
+          return yield* store.write(
+            news.appId,
+            {
+              ...desired,
+              updatedAt: new Date().toISOString(),
+              updatedBy: "local",
+            },
+            key,
+          );
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          if (isLocalId(output.appId))
+            yield* store.remove(output.appId, output.key);
+        }),
+      };
+    }),
+  );
+export const FlagProvider = () =>
+  ProviderLayer.dual(Flag, {
+    live: () => FlagProviderLive(),
+    local: () =>
+      FlagProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+  });

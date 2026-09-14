@@ -18,7 +18,10 @@ const logLevel = Effect.provideService(
 
 // A freshly minted scoped token propagates eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const retryForbidden = <A, E extends { _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,

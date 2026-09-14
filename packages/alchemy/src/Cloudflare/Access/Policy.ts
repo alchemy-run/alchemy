@@ -150,6 +150,16 @@ export type PolicyDecision =
   | (string & {});
 
 export type PolicyProps = {
+  /** Administrators who can approve temporary access requests. */
+  approvalGroups?: zeroTrust.CreateAccessPolicyRequest["approvalGroups"];
+  /** Rules controlling connections to infrastructure application targets. */
+  connectionRules?: zeroTrust.CreateAccessPolicyRequest["connectionRules"];
+  /** Require matching sessions to use browser isolation. */
+  isolationRequired?: zeroTrust.CreateAccessPolicyRequest["isolationRequired"];
+  /** Multi-factor authentication requirements for matching users. */
+  mfaConfig?: zeroTrust.CreateAccessPolicyRequest["mfaConfig"];
+  /** Message shown when requesting a login justification. */
+  purposeJustificationPrompt?: zeroTrust.CreateAccessPolicyRequest["purposeJustificationPrompt"];
   /**
    * Display name for the policy. Treated as a stable identifier so the
    * provider can locate the policy by name during adoption / state recovery.
@@ -314,17 +324,7 @@ export const PolicyProvider = () =>
       // failures.
       let observed: ObservedPolicy | undefined;
       if (output?.policyId) {
-        observed = yield* zeroTrust
-          .getAccessPolicy({
-            accountId: acct,
-            policyId: output.policyId,
-          })
-          .pipe(
-            Effect.map(toObserved),
-            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
-              Effect.succeed(undefined),
-            ),
-          );
+        observed = yield* observePolicy(acct, output.policyId);
       }
       if (!observed) {
         observed = yield* findPolicyByName(acct, name);
@@ -338,6 +338,11 @@ export const PolicyProvider = () =>
           .createAccessPolicy({
             accountId: acct,
             name,
+            approvalGroups: news.approvalGroups,
+            connectionRules: news.connectionRules,
+            isolationRequired: news.isolationRequired,
+            mfaConfig: news.mfaConfig,
+            purposeJustificationPrompt: news.purposeJustificationPrompt,
             decision: news.decision,
             include: normalizePolicyRules(news.include),
             exclude: normalizePolicyRules(news.exclude),
@@ -366,6 +371,11 @@ export const PolicyProvider = () =>
           accountId: acct,
           policyId: prior.id!,
           name,
+          approvalGroups: news.approvalGroups,
+          connectionRules: news.connectionRules,
+          isolationRequired: news.isolationRequired,
+          mfaConfig: news.mfaConfig,
+          purposeJustificationPrompt: news.purposeJustificationPrompt,
           decision: news.decision,
           include: normalizePolicyRules(news.include),
           exclude: normalizePolicyRules(news.exclude),
@@ -426,27 +436,17 @@ export const PolicyProvider = () =>
       );
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* zeroTrust
-        .deleteAccessPolicy({
-          accountId: output.accountId,
-          policyId: output.policyId,
-        })
-        .pipe(Effect.catch((): Effect.Effect<void> => Effect.void));
+      if (!(yield* observePolicy(output.accountId, output.policyId))) return;
+      yield* zeroTrust.deleteAccessPolicy({
+        accountId: output.accountId,
+        policyId: output.policyId,
+      });
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       if (output?.policyId) {
-        const direct = yield* zeroTrust
-          .getAccessPolicy({
-            accountId: acct,
-            policyId: output.policyId,
-          })
-          .pipe(
-            Effect.catch((): Effect.Effect<ObservedPolicy | undefined> =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const direct = yield* observePolicy(acct, output.policyId);
         if (direct && direct.id) {
           return {
             policyId: direct.id,
@@ -483,7 +483,6 @@ const findPolicyByName = (acct: string, name: string) =>
     Stream.filter((p) => p.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
   );
 
 type ObservedPolicy = {
@@ -512,3 +511,13 @@ const toObserved = (r: RawPolicy): ObservedPolicy => ({
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
 });
+
+// List is authoritative for absence; this endpoint has no typed missing-id error.
+const observePolicy = (accountId: string, policyId: string) =>
+  zeroTrust.listAccessPolicies.items({ accountId }).pipe(
+    Stream.filter((policy) => policy.id === policyId),
+    Stream.runHead,
+    Effect.map((policy) =>
+      Option.isSome(policy) ? toObserved(policy.value) : undefined,
+    ),
+  );

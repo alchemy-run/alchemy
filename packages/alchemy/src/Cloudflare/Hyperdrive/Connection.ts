@@ -43,7 +43,21 @@ export type AccessOrigin = {
   accessClientSecret: Redacted.Redacted<string>;
 };
 
-export type Origin = PublicOrigin | AccessOrigin;
+/** Origin reachable through a Workers VPC service. */
+export type VpcOrigin = {
+  /** Database protocol. */
+  scheme: Scheme;
+  /** Workers VPC service identifier. */
+  serviceId: string;
+  /** Database name. */
+  database: string;
+  /** Database user. */
+  user: string;
+  /** Write-only database password. */
+  password: Redacted.Redacted<string>;
+};
+
+export type Origin = PublicOrigin | AccessOrigin | VpcOrigin;
 
 export type Caching = {
   /**
@@ -270,35 +284,48 @@ export const ProviderLive = () =>
         originConnectionLimit: news.originConnectionLimit,
       };
 
-      // Observe + ensure. When we know the hyperdriveId we go straight
-      // to update; otherwise we createConfig and fall back to "find by
-      // name then update" if Cloudflare reports the name is already in
-      // use (race or a cold-start adoption).
-      const synced = output?.hyperdriveId
-        ? yield* hyperdrive.updateConfig({
-            accountId: output.accountId,
-            hyperdriveId: output.hyperdriveId,
-            name: output.name,
-            ...requestBody,
-          })
-        : yield* hyperdrive
-            .createConfig({ accountId, name, ...requestBody })
+      // Persisted identifiers do not prove the physical configuration still
+      // exists. Observe before ensure to recover from out-of-band deletion.
+      const acct = output?.accountId ?? accountId;
+      let observed = output?.hyperdriveId
+        ? yield* hyperdrive
+            .getConfig({ accountId: acct, hyperdriveId: output.hyperdriveId })
             .pipe(
-              Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
-                Effect.gen(function* () {
-                  const match = yield* findByName(name);
-                  if (!match) {
-                    return yield* Effect.fail(originalError);
-                  }
-                  return yield* hyperdrive.updateConfig({
-                    accountId,
-                    hyperdriveId: match.id,
-                    name,
-                    ...requestBody,
-                  });
-                }),
+              Effect.catchTag("HyperdriveConfigNotFound", () =>
+                Effect.succeed(undefined),
               ),
-            );
+            )
+        : undefined;
+      if (!observed) observed = yield* findByName(name);
+      let created = false;
+      if (!observed) {
+        observed = yield* hyperdrive
+          .createConfig({ accountId: acct, name, ...requestBody })
+          .pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                created = true;
+              }),
+            ),
+            Effect.catchTag("InvalidHyperdriveConfig", (cause) =>
+              Effect.gen(function* () {
+                const match = yield* findByName(name);
+                if (!match) return yield* Effect.fail(cause);
+                return match;
+              }),
+            ),
+          );
+      }
+      // Passwords are write-only, so always send desired credentials on an
+      // existing config. A freshly created config already contains them.
+      const synced = created
+        ? observed
+        : yield* hyperdrive.updateConfig({
+            accountId: acct,
+            hyperdriveId: observed.id,
+            name,
+            ...requestBody,
+          });
 
       return {
         hyperdriveId: synced.id,
@@ -395,6 +422,15 @@ const unwrap = (v: string | Redacted.Redacted<string>): string =>
  * runtime schema also accepts `Redacted<string>`.
  */
 const toRequestOrigin = (origin: Origin) => {
+  if ("serviceId" in origin) {
+    return {
+      serviceId: origin.serviceId,
+      database: origin.database,
+      password: unwrap(origin.password),
+      scheme: origin.scheme,
+      user: origin.user,
+    };
+  }
   if ("accessClientId" in origin) {
     return {
       accessClientId: unwrap(origin.accessClientId),

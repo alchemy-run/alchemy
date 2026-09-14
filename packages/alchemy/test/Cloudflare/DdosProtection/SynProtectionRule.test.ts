@@ -72,6 +72,32 @@ test.provider.skipIf(!magicTransit)(
       expect(updated.burstSensitivity).toEqual("high");
       expect(updated.rateSensitivity).toEqual("low");
 
+      const retransmit = yield* stack.deploy(
+        Cloudflare.DdosProtection.SynProtectionRule("Rule", {
+          scope: "global",
+          mode: "disabled",
+          burstSensitivity: "high",
+          rateSensitivity: "low",
+          mitigationType: "retransmit",
+        }),
+      );
+      expect(retransmit.mitigationType).toBe("retransmit");
+      const reset = yield* stack.deploy(
+        Cloudflare.DdosProtection.SynProtectionRule("Rule", {
+          scope: "global",
+          mode: "disabled",
+          burstSensitivity: "high",
+          rateSensitivity: "low",
+        }),
+      );
+      expect(reset.ruleId).toBe(rule.ruleId);
+      const resetObserved =
+        yield* ddos.getAdvancedTcpProtectionSynProtectionRuleItem({
+          accountId: acct,
+          ruleId: reset.ruleId,
+        });
+      expect(resetObserved.mitigationType).toBe("challenge");
+
       yield* stack.destroy();
 
       // Gone — the typed SynProtectionRuleNotFound error proves deletion.

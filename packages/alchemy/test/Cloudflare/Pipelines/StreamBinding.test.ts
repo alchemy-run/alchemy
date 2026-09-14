@@ -21,7 +21,7 @@ const logLevel = Effect.provideService(
 
 const forbiddenBlips = {
   while: (e: { _tag: string }) => e._tag === "Forbidden",
-  schedule: Schedule.exponential("500 millis"),
+  schedule: Schedule.spaced("2 seconds"),
   times: 8,
 } as const;
 
@@ -54,7 +54,7 @@ const sendEvent = (url: string, nonce: string) =>
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
       schedule: Schedule.max([
         Schedule.min([
-          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
           Schedule.spaced("5 seconds"),
         ]),
         Schedule.recurs(30),
@@ -135,5 +135,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 90_000 },
 );

@@ -96,10 +96,13 @@ export const PrefixDelegationProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      if (olds === undefined) return undefined;
-      if (!isResolved(news) || !isResolved(olds)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!output && !olds) return undefined;
+      if (!isResolved(news)) return undefined;
       // Create/delete only — any change forces a replacement.
-      const oldPrefixId = output?.prefixId ?? olds.prefixId;
+      const oldPrefixId = output?.prefixId ?? olds?.prefixId;
       if (
         typeof oldPrefixId === "string" &&
         typeof news.prefixId === "string" &&
@@ -107,11 +110,11 @@ export const PrefixDelegationProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (news.cidr !== (output?.cidr ?? olds.cidr)) {
+      if (news.cidr !== (output?.cidr ?? olds?.cidr)) {
         return { action: "replace" } as const;
       }
       const oldDelegated =
-        output?.delegatedAccountId ?? olds.delegatedAccountId;
+        output?.delegatedAccountId ?? olds?.delegatedAccountId;
       if (
         typeof oldDelegated === "string" &&
         typeof news.delegatedAccountId === "string" &&
@@ -127,7 +130,7 @@ export const PrefixDelegationProvider = () =>
       const acct = output?.accountId ?? accountId;
       const prefixId =
         output?.prefixId ??
-        (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
+        (typeof olds?.prefixId === "string" ? olds?.prefixId : undefined);
       if (!prefixId) return undefined;
 
       // There is no get-by-id op — list and filter. Cold reads match on
@@ -141,7 +144,7 @@ export const PrefixDelegationProvider = () =>
               d.delegatedAccountId ===
                 (output?.delegatedAccountId ??
                   (typeof olds?.delegatedAccountId === "string"
-                    ? olds.delegatedAccountId
+                    ? olds?.delegatedAccountId
                     : undefined)),
           );
       return match ? toAttributes(match, prefixId, acct) : undefined;

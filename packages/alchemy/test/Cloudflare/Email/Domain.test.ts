@@ -24,7 +24,10 @@ const logLevel = Effect.provideService(
 // never point this at a production domain.
 const sacrificialDomain = process.env.CLOUDFLARE_EMAIL_SECURITY_DOMAIN;
 
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const findDomain = (accountId: string, domain: string) =>
   emailSecurity.listSettingDomains.items({ accountId, domain: [domain] }).pipe(

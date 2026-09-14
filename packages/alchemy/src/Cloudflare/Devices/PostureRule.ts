@@ -217,7 +217,7 @@ export const DevicePostureRuleProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createRuleName(id, news.name);
+      const name = yield* createRuleName(id, news.name ?? output?.name);
 
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to create.

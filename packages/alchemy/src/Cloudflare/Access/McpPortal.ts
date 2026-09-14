@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -14,6 +14,8 @@ const TypeId = "Cloudflare.Access.McpPortal" as const;
 type TypeId = typeof TypeId;
 
 export interface McpPortalProps {
+  /** MCP servers exposed by the portal. Use an empty array to remove all servers. */
+  servers?: zeroTrust.CreateAccessAiControlMcpPortalRequest["servers"];
   /**
    * The client-supplied portal identifier. Immutable — changing it
    * triggers a replacement. If omitted, a deterministic id is generated
@@ -183,6 +185,7 @@ export const McpPortalProvider = () =>
           accountId,
           id: portalId,
           hostname: news.hostname,
+          servers: news.servers,
           name,
           ...(news.description !== undefined
             ? { description: news.description }
@@ -202,6 +205,8 @@ export const McpPortalProvider = () =>
       //    server-side defaults on create, e.g. allowCodeMode: true).
       const dirty =
         observed.name !== name ||
+        (news.servers !== undefined &&
+          !deepEqual(observed.servers, news.servers, { stripNullish: true })) ||
         observed.hostname !== news.hostname ||
         (news.description !== undefined &&
           (observed.description || undefined) !== news.description) ||
@@ -217,6 +222,7 @@ export const McpPortalProvider = () =>
         id: portalId,
         name,
         hostname: news.hostname,
+        servers: news.servers,
         ...(news.description !== undefined
           ? { description: news.description }
           : {}),

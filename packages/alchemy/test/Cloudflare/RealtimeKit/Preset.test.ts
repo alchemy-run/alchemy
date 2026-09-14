@@ -110,11 +110,33 @@ test.provider(
           return yield* Cloudflare.RealtimeKit.Preset("Preset", {
             appId: app.appId,
             name: LIFECYCLE_PRESET_NAME,
+            config: {
+              ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetConfig(),
+              media: {
+                ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetConfig()
+                  .media,
+                video: { frameRate: 30, quality: "hd", simulcast: true },
+              },
+              livestreamViewerQualities: [360, 720],
+            },
+            ui: {
+              ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetUi(),
+              designTokens: {
+                ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetUi()
+                  .designTokens,
+                fontFamily: "Inter",
+                googleFont: "Inter",
+              },
+            },
             permissions: {
               ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetPermissions(),
               canRecord: true,
               kickParticipant: true,
               pinParticipant: true,
+              acceptStageRequests: true,
+              stageAccess: "ALLOWED",
+              stageEnabled: true,
+              transcriptionEnabled: true,
             },
           });
         }),
@@ -126,6 +148,14 @@ test.provider(
 
       const updated = yield* getPreset(accountId, v2.appId, v2.presetId);
       expect(updated.permissions?.canRecord).toBe(true);
+      expect(updated.permissions?.acceptStageRequests).toBe(true);
+      expect(updated.permissions?.stageAccess).toEqual("ALLOWED");
+      expect(updated.permissions?.stageEnabled).toBe(true);
+      expect(updated.permissions?.transcriptionEnabled).toBe(true);
+      expect(updated.config.media.video.simulcast).toBe(true);
+      expect(updated.config.livestreamViewerQualities).toEqual([360, 720]);
+      expect(updated.ui.designTokens.fontFamily).toEqual("Inter");
+      expect(updated.ui.designTokens.googleFont).toEqual("Inter");
 
       // Idempotent re-deploy — reconcile must detect the no-op.
       const v3 = yield* stack.deploy(
@@ -136,11 +166,33 @@ test.provider(
           return yield* Cloudflare.RealtimeKit.Preset("Preset", {
             appId: app.appId,
             name: LIFECYCLE_PRESET_NAME,
+            config: {
+              ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetConfig(),
+              media: {
+                ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetConfig()
+                  .media,
+                video: { frameRate: 30, quality: "hd", simulcast: true },
+              },
+              livestreamViewerQualities: [360, 720],
+            },
+            ui: {
+              ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetUi(),
+              designTokens: {
+                ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetUi()
+                  .designTokens,
+                fontFamily: "Inter",
+                googleFont: "Inter",
+              },
+            },
             permissions: {
               ...Cloudflare.RealtimeKit.defaultRealtimeKitPresetPermissions(),
               canRecord: true,
               kickParticipant: true,
               pinParticipant: true,
+              acceptStageRequests: true,
+              stageAccess: "ALLOWED",
+              stageEnabled: true,
+              transcriptionEnabled: true,
             },
           });
         }),

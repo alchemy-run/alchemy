@@ -111,6 +111,19 @@ test.provider("rename updates the group in place", (stack) =>
     });
     expect(actual.name).toEqual("alchemy-test-access-group-rename-b");
 
+    const omittedName = yield* stack.deploy(
+      Cloudflare.Access.Group("RenameGroup", {
+        include: [{ everyone: {} }],
+      }),
+    );
+    expect(omittedName.groupId).toBe(group.groupId);
+    expect(omittedName.name).toBe(renamed.name);
+    const preserved = yield* zeroTrust.getAccessGroupForAccount({
+      accountId,
+      groupId: group.groupId,
+    });
+    expect(preserved.name).toBe(renamed.name);
+
     yield* stack.destroy();
   }).pipe(logLevel),
 );

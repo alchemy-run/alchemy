@@ -251,10 +251,6 @@ export const LeakedCredentialDetectionProvider = () =>
         .pipe(
           // Already gone — idempotent re-delete after a crashed run.
           Effect.catchTag("DetectionNotFound", () => Effect.void),
-          // The zone's toggle was switched off out-of-band; the API
-          // refuses all detection operations then. The detection is
-          // unreachable either way — treat as converged.
-          Effect.catchTag("LeakedCredentialChecksDisabled", () => Effect.void),
         );
     }),
   });
@@ -270,18 +266,13 @@ type ObservedDetection = {
 };
 
 /**
- * Read a detection by id, mapping "gone" (`DetectionNotFound`, Cloudflare
- * error code 11002) and "product off" (`LeakedCredentialChecksDisabled`,
- * code 11001 — the API refuses all detection reads while the zone toggle is
- * off) to `undefined`.
+ * Read a detection by id. Only DetectionNotFound is gone; disabling the
+ * product prevents reads but does not prove that saved detections vanished.
  */
 const getDetection = (zoneId: string, detectionId: string) =>
   lcc.getDetection({ zoneId, detectionId }).pipe(
     Effect.map((d): ObservedDetection | undefined => d),
     Effect.catchTag("DetectionNotFound", () => Effect.succeed(undefined)),
-    Effect.catchTag("LeakedCredentialChecksDisabled", () =>
-      Effect.succeed(undefined),
-    ),
   );
 
 /**

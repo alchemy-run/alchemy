@@ -1,3 +1,4 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
@@ -28,7 +29,7 @@ const getWatermark = (accountId: string, watermarkId: string) =>
   stream.getWatermark({ accountId, identifier: watermarkId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("2 seconds"),
       times: 8,
     }),
   );
@@ -42,7 +43,7 @@ const expectGone = (accountId: string, watermarkId: string) =>
     Effect.retry({
       while: (e) => e._tag === "WatermarkNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),
@@ -164,5 +165,112 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "adopts a watermark explicitly and preserves its name when omitted",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const name = "alchemy-watermark-adoption-audit";
+      const existing = yield* stream.createWatermark({
+        accountId,
+        name,
+        url: PNG_URL,
+        opacity: 0.5,
+        padding: 0.1,
+        position: "lowerLeft",
+        scale: 0.2,
+      });
+      yield* Effect.gen(function* () {
+        const props = {
+          name,
+          url: PNG_URL,
+          opacity: 0.5,
+          padding: 0.1,
+          position: "lowerLeft" as const,
+          scale: 0.2,
+        };
+        const adopted = yield* stack.deploy(
+          Cloudflare.Stream.Watermark("Adopt", props).pipe(adopt(true)),
+        );
+        expect(adopted.watermarkId).toBe(existing.uid);
+        const { name: _, ...omitted } = props;
+        const preserved = yield* stack.deploy(
+          Cloudflare.Stream.Watermark("Adopt", omitted),
+        );
+        expect(preserved.watermarkId).toBe(existing.uid);
+        expect(preserved.name).toBe(name);
+        const defaults = yield* stack.deploy(
+          Cloudflare.Stream.Watermark("Adopt", { url: PNG_URL }),
+        );
+        expect(defaults.watermarkId).not.toBe(existing.uid);
+        expect(defaults.opacity).toBe(1);
+        expect(defaults.position).toBe("upperRight");
+        expect(
+          (yield* getWatermark(accountId, defaults.watermarkId)).name,
+        ).toBeTruthy();
+        yield* stack.destroy();
+        yield* stack.destroy();
+      }).pipe(
+        Effect.ensuring(
+          stream.deleteWatermark({ accountId, identifier: existing.uid! }).pipe(
+            Effect.catchTag("WatermarkNotFound", () => Effect.void),
+            Effect.orDie,
+          ),
+        ),
+      );
+    }),
+  { timeout: 120_000 },
+);
+
+/** Checked-in 8x4 red PNG; uploaded as bytes, without a public download URL. */
+const UPLOAD_PNG = Uint8Array.from(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVR4nGP4z8CAFWEXJUsCAFpeH+EeQoQoAAAAAElFTkSuQmCC",
+    "base64",
+  ),
+);
+test.provider(
+  "uploads PNG bytes and replaces when switching to a URL source",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const first = yield* stack.deploy(
+        Cloudflare.Stream.Watermark("Bytes", {
+          file: UPLOAD_PNG,
+          opacity: 0.5,
+          scale: 0.2,
+          padding: 0.1,
+          position: "lowerRight",
+        }),
+      );
+      expect(first.width).toBe(8);
+      expect(first.height).toBe(4);
+      expect(first.downloadedFrom).toBeUndefined();
+      expect(first.opacity).toBe(0.5);
+      const same = yield* stack.deploy(
+        Cloudflare.Stream.Watermark("Bytes", {
+          file: Uint8Array.from(UPLOAD_PNG),
+          opacity: 0.5,
+          scale: 0.2,
+          padding: 0.1,
+          position: "lowerRight",
+        }),
+      );
+      expect(same.watermarkId).toBe(first.watermarkId);
+      const replaced = yield* stack.deploy(
+        Cloudflare.Stream.Watermark("Bytes", { url: PNG_URL }),
+      );
+      expect(replaced.watermarkId).not.toBe(first.watermarkId);
+      expect(
+        (yield* getWatermark(replaced.accountId, replaced.watermarkId))
+          .downloadedFrom,
+      ).toBe(PNG_URL);
+      yield* expectGone(first.accountId, first.watermarkId);
+      yield* stack.destroy();
+    }),
   { timeout: 120_000 },
 );

@@ -276,7 +276,10 @@ export const RuleProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "RulesetNotFound",
               schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
+                Schedule.min([
+                  Schedule.exponential("500 millis"),
+                  Schedule.spaced("5 seconds"),
+                ]),
                 Schedule.recurs(8),
               ]),
             }),
@@ -293,9 +296,9 @@ export const RuleProvider = () =>
       //    values.
       const desired = {
         host: news.host ?? observed.host ?? undefined,
-        paths: news.paths ?? [...(observed.paths ?? [])],
-        inclusive: news.inclusive ?? observed.inclusive ?? true,
-        isPaused: news.isPaused ?? observed.isPaused ?? false,
+        paths: news.paths ?? [],
+        inclusive: news.inclusive ?? true,
+        isPaused: news.isPaused ?? false,
       };
       const dirty =
         (observed.host ?? undefined) !== desired.host ||

@@ -8,6 +8,9 @@ export declare namespace Subscriber {
   export interface Worker {
     readonly kind: "worker";
     readonly scriptName: string;
+    readonly namespace?: string;
+    /** Subscribe to every user worker in this namespace. */
+    readonly dispatch?: boolean;
     readonly entrypoint?: string;
     readonly props?: Record<string, unknown>;
   }
@@ -29,6 +32,7 @@ export declare namespace Subscriber {
 }
 
 export interface RegistryEntry {
+  readonly namespace?: string;
   readonly scriptName: string;
   readonly debugPortAddress: string;
   readonly services: [RegistryEntry.Worker, ...Array<RegistryEntry.Service>];
@@ -68,13 +72,16 @@ export type ResolvedTarget<T extends Subscriber = Subscriber> = Extract<
   { kind: T["kind"] }
 > & {
   readonly scriptName: string;
+  readonly namespace?: string;
   readonly debugPortAddress: string;
 };
 
 export const resolvedTargetKey = (entry: ResolvedTarget | Subscriber) => {
   switch (entry.kind) {
     case "worker":
-      return `worker:${entry.scriptName}` as const;
+      return entry.namespace
+        ? `dispatch:${JSON.stringify([entry.namespace, entry.scriptName])}`
+        : `worker:${entry.scriptName}`;
     case "durable-object":
       return `durable-object:${entry.scriptName}:${entry.className}` as const;
     case "queue-consumer":

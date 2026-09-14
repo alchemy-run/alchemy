@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -160,6 +161,17 @@ export const AddressMapProvider = () =>
       "canModifyIps",
       "createdAt",
     ],
+    diff: Effect.fn(function* ({ output, olds, news }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (
+        isResolved(news) &&
+        (olds?.defaultSni ?? output?.defaultSni) !== undefined &&
+        news.defaultSni === undefined
+      )
+        return { action: "replace" } as const;
+    }),
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

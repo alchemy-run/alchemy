@@ -17,8 +17,8 @@
  * This is a **local video store only** (mirroring upstream's fidelity
  * limits): no transcoding or HLS ladder — `hlsPlaybackUrl`/`dashPlaybackUrl`
  * point at a placeholder host — and no signed URLs (`generateToken` returns
- * a base64 JSON stub). `createDirectUpload` is unsupported, matching
- * upstream's exact error message.
+ * a base64 JSON stub). Direct upload URLs accept one multipart upload and
+ * enforce expiry; media duration is recorded as a constraint without transcoding.
  *
  * Upstream's `createTypedSql` statement/transaction helpers (`schemas.ts`,
  * `shared/sql.worker.ts`) are replaced with direct `state.storage.sql` calls
@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS _mf_stream_videos (
   live_input_id           TEXT,
   clipped_from_id         TEXT,
   blob_id                 TEXT
+);
+
+CREATE TABLE IF NOT EXISTS _mf_stream_direct_uploads (
+  video_id TEXT PRIMARY KEY REFERENCES _mf_stream_videos(id) ON DELETE CASCADE,
+  token TEXT NOT NULL,
+  expires INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS _mf_stream_captions (
@@ -406,6 +412,103 @@ export class StreamObject extends DurableObject<Env> {
     const row = this.#getVideoRow(id);
     if (row === undefined) throw new NotFoundError(`Video not found: ${id}`);
     return row;
+  }
+
+  async createDirectUpload(params: StreamDirectUploadCreateParams) {
+    if (
+      !Number.isFinite(params.maxDurationSeconds) ||
+      params.maxDurationSeconds < 1 ||
+      params.maxDurationSeconds > 36000
+    ) {
+      throw new BadRequestError(
+        "maxDurationSeconds must be between 1 and 36000",
+      );
+    }
+    const expires =
+      params.expiry === undefined
+        ? this.timers.now() + 30 * 60_000
+        : Date.parse(params.expiry);
+    if (!Number.isFinite(expires) || expires <= this.timers.now()) {
+      throw new BadRequestError("expiry must be a future timestamp");
+    }
+    const watermark =
+      params.watermark === undefined
+        ? null
+        : await this.getWatermark(params.watermark.id);
+    const row = await this.createVideo(null, params);
+    const token = crypto.randomUUID();
+    this.ctx.storage.transactionSync(() => {
+      this.#sql.exec(
+        "INSERT INTO _mf_stream_direct_uploads VALUES (?, ?, ?)",
+        row.id,
+        token,
+        expires,
+      );
+      this.#sql.exec(
+        "UPDATE _mf_stream_videos SET upload_expiry = ?, max_duration_seconds = ? WHERE id = ?",
+        new Date(expires).toISOString(),
+        params.maxDurationSeconds,
+        row.id,
+      );
+    });
+    return {
+      id: row.id,
+      token,
+      watermark,
+      scheduledDeletion: row.scheduled_deletion,
+    };
+  }
+
+  async completeDirectUpload(
+    id: string,
+    token: string,
+    body: ReadableStream<Uint8Array>,
+    size: number,
+  ): Promise<void> {
+    const valid = () =>
+      this.#sql
+        .exec(
+          "SELECT video_id FROM _mf_stream_direct_uploads WHERE video_id = ? AND token = ? AND expires > ?",
+          id,
+          token,
+          this.timers.now(),
+        )
+        .toArray().length > 0;
+    if (!valid())
+      throw new BadRequestError(
+        "Direct upload URL is invalid, expired, or already used",
+      );
+    if (size === 0 || size > 200 * 1024 * 1024)
+      throw new BadRequestError(
+        "Direct uploads require a nonempty file of at most 200 MB",
+      );
+    const blobId = await this.#blob.put(body);
+    try {
+      this.ctx.storage.transactionSync(() => {
+        // Recheck after asynchronous storage so concurrent uploads cannot both consume the URL.
+        if (!valid())
+          throw new BadRequestError(
+            "Direct upload URL is invalid, expired, or already used",
+          );
+        const now = this.#now();
+        this.#sql.exec(
+          "UPDATE _mf_stream_videos SET blob_id = ?, size = ?, uploaded = ?, modified = ?, ready_to_stream = 1, ready_to_stream_at = ?, status_state = 'ready' WHERE id = ?",
+          blobId,
+          size,
+          now,
+          now,
+          now,
+          id,
+        );
+        this.#sql.exec(
+          "DELETE FROM _mf_stream_direct_uploads WHERE video_id = ?",
+          id,
+        );
+      });
+    } catch (error) {
+      await this.#blob.delete(blobId);
+      throw error;
+    }
   }
 
   async getVideo(id: string): Promise<VideoRow> {
@@ -907,6 +1010,43 @@ function rowsToDownloadResponse(
 export class StreamBinding extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const upload = url.pathname.match(
+      /^\/cdn-cgi\/mf\/stream\/([^/]+)\/upload$/,
+    );
+    if (upload) {
+      const headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      };
+      if (request.method === "OPTIONS")
+        return new Response(null, { status: 204, headers });
+      if (request.method !== "POST")
+        return new Response("Method not allowed", { status: 405, headers });
+      try {
+        const form = await request.formData();
+        const file = form.get("file");
+        if (!(file instanceof Blob))
+          return new Response("Expected multipart file field", {
+            status: 400,
+            headers,
+          });
+        await getStub(this.env).completeDirectUpload(
+          upload[1]!,
+          url.searchParams.get("token") ?? "",
+          file.stream(),
+          file.size,
+        );
+        return Response.json(
+          { success: true, result: { uid: upload[1] } },
+          { headers },
+        );
+      } catch (error) {
+        return new Response(
+          error instanceof Error ? error.message : String(error),
+          { status: 400, headers },
+        );
+      }
+    }
     const match = url.pathname.match(/^\/cdn-cgi\/mf\/stream\/([^/]+)\/watch$/);
     if (!match) {
       return new Response("Not found", { status: 404 });
@@ -951,13 +1091,25 @@ export class StreamBinding extends WorkerEntrypoint<Env> {
     return rowToStreamVideo(row, entryUrl);
   }
 
-  // Not supported in local mode yet
   async createDirectUpload(
-    _params: StreamDirectUploadCreateParams,
+    params: StreamDirectUploadCreateParams,
   ): Promise<StreamDirectUpload> {
-    throw new BadRequestError(
-      "createDirectUpload is not supported in local mode",
+    const entryUrl = await getPublicUrl(this.env[BINDING_STREAM_LOOPBACK]);
+    const result = await getStub(this.env).createDirectUpload(params);
+    const uploadURL = new URL(
+      `/cdn-cgi/mf/stream/${result.id}/upload`,
+      entryUrl,
     );
+    uploadURL.searchParams.set("token", result.token);
+    return {
+      id: result.id,
+      uploadURL: uploadURL.toString(),
+      watermark:
+        result.watermark === null
+          ? null
+          : rowToStreamWatermark(result.watermark),
+      scheduledDeletion: result.scheduledDeletion,
+    };
   }
 
   video(id: string): StreamVideoHandle {

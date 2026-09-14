@@ -148,14 +148,20 @@ export const TcpFlowProtectionRuleProvider = () =>
   Provider.succeed(TcpFlowProtectionRule, {
     stables: ["ruleId", "accountId", "scope", "name", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (olds === undefined) return undefined;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       // `news` runs at plan time and may still carry unresolved
       // expressions — bail out and let the engine apply default logic.
       if (!isResolved(news)) return undefined;
       // The API only patches mode/sensitivities — the scope + name pair is
       // the rule's identity and cannot change.
-      if (olds.scope !== news.scope || ruleName(olds) !== ruleName(news)) {
+      if (
+        (output ?? olds) &&
+        ((output?.scope ?? olds?.scope) !== news.scope ||
+          ruleName((output ?? olds)!) !== ruleName(news))
+      ) {
         return { action: "replace" } as const;
       }
       return undefined;

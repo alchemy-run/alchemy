@@ -142,25 +142,27 @@ test.provider(
       expect(outputInfo.width).toBe(4);
       expect(outputInfo.height).toBe(2);
 
-      // GIF output surfaces the documented local-mode 415 (code 9520).
+      // Local GIF output is encoded and can be decoded through the same binding.
       const gifRes = yield* postBytesReady(
         `${deployed.url}/transform?format=image/gif`,
         PNG_RED_8X4,
       );
-      const gifBody = (yield* gifRes.json) as {
-        error: boolean;
-        code: number;
-        message: string;
-      };
-      expect(gifBody.error).toBe(true);
-      expect(gifBody.code).toBe(9520);
-      expect(gifBody.message).toContain(
-        "GIF output is not supported in local mode",
+      expect(gifRes.headers["content-type"]).toBe("image/gif");
+      const gifBytes = new Uint8Array(yield* gifRes.arrayBuffer);
+      expect(new TextDecoder().decode(gifBytes.slice(0, 3))).toBe("GIF");
+      const gifInfoRes = yield* postBytesReady(
+        `${deployed.url}/info`,
+        gifBytes,
       );
+      expect(yield* gifInfoRes.json).toMatchObject({
+        format: "image/gif",
+        width: 8,
+        height: 4,
+      });
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 /**
@@ -202,5 +204,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

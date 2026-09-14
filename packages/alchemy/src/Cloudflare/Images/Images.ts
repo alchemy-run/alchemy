@@ -56,6 +56,10 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * //   { MEDIA: ImagesBinding }
  * ```
  *
+ * Local transformations include text rendered from the requested font URL and
+ * animated GIF/WebP output. AI face/segmentation gravity and production service
+ * limits are not emulated.
+ *
  * ### Local development
  * **Example:** Proxy to the real Images service in dev
  * ```typescript
@@ -102,6 +106,11 @@ export const isImages = (value: unknown): value is ImagesBinding =>
 export interface ImagesClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */
   raw: Effect.Effect<cf.ImagesBinding, never, RuntimeContext>;
+  /** Begin a text image using a font URL, font size and text color. */
+  text(
+    text: string,
+    options: Parameters<cf.ImagesBinding["text"]>[1],
+  ): Effect.Effect<ImageTransformer, never, RuntimeContext>;
   /**
    * Read image format and dimensions from a stream of bytes. Fails with
    * {@link ImagesError} (code 9412) if the input is not a recognized image.

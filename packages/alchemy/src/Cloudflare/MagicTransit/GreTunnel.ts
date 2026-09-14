@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -53,6 +54,10 @@ export interface MagicTunnelBgp {
    * ASN used on the customer end of the BGP session.
    */
   customerAsn: number;
+  /** BGP filter for exported routes. */
+  exportFilterId?: string;
+  /** BGP filter for imported routes. */
+  importFilterId?: string;
   /**
    * Prefixes advertised in addition to the account's Magic prefixes.
    */
@@ -121,6 +126,15 @@ export interface GreTunnelProps {
 }
 
 export interface GreTunnelAttributes {
+  /** Observed automatic return routing mode. */
+  automaticReturnRouting?: boolean;
+  /** Observed health-check configuration. */
+  healthCheck?: magicTransit.GreTunnelsGetResponseGreTunnel["healthCheck"];
+  /** Observed BGP configuration with redacted authentication key. */
+  bgp?: Omit<
+    NonNullable<magicTransit.GreTunnelsGetResponseGreTunnel["bgp"]>,
+    "md5Key"
+  > & { md5Key?: Redacted.Redacted<string> };
   /** Cloudflare-assigned identifier of the GRE tunnel. */
   tunnelId: string;
   /** The Cloudflare account the tunnel belongs to. */
@@ -218,13 +232,38 @@ export const GreTunnelProvider = () =>
   Provider.succeed(GreTunnel, {
     stables: ["tunnelId", "accountId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        [
+          "interfaceAddress6",
+          "description",
+          "ttl",
+          "mtu",
+          "healthCheck",
+          "automaticReturnRouting",
+        ].some((key) =>
+          removedConfiguration(
+            olds[key as keyof typeof olds],
+            news[key as keyof typeof news],
+          ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+      if ((output || olds) && (output?.name ?? olds?.name) !== news.name)
+        return { action: "replace", deleteFirst: true } as const;
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // The tunnel name is its routing identity; renames are rejected.
       if (olds.name !== news.name) return { action: "replace" } as const;
       // The update API has no `bgp` field — BGP changes require recreate.
-      if (!sameBgp(olds.bgp, news.bgp)) return { action: "replace" } as const;
+      if (!sameBgp(olds.bgp, news.bgp))
+        return { action: "replace", deleteFirst: true } as const;
       return undefined;
     }),
 
@@ -276,6 +315,8 @@ export const GreTunnelProvider = () =>
           bgp: news.bgp
             ? {
                 customerAsn: news.bgp.customerAsn,
+                exportFilterId: news.bgp.exportFilterId,
+                importFilterId: news.bgp.importFilterId,
                 extraPrefixes: news.bgp.extraPrefixes,
                 md5Key: news.bgp.md5Key
                   ? Redacted.value(news.bgp.md5Key)
@@ -285,6 +326,9 @@ export const GreTunnelProvider = () =>
           healthCheck: news.healthCheck
             ? {
                 enabled: news.healthCheck.enabled,
+                direction: news.healthCheck.direction,
+                rate: news.healthCheck.rate,
+                type: news.healthCheck.type,
                 target: news.healthCheck.target
                   ? { saved: news.healthCheck.target }
                   : undefined,
@@ -368,29 +412,7 @@ export const GreTunnelProvider = () =>
     }),
   });
 
-interface ObservedGreTunnel {
-  id: string;
-  name: string;
-  cloudflareGreEndpoint: string;
-  customerGreEndpoint: string;
-  interfaceAddress: string;
-  interfaceAddress6?: string | null;
-  description?: string | null;
-  ttl?: number | null;
-  mtu?: number | null;
-  healthCheck?: {
-    direction?: string | null;
-    enabled?: boolean | null;
-    rate?: string | null;
-    target?:
-      | { effective?: string | null; saved?: string | null }
-      | string
-      | null;
-    type?: string | null;
-  } | null;
-  createdOn?: string | null;
-  modifiedOn?: string | null;
-}
+type ObservedGreTunnel = magicTransit.GreTunnelsGetResponseGreTunnel;
 
 /**
  * Read a tunnel by id, mapping "gone" (`GreTunnelNotFound`, Cloudflare
@@ -428,6 +450,9 @@ const observedHealthTarget = (
 };
 
 const dirty = (observed: ObservedGreTunnel, news: GreTunnelProps): boolean =>
+  (news.automaticReturnRouting !== undefined &&
+    (observed.automaticReturnRouting ?? false) !==
+      news.automaticReturnRouting) ||
   observed.cloudflareGreEndpoint !== news.cloudflareGreEndpoint ||
   observed.customerGreEndpoint !== news.customerGreEndpoint ||
   observed.interfaceAddress !== news.interfaceAddress ||
@@ -467,6 +492,8 @@ const sameBgp = (
   const bKey = b.md5Key ? Redacted.value(b.md5Key) : undefined;
   return (
     a.customerAsn === b.customerAsn &&
+    a.exportFilterId === b.exportFilterId &&
+    a.importFilterId === b.importFilterId &&
     aKey === bKey &&
     (a.extraPrefixes ?? []).join(",") === (b.extraPrefixes ?? []).join(",")
   );
@@ -476,6 +503,16 @@ const toAttributes = (
   tunnel: ObservedGreTunnel,
   accountId: string,
 ): GreTunnelAttributes => ({
+  automaticReturnRouting: tunnel.automaticReturnRouting ?? undefined,
+  healthCheck: tunnel.healthCheck ?? undefined,
+  bgp: tunnel.bgp
+    ? {
+        ...tunnel.bgp,
+        md5Key: tunnel.bgp.md5Key
+          ? Redacted.make(tunnel.bgp.md5Key)
+          : undefined,
+      }
+    : undefined,
   tunnelId: tunnel.id,
   accountId,
   name: tunnel.name,

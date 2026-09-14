@@ -1,5 +1,16 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
+import {
+  generateLocalId,
+  isLocalId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
@@ -139,7 +150,7 @@ export const Index = Resource<Index>(TypeId);
 export const isIndex = (value: unknown): value is Index =>
   isResourceOfType(value, TypeId);
 
-export const IndexProvider = () =>
+export const IndexProviderLive = () =>
   Provider.succeed(Index, {
     stables: ["indexName", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
@@ -158,7 +169,13 @@ export const IndexProvider = () =>
         oldName !== name ||
         (news.preset ?? undefined) !== (olds.preset ?? undefined) ||
         (news.dimensions ?? undefined) !== (olds.dimensions ?? undefined) ||
+        (news.dimensions !== undefined &&
+          output?.dimensions !== undefined &&
+          news.dimensions !== output.dimensions) ||
         (news.metric ?? DEFAULT_METRIC) !== (olds.metric ?? DEFAULT_METRIC) ||
+        (!news.preset &&
+          output?.metric !== undefined &&
+          (news.metric ?? DEFAULT_METRIC) !== output.metric) ||
         (news.description ?? undefined) !== (olds.description ?? undefined)
       ) {
         return { action: "replace" } as const;
@@ -284,3 +301,81 @@ const buildConfig = (
         dimensions: news.dimensions!,
         metric: news.metric ?? DEFAULT_METRIC,
       };
+
+const presetDimensions: Record<string, number> = {
+  "@cf/baai/bge-small-en-v1.5": 384,
+  "@cf/baai/bge-base-en-v1.5": 768,
+  "@cf/baai/bge-large-en-v1.5": 1024,
+  "openai/text-embedding-ada-002": 1536,
+  "cohere/embed-multilingual-v2.0": 768,
+};
+
+export const IndexProviderLocal = () =>
+  RpcProvider.effect(
+    Index,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      const state = yield* LocalRuntimeState;
+      return {
+        stables: ["indexName", "accountId"],
+        diff: Effect.fn(function* ({ olds = {}, news = {}, output }) {
+          if (!output || !isLocalId(output.indexName))
+            return { action: "replace" } as const;
+          if (!isResolved(news)) return;
+          if (
+            news.name !== olds.name ||
+            news.dimensions !== olds.dimensions ||
+            news.metric !== olds.metric ||
+            news.preset !== olds.preset ||
+            news.description !== olds.description
+          )
+            return { action: "replace" } as const;
+          MutableHashMap.set(state.vectorizeIndexes, output.indexName, output);
+        }),
+        read: Effect.fn(function* ({ output }) {
+          return output;
+        }),
+        reconcile: Effect.fn(function* ({ news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const dimensions = news.preset
+            ? presetDimensions[news.preset]
+            : news.dimensions;
+          if (!dimensions)
+            return yield* Effect.die(
+              new Error(
+                `Local Vectorize needs explicit dimensions or a supported preset: ${news.preset ?? "missing dimensions"}`,
+              ),
+            );
+          const index: IndexAttributes = {
+            indexName:
+              output && isLocalId(output.indexName)
+                ? output.indexName
+                : generateLocalId(),
+            dimensions,
+            metric: news.metric ?? DEFAULT_METRIC,
+            description: news.description,
+            accountId,
+            createdOn: output?.createdOn ?? new Date().toISOString(),
+            modifiedOn: new Date().toISOString(),
+          };
+          MutableHashMap.set(state.vectorizeIndexes, index.indexName, index);
+          return index;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          MutableHashMap.remove(state.vectorizeIndexes, output.indexName);
+          for (const [key, metadata] of state.vectorizeMetadataIndexes) {
+            if (metadata.indexName === output.indexName)
+              MutableHashMap.remove(state.vectorizeMetadataIndexes, key);
+          }
+          // Persistent data is isolated by the generation's dev identity, as in D1.
+        }),
+      };
+    }),
+  );
+
+export const IndexProvider = () =>
+  ProviderLayer.dual(Index, {
+    live: () => IndexProviderLive(),
+    local: () =>
+      IndexProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+  });

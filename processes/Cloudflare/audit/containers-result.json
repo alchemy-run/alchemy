@@ -1,0 +1,44 @@
+{
+  "service": "containers",
+  "resources": [
+    "Containers.Container",
+    "Containers.ContainerApplication"
+  ],
+  "testsPassed": 11,
+  "testCommand": [
+    "timeout 240 pnpm test test/Cloudflare/Container/Duplicate.test.ts test/Cloudflare/Container/Configuration.test.ts --profile testing --timeout 120000",
+    "timeout 240 pnpm test test/Cloudflare/Container/ContainerApplication.test.ts --profile testing --timeout 120000",
+    "timeout 240 pnpm test test/Cloudflare/Container/LocalContainer.test.ts test/Cloudflare/Container/Dockerfile.local.test.ts --profile testing --timeout 90000"
+  ],
+  "files": [
+    "packages/alchemy/src/Cloudflare/Containers/ContainerApplication.ts",
+    "packages/alchemy/src/Cloudflare/Containers/ContainerProvider.ts",
+    "packages/alchemy/src/Cloudflare/Containers/LocalContainerProvider.ts",
+    "packages/alchemy/test/Cloudflare/Container/ContainerApplication.test.ts",
+    "packages/alchemy/test/Cloudflare/Container/LocalContainer.test.ts",
+    "packages/alchemy/test/Cloudflare/Container/Configuration.test.ts",
+    "packages/alchemy/test/Cloudflare/Container/Duplicate.test.ts",
+    "packages/alchemy/test/Cloudflare/Container/Dockerfile.local.test.ts",
+    "packages/alchemy/test/Cloudflare/Container/fixtures/configuration/application.ts"
+  ],
+  "patches": [
+    {
+      "file": "submodules/distilled/packages/cloudflare/manual-specs/containers.json",
+      "reason": "Manual Smithy source bypasses converter patch pipeline. Added ContainerJobsNotEnabled(code1000 APPLICATION_JOBS_POLICY) and ContainerApplicationAlreadyExists(HTTP400 precise duplicate message). Regenerated src/services/containers.ts only."
+    }
+  ],
+  "skippedTests": [
+    {
+      "test": "jobs mode survives updates and replacement with a fixed name",
+      "env": "CLOUDFLARE_TEST_CONTAINER_JOBS",
+      "exactError": "account does not have the capability to create \"jobs\" based policies. You might need the APPLICATION_JOBS_POLICY capability on the account.",
+      "code": 1000
+    }
+  ],
+  "notes": [
+    "Fixed jobs deleteFirst replacement, live observed scaling/version hash invalidation, relative Dockerfile context handling in both live/local providers.",
+    "Real Duplicate+Configuration4passed1gated; existing application image/recovery5passed; actual local Docker HTTP and local Dockerfile deployment2passed.",
+    "No mocked fixtures. No commits/push/build/typechecks performed by agent.",
+    "Control-plane jobs/autoscaling/geographic placement not emulated locally; real Docker/workerd execution verified."
+  ]
+}

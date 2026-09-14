@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -195,13 +196,23 @@ export const MtlsCertificateProvider = () =>
       const name = news.name ?? oldName;
       if (
         oldName !== name ||
-        (news.ca ?? undefined) !== (olds.ca ?? undefined) ||
-        (news.certificates ?? undefined) !== (olds.certificates ?? undefined) ||
-        unwrap(news.privateKey) !== unwrap(olds.privateKey)
+        (output?.ca !== undefined && (news.ca ?? false) !== output.ca) ||
+        (olds.certificates !== undefined &&
+          (news.ca ?? false) !== (olds.ca ?? false)) ||
+        (olds.certificates !== undefined &&
+          news.certificates.trim() !== olds.certificates.trim()) ||
+        (olds.certificates !== undefined &&
+          unwrap(news.privateKey) !== unwrap(olds.privateKey))
       ) {
-        // There is no update API for mTLS certificates — every change is a
-        // replacement.
-        return { action: "replace" } as const;
+        // Duplicate PEM uploads reuse the existing certificate. Remove it
+        // before changing metadata/key with the same PEM, or replacement GC
+        // would delete the certificate just adopted by the new instance.
+        return {
+          action: "replace",
+          deleteFirst:
+            olds.certificates === undefined ||
+            news.certificates.trim() === olds.certificates.trim(),
+        } as const;
       }
       return undefined;
     }),
@@ -225,7 +236,7 @@ export const MtlsCertificateProvider = () =>
       // physical name (the only brand available; certificates have no tags).
       const name = yield* createCertificateName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match ? toAttributes(match, acct) : undefined;
+      return match ? Unowned(toAttributes(match, acct)) : undefined;
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -291,7 +302,8 @@ export const MtlsCertificateProvider = () =>
                   accountId,
                   news.certificates,
                 );
-                if (!match) return yield* Effect.fail(originalError);
+                if (!match || match.name !== name)
+                  return yield* Effect.fail(originalError);
                 return match;
               }),
             ),
@@ -322,14 +334,18 @@ const createCertificateName = (id: string, name: string | undefined) =>
 
 const findByName = (accountId: string, name: string) =>
   Effect.gen(function* () {
-    const list = yield* mtls.listMtlsCertificates({ accountId });
-    return list.result.find((c) => c.name === name);
+    const list = yield* mtls.listMtlsCertificates
+      .items({ accountId })
+      .pipe(Stream.runCollect);
+    return [...list].find((c) => c.name === name);
   });
 
 const findByContent = (accountId: string, certificates: string) =>
   Effect.gen(function* () {
-    const list = yield* mtls.listMtlsCertificates({ accountId });
-    return list.result.find(
+    const list = yield* mtls.listMtlsCertificates
+      .items({ accountId })
+      .pipe(Stream.runCollect);
+    return [...list].find(
       (c) => c.certificates?.trim() === certificates.trim(),
     );
   });

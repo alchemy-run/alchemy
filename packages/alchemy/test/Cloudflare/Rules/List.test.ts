@@ -152,6 +152,19 @@ test.provider("update description and items in place (same listId)", (stack) =>
     );
     expect(noop.listId).toEqual(initial.listId);
 
+    const cleared = yield* stack.deploy(
+      Cloudflare.Rules.List("UpdateList", {
+        name: "alchemy_rules_list_update",
+        kind: "ip",
+        items: [{ ip: "203.0.113.2", comment: "kept" }, { ip: "192.0.2.0/24" }],
+      }),
+    );
+    expect(cleared.listId).toBe(initial.listId);
+    expect(
+      (yield* rules.getList({ accountId, listId: initial.listId }))
+        .description ?? "",
+    ).toBe("");
+
     yield* stack.destroy();
 
     yield* expectGone(accountId, initial.listId);

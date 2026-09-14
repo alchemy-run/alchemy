@@ -79,6 +79,8 @@ export interface PoolNotificationFilter {
 }
 
 export interface PoolProps {
+  /** Regions from which to perform health checks. Applied through the update API after creation. */
+  checkRegions?: loadBalancers.UpdatePoolRequest["checkRegions"];
   /**
    * A short name (tag) for the pool. Only alphanumeric characters, hyphens,
    * and underscores are allowed. If omitted, a unique name is generated
@@ -292,12 +294,12 @@ export const PoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createPoolName(id, news.name);
+      const name = yield* createPoolName(id, news.name ?? output?.name);
       const body = buildBody(news, name);
 
       // 1. Observe — output.poolId is a cache hint; a 404 falls through
       //    to "missing" and we recreate.
-      const observed = output?.poolId
+      let observed = output?.poolId
         ? yield* getPool(output.accountId ?? accountId, output.poolId)
         : undefined;
 
@@ -307,18 +309,26 @@ export const PoolProvider = () =>
           accountId,
           ...body,
         });
-        return toAttributes(created, accountId);
+        observed = created;
       }
 
       // 3. Sync — the update endpoint is a PUT requiring name + origins;
       //    diff observed against desired and skip the call on a no-op.
-      if (!poolDirty(observed, body)) {
+      if (
+        !poolDirty(observed, body) &&
+        (news.checkRegions === undefined ||
+          JSON.stringify(news.checkRegions) ===
+            JSON.stringify(
+              "checkRegions" in observed ? observed.checkRegions : undefined,
+            ))
+      ) {
         return toAttributes(observed, accountId);
       }
       const updated = yield* loadBalancers.updatePool({
         accountId,
-        poolId: observed.id,
+        poolId: observed.id!,
         ...body,
+        checkRegions: news.checkRegions,
       });
       return toAttributes(updated, accountId);
     }),
@@ -336,7 +346,10 @@ export const PoolProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "PoolInUse",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("5 seconds"),
+              ]),
               Schedule.recurs(6),
             ]),
           }),

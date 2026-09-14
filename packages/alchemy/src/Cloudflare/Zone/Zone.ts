@@ -230,7 +230,11 @@ export const ZoneProvider = () =>
           if (output?.zoneId) {
             const result = yield* zones
               .getZone({ zoneId: output.zoneId })
-              .pipe(Effect.catch(() => Effect.succeed(undefined)));
+              .pipe(
+                Effect.catchTag("InvalidZoneIdentifier", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
             if (result) return toZoneAttributes(result, accountId);
           }
           // Adoption path: no state of our own, but a zone with this name

@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -354,14 +355,14 @@ export const DynamicRoutingProvider = () =>
       const match = yield* findByName(acct, gatewayId, name);
       if (match) {
         const observed = yield* getRoute(acct, gatewayId, match.id);
-        return observed ? toAttributes(observed, acct) : undefined;
+        return observed ? Unowned(toAttributes(observed, acct)) : undefined;
       }
       return undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const gatewayId = news.gatewayId as string;
-      const name = yield* createRouteName(id, news.name);
+      const name = yield* createRouteName(id, news.name ?? output?.name);
       const desired = news.elements ?? [];
 
       // Observe — the routeId cached on `output` is a hint, not a
@@ -407,44 +408,14 @@ export const DynamicRoutingProvider = () =>
       });
 
       if (current.name !== name) {
-        yield* aiGateway
-          .patchDynamicRouting({
-            accountId,
-            gatewayId,
-            id: routeId,
-            name,
-          })
-          .pipe(
-            // Cloudflare does not cascade-delete a gateway's routes when the
-            // gateway itself is deleted: recreating a gateway with the same
-            // id resurrects its old route rows, and a rename onto one of
-            // those ghosts trips the backing `UNIQUE(routes.name,
-            // routes.gateway_id)` constraint (leaked as a 500, typed as
-            // `RouteAlreadyExists` via a distilled patch). Route names are
-            // unique and deterministic, so the holder is a stale duplicate
-            // of this logical resource — delete it and retry the rename.
-            Effect.catchTag("RouteAlreadyExists", (error) =>
-              Effect.gen(function* () {
-                const holder = yield* findByName(accountId, gatewayId, name);
-                if (holder === undefined || holder.id === routeId) {
-                  return yield* Effect.fail(error);
-                }
-                yield* aiGateway
-                  .deleteDynamicRouting({
-                    accountId,
-                    gatewayId,
-                    id: holder.id,
-                  })
-                  .pipe(Effect.catchTag("RouteNotFound", () => Effect.void));
-                yield* aiGateway.patchDynamicRouting({
-                  accountId,
-                  gatewayId,
-                  id: routeId,
-                  name,
-                });
-              }),
-            ),
-          );
+        // A name collision may belong to another live resource. Preserve it
+        // and return the API's typed conflict instead of deleting the holder.
+        yield* aiGateway.patchDynamicRouting({
+          accountId,
+          gatewayId,
+          id: routeId,
+          name,
+        });
       }
 
       // `get` returns the *deployed* version's graph, so an undeployed

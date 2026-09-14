@@ -1,3 +1,7 @@
+import * as Layer from "effect/Layer";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import { localRuntimeServices } from "../LocalRuntime.ts";
+import { StreamProviderLocal } from "./Local.ts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -120,7 +124,9 @@ export interface StreamProps {
    */
   schema?: {
     /** Fields of the structured schema. */
-    fields: StreamField[];
+    fields?: StreamField[];
+    /** Infer event fields from incoming data. */
+    inferred?: boolean;
   };
   /**
    * Input format configuration. Immutable — changing it triggers a
@@ -227,6 +233,12 @@ export type Stream = Resource<
  *
  * @see https://developers.cloudflare.com/pipelines/
  *
+ * ### Local Development <!-- api-prose -->
+ * Local streams accept native Worker `send()` calls with JSON events. Structured
+ * schemas validate scalar types and required fields; `sqlName` maps columns.
+ * HTTP ingestion, metadata extraction, binary/timestamp fields and format
+ * conversions require `Alchemy.remote()`. HTTP is disabled locally by default.
+ *
  * @resource
  * @product Pipelines
  * @category Storage & Databases
@@ -239,7 +251,7 @@ export const Stream = Resource<Stream>(StreamTypeId);
 export const isStream = (value: unknown): value is Stream =>
   Predicate.hasProperty(value, "Type") && value.Type === StreamTypeId;
 
-export const StreamProvider = () =>
+export const StreamProviderLive = () =>
   Provider.succeed(Stream, {
     stables: ["streamId", "accountId", "name", "createdAt"],
 
@@ -250,7 +262,8 @@ export const StreamProvider = () =>
         return { action: "replace" } as const;
       }
       const o = olds as StreamProps | undefined;
-      const newName = yield* streamName(id, news.name);
+      const newName =
+        news.name ?? output?.name ?? (yield* streamName(id, undefined));
       const oldName = output?.name ?? (yield* streamName(id, o?.name));
       if (newName !== oldName) {
         return { action: "replace" } as const;
@@ -288,7 +301,8 @@ export const StreamProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* streamName(id, news.name);
+      const name =
+        news.name ?? output?.name ?? (yield* streamName(id, undefined));
 
       // 1. Observe — the cached streamId is a hint, not a guarantee; a
       //    missing stream falls through to a name lookup and then create.
@@ -369,7 +383,7 @@ export const StreamProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "StreamInUse",
             schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
+              Schedule.spaced("2 seconds"),
               Schedule.recurs(8),
             ]),
           }),
@@ -503,3 +517,10 @@ const toAttributes = (
   createdAt: observed.createdAt,
   modifiedAt: observed.modifiedAt,
 });
+
+export const StreamProvider = () =>
+  ProviderLayer.dual(Stream, {
+    local: () =>
+      StreamProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    live: () => StreamProviderLive(),
+  });

@@ -258,7 +258,7 @@ export const OrganizationProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const name = yield* createOrganizationName(id, news.name);
+      const name = yield* createOrganizationName(id, news.name ?? output?.name);
       // Inputs have been resolved to concrete strings by Plan.
       const parent = news.parent as string | undefined;
 
@@ -338,8 +338,7 @@ const findByName = (name: string, parent: string | undefined) =>
       Array.from(chunk)
         .filter(
           (org) =>
-            org.name === name &&
-            (parent === undefined || org.parent?.id === parent),
+            org.name === name && (org.parent?.id ?? undefined) === parent,
         )
         .sort((a, b) => a.createTime.localeCompare(b.createTime))
         .at(0),

@@ -148,6 +148,8 @@ export interface OnRampAttributes {
   installRoutesInMagicWan: boolean;
   /** The connected VPC/VNet resource id, if set. */
   vpc: string | undefined;
+  /** Cloud region of the on-ramp. Changes require replacement. */
+  region: string | undefined;
   /** Cloud-side ASN, if set. */
   cloudAsn: number | undefined;
   /** Free-form description, if set. */
@@ -263,6 +265,9 @@ export const OnRampProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.accountId !== undefined && output.accountId !== accountId)
+        return { action: "replace" } as const;
       const old = olds !== undefined && isResolved(olds) ? olds : undefined;
       // Immutable identity/topology properties — the PATCH body accepts
       // none of these, so any change is a replacement.
@@ -281,6 +286,16 @@ export const OnRampProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
+      if (
+        (output?.region ?? old?.region) !== undefined &&
+        (output?.region ?? old?.region) !== news.region
+      )
+        return { action: "replace" } as const;
+      if (
+        (output?.cloudAsn ?? old?.cloudAsn) !== undefined &&
+        (output?.cloudAsn ?? old?.cloudAsn) !== news.cloudAsn
+      )
+        return { action: "replace" } as const;
       if (old !== undefined) {
         if (old.region !== news.region) {
           return { action: "replace" } as const;
@@ -323,7 +338,7 @@ export const OnRampProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* onRampName(id, news.name);
+      const name = yield* onRampName(id, news.name ?? output?.name);
       const destroyOnDelete = news.destroyOnDelete ?? false;
 
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:
@@ -541,6 +556,7 @@ const toAttributes = (
   installRoutesInMagicWan: onramp.installRoutesInMagicWan,
   vpc: onramp.vpc ?? undefined,
   cloudAsn: onramp.cloudAsn ?? undefined,
+  region: onramp.region ?? undefined,
   description: onramp.description ?? undefined,
   attachedHubs: [...(onramp.attachedHubs ?? [])],
   attachedVpcs: [...(onramp.attachedVpcs ?? [])],

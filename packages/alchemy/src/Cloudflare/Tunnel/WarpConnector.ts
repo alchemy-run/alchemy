@@ -17,6 +17,10 @@ const TypeId = "Cloudflare.Tunnel.WarpConnector" as const;
 type TypeId = typeof TypeId;
 
 export interface WarpConnectorProps {
+  /** Enable high availability when creating the connector. Changing this replaces the tunnel. */
+  ha?: boolean;
+  /** Rotate the connector tunnel secret. Stored redacted and synchronized through PATCH. */
+  tunnelSecret?: Redacted.Redacted<string>;
   /**
    * User-friendly name for the WARP Connector tunnel. Tunnel names are
    * unique per account, which makes the name the resource's identity
@@ -114,7 +118,11 @@ export const WarpConnectorProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      if (isResolved(news) && olds !== undefined && olds.name !== news.name) {
+      if (
+        isResolved(news) &&
+        olds !== undefined &&
+        (olds.name !== news.name || (olds.ha ?? false) !== (news.ha ?? false))
+      ) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -191,7 +199,7 @@ export const WarpConnectorProvider = () =>
       //    (code 1013): converge by re-reading the tunnel that won.
       if (!observed) {
         observed = yield* zeroTrust
-          .createTunnelWarpConnector({ accountId, name })
+          .createTunnelWarpConnector({ accountId, name, ha: news.ha })
           .pipe(
             Effect.catchTag("DuplicateTunnelName", (error) =>
               findByName(accountId, name).pipe(
@@ -204,11 +212,18 @@ export const WarpConnectorProvider = () =>
       }
 
       // 3. Sync — rename via PATCH only when the observed name differs.
-      if ((observed.name ?? undefined) !== name) {
+      if (
+        (observed.name ?? undefined) !== name ||
+        news.tunnelSecret !== undefined
+      ) {
         observed = yield* zeroTrust.patchTunnelWarpConnector({
           accountId,
           tunnelId: observed.id!,
           name,
+          tunnelSecret:
+            news.tunnelSecret === undefined
+              ? undefined
+              : Redacted.value(news.tunnelSecret),
         });
       }
 

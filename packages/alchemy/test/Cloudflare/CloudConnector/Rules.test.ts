@@ -42,7 +42,10 @@ const resolveZoneId = Effect.gen(function* () {
 // out-of-band verification calls. `Forbidden` is part of the typed error
 // union of both cloud-connector operations via distilled patches.
 const forbiddenRetryPolicy = {
-  schedule: Schedule.exponential("500 millis"),
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("5 seconds"),
+  ]),
   times: 8,
 } as const;
 
@@ -151,7 +154,7 @@ describe.sequential("Rules", () => {
         const liveGone = yield* listLiveRules(zoneId);
         expect(liveGone).toHaveLength(0);
       }).pipe(logLevel),
-    { timeout: 180_000 },
+    { timeout: 90_000 },
   );
 
   test.provider(
@@ -195,7 +198,7 @@ describe.sequential("Rules", () => {
         const liveGone = yield* listLiveRules(zoneId);
         expect(liveGone).toHaveLength(0);
       }).pipe(logLevel),
-    { timeout: 180_000 },
+    { timeout: 90_000 },
   );
 
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -242,6 +245,6 @@ describe.sequential("Rules", () => {
         yield* stack.destroy();
         yield* purgeRules(zoneId);
       }).pipe(logLevel),
-    { timeout: 180_000 },
+    { timeout: 90_000 },
   );
 });

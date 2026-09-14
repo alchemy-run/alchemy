@@ -34,7 +34,10 @@ const resolveZoneId = Effect.gen(function* () {
 // with "Unable to authenticate request". Ride out the blips on the test's
 // own out-of-band calls by retrying the typed `Forbidden` error (part of
 // the argo operations' error unions via distilled patches).
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const getTieredCaching = (zoneId: string) =>
   argo.getTieredCaching({ zoneId }).pipe(

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -213,21 +214,19 @@ export const MemberProvider = () =>
       return rows.filter((row): row is MemberAttributes => row !== undefined);
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Partial<MemberProps>;
-      const n = news as MemberProps;
-      // No prior props to compare against — let the engine decide.
-      if (o.email === undefined) return undefined;
-      // The email is the identity of the invite — it cannot be changed.
-      if (!sameEmail(o.email, n.email)) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
         return { action: "replace" } as const;
-      }
-      // Per the API, demoting an accepted membership back to `pending`
-      // requires removing and re-inviting the member.
-      if (o.status === "accepted" && n.status === "pending") {
+      if (!isResolved(news)) return undefined;
+      const email = output?.email ?? olds?.email;
+      if (email !== undefined && !sameEmail(email, news.email))
         return { action: "replace" } as const;
-      }
-      return undefined;
+      if (
+        (output?.status ?? olds?.status) === "accepted" &&
+        news.status === "pending"
+      )
+        return { action: "replace", deleteFirst: true } as const;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

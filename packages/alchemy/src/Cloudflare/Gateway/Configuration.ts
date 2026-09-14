@@ -200,6 +200,12 @@ export const isConfiguration = (value: unknown): value is Configuration =>
 
 export const ConfigurationProvider = () =>
   Provider.succeed(Configuration, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     nuke: { singleton: true },
     stables: ["accountId", "initialSettings", "createdAt"],
 

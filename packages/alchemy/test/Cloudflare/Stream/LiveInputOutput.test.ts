@@ -25,7 +25,7 @@ const listOutputs = (accountId: string, liveInputId: string) =>
     .pipe(
       Effect.retry({
         while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
+        schedule: Schedule.spaced("2 seconds"),
         times: 8,
       }),
     );
@@ -47,7 +47,7 @@ const expectGone = (accountId: string, liveInputId: string, outputId: string) =>
     Effect.retry({
       while: (e) => e._tag === "OutputNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),
@@ -128,6 +128,22 @@ test.provider(
       );
       expect(noop.output.outputId).toEqual(created.output.outputId);
 
+      const reset = yield* stack.deploy(
+        deployOutput({
+          url: "rtmps://a.rtmps.youtube.com/live2",
+          streamKey: "alchemy-test-stream-key",
+        }),
+      );
+      expect(reset.output.outputId).toEqual(created.output.outputId);
+      expect(reset.output.enabled).toBe(true);
+      expect(
+        (yield* findOutput(
+          accountId,
+          reset.input.liveInputId,
+          reset.output.outputId,
+        ))?.enabled,
+      ).toBe(true);
+
       // Changing the destination (url/streamKey) replaces the output.
       const replaced = yield* stack.deploy(
         deployOutput({
@@ -204,7 +220,7 @@ test.provider(
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
+            schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
         );
@@ -225,18 +241,8 @@ test.provider(
   { timeout: 120_000 },
 );
 
-// `list()` enumerates every live input on the account (via
-// `stream.listLiveInputs`) and then lists each input's outputs. The
-// distilled `listLiveInputs` response schema is currently wrong: it
-// decodes `result` as an object `{ liveInputs?, range?, total? }`, but
-// Cloudflare returns `result` as a *bare array* of live-input items.
-// This surfaces as an untyped `CloudflareHttpError` (status 200,
-// statusText "Schema decode failed") thrown by the schema decoder before
-// `list()`'s own code runs. It is a deterministic schema mismatch (not an
-// entitlement issue), so the live list test is gated until distilled is
-// patched. See the JSON report for the exact needed distilled patch.
-// Run with CLOUDFLARE_TEST_STREAM_LIST=1 once distilled is fixed.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
+// Both bare-array and counted-wrapper live-input responses are supported by distilled.
+test.provider(
   "list enumerates outputs across all live inputs",
   (stack) =>
     Effect.gen(function* () {
@@ -276,7 +282,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
         Effect.retry({
           while: (e) => e._tag === "OutputNotListed",
           schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
             Schedule.recurs(10),
           ]),
         }),

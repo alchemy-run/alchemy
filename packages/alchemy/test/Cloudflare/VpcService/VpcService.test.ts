@@ -129,11 +129,7 @@ test.provider("create vpc service with ipv4 host", (stack) =>
   }).pipe(logLevel),
 );
 
-// TODO: re-enable once distilled ships the union-ordering fix
-// (alchemy-run/distilled#232) — on @distilled.cloud/cloudflare@0.16.3 the
-// dual-stack host variant comes after the ipv4-only variant in the request
-// schema's Schema.Union, so `ipv6` is silently stripped on encode.
-test.provider.skip("create vpc service with dual-stack host", (stack) =>
+test.provider("create vpc service with dual-stack host", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -214,10 +210,65 @@ const waitForServiceToBeDeleted = Effect.fn(function* (
     Effect.retry({
       while: (e): e is VpcServiceStillExists =>
         e instanceof VpcServiceStillExists,
-      schedule: Schedule.exponential(100),
+      schedule: Schedule.spaced("500 millis"),
+      times: 8,
     }),
-    Effect.catch(() => Effect.void),
+    Effect.catchTag("VpcServiceNotFound", () => Effect.void),
   );
 });
 
 class VpcServiceStillExists extends Data.TaggedError("VpcServiceStillExists") {}
+
+test.provider(
+  "creates and updates a TCP service with application protocol and TLS settings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const program = (tcpPort: number) =>
+        Effect.gen(function* () {
+          const tunnel = yield* Cloudflare.Tunnel.Tunnel("TcpTunnel", {});
+          return yield* Cloudflare.VpcService.VpcService("TcpService", {
+            serviceType: "tcp",
+            tcpPort,
+            appProtocol: "postgresql",
+            tlsSettings: { certVerificationMode: "disabled" },
+            host: {
+              ipv4: "192.0.2.10",
+              network: { tunnelId: tunnel.tunnelId },
+            },
+          });
+        });
+      const created = yield* stack.deploy(program(5432));
+      const live = yield* connectivity.getDirectoryService({
+        accountId,
+        serviceId: created.serviceId,
+      });
+      expect(live.type).toEqual("tcp");
+      expect(live.tcpPort).toEqual(5432);
+      expect(live.appProtocol).toEqual("postgresql");
+      expect(live.tlsSettings?.certVerificationMode).toEqual("disabled");
+      const invalid = yield* connectivity
+        .updateDirectoryService({
+          accountId,
+          serviceId: created.serviceId,
+          name: created.serviceName,
+          type: "tcp",
+          tcpPort: 5432,
+          host: created.host,
+          tlsSettings: { certVerificationMode: "none" },
+        })
+        .pipe(Effect.flip);
+      expect(invalid._tag).toEqual("InvalidVpcServiceConfiguration");
+      const updated = yield* stack.deploy(program(5433));
+      expect(updated.serviceId).toEqual(created.serviceId);
+      const changed = yield* connectivity.getDirectoryService({
+        accountId,
+        serviceId: updated.serviceId,
+      });
+      expect(changed.tcpPort).toEqual(5433);
+      yield* stack.destroy();
+      yield* waitForServiceToBeDeleted(created.serviceId, accountId);
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);

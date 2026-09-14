@@ -1,8 +1,10 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { deepEqual } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
@@ -61,6 +63,10 @@ export type RuleSettings = NonNullable<
 >;
 
 export interface RuleProps {
+  /** Expiration timestamp and duration for DNS policies. */
+  expiration?: zeroTrust.CreateGatewayRuleRequest["expiration"];
+  /** Schedule controlling when DNS and DNS resolver policies apply. */
+  schedule?: zeroTrust.CreateGatewayRuleRequest["schedule"];
   /**
    * Human-readable rule name. If omitted, a deterministic physical name is
    * generated from the app/stage/logical-id. Used during adoption to locate
@@ -214,7 +220,6 @@ export const RuleProvider = () =>
       const env = yield* CloudflareEnvironment;
 
       const createRule = yield* zeroTrust.createGatewayRule;
-      const getRule = yield* zeroTrust.getGatewayRule;
       const updateRule = yield* zeroTrust.updateGatewayRule;
       const deleteRule = yield* zeroTrust.deleteGatewayRule;
       const listRules = zeroTrust.listGatewayRules;
@@ -242,17 +247,17 @@ export const RuleProvider = () =>
           ),
         );
 
+      // Listing distinguishes absence from API failure without suppressing errors.
       const observeById = (accountId: string, ruleId: string) =>
-        Effect.gen(function* () {
-          const r = yield* getRule({ accountId, ruleId }).pipe(
-            // Distilled tags transport errors but not the live Cloudflare 404
-            // for a missing rule. Swallow generically so the reconcile flow
-            // falls through to recreate.
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-          if (r === undefined) return undefined;
-          return narrowRule(r as Parameters<typeof narrowRule>[0]);
-        });
+        listRules.items({ accountId }).pipe(
+          Stream.filter((rule) => rule.id === ruleId),
+          Stream.runHead,
+          Effect.map((rule) =>
+            Option.isSome(rule)
+              ? narrowRule(rule.value as Parameters<typeof narrowRule>[0])
+              : undefined,
+          ),
+        );
 
       return {
         stables: ["ruleId", "action", "accountId"],
@@ -334,6 +339,8 @@ export const RuleProvider = () =>
               identity: body.identity,
               devicePosture: body.devicePosture,
               ruleSettings: body.ruleSettings,
+              expiration: body.expiration,
+              schedule: body.schedule,
               precedence: body.precedence,
               enabled: body.enabled,
               description: body.description,
@@ -371,6 +378,8 @@ export const RuleProvider = () =>
               identity: body.identity,
               devicePosture: body.devicePosture,
               ruleSettings: body.ruleSettings,
+              expiration: body.expiration,
+              schedule: body.schedule,
               precedence: body.precedence,
               enabled: body.enabled,
               description: body.description,
@@ -404,10 +413,11 @@ export const RuleProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
+          if (!(yield* observeById(output.accountId, output.ruleId))) return;
           yield* deleteRule({
             accountId: output.accountId,
             ruleId: output.ruleId,
-          }).pipe(Effect.catch(() => Effect.void));
+          });
         }),
 
         read: Effect.fn(function* ({ output }) {
@@ -437,6 +447,8 @@ export const RuleProvider = () =>
   );
 
 interface ObservedRule {
+  readonly expiration?: unknown;
+  readonly schedule?: unknown;
   readonly id?: string;
   readonly name?: string;
   readonly action?: RuleAction;
@@ -461,6 +473,8 @@ const undefArr = <T>(
   v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
 
 const narrowRule = (raw: {
+  expiration?: unknown;
+  schedule?: unknown;
   id?: string | null;
   name?: string | null;
   action?: RuleAction | null | string;
@@ -475,6 +489,8 @@ const narrowRule = (raw: {
   createdAt?: string | null;
   updatedAt?: string | null;
 }): ObservedRule => ({
+  expiration: undef(raw.expiration),
+  schedule: undef(raw.schedule),
   id: undef(raw.id),
   name: undef(raw.name),
   action: raw.action == null ? undefined : (raw.action as RuleAction),
@@ -495,6 +511,8 @@ const narrowRule = (raw: {
 // ---------------------------------------------------------------------------
 
 interface RuleMutableBody {
+  expiration?: RuleProps["expiration"];
+  schedule?: RuleProps["schedule"];
   name: string;
   action: RuleAction;
   filters: ReadonlyArray<RuleFilter>;
@@ -515,6 +533,8 @@ const buildMutableBody = (
     name: resolvedName,
     action: news.action,
     filters: news.filters,
+    expiration: news.expiration,
+    schedule: news.schedule,
   };
   if (news.traffic !== undefined) body.traffic = news.traffic;
   if (news.identity !== undefined) body.identity = news.identity;
@@ -534,6 +554,16 @@ const bodyEqualsObserved = (
   desired: RuleMutableBody,
   observed: ObservedRule,
 ): boolean => {
+  if (
+    desired.expiration !== undefined &&
+    !deepEqual(desired.expiration, observed.expiration, { stripNullish: true })
+  )
+    return false;
+  if (
+    desired.schedule !== undefined &&
+    !deepEqual(desired.schedule, observed.schedule, { stripNullish: true })
+  )
+    return false;
   if (desired.name !== observed.name) return false;
   if (desired.action !== observed.action) return false;
   if (!arrayEquals(desired.filters, observed.filters)) return false;

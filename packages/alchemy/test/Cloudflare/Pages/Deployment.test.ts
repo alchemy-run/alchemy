@@ -100,13 +100,14 @@ test.provider(
       yield* stack.destroy();
       yield* purgeProject(accountId, PROJECT_NAME);
 
-      const makeStack = (branch?: string) =>
+      const makeStack = (branch?: string, commitMessage?: string) =>
         Effect.gen(function* () {
           const project = yield* Cloudflare.Pages.Project("DeployProject", {
             name: PROJECT_NAME,
           }).pipe(adopt(true));
           const deployment = yield* Cloudflare.Pages.Deployment("Deployment", {
             projectName: project.name,
+            commitMessage,
             ...(branch === undefined ? {} : { branch }),
           });
           return { deployment };
@@ -165,6 +166,26 @@ test.provider(
         preview1.deploymentId,
       );
 
+      // Content/build metadata is immutable too: a new commit on the same
+      // branch must replace the deployment rather than leave stale content.
+      const newCommit = (yield* stack.deploy(
+        makeStack("preview-2", "audit commit"),
+      )).deployment;
+      expect(newCommit.deploymentId).not.toEqual(preview2.deploymentId);
+      const commitLive = yield* getDeployment(
+        accountId,
+        PROJECT_NAME,
+        newCommit.deploymentId,
+      );
+      expect(commitLive.deploymentTrigger?.metadata?.commitMessage).toEqual(
+        "audit commit",
+      );
+      yield* expectDeploymentGone(
+        accountId,
+        PROJECT_NAME,
+        preview2.deploymentId,
+      );
+
       // 5. Destroy — the preview deployment is force-deleted, then the
       //    project (and with it the remaining production deployment) goes.
       yield* stack.destroy();
@@ -174,19 +195,8 @@ test.provider(
   { timeout: 120_000 },
 );
 
-// `list()` fans out over `pages.listProjects` → per-project
-// `pages.listProjectDeployments`. The live list assertion is gated behind
-// CLOUDFLARE_TEST_PAGES_LIST because `pages.listProjects` currently fails to
-// decode: direct-upload / ad_hoc deployments return no `source` field, but
-// the generated `ListProjectsResponse` schema marks
-// `canonicalDeployment.source` and `latestDeployment.source` as required
-// (`Schema.Struct`, not `Schema.optional`). The failure surfaces as:
-//   CloudflareHttpError { status: 200, statusText: "Schema decode failed" }
-// NEEDED DISTILLED PATCH: make the deployment-level `source` optional on the
-// projects-list response (and on every other deployment object that can be an
-// ad_hoc/direct-upload deployment). Patch + regen `pages`, then remove the
-// gate — `list()` itself is already correct.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_PAGES_LIST)(
+// Enumerate all deployed Pages projects and their deployments.
+test.provider(
   "list enumerates deployments across Pages projects",
   (stack) =>
     Effect.gen(function* () {

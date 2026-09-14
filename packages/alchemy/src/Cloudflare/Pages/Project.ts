@@ -20,6 +20,10 @@ type TypeId = typeof TypeId;
  * Build configuration for a Pages project. All fields are mutable in place.
  */
 export interface BuildConfig {
+  /** Analytics classification tag. */
+  webAnalyticsTag?: string;
+  /** Analytics authorization token. */
+  webAnalyticsToken?: string;
   /**
    * Enable build caching for the project.
    */
@@ -62,6 +66,34 @@ export interface EnvVar {
  * config are explicitly removed.
  */
 export interface DeploymentConfig {
+  /** Workers AI bindings. */
+  aiBindings?: pages.ProjectsCreateRequestDeploymentConfigsProduction["aiBindings"];
+  /** Use the latest compatibility date for preview deployments. Production requires false. */
+  alwaysUseLatestCompatibilityDate?: pages.ProjectsCreateRequestDeploymentConfigsProduction["alwaysUseLatestCompatibilityDate"];
+  /** Analytics Engine dataset bindings. */
+  analyticsEngineDatasets?: pages.ProjectsCreateRequestDeploymentConfigsProduction["analyticsEngineDatasets"];
+  /** Browser Rendering bindings. */
+  browsers?: pages.ProjectsCreateRequestDeploymentConfigsProduction["browsers"];
+  /** Build image major version. */
+  buildImageMajorVersion?: pages.ProjectsCreateRequestDeploymentConfigsProduction["buildImageMajorVersion"];
+  /** Durable Object namespace bindings. */
+  durableObjectNamespaces?: pages.ProjectsCreateRequestDeploymentConfigsProduction["durableObjectNamespaces"];
+  /** Hyperdrive bindings. */
+  hyperdriveBindings?: pages.ProjectsCreateRequestDeploymentConfigsProduction["hyperdriveBindings"];
+  /** Pages Functions CPU limits. */
+  limits?: pages.ProjectsCreateRequestDeploymentConfigsProduction["limits"];
+  /** Mutual TLS certificate bindings. */
+  mtlsCertificates?: pages.ProjectsCreateRequestDeploymentConfigsProduction["mtlsCertificates"];
+  /** Queue producer bindings. */
+  queueProducers?: pages.ProjectsCreateRequestDeploymentConfigsProduction["queueProducers"];
+  /** Worker service bindings. */
+  services?: pages.ProjectsCreateRequestDeploymentConfigsProduction["services"];
+  /** Pages Functions usage model. */
+  usageModel?: pages.ProjectsCreateRequestDeploymentConfigsProduction["usageModel"];
+  /** Vectorize index bindings. */
+  vectorizeBindings?: pages.ProjectsCreateRequestDeploymentConfigsProduction["vectorizeBindings"];
+  /** Wrangler deployment configuration hash. */
+  wranglerConfigHash?: pages.ProjectsCreateRequestDeploymentConfigsProduction["wranglerConfigHash"];
   /**
    * Environment variables, keyed by variable name.
    */
@@ -80,7 +112,7 @@ export interface DeploymentConfig {
    * R2 bucket bindings, keyed by binding name. The value is the bucket
    * name (e.g. `bucket.bucketName`).
    */
-  r2Buckets?: Record<string, string>;
+  r2Buckets?: Record<string, string | { name: string; jurisdiction?: string }>;
   /**
    * Compatibility date used by Pages Functions (e.g. `2025-01-01`).
    */
@@ -115,6 +147,8 @@ export interface DeploymentConfigs {
 }
 
 export interface ProjectProps {
+  /** GitHub/GitLab repository and deployment triggers. Repository connection requires an installed integration. */
+  source?: pages.CreateProjectRequest["source"];
   /**
    * Name of the project. Forms the `<name>.pages.dev` subdomain, so it must
    * be unique across all of Cloudflare Pages and contain only lowercase
@@ -291,7 +325,7 @@ export const ProjectProvider = () =>
       const observed = yield* getProject(acct, name);
       return observed ? Unowned(toAttributes(observed, acct)) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? output?.name ?? (yield* createProjectName(id));
 
@@ -306,6 +340,7 @@ export const ProjectProvider = () =>
           .createProject({
             accountId,
             name,
+            source: news.source,
             productionBranch: news.productionBranch ?? "main",
             buildConfig: toApiBuildConfig(news.buildConfig),
             deploymentConfigs: toApiDeploymentConfigs(
@@ -328,7 +363,7 @@ export const ProjectProvider = () =>
       //    PATCH only the delta. Cloudflare's PATCH deep-merges
       //    `deploymentConfigs`, so removed record keys are sent as
       //    explicit nulls.
-      const patch = buildProjectPatch(news, observed);
+      const patch = buildProjectPatch(news, observed, olds);
       if (patch !== undefined) {
         observed = yield* pages.patchProject({
           accountId,
@@ -439,6 +474,8 @@ const toApiBuildConfig = (
         buildCommand: config.buildCommand,
         destinationDir: config.destinationDir,
         rootDir: config.rootDir,
+        webAnalyticsTag: config.webAnalyticsTag,
+        webAnalyticsToken: config.webAnalyticsToken,
       };
 
 /**
@@ -451,6 +488,38 @@ const toApiEnvConfig = (
   desired: DeploymentConfig,
   observed: ObservedEnvConfig | undefined,
 ): ApiEnvConfig => ({
+  aiBindings: mergeTypedRecord(desired.aiBindings, observed?.aiBindings),
+  alwaysUseLatestCompatibilityDate: desired.alwaysUseLatestCompatibilityDate,
+  analyticsEngineDatasets: mergeTypedRecord(
+    desired.analyticsEngineDatasets,
+    observed?.analyticsEngineDatasets,
+  ),
+  browsers: mergeTypedRecord(desired.browsers, observed?.browsers),
+  buildImageMajorVersion: desired.buildImageMajorVersion,
+  durableObjectNamespaces: mergeTypedRecord(
+    desired.durableObjectNamespaces,
+    observed?.durableObjectNamespaces,
+  ),
+  hyperdriveBindings: mergeTypedRecord(
+    desired.hyperdriveBindings,
+    observed?.hyperdriveBindings,
+  ),
+  limits: desired.limits,
+  mtlsCertificates: mergeTypedRecord(
+    desired.mtlsCertificates,
+    observed?.mtlsCertificates,
+  ),
+  queueProducers: mergeTypedRecord(
+    desired.queueProducers,
+    observed?.queueProducers,
+  ),
+  services: mergeTypedRecord(desired.services, observed?.services),
+  usageModel: desired.usageModel,
+  vectorizeBindings: mergeTypedRecord(
+    desired.vectorizeBindings,
+    observed?.vectorizeBindings,
+  ),
+  wranglerConfigHash: desired.wranglerConfigHash,
   envVars: mergeRecord(
     desired.envVars === undefined
       ? undefined
@@ -474,7 +543,14 @@ const toApiEnvConfig = (
     observed?.d1Databases,
   ),
   r2Buckets: mergeRecord(
-    mapBindingRecord(desired.r2Buckets, "name"),
+    desired.r2Buckets === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(desired.r2Buckets).map(([binding, bucket]) => [
+            binding,
+            typeof bucket === "string" ? { name: bucket } : bucket,
+          ]),
+        ),
     observed?.r2Buckets,
   ),
   compatibilityDate: desired.compatibilityDate,
@@ -538,7 +614,7 @@ const toApiDeploymentConfigs = (
 
 type ProjectPatchBody = Pick<
   pages.PatchProjectRequest,
-  "productionBranch" | "buildConfig" | "deploymentConfigs"
+  "productionBranch" | "buildConfig" | "deploymentConfigs" | "source"
 >;
 
 /**
@@ -549,9 +625,17 @@ type ProjectPatchBody = Pick<
 const buildProjectPatch = (
   news: ProjectProps,
   observed: ObservedProject,
+  olds: ProjectProps | undefined,
 ): ProjectPatchBody | undefined => {
   const patch: ProjectPatchBody = {};
   let dirty = false;
+  if (
+    news.source !== undefined &&
+    desiredConfigurationDirty(news.source, observed.source)
+  ) {
+    patch.source = news.source;
+    dirty = true;
+  }
 
   const desiredBranch = news.productionBranch ?? "main";
   if (observed.productionBranch !== desiredBranch) {
@@ -574,7 +658,8 @@ const buildProjectPatch = (
     );
     if (
       desired !== undefined &&
-      deploymentConfigsDirty(desired, observedDeploymentConfigs(observed))
+      (deploymentConfigsDirty(desired, observedDeploymentConfigs(observed)) ||
+        secretConfigChanged(news.deploymentConfigs, olds?.deploymentConfigs))
     ) {
       patch.deploymentConfigs = desired;
       dirty = true;
@@ -597,6 +682,8 @@ const buildConfigDirty = (
     "buildCommand",
     "destinationDir",
     "rootDir",
+    "webAnalyticsTag",
+    "webAnalyticsToken",
   ];
   return fields.some(
     (field) =>
@@ -645,6 +732,57 @@ const envConfigDirty = (
   ) {
     return true;
   }
+  if (
+    recordDirty(desired.aiBindings, observed?.aiBindings, deepEquals) ||
+    (desired.alwaysUseLatestCompatibilityDate !== undefined &&
+      desiredConfigurationDirty(
+        desired.alwaysUseLatestCompatibilityDate,
+        observed?.alwaysUseLatestCompatibilityDate,
+      )) ||
+    recordDirty(
+      desired.analyticsEngineDatasets,
+      observed?.analyticsEngineDatasets,
+      deepEquals,
+    ) ||
+    recordDirty(desired.browsers, observed?.browsers, deepEquals) ||
+    (desired.buildImageMajorVersion !== undefined &&
+      desiredConfigurationDirty(
+        desired.buildImageMajorVersion,
+        observed?.buildImageMajorVersion,
+      )) ||
+    recordDirty(
+      desired.durableObjectNamespaces,
+      observed?.durableObjectNamespaces,
+      deepEquals,
+    ) ||
+    recordDirty(
+      desired.hyperdriveBindings,
+      observed?.hyperdriveBindings,
+      deepEquals,
+    ) ||
+    (desired.limits !== undefined &&
+      desiredConfigurationDirty(desired.limits, observed?.limits)) ||
+    recordDirty(
+      desired.mtlsCertificates,
+      observed?.mtlsCertificates,
+      deepEquals,
+    ) ||
+    recordDirty(desired.queueProducers, observed?.queueProducers, deepEquals) ||
+    recordDirty(desired.services, observed?.services, deepEquals) ||
+    (desired.usageModel !== undefined &&
+      desiredConfigurationDirty(desired.usageModel, observed?.usageModel)) ||
+    recordDirty(
+      desired.vectorizeBindings,
+      observed?.vectorizeBindings,
+      deepEquals,
+    ) ||
+    (desired.wranglerConfigHash !== undefined &&
+      desiredConfigurationDirty(
+        desired.wranglerConfigHash,
+        observed?.wranglerConfigHash,
+      ))
+  )
+    return true;
   return (
     recordDirty(desired.envVars, observed?.envVars, envVarEquals) ||
     recordDirty(desired.kvNamespaces, observed?.kvNamespaces, deepEquals) ||
@@ -688,3 +826,49 @@ const envVarEquals = (desired: unknown, observed: unknown): boolean => {
 
 const deepEquals = (a: unknown, b: unknown): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
+
+/** Null binding values remove previously configured entries in the PATCH API. */
+const mergeTypedRecord = <T>(
+  desired: Record<string, T | null | undefined> | undefined,
+  observed: Record<string, unknown> | null | undefined,
+): Record<string, T | null | undefined> | undefined => {
+  if (desired === undefined) return undefined;
+  const result: Record<string, T | null | undefined> = { ...desired };
+  for (const key of Object.keys(observed ?? {}))
+    if (!(key in desired)) result[key] = null;
+  return result;
+};
+
+/** Compare only desired fields; omitted project settings remain unmanaged. */
+const desiredConfigurationDirty = (
+  desired: unknown,
+  observed: unknown,
+): boolean => {
+  if (Array.isArray(desired)) return !deepEquals(desired, observed);
+  if (desired !== null && typeof desired === "object") {
+    return Object.entries(desired).some(
+      ([key, value]) =>
+        value !== undefined &&
+        desiredConfigurationDirty(
+          value,
+          observed !== null && typeof observed === "object" && key in observed
+            ? Reflect.get(observed, key)
+            : undefined,
+        ),
+    );
+  }
+  return desired !== observed;
+};
+
+/** Secret values are hidden by GET; compare desired values to persisted props. */
+const secretConfigChanged = (
+  news: DeploymentConfigs | undefined,
+  olds: DeploymentConfigs | undefined,
+): boolean =>
+  (["preview", "production"] as const).some((env) =>
+    Object.entries(news?.[env]?.envVars ?? {}).some(
+      ([name, value]) =>
+        value.type === "secret_text" &&
+        value.value !== olds?.[env]?.envVars?.[name]?.value,
+    ),
+  );

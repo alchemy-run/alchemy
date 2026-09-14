@@ -7,6 +7,16 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 export type OrganizationProps = {
+  /** Deny requests to account domains that do not match an Access application. */
+  denyUnmatchedRequests?: zeroTrust.UpdateOrganizationForAccountRequest["denyUnmatchedRequests"];
+  /** Zone names exempt from blocking unmatched requests. */
+  denyUnmatchedRequestsExemptedZoneNames?: zeroTrust.UpdateOrganizationForAccountRequest["denyUnmatchedRequestsExemptedZoneNames"];
+  /** Organization multi-factor authentication configuration. */
+  mfaConfig?: zeroTrust.UpdateOrganizationForAccountRequest["mfaConfig"];
+  /** Requirements for PIV security keys used for authentication. */
+  mfaPivKeyRequirements?: zeroTrust.UpdateOrganizationForAccountRequest["mfaPivKeyRequirements"];
+  /** Require multi-factor authentication for every application. */
+  mfaRequiredForAllApps?: zeroTrust.UpdateOrganizationForAccountRequest["mfaRequiredForAllApps"];
   /**
    * The unique subdomain assigned to your Zero Trust organization, e.g.
    * `acme.cloudflareaccess.com`. Per-account this is functionally immutable —
@@ -194,6 +204,12 @@ export const Organization = Resource<Organization>(
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     nuke: { singleton: true },
     stables: ["accountId", "authDomain"],
     reconcile: Effect.fn(function* ({ news }) {
@@ -224,6 +240,12 @@ export const OrganizationProvider = () =>
         observed = yield* zeroTrust
           .createOrganizationForAccount({
             accountId,
+            denyUnmatchedRequests: news.denyUnmatchedRequests,
+            denyUnmatchedRequestsExemptedZoneNames:
+              news.denyUnmatchedRequestsExemptedZoneNames,
+            mfaConfig: news.mfaConfig,
+            mfaPivKeyRequirements: news.mfaPivKeyRequirements,
+            mfaRequiredForAllApps: news.mfaRequiredForAllApps,
             authDomain: news.authDomain,
             name: desiredName,
             ...(news.sessionDuration !== undefined
@@ -272,6 +294,12 @@ export const OrganizationProvider = () =>
       // idempotent.
       const updated = yield* zeroTrust.updateOrganizationForAccount({
         accountId,
+        denyUnmatchedRequests: news.denyUnmatchedRequests,
+        denyUnmatchedRequestsExemptedZoneNames:
+          news.denyUnmatchedRequestsExemptedZoneNames,
+        mfaConfig: news.mfaConfig,
+        mfaPivKeyRequirements: news.mfaPivKeyRequirements,
+        mfaRequiredForAllApps: news.mfaRequiredForAllApps,
         authDomain: news.authDomain,
         name: desiredName,
         ...(news.sessionDuration !== undefined

@@ -97,10 +97,13 @@ export const ServiceBindingProvider = () =>
     stables: ["bindingId", "prefixId", "accountId", "cidr", "serviceId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      if (olds === undefined) return undefined;
-      if (!isResolved(news) || !isResolved(olds)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!output && !olds) return undefined;
+      if (!isResolved(news)) return undefined;
       // Create/delete only — any change forces a replacement.
-      const oldPrefixId = output?.prefixId ?? olds.prefixId;
+      const oldPrefixId = output?.prefixId ?? olds?.prefixId;
       if (
         typeof oldPrefixId === "string" &&
         typeof news.prefixId === "string" &&
@@ -108,10 +111,10 @@ export const ServiceBindingProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (news.cidr !== (output?.cidr ?? olds.cidr)) {
+      if (news.cidr !== (output?.cidr ?? olds?.cidr)) {
         return { action: "replace" } as const;
       }
-      const oldServiceId = output?.serviceId ?? olds.serviceId;
+      const oldServiceId = output?.serviceId ?? olds?.serviceId;
       if (
         typeof oldServiceId === "string" &&
         typeof news.serviceId === "string" &&
@@ -127,7 +130,7 @@ export const ServiceBindingProvider = () =>
       const acct = output?.accountId ?? accountId;
       const prefixId =
         output?.prefixId ??
-        (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
+        (typeof olds?.prefixId === "string" ? olds?.prefixId : undefined);
       if (!prefixId) return undefined;
 
       if (output?.bindingId) {
@@ -137,7 +140,12 @@ export const ServiceBindingProvider = () =>
       // Cold read — (cidr, serviceId) identify a binding uniquely.
       const cidr = output?.cidr ?? olds?.cidr;
       if (typeof cidr !== "string") return undefined;
-      const match = yield* findByCidr(acct, prefixId, cidr);
+      const match = yield* findByCidr(
+        acct,
+        prefixId,
+        cidr,
+        typeof olds?.serviceId === "string" ? olds.serviceId : undefined,
+      );
       return match ? toAttributes(match, prefixId, acct) : undefined;
     }),
 
@@ -189,7 +197,7 @@ export const ServiceBindingProvider = () =>
         ? yield* getBinding(acct, prefixId, output.bindingId)
         : undefined;
       if (!observed) {
-        observed = yield* findByCidr(acct, prefixId, news.cidr);
+        observed = yield* findByCidr(acct, prefixId, news.cidr, serviceId);
       }
 
       // 2. Ensure — nothing is mutable, so an observed binding is already
@@ -242,10 +250,21 @@ const getBinding = (accountId: string, prefixId: string, bindingId: string) =>
  * Find a service binding by exact CIDR — unique within a parent prefix.
  * The parent prefix being gone reads as "no match".
  */
-const findByCidr = (accountId: string, prefixId: string, cidr: string) =>
+const findByCidr = (
+  accountId: string,
+  prefixId: string,
+  cidr: string,
+  serviceId?: string,
+) =>
   addressing.listPrefixServiceBindings.items({ accountId, prefixId }).pipe(
     Stream.runCollect,
-    Effect.map((chunk) => Array.from(chunk).find((b) => b.cidr === cidr)),
+    Effect.map((chunk) =>
+      Array.from(chunk).find(
+        (b) =>
+          b.cidr === cidr &&
+          (serviceId === undefined || b.serviceId === serviceId),
+      ),
+    ),
     Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)),
   );
 

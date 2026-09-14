@@ -148,6 +148,10 @@ export interface JobProps {
    * Structured output configuration (fields, format, delimiters, sampling).
    */
   outputOptions?: OutputOptions;
+  /** Legacy batch frequency; prefer maxUploadBytes/maxUploadIntervalSeconds. */
+  frequency?: "high" | "low";
+  /** Legacy query-string output options; prefer outputOptions. */
+  logpullOptions?: string;
   /**
    * Maximum uncompressed file size of a batch, in bytes. Between 5 MB and
    * 1 GB, or `0` to disable the limit.
@@ -388,7 +392,7 @@ export const JobProvider = () =>
         accountId: output?.accountId ?? accountId,
         zoneId: (news.zoneId as string | undefined) ?? undefined,
       };
-      const name = yield* createJobName(id, news.name);
+      const name = yield* createJobName(id, news.name ?? output?.name);
       const destinationConf = news.destinationConf as string;
       const body = buildMutableBody(news, name, destinationConf);
 
@@ -509,6 +513,8 @@ interface JobMutableBody {
   maxUploadRecords: number | undefined;
   name: string;
   outputOptions: OutputOptions | undefined;
+  frequency: JobProps["frequency"];
+  logpullOptions: string | undefined;
   ownershipChallenge: string | undefined;
 }
 
@@ -526,6 +532,8 @@ const buildMutableBody = (
   maxUploadRecords: news.maxUploadRecords,
   name,
   outputOptions: news.outputOptions,
+  frequency: news.frequency,
+  logpullOptions: news.logpullOptions,
   ownershipChallenge: news.ownershipChallenge,
 });
 
@@ -570,6 +578,16 @@ const needsUpdate = (
     return true;
   }
   if (news.filter !== olds.filter) return true;
+  if (
+    desired.frequency !== undefined &&
+    desired.frequency !== observed.frequency
+  )
+    return true;
+  if (
+    desired.logpullOptions !== undefined &&
+    desired.logpullOptions !== observed.logpullOptions
+  )
+    return true;
   if (desired.enabled !== (observed.enabled ?? false)) return true;
   if (desired.name !== (observed.name ?? undefined)) return true;
   if (

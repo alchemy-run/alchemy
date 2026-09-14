@@ -58,6 +58,7 @@ test.provider(
           precedence: 12010,
           description: "Alchemy test profile",
           switchLocked: true,
+          dnsSearchSuffixes: [{ suffix: "alchemy-test.internal" }],
         }),
       );
 
@@ -75,6 +76,9 @@ test.provider(
       const live = yield* getProfile(accountId, profile.policyId);
       expect(live?.name).toEqual("alchemy-test-custom-profile");
       expect(live?.switchLocked).toEqual(true);
+      expect(live?.dnsSearchSuffixes).toEqual([
+        { suffix: "alchemy-test.internal" },
+      ]);
 
       // Update mutable props (body + split-tunnel exclude list) in place —
       // same policyId.
@@ -85,6 +89,7 @@ test.provider(
           precedence: 12010,
           description: "Alchemy test profile v2",
           switchLocked: false,
+          dnsSearchSuffixes: [],
           exclude: [{ address: "10.99.0.0/16", description: "test range" }],
         }),
       );
@@ -94,6 +99,9 @@ test.provider(
       expect(updated.exclude.some((e) => e.address === "10.99.0.0/16")).toEqual(
         true,
       );
+
+      const updatedLive = yield* getProfile(accountId, profile.policyId);
+      expect(updatedLive?.dnsSearchSuffixes ?? []).toEqual([]);
 
       // Out-of-band verify the exclude list endpoint.
       const excludes = yield* zeroTrust

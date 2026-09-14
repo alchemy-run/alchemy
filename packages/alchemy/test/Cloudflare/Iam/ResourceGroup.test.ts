@@ -30,7 +30,10 @@ const getResourceGroup = (accountId: string, resourceGroupId: string) =>
   iam.getResourceGroup({ accountId, resourceGroupId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -42,7 +45,10 @@ const expectGone = (accountId: string, resourceGroupId: string) =>
     Effect.asSome,
     Effect.catchTag("ResourceGroupNotFound", () => Effect.succeedNone),
     Effect.repeat({
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       until: (g) => g._tag === "None",
       times: 8,
     }),
@@ -109,12 +115,20 @@ test.provider(
       const updated = yield* getResourceGroup(accountId, v2.resourceGroupId);
       expect(updated.name).toEqual(RG_NAME_RENAMED);
 
-      // No-op deploy — same desired state, same identity, reconcile
-      // observes the in-sync state and applies nothing.
+      // Change the real API state without changing the stack props. Refresh
+      // must reconcile the scope when a subsequent rename triggers an update.
+      yield* iam.updateResourceGroup({
+        accountId,
+        resourceGroupId: v2.resourceGroupId,
+        name: "alchemy-iam-rg-drifted",
+        scope: { key: accountScopeKey, objects: [{ key: "*" }] },
+      });
+      // Change the name to trigger reconciliation while retaining the desired
+      // scope/policies, which must converge from the out-of-band edit.
       const v3 = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Iam.ResourceGroup("Rg", {
-            name: RG_NAME_RENAMED,
+            name: RG_NAME_RENAMED + "-restored",
             scope: {
               key: accountScopeKey,
               objects: [{ key: zoneObjectKey }],
@@ -123,6 +137,9 @@ test.provider(
         }),
       );
       expect(v3.resourceGroupId).toEqual(v1.resourceGroupId);
+      const restored = yield* getResourceGroup(accountId, v3.resourceGroupId);
+      expect(restored.name).toEqual(RG_NAME_RENAMED + "-restored");
+      expect(restored.scope.objects).toEqual([{ key: zoneObjectKey }]);
 
       yield* stack.destroy();
 

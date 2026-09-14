@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -228,29 +229,23 @@ export const TestScheduleProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      const o = olds as TestScheduleProps | undefined;
-      const n = news as TestScheduleProps;
-      // No prior props to compare against — let the engine decide.
-      if (o?.url === undefined) return undefined;
-      // The URL is the schedule's path identity.
-      if (normalizeUrl(o.url) !== normalizeUrl(n.url)) {
-        return { action: "replace" } as const;
-      }
-      // Schedules are keyed per region — a region change is a new schedule.
-      if ((o.region ?? DEFAULT_REGION) !== (n.region ?? DEFAULT_REGION)) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const oldUrl = output?.url ?? olds?.url;
+      const oldRegion = output?.region ?? olds?.region ?? DEFAULT_REGION;
+      const oldZoneId = output?.zoneId ?? olds?.zoneId;
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
-        return { action: "replace" } as const;
-      }
-      // frequency converges in place (reconcile deletes + re-creates).
-      return undefined;
+        oldUrl !== undefined &&
+        normalizeUrl(oldUrl) !== normalizeUrl(news.url)
+      )
+        return { action: "replace" };
+      if (
+        (output !== undefined || olds !== undefined) &&
+        oldRegion !== (news.region ?? DEFAULT_REGION)
+      )
+        return { action: "replace" };
+      if (oldZoneId !== undefined && oldZoneId !== news.zoneId)
+        return { action: "replace" };
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -273,7 +268,7 @@ export const TestScheduleProvider = () =>
       return Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, olds }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
       const region = news.region ?? DEFAULT_REGION;
@@ -281,6 +276,7 @@ export const TestScheduleProvider = () =>
       // 1. Observe — cloud state is authoritative. `output` is only a cache
       //    of the stable identity, which `news` fully determines anyway.
       let observed = yield* getSchedule(zoneId, news.url, region);
+      const wasMissing = observed === undefined;
 
       // 2. Ensure — create when missing. A concurrent create surfaces as
       //    `TestScheduleAlreadyExists`: converge by re-reading the schedule
@@ -299,8 +295,10 @@ export const TestScheduleProvider = () =>
       //    schedule under the same identity. Skip entirely on a no-op (or
       //    when the user left frequency to the API default).
       if (
-        news.frequency !== undefined &&
-        observed.frequency !== news.frequency
+        !wasMissing &&
+        ((news.frequency !== undefined &&
+          observed.frequency !== news.frequency) ||
+          (news.frequency === undefined && olds?.frequency !== undefined))
       ) {
         const previous = observed;
         yield* speed
@@ -312,17 +310,16 @@ export const TestScheduleProvider = () =>
           region,
           news.frequency,
         ).pipe(
-          // Cloudflare caps DAILY-schedule creations per URL per day. We
-          // already deleted the old schedule — restore it so a quota
-          // rejection degrades to "unchanged" rather than "lost", then
-          // surface the typed error.
-          Effect.catchTag("TestScheduleQuotaReached", (error) =>
+          // Any failed recreation leaves a gap after DELETE. Attempt to
+          // restore the previous schedule, then preserve the original error;
+          // a failed rollback is also surfaced by the finalizer.
+          Effect.onError(() =>
             createAndObserve(
               zoneId,
               news.url,
               region,
               (previous.frequency ?? undefined) as TestFrequency | undefined,
-            ).pipe(Effect.flatMap(() => Effect.fail(error))),
+            ).pipe(Effect.orDie),
           ),
         );
       }

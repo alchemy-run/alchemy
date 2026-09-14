@@ -34,7 +34,10 @@ const expectGone = (accountId: string, routeId: string) =>
     Effect.retry({
       while: (e) => e._tag === "RouteNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),

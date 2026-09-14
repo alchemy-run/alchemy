@@ -35,7 +35,10 @@ const expectGone = (accountId: string, siteId: string) =>
     Effect.retry({
       while: (e) => e._tag === "SiteNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),
@@ -118,7 +121,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitled)(
@@ -206,5 +209,5 @@ test.provider.skipIf(!entitled)(
 
       yield* expectGone(accountId, site.siteId);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

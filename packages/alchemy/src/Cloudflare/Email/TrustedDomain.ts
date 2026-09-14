@@ -119,6 +119,11 @@ export const isTrustedDomain = (value: unknown): value is TrustedDomain =>
 
 export const TrustedDomainProvider = () =>
   Provider.succeed(TrustedDomain, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
     stables: ["trustedDomainId", "accountId", "createdAt"],
 
     // Account-scoped collection. Exhaustively paginate the account's trusted
@@ -191,7 +196,7 @@ export const TrustedDomainProvider = () =>
           isRecent: news.isRecent ?? false,
           isSimilarity: news.isSimilarity ?? false,
           isRegex: news.isRegex ?? false,
-          comments: news.comments,
+          comments: news.comments ?? "",
         });
         return toAttributes(created, accountId);
       }
@@ -202,8 +207,7 @@ export const TrustedDomainProvider = () =>
         (observed.isRecent ?? false) !== (news.isRecent ?? false) ||
         (observed.isSimilarity ?? false) !== (news.isSimilarity ?? false) ||
         (observed.isRegex ?? false) !== (news.isRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (observed.comments ?? "") !== (news.comments ?? "");
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -215,7 +219,7 @@ export const TrustedDomainProvider = () =>
         isRecent: news.isRecent ?? false,
         isSimilarity: news.isSimilarity ?? false,
         isRegex: news.isRegex ?? false,
-        comments: news.comments,
+        comments: news.comments ?? "",
       });
       return toAttributes(patched, accountId);
     }),

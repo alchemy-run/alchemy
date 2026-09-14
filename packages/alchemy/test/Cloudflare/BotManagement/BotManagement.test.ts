@@ -141,6 +141,13 @@ describe.sequential("BotManagement", () => {
           const live2 = yield* getConfig(zoneId);
           expect(live2.sbfmDefinitelyAutomated).toEqual(target2);
 
+          // Removing a prop relinquishes active management but destroy must
+          // still restore the pre-management value of that historical field.
+          const omitted = yield* stack.deploy(
+            Cloudflare.BotManagement.BotManagement("Bots", { zoneId }),
+          );
+          expect(omitted.managedKeys).toContain("sbfmDefinitelyAutomated");
+
           // 3. Destroy — the managed field is restored to the snapshot value
           //    (when the snapshot had one; the test zone always does once the
           //    field has ever been set, which step 1 guarantees for reruns).

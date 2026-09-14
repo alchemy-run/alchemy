@@ -157,7 +157,7 @@ export const EntryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createEntryName(id, news.name);
+      const name = yield* createEntryName(id, news.name ?? output?.name);
 
       // 1. Observe.
       const observed = output?.entryId
@@ -185,6 +185,7 @@ export const EntryProvider = () =>
       //    differs; skip the call on a no-op.
       const dirty =
         observed.name !== name ||
+        (observed.description ?? "") !== (news.description ?? "") ||
         observed.enabled !== (news.enabled ?? true) ||
         observed.pattern.regex !== news.pattern.regex ||
         (observed.pattern.validation ?? undefined) !== news.pattern.validation;
@@ -197,9 +198,7 @@ export const EntryProvider = () =>
         name,
         enabled: news.enabled ?? true,
         pattern: encodePattern(news.pattern),
-        ...(news.description !== undefined
-          ? { description: news.description }
-          : {}),
+        description: news.description ?? "",
       });
       return toAttributes(updated, accountId);
     }),

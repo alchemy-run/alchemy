@@ -117,6 +117,11 @@ export const isBlockSender = (value: unknown): value is BlockSender =>
 
 export const BlockSenderProvider = () =>
   Provider.succeed(BlockSender, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
     stables: ["blockSenderId", "accountId", "createdAt"],
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -157,7 +162,7 @@ export const BlockSenderProvider = () =>
           pattern: news.pattern,
           patternType: news.patternType,
           isRegex: news.isRegex ?? false,
-          comments: news.comments,
+          comments: news.comments ?? "",
         });
         return toAttributes(created, accountId);
       }
@@ -167,8 +172,7 @@ export const BlockSenderProvider = () =>
         (observed.pattern ?? "") !== news.pattern ||
         (observed.patternType ?? "") !== news.patternType ||
         (observed.isRegex ?? false) !== (news.isRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (observed.comments ?? "") !== (news.comments ?? "");
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -179,7 +183,7 @@ export const BlockSenderProvider = () =>
         pattern: news.pattern,
         patternType: news.patternType,
         isRegex: news.isRegex ?? false,
-        comments: news.comments,
+        comments: news.comments ?? "",
       });
       return toAttributes(patched, accountId);
     }),
