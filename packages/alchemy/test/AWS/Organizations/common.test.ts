@@ -1,4 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { Stack as StackService } from "@/Stack";
+import type { Stage as StageService } from "@/Stage";
 import * as Effect from "effect/Effect";
 
 const tags: Record<string, string> = { managed_by: "alchemy" };
@@ -20,10 +22,12 @@ const { updateResourceTags } = await import("@/AWS/Organizations/common");
 const { Stack } = await import("@/Stack");
 const { Stage } = await import("@/Stage");
 
-const run = <A>(effect: Effect.Effect<A, unknown, Stack | Stage>) =>
+const run = <A>(
+  effect: Effect.Effect<A, unknown, StackService | StageService>,
+) =>
   Effect.runPromise(
     effect.pipe(
-      Effect.provideService(Stack, { name: "tag-test" } as Stack),
+      Effect.provideService(Stack, { name: "tag-test" } as StackService),
       Effect.provideService(Stage, "test"),
     ),
   );
@@ -46,7 +50,7 @@ describe("Organizations tag reconciliation", () => {
       { Key: "alchemy::stage", Value: "test" },
       { Key: "alchemy::id", Value: "resource-id" },
     ]);
-    expect(returned).toEqual(tags);
+    expect(returned as Record<string, string>).toEqual(tags);
 
     writes.length = 0;
     await run(
