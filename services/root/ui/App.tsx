@@ -235,13 +235,11 @@ export const App = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <StopResume chat={channel.chat} />
-              {channel.name === "root" && (
-                <SessionModelSelect
-                  sessionId={channel.chat}
-                  label="model"
-                  size="sm"
-                />
-              )}
+              <SessionModelSelect
+                sessionId={channel.chat}
+                label="model"
+                size="sm"
+              />
             </div>
           </header>
           <ChatView

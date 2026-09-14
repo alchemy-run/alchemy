@@ -1,8 +1,10 @@
 import * as AI from "alchemy/AI";
+import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { Ask, Tell } from "../chat/Ask.ts";
 import { Call } from "../chat/Call.ts";
+import { models } from "../platform/Model.ts";
 import { makeProposalTools } from "../proposals/Propose.ts";
 import { lineage } from "../Root.ts";
 import { makeWorkspaceTools } from "../sandbox/WorkspaceTools.ts";
@@ -22,9 +24,16 @@ import { Tasks, type TaskItem, type TaskStatus } from "./Tasks.ts";
  * proposals so the humans' approval is one click. It answers the Head
  * with short, factual reports — its answer IS the report.
  */
-export class EngineeringManager extends AI.Agent<EngineeringManager>(
-  import.meta,
-)("EngineeringManager") {}
+export class EngineeringManager extends AI.Agent<
+  EngineeringManager,
+  EngineeringManagerApi
+>(import.meta)("EngineeringManager") {}
+
+export interface EngineeringManagerApi {
+  /** The session's current pick; `undefined` = the org's default. */
+  readonly model: () => Effect.Effect<string | undefined>;
+  readonly setModel: (model: string | undefined) => Effect.Effect<void>;
+}
 
 const shortId = (): string => Math.random().toString(36).slice(2, 8);
 
@@ -124,11 +133,14 @@ const ledger = AI.Thing(
 
 export const EngineeringManagerLive = EngineeringManager.make(
   Effect.gen(function* () {
+    const model = yield* models;
     const tasks = yield* Tasks;
     const engineer = yield* Engineer;
     const { workspace, dropWorkspace } = yield* makeWorkspaceTools;
     const { proposeComment, proposeMerge, proposeClose } =
       yield* makeProposalTools;
+
+    const chosen = PersistentRef.of<string | null>("model", () => null);
 
     const taskUpsert = yield* AI.Tool("task_upsert")`
       Create or update a task — the unit of work. A task holds 1..*
@@ -235,7 +247,9 @@ export const EngineeringManagerLive = EngineeringManager.make(
     );
 
     return {
-      turn: AI.fragment`
+      turn: Effect.gen(function* () {
+        const pick = yield* chosen;
+        return yield* AI.fragment`
         You are the ENGINEERING MANAGER for the Alchemy products — the
         alchemy repository and its distilled and floci submodule
         repositories. You are the head of the engineering team of an
@@ -270,7 +284,14 @@ export const EngineeringManagerLive = EngineeringManager.make(
         POLICY: you never write to the outside world — merging,
         commenting, closing are PROPOSALS the humans decide. Batch clean
         proposals; keep the humans' queue small. ${Tell} the Head of
-        milestones; do not ask it what you can decide yourself.`,
+        milestones; do not ask it what you can decide yourself.`.pipe(
+          Effect.provide(model(pick === null ? undefined : pick)),
+        );
+      }),
+      model: () =>
+        Effect.map(chosen, (pick) => (pick === null ? undefined : pick)),
+      setModel: (next: string | undefined) =>
+        PersistentRef.set(chosen, next ?? null),
     };
   }),
 );
