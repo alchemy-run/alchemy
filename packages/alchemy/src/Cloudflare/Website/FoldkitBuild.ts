@@ -1,11 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import type {
-  ViteBuildDirectories,
+  ViteAssetsDeriver,
   ViteDerivedAssets,
 } from "../Workers/Worker.ts";
 
@@ -116,15 +115,8 @@ export const foldkitAssetsFromManifest = (
   return { ignore: ["/index.html"] };
 };
 
-/** {@link ViteOptions.deriveAssets} for a Foldkit build. */
-export const deriveFoldkitAssets = (
-  build: ViteBuildDirectories,
-  declared: AssetsConfig | undefined,
-): Effect.Effect<
-  ViteDerivedAssets | undefined,
-  PlatformError,
-  FileSystem.FileSystem | Path.Path
-> =>
+/** The {@link ViteAssetsDeriver} for `framework: "foldkit"`. */
+export const deriveFoldkitAssets: ViteAssetsDeriver = (build, declared) =>
   readFoldkitBuildManifest(build.serverDirectory).pipe(
     Effect.map((manifest) => foldkitAssetsFromManifest(manifest, declared)),
   );

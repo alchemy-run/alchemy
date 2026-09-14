@@ -1174,7 +1174,7 @@ export interface WorkerSourceDescriptor {
   readonly options?: unknown;
 }
 
-/** The output directories a Vite build resolved, for {@link ViteOptions.deriveAssets}. */
+/** The output directories a Vite build resolved, handed to a {@link ViteAssetsDeriver}. */
 export interface ViteBuildDirectories {
   /** Absolute path of the client environment's output. */
   readonly clientDirectory: string;
@@ -1185,7 +1185,7 @@ export interface ViteBuildDirectories {
   readonly serverDirectory: string | undefined;
 }
 
-/** What {@link ViteOptions.deriveAssets} may adjust on the asset upload. */
+/** What a {@link ViteAssetsDeriver} may adjust on the asset upload. */
 export interface ViteDerivedAssets extends AssetsConfig {
   /**
    * Files to leave out of the upload, as `.assetsignore` patterns relative
@@ -1193,6 +1193,32 @@ export interface ViteDerivedAssets extends AssetsConfig {
    */
   readonly ignore?: ReadonlyArray<string>;
 }
+
+/**
+ * Reads what a framework's build left beside its server bundle and turns
+ * it into asset routing. Receives the resolved output directories and what
+ * the resource's own `assets` declared — which wins over anything returned
+ * and which the deriver may take into account — and returns asset config
+ * to fill in, plus files to leave out of the upload.
+ *
+ * One deriver exists per {@link ViteFramework}; `Sources/Vite.ts` selects
+ * it from {@link ViteOptions.framework}.
+ */
+export type ViteAssetsDeriver = (
+  build: ViteBuildDirectories,
+  declared: AssetsConfig | undefined,
+) => Effect.Effect<
+  ViteDerivedAssets | undefined,
+  PlatformError,
+  FileSystem.FileSystem | Path.Path
+>;
+
+/**
+ * A framework whose build leaves a description of itself beside the
+ * server bundle that Alchemy knows how to read. See
+ * {@link ViteOptions.framework}.
+ */
+export type ViteFramework = "foldkit";
 
 export interface ViteOptions {
   /**
@@ -1243,27 +1269,17 @@ export interface ViteOptions {
         >;
   };
   /**
-   * Adjusts the asset upload from what the build produced, once it has.
+   * Names the framework whose build this is, when its build leaves a
+   * description of itself beside the server bundle — which paths it
+   * prerendered, say — from which the right asset routing follows rather
+   * than from configuration. Once the build has run, the framework's
+   * {@link ViteAssetsDeriver} reads that description and fills in asset
+   * config under what the resource's own `assets` declared.
    *
-   * A framework can leave a description of its build beside the server
-   * bundle — which paths it prerendered, say — and the right asset routing
-   * follows from that rather than from configuration. This hook reads it:
-   * it receives the resolved output directories and returns asset config
-   * to fill in, plus files to leave out of the upload. It also receives
-   * what the resource's own `assets` declared, which wins over anything
-   * the hook returns and which the hook may take into account.
-   *
-   * `Website.Foldkit` uses it to read `foldkit.build.json`. A plain Vite
-   * project has nothing to derive and leaves it unset.
+   * `Website.Foldkit` sets `"foldkit"`, which reads `foldkit.build.json`.
+   * A plain Vite project has nothing to derive and leaves it unset.
    */
-  deriveAssets?: (
-    build: ViteBuildDirectories,
-    declared: AssetsConfig | undefined,
-  ) => Effect.Effect<
-    ViteDerivedAssets | undefined,
-    PlatformError,
-    FileSystem.FileSystem | Path.Path
-  >;
+  framework?: ViteFramework;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).

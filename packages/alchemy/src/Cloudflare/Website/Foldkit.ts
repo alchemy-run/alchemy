@@ -4,7 +4,6 @@ import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
-import { deriveFoldkitAssets } from "./FoldkitBuild.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -271,8 +270,8 @@ export const Foldkit: {
               memo: props?.memo,
               // The build's own `foldkit.build.json` settles the routing a
               // server-rendered or prerendered app needs; see
-              // `FoldkitProps.assets`.
-              deriveAssets: deriveFoldkitAssets,
+              // `FoldkitProps.assets` and `FoldkitBuild.ts`.
+              framework: "foldkit",
             },
           }),
         ),

@@ -21,10 +21,16 @@ import {
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
+import { deriveFoldkitAssets } from "../../Website/FoldkitBuild.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
-import { isSelfUrl, type ViteOptions } from "../Worker.ts";
+import {
+  isSelfUrl,
+  type ViteAssetsDeriver,
+  type ViteFramework,
+  type ViteOptions,
+} from "../Worker.ts";
 import { isContainerDecl } from "../WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
@@ -385,6 +391,14 @@ export const hashViteInput = Effect.fn(function* <E, R>(
 });
 
 /**
+ * The {@link ViteAssetsDeriver} behind each {@link ViteFramework}: what
+ * reads the framework's build description once the build has run.
+ */
+const frameworkAssets: Record<ViteFramework, ViteAssetsDeriver> = {
+  foldkit: deriveFoldkitAssets,
+};
+
+/**
  * Source provider for vite-based workers (`props.vite`, set by
  * `Website.Vite`): the vite builder produces the client assets and the
  * server bundle in one pass; diff never builds — the `input` hash over
@@ -431,8 +445,8 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
     // prerendered knows the routing better than a default would, and the
     // resource's own `assets` still has the last word.
     const derivedAssets =
-      clientDirectory && vite.deriveAssets
-        ? yield* vite.deriveAssets(
+      clientDirectory && vite.framework
+        ? yield* frameworkAssets[vite.framework](
             { clientDirectory, serverDirectory },
             declaredAssets,
           )
