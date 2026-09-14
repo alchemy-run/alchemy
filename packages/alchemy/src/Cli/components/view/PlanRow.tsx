@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * Shared rows for the Plan tree. Review and apply modes both render
  * namespaces through this component so they look like the same tree.
