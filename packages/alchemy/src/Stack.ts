@@ -19,7 +19,7 @@ import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "./Auth/Profile.ts";
 // Type-only: with verbatimModuleSyntax a value import would survive emit and
-// drag the terminal helpers (node:tty, string-width) into every unbundled
+// drag the terminal helpers (node:tty, Sigil's ansi helpers) into every unbundled
 // child process that loads Stack.ts.
 import type { Interaction } from "./Interaction.ts";
 import type { Input, InputProps } from "./Input.ts";

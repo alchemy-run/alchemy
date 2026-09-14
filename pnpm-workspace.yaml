@@ -170,7 +170,6 @@ catalog:
   solid-devtools: "^0.34.3"
   solid-js: "^1.9.12"
   starlight-blog: "^0.29.0"
-  string-width: "^8.2.2"
   tinyglobby: "^0.2.17"
   svelte: "^5.56.6"
   tailwindcss: "^4.1.18"

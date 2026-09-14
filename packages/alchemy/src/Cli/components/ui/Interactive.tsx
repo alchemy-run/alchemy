@@ -14,7 +14,7 @@ import {
   useState,
 } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
-import stringWidth from "string-width";
+import { stringWidth } from "@alchemy.run/sigil/ansi";
 import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
 import { theme } from "../../../Util/Theme.ts";
 import { copyToClipboard, truncate } from "../../../Util/Terminal.ts";
