@@ -19,8 +19,6 @@
  *
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
-import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
 import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
 import * as Data from "effect/Data";
@@ -80,6 +78,13 @@ export const withLocalD1Query = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
+      // Lazy: the platform proxy boots workerd (see LocalGateway.ts).
+      const [{ open }, { D1 }] = yield* Effect.promise(() =>
+        Promise.all([
+          import("@alchemy.run/cloudflare-runtime/core/platform-proxy"),
+          import("@alchemy.run/cloudflare-runtime/core/bindings"),
+        ]),
+      );
       const proxy = yield* open({
         name: gatewayName("alchemy-d1-gateway", databaseId),
         bindings: [
