@@ -1,6 +1,6 @@
 ---
 title: Git
-description: A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
+description: A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API.
 ---
 
 `alchemy/Git` is a pluggable, embeddable, self-hostable git server. It
@@ -77,19 +77,22 @@ back byte-identical under `git fsck --strict`.
 
 ## Build one
 
-[Getting Started](/git/getting-started) deploys the file above and pushes to it in ten
-minutes. The tutorial then builds it from an empty file, one decision
-per part:
+[Getting Started](/git/getting-started) is a complete shared-credential quickstart.
+The tutorial starts with a Git push and builds one behavior at a time. Every
+part ends with a deployment and a check you can run:
 
-1. [A git server in one file](/git/tutorial/part-1) — each block,
-   named as you type it.
-2. [Repositories](/git/tutorial/part-2) — create, push, make public,
-   clone anonymously.
-3. [Your own API](/git/tutorial/part-3) — the git routes inside your
-   `HttpApi` behind Better Auth, a route of your own, and one of the
-   engine's replaced.
-4. [Your own rules](/git/tutorial/part-4) — git's pre-receive hook as
-   a service: protect `main`, let a team share a repository.
+1. [Push your first repository](/git/tutorial/part-1) — deploy Git, push a commit,
+   and clone it back.
+2. [Control access](/git/tutorial/part-2) — require a shared credential and verify
+   anonymous requests fail.
+3. [Publish a repository](/git/tutorial/part-3) — allow anonymous clones while
+   keeping writes protected.
+4. [Give users their own credentials](/git/tutorial/part-4) — use accounts and
+   individual API keys.
+5. [Add your application's API](/git/tutorial/part-5) — serve `/me` beside Git
+   with the same authenticated user.
+6. [Protect a branch](/git/tutorial/part-6) — reject deletion of `main` with a
+   pre-receive hook.
 
 ## Use it
 

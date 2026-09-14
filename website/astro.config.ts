@@ -1154,20 +1154,28 @@ export default defineConfig({
               label: "Tutorial",
               items: [
                 {
-                  label: "Part 1: A git server in one file",
+                  label: "Part 1: Push your first repository",
                   link: "/git/tutorial/part-1",
                 },
                 {
-                  label: "Part 2: Repositories",
+                  label: "Part 2: Control access",
                   link: "/git/tutorial/part-2",
                 },
                 {
-                  label: "Part 3: Your own API",
+                  label: "Part 3: Publish a repository",
                   link: "/git/tutorial/part-3",
                 },
                 {
-                  label: "Part 4: Your own rules",
+                  label: "Part 4: Give users their own credentials",
                   link: "/git/tutorial/part-4",
+                },
+                {
+                  label: "Part 5: Add your application's API",
+                  link: "/git/tutorial/part-5",
+                },
+                {
+                  label: "Part 6: Protect a branch",
+                  link: "/git/tutorial/part-6",
                 },
               ],
             },

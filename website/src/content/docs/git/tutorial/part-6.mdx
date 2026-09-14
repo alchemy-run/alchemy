@@ -1,0 +1,130 @@
+---
+title: "Part 6: Protect a branch"
+description: Add a pre-receive hook that prevents deleting main, then verify accepted and rejected ref updates.
+---
+
+The middleware decides who may push. Now add a rule about what an authorized
+push may do: it may update `main`, but it may not delete it.
+
+A Git push's ref changes are inside the protocol request. `Git.Hooks.preReceive`
+runs after those changes have been parsed and before any refs move, so it can
+inspect the proposed updates.
+
+## Define the branch rule
+
+Create `src/hooks.ts`:
+
+```typescript
+// src/hooks.ts
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const ProtectedMain = Layer.succeed(Git.Hooks, {
+  preReceive: ({ updates }) =>
+    Effect.succeed(
+      updates
+        .filter((update) =>
+          update.ref === "refs/heads/main" && /^0+$/.test(update.newOid),
+        )
+        .map((update) => ({
+          ref: update.ref,
+          reason: "main cannot be deleted",
+        })),
+    ),
+});
+```
+
+A deletion uses an all-zero `newOid`. The hook returns a reason for each rejected
+ref; an empty array accepts the push. This rule allows creating and updating
+`main`, and it allows deleting other branches.
+
+## Supply the hook to Git's handlers
+
+Import it:
+
+```diff lang="typescript"
+// src/git.ts
+ import { AppApiLive } from "./api.ts";
++import { ProtectedMain } from "./hooks.ts";
+```
+
+Provide the hook after the handler layer that consumes it:
+
+```diff lang="typescript"
+// src/git.ts
+   Layer.provide(Git.ApiHandlersLive),
++  Layer.provide(ProtectedMain),
+   Layer.provide(Git.ReposDurableObject),
+```
+
+The hook is optional. Providing this layer activates your rule for ref writes,
+including Git pushes and the REST API.
+
+## Deploy the rule
+
+```sh
+bun alchemy deploy
+```
+
+Use Dana's `$KEY` when Git prompts during the checks below. Keep the remote
+pointed at `$HOST/$OWNER/web.git` from Part 4.
+
+## Verify an ordinary update
+
+```sh
+printf 'Main is protected from deletion.\n' >> work/README.md
+git -C work commit -am "Document the branch rule"
+git -c credential.helper= -C work push origin main
+```
+
+The push should succeed: updating `main` does not match the deletion rule.
+
+## Verify that another branch can be deleted
+
+```sh
+git -c credential.helper= -C work push origin HEAD:feature
+git -c credential.helper= -C work push origin --delete feature
+```
+
+Both operations should succeed.
+
+## Verify that main cannot be deleted
+
+```sh
+git -c credential.helper= -C work push origin --delete main
+```
+
+Expect the push to be rejected with `main cannot be deleted`. Verify that the
+remote still has the branch:
+
+```sh
+git -c credential.helper= -C work ls-remote origin refs/heads/main
+```
+
+It should print the current commit ID and `refs/heads/main`. Authentication
+accepted the caller; the hook rejected the proposed change.
+
+## Remove the tutorial deployment
+
+When you finish experimenting:
+
+```sh
+bun alchemy destroy
+```
+
+This removes the Worker, repositories' storage, R2 bucket contents, and account
+database from this tutorial stack. Keep your local `work` checkout if you want
+to retain its commits.
+
+## Build further
+
+You have deployed Git, controlled access, allowed public reads, introduced user
+credentials, added your own API, and enforced a ref rule. Each behavior can now
+change independently.
+
+- [HTTP routes](/git/blocks/server) covers custom Git handlers and API schemas.
+- [Authentication and hooks](/git/blocks/auth) describes the two policy boundaries.
+- [Recipes](/git/recipes) covers other storage and hashing implementations.
+- The [complete application example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-git-service)
+  adds a browser UI and serves it on the Git host's origin.

@@ -1,9 +1,12 @@
 ---
 title: Getting Started
-description: Deploy a git host to Cloudflare and push your first repository, in one file. The tutorial then builds the same file from empty.
+description: A complete quickstart for a Git host protected by a shared credential. Deploy it to Cloudflare, push a repository, and clone it back.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+For a step-by-step explanation, start with [Push your first repository](/git/tutorial/part-1).
+This page provides a complete host protected by one shared credential.
 
 You need a Cloudflare account with Workers, Durable Objects, and R2
 enabled. [Cloudflare setup](/cloudflare/setup) connects one.
@@ -166,36 +169,38 @@ curl -u "x:$GIT_SECRET" -X POST "$HOST/api/v1/repos" \
 
 ## Push
 
-The secret goes in the password field of the remote URL. The username
-is ignored:
+Use the full `$HOST` URL from the deployment output. When Git prompts, enter
+`x` as the username and `$GIT_SECRET` as the password:
 
 ```sh
-git remote add origin "https://x:$GIT_SECRET@$HOST/acme/web.git"
-git push -u origin main
+git remote add origin "$HOST/acme/web.git"
+git -c credential.helper= push -u origin main
 ```
 
 Clone it back to prove the round trip:
 
 ```sh
-git clone "https://x:$GIT_SECRET@$HOST/acme/web.git" verify
+git -c credential.helper= clone "$HOST/acme/web.git" verify
 git -C verify fsck --strict
 ```
 
 ## Continue with the tutorial
 
-The file above is a handful of decisions. The tutorial builds it from
-empty, one decision per part, then puts it behind your own API and
-your own rules:
+The tutorial introduces one behavior per part. Each part includes a deploy and
+commands that verify what changed:
 
-1. [A git server in one file](/git/tutorial/part-1) — each block,
-   named as you type it.
-2. [Repositories](/git/tutorial/part-2) — create, push, make public,
-   clone anonymously.
-3. [Your own API](/git/tutorial/part-3) — Git routes beside your
-   `HttpApi` routes, behind Better Auth, a route of your own, and one of the
-   engine's replaced.
-4. [Your own rules](/git/tutorial/part-4) — git's pre-receive hook as
-   a service: protect `main`, let a team share a repository.
+1. [Push your first repository](/git/tutorial/part-1) — deploy Git, push a commit,
+   and clone it back.
+2. [Control access](/git/tutorial/part-2) — require a shared credential and verify
+   anonymous requests fail.
+3. [Publish a repository](/git/tutorial/part-3) — allow anonymous clones while
+   keeping writes protected.
+4. [Give users their own credentials](/git/tutorial/part-4) — use accounts and
+   individual API keys.
+5. [Add your application's API](/git/tutorial/part-5) — serve `/me` beside Git
+   with the same authenticated user.
+6. [Protect a branch](/git/tutorial/part-6) — reject deletion of `main` with a
+   pre-receive hook.
 
 [Building blocks](/git/blocks) is the reference for each line of
 `GitLive`, and [Recipes](/git/recipes) covers S3 bytes, Lambda hashing,

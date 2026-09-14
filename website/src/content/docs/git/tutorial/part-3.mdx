@@ -1,380 +1,140 @@
 ---
-title: "Part 3: Your own API"
-description: Compose your own API and Git as sibling route layers, with Better Auth sessions and API keys.
+title: "Part 3: Publish a repository"
+description: Allow anonymous clones of public repositories while preserving authenticated writes.
 ---
 
-Your application owns its API and HTTP server. Git contributes an ordinary
-`Git.ApiLive` route layer beside the application's routes:
+The credential from [Part 2](/git/tutorial/part-2) protects every request.
+Now make `acme/web` readable by anyone while keeping writes protected.
 
-```typescript
-const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
-  Layer.provide(Authentication.layer),
-);
+## Mark the repository public
+
+```sh
+curl --fail-with-body -u "x:$GIT_SECRET" \
+  -X PATCH "$HOST/api/v1/repos/acme/web" \
+  -H "Content-Type: application/json" \
+  -d '{"public":true}'
 ```
 
-This part replaces the shared secret with Better Auth, adds `/api/v1/me`,
-and serves the application and Git on the same origin. The complete files live in
-[examples/cloudflare-git-service](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-git-service).
+`public` is stored repository metadata. It does not bypass your middleware.
+An anonymous request still receives `401` until you teach the policy to use it.
 
-## Better Auth and the session
+## Look up the repository's visibility
 
-Install `@alchemy.run/better-auth`, `better-auth`, and `@better-auth/api-key`.
-Declare the database, authentication instance, and the application's session service:
+Create `src/public-read.ts`:
 
 ```typescript
-/**
- * Who a user is. Better Auth holds the users, their sessions (browsers),
- * and their API keys (`git` clients, `gh`); the engine holds none of it.
- */
-import { BetterAuth } from "@alchemy.run/better-auth";
-import { apiKey } from "@better-auth/api-key";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Context from "effect/Context";
-import * as Schema from "effect/Schema";
-
-/** Better Auth's users, sessions, and API keys. */
-export const AuthDb = Cloudflare.D1.Database("AuthDb");
-
-/** Better Auth, yielded wherever it is needed; the engine de-dupes the declaration. */
-export const Auth = BetterAuth({
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-  plugins: [apiKey()],
-});
-
-/** The user record routes see. */
-export const User = Schema.Struct({
-  id: Schema.String,
-  name: Schema.optional(Schema.String),
-});
-
-/** 401 — no usable credential, on a route that needs one. */
-export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
-  "Unauthorized",
-  {},
-  { httpApiStatus: 401 },
-) {}
-
-/**
- * Who is calling: the signed-in user, or `null` on an anonymous read of
- * a public repository. Every route runs with it in context.
- */
-export class Session extends Context.Service<
-  Session,
-  { readonly user: typeof User.Type | null }
->()("app/Session") {}
-```
-
-## Authenticate requests
-
-Use native `HttpRouter.middleware`. The initialization effect resolves Better Auth
-and the registry; the returned function runs for each request. It accepts a session
-cookie or a Git HTTP Basic password containing an API key. The repository owner
-can write; other callers can read public repositories.
-
-```typescript
-/**
- * Who may call what. One `HttpRouter` middleware in front of every route,
- * git's and ours: REST, the wire, the raw reads, and the GitHub facade.
- * A user owns the repositories under their own name; anyone may read a
- * public one.
- */
-import { RuntimeContext } from "alchemy";
+// src/public-read.ts
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
-import { Auth, Session } from "./auth.ts";
 
-/** A 401 that makes `git` ask for credentials. */
-const unauthorized = HttpServerResponse.jsonUnsafe(
-  { _tag: "Unauthorized" },
-  { status: 401, headers: { "www-authenticate": 'Basic realm="git"' } },
-);
-
-/**
- * An API key in the password field of the remote names a user; otherwise
- * the session cookie does; otherwise the request is anonymous. A user may
- * do anything under their own owner name and use the routes that have no
- * owner (create, list, import); anyone may read a public repository.
- */
-export const Authentication = HttpRouter.middleware<{ provides: Session }>()(
-  Effect.gen(function* () {
-    const auth = yield* Auth;
-    const registry = yield* Git.RegistryStore;
-
-    const resolve = Effect.gen(function* () {
-      const { password } = yield* HttpApiBuilder.securityDecode(
-        HttpApiSecurity.basic,
-      );
-      const key = Redacted.value(password);
-      if (key !== "") {
-        const verified = yield* auth.api
-          .verifyApiKey({ body: { key } })
-          .pipe(
-            Effect.catchTag("BetterAuthApiError", () =>
-              Effect.succeed({ valid: false as const, key: null }),
-            ),
-          );
-        return verified.valid && verified.key
-          ? { id: verified.key.referenceId }
-          : undefined;
-      }
-      const session = yield* auth
-        .getSession()
-        .pipe(
-          Effect.catchTag("BetterAuthApiError", () => Effect.succeed(null)),
-        );
-      return session
-        ? { id: session.user.id, name: session.user.name }
-        : undefined;
-    });
-
-    /**
-     * Anonymous may read one public repository. A repository that does
-     * not exist is the route's 404, so a 401 never confirms a private one.
-     */
-    const publicRead = Effect.gen(function* () {
-      const params = yield* HttpRouter.params;
-      const owner = params.owner?.toLowerCase();
-      const name = params.repo?.toLowerCase().replace(/\.git$/, "");
-      if (owner === undefined || name === undefined) return false;
-      const entry = yield* registry
-        .resolve(owner, name)
-        .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
-      return entry === undefined || entry.public;
-    });
-
-    return (httpEffect) =>
-      Effect.gen(function* () {
-        const user = yield* resolve;
-        const { owner } = yield* HttpRouter.params;
-        const own =
-          owner === undefined || owner.toLowerCase() === user?.id.toLowerCase();
-        if (user !== undefined && own) {
-          return yield* Effect.provideService(httpEffect, Session, { user });
-        }
-        const request = yield* HttpServerRequest;
-        if (Git.isRead(request) && (yield* publicRead)) {
-          return yield* Effect.provideService(httpEffect, Session, {
-            user: user ?? null,
-          });
-        }
-        return unauthorized;
-      }).pipe(Effect.provide(RuntimeContext.phantom));
-  }),
-);
-```
-
-The middleware provides `Session` to the routes behind it. The Worker supplies
-`RuntimeContext` for each request; the phantom layer accounts for that existing
-request service without capturing a deploy-time context.
-
-## Add your endpoint
-
-`AppRoutes` is the application's own group. It defines `/api/v1/me`; it is not
-part of Git. Build your application API normally:
-
-```typescript
-/** The app's own Effect HTTP endpoints. */
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import { Unauthorized, User } from "./auth.ts";
-
-/** Who am I. Signed-in only. */
-export const Me = HttpApiEndpoint.get("me", "/api/v1/me", {
-  success: User,
-  error: Unauthorized,
-});
-
-export class AppRoutes extends HttpApiGroup.make("app").add(Me) {}
-```
-
-```typescript
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import { Session, Unauthorized } from "./auth.ts";
-/** The application's own API. Git routes are composed beside it in git.ts. */
-import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import { AppRoutes } from "./routes.ts";
-
-export class AppApi extends HttpApi.make("app").add(AppRoutes) {}
-
-const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
-  h.handle("me", () =>
-    Effect.gen(function* () {
-      const { user } = yield* Session;
-      if (user === null) return yield* new Unauthorized();
-      return user;
-    }),
-  ),
-);
-
-export const AppApiLive = HttpApiBuilder.layer(AppApi).pipe(Layer.provide(MeLive));
-
-```
-
-## Compose the route layers
-
-`MeLive` implements only the application's group. It is provided to the
-application's `HttpApiBuilder.layer(AppApi)`. Git receives neither one:
-
-```typescript
-import * as Http from "alchemy/Http";
-/** The application's HTTP routes: our API and Git, with shared authentication. */
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Git from "alchemy/Git";
-import * as Layer from "effect/Layer";
-import { AppApiLive } from "./api.ts";
-import { Authentication } from "./middleware.ts";
-
-/** Packs, clone bundles, and spilled pushes. */
-export const GitObjects = Cloudflare.R2.Bucket("GitObjects", {
-  // `bun test` sets NODE_ENV=test: the integration test tears the stack
-  // down with repositories still in the bucket.
-  forceDestroy: process.env.NODE_ENV === "test",
-});
-
-const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
-  Layer.provide(Authentication.layer),
-);
-
-export const HttpLive = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
-  Layer.provide(Git.ApiHandlersLive),
-  Layer.provide(Git.ReposDurableObject),
-  Layer.provide(Git.RegistryDurableObject), // owner/name → repo
-  Layer.provide(Git.HasherInline), // push verification in this Worker
-  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
-  Layer.provide(Http.Platform),
-);
-```
-
-`Git.InternalApiLive` is a sibling outside public authentication. Its hashing
-handler verifies its own secret. The host builds its router with
-`HttpRouter.toHttpEffect(HttpLive)` and mounts Better Auth's `/api/auth` handler:
-
-```typescript
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-/**
- * The Worker that serves the API: Better Auth's routes under `/api/auth`,
- * the git server for everything else. `src/worker.ts` fronts it on the
- * website's origin.
- */
-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Git from "alchemy/Git";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import { Auth, AuthDb } from "./auth.ts";
-import { HttpLive } from "./git.ts";
-
-export default class GitHost extends Cloudflare.Worker<GitHost>()(
-  "GitHost",
-  {
-    main: import.meta.url,
-    ...Git.GIT_WORKER_OPTIONS,
-    observability: { enabled: true },
-  },
-  Effect.gen(function* () {
-    const auth = yield* Auth;
-    const fetch = yield* HttpRouter.toHttpEffect(HttpLive);
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        if (request.url.startsWith("/api/auth")) return yield* auth.fetch;
-        return yield* fetch;
-      }),
-    };
-  }).pipe(Effect.provide(CloudflareD1(AuthDb))),
-) {}
-```
-
-## Try it
-
-Sign up, and Better Auth sets a session cookie:
-
-```sh
-curl -c jar -X POST "$HOST/api/auth/sign-up/email" \
-  -H "Origin: $HOST" -H "Content-Type: application/json" \
-  -d '{"name":"Dana","email":"dana@example.com","password":"correct-horse-battery"}'
-```
-
-Create a repository under your own id. Owner names are lowercased:
-
-```sh
-ME=$(curl -s -b jar "$HOST/api/v1/me" | jq -r .id | tr 'A-Z' 'a-z')
-curl -b jar -X POST "$HOST/api/v1/repos" \
-  -H "Origin: $HOST" -H "Content-Type: application/json" \
-  -d "{\"owner\":\"$ME\",\"name\":\"web\",\"public\":true}"
-```
-
-Mint an API key. It is shown once, and it is the password of your git
-remote:
-
-```sh
-KEY=$(curl -s -b jar -X POST "$HOST/api/auth/api-key/create" \
-  -H "Origin: $HOST" -H "Content-Type: application/json" \
-  -d '{"name":"laptop"}' | jq -r .key)
-
-git remote add origin "https://x:$KEY@$HOST/$ME/web.git"
-git push -u origin main
-```
-
-Every push and every API call went through `Authentication`. The
-engine never saw a credential.
-
-## Replace a Git handler
-
-To answer GitHub's `/api/v3/user` from your session, implement that group with
-`HttpApiBuilder.group(Git.Api, "github", ...)`. Merge the override after
-`Git.GroupsLive`, then provide those groups to `HttpApiBuilder.layer(Git.Api)`.
-The complete pattern is in [HTTP routes](/git/blocks/server#replace-a-git-handler).
-Your application routes remain a sibling layer.
-
-## Your application on the same origin
-
-The application is a front-door Worker that serves your UI and
-forwards `/api/**` and the git paths to the host over a service
-binding. The session cookie is first-party, clone URLs are on your
-domain, and nothing needs CORS:
-
-```typescript
-// src/worker.ts
-const API = /^\/api\//;
-const WIRE = /^\/[^/]+\/[^/]+\/(?:info\/refs$|git-upload-pack$|git-receive-pack$)/;
-
-export default {
-  fetch(request: Request, env: { GIT: Fetcher; ASSETS: Fetcher }) {
-    const { pathname } = new URL(request.url);
-    return API.test(pathname) || WIRE.test(pathname)
-      ? env.GIT.fetch(request)
-      : env.ASSETS.fetch(request);
-  },
-};
-```
-
-```typescript
-// alchemy.run.ts
-const web = yield* Cloudflare.Website.Vite("Web", {
-  main: "src/worker.ts",
-  domain: "git.example.com",
-  assets: { notFoundHandling: "single-page-application", runWorkerFirst: true },
-  env: { GIT: GitHost },
+export const PublicRead = Effect.gen(function* () {
+  const registry = yield* Git.RegistryStore;
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    if (!Git.isRead(request)) return false;
+    const { owner, repo } = yield* HttpRouter.params;
+    if (owner === undefined || repo === undefined) return false;
+    const entry = yield* registry
+      .resolve(owner.toLowerCase(), repo.toLowerCase().replace(/\.git$/, ""))
+      .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
+    return entry?.public === true;
+  });
 });
 ```
 
-Forward the git paths verbatim. A proxy that buffers request bodies
-breaks streaming pushes, and one that rewrites `Host` makes the host
-print clone URLs for the wrong domain.
+The outer effect acquires the registry when the routes are built. The inner
+effect checks the current request. It permits only reads of a named, public
+repository. Listing every repository is not a read of one public repository.
 
-## Continue
+`Git.isRead` understands Git's protocol: a clone includes a POST to
+`git-upload-pack`, while discovery for a push must remain protected.
 
-[Part 4](/git/tutorial/part-4) adds team authorization and a pre-receive hook
-that protects `main`. [Auth](/git/blocks/auth) explains request middleware and
-hook responsibilities; [HTTP routes](/git/blocks/server) covers composition,
-overrides, schemas, and internal hashing.
+## Permit public reads in the middleware
+
+Import the check:
+
+```diff lang="typescript"
+// src/middleware.ts
+ import { GitSecret } from "./secret.ts";
++import { PublicRead } from "./public-read.ts";
+```
+
+Acquire it alongside the credential:
+
+```diff lang="typescript"
+// src/middleware.ts
+     const secret = yield* (yield* GitSecret).text;
++    const publicRead = yield* PublicRead;
+```
+
+Before returning `401`, allow requests that pass the public-read check:
+
+```diff lang="typescript"
+// src/middleware.ts
+         if (Redacted.value(password) === Redacted.value(yield* secret)) {
+           return yield* httpEffect;
+         }
++        if (yield* publicRead) return yield* httpEffect;
+         return HttpServerResponse.empty({
+```
+
+The existing `Git.RegistryDurableObject` layer supplies this new dependency.
+The shared credential still allows all operations; anonymous callers only get
+the public reads you just defined.
+
+## Deploy the policy
+
+```sh
+bun alchemy deploy
+```
+
+This updates the Worker. The public flag you set earlier remains stored in the
+registry.
+
+## Clone without credentials
+
+```sh
+GIT_TERMINAL_PROMPT=0 git -c credential.helper= \
+  clone "$HOST/acme/web.git" public-copy
+git -C public-copy fsck --strict
+```
+
+The clone should succeed without a password. Disabling the credential helper
+ensures this check does not accidentally use a saved credential.
+
+## Verify that anonymous writes still fail
+
+```sh
+GIT_TERMINAL_PROMPT=0 git -c credential.helper= -C work \
+  push origin HEAD:anonymous-write
+```
+
+Expect authentication to fail and no `anonymous-write` branch to be created.
+An authenticated push from Part 2 still works.
+
+## Verify that private reads still fail
+
+Temporarily make the repository private:
+
+```sh
+curl --fail-with-body -u "x:$GIT_SECRET" \
+  -X PATCH "$HOST/api/v1/repos/acme/web" \
+  -H "Content-Type: application/json" \
+  -d '{"public":false}'
+curl -i "$HOST/api/v1/repos/acme/web"
+```
+
+The anonymous read must return `401`. Restore the public setting before
+continuing:
+
+```sh
+curl --fail-with-body -u "x:$GIT_SECRET" \
+  -X PATCH "$HOST/api/v1/repos/acme/web" \
+  -H "Content-Type: application/json" \
+  -d '{"public":true}'
+```
+
+[Part 4: Give users their own credentials](/git/tutorial/part-4) replaces the
+shared credential with accounts and individual API keys.

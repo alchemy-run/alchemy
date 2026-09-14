@@ -14,7 +14,7 @@ const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
 
 `Authentication` may provide your own `Session` service to handlers. It resolves
 users from your identity system and authorizes the request before the Git handler
-runs. [Part 3](/git/tutorial/part-3#authenticate-requests) shows the complete Better
+runs. [Part 4](/git/tutorial/part-4#authorize-the-identified-user) shows the complete Better
 Auth implementation; [Getting Started](/git/getting-started) uses a shared secret.
 
 | Component | Decides | Runs |
@@ -78,9 +78,9 @@ export const ProtectedMain = Layer.succeed(Git.Hooks, {
 `Git.Hooks` is optional; without it every update is accepted, and
 `Git.HooksNone` says so explicitly. A hook may be a `Layer.effect` that
 reads your own data. Who may write to a repository at all is the
-middleware's question, as the team rule in [Part 4](/git/tutorial/part-4)
-shows. A hook that must see the commit a merge writes, or react after a
-push, decorates `Git.RepoStore` instead; [Repository](/git/blocks/repositories)
+middleware's question. [Part 6](/git/tutorial/part-6) implements and tests a
+rule that prevents deleting `main`. A hook that must see the commit a merge
+writes, or react after a push, decorates `Git.RepoStore` instead; [Repository](/git/blocks/repositories)
 shows it.
 
 ## Internal hashing
