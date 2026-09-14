@@ -6,9 +6,11 @@ description: Deploy a Git host, push a commit, and clone it back. Add storage an
 Start with a Git remote you can push to. This part deploys a Worker backed by
 Durable Objects and R2, then sends a real commit through it and clones it back.
 
+:::caution
 This first deployment is open: anyone who knows its URL can create repositories,
 read them, and write to them. Use a disposable repository. [Part 2](/git/tutorial/part-2)
 adds access control before you use the host for private work.
+:::
 
 ## Create the project
 
