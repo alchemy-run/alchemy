@@ -26,9 +26,11 @@ test.provider("AWS creates the default group with its initial rules", (stack) =>
     );
 
     const group = yield* findDefaultGroup(vpc.vpcId);
-    const rules = yield* readRules(group.GroupId!);
-    expect(rules.filter((rule) => !rule.IsEgress).length).toBeGreaterThan(0);
-    expect(rules.filter((rule) => rule.IsEgress).length).toBeGreaterThan(0);
+    yield* expectRules(
+      group.GroupId!,
+      [{ IpProtocol: "-1", ReferencedGroupInfo: { GroupId: group.GroupId! } }],
+      [{ IpProtocol: "-1", CidrIpv4: "0.0.0.0/0" }],
+    );
 
     yield* stack.destroy();
     yield* assertVpcGone(vpc.vpcId);
@@ -66,7 +68,7 @@ test.provider(
       expect(initial.defaultSecurityGroup.groupId).toEqual(
         defaultGroup.GroupId,
       );
-      yield* expectRules(initial.defaultSecurityGroup.groupId, 0, 0);
+      yield* expectRules(initial.defaultSecurityGroup.groupId, [], []);
 
       // A second identical deployment verifies idempotence against AWS readback.
       yield* stack.deploy(
@@ -81,7 +83,7 @@ test.provider(
           });
         }),
       );
-      yield* expectRules(initial.defaultSecurityGroup.groupId, 0, 0);
+      yield* expectRules(initial.defaultSecurityGroup.groupId, [], []);
 
       // A changed complete declaration replaces the rule set.
       yield* stack.deploy(
@@ -103,7 +105,18 @@ test.provider(
           });
         }),
       );
-      yield* expectRules(initial.defaultSecurityGroup.groupId, 1, 0);
+      yield* expectRules(
+        initial.defaultSecurityGroup.groupId,
+        [
+          {
+            IpProtocol: "tcp",
+            FromPort: 443,
+            ToPort: 443,
+            CidrIpv4: "10.42.0.0/16",
+          },
+        ],
+        [],
+      );
 
       // Removing the Alchemy resource must not delete the AWS-owned group or
       // restore its initial AWS rules.
@@ -116,7 +129,18 @@ test.provider(
       );
       const preserved = yield* findDefaultGroup(initial.vpc.vpcId);
       expect(preserved.GroupId).toEqual(initial.defaultSecurityGroup.groupId);
-      yield* expectRules(initial.defaultSecurityGroup.groupId, 1, 0);
+      yield* expectRules(
+        initial.defaultSecurityGroup.groupId,
+        [
+          {
+            IpProtocol: "tcp",
+            FromPort: 443,
+            ToPort: 443,
+            CidrIpv4: "10.42.0.0/16",
+          },
+        ],
+        [],
+      );
 
       yield* stack.destroy();
       yield* assertVpcGone(initial.vpc.vpcId);
@@ -147,10 +171,14 @@ const readRules = (groupId: string) =>
 
 const expectRules = Effect.fn(function* (
   groupId: string,
-  ingress: number,
-  egress: number,
+  ingress: Partial<EC2.SecurityGroupRule>[],
+  egress: Partial<EC2.SecurityGroupRule>[],
 ) {
   const rules = yield* readRules(groupId);
-  expect(rules.filter((rule) => !rule.IsEgress)).toHaveLength(ingress);
-  expect(rules.filter((rule) => rule.IsEgress)).toHaveLength(egress);
+  expect(rules.filter((rule) => !rule.IsEgress)).toEqual(
+    ingress.map((rule) => expect.objectContaining(rule)),
+  );
+  expect(rules.filter((rule) => rule.IsEgress)).toEqual(
+    egress.map((rule) => expect.objectContaining(rule)),
+  );
 });
