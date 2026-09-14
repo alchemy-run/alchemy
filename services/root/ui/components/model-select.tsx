@@ -65,6 +65,7 @@ export const ModelSelect = ({
   onChange,
   busy,
   size = "sm",
+  variant = "chip",
   className,
   label,
 }: {
@@ -72,6 +73,10 @@ export const ModelSelect = ({
   onChange: (model: string) => void;
   busy?: boolean;
   size?: "sm" | "default";
+  /** `chip` — a bordered control (headers); `ghost` — quiet muted
+   *  text that only surfaces on hover (the composer: the pick should
+   *  not shout next to what you're typing). */
+  variant?: "chip" | "ghost";
   className?: string;
   /** The accessible name — says whose model this is. */
   label: string;
@@ -103,9 +108,13 @@ export const ModelSelect = ({
         data-model={value === null ? "default" : value}
         title={`${label} — takes effect at its next sampling; nothing in flight is interrupted`}
         className={cn(
-          // a CONTROL-sized chip (the composer's buttons are 32px):
-          // the whole box is the target, not just the label inside it
-          "gap-1.5 border-border bg-card px-3 text-[11px] text-muted-foreground shadow-none hover:bg-accent hover:text-foreground data-[size=sm]:h-8",
+          "gap-1.5 text-[11px] text-muted-foreground shadow-none hover:text-foreground data-[size=sm]:h-8",
+          variant === "chip"
+            ? // a CONTROL-sized chip (the composer's buttons are 32px):
+              // the whole box is the target, not just the label inside it
+              "border-border bg-card px-3 hover:bg-accent"
+            : // ghost: plain muted text until hovered
+              "border-transparent bg-transparent px-2 hover:bg-accent/60 dark:bg-transparent dark:hover:bg-accent/60",
           className,
         )}
       >
@@ -139,11 +148,13 @@ export const SessionModelSelect = ({
   sessionId,
   label,
   size,
+  variant,
   className,
 }: {
   sessionId: string;
   label: string;
   size?: "sm" | "default";
+  variant?: "chip" | "ghost";
   className?: string;
 }) => {
   const [read, setRead] = useState<string | null | undefined>(undefined);
@@ -174,6 +185,7 @@ export const SessionModelSelect = ({
       value={read}
       busy={busy}
       size={size}
+      variant={variant}
       className={className}
       label={label}
       onChange={(model) => {

@@ -17,16 +17,18 @@
 import { ChatView } from "@/components/chat";
 import { CallThread } from "@/components/call";
 import { SessionModelSelect } from "@/components/model-select";
+import { ChannelThreads, TaskPanel } from "@/components/tasks";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
   OVERLAY_EVENT,
   overlayFromLocation,
   showOverlay,
+  taskFromLocation,
   type Overlay,
 } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Hash, Moon, Pause, Play, Sun, X } from "lucide-react";
+import { Hash, Moon, Pause, Play, Search, Sun, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 interface Channel {
@@ -146,6 +148,11 @@ export const App = () => {
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
   );
+  const [task, setTask] = useState<string | undefined>(() =>
+    taskFromLocation(),
+  );
+  /** The transcript search, per channel — cleared on channel switch. */
+  const [search, setSearch] = useState("");
   const [channels, setChannels] = useState<ReadonlyArray<Channel>>(FALLBACK);
   const [selected, setSelected] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -165,7 +172,10 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
-    const sync = () => setOverlay(overlayFromLocation());
+    const sync = () => {
+      setOverlay(overlayFromLocation());
+      setTask(taskFromLocation());
+    };
     window.addEventListener("popstate", sync);
     window.addEventListener(OVERLAY_EVENT, sync);
     return () => {
@@ -176,8 +186,11 @@ export const App = () => {
 
   const pick = (name: string) => {
     setSelected(name);
+    setSearch("");
     const url = name === "root" ? "/" : `/?channel=${encodeURIComponent(name)}`;
     window.history.pushState({}, "", url);
+    // the URL above drops ?task, so the panel closes with the switch
+    setTask(undefined);
   };
 
   const channel =
@@ -185,7 +198,7 @@ export const App = () => {
 
   return (
     <div className="relative flex h-dvh flex-col bg-background text-foreground">
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         {/* the rail: one channel per group — the org chart, as rooms */}
         <nav
           aria-label="Channels"
@@ -202,43 +215,72 @@ export const App = () => {
               <ThemeIcon className="size-3.5" />
             </button>
           </div>
-          <div className="flex flex-col gap-0.5 px-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
             {channels.map((entry) => (
-              <button
-                key={entry.name}
-                type="button"
-                onClick={() => pick(entry.name)}
-                aria-label={`open the ${entry.name} channel`}
-                className={cn(
-                  "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[13px]",
-                  entry.name === channel.name
-                    ? "bg-accent font-medium"
-                    : "text-muted-foreground hover:bg-accent/60",
+              <div key={entry.name} className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => pick(entry.name)}
+                  aria-label={`open the ${entry.name} channel`}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[13px]",
+                    entry.name === channel.name
+                      ? "bg-accent font-medium"
+                      : "text-muted-foreground hover:bg-accent/60",
+                  )}
+                >
+                  <Hash className="size-3.5 shrink-0" />
+                  {entry.name}
+                </button>
+                {/* the channel's THREADS, nested under it — the
+                    ledger has no separate board */}
+                {entry.name === "engineering" && (
+                  <ChannelThreads selected={task} />
                 )}
-              >
-                <Hash className="size-3.5 shrink-0" />
-                {entry.name}
-              </button>
+              </div>
             ))}
           </div>
         </nav>
 
         {/* the channel */}
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className="flex shrink-0 items-center justify-between border-b border-border px-3 py-1.5">
-            <div className="flex items-center gap-1.5">
-              <Hash className="size-4 text-muted-foreground" />
+          <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+            <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+              <Hash className="size-4 shrink-0 text-muted-foreground" />
               <span className="text-sm font-medium">{channel.name}</span>
-              <span className="pl-1 font-mono text-[10px] text-muted-foreground">
+              <span className="hidden min-w-0 truncate pl-1 font-mono text-[10px] text-muted-foreground lg:inline">
                 {channel.chat}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {/* search WITHIN the channel — filters the transcript */}
+              <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 px-2 py-0.5 focus-within:border-border">
+                <Search className="size-3 shrink-0 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={`search #${channel.name}…`}
+                  aria-label={`search the ${channel.name} channel`}
+                  className="w-24 min-w-0 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/70 md:w-36"
+                />
+                {search.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label="clear the search"
+                    className="flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
               <StopResume chat={channel.chat} />
+              {/* the composer keeps the pick reachable on narrow */}
               <SessionModelSelect
                 sessionId={channel.chat}
                 label="model"
                 size="sm"
+                className="max-md:hidden"
               />
             </div>
           </header>
@@ -247,8 +289,12 @@ export const App = () => {
             id={channel.chat}
             active={overlay === undefined}
             placeholder={`Message #${channel.name}…`}
+            filter={search}
           />
         </section>
+
+        {/* a task's THREAD — the Slack thread panel, beside the center */}
+        {task !== undefined && <TaskPanel key={task} id={task} />}
       </div>
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>

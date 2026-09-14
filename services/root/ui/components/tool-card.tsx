@@ -45,7 +45,7 @@ import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
 import { CodeCard } from "@/components/code";
 import { AskThread } from "@/components/ask-thread";
-import { showOverlay } from "@/lib/routes";
+import { showOverlay, showTask, taskPath } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -398,6 +398,24 @@ const ThreadId = ({ id }: { id: string | undefined }) => (
   <span className="font-mono text-mist">{id ?? "?"}</span>
 );
 
+/** A task id in a ledger chip — the chip is the task's THREAD ANCHOR
+ *  in the channel; clicking the id opens the task's panel. A REAL
+ *  link (deep-linkable, cmd-clickable); plain clicks route in-app. */
+const TaskAnchor = ({ id }: { id: string }) => (
+  <a
+    href={taskPath(id)}
+    onClick={(event) => {
+      event.stopPropagation();
+      if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+      event.preventDefault();
+      showTask(id);
+    }}
+    className="cursor-pointer font-mono text-mist underline decoration-border underline-offset-2 hover:text-foreground"
+  >
+    {id}
+  </a>
+);
+
 /** The "why" of a judgement or a decision, as its own paragraph. */
 const Why = ({ why }: { why: string | undefined }) =>
   why ? (
@@ -731,7 +749,8 @@ const THREAD: {
   }),
 
   // the manager's LEDGER bookkeeping — one quiet line each, never a
-  // wall: the channel's content is events and responses, not filing
+  // wall: the channel's content is events and responses, not filing.
+  // Each chip is its task's THREAD ANCHOR — the id opens the panel.
   task_covering: (
     input: { ref?: string },
     output: string | undefined,
@@ -747,7 +766,7 @@ const THREAD: {
         <span className="text-muted-foreground">
           coverage of <Ref value={String(input.ref ?? "")} />
           {" → "}
-          {found == null ? "untracked" : (found.id ?? "a task")}
+          {found?.id == null ? "untracked" : <TaskAnchor id={found.id} />}
         </span>
       ),
     };
@@ -757,14 +776,17 @@ const THREAD: {
     output: string | undefined,
   ) => {
     const record = parseRecord(output);
+    const id =
+      typeof record?.id === "string"
+        ? record.id
+        : typeof input.task === "string"
+          ? input.task
+          : undefined;
     return {
       icon: ListChecks,
       title: (
         <span className="text-muted-foreground">
-          filed{" "}
-          <span className="font-mono">
-            {String(record?.id ?? input.task ?? "a task")}
-          </span>
+          filed {id === undefined ? "a task" : <TaskAnchor id={id} />}
           {typeof input.status === "string" ? ` — ${input.status}` : ""}
           {typeof input.title === "string" ? ` · ${input.title}` : ""}
         </span>
@@ -1847,6 +1869,32 @@ export interface ToolCardProps {
   readonly errorText: string | undefined;
 }
 
+/** The card header: a toggle button when there's detail to expand, a
+ *  plain div otherwise — a disabled <button> swallows its children's
+ *  clicks, and chip titles carry live links that must stay clickable. */
+const HeaderShell = ({
+  expandable,
+  onToggle,
+  children,
+}: {
+  expandable: boolean;
+  onToggle: (target: HTMLElement) => void;
+  children: ReactNode;
+}) =>
+  expandable ? (
+    <button
+      type="button"
+      onClick={(event) => onToggle(event.currentTarget)}
+      className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left hover:bg-accent/50"
+    >
+      {children}
+    </button>
+  ) : (
+    <div className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left">
+      {children}
+    </div>
+  );
+
 /**
  * One tool call in the transcript: glyph + one-line summary + status,
  * expandable to per-tool detail. Returns null for unknown tools so the
@@ -1890,14 +1938,12 @@ export const ToolCard = ({
         failed ? "callout-danger" : running && "border-primary/40",
       )}
     >
-      <button
-        type="button"
-        disabled={!expandable}
-        onClick={(event) => anchored(event.currentTarget, () => setOpen(!open))}
-        className={cn(
-          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
-          expandable && "cursor-pointer hover:bg-accent/50",
-        )}
+      {/* a DIV when not expandable — a disabled <button> swallows its
+          children's clicks, and chip titles carry live links (task
+          anchors, refs) that must stay clickable */}
+      <HeaderShell
+        expandable={expandable}
+        onToggle={(target) => anchored(target, () => setOpen(!open))}
       >
         <view.icon
           className={cn(
@@ -1932,7 +1978,7 @@ export const ToolCard = ({
             )}
           />
         )}
-      </button>
+      </HeaderShell>
       {!open && !running && !failed && view.summary !== undefined && (
         <div className="flex items-start gap-2 px-2.5 pb-1.5 font-mono text-[11px] text-muted-foreground">
           <span className="shrink-0">→</span>

@@ -21,11 +21,11 @@ import {
 import {
   PromptInput,
   PromptInputBody,
-  PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import { InputGroupAddon } from "@/components/ui/input-group";
 import { confirm } from "@/components/confirm";
 import { SessionModelSelect } from "@/components/model-select";
 import {
@@ -84,6 +84,7 @@ import {
   GitPullRequestClosed,
   Hash,
   Link2,
+  ListChecks,
   LoaderCircle,
   MessageSquare,
   Square,
@@ -92,6 +93,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { showTask, taskPath } from "@/lib/routes";
 import {
   createContext,
   useCallback,
@@ -334,6 +336,32 @@ export const linkifyMarkdownRefs = (text: string, repo?: string): string =>
     })
     .join("");
 
+/**
+ * Rewrite bare task ids (`t-mu1l0zyu-5m9a`) into thread deep links
+ * (`/?task=…` — a RELATIVE href, which markdown sanitization allows
+ * where a custom protocol would be stripped) so the channel can
+ * ANSWER with threads: ask it "what covers container dedup?" and the
+ * ids in its reply render as pills that open the thread panel. Code
+ * spans and existing links stay untouched.
+ */
+export const linkifyMarkdownTaskIds = (text: string): string =>
+  text
+    .split(CODE_SPLIT)
+    .map((chunk, index) => {
+      if (index % 2 === 1) return chunk; // code or a link — leave alone
+      return chunk.replace(
+        /(?<![\w/.-])t-[a-z0-9]{4,}-[a-z0-9]{2,}\b/g,
+        (id) => `[${id}](/?task=${id})`,
+      );
+    })
+    .join("");
+
+/** The task id a thread deep link names (`/?task=t-x`, any params). */
+const taskHrefId = (href: unknown): string | undefined =>
+  typeof href === "string" && href.startsWith("/?")
+    ? (new URLSearchParams(href.slice(2)).get("task") ?? undefined)
+    : undefined;
+
 /** How anchor pills act when clicked — the review view provides one;
  *  everywhere else the pill is inert text. */
 export const AnchorActionContext = createContext<
@@ -345,6 +373,27 @@ export const AnchorActionContext = createContext<
  *  review view when one is listening. */
 const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
   const onAnchor = useContext(AnchorActionContext);
+  // a thread deep link (`/?task=t-x`) — a pill that opens the task's
+  // panel on the right (cmd-click still opens it in a new tab)
+  const taskId = taskHrefId(href);
+  if (taskId !== undefined) {
+    return (
+      <a
+        href={taskPath(taskId)}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+          event.preventDefault();
+          showTask(taskId);
+        }}
+        title="open this thread"
+        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0 align-text-bottom font-mono text-[11px] text-foreground no-underline hover:bg-accent"
+      >
+        <ListChecks className="size-3 text-mist" />
+        {children}
+      </a>
+    );
+  }
   const anchor = typeof href === "string" ? parseAnchor(href) : undefined;
   if (anchor !== undefined) {
     return (
@@ -409,7 +458,7 @@ export const MarkdownText = ({
   repo?: string;
 }) => (
   <MessageResponse components={MARKDOWN_COMPONENTS}>
-    {linkifyMarkdownRefs(text, repo)}
+    {linkifyMarkdownTaskIds(linkifyMarkdownRefs(text, repo))}
   </MessageResponse>
 );
 
@@ -1129,6 +1178,9 @@ export interface ChatProps {
   /** Rewrite the outgoing text just before it is sent (the review
    *  appends its pills as `anchor://` links here). */
   transformSubmit?: (text: string) => string;
+  /** Search WITHIN the transcript: every-word-matches filter — only
+   *  matching messages render while set. */
+  filter?: string;
 }
 
 const ChatTranscript = ({
@@ -1142,6 +1194,7 @@ const ChatTranscript = ({
   hideFinalReply,
   composerExtra,
   transformSubmit,
+  filter,
 }: ChatProps & {
   initial: UIMessage[];
   /** false = no snapshot endpoint — replay over the socket. */
@@ -1290,6 +1343,36 @@ const ChatTranscript = ({
     part.type === "dynamic-tool" &&
     toolOwner.get(part.toolCallId) !== message.id;
 
+  // SEARCH within the channel: every-word-matches over a message's
+  // text and tool calls; while a query is set only matches render
+  const searchWords = (filter ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+  const matchesSearch = (message: UIMessage): boolean => {
+    if (searchWords.length === 0) return true;
+    const hay = message.parts
+      .flatMap((part) =>
+        part.type === "text"
+          ? [part.text]
+          : part.type === "dynamic-tool"
+            ? [
+                part.toolName,
+                JSON.stringify(part.input ?? ""),
+                typeof part.output === "string"
+                  ? part.output
+                  : JSON.stringify(part.output ?? ""),
+              ]
+            : [],
+      )
+      .join("\n")
+      .toLowerCase();
+    return searchWords.every((word) => hay.includes(word));
+  };
+  const searching = searchWords.length > 0;
+  const hits = searching
+    ? messages.filter(
+        (message) => !deleted.has(message.id) && matchesSearch(message),
+      ).length
+    : 0;
+
   return (
     <>
       {/* initial="instant": open AT the end, no scroll animation */}
@@ -1320,8 +1403,16 @@ const ChatTranscript = ({
                   }
                 }}
               >
+                {searching && (
+                  <div className="sticky top-0 z-10 mx-auto rounded-full border border-border bg-background px-3 py-0.5 text-[11px] text-muted-foreground">
+                    {hits === 0
+                      ? `nothing matches "${filter}"`
+                      : `${hits} matching message${hits === 1 ? "" : "s"}`}
+                  </div>
+                )}
                 {messages.map((message, messageIndex) => {
                   if (deleted.has(message.id)) return null;
+                  if (searching && !matchesSearch(message)) return null;
                   // the reply: every text part after the message's last tool
                   // call (all of them when it called none)
                   const lastToolIndex =
@@ -1602,14 +1693,31 @@ const ChatTranscript = ({
           <PromptInput onSubmit={onSubmit}>
             <PromptInputBody>
               {composerExtra}
-              <PromptInputTextarea placeholder={placeholder ?? "Say something…"} />
+              {/* ONE line tall by default (field-sizing grows it as
+                  you type) — the composer is a bar, not a canvas */}
+              <PromptInputTextarea
+                className="min-h-0 py-2.5"
+                placeholder={placeholder ?? "Say something…"}
+              />
             </PromptInputBody>
-            {/* the controls, bottom right, flat on the card: the model
-                THIS session samples with (the agent you are talking to
-                — a thread's pick still reaches its engineers on the
-                server), and send/stop */}
-            <PromptInputFooter className="justify-end">
-              <SessionModelSelect sessionId={id} label="The agent's model" />
+            {/* the controls INLINE, right of the text (no footer row —
+                it doubled the composer's height): the model THIS
+                session samples with (the agent you are talking to — a
+                thread's pick still reaches its engineers on the
+                server), and send/stop, pinned to the bottom as the
+                text grows */}
+            <InputGroupAddon
+              align="inline-end"
+              className="gap-0.5 self-end py-1.5"
+            >
+              {/* ghost, not a chip — the pick should not shout next
+                  to what you're typing (the header keeps the chip) */}
+              <SessionModelSelect
+                sessionId={id}
+                label="The agent's model"
+                size="sm"
+                variant="ghost"
+              />
               {/* while the agent works the button is STOP: abort the
                   round on the server (the session lives on); the turn's
                   end arrives over the socket and the button turns back.
@@ -1624,7 +1732,7 @@ const ChatTranscript = ({
                 variant="ghost"
                 className="text-muted-foreground"
               />
-            </PromptInputFooter>
+            </InputGroupAddon>
           </PromptInput>
         </div>
       )}

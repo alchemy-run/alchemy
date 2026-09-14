@@ -8,7 +8,8 @@ import { Tasks, type TaskStatus } from "./Tasks.ts";
 /**
  * The engineering ledgers, read-only:
  *
- * - `GET /api/tasks`  — the task ledger (`?status=` filters)
+ * - `GET /api/tasks`      — the task ledger (`?status=` filters)
+ * - `GET /api/tasks/:id`  — one task, whole (notes included)
  */
 export const TasksApi = Effect.gen(function* () {
   const tasks = yield* Tasks;
@@ -27,6 +28,22 @@ export const TasksApi = Effect.gen(function* () {
             status === null ? undefined : (status as TaskStatus),
           ),
         });
+      }),
+    ),
+    HttpRouter.add(
+      "GET",
+      "/api/tasks/:id",
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params;
+        const task = yield* tasks.read(
+          decodeURIComponent(String(params.id ?? "")),
+        );
+        return task === undefined
+          ? yield* HttpServerResponse.json(
+              { error: "no such task" },
+              { status: 404 },
+            )
+          : yield* HttpServerResponse.json({ task });
       }),
     ),
   );
