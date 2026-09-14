@@ -462,6 +462,11 @@ export const MarkdownText = ({
   </MessageResponse>
 );
 
+/** What a call cut short by the round's end says in place of its
+ *  result — mirrors DriverCore's STOPPED_TEXT (not imported: the
+ *  server module must stay out of the browser bundle). */
+const STOPPED_TEXT = "stopped — the round ended before this call answered";
+
 /* ── long prose: clamp + read more ────────────────────────────────── */
 
 /** Collapsed height for long messages — roughly a dozen lines. */
@@ -1249,31 +1254,34 @@ const ChatTranscript = ({
   };
 
   // DELETION is optimistic: hide the messages now, redact them on the
-  // server (the whole burst behind an assistant message). Only
-  // durable rows delete — a `live-*` streaming sample isn't a row
-  // yet. The snapshot on the next mount won't contain deleted rows.
-  // Deferred a tick so the menu that asked has closed before the
-  // confirm dialog takes focus.
+  // server (the whole burst behind an assistant message). Durable
+  // rows (`u-`/`a-`/`crash-`/`abort-`) redact server-side; anything
+  // else (`live-*` — a burst this view caught mid-stream and never
+  // saw finish) has no server row and just hides — EVERYTHING is
+  // deletable. Deferred a tick so the menu that asked has closed
+  // before the confirm dialog takes focus.
   const [deleted, setDeleted] = useState<Set<string>>(() => new Set());
   const removeMessages = useCallback(
     (ids: ReadonlyArray<string>) => {
+      if (ids.length === 0) return;
       const durable = ids.filter((messageId) =>
         /^(u|a|crash|abort)-\d+$/.test(messageId),
       );
-      if (durable.length === 0) return;
       setTimeout(() => {
         void confirm(
-          durable.length === 1
+          ids.length === 1
             ? "Delete this message from the transcript?"
-            : `Delete ${durable.length} messages from the transcript?`,
+            : `Delete ${ids.length} messages from the transcript?`,
         ).then((confirmed) => {
           if (!confirmed) return;
           setDeleted((current) => {
             const next = new Set(current);
-            for (const messageId of durable) next.add(messageId);
+            for (const messageId of ids) next.add(messageId);
             return next;
           });
-          void deleteChatMessages(id, durable).catch(() => {});
+          if (durable.length > 0) {
+            void deleteChatMessages(id, durable).catch(() => {});
+          }
         });
       }, 0);
     },
@@ -1457,6 +1465,20 @@ const ChatTranscript = ({
                     day !== undefined &&
                     (messageIndex === 0 || day !== dayOf(previousAt));
                   const bare = isBare(message);
+                  // "running…" forever is a lie: the only call that
+                  // can truly be running rides the LAST message while
+                  // the agent is working. A dangling open part in any
+                  // earlier burst was cut under this view (it caught
+                  // the burst mid-stream; the closing chunks never
+                  // reached it) — settle it exactly as the snapshot
+                  // would.
+                  const burstLive =
+                    working &&
+                    message.id === messages[messages.length - 1]?.id;
+                  const cutOpen = (state: string) =>
+                    !burstLive &&
+                    (state === "input-available" ||
+                      state === "input-streaming");
                   // consecutive timeline rows STACK like the channel's — the
                   // conversation's message gap is for speech, not for a log
                   const stacked =
@@ -1546,10 +1568,14 @@ const ChatTranscript = ({
                                     toolName={item.toolName}
                                     calls={item.calls.map((call) => ({
                                       toolName: call.toolName,
-                                      state: call.state,
+                                      state: cutOpen(call.state)
+                                        ? ("output-error" as const)
+                                        : call.state,
                                       input: call.input,
                                       output: call.output,
-                                      errorText: call.errorText,
+                                      errorText: cutOpen(call.state)
+                                        ? STOPPED_TEXT
+                                        : call.errorText,
                                     }))}
                                   />
                                 );
@@ -1580,14 +1606,17 @@ const ChatTranscript = ({
                               }
                               if (part.type === "dynamic-tool") {
                                 const tool = part;
+                                const cut = cutOpen(tool.state);
                                 const card = (
                                   <ToolCard
                                     key={index}
                                     toolName={tool.toolName}
-                                    state={tool.state}
+                                    state={cut ? "output-error" : tool.state}
                                     input={tool.input}
                                     output={tool.output}
-                                    errorText={tool.errorText}
+                                    errorText={
+                                      cut ? STOPPED_TEXT : tool.errorText
+                                    }
                                   />
                                 );
                                 // registry-rendered tools get the compact
@@ -1598,7 +1627,9 @@ const ChatTranscript = ({
                                   <Tool key={index}>
                                     <ToolHeader
                                       type={tool.type}
-                                      state={tool.state}
+                                      state={
+                                        cut ? "output-error" : tool.state
+                                      }
                                       toolName={tool.toolName}
                                     />
                                     <ToolContent>
@@ -1619,7 +1650,9 @@ const ChatTranscript = ({
                                             </pre>
                                           ) : undefined
                                         }
-                                        errorText={tool.errorText}
+                                        errorText={
+                                          cut ? STOPPED_TEXT : tool.errorText
+                                        }
                                       />
                                     </ToolContent>
                                   </Tool>
