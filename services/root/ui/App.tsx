@@ -21,10 +21,12 @@ import { MembersPanel } from "@/components/members";
 import { ChannelThreads, TaskThread } from "@/components/tasks";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
+  channelFromLocation,
+  normalizeLegacyLocation,
   OVERLAY_EVENT,
   overlayFromLocation,
+  showChannel,
   showOverlay,
-  showTask,
   taskFromLocation,
   type Overlay,
 } from "@/lib/routes";
@@ -163,6 +165,9 @@ const StopResume = ({ chat }: { chat: string }) => {
 const RAIL_MIN = 160;
 const RAIL_MAX = 480;
 
+// before any state reads the location: old query urls become paths
+normalizeLegacyLocation();
+
 export const App = () => {
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
@@ -182,10 +187,13 @@ export const App = () => {
     return Number.isFinite(stored) && stored >= RAIL_MIN ? stored : 208;
   });
   const [channels, setChannels] = useState<ReadonlyArray<Channel>>(FALLBACK);
-  const [selected, setSelected] = useState<string>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("channel") ?? "root";
-  });
+  const [selected, setSelected] = useState<string>(
+    // a task permalink loads with the ledger's home channel behind it
+    // — that's where its threads live in the rail
+    () =>
+      channelFromLocation() ??
+      (taskFromLocation() !== undefined ? "engineering" : "root"),
+  );
   const { resolved, toggle } = useTheme();
   const ThemeIcon = resolved === "dark" ? Moon : Sun;
 
@@ -203,6 +211,8 @@ export const App = () => {
     const sync = () => {
       setOverlay(overlayFromLocation());
       setTask(taskFromLocation());
+      const name = channelFromLocation();
+      if (name !== undefined) setSelected(name);
     };
     window.addEventListener("popstate", sync);
     window.addEventListener(OVERLAY_EVENT, sync);
@@ -213,12 +223,8 @@ export const App = () => {
   }, []);
 
   const pick = (name: string) => {
-    setSelected(name);
     setSearch("");
-    const url = name === "root" ? "/" : `/?channel=${encodeURIComponent(name)}`;
-    window.history.pushState({}, "", url);
-    // the URL above drops ?task, so the panel closes with the switch
-    setTask(undefined);
+    showChannel(name); // the path change also leaves any /t/ focus
   };
 
   const channel =
@@ -311,7 +317,7 @@ export const App = () => {
             key={task}
             id={task}
             channel={channel.name}
-            onUp={() => showTask(undefined)}
+            onUp={() => showChannel(channel.name)}
           />
         ) : (
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">

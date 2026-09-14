@@ -344,12 +344,12 @@ export const linkifyMarkdownRefs = (text: string, repo?: string): string =>
     .join("");
 
 /**
- * Rewrite bare task ids (`t-mu1l0zyu-5m9a`) into thread deep links
- * (`/?task=…` — a RELATIVE href, which markdown sanitization allows
+ * Rewrite bare task ids (`t-mu1l0zyu-5m9a`) into thread permalinks
+ * (`/t/<id>` — a RELATIVE href, which markdown sanitization allows
  * where a custom protocol would be stripped) so the channel can
  * ANSWER with threads: ask it "what covers container dedup?" and the
- * ids in its reply render as pills that open the thread panel. Code
- * spans and existing links stay untouched.
+ * ids in its reply render as pills that focus the thread. Code spans
+ * and existing links stay untouched.
  */
 export const linkifyMarkdownTaskIds = (text: string): string =>
   text
@@ -358,16 +358,17 @@ export const linkifyMarkdownTaskIds = (text: string): string =>
       if (index % 2 === 1) return chunk; // code or a link — leave alone
       return chunk.replace(
         /(?<![\w/.-])t-[a-z0-9]{4,}-[a-z0-9]{2,}\b/g,
-        (id) => `[${id}](/?task=${id})`,
+        (id) => `[${id}](/t/${id})`,
       );
     })
     .join("");
 
-/** The task id a thread deep link names (`/?task=t-x`, any params). */
-const taskHrefId = (href: unknown): string | undefined =>
-  typeof href === "string" && href.startsWith("/?")
-    ? (new URLSearchParams(href.slice(2)).get("task") ?? undefined)
-    : undefined;
+/** The task id a thread permalink names (`/t/t-x`). */
+const taskHrefId = (href: unknown): string | undefined => {
+  if (typeof href !== "string") return undefined;
+  const match = href.match(/^\/t\/([a-z0-9-]+)$/);
+  return match?.[1];
+};
 
 /** How anchor pills act when clicked — the review view provides one;
  *  everywhere else the pill is inert text. */
@@ -380,8 +381,8 @@ export const AnchorActionContext = createContext<
  *  review view when one is listening. */
 const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
   const onAnchor = useContext(AnchorActionContext);
-  // a thread deep link (`/?task=t-x`) — a pill that opens the task's
-  // panel on the right (cmd-click still opens it in a new tab)
+  // a thread permalink (`/t/t-x`) — a pill that focuses the thread
+  // (cmd-click still opens it in a new tab)
   const taskId = taskHrefId(href);
   if (taskId !== undefined) {
     return (

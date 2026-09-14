@@ -1,24 +1,65 @@
 /**
- * The app has ONE page — the Root channel — and OVERLAYS, addressed by
- * query params so any view is a link:
+ * RESOURCEFUL urls — places are PATHS (the twitter-permalink move),
+ * transient chrome is query:
  *
  * ```
- * /                          the Root channel (the Head's session)
- * /?agent=Engineer:root::e-4f2a    … a teammate's session, read-only
- * /?workspace=pr-1521              … a workspace's terminal
- * /?call=c-x9                      … a call's live thread
- * /?channel=engineering            … which channel is open
- * /?task=t-4f2a                    … a task thread (right panel)
+ * /                     the default feed (#root)
+ * /c/engineering        a channel
+ * /t/t-mu1l0zyu-5m9a    a task thread — standalone: a task BELONGS to
+ *                       no channel; it is REFERENCED from places (a
+ *                       post's pill, the rail, later a quote-post)
+ * ?agent=…  ?workspace=…  ?call=…
+ *                       overlays, riding on ANY path — a peek over
+ *                       the current place, not a place of their own
  * ```
- *
- * `?task=` COMPOSES with the center view (a Slack thread panel, not a
- * modal): it rides beside the open channel.
  */
 
 export type Overlay =
   | { readonly kind: "agent"; readonly id: string }
   | { readonly kind: "workspace"; readonly name: string }
   | { readonly kind: "call"; readonly id: string };
+
+/** One event for every in-app navigation — views re-read location. */
+export const OVERLAY_EVENT = "root:overlay";
+
+const navigate = (url: string): void => {
+  window.history.pushState({}, "", url);
+  window.dispatchEvent(new Event(OVERLAY_EVENT));
+};
+
+/* ── places (paths) ───────────────────────────────────────────────── */
+
+const segments = (): ReadonlyArray<string> =>
+  window.location.pathname.split("/").filter(Boolean);
+
+export const channelPath = (name: string): string =>
+  name === "root" ? "/" : `/c/${encodeURIComponent(name)}`;
+
+/** The channel the path names — undefined off channel paths. */
+export const channelFromLocation = (): string | undefined => {
+  const parts = segments();
+  if (parts.length === 0) return "root";
+  return parts[0] === "c" && parts[1] !== undefined
+    ? decodeURIComponent(parts[1])
+    : undefined;
+};
+
+export const taskPath = (id: string): string => `/t/${encodeURIComponent(id)}`;
+
+export const taskFromLocation = (): string | undefined => {
+  const parts = segments();
+  return parts[0] === "t" && parts[1] !== undefined
+    ? decodeURIComponent(parts[1])
+    : undefined;
+};
+
+export const showChannel = (name: string): void => navigate(channelPath(name));
+
+/** Focus a task's thread — its own place, wherever it was referenced
+ *  from. */
+export const showTask = (id: string): void => navigate(taskPath(id));
+
+/* ── overlays (query over the current path) ───────────────────────── */
 
 export const overlayFromLocation = (): Overlay | undefined => {
   const params = new URLSearchParams(window.location.search);
@@ -31,52 +72,33 @@ export const overlayFromLocation = (): Overlay | undefined => {
   return undefined;
 };
 
-export const overlayPath = (overlay: Overlay | undefined): string =>
-  overlay === undefined
-    ? "/"
+/** The overlay's url ON the current path — closing one returns to the
+ *  place it covered. */
+export const overlayPath = (overlay: Overlay | undefined): string => {
+  const base = window.location.pathname;
+  return overlay === undefined
+    ? base
     : overlay.kind === "agent"
-      ? `/?agent=${encodeURIComponent(overlay.id)}`
+      ? `${base}?agent=${encodeURIComponent(overlay.id)}`
       : overlay.kind === "workspace"
-        ? `/?workspace=${encodeURIComponent(overlay.name)}`
-        : `/?call=${encodeURIComponent(overlay.id)}`;
-
-export const OVERLAY_EVENT = "root:overlay";
+        ? `${base}?workspace=${encodeURIComponent(overlay.name)}`
+        : `${base}?call=${encodeURIComponent(overlay.id)}`;
+};
 
 /** Navigate to an overlay (or none) — history-aware, app-internal. */
-export const showOverlay = (overlay: Overlay | undefined): void => {
-  window.history.pushState({}, "", overlayPath(overlay));
-  window.dispatchEvent(new Event(OVERLAY_EVENT));
-};
+export const showOverlay = (overlay: Overlay | undefined): void =>
+  navigate(overlayPath(overlay));
 
-/* ── the task ledger: index view + thread panel ───────────────────── */
-
-export const taskFromLocation = (): string | undefined =>
-  new URLSearchParams(window.location.search).get("task") ?? undefined;
-
-/** The current URL with ONLY the given params changed — the task
- *  panel and index compose with the open channel instead of
- *  replacing it. Every view is a path, so everything deep-links. */
-export const patchedPath = (
-  patch: Record<string, string | undefined>,
-): string => {
+/** Pre-path urls (`/?channel=…`, `/?task=…`) translate ONCE at boot —
+ *  old links keep resolving; overlay params survive untouched. */
+export const normalizeLegacyLocation = (): void => {
   const params = new URLSearchParams(window.location.search);
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined) params.delete(key);
-    else params.set(key, value);
-  }
-  const search = params.toString();
-  return search.length === 0 ? "/" : `/?${search}`;
+  const task = params.get("task");
+  const channel = params.get("channel");
+  if (task === null && channel === null) return;
+  window.history.replaceState(
+    {},
+    "",
+    task !== null ? taskPath(task) : channelPath(channel!),
+  );
 };
-
-const patchLocation = (patch: Record<string, string | undefined>): void => {
-  window.history.pushState({}, "", patchedPath(patch));
-  window.dispatchEvent(new Event(OVERLAY_EVENT));
-};
-
-/** A task thread's link target — for real <a href>s (cmd-click,
- *  copy-link) with an onClick that routes in-app. */
-export const taskPath = (id: string): string => patchedPath({ task: id });
-
-/** Open (or close) a task's thread panel beside the center view. */
-export const showTask = (id: string | undefined): void =>
-  patchLocation({ task: id });
