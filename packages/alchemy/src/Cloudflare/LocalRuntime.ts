@@ -11,16 +11,21 @@ import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
 
-export const LOCAL_ENTRY_URL = import.meta.resolve(
-  // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
-  // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
-  // we have to pick the right extension ourselves. `import.meta.url` reflects
-  // the actual on-disk extension of *this* file (`.ts` when loaded from
-  // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
-  // under Node), which is exactly the signal we need.
-  import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
-  import.meta.url,
-);
+// Node-only sidecar entry. `globalThis.__ALCHEMY_RUNTIME__` is folded to
+// `true` in Worker bundles, so this does not evaluate `import.meta.url`
+// inside workerd (undefined `.endsWith`, #1443).
+export const LOCAL_ENTRY_URL: string = globalThis.__ALCHEMY_RUNTIME__
+  ? ""
+  : import.meta.resolve(
+      // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
+      // `rewriteRelativeImportExtensions` does NOT touch the string literal,
+      // so we have to pick the right extension ourselves. `import.meta.url`
+      // reflects the actual on-disk extension of *this* file (`.ts` when
+      // loaded from `src/` under Bun or vitest, `.js` when loaded from the
+      // compiled `lib/` under Node), which is exactly the signal we need.
+      import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+      import.meta.url,
+    );
 
 export class LocalRuntimeState extends Context.Service<
   LocalRuntimeState,
