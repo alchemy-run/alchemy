@@ -687,7 +687,14 @@ export const InstanceProvider = () =>
             olds.privateIpAddress !== news.privateIpAddress ||
             olds.availabilityZone !== news.availabilityZone
           ) {
-            return { action: "replace" } as const;
+            // AWS cannot launch a replacement while the previous instance
+            // still owns the same explicitly requested primary private IP.
+            // Preserve create-first behavior when no fixed IP is requested,
+            // or when the replacement moves to a different address.
+            return news.privateIpAddress !== undefined &&
+              olds.privateIpAddress === news.privateIpAddress
+              ? ({ action: "replace", deleteFirst: true } as const)
+              : ({ action: "replace" } as const);
           }
 
           if (
