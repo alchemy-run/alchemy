@@ -141,7 +141,7 @@ const AccountApiToken = (
     accountId: string;
   },
 ) =>
-  Cloudflare.AccountApiToken(id, {
+  Cloudflare.ApiToken.AccountApiToken(id, {
     name: "alchemy-ci",
     accountId: props.accountId,
     policies: [
