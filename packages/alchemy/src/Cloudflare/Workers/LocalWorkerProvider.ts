@@ -1292,6 +1292,7 @@ export const LocalWorkerProvider = () =>
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
                         queueConsumers,
+                        crons: worker.crons,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
