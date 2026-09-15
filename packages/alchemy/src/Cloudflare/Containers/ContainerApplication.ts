@@ -18,39 +18,47 @@ import { LocalContainerProvider } from "./LocalContainerProvider.ts";
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
 export namespace ContainerApplication {
-  /**
-   * Deployment configuration (image, resources, networking, secrets, …).
-   * The create request takes `image` / `instanceType` /
-   * `environmentVariables` flat at the top level; the full shape still
-   * appears on the application record, updates, and rollout targets.
-   */
-  export type Configuration = Containers.ContainerConfiguration;
-  export type InstanceType = NonNullable<Configuration["instanceType"]>;
+  export type InstanceType = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+  >;
   export type SchedulingPolicy = NonNullable<
     Containers.CreateContainerApplicationRequest["schedulingPolicy"]
   >;
-  export type Observability = NonNullable<Configuration["observability"]>;
-  export type Secret = NonNullable<Configuration["secrets"]>[number];
-  export type Disk = NonNullable<Configuration["disk"]>;
-  export type EnvironmentVariable = NonNullable<
-    Configuration["environmentVariables"]
+  export type Observability = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+  >;
+  export type Secret = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
   >[number];
-  export type Label = NonNullable<Configuration["labels"]>[number];
-  export type Network = NonNullable<Configuration["network"]>;
-  export type Dns = NonNullable<Configuration["dns"]>;
-  export type Port = NonNullable<Configuration["ports"]>[number];
-  export type Check = NonNullable<Configuration["checks"]>[number];
+  export type Disk = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+  >;
+  export type EnvironmentVariable = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+  >[number];
+  export type Label = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+  >[number];
+  export type Network = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["network"]
+  >;
+  export type Dns = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+  >;
+  export type Port = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+  >[number];
+  export type Check = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+  >[number];
   export type Constraints = {
     tier?: number;
   };
   export type Affinities = {
     colocation?: "datacenter";
   };
-  /**
-   * The Durable Object namespace (and exported class) an application is
-   * bound to. Cloudflare requires both on create.
-   */
-  export type DurableObjects = Containers.DurableObjectsRef;
+  export type Configuration =
+    Containers.CreateContainerApplicationRequest["configuration"];
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -693,10 +701,14 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     configuration: ContainerApplication.Configuration;
     /**
-     * The Durable Object namespace and class attached to the application, if
-     * it is bound to one.
+     * The Durable Object namespace attached to the application, if it is bound
+     * to one.
      */
-    durableObjects: ContainerApplication.DurableObjects | undefined;
+    durableObjects:
+      | {
+          namespaceId: string;
+        }
+      | undefined;
     /**
      * ISO-8601 timestamp of when the application was created.
      */
@@ -718,10 +730,11 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   },
   {
     /**
-     * Durable Object namespace and exported class attached to the container
-     * application.
+     * Durable Object namespace attached to the container application.
      */
-    durableObjects?: ContainerApplication.DurableObjects;
+    durableObjects?: {
+      namespaceId: string;
+    };
     /**
      * Environment variables injected into the container runtime via the binding.
      */
