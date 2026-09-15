@@ -1,4 +1,5 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -85,6 +86,7 @@ export interface DBInstanceProps {
   masterUserSecretKmsKeyId?: string;
   /**
    * Listener port. In-place modify (sent as `DBPortNumber` on modify).
+   * Ignored for Aurora cluster members; configure the port on the DB cluster.
    */
   port?: number;
   /**
@@ -143,7 +145,8 @@ export interface DBInstanceProps {
    */
   caCertificateIdentifier?: string;
   /**
-   * Enable IAM database authentication. In-place modify.
+   * Enable IAM database authentication. In-place modify. Ignored for Aurora
+   * cluster members, where IAM authentication is managed by the DB cluster.
    */
   enableIAMDatabaseAuthentication?: boolean;
   /**
@@ -171,14 +174,18 @@ export interface DBInstanceProps {
   /**
    * Log types to export to CloudWatch Logs. Diffed against observed state and
    * applied via the delta-shaped `CloudwatchLogsExportConfiguration` on modify.
+   * Ignored for Aurora cluster members; configure log exports on the DB cluster.
    */
   enableCloudwatchLogsExports?: string[];
   /**
-   * Block accidental deletion. In-place modify.
+   * Block accidental deletion. In-place modify. Ignored for Aurora cluster
+   * members; configure deletion protection on the DB cluster. Cluster deletion
+   * protection does not prevent deleting individual Aurora instances.
    */
   deletionProtection?: boolean;
   /**
-   * Network type: `IPV4` | `DUAL`. In-place modify.
+   * Network type: `IPV4` | `DUAL`. In-place modify. Ignored for Aurora cluster
+   * members; configure the network type on the DB cluster.
    */
   networkType?: string;
   /**
@@ -278,6 +285,26 @@ export interface DBInstance extends Resource<
      */
     dbParameterGroupNames: string[];
     /**
+     * Observed parameter groups and their AWS application states. A group in
+     * `pending-reboot` needs an explicit reboot before its static changes apply;
+     * Alchemy does not reboot the instance automatically.
+     */
+    dbParameterGroups: Array<{
+      /** Name of the associated parameter group. */
+      name: string | undefined;
+      /** AWS parameter application state, such as `in-sync` or `pending-reboot`. */
+      status: string | undefined;
+    }>;
+    /**
+     * Observed VPC security group associations and their AWS application states.
+     */
+    vpcSecurityGroups: Array<{
+      /** ID of the associated VPC security group. */
+      id: string | undefined;
+      /** AWS association state, such as `active`. */
+      status: string | undefined;
+    }>;
+    /**
      * Allocated storage in GiB.
      */
     allocatedStorage: number | undefined;
@@ -337,6 +364,10 @@ export interface DBInstance extends Resource<
      * Whether IAM database authentication is enabled.
      */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /**
+     * A scheduled IAM authentication change that has not applied yet.
+     */
+    pendingIamDatabaseAuthenticationEnabled: boolean | undefined;
     /**
      * Whether Performance Insights is enabled.
      */
@@ -512,57 +543,70 @@ const toAttrs = ({
   skipFinalSnapshot?: boolean | undefined;
   finalDBSnapshotIdentifier?: string | undefined;
   masterUserPasswordFingerprint?: Redacted.Redacted<string> | undefined;
-}): DBInstance["Attributes"] => ({
-  skipFinalSnapshot,
-  finalDBSnapshotIdentifier,
-  masterUserPasswordFingerprint,
-  dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
-  dbInstanceArn: instance.DBInstanceArn ?? "",
-  dbClusterIdentifier: instance.DBClusterIdentifier,
-  endpointAddress: instance.Endpoint?.Address,
-  endpointPort: instance.Endpoint?.Port,
-  dbInstanceClass: instance.DBInstanceClass,
-  engine: instance.Engine,
-  engineVersion: instance.EngineVersion,
-  status: instance.DBInstanceStatus,
-  promotionTier: instance.PromotionTier,
-  publiclyAccessible: instance.PubliclyAccessible,
-  dbSubnetGroupName: instance.DBSubnetGroup?.DBSubnetGroupName,
-  dbParameterGroupNames: (instance.DBParameterGroups ?? []).flatMap((group) =>
-    group.DBParameterGroupName ? [group.DBParameterGroupName] : [],
-  ),
-  allocatedStorage: instance.AllocatedStorage,
-  maxAllocatedStorage: instance.MaxAllocatedStorage,
-  storageType: instance.StorageType,
-  iops: instance.Iops,
-  storageThroughput: instance.StorageThroughput,
-  multiAZ: instance.MultiAZ,
-  availabilityZone: instance.AvailabilityZone,
-  secondaryAvailabilityZone: instance.SecondaryAvailabilityZone,
-  backupRetentionPeriod: instance.BackupRetentionPeriod,
-  preferredBackupWindow: instance.PreferredBackupWindow,
-  preferredMaintenanceWindow: instance.PreferredMaintenanceWindow,
-  kmsKeyId: instance.KmsKeyId,
-  storageEncrypted: instance.StorageEncrypted,
-  caCertificateIdentifier: instance.CACertificateIdentifier,
-  iamDatabaseAuthenticationEnabled: instance.IAMDatabaseAuthenticationEnabled,
-  performanceInsightsEnabled: instance.PerformanceInsightsEnabled,
-  monitoringInterval: instance.MonitoringInterval,
-  enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
-  enabledCloudwatchLogsExports: instance.EnabledCloudwatchLogsExports ?? [],
-  deletionProtection: instance.DeletionProtection,
-  dbiResourceId: instance.DbiResourceId,
-  masterUsername: instance.MasterUsername,
-  masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
-  optionGroupMemberships: (instance.OptionGroupMemberships ?? []).flatMap(
-    (membership) =>
-      membership.OptionGroupName ? [membership.OptionGroupName] : [],
-  ),
-  licenseModel: instance.LicenseModel,
-  dbInstancePort: instance.DbInstancePort,
-  networkType: instance.NetworkType,
-  tags,
-});
+}): DBInstance["Attributes"] => {
+  const dbParameterGroups = (instance.DBParameterGroups ?? []).map((group) => ({
+    name: group.DBParameterGroupName,
+    status: group.ParameterApplyStatus,
+  }));
+  return {
+    skipFinalSnapshot,
+    finalDBSnapshotIdentifier,
+    masterUserPasswordFingerprint,
+    dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
+    dbInstanceArn: instance.DBInstanceArn ?? "",
+    dbClusterIdentifier: instance.DBClusterIdentifier,
+    endpointAddress: instance.Endpoint?.Address,
+    endpointPort: instance.Endpoint?.Port,
+    dbInstanceClass: instance.DBInstanceClass,
+    engine: instance.Engine,
+    engineVersion: instance.EngineVersion,
+    status: instance.DBInstanceStatus,
+    promotionTier: instance.PromotionTier,
+    publiclyAccessible: instance.PubliclyAccessible,
+    dbSubnetGroupName: instance.DBSubnetGroup?.DBSubnetGroupName,
+    dbParameterGroupNames: dbParameterGroups.flatMap((group) =>
+      group.name === undefined ? [] : [group.name],
+    ),
+    dbParameterGroups,
+    vpcSecurityGroups: (instance.VpcSecurityGroups ?? []).map((group) => ({
+      id: group.VpcSecurityGroupId,
+      status: group.Status,
+    })),
+    allocatedStorage: instance.AllocatedStorage,
+    maxAllocatedStorage: instance.MaxAllocatedStorage,
+    storageType: instance.StorageType,
+    iops: instance.Iops,
+    storageThroughput: instance.StorageThroughput,
+    multiAZ: instance.MultiAZ,
+    availabilityZone: instance.AvailabilityZone,
+    secondaryAvailabilityZone: instance.SecondaryAvailabilityZone,
+    backupRetentionPeriod: instance.BackupRetentionPeriod,
+    preferredBackupWindow: instance.PreferredBackupWindow,
+    preferredMaintenanceWindow: instance.PreferredMaintenanceWindow,
+    kmsKeyId: instance.KmsKeyId,
+    storageEncrypted: instance.StorageEncrypted,
+    caCertificateIdentifier: instance.CACertificateIdentifier,
+    iamDatabaseAuthenticationEnabled: instance.IAMDatabaseAuthenticationEnabled,
+    pendingIamDatabaseAuthenticationEnabled:
+      instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled,
+    performanceInsightsEnabled: instance.PerformanceInsightsEnabled,
+    monitoringInterval: instance.MonitoringInterval,
+    enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
+    enabledCloudwatchLogsExports: instance.EnabledCloudwatchLogsExports ?? [],
+    deletionProtection: instance.DeletionProtection,
+    dbiResourceId: instance.DbiResourceId,
+    masterUsername: instance.MasterUsername,
+    masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
+    optionGroupMemberships: (instance.OptionGroupMemberships ?? []).flatMap(
+      (membership) =>
+        membership.OptionGroupName ? [membership.OptionGroupName] : [],
+    ),
+    licenseModel: instance.LicenseModel,
+    dbInstancePort: instance.DbInstancePort,
+    networkType: instance.NetworkType,
+    tags,
+  };
+};
 
 /**
  * Compute the CloudWatch Logs export delta. The modify API is delta-shaped
@@ -586,6 +630,133 @@ const logExportDelta = (
     ...(DisableLogTypes.length > 0 ? { DisableLogTypes } : {}),
   };
 };
+
+const sameMembers = (
+  desired: readonly string[],
+  observed: readonly (string | undefined)[],
+): boolean => {
+  const want = new Set(desired);
+  const have = new Set(observed);
+  return want.size === have.size && [...want].every((value) => have.has(value));
+};
+
+/**
+ * Aurora cluster members inherit these settings from their DB cluster. Project
+ * the same instance-owned configuration for writes, drift, and convergence.
+ * https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_CreateDBInstance.html
+ * https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html
+ */
+const toManagedConfiguration = (props: DBInstanceProps) => ({
+  publiclyAccessible: props.publiclyAccessible,
+  dbParameterGroupName: props.dbParameterGroupName,
+  ...(props.dbClusterIdentifier === undefined
+    ? {
+        enableIAMDatabaseAuthentication: props.enableIAMDatabaseAuthentication,
+        vpcSecurityGroupIds: props.vpcSecurityGroupIds,
+        port: props.port,
+        deletionProtection: props.deletionProtection,
+        networkType: props.networkType,
+        enableCloudwatchLogsExports: props.enableCloudwatchLogsExports,
+      }
+    : {}),
+});
+
+const hasManagedConfiguration = (props: DBInstanceProps): boolean =>
+  Object.values(toManagedConfiguration(props)).some(
+    (value) => value !== undefined,
+  );
+
+/**
+ * Compare managed configuration with AWS observations, including pending changes.
+ * `pending-reboot` is an honest, durable outcome for a static parameter change,
+ * not an instruction for Alchemy to reboot a database.
+ */
+const configurationConverged = (
+  props: DBInstanceProps,
+  instance: rds.DBInstance,
+): boolean => {
+  const desired = toManagedConfiguration(props);
+  return (
+    (desired.enableIAMDatabaseAuthentication === undefined ||
+      (desired.enableIAMDatabaseAuthentication ===
+        instance.IAMDatabaseAuthenticationEnabled &&
+        instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
+          undefined)) &&
+    (desired.publiclyAccessible === undefined ||
+      desired.publiclyAccessible === instance.PubliclyAccessible) &&
+    (desired.networkType === undefined ||
+      desired.networkType === instance.NetworkType) &&
+    (desired.port === undefined || desired.port === instance.Endpoint?.Port) &&
+    (desired.deletionProtection === undefined ||
+      desired.deletionProtection === instance.DeletionProtection) &&
+    (desired.enableCloudwatchLogsExports === undefined ||
+      sameMembers(
+        desired.enableCloudwatchLogsExports,
+        instance.EnabledCloudwatchLogsExports ?? [],
+      )) &&
+    (desired.dbParameterGroupName === undefined ||
+      (instance.DBParameterGroups?.length === 1 &&
+        instance.DBParameterGroups.every(
+          (group) =>
+            group.DBParameterGroupName === desired.dbParameterGroupName &&
+            (group.ParameterApplyStatus === "in-sync" ||
+              group.ParameterApplyStatus === "pending-reboot"),
+        ))) &&
+    (desired.vpcSecurityGroupIds === undefined ||
+      (sameMembers(
+        desired.vpcSecurityGroupIds,
+        (instance.VpcSecurityGroups ?? []).map(
+          (group) => group.VpcSecurityGroupId,
+        ),
+      ) &&
+        (instance.VpcSecurityGroups ?? []).every(
+          (group) => group.Status === "active",
+        )))
+  );
+};
+
+class DBInstanceConfigurationPending extends Data.TaggedError(
+  "DBInstanceConfigurationPending",
+)<{
+  instanceId: string;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' has not applied its managed configuration`;
+  }
+}
+
+class DBInstanceReadinessBlocked extends Data.TaggedError(
+  "DBInstanceReadinessBlocked",
+)<{
+  instanceId: string;
+  status: string;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' requires intervention (status: ${this.status})`;
+  }
+}
+
+/**
+ * These states require intervention and cannot become available by polling.
+ * Includes the terminal states used by the AWS DBInstanceAvailable waiter.
+ * https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/accessing-monitoring.html
+ */
+const blockedStatuses = new Set([
+  "deleted",
+  "deleting",
+  "failed",
+  "inaccessible-encryption-credentials",
+  "inaccessible-encryption-credentials-recoverable",
+  "incompatible-create",
+  "incompatible-network",
+  "incompatible-option-group",
+  "incompatible-parameters",
+  "incompatible-restore",
+  "insufficient-capacity",
+  "restore-error",
+  "storage-full",
+  "upgrade-failed",
+]);
 
 export const DBInstanceProvider = () =>
   Provider.effect(
@@ -649,6 +820,36 @@ export const DBInstanceProvider = () =>
         );
       });
 
+      const waitForConfiguration = Effect.fn(function* (
+        instanceId: string,
+        props: DBInstanceProps,
+      ) {
+        return yield* Effect.gen(function* () {
+          const instance = yield* readInstance(instanceId);
+          const status = instance?.DBInstanceStatus;
+          if (status !== undefined && blockedStatuses.has(status)) {
+            return yield* new DBInstanceReadinessBlocked({
+              instanceId,
+              status,
+            });
+          }
+          if (
+            instance?.DBInstanceArn &&
+            status === "available" &&
+            configurationConverged(props, instance)
+          ) {
+            return instance;
+          }
+          return yield* new DBInstanceConfigurationPending({ instanceId });
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "DBInstanceConfigurationPending",
+            schedule: Schedule.fixed("5 seconds"),
+            times: 10,
+          }),
+        );
+      });
+
       return {
         stables: ["dbInstanceArn", "dbInstanceIdentifier"],
         // Pattern (a) AWS account/region collection: `describeDBInstances` is
@@ -682,7 +883,7 @@ export const DBInstanceProvider = () =>
               Effect.succeed([] as DBInstance["Attributes"][]),
             ),
           ),
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
@@ -702,6 +903,26 @@ export const DBInstanceProvider = () =>
               olds.dbSubnetGroupName !== news.dbSubnetGroupName)
           ) {
             return { action: "replace" } as const;
+          }
+          // Existing state may predate the observed association attributes.
+          // Populate them once even when props and live configuration match.
+          if (
+            output !== undefined &&
+            (!Object.hasOwn(output, "dbParameterGroups") ||
+              !Object.hasOwn(output, "vpcSecurityGroups"))
+          ) {
+            return { action: "update" } as const;
+          }
+          if (output !== undefined && hasManagedConfiguration(news)) {
+            const instance = yield* readInstance(output.dbInstanceIdentifier);
+            if (!instance?.DBInstanceArn) {
+              // The physical instance is gone; downstream references must be
+              // resolved again when it is recreated.
+              return { action: "update", stables: [] } as const;
+            }
+            if (!configurationConverged(news, instance)) {
+              return { action: "update" } as const;
+            }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -729,6 +950,7 @@ export const DBInstanceProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const identifier =
             output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          const configuration = toManagedConfiguration(news);
           // AWS never returns the master password, so there is nothing to
           // observe-and-diff — fingerprint the configured value instead and
           // only send `MasterUserPassword` when the fingerprint changed.
@@ -779,37 +1001,36 @@ export const DBInstanceProvider = () =>
                 MasterUserPassword: news.masterUserPassword,
                 ManageMasterUserPassword: news.manageMasterUserPassword,
                 MasterUserSecretKmsKeyId: news.masterUserSecretKmsKeyId,
-                Port: news.port,
+                Port: configuration.port,
                 MultiAZ: news.multiAZ,
                 AvailabilityZone: news.availabilityZone,
                 BackupRetentionPeriod: backupRetentionDays,
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 DBSubnetGroupName: news.dbSubnetGroupName,
-                DBParameterGroupName: news.dbParameterGroupName,
+                DBParameterGroupName: configuration.dbParameterGroupName,
                 OptionGroupName: news.optionGroupName,
                 LicenseModel: news.licenseModel,
                 StorageEncrypted: news.storageEncrypted,
                 KmsKeyId: news.kmsKeyId,
                 CACertificateIdentifier: news.caCertificateIdentifier,
                 EnableIAMDatabaseAuthentication:
-                  news.enableIAMDatabaseAuthentication,
+                  configuration.enableIAMDatabaseAuthentication,
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
                 PerformanceInsightsRetentionPeriod:
                   performanceInsightsRetentionDays,
                 MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
-                EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
-                DeletionProtection: news.deletionProtection,
-                NetworkType: news.networkType,
+                EnableCloudwatchLogsExports:
+                  configuration.enableCloudwatchLogsExports,
+                DeletionProtection: configuration.deletionProtection,
+                NetworkType: configuration.networkType,
                 // Cluster members inherit VPC security groups from the DB
                 // cluster; passing them fails with InvalidParameterCombination
                 // ("Set vpc security group for the DB Cluster").
-                VpcSecurityGroupIds: news.dbClusterIdentifier
-                  ? undefined
-                  : news.vpcSecurityGroupIds,
-                PubliclyAccessible: news.publiclyAccessible,
+                VpcSecurityGroupIds: configuration.vpcSecurityGroupIds,
+                PubliclyAccessible: configuration.publiclyAccessible,
                 PromotionTier: news.promotionTier,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
                 CopyTagsToSnapshot: news.copyTagsToSnapshot,
@@ -861,31 +1082,46 @@ export const DBInstanceProvider = () =>
             setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
-            setIf("DBPortNumber", news.port, observed.DbInstancePort);
+            setIf("DBPortNumber", configuration.port, observed.DbInstancePort);
             setIf("OptionGroupName", news.optionGroupName, undefined);
             setIf("LicenseModel", news.licenseModel, observed.LicenseModel);
             setIf("CACertificateIdentifier", news.caCertificateIdentifier, observed.CACertificateIdentifier); // prettier-ignore
-            setIf("EnableIAMDatabaseAuthentication", news.enableIAMDatabaseAuthentication, observed.IAMDatabaseAuthenticationEnabled); // prettier-ignore
+            setIf(
+              "EnableIAMDatabaseAuthentication",
+              configuration.enableIAMDatabaseAuthentication,
+              observed.PendingModifiedValues
+                ?.IAMDatabaseAuthenticationEnabled !== undefined &&
+                observed.PendingModifiedValues
+                  .IAMDatabaseAuthenticationEnabled !==
+                  configuration.enableIAMDatabaseAuthentication
+                ? undefined
+                : observed.IAMDatabaseAuthenticationEnabled,
+            );
             setIf("EnablePerformanceInsights", news.enablePerformanceInsights, observed.PerformanceInsightsEnabled); // prettier-ignore
             setIf("PerformanceInsightsKMSKeyId", news.performanceInsightsKMSKeyId, observed.PerformanceInsightsKMSKeyId); // prettier-ignore
             setIf("PerformanceInsightsRetentionPeriod", performanceInsightsRetentionDays, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
             setIf("MonitoringInterval", monitoringIntervalSeconds, observed.MonitoringInterval); // prettier-ignore
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
-            setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
-            setIf("NetworkType", news.networkType, observed.NetworkType);
-            setIf("DBParameterGroupName", news.dbParameterGroupName, undefined);
-            setIf("PubliclyAccessible", news.publiclyAccessible, observed.PubliclyAccessible); // prettier-ignore
+            setIf("DeletionProtection", configuration.deletionProtection, observed.DeletionProtection); // prettier-ignore
+            setIf(
+              "NetworkType",
+              configuration.networkType,
+              observed.NetworkType,
+            );
+            setIf(
+              "DBParameterGroupName",
+              configuration.dbParameterGroupName,
+              undefined,
+            );
+            setIf("PubliclyAccessible", configuration.publiclyAccessible, observed.PubliclyAccessible); // prettier-ignore
             setIf("PromotionTier", news.promotionTier, observed.PromotionTier);
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
             setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
             // Security groups on Aurora cluster members are managed by the DB
             // cluster (ModifyDBCluster), so only sync them for standalone
             // instances.
-            if (
-              news.vpcSecurityGroupIds !== undefined &&
-              news.dbClusterIdentifier === undefined
-            ) {
-              core.VpcSecurityGroupIds = news.vpcSecurityGroupIds;
+            if (configuration.vpcSecurityGroupIds !== undefined) {
+              core.VpcSecurityGroupIds = configuration.vpcSecurityGroupIds;
               coreDirty = true;
             }
             if (news.allowMajorVersionUpgrade) {
@@ -920,7 +1156,7 @@ export const DBInstanceProvider = () =>
             // never mixes the full-set fields above.
             const logDelta = logExportDelta(
               observed.EnabledCloudwatchLogsExports,
-              news.enableCloudwatchLogsExports,
+              configuration.enableCloudwatchLogsExports,
             );
             if (logDelta) {
               yield* rds.modifyDBInstance({
@@ -950,6 +1186,9 @@ export const DBInstanceProvider = () =>
             });
           }
 
+          if (hasManagedConfiguration(news)) {
+            observed = yield* waitForConfiguration(identifier, news);
+          }
           yield* session.note(dbInstanceArn || identifier);
           return toAttrs({
             instance: observed,
