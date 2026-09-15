@@ -103,7 +103,12 @@ import {
   sessionAuthor,
   type Author,
 } from "@/components/avatar";
-import { Mention, MentionAskView } from "@/components/ask-thread";
+import {
+  Mention,
+  PendingPost,
+  PostThread,
+  mentionsOf,
+} from "@/components/post-thread";
 import {
   createContext,
   useCallback,
@@ -1127,6 +1132,14 @@ const ReasoningTrace = ({
  * render as full-width timeline rows (the bubble around them reads as
  * an ugly double border), and consecutive ones stack.
  */
+/** A user row's author: the STORED `Message.author` when the wire
+ *  carried one (an agent's ask names its sender), else the human. */
+const authorOf = (message: UIMessage): Author => {
+  const name = (message.metadata as { author?: string } | undefined)?.author;
+  if (name === undefined || name === HUMAN.name) return HUMAN;
+  return { name, kind: "agent" };
+};
+
 const isBare = (message: UIMessage): boolean => {
   const kind = (message.metadata as { kind?: string } | undefined)?.kind;
   return (
@@ -1576,15 +1589,18 @@ const ChatTranscript = ({
                     day !== undefined &&
                     (messageIndex === 0 || day !== dayOf(previousAt));
                   // WHO speaks (discord rows): assistant rows are the
-                  // session's agent; inbound events are the world's
-                  // feed; everything else typed is the human
+                  // session's agent; user rows carry their STORED
+                  // author (`Message.author` — an agent's ask arriving
+                  // in this session names its sender); inbound events
+                  // are the world's feed; an unattributed typed
+                  // message is the human's
                   const author: Author =
                     message.role === "assistant"
                       ? agentAuthor
                       : kind !== undefined ||
                           firstTextOf(message)?.startsWith("[inbound") === true
                         ? WORLD
-                        : HUMAN;
+                        : authorOf(message);
                   // "running…" forever is a lie: the only call that
                   // can truly be running rides the LAST message while
                   // the agent is working. A dangling open part in any
@@ -1618,39 +1634,31 @@ const ChatTranscript = ({
                         ? (() => {
                             try {
                               return JSON.parse(tool.output) as {
-                                answers?: unknown;
+                                post?: unknown;
                               };
                             } catch {
                               return undefined;
                             }
                           })()
-                        : (tool.output as { answers?: unknown } | undefined);
-                    const entries = Array.isArray(record?.answers)
-                      ? (record.answers as Array<{
-                          agent?: unknown;
-                          ask?: unknown;
-                        }>)
-                          .filter(
-                            (entry) =>
-                              typeof entry.agent === "string" &&
-                              typeof entry.ask === "string",
-                          )
-                          .map((entry) => ({
-                            agent: entry.agent as string,
-                            ask: entry.ask as string,
-                          }))
-                      : undefined;
-                    const input = (tool.input ?? {}) as {
-                      text?: string;
-                      question?: string;
-                    };
+                        : (tool.output as { post?: unknown } | undefined);
+                    const postId =
+                      typeof record?.post === "string"
+                        ? record.post
+                        : undefined;
+                    const text = String(
+                      (tool.input as { text?: string } | undefined)?.text ?? "",
+                    );
                     return (
                       <div key={key} className="py-0.5">
-                        <MentionAskView
-                          text={String(input.text ?? input.question ?? "")}
-                          entries={entries}
-                          stopped={cutOpen(tool.state)}
-                        />
+                        {postId !== undefined ? (
+                          <PostThread id={postId} speaker={author.name} />
+                        ) : (
+                          <PendingPost
+                            text={text}
+                            agents={mentionsOf(text)}
+                            stopped={cutOpen(tool.state)}
+                          />
+                        )}
                       </div>
                     );
                   };
@@ -1668,7 +1676,7 @@ const ChatTranscript = ({
                             firstTextOf(previous)?.startsWith("[inbound") ===
                               true
                           ? WORLD
-                          : HUMAN;
+                          : authorOf(previous);
                   const grouped =
                     !newDay &&
                     previousAuthor?.name === author.name &&

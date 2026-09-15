@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { AsksApi } from "./chat/AsksApi.ts";
+import { PostsApi } from "./chat/PostsApi.ts";
 import { CallsApi } from "./chat/CallsApi.ts";
 import { Interrupt } from "./chat/Interrupt.ts";
 import { Models } from "./chat/Models.ts";
@@ -31,7 +31,7 @@ export const Api = Effect.gen(function* () {
     yield* Interrupt,
     yield* Models,
     yield* CallsApi,
-    yield* AsksApi,
+    yield* PostsApi,
     yield* TasksApi,
     yield* ChannelsApi,
     yield* DecideApi,

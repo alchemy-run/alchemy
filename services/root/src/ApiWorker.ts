@@ -13,7 +13,7 @@ import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
 import { AskLive, TellLive } from "./chat/Ask.ts";
 import { Calls, CallToolLive } from "./chat/Call.ts";
-import { AsksLive, CallsLive } from "./chat/ChatDO.ts";
+import { CallsLive, PostsLive } from "./chat/ChatDO.ts";
 import { WriteTools } from "./coding/Editor.ts";
 import { OpenPullRequestLive } from "./coding/OpenPullRequest.ts";
 import { PushBranchLive } from "./coding/PushBranch.ts";
@@ -72,7 +72,7 @@ const Spill = SpillingTools.pipe(
  *  the colleague addresses and the call store. */
 const Conversation = Layer.mergeAll(AskLive, TellLive, CallToolLive).pipe(
   Layer.provide(ColleaguesLive),
-  Layer.provide(AsksLive),
+  Layer.provide(PostsLive),
   Layer.provide(CallsLive),
 );
 
@@ -199,7 +199,7 @@ const Company = Layer.mergeAll(
   Layer.provideMerge([TriageLive, TasksLive]),
   Layer.provideMerge(ProposalsLive),
   Layer.provideMerge(CallsLive),
-  Layer.provideMerge(AsksLive),
+  Layer.provideMerge(PostsLive),
   Layer.provideMerge(CheckoutsRouter),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),

@@ -7,7 +7,7 @@ import * as Clock from "effect/Clock";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
 import { nameOfKey } from "../Root.ts";
-import { Asks } from "./Asks.ts";
+import { Posts } from "./Posts.ts";
 import { Calls, renderUtterance } from "./Call.ts";
 
 /**
@@ -22,11 +22,14 @@ import { Calls, renderUtterance } from "./Call.ts";
  * the humans read the text as a plain conversation, chips where the
  * names are.
  *
- * The chain rides the delivered text as a machine-readable header
- * (`[ask head > manager] …`), so every hop knows its
- * ancestry: a cycle is refused, and a chain deeper than {@link MAX_HOPS}
- * is refused — the refusal is model-visible, so the asker answers with
- * what it has instead of recursing forever.
+ * Ancestry is STRUCTURAL, never in-band: the delivered message's id
+ * IS the ask's post id (`Sessions.dispatch` carries an identified
+ * `AI.Message`), the target reads what it is answering from
+ * `AI.Thread.invocations` (the round's admitted messages), and the
+ * cycle/hop guard walks the post tree's ancestors — a chain deeper
+ * than {@link MAX_HOPS} or one that would cycle is refused
+ * model-visibly, so the asker answers with what it has instead of
+ * recursing forever.
  */
 
 /** The most hops a question may travel from the Root Group's channel. */
@@ -96,34 +99,6 @@ export class Colleagues extends Context.Service<
   }
 >()("Colleagues") {}
 
-const HEADER = /^\[ask ([a-z0-9-]+) \| ([^\]]+)\]/;
-
-/** The delivered form: the ask's ID and its chain, then the question.
- *  The id is the tree edge — an ask made while answering this one
- *  records it as its parent (Asks.ts). */
-export const withChain = (
-  id: string,
-  chain: ReadonlyArray<string>,
-  question: string,
-): string => `[ask ${id} | ${chain.join(" > ")}]\n${question}`;
-
-/** Pull text out of a prompt message's content, defensively. */
-const textOf = (message: unknown): string => {
-  if (typeof message !== "object" || message === null) return "";
-  const content = (message as { content?: unknown }).content;
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part) =>
-      typeof part === "object" &&
-      part !== null &&
-      typeof (part as { text?: unknown }).text === "string"
-        ? (part as { text: string }).text
-        : "",
-    )
-    .join("");
-};
-
 /** The calling SESSION — tool physics are Layers (built once per
  *  isolate), so the session is read from the ambient frame at CALL
  *  time; its absence is a wiring defect, never a model-visible error. */
@@ -136,22 +111,19 @@ const currentThread = Effect.gen(function* () {
     : thread;
 });
 
-/** The ask this session is currently ANSWERING (the latest ask header
- *  in its transcript): its id (the parent edge for asks made while
- *  answering) and its chain (the cycle/hop guard). */
+/** The post this session's CURRENT round is answering — the newest
+ *  invocation whose message id is a post (an ask delivered it with
+ *  the post id as the message id). Structural and round-scoped:
+ *  `AI.Thread.invocations` is the round's admitted messages, so a
+ *  stale ask earlier in the transcript can never claim the edge. */
 const currentAsk = Effect.gen(function* () {
   const thread = yield* currentThread;
-  const entries = yield* thread.entries;
-  for (let index = entries.length - 1; index >= 0; index--) {
-    const match = HEADER.exec(textOf(entries[index]));
-    if (match !== null) {
-      return {
-        parent: match[1]!,
-        chain: match[2]!.split(">").map((name) => name.trim()),
-      };
-    }
+  const invocations = yield* thread.invocations;
+  for (let index = invocations.length - 1; index >= 0; index--) {
+    const id = invocations[index]!.id;
+    if (id.startsWith("p-")) return id;
   }
-  return { parent: undefined, chain: [] as ReadonlyArray<string> };
+  return undefined;
 });
 
 const agent = AI.Thing("agent", S.String)`
@@ -170,13 +142,16 @@ const answers = AI.Thing(
   S.Array(
     S.Struct({
       agent: S.String,
-      ask: S.String,
+      post: S.String,
       answer: S.String,
     }),
   ),
 )`
-  One entry per mentioned agent: its settled answer, and the ask's id
-  in the company's ask tree.`;
+  One entry per mentioned agent: its answer, and that reply's post id
+  in the company's thread.`;
+
+const postId = AI.Thing("post", S.String)`
+  Your message's post id — the root of the thread the humans read.`;
 
 const call = AI.Thing("call", S.optionalKey(S.String))`
   A call id (from the call tool): the exchange is mirrored into that
@@ -187,7 +162,7 @@ const note = AI.Thing("note", S.String)`
 
 export class Ask extends (AI.Tool<Ask>(import.meta)("ask")`
   Say ${text} to the agents it @mentions and wait for their
-  ${AI.out(answers)} — every mentioned agent is asked; each may ask
+  ${AI.out(answers, postId)} — every mentioned agent is asked; each may ask
   others while answering, and the chains bubble back to you. The
   whole exchange renders as a THREAD the humans read — never paste an
   answer back into your reply; reference the outcome in one line at
@@ -210,7 +185,7 @@ export const AskLive = Layer.effect(
   Effect.gen(function* () {
     const colleagues = yield* Colleagues;
     const sessions = yield* AI.Sessions;
-    const asks = yield* Asks;
+    const posts = yield* Posts;
     const calls = yield* Effect.serviceOption(Calls);
 
     const mirror = Effect.fn(function* (
@@ -225,7 +200,15 @@ export const AskLive = Layer.effect(
     return Effect.fn(function* (p: { text: string; call?: string }) {
       const me = yield* currentThread;
       const myName = nameOfKey(me.key);
-      const { parent, chain: behind } = yield* currentAsk;
+      const parent = yield* currentAsk;
+      // the chain BEHIND this ask — the post tree's ancestor authors
+      // (structural; no header to parse, nothing to go stale)
+      const behind =
+        parent === undefined
+          ? []
+          : (yield* posts.ancestors(parent)).map(
+              (ancestor) => ancestor.author,
+            );
       const chain = behind.includes(myName) ? behind : [...behind, myName];
 
       // WHO the text addresses — the @mentions ARE the routing
@@ -259,6 +242,21 @@ export const AskLive = Layer.effect(
         }
       }
 
+      // ONE post for the message — the targets' answers reply to it,
+      // so the text (and the @mentions addressing it) is written and
+      // rendered exactly once, however many agents it asks
+      const minted = yield* Clock.currentTimeMillis;
+      const postId = `p-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      yield* posts
+        .post({
+          id: postId,
+          ...(parent !== undefined ? { parent } : {}),
+          author: myName,
+          text: p.text,
+        })
+        .pipe(Effect.ignore);
+      yield* mirror(p.call, myName, p.text);
+
       const askOne = Effect.fn(function* (target: {
         readonly name: string;
         readonly term: string;
@@ -275,25 +273,17 @@ export const AskLive = Layer.effect(
           );
         }
 
-        const minted = yield* Clock.currentTimeMillis;
-        const id = `a-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-        yield* asks
-          .open({
-            id,
-            ...(parent !== undefined ? { parent } : {}),
-            ...(p.call !== undefined ? { call: p.call } : {}),
-            asker: myName,
-            target: target.name,
-            question: p.text,
-          })
-          .pipe(Effect.ignore);
-        yield* mirror(p.call, myName, `→ ${target.name}: ${p.text}`);
-
+        // the target's REPLY is its own post under the message —
+        // written when the answer lands (or when the chain breaks),
+        // so a thread reads: the message, then who said what back
+        const replyId = `${postId}-${target.name}`;
         const outcome = yield* sessions
           .dispatch(
             target.term,
             target.key,
-            withChain(id, [...chain, target.name], p.text),
+            // the delivered message IS the post: same id (the tree
+            // edge nested asks parent onto), same author, same text
+            { id: postId, author: myName, content: p.text },
             {
               parent: { term: target.term, key: me.key },
               ...(history !== undefined && history.length > 0
@@ -303,8 +293,14 @@ export const AskLive = Layer.effect(
           )
           .pipe(
             Effect.tapDefect((defect) =>
-              asks
-                .settle(id, "failed", String(defect).slice(0, 2_000))
+              posts
+                .post({
+                  id: replyId,
+                  parent: postId,
+                  author: target.name,
+                  text: String(defect).slice(0, 2_000),
+                  status: "failed",
+                })
                 .pipe(Effect.ignore),
             ),
           );
@@ -315,9 +311,17 @@ export const AskLive = Layer.effect(
           answerText.length > 8_000
             ? `${answerText.slice(0, 8_000)}\n[… clipped]`
             : answerText;
-        yield* asks.settle(id, "answered", clipped).pipe(Effect.ignore);
+        yield* posts
+          .post({
+            id: replyId,
+            parent: postId,
+            author: target.name,
+            text: clipped,
+            status: "settled",
+          })
+          .pipe(Effect.ignore);
         yield* mirror(p.call, target.name, clipped);
-        return { agent: target.name, ask: id, answer: clipped };
+        return { agent: target.name, post: replyId, answer: clipped };
       });
 
       // every mentioned agent answers — concurrently, the way a
@@ -325,7 +329,8 @@ export const AskLive = Layer.effect(
       const settled = yield* Effect.all(targets.map(askOne), {
         concurrency: 4,
       });
-      return { answers: settled };
+      yield* posts.settle(postId, "settled").pipe(Effect.ignore);
+      return { answers: settled, post: postId };
     });
   }),
 );

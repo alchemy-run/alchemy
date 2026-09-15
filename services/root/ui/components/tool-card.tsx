@@ -44,7 +44,7 @@ import type { GeneralEngineer } from "../../src/engineering/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
 import { CodeCard } from "@/components/code";
-import { MentionAskView } from "@/components/ask-thread";
+import { PostThread } from "@/components/post-thread";
 import { showOverlay, showTask, taskPath } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -1127,18 +1127,8 @@ const CODER: Renderers<typeof GeneralEngineer> = {
   // any other surface.
   ask: (input, output, running) => {
     const record = parseRecord(output);
-    const entries = Array.isArray(record?.answers)
-      ? (record.answers as Array<{ agent?: unknown; ask?: unknown }>)
-          .filter(
-            (entry) =>
-              typeof entry.agent === "string" &&
-              typeof entry.ask === "string",
-          )
-          .map((entry) => ({
-            agent: entry.agent as string,
-            ask: entry.ask as string,
-          }))
-      : undefined;
+    const postId =
+      typeof record?.post === "string" ? record.post : undefined;
     return {
       icon: MessageSquare,
       title: (
@@ -1150,9 +1140,12 @@ const CODER: Renderers<typeof GeneralEngineer> = {
         </>
       ),
       summary: running ? "waiting for the answers…" : undefined,
-      body: (
-        <MentionAskView text={String(input.text ?? "")} entries={entries} />
-      ),
+      body:
+        postId === undefined ? (
+          <Prose>{String(input.text ?? "")}</Prose>
+        ) : (
+          <PostThread id={postId} />
+        ),
     };
   },
   tell: (input) => ({

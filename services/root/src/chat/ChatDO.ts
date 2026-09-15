@@ -5,7 +5,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { inWorker } from "../platform/Database.ts";
-import { Asks, type AskNode } from "./Asks.ts";
+import { Posts, type Post } from "./Posts.ts";
 import { Calls, type CallUtterance, type CallView } from "./Call.ts";
 
 /**
@@ -27,19 +27,15 @@ import { Calls, type CallUtterance, type CallView } from "./Call.ts";
 const TAG = "calls";
 
 const TABLES = [
-  `CREATE TABLE IF NOT EXISTS asks (
+  `CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
     parent_id TEXT,
-    call_id TEXT,
-    asker TEXT NOT NULL,
-    target TEXT NOT NULL,
-    question TEXT NOT NULL,
-    answer TEXT,
+    author TEXT NOT NULL,
+    text TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'running',
-    at INTEGER NOT NULL,
-    answered_at INTEGER
+    at INTEGER NOT NULL
   )`,
-  `CREATE INDEX IF NOT EXISTS asks_parent ON asks (parent_id)`,
+  `CREATE INDEX IF NOT EXISTS posts_parent ON posts (parent_id)`,
   `CREATE TABLE IF NOT EXISTS calls (
     id TEXT PRIMARY KEY,
     topic TEXT NOT NULL,
@@ -64,17 +60,13 @@ const TABLES = [
   )`,
 ];
 
-interface AskRow extends Record<string, Cloudflare.SqlStorageValue> {
+interface PostRow extends Record<string, Cloudflare.SqlStorageValue> {
   id: string;
   parent_id: string | null;
-  call_id: string | null;
-  asker: string;
-  target: string;
-  question: string;
-  answer: string | null;
+  author: string;
+  text: string;
   status: string;
   at: number;
-  answered_at: number | null;
 }
 
 interface CallRow extends Record<string, Cloudflare.SqlStorageValue> {
@@ -94,42 +86,45 @@ interface UtteranceRow extends Record<string, Cloudflare.SqlStorageValue> {
   at: number;
 }
 
-const toNode = (row: AskRow): AskNode => ({
+const toPost = (row: PostRow): Post => ({
   id: row.id,
   ...(row.parent_id === null ? {} : { parent: row.parent_id }),
-  ...(row.call_id === null ? {} : { call: row.call_id }),
-  asker: row.asker,
-  target: row.target,
-  question: row.question,
-  ...(row.answer === null ? {} : { answer: row.answer }),
-  status: row.status as AskNode["status"],
+  author: row.author,
+  text: row.text,
+  status: row.status as Post["status"],
   at: row.at,
   children: [],
 });
 
 interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
-  // ── the ask tree ──
-  readonly askOpen: (input: {
+  // ── the post tree ──
+  readonly postWrite: (input: {
     readonly id: string;
     readonly parent?: string;
-    readonly call?: string;
-    readonly asker: string;
-    readonly target: string;
-    readonly question: string;
+    readonly author: string;
+    readonly text: string;
+    readonly status?: Post["status"];
   }) => Effect.Effect<void, never, RuntimeContext>;
-  readonly askSettle: (
+  readonly postSettle: (
     id: string,
-    status: "answered" | "failed",
-    answer: string,
+    status: Post["status"],
   ) => Effect.Effect<void, never, RuntimeContext>;
-  /** The SUBTREE under one ask (children nested, chronological). */
-  readonly askTree: (
+  /** The SUBTREE under one post (children nested, chronological). */
+  readonly postTree: (
     id: string,
-  ) => Effect.Effect<AskNode | undefined, never, RuntimeContext>;
-  /** Root asks (no parent), newest first — the company's activity. */
-  readonly askRoots: (
+  ) => Effect.Effect<Post | undefined, never, RuntimeContext>;
+  /** The chain ABOVE one post — root first, ending with the post. */
+  readonly postAncestors: (
+    id: string,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly id: string; readonly author: string }>,
+    never,
+    RuntimeContext
+  >;
+  /** Root posts (no parent), newest first — the company's activity. */
+  readonly postRoots: (
     limit?: number,
-  ) => Effect.Effect<ReadonlyArray<AskNode>, never, RuntimeContext>;
+  ) => Effect.Effect<ReadonlyArray<Post>, never, RuntimeContext>;
 
   // ── calls ──
   readonly open: (input: {
@@ -247,52 +242,48 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           ),
         ),
 
-        askOpen: Effect.fn(function* (input) {
+        postWrite: Effect.fn(function* (input) {
           const at = yield* Clock.currentTimeMillis;
           yield* sql.exec(
-            `INSERT OR IGNORE INTO asks
-              (id, parent_id, call_id, asker, target, question, status, at)
-             VALUES (?, ?, ?, ?, ?, ?, 'running', ?)`
+            `INSERT OR IGNORE INTO posts
+              (id, parent_id, author, text, status, at)
+             VALUES (?, ?, ?, ?, ?, ?)`
               .trim()
               .replaceAll(/\s+/g, " "),
             input.id,
             input.parent ?? null,
-            input.call ?? null,
-            input.asker,
-            input.target,
-            input.question,
+            input.author,
+            input.text,
+            input.status ?? "running",
             at,
           );
         }),
 
-        askSettle: Effect.fn(function* (id, status, answer) {
-          const at = yield* Clock.currentTimeMillis;
+        postSettle: Effect.fn(function* (id, status) {
           yield* sql.exec(
-            "UPDATE asks SET status = ?, answer = ?, answered_at = ? WHERE id = ?",
+            "UPDATE posts SET status = ? WHERE id = ?",
             status,
-            answer,
-            at,
             id,
           );
         }),
 
-        askTree: Effect.fn(function* (id) {
+        postTree: Effect.fn(function* (id) {
           // the subtree, assembled in memory — chains are hop-budgeted
           // (MAX_HOPS), so a tree is small by construction
-          const rows = yield* (yield* sql.exec<AskRow>(
+          const rows = yield* (yield* sql.exec<PostRow>(
             `WITH RECURSIVE tree (id) AS (
                SELECT ? UNION ALL
-               SELECT asks.id FROM asks JOIN tree ON asks.parent_id = tree.id
+               SELECT posts.id FROM posts JOIN tree ON posts.parent_id = tree.id
              )
-             SELECT asks.* FROM asks JOIN tree ON asks.id = tree.id
-             ORDER BY asks.at ASC`
+             SELECT posts.* FROM posts JOIN tree ON posts.id = tree.id
+             ORDER BY posts.at ASC`
               .trim()
               .replaceAll(/\s+/g, " "),
             id,
           )).toArray();
-          const nodes = new Map<string, AskNode & { children: AskNode[] }>();
+          const nodes = new Map<string, Post & { children: Post[] }>();
           for (const row of rows) {
-            nodes.set(row.id, { ...toNode(row), children: [] });
+            nodes.set(row.id, { ...toPost(row), children: [] });
           }
           for (const node of nodes.values()) {
             if (node.parent !== undefined) {
@@ -302,12 +293,29 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           return nodes.get(id);
         }),
 
-        askRoots: Effect.fn(function* (limit) {
-          const rows = yield* (yield* sql.exec<AskRow>(
-            "SELECT * FROM asks WHERE parent_id IS NULL ORDER BY at DESC LIMIT ?",
+        postAncestors: Effect.fn(function* (id) {
+          const rows = yield* (yield* sql.exec<PostRow>(
+            `WITH RECURSIVE chain (id, depth) AS (
+               SELECT ?, 0 UNION ALL
+               SELECT posts.parent_id, chain.depth + 1
+               FROM posts JOIN chain ON posts.id = chain.id
+               WHERE posts.parent_id IS NOT NULL AND chain.depth < 32
+             )
+             SELECT posts.* FROM posts JOIN chain ON posts.id = chain.id
+             ORDER BY chain.depth DESC`
+              .trim()
+              .replaceAll(/\s+/g, " "),
+            id,
+          )).toArray();
+          return rows.map((row) => ({ id: row.id, author: row.author }));
+        }),
+
+        postRoots: Effect.fn(function* (limit) {
+          const rows = yield* (yield* sql.exec<PostRow>(
+            "SELECT * FROM posts WHERE parent_id IS NULL ORDER BY at DESC LIMIT ?",
             limit ?? 50,
           )).toArray();
-          return rows.map(toNode);
+          return rows.map(toPost);
         }),
 
         open: Effect.fn(function* (input) {
@@ -395,19 +403,19 @@ export const CallsLive: Layer.Layer<Calls, never, Cloudflare.Worker> =
     }),
   );
 
-/** The {@link Asks} facade over the same DO. */
-export const AsksLive: Layer.Layer<Asks, never, Cloudflare.Worker> =
+/** The {@link Posts} facade over the same DO. */
+export const PostsLive: Layer.Layer<Posts, never, Cloudflare.Worker> =
   Layer.effect(
-    Asks,
+    Posts,
     Effect.gen(function* () {
       const namespace = yield* ChatDOLive;
       const stub = () => namespace.getByName(MAIN);
-      return Asks.of({
-        open: (input) => inWorker(stub().askOpen(input)),
-        settle: (id, status, answer) =>
-          inWorker(stub().askSettle(id, status, answer)),
-        tree: (id) => inWorker(stub().askTree(id)),
-        roots: (limit) => inWorker(stub().askRoots(limit)),
+      return Posts.of({
+        post: (input) => inWorker(stub().postWrite(input)),
+        settle: (id, status) => inWorker(stub().postSettle(id, status)),
+        tree: (id) => inWorker(stub().postTree(id)),
+        ancestors: (id) => inWorker(stub().postAncestors(id)),
+        roots: (limit) => inWorker(stub().postRoots(limit)),
       });
     }),
   );

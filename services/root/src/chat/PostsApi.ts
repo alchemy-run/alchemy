@@ -3,47 +3,45 @@ import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Asks } from "./Asks.ts";
+import { Posts } from "./Posts.ts";
 
 /**
- * The ASK TREE's wire — what the UI's reddit-style thread rendering
- * reads:
+ * The company's conversation, read-only — one shape, one recursion:
  *
- * - `GET /api/asks`          — root asks, newest first (`?limit=`)
- * - `GET /api/asks/:id/tree` — one ask's SUBTREE, children nested
- *   (an ask card polls its subtree while the chain runs)
+ * - `GET /api/posts`      — the newest root posts (`?limit=`)
+ * - `GET /api/posts/:id`  — one post and everything beneath it
  */
-export const AsksApi = Effect.gen(function* () {
-  const asks = yield* Asks;
+export const PostsApi = Effect.gen(function* () {
+  const posts = yield* Posts;
 
   return Layer.mergeAll(
     HttpRouter.add(
       "GET",
-      "/api/asks",
+      "/api/posts",
       Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const limit = new URL(request.url, "http://worker").searchParams.get(
           "limit",
         );
         return yield* HttpServerResponse.json({
-          asks: yield* asks.roots(
-            limit === null ? undefined : Number(limit) || undefined,
-          ),
+          posts: yield* posts.roots(limit === null ? undefined : Number(limit)),
         });
       }),
     ),
     HttpRouter.add(
       "GET",
-      "/api/asks/:id/tree",
+      "/api/posts/:id",
       Effect.gen(function* () {
         const params = yield* HttpRouter.params;
-        const tree = yield* asks.tree(String(params.id ?? ""));
-        return tree === undefined
+        const post = yield* posts.tree(
+          decodeURIComponent(String(params.id ?? "")),
+        );
+        return post === undefined
           ? yield* HttpServerResponse.json(
-              { error: "no such ask" },
+              { error: "no such post" },
               { status: 404 },
             )
-          : yield* HttpServerResponse.json(tree);
+          : yield* HttpServerResponse.json(post);
       }),
     ),
   );
