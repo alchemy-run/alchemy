@@ -191,6 +191,9 @@
       "path": "./examples/stripe-billing/tsconfig.json"
     },
     {
+      "path": "./examples/stripe-connect/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-app/tsconfig.json"
     },
     {

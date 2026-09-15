@@ -3,18 +3,17 @@ title: Sell from a Worker
 description: Read the catalog and create customers over HTTP from a Cloudflare Worker.
 ---
 
-You want a Worker that returns the live Product and creates
-Customers. Put the catalog on the Worker, bind `RetrieveProduct` and
-`CreateCustomer`, and provide the `*Http` layers on the Worker
-Effect.
+You want a Worker that returns the live Product and creates Customers.
+Put the catalog on the Worker, bind `RetrieveProduct` and
+`CreateCustomer`, and provide the `*Http` layers on the Worker Effect.
+
+## Bind the catalog
 
 ```typescript
 // src/api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
@@ -29,51 +28,75 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
     return {
       fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        if (request.url.startsWith("/product")) {
-          const live = yield* retrieveProduct().pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({
-            id: live.id,
-            name: live.name,
-          });
-        }
-        if (
-          request.method === "POST" &&
-          request.url.startsWith("/customers")
-        ) {
-          const body = (yield* request.json) as { email?: string };
-          if (!body.email) {
-            return yield* HttpServerResponse.json(
-              { error: "email is required" },
-              { status: 400 },
-            );
-          }
-          const customer = yield* createCustomer({
-            email: body.email,
-          }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { id: customer.id, email: customer.email },
-            { status: 201 },
-          );
-        }
-        return HttpServerResponse.text("ok");
+        // routes below
       }),
     };
-  }).pipe(
-    Effect.provide([
-      Stripe.RetrieveProductHttp,
-      Stripe.CreateCustomerHttp,
-    ]),
-  ),
+  }),
 ) {}
 ```
 
-Yield the Worker from the Stack with
-`Layer.mergeAll(Cloudflare.providers(), Stripe.providers())`.
+`Stripe.Product` declares the catalog item on this Worker. The
+`retrieveProduct` and `createCustomer` bindings are the runtime clients
+your routes will call.
 
-`RetrieveProduct(product)` is request-scoped — call it from `fetch`,
-not at plan time. Provide every `*Http` layer with
-`Effect.provide([...])` on the Worker Effect, not the Stack.
+## Serve the product
+
+```typescript
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+// inside the Worker's fetch
+const request = yield* HttpServerRequest;
+if (request.url.startsWith("/product")) {
+  const live = yield* retrieveProduct().pipe(Effect.orDie);
+  return yield* HttpServerResponse.json({
+    id: live.id,
+    name: live.name,
+  });
+}
+```
+
+`retrieveProduct()` is request-scoped — call it from `fetch`, not at
+plan time.
+
+## Create customers
+
+```typescript
+if (request.method === "POST" && request.url.startsWith("/customers")) {
+  const body = (yield* request.json) as { email?: string };
+  if (!body.email) {
+    return yield* HttpServerResponse.json(
+      { error: "email is required" },
+      { status: 400 },
+    );
+  }
+  const customer = yield* createCustomer({
+    email: body.email,
+  }).pipe(Effect.orDie);
+  return yield* HttpServerResponse.json(
+    { id: customer.id, email: customer.email },
+    { status: 201 },
+  );
+}
+```
+
+`createCustomer` takes the Stripe request body directly and returns the
+new customer.
+
+## Provide the HTTP layers
+
+```typescript
+}).pipe(
+  Effect.provide([
+    Stripe.RetrieveProductHttp,
+    Stripe.CreateCustomerHttp,
+  ]),
+)
+```
+
+Provide every `*Http` layer on the Worker Effect, not the Stack. Yield
+the Worker from the Stack with
+`Layer.mergeAll(Cloudflare.providers(), Stripe.providers())`.
 
 The host gets a [`RestrictedApiKey`](/providers/stripe/restrictedapikey)
 named `{Worker}StripeToken`. Permissions come from each capability

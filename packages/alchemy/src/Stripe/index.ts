@@ -10,6 +10,8 @@ export * from "./BillingPortalConfiguration.ts";
 export * from "./Coupon.ts";
 export * from "./CreateAccount.ts";
 export * from "./CreateAccountHttp.ts";
+export * from "./CreateAccountLink.ts";
+export * from "./CreateAccountLinkHttp.ts";
 export * from "./CreateAppsSecret.ts";
 export * from "./CreateAppsSecretHttp.ts";
 export * from "./CreateCreditGrant.ts";
