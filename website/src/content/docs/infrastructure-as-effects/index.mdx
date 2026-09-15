@@ -4,11 +4,15 @@ description: One Effect program models both your runtime code and the infrastruc
 ---
 
 Infrastructure as Effects is Alchemy's model for building
-applications. The code that runs inside a Worker or Lambda Function
-and the infrastructure it runs on are one Effect program. A
-**Runtime**, such as a Worker, is a
-[Resource](/infrastructure-as-code/resource) that carries its own
-code, and the resources it uses are wired in as typed values:
+applications, layered on top of its
+[Infrastructure as Code](/infrastructure-as-code/stack) engine. The
+code that runs inside a Worker or Lambda Function and the
+infrastructure it runs on are one Effect program. A **Runtime**, such
+as a Worker, is a [Resource](/infrastructure-as-code/resource) that
+carries its own code, and the resources it uses are wired in as typed
+values. This page is the map of the section, using one running
+example — the same Worker that opens
+[What is Alchemy?](/what-is-alchemy):
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -37,79 +41,37 @@ export default Cloudflare.Worker(
 
 Traditional IaC splits this in two. One file declares the bucket and
 the Worker. Another file is the code the Worker runs, reaching for the
-bucket through its environment. Alchemy supports that shape too:
-
-```typescript
-// alchemy.run.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-
-export const Uploads = Cloudflare.R2.Bucket("Uploads");
-
-export const Api = Cloudflare.Worker("Api", {
-  main: "./src/api.ts",
-  env: { Uploads },
-});
-
-export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
-```
-
-```typescript
-// src/api.ts
-import type { ApiEnv } from "../alchemy.run.ts";
-
-export default {
-  async fetch(request: Request, env: ApiEnv) {
-    const obj = await env.Uploads.get("hello.txt");
-    return obj
-      ? new Response(await obj.text())
-      : new Response("Not found", { status: 404 });
-  },
-};
-```
-
-Two files, held together by the name `Uploads`. The Effect form above
-is those two files as one. `bucket` is a value the handler closes over,
-and the code that uses the bucket sits next to the line that declares
-it.
+bucket through an environment variable — two files held together by a
+name, with nothing checking that they agree. Alchemy fully supports
+that shape too ([What is Alchemy?](/what-is-alchemy#a-superset-of-infrastructure-as-code)
+shows it side by side). The Effect form above is those two files as
+one: `bucket` is a value the handler closes over, and the code that
+uses the bucket sits next to the line that declares it.
 
 Everything in this section is in that one Worker. Here is the map.
 
 ## Runtimes carry their code
 
-`Cloudflare.Worker` is a **Runtime**. Its props are the cloud
-configuration, and `main: import.meta.url` tells Alchemy to bundle
-this file's default export as the Worker's code. The Effect is that
-code, and it always has the same shape:
-
-```typescript
-Effect.gen(function* () {
-  // bind what you need
-  const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
-
-  // return what you expose
-  return { fetch: /* ... */ };
-});
-```
-
-[Runtime](/infrastructure-as-effects/runtime) covers that shape, the
-`fetch` and RPC interface it returns, and the three ways to declare
-one.
+`Cloudflare.Worker` is a **Runtime**: a Resource whose props are the
+cloud configuration and whose Effect is the code it runs.
+`main: import.meta.url` tells Alchemy to bundle this file's default
+export as the Worker's script. The Effect always has the same shape —
+bind what you need, then return what you expose — and a Worker, a
+Lambda Function, a Durable Object, and a Workflow are all variations
+on it. [Runtime](/infrastructure-as-effects/runtime) covers that
+shape, the `fetch` and RPC interface it returns, and the three ways to
+declare one.
 
 ## Bindings wire resources in
 
 `yield* Cloudflare.R2.ReadWriteBucket(Uploads)` is a **Binding**. It
 hands back a typed client and generates whatever the client needs to
-work: a native binding on Cloudflare, an IAM statement and an
-environment variable on AWS:
-
-```typescript
-const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
-// → { Action: ["dynamodb:GetItem"], Resource: [Jobs.tableArn] }
-// → Jobs_tableName=Jobs-a1b2c3
-```
-
-There is no `env.Uploads` to reach for. The binding is the SDK. See
-[Bindings](/infrastructure-as-effects/binding) for how they work.
+work: a native binding on Cloudflare, an IAM statement scoped to the
+one resource plus an environment variable on AWS. There is no
+`env.Uploads` to reach for and no hand-written policy — the binding is
+the SDK. [Bindings](/infrastructure-as-effects/binding) follows one
+binding through the permissions, configuration, and client it
+generates.
 
 An [Event Source](/infrastructure-as-effects/event-sources) is a
 Binding that runs an Effect or `Stream` in the background, whenever

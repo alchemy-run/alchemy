@@ -98,18 +98,22 @@ Stack with a Bucket, a KV Namespace, and a Worker bound to both:
 
 <DeployTerminal client:visible />
 
-`state` is where the result persists between runs, so the next deploy
-only touches what changed. [Stacks](/infrastructure-as-code/stack)
-covers stages, outputs, and state.
+**State** is where the result persists between runs, so the next
+deploy only touches what changed — the `state` option above picks
+where it's stored.
+
+:::note
+[Stacks](/infrastructure-as-code/stack) covers stages, outputs, and
+state.
+:::
 
 A **Resource** is a cloud entity in a Stack managed by Alchemy: a
-bucket, a database, a queue, a Worker, a DNS record. Declare it, then
-yield it in the Stack to add it to the plan:
+bucket, a database, a queue, a Worker, a DNS record. Yield it in the
+Stack to add it to the plan:
 
 ```typescript
-export const Uploads = Cloudflare.R2.Bucket("Uploads");
-
-const bucket = yield* Uploads; // bucket.bucketName is an Output
+const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+// bucket.bucketName is an Output
 ```
 
 Each Resource has a logical id, `"Uploads"` here, that Alchemy uses to
@@ -118,7 +122,7 @@ into other Resources. Here the physical bucket name Alchemy generated
 becomes an environment variable on a Worker:
 
 ```typescript
-const bucket = yield* Uploads;
+const bucket = yield* Cloudflare.R2.Bucket("Uploads");
 
 yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
@@ -197,10 +201,10 @@ dependency graph, which most IaC tools reject. See
 
 ## Infrastructure as Effects
 
-Infrastructure as Effects is what Alchemy adds on top of
-Infrastructure as Code.
-A **Runtime** is a Resource that carries the code it runs: a Worker, Lambda Function, Container, or Server.
-That code is always written the same way, as an **Effectful
+Infrastructure as Effects adds two new concepts to Infrastructure as
+Code: **Runtimes** and **Bindings**. A Runtime is a Resource that
+carries the code it runs: a Worker, Lambda Function, Container, or
+Server. That code is always written the same way, as an **Effectful
 Constructor**. Bind what you need, then return what you expose:
 
 ```typescript
@@ -213,10 +217,8 @@ Effect.gen(function* () {
 });
 ```
 
-The outer Effect is the Construction phase. It runs at deploy time,
-where the bindings are recorded, and again at cold start, where they
-become live clients. What it returns is the Runtime phase, the handlers
-that run per request. A Worker returns `fetch`, a Durable Object
+The outer Effect runs at deploy time and at cold start; what it
+returns runs per request. A Worker returns `fetch`, a Durable Object
 returns its RPC methods, a Workflow returns its run function, and
 every Runtime in Alchemy is a variation on that one shape.
 
@@ -248,24 +250,10 @@ through the permissions, configuration, and client it generates.
 A Binding is a contract plus a **Layer** that implements it, which is
 why `ReadWriteBucketBinding` can be swapped for `ReadWriteBucketHttp`
 without touching the handler. The same split works for services of
-your own. Put resources and bindings behind a service, and the handler
-depends on the service alone:
-
-```typescript
-Effect.gen(function* () {
-  const jobs = yield* JobService;
-
-  return {
-    fetch: Effect.gen(function* () {
-      return HttpServerResponse.json(yield* jobs.getJob("job-1"));
-    }),
-  };
-}).pipe(Effect.provide(JobServiceKV))
-```
-
-Provide `JobServiceKV` and a KV Namespace is created and bound.
-Provide a DynamoDB-backed Layer and a Table is instead. The handler
-doesn't change.
+your own: put resources and bindings behind a service, and the handler
+depends on the service alone. Provide a KV-backed Layer and a KV
+Namespace is created and bound; provide a DynamoDB-backed Layer and a
+Table is instead. The handler never changes.
 
 :::note
 [Layers](/infrastructure-as-effects/layers) builds one from scratch,
