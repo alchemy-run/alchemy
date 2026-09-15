@@ -1550,10 +1550,11 @@ const ChatTranscript = ({
                     return (
                       <div key={key} className="py-0.5">
                         {askId !== undefined ? (
-                          <AskThread id={askId} />
+                          <AskThread id={askId} speaker={author.name} />
                         ) : (
                           <AskComment
                             depth={0}
+                            speaker={author.name}
                             node={{
                               id: tool.toolCallId,
                               asker: author.name,

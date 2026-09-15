@@ -85,6 +85,33 @@ const Who = ({ name, avatar = true }: { name: string; avatar?: boolean }) => {
   );
 };
 
+/** WHO a question is directed at — the discord mention: `@reviewer`,
+ *  accent-washed, clicking opens the target's session. */
+const Mention = ({ name }: { name: string }) => {
+  const session = sessionOf(name);
+  return (
+    <button
+      type="button"
+      disabled={session === undefined}
+      onClick={
+        session === undefined
+          ? undefined
+          : (event) => {
+              event.stopPropagation();
+              showOverlay({ kind: "agent", id: session });
+            }
+      }
+      title={session === undefined ? undefined : `open ${name}'s session`}
+      className={cn(
+        "shrink-0 rounded bg-primary/15 px-1 font-mono text-[11px] font-medium text-primary",
+        session !== undefined && "cursor-pointer hover:bg-primary/25",
+      )}
+    >
+      @{name}
+    </button>
+  );
+};
+
 /** Markdown clamped to a few lines, expanding in place — succinct
  *  first, the full text one click away. */
 const Clamped = ({ text, lines = 3 }: { text: string; lines?: number }) => {
@@ -126,21 +153,26 @@ const Clamped = ({ text, lines = 3 }: { text: string; lines?: number }) => {
   );
 };
 
-/** One COMMENT: gutter (avatar + fold line) beside content. */
+/** One COMMENT: gutter (avatar + fold line) beside content. The
+ *  avatar is omitted when the author is already established by the
+ *  enclosing context (the message row, the parent's answer) — the
+ *  gutter keeps its width so the fold line and indentation hold. */
 const Comment = ({
   author,
   header,
   children,
   onFold,
 }: {
-  author: string;
+  author?: string;
   header: ReactNode;
   children?: ReactNode;
   onFold?: () => void;
 }) => (
   <div className="flex min-w-0 gap-2">
     <div className="flex w-[18px] shrink-0 flex-col items-center gap-1">
-      <Avatar name={author} kind="agent" size={18} />
+      {author !== undefined && (
+        <Avatar name={author} kind="agent" size={18} />
+      )}
       {children !== undefined && (
         <button
           type="button"
@@ -163,9 +195,11 @@ const Comment = ({
 /** A folded branch — one row, reddit's "N replies". */
 const Folded = ({
   node,
+  speaker,
   onOpen,
 }: {
   node: AskNode;
+  speaker?: string;
   onOpen: () => void;
 }) => {
   const replies = replyCount(node);
@@ -176,8 +210,15 @@ const Folded = ({
       className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded py-0.5 text-left hover:bg-accent/60"
     >
       <CirclePlus className="size-3.5 shrink-0 text-muted-foreground" />
-      <Avatar name={node.asker} kind="agent" size={16} />
-      <span className="font-mono text-[11px] font-medium">{node.asker}</span>
+      {node.asker !== speaker && (
+        <>
+          <Avatar name={node.asker} kind="agent" size={16} />
+          <span className="font-mono text-[11px] font-medium">
+            {node.asker}
+          </span>
+        </>
+      )}
+      <Mention name={node.target} />
       <span className="min-w-0 truncate text-[12px] text-muted-foreground">
         {node.title ?? firstLineOf(node.question)}
       </span>
@@ -194,33 +235,40 @@ const Folded = ({
   );
 };
 
-/** One ask as a comment SUBTREE: the question (titled, clamped), the
- *  asks made while answering nested under it, the answer closing the
- *  node — exactly the order the conversation happened. */
+/** One ask as a comment SUBTREE: the question (titled, clamped, aimed
+ *  with an @mention), the asks made while answering nested under it,
+ *  the answer closing the node — exactly the order the conversation
+ *  happened. `speaker` is the voice the context has already
+ *  established (the message's author, or the parent node's target):
+ *  a node speaking in that voice does not restate it. */
 export const AskComment = ({
   node,
   depth,
+  speaker,
 }: {
   node: AskNode;
   depth: number;
+  /** The already-established voice — suppresses a redundant author. */
+  speaker?: string;
 }) => {
   const [folded, setFolded] = useState(depth >= AUTO_FOLD_DEPTH);
 
   if (folded) {
-    return <Folded node={node} onOpen={() => setFolded(false)} />;
+    return (
+      <Folded node={node} speaker={speaker} onOpen={() => setFolded(false)} />
+    );
   }
+  const restated = node.asker !== speaker;
   return (
     <Comment
-      author={node.asker}
+      author={restated ? node.asker : undefined}
       onFold={() => setFolded(true)}
       header={
         <div className="flex min-w-0 items-center gap-1.5">
-          <Who name={node.asker} avatar={false} />
+          {restated && <Who name={node.asker} avatar={false} />}
+          <Mention name={node.target} />
           <span className="min-w-0 truncate text-[13px] font-medium">
             {node.title ?? firstLineOf(node.question)}
-          </span>
-          <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">
-            → {node.target}
           </span>
           {node.status === "running" && (
             <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
@@ -244,8 +292,15 @@ export const AskComment = ({
         node.answer !== undefined ||
         node.status === "running") && (
         <div className="flex min-w-0 flex-col gap-1 pt-1.5">
+          {/* asks the TARGET made while answering — its voice is now
+              the established one, so its own nodes don't restate it */}
           {node.children.map((child) => (
-            <AskComment key={child.id} node={child} depth={depth + 1} />
+            <AskComment
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              speaker={node.target}
+            />
           ))}
           {node.answer !== undefined ? (
             <Comment
@@ -279,8 +334,16 @@ export const AskComment = ({
   );
 };
 
-/** The live subtree under one ask id — polls while any node runs. */
-export const AskThread = ({ id }: { id: string }) => {
+/** The live subtree under one ask id — polls while any node runs.
+ *  `speaker` is the enclosing message's author (the ROOT asker), so
+ *  the top node reads as "@target · title", not a self-reply. */
+export const AskThread = ({
+  id,
+  speaker,
+}: {
+  id: string;
+  speaker?: string;
+}) => {
   const [tree, setTree] = useState<AskNode | undefined>(undefined);
 
   useEffect(() => {
@@ -310,5 +373,5 @@ export const AskThread = ({ id }: { id: string }) => {
       <div className="text-[11px] text-muted-foreground">loading the chain…</div>
     );
   }
-  return <AskComment node={tree} depth={0} />;
+  return <AskComment node={tree} depth={0} speaker={speaker} />;
 };
