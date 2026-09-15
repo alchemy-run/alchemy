@@ -21,7 +21,7 @@ import { ReadTools, RunTools } from "./coding/Toolbox.ts";
 import { GeneralEngineer } from "./engineering/Engineer.ts";
 import { ColleaguesLive, EngineeringChart } from "./engineering/Group.ts";
 import { EngineeringManagerLive } from "./engineering/Manager.ts";
-import { TriagePump } from "./engineering/Triage.ts";
+import { GeneralReviewer } from "./engineering/Reviewer.ts";
 import { TasksLive, TriageLive } from "./engineering/TriageDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
@@ -93,6 +93,23 @@ const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(SessionRepoLive),
 );
 
+/** The REVIEWER — the quality gate: the same hands as the engineer
+ *  (review by running; self-improvement PRs), plus the proposal tools
+ *  (READY is filing the merge proposal) and workspaces of its own. */
+const ReviewerWorker = GeneralReviewer.pipe(
+  Layer.provide([PushBranchLive, OpenPullRequestLive]),
+  Layer.provide(PublishTokenLive),
+  Layer.provide(Conversation),
+  Layer.provide(ProposalsLive),
+  Layer.provide(WorkspaceAgentLive),
+  Layer.provide(Editor),
+  Layer.provide(Guidance),
+  Layer.provide(Toolbox),
+  Layer.provide(Spill),
+  Layer.provide(SandboxSession),
+  Layer.provide(SessionRepoLive),
+);
+
 /** The MANAGER — the head of the engineering team: the triage queue,
  *  the task ledger, spawn/workspaces, proposals, conversation. */
 const ManagerWorker = EngineeringManagerLive.pipe(
@@ -109,6 +126,7 @@ const ManagerWorker = EngineeringManagerLive.pipe(
 const EngineeringLive = EngineeringChart.pipe(
   Layer.provide(ManagerWorker),
   Layer.provide(EngineerWorker),
+  Layer.provide(ReviewerWorker),
 );
 
 /** The PRODUCT MANAGER — the #product channel's resident: accepts the
@@ -137,15 +155,20 @@ const HeadWorker = Layer.suspend(() => HeadLive).pipe(
   Layer.provide(SessionRepoLive),
 );
 
-/** INGEST: GitHub events → the triage queue → the manager. */
-const IngestWorker = TriagePump.pipe(
-  Layer.provide(ManagerWorker),
-  Layer.provide(TriageLive),
-  // a REAL webhook: deploy provisions it against the Worker's URL;
-  // under `alchemy dev` the local provider polls GitHub and posts the
-  // same deliveries to the local Worker
-  Layer.provide(Cloudflare.GitHubRepositoryEventSourceLive),
-);
+// INGEST: GitHub events → the triage queue → the manager.
+// DISABLED for now (operator's call): the review loop is being
+// exercised on self-initiated tasks only — no forwarding of real
+// issues/pull requests. Re-enable by restoring TriagePump here (and
+// its import) and adding IngestWorker back into the Company merge.
+//
+// const IngestWorker = TriagePump.pipe(
+//   Layer.provide(ManagerWorker),
+//   Layer.provide(TriageLive),
+//   // a REAL webhook: deploy provisions it against the Worker's URL;
+//   // under `alchemy dev` the local provider polls GitHub and posts
+//   // the same deliveries to the local Worker
+//   Layer.provide(Cloudflare.GitHubRepositoryEventSourceLive),
+// );
 
 /**
  * The ROUTER runs at the Worker level, where no session workspace
@@ -181,8 +204,8 @@ const Company = Layer.mergeAll(
   ProductManagerWorker,
   ManagerWorker,
   EngineerWorker,
+  ReviewerWorker,
   WorkspaceWorker,
-  IngestWorker,
   Conversation,
   // the routes' own reads: colleague addresses (CallsApi), stores
   ColleaguesLive,

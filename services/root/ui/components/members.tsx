@@ -88,6 +88,13 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
             session: "EngineeringManager:root::engineering-manager",
             detail: "runs this channel",
           },
+          {
+            name: "reviewer",
+            kind: "agent",
+            online: true,
+            session: "Reviewer:root::reviewer",
+            detail: "the quality gate",
+          },
         ]
       : channel === "product"
         ? [

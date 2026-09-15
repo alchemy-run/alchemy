@@ -6,6 +6,7 @@ import { ProductChart } from "../product/Group.ts";
 import { lineage, ROOT } from "../Root.ts";
 import { Engineer } from "./Engineer.ts";
 import { EngineeringManager } from "./Manager.ts";
+import { Reviewer } from "./Reviewer.ts";
 
 /**
  * The ENGINEERING GROUP — declared like everything else (`AI.Group`):
@@ -31,6 +32,9 @@ export const EngineeringChart = Engineering.make`
   task ledger, and stages clean merge proposals for the humans.
   ${Engineer} is its worker — the coding skill-set given hands —
   staffed onto tasks by the manager, one workspace each.
+  ${Reviewer} is its quality gate: engineers ask it to review their
+  pull requests; it iterates with them until the work meets the
+  standard, then files the merge proposal the humans decide.
 `;
 
 /**
@@ -59,6 +63,7 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
       "head",
       ...members.map((member) => member.slug),
       "e-<id> (a spawned engineer)",
+      "r-<id> (a parallel reviewer session)",
     ];
     return Colleagues.of({
       resolve: (name) =>
@@ -71,6 +76,15 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
             return {
               name: slug,
               term: Engineer["~alchemy/Name"],
+              key: lineage(slug),
+            };
+          }
+          // parallel review sessions — one reviewer TERM, a session
+          // per name, so four engineers never queue on one context
+          if (/^r-[a-z0-9]+$/.test(slug)) {
+            return {
+              name: slug,
+              term: Reviewer["~alchemy/Name"],
               key: lineage(slug),
             };
           }
