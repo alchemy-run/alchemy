@@ -89,15 +89,25 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
             detail: "runs this channel",
           },
         ]
-      : [
-          {
-            name: "head",
-            kind: "agent",
-            online: true,
-            session: "Head:root",
-            detail: "runs this channel",
-          },
-        ];
+      : channel === "product"
+        ? [
+            {
+              name: "product-manager",
+              kind: "agent",
+              online: true,
+              session: "ProductManager:root::product-manager",
+              detail: "runs this channel",
+            },
+          ]
+        : [
+            {
+              name: "head",
+              kind: "agent",
+              online: true,
+              session: "Head:root",
+              detail: "runs this channel",
+            },
+          ];
 
   // engineers surface while the ledger has them on work — done work
   // ages them out of the list, exactly like leaving the room

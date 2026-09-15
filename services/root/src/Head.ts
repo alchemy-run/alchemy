@@ -5,6 +5,7 @@ import { Ask, Tell } from "./chat/Ask.ts";
 import { Call } from "./chat/Call.ts";
 import Engineering from "./engineering/Group.ts";
 import { makeEntityTools } from "./github/Entity.ts";
+import Product from "./product/Group.ts";
 import { models } from "./platform/Model.ts";
 import { makeProposalTools } from "./proposals/Propose.ts";
 import { makeWorkspaceTools } from "./sandbox/WorkspaceTools.ts";
@@ -55,7 +56,7 @@ export const HeadLive = Head.make(
           or process is a charter file, proposed as a pull request,
           merged by the human, self-deployed.
 
-          THE TEAM: ${Engineering}
+          THE TEAM: ${Engineering} ${Product}
 
           THE STRUCTURE IS CODE — never runtime state. Every role, its
           standing brief, its tools, and the team chart above are

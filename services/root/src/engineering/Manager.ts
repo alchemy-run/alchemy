@@ -27,14 +27,12 @@ import { Tasks, type TaskItem, type TaskStatus } from "./Tasks.ts";
  */
 export class EngineeringManager extends AI.Agent<
   EngineeringManager,
-  EngineeringManagerApi
+  {
+    /** The session's current pick; `undefined` = the org's default. */
+    readonly model: () => Effect.Effect<string | undefined>;
+    readonly setModel: (model: string | undefined) => Effect.Effect<void>;
+  }
 >(import.meta)("EngineeringManager") {}
-
-export interface EngineeringManagerApi {
-  /** The session's current pick; `undefined` = the org's default. */
-  readonly model: () => Effect.Effect<string | undefined>;
-  readonly setModel: (model: string | undefined) => Effect.Effect<void>;
-}
 
 const shortId = (): string => Math.random().toString(36).slice(2, 8);
 
@@ -223,9 +221,7 @@ export const EngineeringManagerLive = EngineeringManager.make(
             id: task.id,
             title: task.title,
             status: task.status,
-            ...(task.assignee !== undefined
-              ? { assignee: task.assignee }
-              : {}),
+            ...(task.assignee !== undefined ? { assignee: task.assignee } : {}),
             ...(task.workspace !== undefined
               ? { workspace: task.workspace }
               : {}),

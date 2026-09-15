@@ -2,18 +2,9 @@ import * as AI from "alchemy/AI";
 import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
 import { OrgGuidance } from "../OrgGuidance.ts";
-import { ReadOutput } from "../artifacts/ReadOutput.ts";
-import { SessionRepo } from "../github/SessionRepo.ts";
-import { models } from "../platform/Model.ts";
-import { AwsEmulation } from "../process/AwsEmulation.ts";
-import { CloudflareEmulation } from "../process/CloudflareEmulation.ts";
-import { Distillation } from "../process/Distillation.ts";
-import { ProviderEngineering } from "../process/ProviderEngineering.ts";
-import { PullRequests } from "../process/PullRequests.ts";
-import { Verification } from "../process/Verification.ts";
-import { defaultWorkspace } from "../sandbox/SessionTree.ts";
-import { Ask, Tell } from "../chat/Ask.ts";
 import { ROOT } from "../Root.ts";
+import { ReadOutput } from "../artifacts/ReadOutput.ts";
+import { Ask, Tell } from "../chat/Ask.ts";
 import { Bash } from "../coding/Bash.ts";
 import { EditFile } from "../coding/EditFile.ts";
 import { Glob } from "../coding/Glob.ts";
@@ -23,6 +14,15 @@ import { OpenPullRequest } from "../coding/OpenPullRequest.ts";
 import { PushBranch } from "../coding/PushBranch.ts";
 import { ReadFile } from "../coding/ReadFile.ts";
 import { WriteFile } from "../coding/WriteFile.ts";
+import { SessionRepo } from "../github/SessionRepo.ts";
+import { models } from "../platform/Model.ts";
+import { AwsEmulation } from "../process/AwsEmulation.ts";
+import { CloudflareEmulation } from "../process/CloudflareEmulation.ts";
+import { Distillation } from "../process/Distillation.ts";
+import { ProviderEngineering } from "../process/ProviderEngineering.ts";
+import { PullRequests } from "../process/PullRequests.ts";
+import { Verification } from "../process/Verification.ts";
+import { defaultWorkspace } from "../sandbox/SessionTree.ts";
 
 /**
  * The CODER — a generic coding agent, the whole product in one file:
@@ -116,7 +116,9 @@ export const GeneralEngineer = Engineer.make(
       // model knows both its footing and its reach. Name only — never
       // a machine touch: the tree itself lands on the first tool call.
       const handedName = yield* defaultWorkspace;
-      const manager = thread.key.startsWith(`${ROOT}::`) ? "engineering-manager" : undefined;
+      const manager = thread.key.startsWith(`${ROOT}::`)
+        ? "engineering-manager"
+        : undefined;
 
       // the PR clause of the stance — a nested fragment so its PushBranch
       // mention counts (mention-is-presence rides splices, not strings)

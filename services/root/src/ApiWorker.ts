@@ -28,6 +28,8 @@ import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { HeadLive } from "./Head.ts";
 import { OrgDoctrine } from "./OrgGuidance.ts";
+import { ProductChart } from "./product/Group.ts";
+import { ProductManagerLive } from "./product/Manager.ts";
 import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
 import { AwsEmulationGeneral } from "./process/AwsEmulation.ts";
 import { CloudflareEmulationGeneral } from "./process/CloudflareEmulation.ts";
@@ -109,6 +111,17 @@ const EngineeringLive = EngineeringChart.pipe(
   Layer.provide(EngineerWorker),
 );
 
+/** The PRODUCT MANAGER — the #product channel's resident: accepts the
+ *  humans' product conversations, allocates them through asks. */
+const ProductManagerWorker = ProductManagerLive.pipe(
+  Layer.provide(Conversation),
+  Layer.provide([TriageLive, TasksLive]),
+  Layer.provide(SessionRepoLive),
+);
+
+/** The PRODUCT group — its chart over its members. */
+const ProductLive = ProductChart.pipe(Layer.provide(ProductManagerWorker));
+
 /** The WORKSPACE — one session per workspace: the machine-owning
  *  resource the company works in, the target of `/terminal/Workspace/…`. */
 const WorkspaceWorker = WorkspaceAgentLive.pipe(Layer.provide(SandboxSession));
@@ -116,6 +129,7 @@ const WorkspaceWorker = WorkspaceAgentLive.pipe(Layer.provide(SandboxSession));
 /** The HEAD — ⊤: the Root Thread's resident. */
 const HeadWorker = Layer.suspend(() => HeadLive).pipe(
   Layer.provide(EngineeringLive),
+  Layer.provide(ProductLive),
   Layer.provide(Conversation),
   Layer.provide(ProposalsLive),
   Layer.provide(WorkspaceWorker),
@@ -163,6 +177,8 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
 const Company = Layer.mergeAll(
   HeadWorker,
   EngineeringLive,
+  ProductLive,
+  ProductManagerWorker,
   ManagerWorker,
   EngineerWorker,
   WorkspaceWorker,
