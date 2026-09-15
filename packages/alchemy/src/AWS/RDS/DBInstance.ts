@@ -1,4 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -10,6 +12,11 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+  type PolicyDocument,
+} from "../IAM/Policy.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 
@@ -83,6 +90,15 @@ export interface DBInstanceProps {
    * KMS key used to encrypt the managed master user secret.
    */
   masterUserSecretKmsKeyId?: string;
+  /**
+   * Resource policy for this instance's RDS-managed master secret. RDS retains
+   * ownership of the secret value, rotation, and deletion. Requires a managed
+   * master secret and `secretsmanager:GetResourcePolicy` / `PutResourcePolicy`
+   * permissions. Public policies are rejected with `BlockPublicPolicy`.
+   *
+   * Omission leaves any existing policy unchanged and stops managing it.
+   */
+  masterUserSecretResourcePolicy?: PolicyDocument;
   /**
    * Listener port. In-place modify (sent as `DBPortNumber` on modify).
    */
@@ -399,6 +415,11 @@ export interface DBInstance extends Resource<
      */
     masterUserSecretArn: string | undefined;
     /**
+     * Canonical observed policy when `masterUserSecretResourcePolicy` is managed.
+     * Undefined when policy management is omitted or AWS reports no policy.
+     */
+    masterUserSecretResourcePolicy: string | undefined;
+    /**
      * Option group memberships.
      */
     optionGroupMemberships: string[];
@@ -472,6 +493,27 @@ export interface DBInstance extends Resource<
  * });
  * ```
  *
+ * ### Managed Master Secret Policy
+ * **Example:** Allow a role to read the RDS-managed master secret
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   allocatedStorage: 20,
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   masterUserSecretResourcePolicy: {
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { AWS: reader.roleArn },
+ *       Action: ["secretsmanager:GetSecretValue"],
+ *       Resource: "*",
+ *     }],
+ *   },
+ * });
+ * ```
+ *
  * @resource
  */
 export const DBInstance = Resource<DBInstance>("AWS.RDS.DBInstance");
@@ -506,12 +548,14 @@ const toAttrs = ({
   skipFinalSnapshot,
   finalDBSnapshotIdentifier,
   masterUserPasswordFingerprint,
+  masterUserSecretResourcePolicy,
 }: {
   instance: rds.DBInstance;
   tags: Record<string, string>;
   skipFinalSnapshot?: boolean | undefined;
   finalDBSnapshotIdentifier?: string | undefined;
   masterUserPasswordFingerprint?: Redacted.Redacted<string> | undefined;
+  masterUserSecretResourcePolicy?: string | undefined;
 }): DBInstance["Attributes"] => ({
   skipFinalSnapshot,
   finalDBSnapshotIdentifier,
@@ -554,6 +598,7 @@ const toAttrs = ({
   dbiResourceId: instance.DbiResourceId,
   masterUsername: instance.MasterUsername,
   masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
+  masterUserSecretResourcePolicy,
   optionGroupMemberships: (instance.OptionGroupMemberships ?? []).flatMap(
     (membership) =>
       membership.OptionGroupName ? [membership.OptionGroupName] : [],
@@ -586,6 +631,26 @@ const logExportDelta = (
     ...(DisableLogTypes.length > 0 ? { DisableLogTypes } : {}),
   };
 };
+
+class DBInstanceManagedSecretMissing extends Data.TaggedError(
+  "DBInstanceManagedSecretMissing",
+)<{
+  instanceId: string;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' has no RDS-managed master secret for its resource policy`;
+  }
+}
+
+class DBInstanceSecretPolicyPending extends Data.TaggedError(
+  "DBInstanceSecretPolicyPending",
+)<{
+  instanceId: string;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' managed-secret resource policy has not propagated`;
+  }
+}
 
 export const DBInstanceProvider = () =>
   Provider.effect(
@@ -649,6 +714,76 @@ export const DBInstanceProvider = () =>
         );
       });
 
+      const readMasterSecretPolicy = Effect.fn(function* (secretArn: string) {
+        const observed = yield* secretsmanager.getResourcePolicy({
+          SecretId: secretArn,
+        });
+        return observed.ResourcePolicy === undefined
+          ? undefined
+          : normalizePolicyDocument(observed.ResourcePolicy);
+      });
+
+      const reconcileMasterSecretPolicy = Effect.fn(function* (
+        instanceId: string,
+        instance: rds.DBInstance,
+        policy: PolicyDocument,
+      ) {
+        const managedSecret =
+          instance.MasterUserSecret?.SecretArn === undefined
+            ? yield* readInstance(instanceId).pipe(
+                Effect.flatMap((current) =>
+                  current?.MasterUserSecret?.SecretArn === undefined
+                    ? Effect.fail(
+                        new DBInstanceManagedSecretMissing({ instanceId }),
+                      )
+                    : Effect.succeed({
+                        instance: current,
+                        secretArn: current.MasterUserSecret.SecretArn,
+                      }),
+                ),
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "DBInstanceManagedSecretMissing",
+                  schedule: Schedule.fixed("5 seconds"),
+                  times: 10,
+                }),
+              )
+            : { instance, secretArn: instance.MasterUserSecret.SecretArn };
+        const desired = normalizePolicyDocument(policy);
+        const readPolicy = readMasterSecretPolicy(managedSecret.secretArn);
+        // RDS can report the managed ARN before Secrets Manager's metadata
+        // is visible. A missing secret is retried, never treated as no policy.
+        const observed = yield* readPolicy.pipe(
+          Effect.retry({
+            while: (error) => error._tag === "ResourceNotFoundException",
+            schedule: Schedule.fixed("5 seconds"),
+            times: 10,
+          }),
+        );
+        if (observed === desired)
+          return { instance: managedSecret.instance, policy: observed };
+        yield* secretsmanager.putResourcePolicy({
+          SecretId: managedSecret.secretArn,
+          ResourcePolicy: stringifyPolicyDocument(policy),
+          BlockPublicPolicy: true,
+        });
+        const appliedPolicy = yield* readPolicy.pipe(
+          Effect.flatMap((actual) =>
+            actual === desired
+              ? Effect.succeed(actual)
+              : Effect.fail(new DBInstanceSecretPolicyPending({ instanceId })),
+          ),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "DBInstanceSecretPolicyPending" ||
+              error._tag === "ResourceNotFoundException",
+            schedule: Schedule.fixed("5 seconds"),
+            times: 10,
+          }),
+        );
+        return { instance: managedSecret.instance, policy: appliedPolicy };
+      });
+
       return {
         stables: ["dbInstanceArn", "dbInstanceIdentifier"],
         // Pattern (a) AWS account/region collection: `describeDBInstances` is
@@ -682,7 +817,7 @@ export const DBInstanceProvider = () =>
               Effect.succeed([] as DBInstance["Attributes"][]),
             ),
           ),
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
@@ -702,6 +837,23 @@ export const DBInstanceProvider = () =>
               olds.dbSubnetGroupName !== news.dbSubnetGroupName)
           ) {
             return { action: "replace" } as const;
+          }
+          if (
+            output !== undefined &&
+            news.masterUserSecretResourcePolicy !== undefined
+          ) {
+            const instance = yield* readInstance(output.dbInstanceIdentifier);
+            if (!instance?.DBInstanceArn) {
+              return { action: "update", stables: [] } as const;
+            }
+            const secretArn = instance.MasterUserSecret?.SecretArn;
+            if (
+              secretArn === undefined ||
+              normalizePolicyDocument(news.masterUserSecretResourcePolicy) !==
+                (yield* readMasterSecretPolicy(secretArn))
+            ) {
+              return { action: "update" } as const;
+            }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -724,6 +876,13 @@ export const DBInstanceProvider = () =>
             finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
             masterUserPasswordFingerprint:
               output?.masterUserPasswordFingerprint,
+            masterUserSecretResourcePolicy:
+              olds?.masterUserSecretResourcePolicy !== undefined &&
+              instance.MasterUserSecret?.SecretArn !== undefined
+                ? yield* readMasterSecretPolicy(
+                    instance.MasterUserSecret.SecretArn,
+                  )
+                : undefined,
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -950,13 +1109,22 @@ export const DBInstanceProvider = () =>
             });
           }
 
+          const managedSecret =
+            news.masterUserSecretResourcePolicy === undefined
+              ? undefined
+              : yield* reconcileMasterSecretPolicy(
+                  identifier,
+                  observed,
+                  news.masterUserSecretResourcePolicy,
+                );
           yield* session.note(dbInstanceArn || identifier);
           return toAttrs({
-            instance: observed,
+            instance: managedSecret?.instance ?? observed,
             tags: desiredTags,
             skipFinalSnapshot: news.skipFinalSnapshot,
             finalDBSnapshotIdentifier: news.finalDBSnapshotIdentifier,
             masterUserPasswordFingerprint: passwordFingerprint,
+            masterUserSecretResourcePolicy: managedSecret?.policy,
           });
         }),
         delete: Effect.fn(function* ({ output }) {
