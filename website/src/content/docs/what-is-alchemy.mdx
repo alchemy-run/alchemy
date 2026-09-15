@@ -225,12 +225,17 @@ every Runtime in Alchemy is a variation on that one shape.
 
 #### Binding
 
-A **Binding** connects a Resource to the Runtime that uses it, like
-`yield* Cloudflare.R2.ReadWriteBucket(Uploads)` above. It hands back
-a typed client and generates whatever that client needs to work. On
-Cloudflare that is a native Worker binding. On AWS it is an IAM
-statement scoped to one resource, plus the resource's name in the
-Function's environment:
+A **Binding** connects a Resource to the Runtime that uses it:
+
+```typescript
+const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+// bucket.get / bucket.put / bucket.list, typed end to end
+```
+
+It hands back a typed client and generates whatever that client needs
+to work. On Cloudflare that is a native Worker binding. On AWS it is
+an IAM statement scoped to one resource, plus the resource's name in
+the Function's environment:
 
 ```typescript
 const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
@@ -245,9 +250,15 @@ binding is the SDK.
 
 Every Binding is a contract paired with a **Layer** that fulfills it:
 the handler is written against the contract, and the Layer decides
-how. Swap `ReadWriteBucketBinding` (a native Worker binding) for
-`ReadWriteBucketHttp` (the API with a scoped token) and the handler
-doesn't change.
+how — swap the Layer and the handler doesn't change:
+
+```diff lang="typescript"
+ Effect.gen(function* () {
+   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+   // ...
+-}).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)); // native Worker binding
++}).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketHttp));    // HTTP with a scoped token
+```
 
 The same split works for services of your own. A Layer can own
 Resources and Bindings outright:
