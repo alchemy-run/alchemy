@@ -68,6 +68,9 @@ const getJson = <T>(path: string) =>
     return (yield* response.json) as T;
   });
 
+const route = (pathname: string, params: Record<string, string>) =>
+  `${pathname}?${new URLSearchParams(params).toString()}`;
+
 // Probe routes answer `{ tag }` — retry while IAM propagation still yields
 // AccessDenied so we assert the *expected* typed platform rejection.
 const getTag = (path: string) =>
@@ -364,11 +367,37 @@ describe("S3 Bindings", () => {
     );
   });
 
+  describe("HeadObject", () => {
+    test.provider(
+      "reads object metadata through the deployed Lambda binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const key = "head/metadata.txt";
+          const body = "metadata through the Lambda binding";
+
+          yield* S3.putObject({
+            Bucket: bucketName,
+            Key: key,
+            Body: body,
+            ContentType: "text/plain",
+          });
+
+          const result = yield* getJson<{
+            contentLength: number;
+            contentType?: string;
+            etag?: string;
+          }>(route("/head-object", { key }));
+
+          expect(result.contentLength).toBe(body.length);
+          expect(result.contentType).toBe("text/plain");
+          expect(result.etag).toBeTruthy();
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
   const seed = (key: string, body: string) =>
     S3.putObject({ Bucket: bucketName, Key: key, Body: body });
-
-  const route = (pathname: string, params: Record<string, string>) =>
-    `${pathname}?${new URLSearchParams(params).toString()}`;
 
   describe("DeleteObjects", () => {
     test.provider(
