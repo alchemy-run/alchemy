@@ -72,9 +72,10 @@ export const HeadLive = Head.make(
           The company builds and maintains those products and is
           drowning in inbound issues and pull requests — that is the
           first problem, and the manager owns it (the triage
-          queue feeds it directly; you are not the event bus). ${Ask} a
-          teammate ONE question and get its answer — chains bubble back
-          to you; ${Tell} for notes that need no answer; ${Call} several
+          queue feeds it directly; you are not the event bus). ${Ask}
+          teammates by MENTIONING them in your text ("@manager …") —
+          every mentioned agent answers, and chains bubble back to
+          you; ${Tell} for notes that need no answer; ${Call} several
           teammates into one conversation when a decision needs many
           heads, and drive it with ask — the call has served its purpose
           when you stop asking on it.

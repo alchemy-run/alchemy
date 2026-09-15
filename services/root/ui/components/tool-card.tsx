@@ -44,7 +44,7 @@ import type { GeneralEngineer } from "../../src/engineering/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
 import { CodeCard } from "@/components/code";
-import { AskThread } from "@/components/ask-thread";
+import { MentionAskView } from "@/components/ask-thread";
 import { showOverlay, showTask, taskPath } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -1122,35 +1122,37 @@ const CHANNEL: {
  */
 const CODER: Renderers<typeof GeneralEngineer> = {
   // the word between colleagues — every agent holds ask/tell, so
-  // these cards serve every wire
-  // an ask is a THREAD: once it lands, the card renders its whole
-  // subtree (the asks the target made while answering, nested) —
-  // reddit-style, from /api/asks/:id/tree
+  // these cards serve every wire. The transcript renders asks as
+  // conversation (chat.tsx bypasses the card); this fallback serves
+  // any other surface.
   ask: (input, output, running) => {
     const record = parseRecord(output);
-    const askId = typeof record?.ask === "string" ? record.ask : undefined;
+    const entries = Array.isArray(record?.answers)
+      ? (record.answers as Array<{ agent?: unknown; ask?: unknown }>)
+          .filter(
+            (entry) =>
+              typeof entry.agent === "string" &&
+              typeof entry.ask === "string",
+          )
+          .map((entry) => ({
+            agent: entry.agent as string,
+            ask: entry.ask as string,
+          }))
+      : undefined;
     return {
       icon: MessageSquare,
       title: (
         <>
-          Ask <span className="text-muted-foreground">→</span>{" "}
-          <span className="font-mono">{String(input.agent ?? "")}</span>
+          Ask{" "}
+          <span className="text-muted-foreground">
+            {clamp(firstLine(String(input.text ?? "")), 90)}
+          </span>
         </>
       ),
-      summary: running ? "waiting for the answer…" : undefined,
-      body:
-        askId !== undefined ? (
-          <AskThread id={askId} />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {input.question ? <Prose>{input.question}</Prose> : null}
-            {record?.answer !== undefined && (
-              <div className="border-l-2 border-border pl-2">
-                <Prose>{String(record.answer)}</Prose>
-              </div>
-            )}
-          </div>
-        ),
+      summary: running ? "waiting for the answers…" : undefined,
+      body: (
+        <MentionAskView text={String(input.text ?? "")} entries={entries} />
+      ),
     };
   },
   tell: (input) => ({

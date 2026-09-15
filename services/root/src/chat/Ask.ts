@@ -13,13 +13,16 @@ import { Calls, renderUtterance } from "./Call.ts";
 /**
  * ASK — conversation as function calling, the ONLY way agents talk.
  *
- * One question, ONE target. The target answers — and while answering it
- * is free to ask someone else: the chain is nested blocking dispatches
- * (the proven spawn pattern), so answers bubble up like return values —
- * to the Head, then to the human. The multi-agent problem is resolved
- * by avoiding it: at every moment exactly ONE agent is acting.
+ * One MESSAGE, addressed by @MENTION: every agent the text mentions
+ * ("@reviewer please look at PR #12") receives it and answers. Each
+ * target answers — and while answering it is free to ask someone
+ * else: a chain is nested blocking dispatches (the proven spawn
+ * pattern), so answers bubble up like return values — to the Head,
+ * then to the human. The mention is the routing AND the rendering:
+ * the humans read the text as a plain conversation, chips where the
+ * names are.
  *
- * The chain rides the delivered question as a machine-readable header
+ * The chain rides the delivered text as a machine-readable header
  * (`[ask head > manager] …`), so every hop knows its
  * ancestry: a cycle is refused, and a chain deeper than {@link MAX_HOPS}
  * is refused — the refusal is model-visible, so the asker answers with
@@ -48,6 +51,26 @@ export class TeammateUnknown extends Data.TaggedError("TeammateUnknown")<{
     return `no teammate named '${this.member}' — the team is: ${this.roster.join(", ")}`;
   }
 }
+
+/** An ask with nobody mentioned goes nowhere — refused, visibly. */
+export class NoMention extends Data.TaggedError("NoMention") {
+  override get message(): string {
+    return (
+      "REFUSED: the ask mentions nobody — address every agent you're " +
+      'asking with @name in the text ("@reviewer please review PR ' +
+      '#12 on ws-stripe") and send again'
+    );
+  }
+}
+
+/** How agents are addressed IN TEXT — `@reviewer`, `@e-4f2a`. The
+ *  same convention the UI renders as mention chips. */
+export const MENTION = /(?<![\w@.])@([a-z][a-z0-9-]{0,40})\b/g;
+
+/** Every distinct name the text mentions, in order of appearance. */
+export const mentionsOf = (text: string): ReadonlyArray<string> => [
+  ...new Set([...text.matchAll(MENTION)].map((match) => match[1]!)),
+];
 
 /**
  * The COLLEAGUES a session can address: the whole company, resolved by
@@ -132,26 +155,28 @@ const currentAsk = Effect.gen(function* () {
 });
 
 const agent = AI.Thing("agent", S.String)`
-  The teammate to ask, by name — "head", a role like
-  "manager", or a spawned engineer like "e-4f2a". One
-  target per question.`;
+  The teammate, by name — "head", a role like "manager", or a spawned
+  engineer like "e-4f2a".`;
 
-const question = AI.Thing("question", S.String)`
-  ONE question, self-contained: everything the target needs to answer
-  without your context (they do not see your conversation).`;
+const text = AI.Thing("text", S.String)`
+  Your message, written the way you'd talk to colleagues — and
+  ADDRESSED with @mentions: EVERY agent you mention ("@reviewer",
+  "@e-4f2a", "@manager") receives this text and answers it. Make it
+  self-contained (they do not see your conversation); lead with the
+  point.`;
 
-const askTitle = AI.Thing("title", S.String)`
-  ONE LINE (under 60 characters), present tense: what you're asking
-  for — "review PR #12 on ws-stripe", "scope the Stripe surface".
-  This labels the ask in the live tree the humans watch; the question
-  carries the detail, the title carries the glance.`;
-
-const answer = AI.Thing("answer", S.String)`
-  The target's settled answer — it may have asked others to produce it.`;
-
-const askId = AI.Thing("ask", S.String)`
-  This ask's id in the company's ask tree — the UI renders the chain
-  under it.`;
+const answers = AI.Thing(
+  "answers",
+  S.Array(
+    S.Struct({
+      agent: S.String,
+      ask: S.String,
+      answer: S.String,
+    }),
+  ),
+)`
+  One entry per mentioned agent: its settled answer, and the ask's id
+  in the company's ask tree.`;
 
 const call = AI.Thing("call", S.optionalKey(S.String))`
   A call id (from the call tool): the exchange is mirrored into that
@@ -161,15 +186,16 @@ const note = AI.Thing("note", S.String)`
   A short note — context, a heads-up, a report. No answer expected.`;
 
 export class Ask extends (AI.Tool<Ask>(import.meta)("ask")`
-  Ask ${agent} one ${question} — labeled with a ${askTitle} — and wait
-  for the ${AI.out(answer, askId)}. The
-  target may ask others while answering — the chain bubbles back to
-  you. The whole exchange renders as a THREAD the humans read — never
-  paste the answer back into your reply; reference its outcome in one
-  line at most. Refused (${ChainRefused}) when the chain would cycle
-  or the hop budget is spent: answer with what you have. Unknown names
-  fail with ${TeammateUnknown} and the roster. Pass ${call} to hold
-  the exchange in a call's thread.`) {}
+  Say ${text} to the agents it @mentions and wait for their
+  ${AI.out(answers)} — every mentioned agent is asked; each may ask
+  others while answering, and the chains bubble back to you. The
+  whole exchange renders as a THREAD the humans read — never paste an
+  answer back into your reply; reference the outcome in one line at
+  most. Refused: ${NoMention} when the text mentions nobody;
+  ${ChainRefused} when a chain would cycle or the hop budget is spent
+  (answer with what you have); unknown names fail with
+  ${TeammateUnknown} and the roster. Pass ${call} to hold the
+  exchange in a call's thread.`) {}
 
 export class Tell extends (AI.Tool<Tell>(import.meta)("tell")`
   Leave ${agent} a ${note} — fire-and-forget; no answer, no waiting
@@ -196,25 +222,24 @@ export const AskLive = Layer.effect(
       yield* calls.value.append(callId, { author, text }).pipe(Effect.ignore);
     });
 
-    return Effect.fn(function* (p: {
-      agent: string;
-      question: string;
-      title?: string;
-      call?: string;
-    }) {
+    return Effect.fn(function* (p: { text: string; call?: string }) {
       const me = yield* currentThread;
       const myName = nameOfKey(me.key);
       const { parent, chain: behind } = yield* currentAsk;
       const chain = behind.includes(myName) ? behind : [...behind, myName];
-      const target = yield* colleagues.resolve(p.agent);
-      if (chain.includes(target.name) || chain.length >= MAX_HOPS) {
-        return yield* new ChainRefused({ chain, target: target.name });
-      }
 
-      // on a call: the asker and the target must both be MEMBERS, and
-      // the target receives the meeting-so-far it has not yet seen —
-      // one message per utterance (its own words never echoed back)
-      let history: ReadonlyArray<string> | undefined;
+      // WHO the text addresses — the @mentions ARE the routing
+      const names = mentionsOf(p.text);
+      if (names.length === 0) return yield* new NoMention();
+      const targets = yield* Effect.forEach(names, (name) =>
+        colleagues.resolve(name),
+      );
+      for (const target of targets) {
+        if (chain.includes(target.name) || chain.length >= MAX_HOPS) {
+          return yield* new ChainRefused({ chain, target: target.name });
+        }
+      }
+      // on a call: the asker and every target must be MEMBERS
       if (p.call !== undefined && Option.isSome(calls)) {
         const view = yield* calls.value.read(p.call);
         if (view === undefined) {
@@ -223,58 +248,84 @@ export const AskLive = Layer.effect(
             roster: ["(no such call — open one with the call tool)"],
           });
         }
-        if (!view.members.includes(myName) || !view.members.includes(target.name)) {
+        const missing = [myName, ...targets.map((target) => target.name)].find(
+          (name) => !view.members.includes(name),
+        );
+        if (missing !== undefined) {
           return yield* new TeammateUnknown({
-            member: target.name,
+            member: missing,
             roster: view.members,
           });
         }
-        const delta = yield* calls.value.since(p.call, target.name);
-        history = delta.map((utterance) => renderUtterance(p.call!, utterance));
       }
 
-      const minted = yield* Clock.currentTimeMillis;
-      const id = `a-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      yield* asks
-        .open({
-          id,
-          ...(parent !== undefined ? { parent } : {}),
-          ...(p.call !== undefined ? { call: p.call } : {}),
-          asker: myName,
-          target: target.name,
-          ...(p.title !== undefined ? { title: p.title } : {}),
-          question: p.question,
-        })
-        .pipe(Effect.ignore);
-      yield* mirror(p.call, myName, `→ ${target.name}: ${p.question}`);
+      const askOne = Effect.fn(function* (target: {
+        readonly name: string;
+        readonly term: string;
+        readonly key: string;
+      }) {
+        // on a call: the target receives the meeting-so-far it has
+        // not yet seen — one message per utterance (its own words
+        // never echoed back)
+        let history: ReadonlyArray<string> | undefined;
+        if (p.call !== undefined && Option.isSome(calls)) {
+          const delta = yield* calls.value.since(p.call, target.name);
+          history = delta.map((utterance) =>
+            renderUtterance(p.call!, utterance),
+          );
+        }
 
-      const outcome = yield* sessions
-        .dispatch(
-          target.term,
-          target.key,
-          withChain(id, [...chain, target.name], p.question),
-          {
-            parent: { term: target.term, key: me.key },
-            ...(history !== undefined && history.length > 0
-              ? { history }
-              : {}),
-          },
-        )
-        .pipe(
-          Effect.tapDefect((defect) =>
-            asks
-              .settle(id, "failed", String(defect).slice(0, 2_000))
-              .pipe(Effect.ignore),
-          ),
-        );
+        const minted = yield* Clock.currentTimeMillis;
+        const id = `a-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        yield* asks
+          .open({
+            id,
+            ...(parent !== undefined ? { parent } : {}),
+            ...(p.call !== undefined ? { call: p.call } : {}),
+            asker: myName,
+            target: target.name,
+            question: p.text,
+          })
+          .pipe(Effect.ignore);
+        yield* mirror(p.call, myName, `→ ${target.name}: ${p.text}`);
 
-      const text =
-        typeof outcome === "string" ? outcome : JSON.stringify(outcome);
-      const clipped =
-        text.length > 8_000 ? `${text.slice(0, 8_000)}\n[… clipped]` : text;
-      yield* asks.settle(id, "answered", clipped).pipe(Effect.ignore);
-      yield* mirror(p.call, target.name, clipped);
-      return { answer: clipped, ask: id };
+        const outcome = yield* sessions
+          .dispatch(
+            target.term,
+            target.key,
+            withChain(id, [...chain, target.name], p.text),
+            {
+              parent: { term: target.term, key: me.key },
+              ...(history !== undefined && history.length > 0
+                ? { history }
+                : {}),
+            },
+          )
+          .pipe(
+            Effect.tapDefect((defect) =>
+              asks
+                .settle(id, "failed", String(defect).slice(0, 2_000))
+                .pipe(Effect.ignore),
+            ),
+          );
+
+        const answerText =
+          typeof outcome === "string" ? outcome : JSON.stringify(outcome);
+        const clipped =
+          answerText.length > 8_000
+            ? `${answerText.slice(0, 8_000)}\n[… clipped]`
+            : answerText;
+        yield* asks.settle(id, "answered", clipped).pipe(Effect.ignore);
+        yield* mirror(p.call, target.name, clipped);
+        return { agent: target.name, ask: id, answer: clipped };
+      });
+
+      // every mentioned agent answers — concurrently, the way a
+      // message to several colleagues lands on all of them at once
+      const settled = yield* Effect.all(targets.map(askOne), {
+        concurrency: 4,
+      });
+      return { answers: settled };
     });
   }),
 );

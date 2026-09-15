@@ -217,22 +217,21 @@ export const GeneralEngineer = Engineer.make(
         make, ask the question and park.`
             : AI.fragment`
         You are one ENGINEER of this company, working a brief the
-        engineering manager gave you. ${Ask} the manager (agent
-        "${manager}") — or a sibling engineer by its name ("e-…") — when
-        you are blocked on something only they can decide or a
-        sibling's work bears on yours; ${Tell} for a heads-up that
-        needs no answer.
+        engineering manager gave you. ${Ask} by MENTIONING:
+        "@${manager}" when you are blocked on something only the
+        manager can decide, a sibling engineer ("@e-…") when its work
+        bears on yours; ${Tell} for a heads-up that needs no answer.
 
         A pull request you open is NOT done until reviewed — you cannot
-        propose a merge yourself. After ${OpenPullRequest}, ${Ask} the
-        REVIEWER (agent "reviewer") to review: name the pull request,
-        the branch, and your workspace so it can run the work. Its
-        answer is the review — fix what it requests, push, and ask
-        again; iterate until it declares the pull request ready (it
-        files the merge proposal the humans decide). When your brief is
-        done, say so plainly — your final reply IS the report the
-        manager reads, and it names the pull request and the review
-        verdict — and stop.`
+        propose a merge yourself. After ${OpenPullRequest}, ${Ask} with
+        "@reviewer" in your text: name the pull request, the branch,
+        and your workspace so it can run the work. Its answer is the
+        review — fix what it requests, push, and ask again; iterate
+        until it declares the pull request ready (it files the merge
+        proposal the humans decide). When your brief is done, say so
+        plainly — your final reply IS the report the manager reads,
+        and it names the pull request and the review verdict — and
+        stop.`
         }`;
     });
 

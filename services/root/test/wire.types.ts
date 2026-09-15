@@ -66,8 +66,7 @@ const _complete: Registry<typeof GeneralEngineer> = {
   // optionalKey params surface as OPTIONAL keys (the Tool.ts split)
   listDirectory: (input) => (input.path satisfies string | undefined, 1),
   ask: (input) => (
-    input.agent satisfies string,
-    input.question satisfies string,
+    input.text satisfies string,
     input.call satisfies string | undefined,
     1
   ),

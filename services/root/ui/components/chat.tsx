@@ -101,7 +101,7 @@ import {
   sessionAuthor,
   type Author,
 } from "@/components/avatar";
-import { AskComment, AskThread } from "@/components/ask-thread";
+import { Mention, MentionAskView } from "@/components/ask-thread";
 import {
   createContext,
   useCallback,
@@ -371,6 +371,23 @@ const taskHrefId = (href: unknown): string | undefined => {
   return match?.[1];
 };
 
+/**
+ * Rewrite `@name` mentions into agent links so every message reads
+ * like the conversation it is — the anchor renderer turns them into
+ * mention chips. Code spans and existing links stay untouched.
+ */
+export const linkifyMarkdownMentions = (text: string): string =>
+  text
+    .split(CODE_SPLIT)
+    .map((chunk, index) => {
+      if (index % 2 === 1) return chunk; // code or a link — leave alone
+      return chunk.replace(
+        /(?<![\w@.\/])@([a-z][a-z0-9-]{0,40})\b/g,
+        (_whole, name: string) => `[@${name}](/agents/${name})`,
+      );
+    })
+    .join("");
+
 /** How anchor pills act when clicked — the review view provides one;
  *  everywhere else the pill is inert text. */
 export const AnchorActionContext = createContext<
@@ -382,6 +399,12 @@ export const AnchorActionContext = createContext<
  *  review view when one is listening. */
 const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
   const onAnchor = useContext(AnchorActionContext);
+  // an agent mention (`/agents/name`) — the discord chip
+  if (typeof href === "string" && href.startsWith("/agents/")) {
+    return (
+      <Mention name={decodeURIComponent(href.slice("/agents/".length))} />
+    );
+  }
   // a thread permalink (`/t/t-x`) — a pill that focuses the thread
   // (cmd-click still opens it in a new tab)
   const taskId = taskHrefId(href);
@@ -467,7 +490,9 @@ export const MarkdownText = ({
   repo?: string;
 }) => (
   <MessageResponse components={MARKDOWN_COMPONENTS}>
-    {linkifyMarkdownTaskIds(linkifyMarkdownRefs(text, repo))}
+    {linkifyMarkdownMentions(
+      linkifyMarkdownTaskIds(linkifyMarkdownRefs(text, repo)),
+    )}
   </MessageResponse>
 );
 
@@ -1473,9 +1498,30 @@ const ChatTranscript = ({
                         kind?: "note" | "reminder";
                         at?: number;
                         aborted?: boolean;
+                        /** The input this burst ANSWERS — the reply
+                         *  edge the engine stamps on every burst. */
+                        replyTo?: string;
                       }
                     | undefined;
                   const kind = meta?.kind;
+                  // a reply THREADS under the post it answers — the
+                  // data model's edge, not a role heuristic. The next
+                  // reply to the SAME post continues the trunk; the
+                  // last one's elbow ends it (reddit's grammar).
+                  const threaded = meta?.replyTo !== undefined;
+                  let threadContinues = false;
+                  for (
+                    let ahead = messageIndex + 1;
+                    ahead < messages.length;
+                    ahead++
+                  ) {
+                    const next = messages[ahead]!;
+                    if (deleted.has(next.id)) continue;
+                    threadContinues =
+                      (next.metadata as { replyTo?: string } | undefined)
+                        ?.replyTo === meta?.replyTo;
+                    break;
+                  }
                   // DAY DIVIDER: a rule wherever the calendar day advances
                   // — against the nearest earlier message that HAS a clock
                   // (a message without one must not read as a new day)
@@ -1515,10 +1561,10 @@ const ChatTranscript = ({
                     (state === "input-available" ||
                       state === "input-streaming");
                   // an ASK is not a tool card — it IS the
-                  // conversation: render the exchange as a reddit
-                  // comment subtree (ask-thread.tsx), no card chrome.
-                  // Until the ask id lands, a node built from the
-                  // call's input stands in, spinning.
+                  // conversation: the text (its @mentions as chips)
+                  // with each mentioned agent's reply threading under
+                  // it, reddit-shaped. Until the answers land, the
+                  // mentions stand in as "is answering…" rows.
                   const renderAsk = (
                     tool: {
                       toolCallId: string;
@@ -1533,44 +1579,39 @@ const ChatTranscript = ({
                         ? (() => {
                             try {
                               return JSON.parse(tool.output) as {
-                                ask?: unknown;
+                                answers?: unknown;
                               };
                             } catch {
                               return undefined;
                             }
                           })()
-                        : (tool.output as { ask?: unknown } | undefined);
-                    const askId =
-                      typeof record?.ask === "string" ? record.ask : undefined;
+                        : (tool.output as { answers?: unknown } | undefined);
+                    const entries = Array.isArray(record?.answers)
+                      ? (record.answers as Array<{
+                          agent?: unknown;
+                          ask?: unknown;
+                        }>)
+                          .filter(
+                            (entry) =>
+                              typeof entry.agent === "string" &&
+                              typeof entry.ask === "string",
+                          )
+                          .map((entry) => ({
+                            agent: entry.agent as string,
+                            ask: entry.ask as string,
+                          }))
+                      : undefined;
                     const input = (tool.input ?? {}) as {
-                      agent?: string;
-                      title?: string;
+                      text?: string;
                       question?: string;
                     };
                     return (
                       <div key={key} className="py-0.5">
-                        {askId !== undefined ? (
-                          <AskThread id={askId} speaker={author.name} />
-                        ) : (
-                          <AskComment
-                            depth={0}
-                            speaker={author.name}
-                            node={{
-                              id: tool.toolCallId,
-                              asker: author.name,
-                              target: String(input.agent ?? "?"),
-                              ...(input.title !== undefined
-                                ? { title: input.title }
-                                : {}),
-                              question: String(input.question ?? ""),
-                              status: cutOpen(tool.state)
-                                ? "failed"
-                                : "running",
-                              at: 0,
-                              children: [],
-                            }}
-                          />
-                        )}
+                        <MentionAskView
+                          text={String(input.text ?? input.question ?? "")}
+                          entries={entries}
+                          stopped={cutOpen(tool.state)}
+                        />
                       </div>
                     );
                   };
@@ -1608,6 +1649,26 @@ const ChatTranscript = ({
                           <div className="h-px flex-1 bg-border" />
                         </div>
                       )}
+                      {/* a reply is a THREAD under the post it
+                          answers (its `replyTo` edge) — hung off the
+                          post's trunk by reddit's elbow; the next
+                          reply to the same post continues the trunk,
+                          the last one's elbow ends it */}
+                      <div className={cn(threaded && "relative ml-9")}>
+                        {threaded && (
+                          <>
+                            <div
+                              aria-hidden
+                              className="pointer-events-none absolute -left-[18px] top-0 h-[18px] w-[15px] rounded-bl-[10px] border-b border-l border-border"
+                            />
+                            {threadContinues && (
+                              <div
+                                aria-hidden
+                                className="pointer-events-none absolute -left-[18px] top-0 bottom-0 w-px bg-border"
+                              />
+                            )}
+                          </>
+                        )}
                       <div
                         data-message-id={message.id}
                         data-selected={
@@ -1626,8 +1687,9 @@ const ChatTranscript = ({
                           setMenuIds(selection.target(message.id))
                         }
                         className={cn(
-                          "group/row -mx-2 flex items-start gap-3 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
+                          "group/row -mx-2 flex min-w-0 flex-1 items-start gap-3 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
                           !grouped && "mt-2.5",
+                          threaded && "-mx-0",
                           // the row under the pointer lifts; a selected one stays lit
                           selection.has(message.id) ||
                             menuIds.includes(message.id)
@@ -1635,16 +1697,26 @@ const ChatTranscript = ({
                             : "hover:bg-accent/70",
                         )}
                       >
-                        {/* the AVATAR column — a grouped row swaps it
-                            for the wall clock, visible on hover */}
+                        {/* the AVATAR column — replies wear the
+                            thread's uniform 24px; a grouped row swaps
+                            it for the wall clock, visible on hover */}
                         {grouped ? (
-                          <div className="w-9 shrink-0 select-none pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 opacity-0 group-hover/row:opacity-100">
+                          <div
+                            className={cn(
+                              "shrink-0 select-none pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 opacity-0 group-hover/row:opacity-100",
+                              threaded ? "w-6" : "w-9",
+                            )}
+                          >
                             {meta?.at !== undefined
                               ? formatAt(meta.at)
                               : null}
                           </div>
                         ) : (
-                          <Avatar {...author} className="mt-0.5" />
+                          <Avatar
+                            {...author}
+                            size={threaded ? 24 : 36}
+                            className="mt-0.5"
+                          />
                         )}
                         <div className="min-w-0 flex-1">
                           {!grouped && (
@@ -1659,6 +1731,12 @@ const ChatTranscript = ({
                                     {formatAt(meta.at)}
                                   </span>
                                 </AtTooltip>
+                              )}
+                              {/* the message still being written wears
+                                  the spinner — the response happens IN
+                                  the thread, not as a row below it */}
+                              {burstLive && (
+                                <LoaderCircle className="size-3 shrink-0 animate-spin self-center text-muted-foreground" />
                               )}
                             </div>
                           )}
@@ -1814,6 +1892,7 @@ const ChatTranscript = ({
                         </Message>
                         </div>
                       </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1840,27 +1919,38 @@ const ChatTranscript = ({
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
-          {/* WHO is at work — a skeleton row naming the responder,
-              with the CALL TREE emerging under it as it asks others:
-              the stack-trace view, indented like a reddit thread */}
-          {working && (
+          {/* WHO is at work — the skeleton bridges ONLY the gap
+              before the responder's message exists; once it streams,
+              the message itself is the response (its header wears the
+              spinner) and a second row would be a duplicate */}
+          {working &&
+            [...messages]
+              .reverse()
+              .find((entry) => !deleted.has(entry.id))?.role !==
+              "assistant" && (
             <div
               data-working=""
               role="status"
               aria-label={`${agentAuthor.name} is responding`}
-              className="-mx-2 mt-2.5 flex items-start gap-3 px-1.5 py-0.5"
+              className="relative ml-9 mt-2.5"
             >
-              <Avatar {...agentAuthor} className="mt-0.5 opacity-70" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-semibold leading-5 text-muted-foreground">
-                    {agentAuthor.name}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <LoaderCircle className="size-3 animate-spin" />
-                    <span className="animate-pulse">is responding…</span>
-                  </span>
-                </div>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -left-[18px] top-0 h-[18px] w-[15px] rounded-bl-[10px] border-b border-l border-border"
+              />
+              <div className="flex min-w-0 items-center gap-2 py-0.5">
+                <Avatar
+                  {...agentAuthor}
+                  size={24}
+                  className="mt-0.5 opacity-70"
+                />
+                <span className="text-[13px] font-semibold leading-5 text-muted-foreground">
+                  {agentAuthor.name}
+                </span>
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <LoaderCircle className="size-3 animate-spin" />
+                  <span className="animate-pulse">is responding…</span>
+                </span>
               </div>
             </div>
           )}

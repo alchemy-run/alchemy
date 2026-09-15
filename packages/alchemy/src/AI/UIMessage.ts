@@ -133,6 +133,12 @@ export const toUIMessages = (
   let stepTick: number | undefined;
   let stepAt = 0;
 
+  // the input that woke the round in flight — every burst is, by the
+  // session's own physics, the REPLY to the input before it, and the
+  // message carries that edge (`replyTo`) so clients thread on data,
+  // not on heuristics
+  let lastInputId: string | undefined;
+
   const openAssistant = (observation: { seq: number; at: number }) => {
     if (assistant === undefined) {
       const parts: Array<UIMessagePart<any, any>> = [];
@@ -140,7 +146,10 @@ export const toUIMessages = (
         id: `a-${observation.seq}`,
         role: "assistant",
         parts,
-        metadata: { at: observation.at },
+        metadata: {
+          at: observation.at,
+          ...(lastInputId === undefined ? {} : { replyTo: lastInputId }),
+        },
       };
       assistant = { message, parts };
       messages.push(message);
@@ -200,7 +209,9 @@ export const toUIMessages = (
       case "input": {
         assistant = undefined;
         stepTick = undefined;
-        messages.push(inputToUIMessage(observation));
+        const input = inputToUIMessage(observation);
+        lastInputId = input.id;
+        messages.push(input);
         break;
       }
       // a call the sampling made before it completed — its handler is
@@ -357,6 +368,9 @@ export const toUIMessages = (
       id: `live-${streaming.tick}`,
       role: "assistant",
       parts,
+      ...(lastInputId === undefined
+        ? {}
+        : { metadata: { replyTo: lastInputId } }),
     });
   }
   return messages;
@@ -446,6 +460,9 @@ export const makeChunkTranslator = () => {
   const openCalls = new Set<string>();
   // the burst's samplings so far — stamped on the message at `finish`
   let sampling: SamplingMetadata = {};
+  // the input that woke the round — the burst's REPLY edge (`replyTo`
+  // in the start chunk's metadata), same as the snapshot stamps it
+  let lastInputId: string | undefined;
 
   return (
     observation: SessionObservation,
@@ -474,6 +491,13 @@ export const makeChunkTranslator = () => {
     };
 
     switch (observation.type) {
+      // a new round's trigger — remembered so the burst it wakes
+      // carries its reply edge (the input row itself reaches clients
+      // via the snapshot; the live feed threads on it)
+      case "input": {
+        lastInputId = `u-${observation.seq}`;
+        break;
+      }
       // A tool call the in-flight sampling just made: its handler may
       // run for a long time (a machine waking, a tree converging, a
       // test suite) before the durable `assistant` restates it — so
@@ -490,7 +514,12 @@ export const makeChunkTranslator = () => {
             messageId: `a-${observation.seq}`,
             // the wall clock, as a snapshot's message would carry it —
             // the view's day dividers read it
-            messageMetadata: { at: observation.at },
+            messageMetadata: {
+              at: observation.at,
+              ...(lastInputId === undefined
+                ? {}
+                : { replyTo: lastInputId }),
+            },
           });
           started = true;
         }
@@ -516,7 +545,12 @@ export const makeChunkTranslator = () => {
           chunks.push({
             type: "start",
             messageId: `a-${observation.seq}`,
-            messageMetadata: { at: observation.at },
+            messageMetadata: {
+              at: observation.at,
+              ...(lastInputId === undefined
+                ? {}
+                : { replyTo: lastInputId }),
+            },
           });
           started = true;
         }

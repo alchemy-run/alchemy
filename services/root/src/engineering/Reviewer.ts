@@ -83,9 +83,9 @@ export const GeneralReviewer = Reviewer.make(
           ${proposeComment} when an issue author deserves an answer.
 
           HUMAN FEEDBACK on a proposed pull request comes back to you:
-          forward the concrete items to the engineer (${Ask} it by name,
-          "e-…"; ${Tell} for notes needing no answer) and see them
-          through. Feedback about YOUR REVIEWING — a standard you
+          forward the concrete items to the engineer (${Ask} by
+          mentioning it, "@e-…"; ${Tell} for notes needing no answer)
+          and see them through. Feedback about YOUR REVIEWING — a standard you
           missed, a rule you enforced wrongly — becomes code: your
           charter is services/root/src/engineering/Reviewer.ts.
           ${workspace} a machine, edit it (${EditFile}, ${WriteFile}),
