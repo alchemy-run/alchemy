@@ -1551,7 +1551,15 @@ const ChatTranscript = ({
                       (entry.metadata as { replyTo?: string } | undefined)
                         ?.replyTo === message.id,
                   );
-                  const hasReplies = replies.length > 0;
+                  // a message whose CONTENT carries an ask has replies
+                  // too — they hang inside it (the mentioned agents),
+                  // and they need the author's trunk to hang from
+                  const carriesAsk = message.parts.some(
+                    (part) =>
+                      part.type === "dynamic-tool" &&
+                      (part as { toolName?: string }).toolName === "ask",
+                  );
+                  const hasReplies = replies.length > 0 || carriesAsk;
                   const foldedHere = foldedThreads.has(message.id);
                   // DAY DIVIDER: a rule wherever the calendar day advances
                   // — against the nearest earlier message that HAS a clock
@@ -1692,12 +1700,12 @@ const ChatTranscript = ({
                                 landing ON the reply's avatar */}
                             <div
                               aria-hidden
-                              className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border"
+                              className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30"
                             />
                             {threadContinues && (
                               <div
                                 aria-hidden
-                                className="pointer-events-none absolute -left-5 top-0 bottom-0 w-px bg-border"
+                                className="pointer-events-none absolute -left-5 top-0 bottom-0 w-px bg-muted-foreground/30"
                               />
                             )}
                           </>
@@ -1753,32 +1761,39 @@ const ChatTranscript = ({
                               size={24}
                               className="mt-0.5"
                             />
-                            {hasReplies && (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  toggleThread(message.id);
-                                }}
-                                aria-label={
-                                  foldedHere
-                                    ? "expand this thread"
-                                    : "collapse this thread"
-                                }
-                                title={foldedHere ? "expand" : "collapse"}
-                                className="group/trunk relative w-4 flex-1 cursor-pointer"
-                              >
-                                {!foldedHere && (
-                                  <CircleMinus className="absolute left-1/2 top-1.5 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
-                                )}
-                                <span
-                                  className={cn(
-                                    "absolute bottom-0 left-1/2 w-px -translate-x-1/2 bg-border",
-                                    foldedHere ? "top-1" : "top-[9px]",
+                            {hasReplies &&
+                              (replies.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleThread(message.id);
+                                  }}
+                                  aria-label={
+                                    foldedHere
+                                      ? "expand this thread"
+                                      : "collapse this thread"
+                                  }
+                                  title={foldedHere ? "expand" : "collapse"}
+                                  className="group/trunk relative w-4 flex-1 cursor-pointer"
+                                >
+                                  {/* the line runs UNBROKEN from the
+                                      avatar's bottom; the ⊖ rides on
+                                      it, its own halo masking the
+                                      stretch it covers */}
+                                  <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
+                                  {!foldedHere && (
+                                    <CircleMinus className="absolute left-1/2 top-1 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
                                   )}
-                                />
-                              </button>
-                            )}
+                                </button>
+                              ) : (
+                                // the ask inside this message hangs
+                                // from the author's trunk; its own
+                                // comments carry the fold handles
+                                <span className="relative w-4 flex-1">
+                                  <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
+                                </span>
+                              ))}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
@@ -1962,7 +1977,7 @@ const ChatTranscript = ({
                         <div className="relative ml-8">
                           <div
                             aria-hidden
-                            className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border"
+                            className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30"
                           />
                           <button
                             type="button"
@@ -2018,7 +2033,7 @@ const ChatTranscript = ({
             >
               <div
                 aria-hidden
-                className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border"
+                className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30"
               />
               <div className="flex min-w-0 items-center gap-2 py-0.5">
                 <Avatar

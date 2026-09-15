@@ -218,7 +218,7 @@ export const Trunk = ({ children }: { children: ReactNode }) => (
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-y-0 w-px bg-border",
+        "pointer-events-none absolute inset-y-0 w-px bg-muted-foreground/30",
         TRUNK_LEFT,
       )}
     />
@@ -242,7 +242,7 @@ export const Reply = ({
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none absolute top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border",
+        "pointer-events-none absolute top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30",
         TRUNK_LEFT,
       )}
     />
@@ -250,7 +250,7 @@ export const Reply = ({
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-y-0 w-px bg-border",
+          "pointer-events-none absolute inset-y-0 w-px bg-muted-foreground/30",
           TRUNK_LEFT,
         )}
       />
@@ -572,21 +572,23 @@ export const MentionAskView = ({
         <MarkdownText text={text} />
       </div>
       {items.length > 0 && (
-        <div className={cn("relative", STEP)}>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            {items.map((item, index) => (
-              <Reply key={item.agent} last={index === items.length - 1}>
-                {item.ask !== undefined ? (
-                  <TargetReply id={item.ask} />
-                ) : (
-                  <AnsweringRow
-                    agent={item.agent}
-                    stopped={stopped === true}
-                  />
-                )}
-              </Reply>
-            ))}
-          </div>
+        // NO extra step: the enclosing message's content column is
+        // already one step past its author's avatar, so the replies
+        // sit HERE and their elbows reach back to that avatar's
+        // trunk — reddit's parent-to-child indent, exactly one step
+        <div className="relative flex min-w-0 flex-col">
+          {items.map((item, index) => (
+            <Reply key={item.agent} last={index === items.length - 1}>
+              {item.ask !== undefined ? (
+                <TargetReply id={item.ask} />
+              ) : (
+                <AnsweringRow
+                  agent={item.agent}
+                  stopped={stopped === true}
+                />
+              )}
+            </Reply>
+          ))}
         </div>
       )}
     </div>
