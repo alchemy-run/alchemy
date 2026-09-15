@@ -5,14 +5,12 @@ description: One Effect program models both your runtime code and the infrastruc
 
 Infrastructure as Effects is Alchemy's model for building
 applications, layered on top of its
-[Infrastructure as Code](/infrastructure-as-code/stack) engine. The
+[Infrastructure as Code](/infrastructure-as-code/stack) engine: the
 code that runs inside a Worker or Lambda Function and the
-infrastructure it runs on are one Effect program. A **Runtime**, such
-as a Worker, is a [Resource](/infrastructure-as-code/resource) that
-carries its own code, and the resources it uses are wired in as typed
-values. This page is the map of the section, using one running
-example — the same Worker that opens
-[What is Alchemy?](/what-is-alchemy):
+infrastructure it runs on are one Effect program.
+[What is Alchemy?](/what-is-alchemy) makes the case for that model;
+this page is the map of the section, dissecting one running example —
+the same Worker that opens that page:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -39,16 +37,9 @@ export default Cloudflare.Worker(
 );
 ```
 
-Traditional IaC splits this in two. One file declares the bucket and
-the Worker. Another file is the code the Worker runs, reaching for the
-bucket through an environment variable — two files held together by a
-name, with nothing checking that they agree. Alchemy fully supports
-that shape too ([What is Alchemy?](/what-is-alchemy#a-superset-of-infrastructure-as-code)
-shows it side by side). The Effect form above is those two files as
-one: `bucket` is a value the handler closes over, and the code that
-uses the bucket sits next to the line that declares it.
-
-Everything in this section is in that one Worker. Here is the map.
+One file, no `env` to reach through: `bucket` is a value the handler
+closes over, next to the line that declares it. Everything in this
+section is in that one Worker — here is the map.
 
 ## Runtimes carry their code
 
