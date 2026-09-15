@@ -871,7 +871,15 @@ export const BucketProvider = () =>
         if (canon(current) === canon(desiredRule)) return;
         yield* s3.putBucketEncryption({
           Bucket: bucketName,
-          ServerSideEncryptionConfiguration: { Rules: [desiredRule] },
+          ServerSideEncryptionConfiguration: {
+            // BucketEncryption owns the defaults, not encryption-type blocks.
+            Rules: [
+              {
+                ...desiredRule,
+                BlockedEncryptionTypes: current?.BlockedEncryptionTypes,
+              },
+            ],
+          },
         });
         yield* session.note(`Updated bucket encryption: ${bucketName}`);
       });
