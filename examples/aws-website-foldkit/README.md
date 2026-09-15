@@ -37,7 +37,7 @@ the input files are content-hashed (scoped by `memo.include`).
 bun run dev
 ```
 
-`alchemy dev` runs Vite's own dev server — Foldkit's HMR and devtools
+`alchemy dev` runs Vite's own dev server — Foldkit's live reload and devtools
 wiring work unchanged — and no AWS resources are created.
 
 ## Destroy
