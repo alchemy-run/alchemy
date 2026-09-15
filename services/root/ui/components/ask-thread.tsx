@@ -25,7 +25,7 @@ import { Avatar, sessionOf } from "@/components/avatar";
 import { MarkdownText } from "@/components/chat";
 import { showOverlay } from "@/lib/routes";
 import { cn } from "@/lib/utils";
-import { CirclePlus, Loader2 } from "lucide-react";
+import { CircleMinus, CirclePlus, Loader2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 export interface AskNode {
@@ -189,7 +189,8 @@ export const CommentShell = ({
       {aside}
     </div>
     <div className={cn("relative", STEP)}>
-      {/* the TRUNK — reddit's fold handle, under the avatar */}
+      {/* the TRUNK — reddit's fold handle under the avatar, the ⊖
+          visible at its head */}
       {onFold !== undefined && (
         <button
           type="button"
@@ -198,7 +199,8 @@ export const CommentShell = ({
           title="collapse"
           className="group/trunk absolute inset-y-0 -left-7 w-4 cursor-pointer"
         >
-          <span className="absolute inset-y-0 left-[7px] w-px bg-border group-hover/trunk:w-[3px] group-hover/trunk:bg-primary/50" />
+          <CircleMinus className="absolute left-px top-0 z-10 size-3.5 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+          <span className="absolute bottom-0 left-[7px] top-4 w-px bg-border group-hover/trunk:w-[3px] group-hover/trunk:bg-primary/50" />
         </button>
       )}
       <div className="flex min-w-0 flex-col gap-1 pt-0.5">{children}</div>

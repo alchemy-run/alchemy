@@ -77,6 +77,8 @@ import {
   AlarmClock,
   ChevronDown,
   CircleDot,
+  CircleMinus,
+  CirclePlus,
   Copy,
   FileCode2,
   GitMerge,
@@ -1310,6 +1312,18 @@ const ChatTranscript = ({
   // deletable. Deferred a tick so the menu that asked has closed
   // before the confirm dialog takes focus.
   const [deleted, setDeleted] = useState<Set<string>>(() => new Set());
+  // reddit's ⊖/⊕ — a post's reply THREAD folds behind "N replies"
+  const [foldedThreads, setFoldedThreads] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleThread = useCallback((id: string) => {
+    setFoldedThreads((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const removeMessages = useCallback(
     (ids: ReadonlyArray<string>) => {
       if (ids.length === 0) return;
@@ -1434,9 +1448,9 @@ const ChatTranscript = ({
     <>
       {/* initial="instant": open AT the end, no scroll animation */}
       <Conversation className="min-h-0 flex-1" initial="instant">
-        {/* discord-shaped: LEFT-justified, full width — no centered
-            reading column */}
-        <ConversationContent className="max-w-none">
+        {/* reddit-shaped: LEFT-justified, full width, tight rows —
+            spacing belongs to the tree, not the container */}
+        <ConversationContent className="max-w-none gap-0">
           {/* ONE menu for the transcript; the row under the pointer
               picks the ids (its own, or the selection it belongs to) */}
           <ContextMenu
@@ -1509,6 +1523,14 @@ const ChatTranscript = ({
                   // reply to the SAME post continues the trunk; the
                   // last one's elbow ends it (reddit's grammar).
                   const threaded = meta?.replyTo !== undefined;
+                  // a folded thread hides its replies behind "⊕ N"
+                  if (
+                    threaded &&
+                    meta?.replyTo !== undefined &&
+                    foldedThreads.has(meta.replyTo)
+                  ) {
+                    return null;
+                  }
                   let threadContinues = false;
                   for (
                     let ahead = messageIndex + 1;
@@ -1522,6 +1544,15 @@ const ChatTranscript = ({
                         ?.replyTo === meta?.replyTo;
                     break;
                   }
+                  // this post's replies — the trunk it carries
+                  const replies = messages.filter(
+                    (entry) =>
+                      !deleted.has(entry.id) &&
+                      (entry.metadata as { replyTo?: string } | undefined)
+                        ?.replyTo === message.id,
+                  );
+                  const hasReplies = replies.length > 0;
+                  const foldedHere = foldedThreads.has(message.id);
                   // DAY DIVIDER: a rule wherever the calendar day advances
                   // — against the nearest earlier message that HAS a clock
                   // (a message without one must not read as a new day)
@@ -1654,17 +1685,17 @@ const ChatTranscript = ({
                           post's trunk by reddit's elbow; the next
                           reply to the same post continues the trunk,
                           the last one's elbow ends it */}
-                      <div className={cn(threaded && "relative ml-9")}>
+                      <div className={cn(threaded && "relative ml-8")}>
                         {threaded && (
                           <>
                             <div
                               aria-hidden
-                              className="pointer-events-none absolute -left-[18px] top-0 h-[18px] w-[15px] rounded-bl-[10px] border-b border-l border-border"
+                              className="pointer-events-none absolute -left-5 top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border"
                             />
                             {threadContinues && (
                               <div
                                 aria-hidden
-                                className="pointer-events-none absolute -left-[18px] top-0 bottom-0 w-px bg-border"
+                                className="pointer-events-none absolute -left-5 top-0 bottom-0 w-px bg-border"
                               />
                             )}
                           </>
@@ -1687,9 +1718,14 @@ const ChatTranscript = ({
                           setMenuIds(selection.target(message.id))
                         }
                         className={cn(
-                          "group/row -mx-2 flex min-w-0 flex-1 items-start gap-3 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
-                          !grouped && "mt-2.5",
-                          threaded && "-mx-0",
+                          "group/row -mx-2 flex min-w-0 flex-1 items-stretch gap-2 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
+                          // spacing lives on the TREE: posts breathe,
+                          // replies sit tight against their trunk
+                          threaded
+                            ? "-mx-0"
+                            : grouped
+                              ? "mt-0.5"
+                              : "mt-6",
                           // the row under the pointer lifts; a selected one stays lit
                           selection.has(message.id) ||
                             menuIds.includes(message.id)
@@ -1697,26 +1733,51 @@ const ChatTranscript = ({
                             : "hover:bg-accent/70",
                         )}
                       >
-                        {/* the AVATAR column — replies wear the
-                            thread's uniform 24px; a grouped row swaps
-                            it for the wall clock, visible on hover */}
+                        {/* the AVATAR column — reddit's uniform 24px
+                            at every depth; a post with replies grows
+                            the TRUNK under its avatar (⊖ at its
+                            head); a grouped row swaps the avatar for
+                            the wall clock, visible on hover */}
                         {grouped ? (
-                          <div
-                            className={cn(
-                              "shrink-0 select-none pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 opacity-0 group-hover/row:opacity-100",
-                              threaded ? "w-6" : "w-9",
-                            )}
-                          >
+                          <div className="w-6 shrink-0 select-none pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 opacity-0 group-hover/row:opacity-100">
                             {meta?.at !== undefined
                               ? formatAt(meta.at)
                               : null}
                           </div>
                         ) : (
-                          <Avatar
-                            {...author}
-                            size={threaded ? 24 : 36}
-                            className="mt-0.5"
-                          />
+                          <div className="flex w-6 shrink-0 flex-col items-center">
+                            <Avatar
+                              {...author}
+                              size={24}
+                              className="mt-0.5"
+                            />
+                            {hasReplies && (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleThread(message.id);
+                                }}
+                                aria-label={
+                                  foldedHere
+                                    ? "expand this thread"
+                                    : "collapse this thread"
+                                }
+                                title={foldedHere ? "expand" : "collapse"}
+                                className="group/trunk relative mt-1 w-4 flex-1 cursor-pointer"
+                              >
+                                {!foldedHere && (
+                                  <CircleMinus className="absolute left-1/2 top-0 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+                                )}
+                                <span
+                                  className={cn(
+                                    "absolute bottom-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover/trunk:w-[3px] group-hover/trunk:bg-primary/50",
+                                    foldedHere ? "top-1" : "top-4",
+                                  )}
+                                />
+                              </button>
+                            )}
+                          </div>
                         )}
                         <div className="min-w-0 flex-1">
                           {!grouped && (
@@ -1893,6 +1954,25 @@ const ChatTranscript = ({
                         </div>
                       </div>
                       </div>
+                      {/* a folded thread — reddit's "⊕ N replies",
+                          hanging off the post by its elbow */}
+                      {hasReplies && foldedHere && (
+                        <div className="relative ml-8">
+                          <div
+                            aria-hidden
+                            className="pointer-events-none absolute -left-5 top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleThread(message.id)}
+                            className="flex cursor-pointer items-center gap-1.5 py-1 text-[12px] text-muted-foreground hover:text-foreground"
+                          >
+                            <CirclePlus className="size-3.5" />
+                            {replies.length} repl
+                            {replies.length === 1 ? "y" : "ies"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1932,11 +2012,11 @@ const ChatTranscript = ({
               data-working=""
               role="status"
               aria-label={`${agentAuthor.name} is responding`}
-              className="relative ml-9 mt-2.5"
+              className="relative ml-8 mt-1"
             >
               <div
                 aria-hidden
-                className="pointer-events-none absolute -left-[18px] top-0 h-[18px] w-[15px] rounded-bl-[10px] border-b border-l border-border"
+                className="pointer-events-none absolute -left-5 top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border"
               />
               <div className="flex min-w-0 items-center gap-2 py-0.5">
                 <Avatar
