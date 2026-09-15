@@ -245,6 +245,152 @@ test.provider(
   { timeout: 240_000 },
 );
 
+test.provider(
+  "a stale failed deployment does not fail the replacement deployment",
+  (stack) =>
+    Effect.gen(function* () {
+      const family = "alchemy-test-ecs-service-failed-rollout";
+      const stableImage = "public.ecr.aws/nginx/nginx:stable";
+      const failingImage = "public.ecr.aws/docker/library/alpine:3.20";
+
+      const registerTaskDefinition = (image: string, command?: string[]) =>
+        ecs.registerTaskDefinition({
+          family,
+          networkMode: "awsvpc",
+          requiresCompatibilities: ["FARGATE"],
+          cpu: "256",
+          memory: "512",
+          containerDefinitions: [
+            {
+              name: "app",
+              image,
+              command,
+              essential: true,
+              portMappings: [{ containerPort: 80, protocol: "tcp" }],
+            },
+          ],
+        });
+
+      const deployService = (
+        taskDefinitionArn: string,
+        generation: string,
+        desiredCount: number,
+      ) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const defaultVpc = yield* getDefaultVpc;
+            const subnet = yield* Subnet("FailedRolloutSubnet", {
+              vpcId: defaultVpc.vpcId,
+              cidrBlock: defaultVpc.subnetCidrBlock(232),
+            });
+            const cluster = yield* Cluster("FailedRolloutCluster", {
+              clusterName: family,
+            });
+            return yield* Service("FailedRolloutService", {
+              cluster,
+              task: { taskDefinitionArn, containerName: "app", port: 80 },
+              desiredCount,
+              vpcId: defaultVpc.vpcId,
+              subnets: [subnet.subnetId],
+              assignPublicIp: true,
+              tags: { generation },
+              deploymentStabilizationTimeout: "8 minutes",
+              deploymentConfiguration: {
+                minimumHealthyPercent: 0,
+                maximumPercent: 200,
+                deploymentCircuitBreaker: { enable: true, rollback: false },
+              },
+            });
+          }),
+        );
+
+      const waitForFailedDeployment = (
+        cluster: string,
+        service: string,
+        deploymentId: string,
+      ) =>
+        ecs.describeServices({ cluster, services: [service] }).pipe(
+          Effect.repeat({
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(48),
+            ]),
+            until: (response) =>
+              response.services?.[0]?.deployments?.some(
+                (deployment) =>
+                  deployment.id === deploymentId &&
+                  deployment.rolloutState === "FAILED",
+              ) === true,
+          }),
+        );
+
+      // Arrange: start clean and register cleanup before creating anything.
+      yield* stack.destroy();
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function* () {
+          yield* stack.destroy().pipe(Effect.ignore);
+          yield* reclaimTaskDefinitionFamily(family).pipe(Effect.ignore);
+        }),
+      );
+
+      const initialTask = yield* registerTaskDefinition(stableImage);
+      const failingTask = yield* registerTaskDefinition(failingImage, [
+        "sh",
+        "-c",
+        "exit 1",
+      ]);
+      const recoveryTask = yield* registerTaskDefinition(stableImage);
+      const initialTaskArn = initialTask.taskDefinition?.taskDefinitionArn!;
+      const failingTaskArn = failingTask.taskDefinition?.taskDefinitionArn!;
+      const recoveryTaskArn = recoveryTask.taskDefinition?.taskDefinitionArn!;
+
+      // Establish a healthy service without starting a task yet.
+      const created = yield* deployService(initialTaskArn, "initial", 0);
+
+      // Fail: roll out a task that exits immediately and wait for AWS to mark
+      // that exact deployment as FAILED.
+      const failedUpdate = yield* ecs.updateService({
+        cluster: created.clusterArn,
+        service: created.serviceName,
+        taskDefinition: failingTaskArn,
+        desiredCount: 1,
+        forceNewDeployment: true,
+      });
+      const failedDeploymentId = failedUpdate.service?.deployments?.find(
+        (deployment) => deployment.status === "PRIMARY",
+      )?.id;
+      expect(failedDeploymentId).toBeDefined();
+
+      const failedSnapshot = yield* waitForFailedDeployment(
+        created.clusterArn,
+        created.serviceName,
+        failedDeploymentId!,
+      );
+      expect(
+        failedSnapshot.services?.[0]?.deployments?.find(
+          (deployment) => deployment.id === failedDeploymentId,
+        )?.rolloutState,
+      ).toBe("FAILED");
+
+      // Recover: deploy a new healthy revision through Alchemy. The stale
+      // FAILED deployment above must not be mistaken for this deployment.
+      const recovered = yield* deployService(recoveryTaskArn, "recovered", 1);
+      expect(recovered.serviceArn).toBe(created.serviceArn);
+      expect(recovered.taskDefinitionArn).toBe(recoveryTaskArn);
+
+      // Cleanup and prove the test cluster is gone.
+      yield* stack.destroy();
+      yield* reclaimTaskDefinitionFamily(family);
+
+      const after = yield* ecs.describeClusters({ clusters: [family] });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+        false,
+      );
+    }),
+  { timeout: 900_000 },
+);
+
 // Manual (user-supplied) load balancer: create an ALB + target group OUT OF
 // BAND, pass it explicitly via `loadBalancers` with `public: false`, and assert
 // (a) no Alchemy-managed ALB was created (no `url`/`loadBalancerArn` on the
