@@ -520,6 +520,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",
