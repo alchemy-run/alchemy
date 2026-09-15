@@ -6,6 +6,7 @@ export * from "./Environment.ts";
 export * from "./Providers.ts";
 export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
+export * from "./Ruleset.ts";
 export * from "./Secret.ts";
 export * from "./Secrets.ts";
 export * from "./Variable.ts";
