@@ -8,7 +8,7 @@
  * sides relative to the merge base) — a conflicting PR is a typed 409, the
  * server never writes conflict markers.
  */
-import * as Http from "../../Http/index.ts";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
@@ -30,7 +30,7 @@ import {
   RepoNotFound,
   RepoPath,
   ValidationError,
-  HookRejected,
+  PushDenied,
 } from "./Schema.ts";
 
 /** `(owner, repo, number)` path segments for single-PR endpoints. */
@@ -45,7 +45,7 @@ export const PullPath = Schema.Struct({
  * Opens a PR. `base`/`head` accept short (`main`) or full
  * (`refs/heads/main`) branch names — only branches are legal (no tags).
  */
-export class CreatePull extends Http.post<CreatePull>()(
+export const CreatePull = HttpApiEndpoint.post(
   "create",
   "/repos/:owner/:repo/pulls",
   {
@@ -61,10 +61,10 @@ export class CreatePull extends Http.post<CreatePull>()(
     success: Pull,
     error: [RepoNotFound, BranchMissing, PullExists, ValidationError],
   },
-) {}
+);
 
 /** Lists PRs, newest first. `state` defaults to `open`. Anonymous on public repos. */
-export class ListPulls extends Http.get<ListPulls>()(
+export const ListPulls = HttpApiEndpoint.get(
   "list",
   "/repos/:owner/:repo/pulls",
   {
@@ -82,10 +82,10 @@ export class ListPulls extends Http.get<ListPulls>()(
     success: Paginated(Pull),
     error: [RepoNotFound],
   },
-) {}
+);
 
 /** Reads one PR with live compare fields (aheadBy/behindBy/mergeable). */
-export class GetPull extends Http.get<GetPull>()(
+export const GetPull = HttpApiEndpoint.get(
   "get",
   "/repos/:owner/:repo/pulls/:number",
   {
@@ -93,10 +93,10 @@ export class GetPull extends Http.get<GetPull>()(
     success: PullDetail,
     error: [RepoNotFound, PullNotFound],
   },
-) {}
+);
 
 /** Patches title/body, or closes/reopens via `state`. */
-export class UpdatePull extends Http.patch<UpdatePull>()(
+export const UpdatePull = HttpApiEndpoint.patch(
   "update",
   "/repos/:owner/:repo/pulls/:number",
   {
@@ -114,13 +114,13 @@ export class UpdatePull extends Http.patch<UpdatePull>()(
     success: Pull,
     error: [RepoNotFound, PullNotFound, PullStateConflict],
   },
-) {}
+);
 
 /**
  * Merges an open PR: fast-forward when possible, else a merge commit iff
  * the three-way tree merge is trivial.
  */
-export class MergePull extends Http.post<MergePull>()(
+export const MergePull = HttpApiEndpoint.post(
   "merge",
   "/repos/:owner/:repo/pulls/:number/merge",
   {
@@ -139,7 +139,7 @@ export class MergePull extends Http.post<MergePull>()(
     }),
     success: MergeResult,
     error: [
-      HookRejected,
+      PushDenied,
       RepoNotFound,
       PullNotFound,
       PullStateConflict,
@@ -150,7 +150,7 @@ export class MergePull extends Http.post<MergePull>()(
       ReadOnlyRepo,
     ],
   },
-) {}
+);
 
 /** The `pulls` group, mounted at `/api/v1`. */
 export class Pulls extends HttpApiGroup.make("pulls")

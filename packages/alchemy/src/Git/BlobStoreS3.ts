@@ -19,11 +19,13 @@
  * ### Providing the store
  * **Example:** Packs on S3, compute on Cloudflare
  * ```typescript
- * const GitLive = Git.ServerLive.pipe(
+ * const GitObjects = AWS.S3.Bucket("GitObjects");
+ *
+ * const GitLive = Git.ApiLive.pipe(
+ *   Layer.provide(Git.ApiHandlersLive),
  *   Layer.provide(Git.ReposDurableObject),
  *   Layer.provide(Git.RegistryDurableObject),
- *   Layer.provide(Git.BlobStoreS3()),
- *   // or: Git.BlobStoreS3({ bucket: AWS.S3.Bucket("GitObjects", { bucketName: "git-objects" }) })
+ *   Layer.provide(Git.BlobStoreS3(GitObjects)),
  * );
  * ```
  */
@@ -33,7 +35,6 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { AbortMultipartUpload } from "../AWS/S3/AbortMultipartUpload.ts";
 import { AbortMultipartUploadHttp } from "../AWS/S3/AbortMultipartUploadHttp.ts";
-import { Bucket } from "../AWS/S3/Bucket.ts";
 import { CompleteMultipartUpload } from "../AWS/S3/CompleteMultipartUpload.ts";
 import { CompleteMultipartUploadHttp } from "../AWS/S3/CompleteMultipartUploadHttp.ts";
 import { CreateMultipartUpload } from "../AWS/S3/CreateMultipartUpload.ts";
@@ -59,18 +60,6 @@ import {
   type BlobMultipart,
   type BlobStoreShape,
 } from "./BlobStore.ts";
-
-/** The id of the `AWS.S3.Bucket` {@link BlobStoreS3} declares when none is passed. */
-export const S3_BUCKET_ID = "GitObjects" as const;
-
-export interface BlobStoreS3Options {
-  /**
-   * The `AWS.S3.Bucket` holding the bytes. Declared for you as
-   * {@link S3_BUCKET_ID}, with an engine-generated name in the deploying
-   * profile's region, when omitted.
-   */
-  readonly bucket?: Effect.Effect<Bucket, never, any> | undefined;
-}
 
 const s3Error =
   (what: string) =>
@@ -100,26 +89,19 @@ const collectBytes = (
   );
 
 /**
- * S3-backed {@link BlobStore}. See the module doc for identity and
- * latency semantics.
+ * S3-backed {@link BlobStore} using the given bucket. Accepts an
+ * `AWS.S3.Bucket` resource or its declaration Effect, like {@link BlobStoreR2}.
+ * See the module doc for identity and latency semantics.
  *
  * @layer
  * @provides Git.BlobStore
  */
 export const BlobStoreS3 = (
-  options?: BlobStoreS3Options,
+  bucket: Parameters<typeof GetObject>[0],
 ): Layer.Layer<BlobStore> =>
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {
-      // Yielding the resource class gives a constructor whose providers are
-      // the host stack's, so declaring the bucket here needs nothing from
-      // the caller. A user-declared bucket is the same resource, yielded.
-      const bucket =
-        options?.bucket === undefined
-          ? yield* (yield* Bucket)(S3_BUCKET_ID)
-          : yield* options.bucket as Effect.Effect<Bucket>;
-
       const getObject = yield* GetObject(bucket);
       const putObject = yield* PutObject(bucket);
       const headObject = yield* HeadObject(bucket);

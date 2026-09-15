@@ -1,9 +1,9 @@
 /**
  * The `repos` group: repo CRUD, fork, import, and compaction
- * (DESIGN.md §5). Every route is an `alchemy/Http` route class. Who may
- * call it is decided by the middleware of the API that mounts it.
+ * (DESIGN.md §5). Every route is an Effect `HttpApiEndpoint`. Who may
+ * call it is decided by the middleware applied to its route layer.
  */
-import * as Http from "../../Http/index.ts";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
@@ -23,7 +23,7 @@ import {
 } from "./Schema.ts";
 
 /** Creates a repo owned by `owner`. */
-export class CreateRepo extends Http.post<CreateRepo>()("create", "/repos", {
+export const CreateRepo = HttpApiEndpoint.post("create", "/repos", {
   payload: Schema.Struct({
     owner: OwnerName,
     name: RepoName,
@@ -40,17 +40,17 @@ export class CreateRepo extends Http.post<CreateRepo>()("create", "/repos", {
   }),
   success: RepoCreated,
   error: [RepoAlreadyExists, ValidationError],
-}) {}
+});
 
 /** Reads one repo (poll `status` for async fork/import/delete progress). */
-export class GetRepo extends Http.get<GetRepo>()("get", "/repos/:owner/:repo", {
+export const GetRepo = HttpApiEndpoint.get("get", "/repos/:owner/:repo", {
   params: RepoPath,
   success: Repo,
   error: [RepoNotFound],
-}) {}
+});
 
 /** Patches description / default branch / readOnly / public. */
-export class UpdateRepo extends Http.patch<UpdateRepo>()(
+export const UpdateRepo = HttpApiEndpoint.patch(
   "update",
   "/repos/:owner/:repo",
   {
@@ -66,13 +66,13 @@ export class UpdateRepo extends Http.patch<UpdateRepo>()(
     success: Repo,
     error: [RepoNotFound, RefNotFound],
   },
-) {}
+);
 
 /**
  * Lists repos, optionally filtered by owner. Lists everything the
  * Registry holds; `public: true` narrows it to public repositories.
  */
-export class ListRepos extends Http.get<ListRepos>()("list", "/repos", {
+export const ListRepos = HttpApiEndpoint.get("list", "/repos", {
   query: Schema.Struct({
     owner: Schema.optional(OwnerName),
     /** Only public repositories when `true`. */
@@ -83,14 +83,14 @@ export class ListRepos extends Http.get<ListRepos>()("list", "/repos", {
     ),
   }),
   success: Paginated(Repo),
-}) {}
+});
 
 /**
  * Deletes a repo. Async purge: responds 204 immediately, repo `status`
  * flips to `'deleting'`, the name frees after the purge alarm completes
  * (then 404).
  */
-export class DeleteRepo extends Http.del<DeleteRepo>()(
+export const DeleteRepo = HttpApiEndpoint.delete(
   "delete",
   "/repos/:owner/:repo",
   {
@@ -98,13 +98,13 @@ export class DeleteRepo extends Http.del<DeleteRepo>()(
     success: HttpApiSchema.NoContent,
     error: [RepoNotFound],
   },
-) {}
+);
 
 /**
  * Forks a repo. The fork starts in `status: 'forking'`; poll
  * `GET /repos/:owner/:repo` until `'ready'`.
  */
-export class ForkRepo extends Http.post<ForkRepo>()(
+export const ForkRepo = HttpApiEndpoint.post(
   "fork",
   "/repos/:owner/:repo/fork",
   {
@@ -116,32 +116,28 @@ export class ForkRepo extends Http.post<ForkRepo>()(
     success: RepoCreated,
     error: [RepoNotFound, RepoAlreadyExists, RepoNotReady],
   },
-) {}
+);
 
 /**
  * Imports from an external smart-HTTP source. The repo starts in
  * `status: 'importing'`; poll `GET /repos/:owner/:repo` until `'ready'`.
  */
-export class ImportRepo extends Http.post<ImportRepo>()(
-  "import",
-  "/repos/import",
-  {
-    payload: Schema.Struct({
-      owner: OwnerName,
-      name: RepoName,
-      source: Schema.Struct({
-        /** Smart-HTTP URL of the source repository. */
-        url: Schema.String,
-        /** Restrict the import to a single ref. */
-        ref: Schema.optional(Schema.String),
-        /** Depth-limit the imported history. */
-        depth: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
-      }),
+export const ImportRepo = HttpApiEndpoint.post("import", "/repos/import", {
+  payload: Schema.Struct({
+    owner: OwnerName,
+    name: RepoName,
+    source: Schema.Struct({
+      /** Smart-HTTP URL of the source repository. */
+      url: Schema.String,
+      /** Restrict the import to a single ref. */
+      ref: Schema.optional(Schema.String),
+      /** Depth-limit the imported history. */
+      depth: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
     }),
-    success: RepoCreated,
-    error: [RepoAlreadyExists, ImportFailed],
-  },
-) {}
+  }),
+  success: RepoCreated,
+  error: [RepoAlreadyExists, ImportFailed],
+});
 
 /**
  * Forces a compaction run now (`Maintain`): moves loose object bytes into
@@ -149,7 +145,7 @@ export class ImportRepo extends Http.post<ImportRepo>()(
  * a push — this is the operator/benchmark handle. Returns immediately; poll
  * `GET /repos/:owner/:repo` and watch `objects.loose` fall to zero.
  */
-export class CompactRepo extends Http.post<CompactRepo>()(
+export const CompactRepo = HttpApiEndpoint.post(
   "compact",
   "/repos/:owner/:repo/compact",
   {
@@ -157,7 +153,7 @@ export class CompactRepo extends Http.post<CompactRepo>()(
     success: HttpApiSchema.NoContent,
     error: [RepoNotFound],
   },
-) {}
+);
 
 /** The `repos` group, mounted at `/api/v1`. */
 export class Repos extends HttpApiGroup.make("repos")
