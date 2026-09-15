@@ -1,4 +1,5 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -32,8 +33,8 @@ export interface DBParameterGroupProps {
    * it safe to adopt a group that was tuned elsewhere.
    *
    * Values must be in the form RDS reports back (it canonicalises some — a
-   * boolean set as `ON` reads back as `1`), or the two never compare equal
-   * and every deploy re-issues the modify.
+   * boolean set as `ON` reads back as `1`). Reconciliation waits for those
+   * reported values and fails if they do not converge within the observation budget.
    *
    * Static parameters are applied with `pending-reboot`, dynamic parameters
    * with `immediate`.
@@ -66,8 +67,9 @@ export interface DBParameterGroup extends Resource<
      */
     description: string | undefined;
     /**
-     * The parameter overrides this resource manages; `{}` when `parameters`
-     * is omitted and the group's settings are owned elsewhere.
+     * Observed user overrides and explicitly managed engine defaults.
+     * Omitting `parameters` observes user overrides without changing them.
+     * These are group settings; static values still require an instance reboot.
      */
     parameters: Record<string, string>;
     /**
@@ -137,6 +139,12 @@ const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
   });
 
+class DBParameterGroupNotSettled extends Data.TaggedError(
+  "DBParameterGroupNotSettled",
+)<{
+  name: string;
+}> {}
+
 export const DBParameterGroupProvider = () =>
   Provider.effect(
     DBParameterGroup,
@@ -185,12 +193,15 @@ export const DBParameterGroupProvider = () =>
           );
       });
 
-      const toUserParameterRecord = (
+      const toManagedParameterRecord = (
         parameters: rds.Parameter[],
+        desired: Record<string, string> = {},
       ): Record<string, string> =>
         Object.fromEntries(
           parameters.flatMap((p) =>
-            p.ParameterName !== undefined && p.ParameterValue !== undefined
+            p.ParameterName !== undefined &&
+            p.ParameterValue !== undefined &&
+            (p.Source === "user" || Object.hasOwn(desired, p.ParameterName))
               ? [[p.ParameterName, p.ParameterValue]]
               : [],
           ),
@@ -269,8 +280,9 @@ export const DBParameterGroupProvider = () =>
             return undefined;
           }
           // Unlike tags, parameters come back from the API.
-          const parameters = toUserParameterRecord(
-            yield* readUserParameters(group.DBParameterGroupName),
+          const parameters = toManagedParameterRecord(
+            yield* readParameters(group.DBParameterGroupName),
+            olds?.parameters,
           );
           return {
             dbParameterGroupName: group.DBParameterGroupName,
@@ -408,13 +420,36 @@ export const DBParameterGroupProvider = () =>
             });
           }
 
+          // A successful modify/reset only acknowledges the request. Read back
+          // the managed group values, retaining user overrides when unowned.
+          // Reuse the existing parameter-group consistency budget; retry reads
+          // for a pending observation, never repeat accepted mutations here.
+          const parameters = yield* readParameters(name).pipe(
+            Effect.flatMap((parameters) => {
+              const observed = toManagedParameterRecord(
+                parameters,
+                desiredParameters,
+              );
+              return desiredParameters === undefined ||
+                deepEqual(desiredParameters, observed)
+                ? Effect.succeed(observed)
+                : Effect.fail(new DBParameterGroupNotSettled({ name }));
+            }),
+            Effect.retry({
+              while: (error) => error._tag === "DBParameterGroupNotSettled",
+              schedule: Schedule.max([
+                Schedule.fixed("5 seconds"),
+                Schedule.recurs(10),
+              ]),
+            }),
+          );
           yield* session.note(dbParameterGroupArn ?? name);
           return {
             dbParameterGroupName: observed.DBParameterGroupName,
             dbParameterGroupArn,
             family: observed.DBParameterGroupFamily ?? news.family,
             description: observed.Description,
-            parameters: desiredParameters ?? {},
+            parameters,
             tags: desiredTags,
           };
         }),
