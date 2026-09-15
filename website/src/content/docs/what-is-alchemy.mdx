@@ -218,7 +218,7 @@ Effect.gen(function* () {
 });
 ```
 
-The outer Effect runs at deploy time and at cold start; what it
+The outer Effect runs both at deploy time and at cold start; what it
 returns runs per request. A Worker returns `fetch`, a Durable Object
 returns its RPC methods, a Workflow returns its run function, and
 every Runtime in Alchemy is a variation on that one shape.
