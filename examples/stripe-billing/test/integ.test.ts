@@ -22,6 +22,16 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const { getWhenReady } = Test;
 
+// Out-of-band distilled calls (`GetWebhookEndpoints`, `DeleteCustomer`)
+// resolve the same stored Stripe key the deploy uses, so the integ test
+// works against the configured profile instead of requiring STRIPE_API_KEY
+// in the environment.
+const StripeHttp = Layer.mergeAll(
+  Stripe.StripeAuth,
+  Stripe.fromAuthProvider(),
+  FetchHttpClient.layer,
+);
+
 const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
@@ -35,9 +45,7 @@ test(
     expect(url).toBeString();
     const delivery = `${url.replace(/\/+$/, "")}/webhooks/stripe`;
     const endpoints = yield* GetWebhookEndpoints({ limit: 100 }).pipe(
-      Effect.provide(
-        Layer.mergeAll(Stripe.CredentialsFromEnv, FetchHttpClient.layer),
-      ),
+      Effect.provide(StripeHttp),
     );
     expect(
       endpoints.data.some((e) => e.url.replace(/\/+$/, "") === delivery),
@@ -115,9 +123,7 @@ test(
 
     yield* DeleteCustomer({ customer: body.id }).pipe(
       Effect.catch(() => Effect.void),
-      Effect.provide(
-        Layer.mergeAll(Stripe.CredentialsFromEnv, FetchHttpClient.layer),
-      ),
+      Effect.provide(StripeHttp),
     );
   }),
   { timeout: 180_000 },

@@ -14,7 +14,7 @@ import StripeEventSourceWorker from "./fixtures/event-source-worker.ts";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
 });
-const { getWhenReady } = Test;
+const { executeWhenReady, getWhenReady } = Test;
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -43,13 +43,18 @@ test(
     const base = url.replace(/\/+$/, "");
     yield* getWhenReady(`${base}/last`);
 
-    const created = yield* HttpClient.execute(
+    // Ride out binding cold-start: the Stripe CreateCustomer token may not
+    // be visible on the first request after a fresh deploy.
+    const created = yield* executeWhenReady(
       HttpClientRequest.post(`${base}/customers`),
     );
     expect(created.status).toBe(201);
     const body = (yield* created.json) as { id: string };
     expect(body.id).toMatch(/^cus_/);
 
+    // Stripe delivers asynchronously to the fresh workers.dev URL and KV
+    // reads are eventually consistent, so poll up to ~3 minutes, absorbing
+    // transient transport errors during edge propagation.
     const id = yield* Effect.gen(function* () {
       const res = yield* HttpClient.execute(
         HttpClientRequest.get(`${base}/last/${body.id}`),
@@ -58,15 +63,16 @@ test(
       const json = (yield* res.json) as { id: string | null };
       return json.id;
     }).pipe(
+      Effect.catch(() => Effect.succeed(null)),
       Effect.repeat({
         schedule: Schedule.spaced("5 seconds"),
         until: (value) => value === body.id,
-        times: 24,
+        times: 36,
       }),
     );
     expect(id).toEqual(body.id);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 240_000 },
 );
 
 test(
