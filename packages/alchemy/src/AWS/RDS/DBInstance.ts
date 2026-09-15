@@ -861,7 +861,7 @@ export const DBInstanceProvider = () =>
             setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
-            setIf("DBPortNumber", news.port, observed.DbInstancePort);
+            setIf("DBPortNumber", news.port, observed.Endpoint?.Port);
             setIf("OptionGroupName", news.optionGroupName, undefined);
             setIf("LicenseModel", news.licenseModel, observed.LicenseModel);
             setIf("CACertificateIdentifier", news.caCertificateIdentifier, observed.CACertificateIdentifier); // prettier-ignore
