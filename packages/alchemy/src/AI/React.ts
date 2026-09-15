@@ -201,8 +201,11 @@ export const useChat = ({
 
 const RECONNECT_DELAY_MS = 3_000;
 
-/** A durable input row's id (`u-<seq>`) — what the driver mints. */
-const DURABLE_INPUT_ID = /^u-\d+$/;
+/** A durable input row's id — the message id the door minted
+ *  (`m-…`), a legacy seq id (`u-<seq>`), or any caller-owned id the
+ *  echo carries. Anything EXCEPT the AI SDK's transient optimistic
+ *  ids, which are UUID-shaped — the echo re-identifies those. */
+const DURABLE_INPUT_ID = /^(?:u-\d+|[a-z]+-.+)$/;
 
 /** A message's text, joined exactly as the transport submits it. */
 const inputText = (message: UIMessage): string =>

@@ -48,6 +48,7 @@ import {
   type Teaching,
 } from "./Skill.ts";
 import { isSource, renderSource } from "./Source.ts";
+import { isMessage, mintMessageId, type Message } from "./Message.ts";
 import {
   Thread,
   Tick,
@@ -227,16 +228,42 @@ export const supervised = (agent: string, actor: Actor): Actor => ({
         }),
 });
 
-/** Unwrap an inbox row into its thread value + observation kind. */
-export const inputProvenance = (
+/**
+ * Normalize ANY admitted input into an identified {@link Message} at
+ * the door — the invariant behind "every message has an id": a bare
+ * string is wrapped with a minted id; a caller's `Message` passes
+ * through (its id and author are the caller's identity claim); a
+ * reminder envelope unwraps to its text with structural provenance;
+ * any other payload (a typed event) rides as structured `content`,
+ * never stringified, so charters still pattern-match it.
+ */
+export const toMessage = (
   input: unknown,
-): { readonly value: unknown; readonly kind?: "reminder" } =>
-  typeof input === "object" &&
-  input !== null &&
-  "~alchemy/input" in input &&
-  (input as ReminderInput)["~alchemy/input"] === "reminder"
-    ? { value: (input as ReminderInput).text, kind: "reminder" }
-    : { value: input };
+): { readonly message: Message<unknown>; readonly kind?: "reminder" } => {
+  if (typeof input === "string") {
+    return { message: { id: mintMessageId(), content: input } };
+  }
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "~alchemy/input" in input &&
+    (input as ReminderInput)["~alchemy/input"] === "reminder"
+  ) {
+    return {
+      message: { id: mintMessageId(), content: (input as ReminderInput).text },
+      kind: "reminder",
+    };
+  }
+  if (isMessage(input)) return { message: input };
+  return { message: { id: mintMessageId(), content: input } };
+};
+
+/** The observation/projection text of a message's content — strings
+ *  verbatim, structured payloads as JSON. */
+export const messageText = (message: Message<unknown>): string =>
+  typeof message.content === "string"
+    ? message.content
+    : JSON.stringify(message.content);
 
 /**
  * Render a capability term's own tagged template into prose (a tool's
@@ -562,16 +589,25 @@ export const compileSkillTool = (names: ReadonlyArray<string>) =>
     failureMode: "return",
   }).annotate(AiTool.Strict, false);
 
-/** A work item or steering message, rendered as one user message. */
-export const asUserMessage = (input: unknown): Prompt.MessageEncoded => ({
-  role: "user",
-  content: [
-    {
-      type: "text",
-      text: typeof input === "string" ? input : JSON.stringify(input),
-    },
-  ],
-});
+/** A work item or steering message, rendered as one user message —
+ *  an authored {@link Message} renders `author: content`, so multi-
+ *  party conversations attribute structurally, never by in-band
+ *  caller conventions. */
+export const asUserMessage = (
+  input: Message<unknown> | string,
+): Prompt.MessageEncoded => {
+  const body = typeof input === "string" ? input : messageText(input);
+  const author = typeof input === "string" ? undefined : input.author;
+  return {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: author === undefined ? body : `${author}: ${body}`,
+      },
+    ],
+  };
+};
 
 /**
  * A note — the charter's EVENT channel (`AI.say`): a point-in-time
@@ -1585,6 +1621,7 @@ export const sampleTick = Effect.fn(function* (options: {
     yield* append([noteMessage(text)]);
     yield* ops.observe({
       type: "input",
+      id: mintMessageId(),
       text: `<note>\n${text}\n</note>`,
       kind: "note",
     });
@@ -1873,7 +1910,13 @@ interface EngineSession {
   tick: number;
   observed: number;
   readonly active: Set<string>;
-  busy?: { readonly attempts: number; readonly since: number };
+  busy?: {
+    readonly attempts: number;
+    readonly since: number;
+    /** The messages this round has admitted — `Thread.invocations`,
+     *  persisted with the liveness marker (crash recovery keeps it). */
+    readonly invocations?: ReadonlyArray<Message<unknown>>;
+  };
   settledOutcome?: { readonly outcome: unknown };
   /** The fiber running the current burst's rounds — what `abort`
    *  interrupts. Set for the burst's duration only. */
@@ -1950,10 +1993,11 @@ export interface SessionEngine {
        * messages, in order, immediately before `input` — then the
        * round runs over all of it. How a conversation held elsewhere
        * (a call's transcript) enters a session as the SEQUENCE it is,
-       * not a blob: each entry is one message. Strings are the whole
-       * contract — attribution/rendering is the caller's convention.
+       * not a blob: each entry is normalized to an identified
+       * {@link Message} at the door (a `Message` passes through with
+       * its attribution; a bare string gets a minted id).
        */
-      readonly history?: ReadonlyArray<string>;
+      readonly history?: ReadonlyArray<Message<unknown> | string>;
     },
   ) => Effect.Effect<unknown, unknown>;
   /**
@@ -2165,6 +2209,9 @@ export const makeSessionEngine = (
       s.handle.messages,
       (rows) => Prompt.make([...rows]).content,
     ),
+    // what the current round is answering — read from the liveness
+    // marker (persisted at admit), never parsed from the transcript
+    invocations: Effect.sync(() => s.busy?.invocations ?? []),
     compact: (plan) =>
       Effect.sync(() => {
         s.pendingCompaction = plan;
@@ -2376,7 +2423,8 @@ export const makeSessionEngine = (
     return s;
   });
 
-  /** Queue one input; pair a dispatch waiter to its inbox seq. */
+  /** Queue one input (normalized to an identified message at this
+   *  door); pair a dispatch waiter to its inbox seq. */
   const enqueue = Effect.fn(function* (
     s: EngineSession,
     input: unknown,
@@ -2385,8 +2433,10 @@ export const makeSessionEngine = (
       readonly quiet?: boolean;
     },
   ) {
-    const seq = yield* s.handle.putInbox(input, {
+    const normalized = toMessage(input);
+    const seq = yield* s.handle.putInbox(normalized.message, {
       quiet: enqueueOptions?.quiet,
+      ...(normalized.kind === undefined ? {} : { kind: normalized.kind }),
     });
     if (enqueueOptions?.waiter !== undefined) {
       s.pendingWaiters.push({ seq, waiter: enqueueOptions.waiter });
@@ -2577,6 +2627,7 @@ export const makeSessionEngine = (
         ]);
         yield* observe(s, {
           type: "input",
+          id: mintMessageId(),
           text: `<note>\nround abandoned after ${maxAttempts} interrupted attempts\n</note>`,
           kind: "note",
         });
@@ -2669,8 +2720,7 @@ export const makeSessionEngine = (
         s.pendingCompaction = undefined;
         return applyCompactionPlan(s.handle, plan);
       });
-      const drained = rows.map((row) => inputProvenance(row.input));
-      const inputs = drained.map((item) => item.value);
+      const inputs = rows.map((row) => row.message.content);
       if (rows.length > 0) {
         const maxSeq = rows[rows.length - 1]!.seq;
         // drained waiters JOIN THE ROUND: only now are they
@@ -2683,11 +2733,19 @@ export const makeSessionEngine = (
           }
         }
         // the ATOMIC ADMIT: inputs into the thread, watermark past
-        // them, the round OPENED (busy) — one write; every crash
-        // point around it converges
-        s.busy = s.busy ?? { attempts: 0, since: Date.now() };
+        // them, the round OPENED (busy, carrying the round's
+        // invocations for `Thread.invocations`) — one write; every
+        // crash point around it converges
+        s.busy = {
+          attempts: s.busy?.attempts ?? 0,
+          since: s.busy?.since ?? Date.now(),
+          invocations: [
+            ...(s.busy?.invocations ?? []),
+            ...rows.map((row) => row.message),
+          ],
+        };
         yield* s.handle.admit({
-          messages: drained.map((item) => asUserMessage(item.value)),
+          messages: rows.map((row) => asUserMessage(row.message)),
           drainedTo: maxSeq + 1,
           meta: metaOf(s),
         });
@@ -2698,11 +2756,15 @@ export const makeSessionEngine = (
         yield* s.handle
           .deleteInbox(rows.map((row) => row.seq))
           .pipe(Effect.ignore);
-        for (const { value, kind } of drained) {
+        for (const row of rows) {
           yield* observe(s, {
             type: "input",
-            text: typeof value === "string" ? value : JSON.stringify(value),
-            kind,
+            id: row.message.id,
+            ...(row.message.author === undefined
+              ? {}
+              : { author: row.message.author }),
+            text: messageText(row.message),
+            ...(row.kind === undefined ? {} : { kind: row.kind }),
           });
         }
       } else if (s.busy === undefined) {
@@ -2734,6 +2796,7 @@ export const makeSessionEngine = (
         yield* appendThread(s, [noteMessage(text)]);
         yield* observe(s, {
           type: "input",
+          id: mintMessageId(),
           text: `<note>\n${text}\n</note>`,
           kind: "note",
         });
@@ -3051,12 +3114,16 @@ export const makeSessionEngine = (
       // only when its own message is drained, so an in-flight earlier
       // round can never answer it.
       const waiter = yield* Deferred.make<unknown, unknown>();
+      const waking = toMessage(input);
       const seqs = yield* s.handle.putInboxBatch([
         ...(dispatchOptions?.history ?? []).map((entry) => ({
-          input: entry,
+          message: toMessage(entry).message,
           quiet: true,
         })),
-        { input },
+        {
+          message: waking.message,
+          ...(waking.kind === undefined ? {} : { kind: waking.kind }),
+        },
       ]);
       s.pendingWaiters.push({ seq: seqs[seqs.length - 1]!, waiter });
       yield* kick(s.key);

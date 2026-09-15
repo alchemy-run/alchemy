@@ -438,48 +438,48 @@ export const layer: {
         { template: charterOrTemplate as TemplateStringsArray, refs },
       )
     : isSkill(term)
-    ? Object.assign(
-        Layer.effect(
-          term as any,
-          Effect.gen(function* () {
-            const template = charterOrTemplate as TemplateStringsArray;
-            const context = yield* Effect.context<never>();
-            const tools: SkillService["tools"] = {};
-            for (const ref of refs) {
-              if (isSource(ref)) {
-                // resolve the file's path where it is true (plan) and bind
-                // it for where it is not (the bundled runtime) — Source.ts
-                yield* bindSource(ref);
-                continue;
+      ? Object.assign(
+          Layer.effect(
+            term as any,
+            Effect.gen(function* () {
+              const template = charterOrTemplate as TemplateStringsArray;
+              const context = yield* Effect.context<never>();
+              const tools: SkillService["tools"] = {};
+              for (const ref of refs) {
+                if (isSource(ref)) {
+                  // resolve the file's path where it is true (plan) and bind
+                  // it for where it is not (the bundled runtime) — Source.ts
+                  yield* bindSource(ref);
+                  continue;
+                }
+                if (!isTool(ref)) continue;
+                const name = (ref as { "~alchemy/Name": string })[
+                  "~alchemy/Name"
+                ];
+                const service = Context.getOption(context, ref as any);
+                if (Option.isNone(service)) {
+                  return yield* Effect.die(
+                    `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
+                  );
+                }
+                tools[name] = Effect.isEffect(service.value)
+                  ? yield* service.value as Effect.Effect<any>
+                  : service.value;
               }
-              if (!isTool(ref)) continue;
-              const name = (ref as { "~alchemy/Name": string })[
-                "~alchemy/Name"
-              ];
-              const service = Context.getOption(context, ref as any);
-              if (Option.isNone(service)) {
-                return yield* Effect.die(
-                  `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
-                );
-              }
-              tools[name] = Effect.isEffect(service.value)
-                ? yield* service.value as Effect.Effect<any>
-                : service.value;
-            }
-            return { template, refs, tools } satisfies SkillService;
-          }) as any,
-        ),
-        // the teaching as static data on the Layer (Teaching)
-        { template: charterOrTemplate as TemplateStringsArray, refs },
-      )
-    : Layer.effect(
-        term,
-        Effect.orDie(
-          Effect.map(
-            Effect.flatMap(Driver, (driver) =>
-              driver.interpret(term, charterOrTemplate),
-            ),
-            withStubs,
+              return { template, refs, tools } satisfies SkillService;
+            }) as any,
           ),
-        ) as any,
-      )) as any;
+          // the teaching as static data on the Layer (Teaching)
+          { template: charterOrTemplate as TemplateStringsArray, refs },
+        )
+      : Layer.effect(
+          term,
+          Effect.orDie(
+            Effect.map(
+              Effect.flatMap(Driver, (driver) =>
+                driver.interpret(term, charterOrTemplate),
+              ),
+              withStubs,
+            ),
+          ) as any,
+        )) as any;

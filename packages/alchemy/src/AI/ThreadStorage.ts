@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "./Events.ts";
+import type { Message } from "./Message.ts";
 
 /** The session facts that ride beside the thread: restored at boot so a
  *  revived session continues its tick count and observation cursor. */
@@ -21,22 +22,35 @@ export interface SessionMeta {
    * all indistinguishable on disk and all recovered the same way.
    * `attempts` counts consecutive re-entries on the SAME round; any
    * completed sampling resets it (progress-keyed budgets, not
-   * wall-clock).
+   * wall-clock). `invocations` are the messages this round has
+   * admitted — persisted with the marker so `Thread.invocations`
+   * survives a crash-recovery re-entry.
    */
-  readonly busy?: { readonly attempts: number; readonly since: number };
+  readonly busy?: {
+    readonly attempts: number;
+    readonly since: number;
+    readonly invocations?: ReadonlyArray<Message<unknown>>;
+  };
   /** The settled outcome — a settled session answers late dispatches
    *  with it and is never restored. */
   readonly settled?: { readonly outcome: unknown };
 }
 
-/** One pending inbox row. */
+/** One pending inbox row — an identified {@link Message}, normalized
+ *  at the door (`Sessions.send`/`dispatch`, a steer, a socket
+ *  submit): bare strings and event payloads are wrapped with a
+ *  minted id before they land here. */
 export interface InboxRow {
   readonly seq: number;
-  readonly input: unknown;
+  readonly message: Message<unknown>;
   /** QUIET inputs (`send(…, { wake: false })`) join whatever round
    *  happens anyway but never open one — a parked session stays
    *  parked with these accumulating as context. */
   readonly quiet?: boolean;
+  /** Structural provenance riding the row (a `Thread.remind`
+   *  delivery) — surfaces on the `input` observation, never parsed
+   *  from text. */
+  readonly kind?: "reminder";
 }
 
 /** One session's storage — all reads and writes for `${term}/${key}`. */
@@ -45,22 +59,27 @@ export interface ThreadHandle {
   readonly meta: Effect.Effect<SessionMeta | undefined>;
   readonly putMeta: (meta: SessionMeta) => Effect.Effect<void>;
   /**
-   * Durably queue one input, returning its inbox seq — the engine
-   * pairs in-flight waiters to their inputs by this seq.
+   * Durably queue one message, returning its inbox seq — the engine
+   * pairs in-flight waiters to their inputs by this seq. IDEMPOTENT
+   * on the message id against PENDING rows: queuing an id already in
+   * the inbox answers the existing row's seq instead of duplicating
+   * it (a caller retrying a delivery after a crash sends once).
    */
   readonly putInbox: (
-    input: unknown,
-    options?: { readonly quiet?: boolean },
+    message: Message<unknown>,
+    options?: { readonly quiet?: boolean; readonly kind?: "reminder" },
   ) => Effect.Effect<number>;
   /**
-   * Durably queue SEVERAL inputs in ONE write (one storage put on the
-   * durable placement — a dispatch's pre-history plus its waking input
-   * land atomically, in order). Answers each row's seq, in input order.
+   * Durably queue SEVERAL messages in ONE write (one storage put on
+   * the durable placement — a dispatch's pre-history plus its waking
+   * input land atomically, in order). Answers each row's seq, in
+   * input order, with the same pending-id idempotency as `putInbox`.
    */
   readonly putInboxBatch: (
     inputs: ReadonlyArray<{
-      readonly input: unknown;
+      readonly message: Message<unknown>;
       readonly quiet?: boolean;
+      readonly kind?: "reminder";
     }>,
   ) => Effect.Effect<ReadonlyArray<number>>;
   /** Pending inbox rows at or above the drain watermark, in order. */

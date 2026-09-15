@@ -23,6 +23,7 @@ const phantomThread = (key: string): AI.ThreadService => ({
   key,
   tokens: Effect.succeed(0),
   entries: Effect.succeed([]),
+  invocations: Effect.succeed([]),
   compact: () => Effect.void,
   reply: () => Effect.void,
   remind: () => Effect.void,

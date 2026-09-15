@@ -25,12 +25,34 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "../AI/Events.ts";
+import type { Message } from "../AI/Message.ts";
 import {
   ThreadStorage,
   type InboxRow,
   type SessionMeta,
   type ThreadHandle,
 } from "../AI/ThreadStorage.ts";
+
+/** The inbox `data` JSON — the identified message plus row
+ *  provenance. Legacy rows (pre-Message) hold the raw input value
+ *  and are wrapped with a seq-deterministic id at read. */
+interface InboxData {
+  readonly message: Message<unknown>;
+  readonly kind?: "reminder";
+}
+
+const parseInboxData = (seq: number, data: string): InboxData => {
+  const parsed = JSON.parse(data) as unknown;
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "message" in parsed &&
+    typeof (parsed as { message?: { id?: unknown } }).message?.id === "string"
+  ) {
+    return parsed as InboxData;
+  }
+  return { message: { id: `m-legacy-${seq}`, content: parsed } };
+};
 
 const TABLES = `
 CREATE TABLE IF NOT EXISTS session_meta (
@@ -135,18 +157,34 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                 );
               }),
               putMeta: (meta) => Effect.sync(() => putMeta(meta)),
-              putInbox: (input, inboxOptions) =>
+              putInbox: (message, inboxOptions) =>
                 Effect.sync(() =>
                   db.transaction(() => {
                     ensureRow();
-                    const seq = (readRow()?.inbox_seq ?? 0) as number;
+                    const row = readRow();
+                    // pending-id idempotency: a retried delivery
+                    // answers the existing row's seq, no duplicate
+                    const pending = db
+                      .query(
+                        "SELECT seq FROM session_inbox WHERE term = ? AND key = ? AND seq >= ? AND json_extract(data, '$.message.id') = ?",
+                      )
+                      .get(term, key, row?.drained ?? 0, message.id) as {
+                      seq: number;
+                    } | null;
+                    if (pending !== null) return pending.seq;
+                    const seq = (row?.inbox_seq ?? 0) as number;
                     db.query(
                       "INSERT INTO session_inbox (term, key, seq, data, quiet) VALUES (?, ?, ?, ?, ?)",
                     ).run(
                       term,
                       key,
                       seq,
-                      JSON.stringify(input ?? null),
+                      JSON.stringify({
+                        message,
+                        ...(inboxOptions?.kind === undefined
+                          ? {}
+                          : { kind: inboxOptions.kind }),
+                      } satisfies InboxData),
                       inboxOptions?.quiet === true ? 1 : 0,
                     );
                     db.query(
@@ -159,23 +197,41 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                 Effect.sync(() =>
                   db.transaction(() => {
                     ensureRow();
-                    const first = (readRow()?.inbox_seq ?? 0) as number;
+                    const row = readRow();
+                    const drained = row?.drained ?? 0;
+                    let next = (row?.inbox_seq ?? 0) as number;
+                    const find = db.query(
+                      "SELECT seq FROM session_inbox WHERE term = ? AND key = ? AND seq >= ? AND json_extract(data, '$.message.id') = ?",
+                    );
                     const insert = db.query(
                       "INSERT INTO session_inbox (term, key, seq, data, quiet) VALUES (?, ?, ?, ?, ?)",
                     );
-                    const seqs = inputs.map((entry, index) => {
+                    const seqs = inputs.map((entry) => {
+                      const pending = find.get(
+                        term,
+                        key,
+                        drained,
+                        entry.message.id,
+                      ) as { seq: number } | null;
+                      if (pending !== null) return pending.seq;
+                      const seq = next++;
                       insert.run(
                         term,
                         key,
-                        first + index,
-                        JSON.stringify(entry.input ?? null),
+                        seq,
+                        JSON.stringify({
+                          message: entry.message,
+                          ...(entry.kind === undefined
+                            ? {}
+                            : { kind: entry.kind }),
+                        } satisfies InboxData),
                         entry.quiet === true ? 1 : 0,
                       );
-                      return first + index;
+                      return seq;
                     });
                     db.query(
                       "UPDATE session_meta SET inbox_seq = ? WHERE term = ? AND key = ?",
-                    ).run(first + inputs.length, term, key);
+                    ).run(next, term, key);
                     return seqs;
                   })(),
                 ),
@@ -191,11 +247,15 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                     data: string;
                     quiet: number;
                   }>
-                ).map((inboxRow): InboxRow => ({
-                  seq: inboxRow.seq,
-                  input: JSON.parse(inboxRow.data),
-                  quiet: inboxRow.quiet === 1,
-                }));
+                ).map((inboxRow): InboxRow => {
+                  const data = parseInboxData(inboxRow.seq, inboxRow.data);
+                  return {
+                    seq: inboxRow.seq,
+                    message: data.message,
+                    quiet: inboxRow.quiet === 1,
+                    ...(data.kind === undefined ? {} : { kind: data.kind }),
+                  };
+                });
               }),
               deleteInbox: (seqs) =>
                 Effect.sync(() => {

@@ -59,6 +59,7 @@ import {
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
 import type { SessionObservation } from "../../AI/Events.ts";
+import type { Message } from "../../AI/Message.ts";
 import { SessionIndex, sessionId } from "../../AI/SessionIndex.ts";
 import {
   handleSessionSocketFrame,
@@ -152,6 +153,7 @@ const phantomThread = (key: string): ThreadService => ({
   key,
   tokens: Effect.succeed(0),
   entries: Effect.succeed([]),
+  invocations: Effect.succeed([]),
   compact: () => Effect.void,
   reply: () => Effect.void,
   remind: () => Effect.void,
@@ -202,8 +204,9 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
     input: unknown,
     options?: {
       readonly parent?: SessionRef;
-      /** Quiet pre-history rows recorded before `input` (Sessions). */
-      readonly history?: ReadonlyArray<string>;
+      /** Quiet pre-history rows recorded before `input` (Sessions) —
+       *  identified messages, or bare strings wrapped at the door. */
+      readonly history?: ReadonlyArray<Message<unknown> | string>;
     },
   ) => Effect.Effect<unknown, unknown, RuntimeContext>;
   /** One METHOD of this session's API (`agent.at(key).method(…)`) —
@@ -894,7 +897,7 @@ export const DurableObjectHost: Layer.Layer<
             input: unknown,
             options?: {
               parent?: SessionRef;
-              history?: ReadonlyArray<string>;
+              history?: ReadonlyArray<Message<unknown> | string>;
             },
           ) {
             return yield* (yield* engine).dispatch(input, {

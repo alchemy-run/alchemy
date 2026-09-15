@@ -109,13 +109,22 @@ const contract = (
         yield* Effect.gen(function* () {
           const storage = yield* ThreadStorage;
           const handle = yield* storage.open("TestAgent", "issue-9");
-          const s0 = yield* handle.putInbox("first");
-          const s1 = yield* handle.putInbox({ event: "second" });
+          const s0 = yield* handle.putInbox({ id: "m-1", content: "first" });
+          const s1 = yield* handle.putInbox({
+            id: "m-2",
+            author: "sam",
+            content: { event: "second" },
+          });
           expect(s1).toBeGreaterThan(s0);
+          // pending-id idempotency: the same message id answers the
+          // existing row's seq instead of duplicating it
+          expect(yield* handle.putInbox({ id: "m-1", content: "first" })).toBe(
+            s0,
+          );
           const pending = yield* handle.listInbox;
-          expect(pending.map((row) => row.input)).toEqual([
-            "first",
-            { event: "second" },
+          expect(pending.map((row) => row.message)).toEqual([
+            { id: "m-1", content: "first" },
+            { id: "m-2", author: "sam", content: { event: "second" } },
           ]);
 
           // the atomic admit: messages + watermark + meta in one write
@@ -138,8 +147,9 @@ const contract = (
             since: 123,
           });
           yield* handle.deleteInbox([s0, s1]);
-          // a later enqueue is visible again
-          const s2 = yield* handle.putInbox("third");
+          // a later enqueue is visible again — and a drained id may
+          // be reused (idempotency guards PENDING rows only)
+          const s2 = yield* handle.putInbox({ id: "m-3", content: "third" });
           expect(s2).toBeGreaterThan(s1);
           expect((yield* handle.listInbox).length).toBe(1);
         }).pipe(Effect.provide(layer));

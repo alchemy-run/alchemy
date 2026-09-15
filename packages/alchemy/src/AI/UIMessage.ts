@@ -56,20 +56,24 @@ export interface StreamingSample {
 }
 
 /**
- * One `input` observation as the user message it is. Ids are the
- * durable seq (`u-${seq}`) so a snapshot and a socket replay of the
- * same row agree — a client dedupes on it.
+ * One `input` observation as the user message it is. The id is the
+ * MESSAGE's durable identity (`Message.id`, stamped on the row at the
+ * door) — stable across snapshot and socket replay, and the same
+ * handle any domain store (a posts tree) knows the message by. Rows
+ * written before messages carried ids fall back to the seq
+ * (`u-${seq}`).
  */
 export const inputToUIMessage = (
   observation: Extract<SessionObservation, { type: "input" }>,
 ): UIMessage => ({
-  id: `u-${observation.seq}`,
+  id: observation.id ?? `u-${observation.seq}`,
   role: "user",
   parts: [{ type: "text", text: observation.text }],
-  // structural provenance (note/reminder) + wall-clock time —
+  // structural provenance (author, note/reminder) + wall-clock time —
   // clients read these, never the in-band text markers
   metadata: {
     at: observation.at,
+    ...(observation.author !== undefined ? { author: observation.author } : {}),
     ...(observation.kind !== undefined ? { kind: observation.kind } : {}),
   },
 });
@@ -101,12 +105,15 @@ export const renderToolFailure = (output: unknown): string => {
  * rendered into the `useChat` wire protocol (designs/ai/streaming.md;
  * only TYPES are imported from `ai`, no runtime dependency): reduce a
  * session's observation log into AI SDK UIMessages. Inputs are user
- * messages; a BURST of samplings (everything between inputs) is one
- * assistant message whose parts are step-start + reasoning + text +
- * dynamic-tool parts, with tool results upgrading their call's
- * state. The in-flight sampling (when given) rides along as a final
- * streaming-state assistant message, so pollers render tokens as
- * they accumulate. {@link makeChunkTranslator} is the live half.
+ * messages; EACH SAMPLING is one assistant message (id'd by the row
+ * that opened it — a live `tool-call`, else its `assistant` row) with
+ * reasoning + text + dynamic-tool parts, tool results upgrading their
+ * call's state wherever the call lives. Per-sampling messages keep
+ * public prose, thinking, and execution individually addressable
+ * instead of welding a whole burst into one message. The in-flight
+ * sampling (when given) rides along as a final streaming-state
+ * assistant message, so pollers render tokens as they accumulate.
+ * {@link makeChunkTranslator} is the live half.
  */
 export const toUIMessages = (
   log: ReadonlyArray<SessionObservation>,
@@ -114,34 +121,39 @@ export const toUIMessages = (
 ): Array<UIMessage> => {
   const messages: Array<UIMessage> = [];
   let assistant:
-    | { message: UIMessage; parts: Array<UIMessagePart<any, any>> }
+    | {
+        message: UIMessage;
+        parts: Array<UIMessagePart<any, any>>;
+        tick: number;
+      }
     | undefined;
   const toolParts = new Map<string, any>();
   // delegations observed mid-sampling ("dispatched" precedes its
-  // burst's consolidated `assistant`) — matched to tool parts by
-  // name, in order, when the burst lands
+  // sampling's consolidated `assistant`) — matched to tool parts by
+  // name, in order, when the sampling lands
   const pendingDispatches: Array<{
     toolName: string;
     agent: string;
     child: string | undefined;
   }> = [];
-  // the sampling whose step is open, and where in the parts it began:
-  // a `tool-call` row opens the step (the call streamed before the
-  // sampling completed) and its `assistant` restatement joins it —
-  // one step per sampling, with the text ahead of the calls as the
-  // model produced it
-  let stepTick: number | undefined;
-  let stepAt = 0;
 
-  // the input that woke the round in flight — every burst is, by the
-  // session's own physics, the REPLY to the input before it, and the
-  // message carries that edge (`replyTo`) so clients thread on data,
-  // not on heuristics
+  // the input that woke the round in flight — every sampling is, by
+  // the session's own physics, part of the REPLY to the input before
+  // it, and each message carries that edge (`replyTo`) so clients
+  // thread on data, not on heuristics
   let lastInputId: string | undefined;
 
-  const openAssistant = (observation: { seq: number; at: number }) => {
-    if (assistant === undefined) {
-      const parts: Array<UIMessagePart<any, any>> = [];
+  // one message PER SAMPLING: a row of a new tick closes the previous
+  // sampling's message and opens a fresh one (a `tool-call` streamed
+  // mid-sampling and its `assistant` restatement share the tick, so
+  // they share the message)
+  const openSampling = (observation: {
+    seq: number;
+    at: number;
+    tick: number;
+  }) => {
+    if (assistant === undefined || assistant.tick !== observation.tick) {
+      const parts: Array<UIMessagePart<any, any>> = [{ type: "step-start" }];
       const message: UIMessage = {
         id: `a-${observation.seq}`,
         role: "assistant",
@@ -151,20 +163,14 @@ export const toUIMessages = (
           ...(lastInputId === undefined ? {} : { replyTo: lastInputId }),
         },
       };
-      assistant = { message, parts };
+      assistant = { message, parts, tick: observation.tick };
       messages.push(message);
     }
     return assistant;
   };
-  const openStep = (tick: number) => {
-    const current = assistant!;
-    if (stepTick !== tick) {
-      current.parts.push({ type: "step-start" });
-      stepTick = tick;
-      stepAt = current.parts.length;
-    }
-    return current;
-  };
+  // the sampling's prose splices ahead of any tool part its live
+  // `tool-call` rows already placed — right after the step marker
+  const PROSE_AT = 1;
   /** A call's part — the one already announced by its `tool-call`
    *  row, else a new one. */
   /** Every call still awaiting its result ends as a failure that says
@@ -208,7 +214,6 @@ export const toUIMessages = (
       }
       case "input": {
         assistant = undefined;
-        stepTick = undefined;
         const input = inputToUIMessage(observation);
         lastInputId = input.id;
         messages.push(input);
@@ -218,8 +223,7 @@ export const toUIMessages = (
       // running (or the process died mid-handler); the viewer sees the
       // call now, as a running tool part, restated when the row lands
       case "tool-call": {
-        openAssistant(observation);
-        const current = openStep(observation.tick);
+        const current = openSampling(observation);
         toolPart(current, {
           id: observation.toolCallId,
           name: observation.toolName,
@@ -228,11 +232,10 @@ export const toUIMessages = (
         break;
       }
       case "assistant": {
-        openAssistant(observation);
-        const current = openStep(observation.tick);
-        // what sampled and what it cost — folded over the burst
-        assistant!.message.metadata = stampSampling(
-          (assistant!.message.metadata ?? {}) as SamplingMetadata,
+        const current = openSampling(observation);
+        // what sampled and what it cost — this sampling's bill
+        current.message.metadata = stampSampling(
+          (current.message.metadata ?? {}) as SamplingMetadata,
           observation,
         );
         // the sampling's prose came BEFORE its calls — ahead of any
@@ -255,7 +258,7 @@ export const toUIMessages = (
         if (observation.text.length > 0) {
           prose.push({ type: "text", text: observation.text });
         }
-        current.parts.splice(stepAt, 0, ...prose);
+        current.parts.splice(PROSE_AT, 0, ...prose);
         for (const call of observation.toolCalls) {
           const part = toolPart(current, call);
           // a delegation call carries its identity — the client links
@@ -288,7 +291,6 @@ export const toUIMessages = (
         // a crash must be VISIBLE to pollers — dropping it leaves the
         // client staring at recovery notes with no cause in sight
         assistant = undefined;
-        stepTick = undefined;
         messages.push({
           id: `crash-${observation.seq}`,
           role: "assistant",
@@ -330,7 +332,6 @@ export const toUIMessages = (
           });
         }
         assistant = undefined;
-        stepTick = undefined;
         break;
       }
       default:
@@ -379,28 +380,31 @@ export const toUIMessages = (
 /**
  * The observation seqs behind ONE UIMessage — the redaction span for
  * `Sessions.redact`. Groups the log exactly as {@link toUIMessages}
- * does, so deleting `a-<seq>` takes the whole burst (its `assistant`
- * samplings, their `tool-call`/`tool-result` rows, and the
- * `dispatched` markers that preceded it), `u-<seq>` takes the one
- * input, `crash-<seq>` the one crash. `settled` rows are never part
- * of a span — the session's end is not a message. Unknown ids answer
- * empty.
+ * does, so deleting `a-<seq>` takes the one SAMPLING (its
+ * `tool-call`/`assistant`/`tool-result` rows and the `dispatched`
+ * markers around it), an input's message id (or legacy `u-<seq>`)
+ * takes the one input, `crash-<seq>` the one crash. `settled` rows
+ * are never part of a span — the session's end is not a message.
+ * Unknown ids answer empty.
  */
 export const observationSpan = (
   log: ReadonlyArray<SessionObservation>,
   messageId: string,
 ): Array<number> => {
   const groups = new Map<string, Array<number>>();
-  let assistant: Array<number> | undefined;
-  // mid-sampling rows (dispatched, live tool-calls) that precede
-  // their burst's consolidated `assistant` — they belong to it
+  let assistant: { seqs: Array<number>; tick: number } | undefined;
+  // mid-sampling rows (dispatched markers) that precede their
+  // sampling's first row — they belong to it
   let pending: Array<number> = [];
+  // a call's result may land after its sampling's message closed
+  // (the next tick opened) — route it to the call's own message
+  const callGroups = new Map<string, Array<number>>();
   for (const observation of log) {
     switch (observation.type) {
       case "input":
         assistant = undefined;
         pending = [];
-        groups.set(`u-${observation.seq}`, [observation.seq]);
+        groups.set(observation.id ?? `u-${observation.seq}`, [observation.seq]);
         break;
       case "crashed":
         assistant = undefined;
@@ -408,28 +412,41 @@ export const observationSpan = (
         groups.set(`crash-${observation.seq}`, [observation.seq]);
         break;
       case "aborted":
-        // part of the burst it ended; alone when nothing had sampled
-        if (assistant !== undefined) assistant.push(observation.seq);
+        // part of the sampling it ended; alone when nothing had sampled
+        if (assistant !== undefined) assistant.seqs.push(observation.seq);
         else groups.set(`abort-${observation.seq}`, [observation.seq]);
         assistant = undefined;
         pending = [];
         break;
-      // the burst's message is named by whichever row OPENED it — a
+      // one group PER SAMPLING, named by whichever row OPENED it — a
       // `tool-call` streamed before its sampling completed, else the
       // `assistant` row (exactly as `toUIMessages` ids the message)
       case "tool-call":
       case "assistant":
-        if (assistant === undefined) {
-          assistant = [];
-          groups.set(`a-${observation.seq}`, assistant);
+        if (assistant === undefined || assistant.tick !== observation.tick) {
+          assistant = { seqs: [], tick: observation.tick };
+          groups.set(`a-${observation.seq}`, assistant.seqs);
         }
-        assistant.push(...pending, observation.seq);
+        assistant.seqs.push(...pending, observation.seq);
         pending = [];
+        if (observation.type === "tool-call") {
+          callGroups.set(observation.toolCallId, assistant.seqs);
+        } else {
+          for (const call of observation.toolCalls) {
+            callGroups.set(call.id, assistant.seqs);
+          }
+        }
         break;
+      case "tool-result": {
+        const group = callGroups.get(observation.toolCallId) ?? assistant?.seqs;
+        if (group !== undefined) group.push(observation.seq);
+        else pending.push(observation.seq);
+        break;
+      }
       case "settled":
         break;
       default:
-        if (assistant !== undefined) assistant.push(observation.seq);
+        if (assistant !== undefined) assistant.seqs.push(observation.seq);
         else pending.push(observation.seq);
         break;
     }
@@ -439,18 +456,25 @@ export const observationSpan = (
 
 /**
  * A stateful translator from a session's live observations to AI SDK
- * UIMessageChunks: emits `start` once, wraps each sampling in
- * `start-step`/`finish-step`, and reports whether the response is
- * COMPLETE (quiescence, settle, or crash) so the HTTP edge knows when
- * to say `finish` and close.
+ * UIMessageChunks — ONE SAMPLING per stream, matching the snapshot's
+ * per-sampling messages: emits `start` once (id'd by the sampling's
+ * first row, exactly as {@link toUIMessages} names it), and reports
+ * COMPLETE (`done`) when the sampling has fully landed — its
+ * `assistant` row and every tool result it owed — or the round is cut
+ * (abort, settle, crash). The socket transport ends the stream on
+ * `done`; the client's persistent view re-subscribes and the next
+ * sampling arrives as its own message, so live and hydrated
+ * transcripts agree message for message.
+ *
+ * `options.replyTo` seeds the reply edge for a stream that opened
+ * mid-round (the input row was consumed by an earlier stream — the
+ * transport remembers it across turns).
  */
-export const makeChunkTranslator = () => {
+export const makeChunkTranslator = (options?: {
+  readonly replyTo?: string;
+}) => {
   let started = false;
   let openStep = false;
-  // the tick whose step is open because a LIVE tool-call announced it
-  // (see the `tool-call` case) — its `assistant` restatement joins that
-  // step instead of opening a second one
-  let liveStepTick: number | undefined;
   // calls THIS stream has announced — an output for an unseen call
   // (a subscribe that opened mid-burst) must be dropped, or the AI
   // SDK fabricates an orphan tool part with no name and no input
@@ -458,11 +482,15 @@ export const makeChunkTranslator = () => {
   // announced calls still owed a result — closed as stopped when the
   // round is cut (abort, settle) instead of running forever in the view
   const openCalls = new Set<string>();
-  // the burst's samplings so far — stamped on the message at `finish`
+  // whether this stream's sampling row has landed — with it down and
+  // every owed result in, the message is complete
+  let sampled = false;
+  // this sampling's bill — stamped on the message at `finish`
   let sampling: SamplingMetadata = {};
-  // the input that woke the round — the burst's REPLY edge (`replyTo`
-  // in the start chunk's metadata), same as the snapshot stamps it
-  let lastInputId: string | undefined;
+  // the input that woke the round — the sampling's REPLY edge
+  // (`replyTo` in the start chunk's metadata), as the snapshot stamps
+  // it; seeded by the transport for mid-round streams
+  let lastInputId: string | undefined = options?.replyTo;
 
   return (
     observation: SessionObservation,
@@ -486,16 +514,34 @@ export const makeChunkTranslator = () => {
       if (openStep) {
         chunks.push({ type: "finish-step" });
         openStep = false;
-        liveStepTick = undefined;
       }
     };
 
+    const start = (observation: { seq: number; at: number }) => {
+      if (started) return;
+      chunks.push({
+        type: "start",
+        // the DURABLE id, exactly as a snapshot names this sampling
+        // (`toUIMessages`/`observationSpan` id it by the row that
+        // OPENED it) — so a client can address the message later
+        // (redaction resolves `a-<seq>`), live or hydrated alike
+        messageId: `a-${observation.seq}`,
+        // the wall clock, as a snapshot's message would carry it —
+        // the view's day dividers read it
+        messageMetadata: {
+          at: observation.at,
+          ...(lastInputId === undefined ? {} : { replyTo: lastInputId }),
+        },
+      });
+      started = true;
+    };
+
     switch (observation.type) {
-      // a new round's trigger — remembered so the burst it wakes
+      // a new round's trigger — remembered so the sampling it wakes
       // carries its reply edge (the input row itself reaches clients
       // via the snapshot; the live feed threads on it)
       case "input": {
-        lastInputId = `u-${observation.seq}`;
+        lastInputId = observation.id ?? `u-${observation.seq}`;
         break;
       }
       // A tool call the in-flight sampling just made: its handler may
@@ -504,30 +550,10 @@ export const makeChunkTranslator = () => {
       // the viewer learns of the call NOW, as a running tool part, and
       // is not left staring at nothing while the handler works.
       case "tool-call": {
-        if (!started) {
-          chunks.push({
-            type: "start",
-            // the DURABLE id, exactly as a snapshot names this burst
-            // (`toUIMessages`/`observationSpan` id it by the row that
-            // OPENED it) — so a client can address the message later
-            // (redaction resolves `a-<seq>`), live or hydrated alike
-            messageId: `a-${observation.seq}`,
-            // the wall clock, as a snapshot's message would carry it —
-            // the view's day dividers read it
-            messageMetadata: {
-              at: observation.at,
-              ...(lastInputId === undefined
-                ? {}
-                : { replyTo: lastInputId }),
-            },
-          });
-          started = true;
-        }
-        if (!openStep || liveStepTick !== observation.tick) {
-          closeStep();
+        start(observation);
+        if (!openStep) {
           chunks.push({ type: "start-step" });
           openStep = true;
-          liveStepTick = observation.tick;
         }
         knownCalls.add(observation.toolCallId);
         openCalls.add(observation.toolCallId);
@@ -541,27 +567,12 @@ export const makeChunkTranslator = () => {
         break;
       }
       case "assistant": {
-        if (!started) {
-          chunks.push({
-            type: "start",
-            messageId: `a-${observation.seq}`,
-            messageMetadata: {
-              at: observation.at,
-              ...(lastInputId === undefined
-                ? {}
-                : { replyTo: lastInputId }),
-            },
-          });
-          started = true;
-        }
-        // the step a live tool-call of THIS sampling already opened is
-        // this sampling's step — restate into it
-        if (!openStep || liveStepTick !== observation.tick) {
-          closeStep();
+        start(observation);
+        if (!openStep) {
           chunks.push({ type: "start-step" });
           openStep = true;
         }
-        liveStepTick = undefined;
+        sampled = true;
         sampling = stampSampling(sampling, observation);
         if (
           observation.reasoning !== undefined &&
@@ -602,8 +613,10 @@ export const makeChunkTranslator = () => {
             dynamic: true,
           });
         }
-        // quiescence ends the burst — the assistant message is complete
-        if (observation.toolCalls.length === 0) {
+        // the sampling has LANDED — with no calls (quiescence) the
+        // message is complete now; with calls it completes when the
+        // last owed result lands (the `tool-result` case below)
+        if (openCalls.size === 0) {
           closeStep();
           chunks.push({ type: "finish", messageMetadata: { ...sampling } });
           done = true;
@@ -630,6 +643,13 @@ export const makeChunkTranslator = () => {
                 dynamic: true,
               },
         );
+        // the sampling's last owed result — its message is complete;
+        // the next sampling opens a fresh stream (and message)
+        if (sampled && openCalls.size === 0) {
+          closeStep();
+          chunks.push({ type: "finish", messageMetadata: { ...sampling } });
+          done = true;
+        }
         break;
       }
       case "settled": {

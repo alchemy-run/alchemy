@@ -105,6 +105,14 @@ export type SessionObservation = ObservationEnvelope &
     | {
         /** A message appended to the session's thread: work item, steer, or note. */
         readonly type: "input";
+        /**
+         * The message's durable identity (`Message.id`) — caller-
+         * supplied at the door or engine-minted. Absent only on rows
+         * written before messages carried ids; renderers tolerate it.
+         */
+        readonly id?: string;
+        /** Who said it (`Message.author`), when attributed. */
+        readonly author?: string;
         readonly text: string;
         /**
          * PROVENANCE, structural: `note` = driver-authored aside

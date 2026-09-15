@@ -3,6 +3,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { Fragment } from "./Fragment.ts";
+import type { Message } from "./Message.ts";
 
 /**
  * A compaction request — the ONE mutation a charter may ask of its
@@ -57,6 +58,17 @@ export interface ThreadService {
   readonly tokens: Effect.Effect<number>;
   /** Read-only access to the thread's messages. */
   readonly entries: Effect.Effect<ReadonlyArray<Prompt.Message>>;
+  /**
+   * The messages the CURRENT round has admitted — what this round is
+   * answering, as identified {@link Message}s in admission order. THE
+   * structural replacement for scanning the transcript: a tool that
+   * needs to know which request it is serving (an ask recording its
+   * reply under the right parent) reads the invocation here, by id,
+   * never by parsing prompt text. Persisted with the round's liveness
+   * marker, so a crash-recovery re-entry still knows its invocations.
+   * Empty outside a round and after the round closes at quiescence.
+   */
+  readonly invocations: Effect.Effect<ReadonlyArray<Message<unknown>>>;
   /** Request compaction; applied at the next sampling boundary. */
   readonly compact: (plan: CompactPlan) => Effect.Effect<void>;
   /**

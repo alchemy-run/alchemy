@@ -191,6 +191,10 @@ export class SessionSocketTransport<
   private turns: Turn[] = [];
   /** Inputs that landed mid-burst — delivered when the burst ends. */
   private heldInputs: UIMessage[] = [];
+  /** The last input's durable id — seeds each turn's translator so a
+   *  sampling streamed on a LATER turn (per-sampling streams) still
+   *  carries its reply edge. */
+  private lastInputId: string | undefined;
   /**
    * Receives user messages the wire carried — see the class doc. Set
    * by `useChat` (`alchemy/AI/React`); a bare transport drops them.
@@ -278,6 +282,10 @@ export class SessionSocketTransport<
       // submit included, so the optimistic message can adopt its
       // durable id (see the class doc)
       const message = inputToUIMessage(observation);
+      // the reply edge for samplings streamed on later turns — and
+      // the open translator hears it too (no chunks, just the edge)
+      this.lastInputId = message.id;
+      sink.translate(observation);
       if (sink.started) this.heldInputs.push(message);
       else this.onInput?.(message);
       return;
@@ -302,7 +310,11 @@ export class SessionSocketTransport<
       start: (controller) => {
         turn = {
           kind,
-          translate: makeChunkTranslator(),
+          translate: makeChunkTranslator(
+            this.lastInputId === undefined
+              ? undefined
+              : { replyTo: this.lastInputId },
+          ),
           controller,
           started: false,
           open: true,

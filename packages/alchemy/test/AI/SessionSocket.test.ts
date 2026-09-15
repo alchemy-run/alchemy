@@ -289,9 +289,9 @@ describe("SessionSocket (DriverLocal)", () => {
             const chunks = yield* readAll(stream);
             const types = chunks.map((chunk) => chunk.type);
 
-            // the round, in useChat's own vocabulary: message start,
-            // the tool call with its input, the tool's OUTPUT (from
-            // the durable tool-result frame), the answer, the finish
+            // ONE SAMPLING per stream: the submit's stream is the tool
+            // sampling — start, the call with its input, the tool's
+            // OUTPUT (the durable tool-result frame), finish
             expect(types[0]).toBe("start");
             expect(types).toContain("tool-input-available");
             expect(types).toContain("tool-output-available");
@@ -300,7 +300,19 @@ describe("SessionSocket (DriverLocal)", () => {
               (chunk) => chunk.type === "tool-output-available",
             )!;
             expect(JSON.stringify(output.output)).toContain("alchemy is IaE");
-            const text = chunks.find((chunk) => chunk.type === "text-delta")!;
+            // the ANSWER is the next sampling — its own message, on
+            // the next stream (what `useChat`'s persist re-subscribe
+            // does after every finish)
+            const next = yield* Effect.promise(() =>
+              transport.reconnectToStream({
+                chatId: "t1",
+                abortSignal: undefined,
+              }),
+            );
+            const answer = yield* readAll(next!).pipe(
+              Effect.timeout("10 seconds"),
+            );
+            const text = answer.find((chunk) => chunk.type === "text-delta")!;
             expect(text.delta).toBe("It is IaE.");
 
             // …and the observer socket saw the same round (broadcast
@@ -426,11 +438,12 @@ describe("SessionSocket (DriverLocal)", () => {
         );
         // the tail is still pending, unfed — the SDK cancels it on its
         // next resume. Our OWN submit's echo is DELIVERED under its
-        // durable id — the client re-identifies its optimistic message
-        // with it, so the row can be addressed later (redaction
-        // resolves observation spans by `u-<seq>`)
+        // durable id — the message id the door minted (`m-…`) — so
+        // the client re-identifies its optimistic message with it and
+        // the row can be addressed later (redaction resolves spans by
+        // the message id)
         expect(echoes.map((echo) => echo.text)).toEqual(["first question"]);
-        expect(echoes[0]!.id).toMatch(/^u-\d+$/);
+        expect(echoes[0]!.id).toMatch(/^m-/);
         yield* Effect.promise(() => tail!.cancel());
 
         // ── a FRESH client with no snapshot replays the history: the
@@ -457,7 +470,7 @@ describe("SessionSocket (DriverLocal)", () => {
         expect(replayedUsers.map((user) => user.text)).toEqual([
           "first question",
         ]);
-        expect(replayedUsers[0]!.id).toMatch(/^u-\d+$/);
+        expect(replayedUsers[0]!.id).toMatch(/^m-/);
 
         // ── the snapshot agrees with the replay, id for id
         const history = yield* gateway

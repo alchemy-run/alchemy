@@ -4,6 +4,7 @@ import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest"
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { SessionObservation } from "./Events.ts";
+import type { Message } from "./Message.ts";
 import type { SessionSummary } from "./SessionIndex.ts";
 
 /**
@@ -88,12 +89,15 @@ export class Sessions extends Context.Service<
      * `Agent.send`: the input is admitted to the session's inbox;
      * `wake: false` records it without starting a round — the next
      * sampling hears it. Fire-and-forget; the session answers into
-     * its own conversation, never to the caller.
+     * its own conversation, never to the caller. A bare string is
+     * wrapped into a {@link Message} with a minted id at the door;
+     * pass a `Message` to own the identity (and attribution) of what
+     * lands in the session.
      */
     readonly send: (
       term: string,
       key: string,
-      input: unknown,
+      input: Message | string,
       options?: { readonly wake?: boolean },
     ) => Effect.Effect<void, never, RuntimeContext>;
     /**
@@ -108,18 +112,18 @@ export class Sessions extends Context.Service<
     readonly dispatch: (
       term: string,
       key: string,
-      input: unknown,
+      input: Message | string,
       options?: {
         readonly parent?: { readonly term: string; readonly key: string };
         /**
          * PRE-HISTORY: recorded into the session as discrete quiet
          * messages, in order, atomically before `input` — how a
          * conversation held elsewhere (a call's transcript) enters a
-         * session as the SEQUENCE it is. Strings only — attribution
-         * and rendering are the caller's convention, never the
-         * platform's.
+         * session as the SEQUENCE it is. Each entry is one
+         * {@link Message} (attributed, identified); a bare string is
+         * wrapped with a minted id and no author.
          */
-        readonly history?: ReadonlyArray<string>;
+        readonly history?: ReadonlyArray<Message | string>;
       },
     ) => Effect.Effect<unknown, never, RuntimeContext>;
     /**

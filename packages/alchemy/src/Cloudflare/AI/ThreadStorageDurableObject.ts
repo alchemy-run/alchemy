@@ -25,6 +25,7 @@
 import * as Effect from "effect/Effect";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "../../AI/Events.ts";
+import type { Message } from "../../AI/Message.ts";
 import type { SessionMeta, ThreadHandle } from "../../AI/ThreadStorage.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { DurableObjectState } from "../Workers/DurableObjectState.ts";
@@ -79,18 +80,31 @@ export const emptyMeta: DurableSessionMeta = {
   drained: 0,
 };
 
-/** Inbox row envelope — carries the quiet flag beside the input. */
+/** Inbox row envelope — the identified message plus row flags.
+ *  Legacy shapes (`{ input, quiet }` and raw values) are wrapped
+ *  with a seq-deterministic id at read. */
 interface InboxEnvelope {
-  readonly input: unknown;
+  readonly message: Message<unknown>;
   readonly quiet: boolean;
+  readonly kind?: "reminder";
 }
 
 const isInboxEnvelope = (row: unknown): row is InboxEnvelope =>
   typeof row === "object" &&
   row !== null &&
+  "message" in row &&
+  typeof (row as { message?: { id?: unknown } }).message?.id === "string" &&
+  typeof (row as InboxEnvelope).quiet === "boolean";
+
+/** A pre-Message envelope (`{ input, quiet }`). */
+const isLegacyEnvelope = (
+  row: unknown,
+): row is { readonly input: unknown; readonly quiet: boolean } =>
+  typeof row === "object" &&
+  row !== null &&
   "input" in row &&
   "quiet" in row &&
-  typeof (row as InboxEnvelope).quiet === "boolean";
+  typeof (row as { quiet: unknown }).quiet === "boolean";
 
 export interface DurableObjectSessionStorage {
   readonly readMeta: Effect.Effect<DurableSessionMeta>;
@@ -171,17 +185,30 @@ export const makeThreadStorageDurableObject = (
       const full = yield* readMeta;
       yield* writeMeta({ ...meta, seq: full.seq, drained: full.drained });
     }),
-    putInbox: (input, inboxOptions) =>
+    putInbox: (message, inboxOptions) =>
       sealed(
         Effect.gen(function* () {
           const full = yield* readMeta;
+          // pending-id idempotency: a retried delivery answers the
+          // existing row's seq instead of duplicating it
+          const rows = yield* listRows<unknown>(INBOX);
+          for (const [k, row] of rows) {
+            const seq = seqOf(INBOX, k);
+            if (seq < full.drained) continue;
+            if (isInboxEnvelope(row) && row.message.id === message.id) {
+              return seq;
+            }
+          }
           // one atomic write: a crash can never leave a row the
           // counter would overwrite
           yield* storage
             .put({
               [seqKey(INBOX, full.seq)]: {
-                input,
+                message,
                 quiet: inboxOptions?.quiet === true,
+                ...(inboxOptions?.kind === undefined
+                  ? {}
+                  : { kind: inboxOptions.kind }),
               } satisfies InboxEnvelope,
               [META]: {
                 ...full,
@@ -196,41 +223,69 @@ export const makeThreadStorageDurableObject = (
       sealed(
         Effect.gen(function* () {
           const full = yield* readMeta;
-          // every row AND the advanced counter in ONE storage put —
-          // a dispatch's pre-history and its waking input are atomic
-          const seqs = inputs.map((_, index) => full.seq + index);
-          yield* storage
-            .put({
-              ...Object.fromEntries(
-                inputs.map((entry, index) => [
-                  seqKey(INBOX, full.seq + index),
-                  {
-                    input: entry.input,
-                    quiet: entry.quiet === true,
-                  } satisfies InboxEnvelope,
-                ]),
-              ),
-              [META]: {
-                ...full,
-                seq: full.seq + inputs.length,
-              } satisfies DurableSessionMeta,
-            })
-            .pipe(Effect.orDie);
+          const pending = new Map<string, number>();
+          for (const [k, row] of yield* listRows<unknown>(INBOX)) {
+            const seq = seqOf(INBOX, k);
+            if (seq < full.drained) continue;
+            if (isInboxEnvelope(row)) pending.set(row.message.id, seq);
+          }
+          // every fresh row AND the advanced counter in ONE storage
+          // put — a dispatch's pre-history and its waking input are
+          // atomic; rows whose id is already pending answer that seq
+          let next = full.seq;
+          const entries: Record<string, unknown> = {};
+          const seqs = inputs.map((entry) => {
+            const known = pending.get(entry.message.id);
+            if (known !== undefined) return known;
+            const seq = next++;
+            pending.set(entry.message.id, seq);
+            entries[seqKey(INBOX, seq)] = {
+              message: entry.message,
+              quiet: entry.quiet === true,
+              ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+            } satisfies InboxEnvelope;
+            return seq;
+          });
+          if (next > full.seq) {
+            entries[META] = {
+              ...full,
+              seq: next,
+            } satisfies DurableSessionMeta;
+            yield* storage.put(entries).pipe(Effect.orDie);
+          }
           return seqs;
         }),
       ),
     listInbox: sealed(
       Effect.gen(function* () {
         const full = yield* readMeta;
-        const rows = yield* listRows<InboxEnvelope | unknown>(INBOX);
+        const rows = yield* listRows<unknown>(INBOX);
         return rows.flatMap(([k, row]) => {
           const seq = seqOf(INBOX, k);
           if (seq < full.drained) return [];
-          // envelope rows carry the quiet flag; legacy raw rows are
-          // waking inputs
-          return isInboxEnvelope(row)
-            ? [{ seq, input: row.input, quiet: row.quiet }]
-            : [{ seq, input: row }];
+          // envelope rows carry the flags; legacy rows (either the
+          // pre-Message envelope or a raw value) wrap with a
+          // seq-deterministic id so re-reads agree
+          if (isInboxEnvelope(row)) {
+            return [
+              {
+                seq,
+                message: row.message,
+                quiet: row.quiet,
+                ...(row.kind === undefined ? {} : { kind: row.kind }),
+              },
+            ];
+          }
+          const legacy = isLegacyEnvelope(row)
+            ? { content: row.input, quiet: row.quiet }
+            : { content: row, quiet: false };
+          return [
+            {
+              seq,
+              message: { id: `m-legacy-${seq}`, content: legacy.content },
+              quiet: legacy.quiet,
+            },
+          ];
         });
       }),
     ),

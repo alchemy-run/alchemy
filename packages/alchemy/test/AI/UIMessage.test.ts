@@ -1,9 +1,10 @@
 /**
  * `observationSpan` — the redaction span behind one UIMessage. It must
- * group the log EXACTLY as `toUIMessages` does: `u-<seq>` is the one
- * input, `a-<seq>` is the whole burst (its samplings, tool results,
- * and the dispatched markers that preceded it), `crash-<seq>` the one
- * crash, and `settled` rows are never part of any span.
+ * group the log EXACTLY as `toUIMessages` does: an input's message id
+ * (legacy `u-<seq>`) is the one input, `a-<seq>` is ONE SAMPLING (its
+ * rows, its tool results, and the dispatched markers around it),
+ * `crash-<seq>` the one crash, and `settled` rows are never part of
+ * any span.
  */
 import type { SessionObservation } from "@/AI/Events.ts";
 import {
@@ -75,10 +76,12 @@ describe("observationSpan", () => {
     expect(observationSpan(log, "u-7")).toEqual([7]);
   });
 
-  it("an assistant message takes its whole burst", () => {
+  it("an assistant message takes its one sampling", () => {
     expect(observationSpan(log, "a-1")).toEqual([1]);
-    // the burst: the dispatched marker, both samplings, the result
-    expect(observationSpan(log, "a-4")).toEqual([3, 4, 5, 6]);
+    // one sampling per message: the dispatched marker and the result
+    // belong to their sampling; the next tick is its own message
+    expect(observationSpan(log, "a-4")).toEqual([3, 4, 5]);
+    expect(observationSpan(log, "a-6")).toEqual([6]);
   });
 
   it("spans exist exactly for the ids toUIMessages renders", () => {
@@ -358,29 +361,56 @@ describe("model + usage", () => {
     },
   ];
 
-  it("the snapshot stamps the burst's model and its summed bill", () => {
+  it("the snapshot stamps each sampling's model and its own bill", () => {
     const messages = toUIMessages(billed);
+    expect(messages.map((message) => message.id)).toEqual([
+      "u-0",
+      "a-1",
+      "a-3",
+      "u-4",
+      "a-5",
+    ]);
     expect(messages[1]!.metadata).toMatchObject({
       model: "gpt-5",
-      usage: { input: 220, cacheRead: 40, output: 40, reasoning: 5 },
+      usage: { input: 100, cacheRead: 40, output: 10 },
     });
-    expect(messages[3]!.metadata).not.toHaveProperty("model");
-    expect(messages[3]!.metadata).not.toHaveProperty("usage");
+    expect(messages[2]!.metadata).toMatchObject({
+      model: "gpt-5",
+      usage: { input: 120, output: 30, reasoning: 5 },
+    });
+    expect(messages[4]!.metadata).not.toHaveProperty("model");
+    expect(messages[4]!.metadata).not.toHaveProperty("usage");
   });
 
-  it("live: the finish carries the same metadata", () => {
-    const translate = makeChunkTranslator();
+  it("live: each sampling's finish carries its own bill", () => {
+    // one stream per sampling: the first ends when its last owed
+    // result lands; the next sampling arrives on a fresh translator
+    const first = makeChunkTranslator();
     let finish: unknown;
-    for (const observation of billed.slice(1, 4)) {
-      for (const chunk of translate(observation).chunks) {
+    let done = false;
+    for (const observation of billed.slice(1, 3)) {
+      const out = first(observation);
+      done = done || out.done;
+      for (const chunk of out.chunks) {
         if (chunk.type === "finish") finish = chunk;
       }
     }
+    expect(done).toBe(true);
     expect(finish).toMatchObject({
       type: "finish",
       messageMetadata: {
         model: "gpt-5",
-        usage: { input: 220, cacheRead: 40, output: 40, reasoning: 5 },
+        usage: { input: 100, cacheRead: 40, output: 10 },
+      },
+    });
+    const second = makeChunkTranslator();
+    const end = second(billed[3]!);
+    expect(end.done).toBe(true);
+    expect(end.chunks.at(-1)).toMatchObject({
+      type: "finish",
+      messageMetadata: {
+        model: "gpt-5",
+        usage: { input: 120, output: 30, reasoning: 5 },
       },
     });
   });

@@ -53,24 +53,41 @@ export const makeThreadStorageMemory = (): ThreadStorageService => {
               Effect.sync(() => {
                 session.meta = meta;
               }),
-            putInbox: (input, inboxOptions) =>
+            putInbox: (message, inboxOptions) =>
               Effect.sync(() => {
+                // pending-id idempotency: a retried delivery lands once
+                const pending = session.inbox.find(
+                  (inboxRow) =>
+                    inboxRow.seq >= session.drained &&
+                    inboxRow.message.id === message.id,
+                );
+                if (pending !== undefined) return pending.seq;
                 const seq = session.inboxSeq++;
                 session.inbox.push({
                   seq,
-                  input,
+                  message,
                   quiet: inboxOptions?.quiet === true,
+                  ...(inboxOptions?.kind === undefined
+                    ? {}
+                    : { kind: inboxOptions.kind }),
                 });
                 return seq;
               }),
             putInboxBatch: (inputs) =>
               Effect.sync(() =>
                 inputs.map((entry) => {
+                  const pending = session.inbox.find(
+                    (inboxRow) =>
+                      inboxRow.seq >= session.drained &&
+                      inboxRow.message.id === entry.message.id,
+                  );
+                  if (pending !== undefined) return pending.seq;
                   const seq = session.inboxSeq++;
                   session.inbox.push({
                     seq,
-                    input: entry.input,
+                    message: entry.message,
                     quiet: entry.quiet === true,
+                    ...(entry.kind === undefined ? {} : { kind: entry.kind }),
                   });
                   return seq;
                 }),
