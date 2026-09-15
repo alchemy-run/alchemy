@@ -29,6 +29,7 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import {
   Bucket,
   inDev,
@@ -68,6 +69,44 @@ const buildsFor = (stackName: string) =>
   modalBuilds.filter((b) => b.stack === stackName);
 
 describe("provider modes", () => {
+  test.provider(
+    "lookup resolves concrete modes while registration lookup stays lazy",
+    (stack) =>
+      Effect.gen(function* () {
+        const registration = yield* Provider.tryFindProviderRegistrationByType(
+          ModalResource.Type,
+        );
+        expect(Option.isSome(registration)).toBe(true);
+        expect(buildsFor(stack.name)).toHaveLength(0);
+
+        const live = yield* Provider.findProvider(ModalResource);
+        expect(live.mode).toBe("live");
+        expect(typeof live.read).toBe("function");
+        expect(buildsFor(stack.name).map((build) => build.mode)).toEqual([
+          "live",
+        ]);
+
+        const local = yield* inDev(
+          Provider.findProviderByType(ModalResource.Type),
+        );
+        expect(local.mode).toBe("local");
+        expect(typeof local.read).toBe("function");
+        const explicitLive = yield* inDev(
+          Provider.findProvider(ModalResource, "live"),
+        );
+        expect(explicitLive).toBe(live);
+        expect(buildsFor(stack.name).map((build) => build.mode)).toEqual([
+          "live",
+          "local",
+        ]);
+        expect(
+          Option.isNone(
+            yield* Provider.tryFindProviderByType("Test.MissingProvider"),
+          ),
+        ).toBe(true);
+      }),
+  );
+
   test.provider(
     "default mode is live; providerMode is stamped; local variant is never built",
     (stack) =>
