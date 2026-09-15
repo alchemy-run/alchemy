@@ -164,10 +164,12 @@ export class Ask extends (AI.Tool<Ask>(import.meta)("ask")`
   Ask ${agent} one ${question} — labeled with a ${askTitle} — and wait
   for the ${AI.out(answer, askId)}. The
   target may ask others while answering — the chain bubbles back to
-  you. Refused (${ChainRefused}) when the chain would cycle or the hop
-  budget is spent: answer with what you have. Unknown names fail with
-  ${TeammateUnknown} and the roster. Pass ${call} to hold the exchange
-  in a call's thread.`) {}
+  you. The whole exchange renders as a THREAD the humans read — never
+  paste the answer back into your reply; reference its outcome in one
+  line at most. Refused (${ChainRefused}) when the chain would cycle
+  or the hop budget is spent: answer with what you have. Unknown names
+  fail with ${TeammateUnknown} and the roster. Pass ${call} to hold
+  the exchange in a call's thread.`) {}
 
 export class Tell extends (AI.Tool<Tell>(import.meta)("tell")`
   Leave ${agent} a ${note} — fire-and-forget; no answer, no waiting

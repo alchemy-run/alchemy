@@ -78,7 +78,6 @@ import {
   ChevronDown,
   CircleDot,
   Copy,
-  CornerDownLeft,
   FileCode2,
   GitMerge,
   GitPullRequestArrow,
@@ -94,15 +93,15 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { showOverlay, showTask, taskPath } from "@/lib/routes";
+import { showTask, taskPath } from "@/lib/routes";
 import {
   Avatar,
   HUMAN,
   KindBadge,
   sessionAuthor,
-  sessionOf,
   type Author,
 } from "@/components/avatar";
+import { AskComment, AskThread } from "@/components/ask-thread";
 import {
   createContext,
   useCallback,
@@ -487,138 +486,6 @@ const firstTextOf = (message: UIMessage): string | undefined => {
     if (part.type === "text") return part.text;
   }
   return undefined;
-};
-
-/* ── the LIVE CALL TREE — who is working, as it emerges ───────────── */
-
-/** One node of the company's ask tree, as /api/asks serves it. */
-interface LiveAsk {
-  readonly id: string;
-  readonly asker: string;
-  readonly target: string;
-  readonly title?: string;
-  readonly question: string;
-  readonly answer?: string;
-  readonly status: "running" | "answered" | "failed";
-  readonly children: ReadonlyArray<LiveAsk>;
-}
-
-const firstLineOf = (text: string, max = 90): string => {
-  const line = text.split("\n", 1)[0] ?? "";
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
-};
-
-/** One row of the live tree: `→ target · label`, spinning while the
- *  question is being answered, `↩ answer` once it lands. Clicking
- *  digs into the TARGET's session — the thread of it working. */
-const LiveAskRow = ({ node, depth }: { node: LiveAsk; depth: number }) => {
-  const session = sessionOf(node.target);
-  const label = node.title ?? firstLineOf(node.question);
-  return (
-    <>
-      <button
-        type="button"
-        data-live-ask={node.id}
-        disabled={session === undefined}
-        onClick={
-          session === undefined
-            ? undefined
-            : (event) => {
-                event.stopPropagation();
-                showOverlay({ kind: "agent", id: session });
-              }
-        }
-        title={node.question}
-        style={{ marginLeft: depth * 14 }}
-        className={cn(
-          "flex min-w-0 items-center gap-1.5 rounded border-l-2 py-px pl-2 pr-1.5 text-left text-[11px]",
-          node.status === "running"
-            ? "border-primary/50"
-            : "border-border/60",
-          session !== undefined && "cursor-pointer hover:bg-accent/70",
-        )}
-      >
-        {node.status === "running" ? (
-          <LoaderCircle className="size-2.5 shrink-0 animate-spin text-primary/70" />
-        ) : (
-          <CornerDownLeft className="size-2.5 shrink-0 text-muted-foreground/60" />
-        )}
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-          {node.asker} → {node.target}
-        </span>
-        <span
-          className={cn(
-            "min-w-0 truncate",
-            node.status === "running"
-              ? "text-foreground/90"
-              : "text-muted-foreground",
-          )}
-        >
-          {label}
-        </span>
-        {node.answer !== undefined && (
-          <span className="min-w-0 truncate text-muted-foreground/70">
-            ↩ {firstLineOf(node.answer, 60)}
-          </span>
-        )}
-      </button>
-      {node.children.map((child) => (
-        <LiveAskRow key={child.id} node={child} depth={depth + 1} />
-      ))}
-    </>
-  );
-};
-
-/**
- * The CALL TREE as it emerges — the stack-trace view: while an agent
- * works, its outgoing asks (and theirs, and theirs) appear as
- * indented rows under the responding skeleton, zig-zagging like a
- * reddit thread. Each row is the EXCHANGE only (who asks whom, the
- * one-line label, the answer when it lands) — an agent's thinking
- * stays in its own session, one click deep.
- */
-const LiveAskTree = ({ agent }: { agent: string }) => {
-  const [roots, setRoots] = useState<ReadonlyArray<LiveAsk>>([]);
-
-  useEffect(() => {
-    let live = true;
-    const load = async () => {
-      try {
-        const response = await fetch("/api/asks?limit=8");
-        if (!response.ok) return;
-        const { asks } = (await response.json()) as { asks: LiveAsk[] };
-        const mine = asks.filter(
-          (ask) => ask.asker === agent && ask.status === "running",
-        );
-        const trees = await Promise.all(
-          mine.map(async (ask) => {
-            const detail = await fetch(
-              `/api/asks/${encodeURIComponent(ask.id)}/tree`,
-            );
-            return detail.ok ? ((await detail.json()) as LiveAsk) : ask;
-          }),
-        );
-        if (live) setRoots(trees.reverse());
-      } catch {
-        // the next poll retries
-      }
-    };
-    void load();
-    const timer = setInterval(() => void load(), 2_000);
-    return () => {
-      live = false;
-      clearInterval(timer);
-    };
-  }, [agent]);
-
-  if (roots.length === 0) return null;
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">
-      {roots.map((root) => (
-        <LiveAskRow key={root.id} node={root} depth={0} />
-      ))}
-    </div>
-  );
 };
 
 /* ── long prose: clamp + read more ────────────────────────────────── */
@@ -1647,6 +1514,65 @@ const ChatTranscript = ({
                     !burstLive &&
                     (state === "input-available" ||
                       state === "input-streaming");
+                  // an ASK is not a tool card — it IS the
+                  // conversation: render the exchange as a reddit
+                  // comment subtree (ask-thread.tsx), no card chrome.
+                  // Until the ask id lands, a node built from the
+                  // call's input stands in, spinning.
+                  const renderAsk = (
+                    tool: {
+                      toolCallId: string;
+                      state: string;
+                      input?: unknown;
+                      output?: unknown;
+                    },
+                    key: string | number,
+                  ) => {
+                    const record =
+                      typeof tool.output === "string"
+                        ? (() => {
+                            try {
+                              return JSON.parse(tool.output) as {
+                                ask?: unknown;
+                              };
+                            } catch {
+                              return undefined;
+                            }
+                          })()
+                        : (tool.output as { ask?: unknown } | undefined);
+                    const askId =
+                      typeof record?.ask === "string" ? record.ask : undefined;
+                    const input = (tool.input ?? {}) as {
+                      agent?: string;
+                      title?: string;
+                      question?: string;
+                    };
+                    return (
+                      <div key={key} className="py-0.5">
+                        {askId !== undefined ? (
+                          <AskThread id={askId} />
+                        ) : (
+                          <AskComment
+                            depth={0}
+                            node={{
+                              id: tool.toolCallId,
+                              asker: author.name,
+                              target: String(input.agent ?? "?"),
+                              ...(input.title !== undefined
+                                ? { title: input.title }
+                                : {}),
+                              question: String(input.question ?? ""),
+                              status: cutOpen(tool.state)
+                                ? "failed"
+                                : "running",
+                              at: 0,
+                              children: [],
+                            }}
+                          />
+                        )}
+                      </div>
+                    );
+                  };
                   // discord GROUPING: consecutive rows by the same
                   // author within a few minutes share one avatar +
                   // header; the run reads as one turn of speech
@@ -1762,6 +1688,14 @@ const ChatTranscript = ({
                                   : false,
                             ).map((item) => {
                               if (item.kind === "run") {
+                                if (item.toolName === "ask") {
+                                  return item.calls.map((call, callIndex) =>
+                                    renderAsk(
+                                      call,
+                                      `${item.index}-${callIndex}`,
+                                    ),
+                                  );
+                                }
                                 return (
                                   <ToolRun
                                     key={item.index}
@@ -1806,6 +1740,9 @@ const ChatTranscript = ({
                               }
                               if (part.type === "dynamic-tool") {
                                 const tool = part;
+                                if (tool.toolName === "ask") {
+                                  return renderAsk(tool, index);
+                                }
                                 const cut = cutOpen(tool.state);
                                 const card = (
                                   <ToolCard
@@ -1923,7 +1860,6 @@ const ChatTranscript = ({
                     <span className="animate-pulse">is responding…</span>
                   </span>
                 </div>
-                <LiveAskTree agent={agentAuthor.name} />
               </div>
             </div>
           )}
