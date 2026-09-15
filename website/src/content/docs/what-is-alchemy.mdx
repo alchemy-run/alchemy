@@ -243,11 +243,11 @@ binding is the SDK.
 
 #### Layers
 
-Every Binding is a contract paired with a **Layer** that fulfills it.
-The handler is written against the contract. The Layer decides how:
-`ReadWriteBucketBinding` uses a native Worker binding,
-`ReadWriteBucketHttp` calls the API with a scoped token. Swap the
-Layer and the handler doesn't change.
+Every Binding is a contract paired with a **Layer** that fulfills it:
+the handler is written against the contract, and the Layer decides
+how. Swap `ReadWriteBucketBinding` (a native Worker binding) for
+`ReadWriteBucketHttp` (the API with a scoped token) and the handler
+doesn't change.
 
 The same split works for services of your own. A Layer can own
 Resources and Bindings outright:
