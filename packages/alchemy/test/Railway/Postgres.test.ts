@@ -1,4 +1,5 @@
-import { CredentialsFromEnv } from "@distilled.cloud/railway";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Alchemy from "@/index.ts";
@@ -14,7 +15,6 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
@@ -30,7 +30,7 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
+    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
   );
 
 const firstOk = (rows: unknown): unknown => {
