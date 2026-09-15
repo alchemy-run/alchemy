@@ -165,16 +165,33 @@ work.
 
 ## Layers
 
-A Binding is infrastructure the Runtime uses directly. A Layer packages
-infrastructure behind a service of your own: declare a
-`Context.Service` for what the handler needs, implement it with a
-Layer that owns its own resources and bindings, and provide that Layer
-on the constructor. On the next deploy the Layer's resources are
-created and bound to this Runtime, while the handler only ever sees
-the service — swap the Layer for one backed by a different store, or a
-different cloud, and the handler doesn't change. This is the
-fundamental building block of Infrastructure as Effects, and
-[Layers](/infrastructure-as-effects/layers) builds one from scratch.
+A Binding is infrastructure the Runtime uses directly. A Layer
+packages infrastructure behind a service of your own — it owns its
+resources and bindings internally, and providing it on the
+constructor is what brings them into the deploy:
+
+```typescript
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const jobs = yield* JobService; // a service of your own
+
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.json(yield* jobs.getJob("job-1"));
+      }),
+    };
+  }).pipe(Effect.provide(JobServiceKV)), // the Layer brings a KV Namespace with it
+);
+```
+
+On the next deploy the Layer's namespace is created and bound to this
+Worker, and the handler only ever sees `JobService`. Swap
+`JobServiceKV` for a DynamoDB-backed Layer and the handler doesn't
+change. This is the fundamental building block of Infrastructure as
+Effects, and [Layers](/infrastructure-as-effects/layers) builds one
+from scratch.
 
 ## Three ways to declare one
 

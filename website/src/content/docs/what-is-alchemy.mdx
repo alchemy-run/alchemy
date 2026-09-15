@@ -250,8 +250,22 @@ through the permissions, configuration, and client it generates.
 A Binding is a contract plus a **Layer** that implements it, which is
 why `ReadWriteBucketBinding` can be swapped for `ReadWriteBucketHttp`
 without touching the handler. The same split works for services of
-your own: put resources and bindings behind a service, and the handler
-depends on the service alone:
+your own — a Layer can own Resources and Bindings outright:
+
+```typescript
+export const JobServiceKV = Layer.effect(
+  JobService,
+  Effect.gen(function* () {
+    const Jobs = yield* Cloudflare.KV.Namespace("Jobs");      // a Resource, owned by the Layer
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Jobs); // and its Binding
+    return { getJob: (id: string) => kv.get<Job>(id, "json") };
+  }),
+);
+```
+
+A handler that provides this Layer gets the namespace created, bound,
+and hidden behind `JobService`. Swapping the storage is one line, in
+the provide, not the handler:
 
 ```diff lang="typescript"
  Effect.gen(function* () {
@@ -260,9 +274,6 @@ depends on the service alone:
 -}).pipe(Effect.provide(JobServiceKV));     // a KV Namespace, created and bound
 +}).pipe(Effect.provide(JobServiceDynamo)); // now a DynamoDB Table instead
 ```
-
-The Layer carries the infrastructure with it — swap it and the
-resource behind the service changes, while the handler never does.
 
 :::note
 [Layers](/infrastructure-as-effects/layers) builds one from scratch
