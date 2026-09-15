@@ -992,8 +992,10 @@ export const LiveContainerProvider = () =>
       const getDurableObjects = (
         bindings: ResourceBinding<ContainerApplication["Binding"]>[],
       ) => {
+        // A stale Worker namespace map can resolve a binding to an object
+        // without an id. It does not request removing the live attachment.
         const dos = bindings.flatMap((b) =>
-          b.data.durableObjects ? [b.data.durableObjects] : [],
+          b.data.durableObjects?.namespaceId ? [b.data.durableObjects] : [],
         );
         // A single DO namespace may appear in multiple bindings (e.g. when
         // a Container is referenced by several resources). Dedupe by namespaceId.
@@ -1151,13 +1153,13 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container reconcile: starting ${name}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
+          const hasUnresolvedAttachment =
+            durableObjects === undefined &&
+            bindings.some(
+              (binding) => binding.data.durableObjects !== undefined,
+            );
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId, bindings);
-          const { build, imageRef, imageHash, dev } = yield* computeImage(
-            id,
-            news,
-            env,
-          );
 
           // Observe — re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as
@@ -1192,12 +1194,44 @@ export const LiveContainerProvider = () =>
             }
           }
 
+          // Only use cached attachment data after confirming the application
+          // is missing. An observed live attachment outranks stale state.
+          const recordedDurableObjects = existing
+            ? existing.durableObjects
+            : output?.accountId === accountId && isLiveId(output.applicationId)
+              ? output.durableObjects
+              : undefined;
+          const durableObjectsForRecovery =
+            durableObjects ?? recordedDurableObjects;
+          if (
+            hasUnresolvedAttachment &&
+            durableObjectsForRecovery === undefined
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
+              ),
+            );
+          }
+          const { build, imageRef, imageHash, dev } = yield* computeImage(
+            id,
+            news,
+            env,
+          );
+
           // Special case: precreate produced an application without the
-          // durable object attachment, but the real reconcile now has one
-          // (or vice versa). The DO attachment is immutable, so we delete
+          // durable object attachment, but the real reconcile now has one.
+          // The DO attachment is immutable, so we delete
           // and recreate. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
-          if (existing && !deepEqual(existing.durableObjects, durableObjects)) {
+          // An unresolved (undefined) desired attachment must never trigger
+          // the delete/recreate below — the live attachment is authoritative
+          // until a real namespace id disagrees.
+          if (
+            existing &&
+            durableObjects &&
+            !deepEqual(existing.durableObjects, durableObjects)
+          ) {
             if (durableObjects) {
               const owner = yield* findApplicationByNamespace(
                 durableObjects.namespaceId,
@@ -1306,7 +1340,9 @@ export const LiveContainerProvider = () =>
               news,
               bindings,
               existing,
-              durableObjects,
+              // Keep the live attachment through the ghost-recreate fallback
+              // when the desired value is unresolved.
+              durableObjects: durableObjectsForRecovery,
               session,
             });
           }
@@ -1339,7 +1375,7 @@ export const LiveContainerProvider = () =>
             bindings,
             name,
             configuration,
-            durableObjects,
+            durableObjects: durableObjectsForRecovery,
             session,
           });
           return {
