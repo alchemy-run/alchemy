@@ -140,6 +140,12 @@ const question = AI.Thing("question", S.String)`
   ONE question, self-contained: everything the target needs to answer
   without your context (they do not see your conversation).`;
 
+const askTitle = AI.Thing("title", S.String)`
+  ONE LINE (under 60 characters), present tense: what you're asking
+  for — "review PR #12 on ws-stripe", "scope the Stripe surface".
+  This labels the ask in the live tree the humans watch; the question
+  carries the detail, the title carries the glance.`;
+
 const answer = AI.Thing("answer", S.String)`
   The target's settled answer — it may have asked others to produce it.`;
 
@@ -155,7 +161,8 @@ const note = AI.Thing("note", S.String)`
   A short note — context, a heads-up, a report. No answer expected.`;
 
 export class Ask extends (AI.Tool<Ask>(import.meta)("ask")`
-  Ask ${agent} one ${question} and wait for the ${AI.out(answer, askId)}. The
+  Ask ${agent} one ${question} — labeled with a ${askTitle} — and wait
+  for the ${AI.out(answer, askId)}. The
   target may ask others while answering — the chain bubbles back to
   you. Refused (${ChainRefused}) when the chain would cycle or the hop
   budget is spent: answer with what you have. Unknown names fail with
@@ -190,6 +197,7 @@ export const AskLive = Layer.effect(
     return Effect.fn(function* (p: {
       agent: string;
       question: string;
+      title?: string;
       call?: string;
     }) {
       const me = yield* currentThread;
@@ -232,6 +240,7 @@ export const AskLive = Layer.effect(
           ...(p.call !== undefined ? { call: p.call } : {}),
           asker: myName,
           target: target.name,
+          ...(p.title !== undefined ? { title: p.title } : {}),
           question: p.question,
         })
         .pipe(Effect.ignore);

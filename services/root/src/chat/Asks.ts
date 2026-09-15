@@ -31,6 +31,8 @@ export interface AskNode {
   readonly call?: string;
   readonly asker: string;
   readonly target: string;
+  /** The asker's ONE-LINE label — what the live tree shows. */
+  readonly title?: string;
   readonly question: string;
   readonly answer?: string;
   readonly status: "running" | "answered" | "failed";
@@ -48,6 +50,7 @@ export class Asks extends Context.Service<
       readonly call?: string;
       readonly asker: string;
       readonly target: string;
+      readonly title?: string;
       readonly question: string;
     }) => Effect.Effect<void>;
     readonly settle: (

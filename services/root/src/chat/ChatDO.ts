@@ -33,6 +33,7 @@ const TABLES = [
     call_id TEXT,
     asker TEXT NOT NULL,
     target TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
     question TEXT NOT NULL,
     answer TEXT,
     status TEXT NOT NULL DEFAULT 'running',
@@ -70,6 +71,7 @@ interface AskRow extends Record<string, Cloudflare.SqlStorageValue> {
   call_id: string | null;
   asker: string;
   target: string;
+  title: string;
   question: string;
   answer: string | null;
   status: string;
@@ -100,6 +102,7 @@ const toNode = (row: AskRow): AskNode => ({
   ...(row.call_id === null ? {} : { call: row.call_id }),
   asker: row.asker,
   target: row.target,
+  ...(row.title === "" ? {} : { title: row.title }),
   question: row.question,
   ...(row.answer === null ? {} : { answer: row.answer }),
   status: row.status as AskNode["status"],
@@ -113,6 +116,7 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
     readonly id: string;
     readonly parent?: string;
     readonly call?: string;
+    readonly title?: string;
     readonly asker: string;
     readonly target: string;
     readonly question: string;
@@ -225,6 +229,17 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
         { discard: true },
       );
+      // additive migration over pre-existing tables — a fresh CREATE
+      // already carries the column; PRAGMA decides, so no error-channel
+      // games (a failed ALTER would poison the whole DO init)
+      const askColumns = yield* (yield* sql.exec<
+        { name: string } & Record<string, Cloudflare.SqlStorageValue>
+      >(`PRAGMA table_info(asks)`)).toArray();
+      if (!askColumns.some((column) => column.name === "title")) {
+        yield* sql.exec(
+          `ALTER TABLE asks ADD COLUMN title TEXT NOT NULL DEFAULT ''`,
+        );
+      }
 
       return {
         fetch: Effect.gen(function* () {
@@ -251,8 +266,8 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           const at = yield* Clock.currentTimeMillis;
           yield* sql.exec(
             `INSERT OR IGNORE INTO asks
-              (id, parent_id, call_id, asker, target, question, status, at)
-             VALUES (?, ?, ?, ?, ?, ?, 'running', ?)`
+              (id, parent_id, call_id, asker, target, title, question, status, at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)`
               .trim()
               .replaceAll(/\s+/g, " "),
             input.id,
@@ -260,6 +275,7 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
             input.call ?? null,
             input.asker,
             input.target,
+            input.title ?? "",
             input.question,
             at,
           );

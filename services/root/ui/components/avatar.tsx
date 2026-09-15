@@ -100,6 +100,18 @@ export const KindBadge = ({ kind }: { kind: AuthorKind }) => {
   );
 };
 
+/** A colleague NAME's session id — the UI's mirror of the server's
+ *  Colleagues resolution, for digging into a live tree node. */
+export const sessionOf = (name: string): string | undefined => {
+  const slug = name.trim().toLowerCase();
+  if (slug === "head") return "Head:root";
+  if (slug === "manager") return "Manager:root::manager";
+  if (slug === "reviewer") return "Reviewer:root::reviewer";
+  if (/^e-[a-z0-9]+$/.test(slug)) return `Engineer:root::${slug}`;
+  if (/^r-[a-z0-9]+$/.test(slug)) return `Reviewer:root::${slug}`;
+  return undefined;
+};
+
 /** The author a SESSION's assistant rows speak as, from the chat id
  *  (`Head:root`, `Manager:root::manager`,
  *  `Engineer:root::e-4f2a`): the key's tail names the instance; the
