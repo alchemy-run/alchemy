@@ -42,6 +42,15 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
+import {
+  assertInheritEnvCollision,
+  assertInheritWorkerProps,
+  bindingsInheritFor,
+  finalizeInheritUploadBindings,
+  inheritNamesForWorker,
+  isInherit,
+  WorkerInheritConfigError,
+} from "./Inherit.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
 import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
@@ -879,12 +888,14 @@ const putWorkerScript = (params: {
   files: workers.PutScriptRequest["files"];
 }) =>
   Effect.gen(function* () {
+    const bindingsInherit = bindingsInheritFor(params.metadata.bindings);
     if (params.dispatchNamespace) {
       return yield* wfp
         .putDispatchNamespaceScript({
           accountId: params.accountId,
           dispatchNamespace: params.dispatchNamespace,
           scriptName: params.scriptName,
+          bindingsInherit,
           metadata:
             params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
           files: params.files,
@@ -900,6 +911,7 @@ const putWorkerScript = (params: {
       .putScript({
         accountId: params.accountId,
         scriptName: params.scriptName,
+        bindingsInherit,
         metadata: params.metadata,
         files: params.files,
       })
@@ -2360,27 +2372,33 @@ export const LiveWorkerProvider = () =>
                         : Redacted.isRedacted(value) &&
                             typeof Redacted.value(value) === "string"
                           ? Redacted.value(value)
-                          : // `Worker.URL` (bare tag or called) — resolved to
-                            // this Worker's own URL. The bare tag is
-                            // Effect-shaped, so check before `Effect.isEffect`.
-                            isSelfUrl(value)
-                            ? selfUrl
-                            : // A `WorkerLoader` is a real Effect that also carries
-                              // the `~alchemy/Kind` marker — it is a binding, not a
-                              // runnable env value. Check it before `Effect.isEffect`
-                              // so we don't execute it as an inlined env entry.
-                              isWorkerLoader(value)
-                              ? undefined
-                              : // A `Cloudflare.Container` declaration is likewise
-                                // Effect-shaped but is a binding (DO namespace +
-                                // ContainerApplication) — yielding it would resolve
-                                // the started-instance tag, which only exists inside
-                                // a Durable Object (#997).
-                                isContainerDecl(value)
+                          : isInherit(value)
+                            ? key.startsWith("VITE_")
+                              ? yield* new WorkerInheritConfigError({
+                                  message: `Cannot inherit '${key}' — Vite build env would not receive the remote value.`,
+                                })
+                              : undefined
+                            : // `Worker.URL` (bare tag or called) — resolved to
+                              // this Worker's own URL. The bare tag is
+                              // Effect-shaped, so check before `Effect.isEffect`.
+                              isSelfUrl(value)
+                              ? selfUrl
+                              : // A `WorkerLoader` is a real Effect that also carries
+                                // the `~alchemy/Kind` marker — it is a binding, not a
+                                // runnable env value. Check it before `Effect.isEffect`
+                                // so we don't execute it as an inlined env entry.
+                                isWorkerLoader(value)
                                 ? undefined
-                                : Effect.isEffect(value)
-                                  ? yield* value as any as Effect.Effect<any>
-                                  : undefined,
+                                : // A `Cloudflare.Container` declaration is likewise
+                                  // Effect-shaped but is a binding (DO namespace +
+                                  // ContainerApplication) — yielding it would resolve
+                                  // the started-instance tag, which only exists inside
+                                  // a Durable Object (#997).
+                                  isContainerDecl(value)
+                                  ? undefined
+                                  : Effect.isEffect(value)
+                                    ? yield* value as any as Effect.Effect<any>
+                                    : undefined,
                     ];
                   }),
                 ),
@@ -2612,12 +2630,12 @@ export const LiveWorkerProvider = () =>
        * plain_text, everything else → json) to a metadata binding list.
        * Shared between the full script upload and the version upload.
        */
-      const appendAlchemyAndEnvBindings = (
+      const appendAlchemyAndEnvBindings = Effect.fn(function* (
         metadataBindings: WorkerBinding[],
         news: WorkerProps,
         accountId: string,
         workerName: string,
-      ) => {
+      ) {
         metadataBindings.push(
           {
             type: "plain_text",
@@ -2649,7 +2667,11 @@ export const LiveWorkerProvider = () =>
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
             if (value === undefined) continue;
-            if (metadataBindings.some((b) => b.name === key)) continue;
+            const existing = metadataBindings.find((b) => b.name === key);
+            if (existing !== undefined) {
+              yield* assertInheritEnvCollision(existing, value);
+              continue;
+            }
             if (Redacted.isRedacted(value)) {
               const unredacted = Redacted.value(value);
               metadataBindings.push({
@@ -2675,7 +2697,56 @@ export const LiveWorkerProvider = () =>
             }
           }
         }
-      };
+      });
+
+      /**
+       * Best-effort preflight: inherit's wire token is always `"latest"`
+       * (Cloudflare error 10057). Refuse unless the latest listed upload is
+       * also the sole 100% deployment. Not an atomic lock — a concurrent
+       * preview can still become `latest` after this check and before PUT.
+       */
+      const assertInheritSourceIsLive = Effect.fn(function* (
+        accountId: string,
+        scriptName: string,
+      ) {
+        const listed = yield* workers
+          .listScriptVersions({
+            accountId,
+            scriptName,
+            perPage: 5,
+          })
+          .pipe(
+            Effect.catchTag("WorkerNotFound", () =>
+              Effect.succeed({ items: [] as { id?: string | null }[] }),
+            ),
+          );
+        const latestUploaded = listed.items?.[0]?.id;
+        if (latestUploaded == null || latestUploaded.length === 0) {
+          return yield* new WorkerInheritConfigError({
+            message: `Inherit requires an existing upload of '${scriptName}' to copy from.`,
+          });
+        }
+        const { deployments } = yield* workers
+          .listScriptDeployments({ accountId, scriptName })
+          .pipe(
+            Effect.catchTag("WorkerNotFound", () =>
+              Effect.succeed({ deployments: [] }),
+            ),
+          );
+        const live = deployments[0];
+        const at100 = (live?.versions ?? []).filter(
+          (version) => version.percentage === 100,
+        );
+        const liveId = at100.length === 1 ? at100[0]?.versionId : undefined;
+        if (liveId !== latestUploaded) {
+          return yield* new WorkerInheritConfigError({
+            message:
+              `Inherit copies the latest upload of '${scriptName}' (${latestUploaded}), which is not the sole 100% deployment` +
+              (liveId !== undefined ? ` (${liveId})` : "") +
+              `. Deploy that version at 100% (or delete undeployed previews) before inheriting. This is a best-effort preflight; a concurrent upload can still become latest before the PUT.`,
+          });
+        }
+      });
 
       /**
        * Create a deployment routing `traffic`% to `versionId`, with the
@@ -2902,6 +2973,10 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* assertInheritWorkerProps(
+          news,
+          inheritNamesForWorker(news, bindings),
+        );
         const version = news.version!;
         const parentName = resolveVersionParentName(version);
         if (parentName === undefined) {
@@ -2994,12 +3069,14 @@ export const LiveWorkerProvider = () =>
           };
           metadataBindings.push({ type: "assets", name: "ASSETS" });
         }
-        appendAlchemyAndEnvBindings(
+        yield* appendAlchemyAndEnvBindings(
           metadataBindings,
           news,
           accountId,
           parentName,
         );
+        const bindingsInherit =
+          yield* finalizeInheritUploadBindings(metadataBindings);
         const compatibility = getCompatibility(news);
         yield* session.note(`Uploading version of ${parentName} ...`, {
           kind: "status",
@@ -3008,6 +3085,7 @@ export const LiveWorkerProvider = () =>
           .createScriptVersion({
             accountId,
             scriptName: parentName,
+            bindingsInherit,
             metadata: {
               mainModule: bundle.main!,
               assets: metadataAssets,
@@ -3520,6 +3598,10 @@ export const LiveWorkerProvider = () =>
         // account-level script. The put/settings calls switch endpoints and
         // the subdomain / custom-domain / cron reconciliation is skipped.
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
+        yield* assertInheritWorkerProps(
+          news,
+          inheritNamesForWorker(news, bindings),
+        );
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
           return yield* Effect.fail(
@@ -3682,7 +3764,17 @@ export const LiveWorkerProvider = () =>
             name: "ASSETS",
           });
         }
-        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
+        yield* appendAlchemyAndEnvBindings(
+          metadataBindings,
+          news,
+          accountId,
+          name,
+        );
+        const bindingsInherit =
+          yield* finalizeInheritUploadBindings(metadataBindings);
+        if (bindingsInherit === "strict") {
+          yield* assertInheritSourceIsLive(accountId, name);
+        }
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
@@ -4076,6 +4168,7 @@ export const LiveWorkerProvider = () =>
             .createScriptVersion({
               accountId,
               scriptName: name,
+              bindingsInherit,
               metadata: {
                 mainModule: metadata.mainModule!,
                 assets: metadata.assets,
@@ -5142,6 +5235,14 @@ export const LiveWorkerProvider = () =>
           let durableObjectNamespaces = getDurableObjects(
             existingSettings?.bindings,
           );
+
+          const inheritNames = inheritNamesForWorker(news, bindings);
+          yield* assertInheritWorkerProps(news, inheritNames);
+          if (inheritNames.length > 0 && existingSettings === undefined) {
+            return yield* new WorkerInheritConfigError({
+              message: `Inherit requires an existing Worker '${name}' — there is no previous upload to copy.`,
+            });
+          }
 
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
