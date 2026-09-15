@@ -82,10 +82,10 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
     channel === "engineering"
       ? [
           {
-            name: "engineering-manager",
+            name: "manager",
             kind: "agent",
             online: true,
-            session: "EngineeringManager:root::engineering-manager",
+            session: "Manager:root::manager",
             detail: "runs this channel",
           },
           {

@@ -24,7 +24,7 @@ import type * as HttpServerResponse from "effect/unstable/http/HttpServerRespons
 
 export interface CallUtterance {
   readonly seq: number;
-  /** A thread-local name (`head`, `engineering-manager`) or the
+  /** A thread-local name (`head`, `manager`) or the
    *  human's login. */
   readonly author: string;
   readonly text: string;

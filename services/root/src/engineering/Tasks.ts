@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
 /**
- * The TASK LEDGER — what the EngineeringManager maintains out of the
+ * The TASK LEDGER — what the Manager maintains out of the
  * triage stream, on ITS thread (the recursion: Manager : its thread ::
  * Head : Root).
  *

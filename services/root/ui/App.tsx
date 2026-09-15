@@ -59,7 +59,7 @@ const FALLBACK: ReadonlyArray<Channel> = [
   { name: "root", chat: "Head:root" },
   {
     name: "engineering",
-    chat: "EngineeringManager:root::engineering-manager",
+    chat: "Manager:root::manager",
   },
 ];
 

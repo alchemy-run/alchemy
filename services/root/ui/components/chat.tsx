@@ -706,7 +706,7 @@ const InboundPill = ({
   );
 };
 
-/** `[ask a-x9 | head > engineering-manager]\nquestion` — a question
+/** `[ask a-x9 | head > manager]\nquestion` — a question
  *  arriving IN this channel: the start (or a hop) of a thread. The
  *  chain breadcrumb says who is asking on whose behalf. */
 const parseAskHeader = (

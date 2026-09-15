@@ -101,7 +101,7 @@ export const KindBadge = ({ kind }: { kind: AuthorKind }) => {
 };
 
 /** The author a SESSION's assistant rows speak as, from the chat id
- *  (`Head:root`, `EngineeringManager:root::engineering-manager`,
+ *  (`Head:root`, `Manager:root::manager`,
  *  `Engineer:root::e-4f2a`): the key's tail names the instance; the
  *  term names the singleton. */
 export const sessionAuthor = (id: string): Author => {

@@ -4,7 +4,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Engineer } from "../engineering/Engineer.ts";
-import { EngineeringManager } from "../engineering/Manager.ts";
+import { Manager } from "../engineering/Manager.ts";
 import { Reviewer } from "../engineering/Reviewer.ts";
 import { Head } from "../Head.ts";
 import { catalog, DEFAULT_MODEL } from "../platform/Model.ts";
@@ -24,7 +24,7 @@ const parseSessionId = (id: string): { term: string; key: string } => {
 export const Models = Effect.gen(function* () {
   const head = yield* Head;
   const engineer = yield* Engineer;
-  const manager = yield* EngineeringManager;
+  const manager = yield* Manager;
   const reviewer = yield* Reviewer;
 
   const listModels = HttpRouter.add(
@@ -69,7 +69,7 @@ export const Models = Effect.gen(function* () {
       const model = yield* engineer.at(key).model();
       return { model: model ?? null, default: DEFAULT_MODEL };
     }
-    if (term === EngineeringManager["~alchemy/Name"]) {
+    if (term === Manager["~alchemy/Name"]) {
       const model = yield* manager.at(key).model();
       return { model: model ?? null, default: DEFAULT_MODEL };
     }
@@ -114,7 +114,7 @@ export const Models = Effect.gen(function* () {
         yield* head.at(key).setModel(chosen.model);
       } else if (term === Engineer["~alchemy/Name"]) {
         yield* engineer.at(key).setModel(chosen.model);
-      } else if (term === EngineeringManager["~alchemy/Name"]) {
+      } else if (term === Manager["~alchemy/Name"]) {
         yield* manager.at(key).setModel(chosen.model);
       } else if (term === Reviewer["~alchemy/Name"]) {
         yield* reviewer.at(key).setModel(chosen.model);

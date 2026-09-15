@@ -5,10 +5,10 @@
  * the node after its children (the order the conversation actually
  * happened):
  *
- *   head → engineering-manager   can we ship #1521?
- *   │  engineering-manager → e-4f2a   is the D1 flake understood?
+ *   head → manager   can we ship #1521?
+ *   │  manager → e-4f2a   is the D1 flake understood?
  *   │  e-4f2a ↩  yes — fencepost in the retry; fix pushed
- *   engineering-manager ↩  yes, pending the merge proposal
+ *   manager ↩  yes, pending the merge proposal
  *
  * Fed by `GET /api/asks/:id/tree`; a tree with a RUNNING node polls
  * until every question is answered.

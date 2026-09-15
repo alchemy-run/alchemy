@@ -11,10 +11,10 @@ import type * as Effect from "effect/Effect";
  * a thread:
  *
  * ```
- * head asks engineering-manager: can we ship #1521?
- * ├─ engineering-manager asks e-4f2a: is the D1 flake understood?
+ * head asks manager: can we ship #1521?
+ * ├─ manager asks e-4f2a: is the D1 flake understood?
  * │  └─ e-4f2a answers: yes — a fencepost in the retry; fix pushed
- * └─ engineering-manager answers: yes, pending the merge proposal
+ * └─ manager answers: yes, pending the merge proposal
  * ```
  *
  * The store is write-through from the Ask tool's physics (open when

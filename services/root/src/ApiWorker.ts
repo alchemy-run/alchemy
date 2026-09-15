@@ -20,7 +20,7 @@ import { PushBranchLive } from "./coding/PushBranch.ts";
 import { ReadTools, RunTools } from "./coding/Toolbox.ts";
 import { GeneralEngineer } from "./engineering/Engineer.ts";
 import { ColleaguesLive, EngineeringChart } from "./engineering/Group.ts";
-import { EngineeringManagerLive } from "./engineering/Manager.ts";
+import { ManagerLive } from "./engineering/Manager.ts";
 import { GeneralReviewer } from "./engineering/Reviewer.ts";
 import { TasksLive, TriageLive } from "./engineering/TriageDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
@@ -110,7 +110,7 @@ const ReviewerWorker = GeneralReviewer.pipe(
 
 /** The MANAGER — the head of the engineering team: the triage queue,
  *  the task ledger, spawn/workspaces, proposals, conversation. */
-const ManagerWorker = EngineeringManagerLive.pipe(
+const ManagerWorker = ManagerLive.pipe(
   Layer.provide(EngineerWorker),
   Layer.provide([TriageLive, TasksLive]),
   Layer.provide(Conversation),
@@ -177,7 +177,7 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
  * - the groups     → code (Root.ts, engineering/Group.ts): sessions
  *   moment a colleague is addressed; ask-chains bubble answers up
  * - the inbound    → the triage queue (one DO), strictly FIFO into
- *   the engineering-manager
+ *   the manager
  * - workspaces     → each its own machine with the repo checked out
  *   (a MicroVM deployed, a linked worktree in dev)
  * - decisions      → proposals (one DO): the humans' Approve/Deny on

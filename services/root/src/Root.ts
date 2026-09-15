@@ -14,7 +14,7 @@ import { Head } from "./Head.ts";
  * who runs its autonomous side (`/attach/Head/root`).
  *
  * Everything derives from this group and carries its key in its own:
- * members (`root::engineering-manager`, `root::e-4f2a`), workspaces
+ * members (`root::manager`, `root::e-4f2a`), workspaces
  * (`root::ws-pr-1521`), calls, tasks, proposals. The lineage is the
  * project — what the company is, is the history of this channel and
  * the trees that grew from it, all of it CODE in the repository the
@@ -42,8 +42,8 @@ export const RootChart = Root.make`
 /** The one root channel — the Head's session key. */
 export const ROOT = "root";
 
-/** A session key under this root: `lineage("engineering-manager")` →
- *  `root::engineering-manager`. The `::` segments are the lineage —
+/** A session key under this root: `lineage("manager")` →
+ *  `root::manager`. The `::` segments are the lineage —
  *  `machineKey` (sandbox) and colleague names (chat) read them. */
 export const lineage = (name: string): string => `${ROOT}::${name}`;
 
@@ -51,8 +51,8 @@ export const lineage = (name: string): string => `${ROOT}::${name}`;
 export const rootOf = (key: string): string => key.split("::")[0]!;
 
 /** A session key's group-local NAME — how colleagues address it
- *  (`root` → "head"; `root::engineering-manager` →
- *  "engineering-manager"; `root::e-4f2a` → "e-4f2a"). */
+ *  (`root` → "head"; `root::manager` →
+ *  "manager"; `root::e-4f2a` → "e-4f2a"). */
 export const nameOfKey = (key: string): string => {
   if (key === ROOT) return "head";
   const segments = key.split("::");

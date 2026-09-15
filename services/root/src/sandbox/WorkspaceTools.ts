@@ -15,7 +15,7 @@ import { WorkspaceAgent } from "./WorkspaceAgent.ts";
  * the repository checked out (its own MicroVM deployed, a linked
  * worktree in dev — sandbox/WorkspaceAgent.ts); the tool RESULT names
  * it, and the Root Thread renders the name as the workspace's terminal
- * chip. Shared by the Head and the EngineeringManager.
+ * chip. Shared by the Head and the Manager.
  */
 
 export class BadRef extends Data.TaggedError("BadRef")<{

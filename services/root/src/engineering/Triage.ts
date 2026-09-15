@@ -90,8 +90,8 @@ export const inboundOf = (
 /** Where the pump delivers: the engineering channel — the manager's
  *  session. */
 export const MANAGER_ADDRESS = {
-  term: "EngineeringManager",
-  key: lineage("engineering-manager"),
+  term: "Manager",
+  key: lineage("manager"),
 } as const;
 
 /**

@@ -20,7 +20,7 @@ import { Calls, renderUtterance } from "./Call.ts";
  * by avoiding it: at every moment exactly ONE agent is acting.
  *
  * The chain rides the delivered question as a machine-readable header
- * (`[ask head > engineering-manager] …`), so every hop knows its
+ * (`[ask head > manager] …`), so every hop knows its
  * ancestry: a cycle is refused, and a chain deeper than {@link MAX_HOPS}
  * is refused — the refusal is model-visible, so the asker answers with
  * what it has instead of recursing forever.
@@ -51,7 +51,7 @@ export class TeammateUnknown extends Data.TaggedError("TeammateUnknown")<{
 
 /**
  * The COLLEAGUES a session can address: the whole company, resolved by
- * group-local name (`head`, `engineering-manager`, `e-4f2a`) to a
+ * group-local name (`head`, `manager`, `e-4f2a`) to a
  * session ADDRESS — a term and a key, pure data (`Sessions.dispatch`
  * does the talking). Implemented once for the company (the Group
  * declaration plus the Head) in engineering/Group.ts — the seam that
@@ -133,7 +133,7 @@ const currentAsk = Effect.gen(function* () {
 
 const agent = AI.Thing("agent", S.String)`
   The teammate to ask, by name — "head", a role like
-  "engineering-manager", or a spawned engineer like "e-4f2a". One
+  "manager", or a spawned engineer like "e-4f2a". One
   target per question.`;
 
 const question = AI.Thing("question", S.String)`

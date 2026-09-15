@@ -117,7 +117,7 @@ export const GeneralEngineer = Engineer.make(
       // a machine touch: the tree itself lands on the first tool call.
       const handedName = yield* defaultWorkspace;
       const manager = thread.key.startsWith(`${ROOT}::`)
-        ? "engineering-manager"
+        ? "manager"
         : undefined;
 
       // the PR clause of the stance — a nested fragment so its PushBranch

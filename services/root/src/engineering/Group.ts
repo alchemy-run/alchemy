@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import { Colleagues, TeammateUnknown } from "../chat/Ask.ts";
 import { lineage, ROOT } from "../Root.ts";
 import { Engineer } from "./Engineer.ts";
-import { EngineeringManager } from "./Manager.ts";
+import { Manager } from "./Manager.ts";
 import { Reviewer } from "./Reviewer.ts";
 
 /**
@@ -24,7 +24,7 @@ export default class Engineering extends AI.Group<Engineering>(import.meta)(
 ) {}
 
 export const EngineeringChart = Engineering.make`
-  The engineering group of the company. ${EngineeringManager} heads it
+  The engineering group of the company. ${Manager} heads it
   (its session is this group's channel):
   it fronts the triage queue (the inbound github issues, pull requests,
   and direct requests for alchemy, distilled, and floci), maintains the
@@ -53,7 +53,7 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
     // dependency (Colleagues is wired into the members themselves;
     // depending on the built group would cycle)
     const members = EngineeringChart.refs
-      .filter((ref): ref is typeof EngineeringManager => AI.isAgent(ref))
+      .filter((ref): ref is typeof Manager => AI.isAgent(ref))
       .map((ref) => {
         const name = ref["~alchemy/Name"];
         return { name, slug: AI.memberSlug(name) };

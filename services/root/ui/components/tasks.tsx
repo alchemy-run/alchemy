@@ -318,9 +318,9 @@ export const TaskThread = ({
           <div className="w-full max-w-3xl shrink-0 px-4 pt-3">
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 px-4 py-3">
               <div className="flex items-center gap-2">
-                <Avatar name="engineering-manager" kind="agent" size={28} />
+                <Avatar name="manager" kind="agent" size={28} />
                 <span className="text-[13px] font-semibold">
-                  engineering-manager
+                  manager
                 </span>
                 <KindBadge kind="agent" />
                 <span className="font-mono text-[10px] text-muted-foreground/70">

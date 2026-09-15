@@ -25,14 +25,14 @@ import { Tasks, type TaskItem, type TaskStatus } from "./Tasks.ts";
  * proposals so the humans' approval is one click. It answers the Head
  * with short, factual reports — its answer IS the report.
  */
-export class EngineeringManager extends AI.Agent<
-  EngineeringManager,
+export class Manager extends AI.Agent<
+  Manager,
   {
     /** The session's current pick; `undefined` = the org's default. */
     readonly model: () => Effect.Effect<string | undefined>;
     readonly setModel: (model: string | undefined) => Effect.Effect<void>;
   }
->(import.meta)("EngineeringManager") {}
+>(import.meta)("Manager") {}
 
 const shortId = (): string => Math.random().toString(36).slice(2, 8);
 
@@ -147,7 +147,7 @@ const ledger = AI.Thing(
 )`
   The ledger's tasks, newest first.`;
 
-export const EngineeringManagerLive = EngineeringManager.make(
+export const ManagerLive = Manager.make(
   Effect.gen(function* () {
     const model = yield* models;
     const tasks = yield* Tasks;
@@ -261,7 +261,7 @@ export const EngineeringManagerLive = EngineeringManager.make(
         yield* engineer.at(key).setWorkspace(p.workspace);
         const outcome = yield* engineer.dispatch(p.brief, {
           key,
-          parent: { term: "EngineeringManager", key: me.key },
+          parent: { term: "Manager", key: me.key },
         });
         return {
           agent: name,
