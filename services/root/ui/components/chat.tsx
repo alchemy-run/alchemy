@@ -1778,12 +1778,12 @@ const ChatTranscript = ({
                                   className="group/trunk relative w-4 flex-1 cursor-pointer"
                                 >
                                   {/* the line runs UNBROKEN from the
-                                      avatar's bottom; the ⊖ rides on
-                                      it, its own halo masking the
-                                      stretch it covers */}
+                                      avatar's bottom; the ⊖ rides the
+                                      JUNCTION at its foot, where the
+                                      reply's arc leaves the trunk */}
                                   <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
                                   {!foldedHere && (
-                                    <CircleMinus className="absolute left-1/2 top-1 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+                                    <CircleMinus className="absolute -bottom-2 left-1/2 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
                                   )}
                                 </button>
                               ) : (

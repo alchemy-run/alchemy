@@ -169,6 +169,8 @@ export const CommentShell = ({
   author?: string;
   /** After the name: mention, status, clock. */
   aside?: ReactNode;
+  /** Unused by the shell itself — the first {@link Reply} draws the
+   *  handle at its arc's junction (a leaf has no arc, no handle). */
   onFold?: () => void;
   children: ReactNode;
 }) => (
@@ -193,17 +195,6 @@ export const CommentShell = ({
           below the avatar; the LINE itself is drawn by the content
           (Trunk segments and Reply elbows), so it always terminates
           at the last reply — the button only needs to be clickable */}
-      {onFold !== undefined && (
-        <button
-          type="button"
-          onClick={onFold}
-          aria-label="collapse this branch"
-          title="collapse"
-          className="group/trunk absolute inset-y-0 -left-7 z-10 w-4 cursor-pointer"
-        >
-          <CircleMinus className="absolute left-1/2 top-1.5 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
-        </button>
-      )}
       <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">{children}</div>
     </div>
   </div>
@@ -233,9 +224,13 @@ export const Trunk = ({ children }: { children: ReactNode }) => (
  *  elbow, which is how the trunk ends. */
 export const Reply = ({
   last,
+  onFold,
   children,
 }: {
   last: boolean;
+  /** Given to the FIRST arc of a branch: the ⊖ rides the junction
+   *  where this arc leaves the parent's trunk. */
+  onFold?: () => void;
   children: ReactNode;
 }) => (
   <div className="relative">
@@ -246,6 +241,18 @@ export const Reply = ({
         TRUNK_LEFT,
       )}
     />
+    {onFold !== undefined && (
+      <button
+        type="button"
+        onClick={onFold}
+        aria-label="collapse this branch"
+        title="collapse"
+        className="group/trunk absolute -top-2 z-10 flex size-4 cursor-pointer items-center justify-center -translate-x-1/2"
+        style={{ left: "-20px" }}
+      >
+        <CircleMinus className="size-3.5 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+      </button>
+    )}
     {!last && (
       <div
         aria-hidden
@@ -396,7 +403,11 @@ export const AskComment = ({
         </div>
       )}
       {replies.map((reply, index) => (
-        <Reply key={index} last={index === replies.length - 1}>
+        <Reply
+          key={index}
+          last={index === replies.length - 1}
+          {...(index === 0 ? { onFold: () => setFolded(true) } : {})}
+        >
           {reply}
         </Reply>
       ))}
@@ -528,8 +539,12 @@ const TargetReply = ({ id }: { id: string }) => {
         tail
       ) : (
         <>
-          {subs.map((child) => (
-            <Reply key={child.id} last={false}>
+          {subs.map((child, index) => (
+            <Reply
+              key={child.id}
+              last={false}
+              {...(index === 0 ? { onFold: () => setFolded(true) } : {})}
+            >
               <AskComment
                 node={child}
                 depth={1}
