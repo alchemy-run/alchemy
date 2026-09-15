@@ -5,8 +5,8 @@ prev:
   link: /getting-started
   label: Getting started
 next:
-  link: /infrastructure-as-effects
-  label: Infrastructure as Effects
+  link: /infrastructure-as-effects/runtime
+  label: Runtime
 ---
 
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
@@ -265,18 +265,27 @@ The Layer carries the infrastructure with it — swap it and the
 resource behind the service changes, while the handler never does.
 
 :::note
-[Layers](/infrastructure-as-effects/layers) builds one from scratch,
-and the [Infrastructure as Effects](/infrastructure-as-effects)
-overview puts the three ideas together.
+[Layers](/infrastructure-as-effects/layers) builds one from scratch
+and shows the swap across clouds.
 :::
+
+The Infrastructure as Effects section goes deeper from here:
+[Event Sources](/infrastructure-as-effects/event-sources) and
+[Sinks](/infrastructure-as-effects/sinks) turn resources into Effect
+`Stream`s, [Phases](/infrastructure-as-effects/phases) pins down
+exactly what runs when,
+[Circular Bindings](/infrastructure-as-effects/circular-bindings)
+lets two Workers call each other, and
+[Telemetry](/infrastructure-as-effects/telemetry) exports every
+request's traces and logs.
 
 ## Where next
 
 <div class="next-steps">
 
-<a href="/infrastructure-as-effects" class="next-card next-card--recommended">
-  <strong>Infrastructure as Effects</strong>
-  <span>The model the rest of the docs build on: Runtimes, Bindings, Layers, and the Construction and Runtime phases.</span>
+<a href="/infrastructure-as-effects/runtime" class="next-card next-card--recommended">
+  <strong>Runtime</strong>
+  <span>The Effectful Constructor in depth: the fetch and RPC interface, and the three ways to declare a Runtime.</span>
 </a>
 
 <a href="/cloudflare" class="next-card">

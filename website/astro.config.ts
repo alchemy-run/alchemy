@@ -141,6 +141,7 @@ function copyMarkdownSources(): AstroIntegration {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/infrastructure-as-effects": "/what-is-alchemy",
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
@@ -240,10 +241,6 @@ export default defineConfig({
             {
               label: "Infrastructure as Effects",
               items: [
-                {
-                  label: "Overview",
-                  link: "/infrastructure-as-effects",
-                },
                 {
                   label: "Runtime",
                   link: "/infrastructure-as-effects/runtime",
