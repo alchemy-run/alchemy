@@ -4582,6 +4582,9 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.0
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
       react-devtools-core:
         specifier: 'catalog:'
         version: 7.0.1
