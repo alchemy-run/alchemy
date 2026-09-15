@@ -156,6 +156,7 @@ export const ContainerPlatform: Platform<
       yield* container.bind`${namespace}`({
         durableObjects: {
           namespaceId: namespace.namespaceId,
+          className: namespace.name,
         },
       });
 

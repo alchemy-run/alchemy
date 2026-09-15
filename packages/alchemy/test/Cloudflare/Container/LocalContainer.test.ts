@@ -20,8 +20,8 @@ const logLevel = Effect.provideService(
 
 // First request has to wait for the local runtime to `docker pull` the image
 // and boot the container, so give it plenty of room.
-const HOOK_TIMEOUT = 300_000;
-const TEST_TIMEOUT = 240_000;
+const HOOK_TIMEOUT = 120_000;
+const TEST_TIMEOUT = 120_000;
 
 const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
@@ -44,7 +44,9 @@ describe("local remote container (image)", () => {
   test(
     "pulls the remote image and serves it over its TCP port",
     Effect.gen(function* () {
-      const { url } = yield* stack;
+      const { url, applicationId } = yield* stack;
+      expect(applicationId.startsWith("dev:")).toBe(true);
+      expect(url).toContain("http://localhost:");
       const client = yield* HttpClient.HttpClient;
 
       // `new URL` (not `${url}/hello`): the dev url has a trailing slash, and
@@ -63,7 +65,7 @@ describe("local remote container (image)", () => {
               ),
         ),
         Effect.timeout("30 seconds"),
-        Effect.retry({ schedule: readinessSchedule, times: 30 }),
+        Effect.retry({ schedule: readinessSchedule, times: 10 }),
       );
       expect(body).toContain("method");
     }).pipe(logLevel),

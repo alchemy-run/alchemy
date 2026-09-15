@@ -208,7 +208,7 @@ export const UserSchemaProvider = () =>
           file,
           kind: "openapi_v3",
           name,
-          validationEnabled: desiredEnabled,
+          validationEnabled: desiredEnabled ? "true" : "false",
         });
         observed = created.schema;
       }

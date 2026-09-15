@@ -4,13 +4,145 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
-import { expect } from "alchemy-test";
+import { FlagProvider, type FlagRule } from "@/Cloudflare/Flagship/Flag";
+import { noopSession } from "@/Report";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import {
+  Credentials,
+  apiTokenCredentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { expect, it } from "alchemy-test";
+import * as Redacted from "effect/Redacted";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+it.live(
+  "migration: recursive flag conditions preserve supported comparison values",
+  () =>
+    Effect.gen(function* () {
+      const rules: FlagRule[] = [
+        {
+          priority: 1,
+          serveVariation: "on",
+          conditions: [
+            {
+              logicalOperator: "AND",
+              clauses: [
+                { attribute: "country", operator: "equals", value: "US" },
+                {
+                  logicalOperator: "OR",
+                  clauses: [
+                    { attribute: "age", operator: "greater_than", value: 18 },
+                    { attribute: "staff", operator: "equals", value: true },
+                    {
+                      attribute: "plan",
+                      operator: "in",
+                      value: ["pro", "enterprise"],
+                    },
+                    {
+                      attribute: "metadata",
+                      operator: "equals",
+                      value: { snake_case: "preserved", nested: [null, 1] },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      const flag = {
+        key: "migration-flag",
+        enabled: true,
+        default_variation: "off",
+        variations: { off: false, on: true },
+        rules: [],
+        type: "boolean",
+      };
+      const methods: string[] = [];
+      const client = HttpClient.make((request) =>
+        Effect.sync(() => {
+          methods.push(request.method);
+          if (request.method === "PUT") {
+            if (request.body._tag !== "Uint8Array")
+              throw new Error("Expected JSON body");
+            const body = JSON.parse(
+              new TextDecoder().decode(request.body.body),
+            );
+            expect(
+              body.rules[0].conditions[0].clauses[1].clauses[3].value,
+            ).toEqual({ snake_case: "preserved", nested: [null, 1] });
+            expect(body.type).toBe("boolean");
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                success: true,
+                result: { ...body, type: "boolean" },
+              }),
+            );
+          }
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ success: true, result: flag }),
+          );
+        }),
+      );
+      yield* Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(Cloudflare.Flagship.Flag);
+        const output = yield* provider.reconcile({
+          id: "Flag",
+          fqn: "Flag",
+          instanceId: "migration",
+          olds: undefined,
+          output: undefined,
+          bindings: [],
+          session: { ...noopSession, note: () => Effect.void },
+          news: {
+            appId: "app-id",
+            key: flag.key,
+            defaultVariation: "off",
+            variations: flag.variations,
+            rules,
+            type: "boolean",
+          },
+        });
+        expect(output.rules).toEqual(rules);
+        expect(output.type).toBe("boolean");
+        expect(methods).toEqual(["GET", "PUT"]);
+      }).pipe(
+        Effect.provide(FlagProvider()),
+        Effect.provideService(Stack, {
+          name: "migration-flag",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+        Effect.provideService(
+          CloudflareEnvironment,
+          Effect.succeed({
+            type: "apiToken",
+            apiToken: Redacted.make("test-token"),
+            accountId: "account-id",
+            source: { type: "env" },
+          }),
+        ),
+        Effect.provideService(HttpClient.HttpClient, client),
+        Effect.provideService(
+          Credentials,
+          Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+        ),
+      );
+    }),
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -27,7 +159,7 @@ const expectFlagGone = (accountId: string, appId: string, flagKey: string) =>
     Effect.retry({
       while: (e): e is FlagStillExists => e instanceof FlagStillExists,
       schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
+        Schedule.spaced("1 second"),
         Schedule.recurs(10),
       ]),
     }),
@@ -315,7 +447,7 @@ test.provider(
           ),
         schedule: Schedule.max([
           Schedule.spaced("3 seconds"),
-          Schedule.recurs(30),
+          Schedule.recurs(10),
         ]),
       });
 
@@ -327,8 +459,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  // The `listApps` consistency poll above is bounded at ~90s (30 x 3s) plus
-  // per-iteration `list()` latency, on top of two deploys; size the test over
-  // that bounded worst case rather than the 120s default.
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

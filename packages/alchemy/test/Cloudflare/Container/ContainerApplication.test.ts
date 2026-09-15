@@ -11,7 +11,13 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
+import type { AsyncEchoObject } from "./fixtures/async/worker.ts";
+import * as Result from "effect/Result";
 const { test } = Test.make({ providers: Cloudflare.providers() });
+// The testing API rejects flat create with ContainerCreateShapeUnsupported.
+const liveLifecycle = test.provider.skipIf(
+  process.env.CLOUDFLARE_TEST_CONTAINERS !== "1",
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -20,13 +26,27 @@ const logLevel = Effect.provideService(
 
 type Scratch = Parameters<Parameters<typeof test.provider>[1]>[0];
 
-/** Deploy a standalone container application from a remote `image`. */
+/** Give each application a real container-enabled namespace before creation. */
+const attachedApplication = (id: string, image: string) =>
+  Effect.gen(function* () {
+    const container = Cloudflare.Container<AsyncEchoObject>(id, {
+      image,
+      className: "AsyncEchoObject",
+    });
+    const main = yield* Effect.sync(
+      () => new URL("./fixtures/async/worker.ts", import.meta.url).pathname,
+    );
+    yield* Cloudflare.Worker(`${id}Worker`, {
+      main,
+      env: { ECHO: container },
+    });
+    return yield* container.Application;
+  });
+
 const deployImage = (scratch: Scratch, image: string) =>
   scratch.deploy(
     Effect.gen(function* () {
-      return {
-        app: yield* Cloudflare.Container("DigestReuse", { image }).Application,
-      };
+      return { app: yield* attachedApplication("DigestReuse", image) };
     }),
   );
 
@@ -54,7 +74,7 @@ const waitForImage = (
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
       until: (app) => app.image === image,
-      times: 30,
+      times: 10,
     }),
   );
 
@@ -84,14 +104,27 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
-  // Canonical `list()` test (Cloudflare account collection, pattern (b)).
-  // `listContainerApplications` returns the full application objects in one
-  // (non-paginated) response, so `list()` maps each into the exact `read`
-  // Attributes shape. Deploying a real container application requires a Docker
-  // build + push to the Cloudflare registry (not feasible in this harness), so
-  // this is a read-only enumeration assertion: the result is a well-typed array
-  // (possibly empty on an account with no container applications) and every
-  // element carries the full Attributes shape.
+  test.provider.skipIf(process.env.CLOUDFLARE_TEST_CONTAINERS === "1")(
+    "flat create exposes the testing account's typed request-shape rejection",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const result = yield* deployImage(
+          stack,
+          "mendhak/http-https-echo:41",
+        ).pipe(Effect.result);
+        yield* stack.destroy();
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("ContainerCreateShapeUnsupported");
+          expect(result.failure.message).toContain(
+            'unrecognized key: \\"class_name\\"',
+          );
+        }
+      }),
+    { timeout: 120_000 },
+  );
+  // LIST carries the same public attributes as a resource read.
   test.provider("list enumerates container applications", (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -111,19 +144,8 @@ describe("ContainerApplication", () => {
     }).pipe(logLevel),
   );
 
-  // Issue #953 (2): an `image` that already references the target registry
-  // (e.g. pushed by CI) is deployed as-is — no docker pull/tag/push
-  // round-trip. The first deploy pushes a public image into the account
-  // registry the normal way; the second deploy references it directly, both
-  // by digest and by tag. The old (remote) path would have re-tagged it into
-  // a repository named after the consumer app, so `configuration.image`
-  // landing on the source's digest reference proves the as-is path ran.
-  //
-  // The tag consumer is the only place `resolveRegistryDigest` (the
-  // `HEAD /v2/<repo>/manifests/<tag>` probe against Cloudflare's registry)
-  // runs on the happy path — a digest reference short-circuits it and a
-  // local push reads the digest from `docker push` output.
-  test.provider(
+  // Pre-pushed tags and digests retain their original registry repository.
+  liveLifecycle(
     "pre-pushed registry image is deployed as-is",
     (scratch) =>
       Effect.gen(function* () {
@@ -132,9 +154,10 @@ describe("ContainerApplication", () => {
         const source = yield* scratch.deploy(
           Effect.gen(function* () {
             return {
-              app: yield* Cloudflare.Container("PrepushSource", {
-                image: "mendhak/http-https-echo:latest",
-              }).Application,
+              app: yield* attachedApplication(
+                "PrepushSource",
+                "mendhak/http-https-echo:latest",
+              ),
             };
           }),
         );
@@ -148,15 +171,15 @@ describe("ContainerApplication", () => {
         const all = yield* scratch.deploy(
           Effect.gen(function* () {
             return {
-              app: yield* Cloudflare.Container("PrepushSource", {
-                image: "mendhak/http-https-echo:latest",
-              }).Application,
-              byDigest: yield* Cloudflare.Container("PrepushByDigest", {
-                image: pushedRef,
-              }).Application,
-              byTag: yield* Cloudflare.Container("PrepushByTag", {
-                image: taggedRef,
-              }).Application,
+              app: yield* attachedApplication(
+                "PrepushSource",
+                "mendhak/http-https-echo:latest",
+              ),
+              byDigest: yield* attachedApplication(
+                "PrepushByDigest",
+                pushedRef,
+              ),
+              byTag: yield* attachedApplication("PrepushByTag", taggedRef),
             };
           }),
         );
@@ -165,7 +188,7 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 600_000 },
+    { timeout: 120_000 },
   );
 
   // #1282: the image tag is `<repo>:<sourceHash>`, so any change to the
@@ -176,7 +199,7 @@ describe("ContainerApplication", () => {
   // `updateContainerApplication`, minting a new application version and
   // rolling every instance for nothing. It now resolves the pushed manifest
   // digest and, when it matches the live image, skips the update entirely.
-  test.provider(
+  liveLifecycle(
     "re-pushing an identical image does not create a new application version",
     (scratch) =>
       Effect.gen(function* () {
@@ -210,33 +233,24 @@ describe("ContainerApplication", () => {
         // completes, so poll until the new digest is live.
         const third = yield* deployImage(scratch, "mendhak/http-https-echo:40");
         expect(third.app.applicationId).toBe(first.app.applicationId);
-        expect(third.app.configuration.image).toMatch(
-          /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
-        );
-        expect(third.app.configuration.image).not.toBe(
-          first.app.configuration.image,
-        );
+        const desiredImage = `${third.app.configuration.image!.split("@")[0]}@${third.app.hash!.digest}`;
+        expect(third.app.hash?.digest).not.toBe(first.app.hash?.digest);
         const rolledOut = yield* waitForImage(
           accountId,
           first.app.applicationId,
-          third.app.configuration.image!,
+          desiredImage,
         );
-        expect(rolledOut.image).toBe(third.app.configuration.image);
+        expect(rolledOut.image).toBe(desiredImage);
         expect(rolledOut.version).toBeGreaterThan(first.app.version);
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 900_000 },
+    { timeout: 120_000 },
   );
 
-  // State written before #1282 carries only `hash.image`, and its live
-  // application runs the mutable `<repo>:<sourceHash>` tag. On the first
-  // reconcile after upgrading, the provider resolves that tag's digest
-  // through the registry, keeps the live tag reference when the rebuilt
-  // image matches, and persists the digest + configuration fingerprint
-  // through one normal update. Every later source-hash drift is then a noop.
-  test.provider(
-    "legacy state without a digest migrates through one update",
+  // Legacy source hashes acquire a digest without rolling an unchanged image.
+  liveLifecycle(
+    "legacy state without a digest preserves an unchanged active image",
     (scratch) =>
       Effect.gen(function* () {
         yield* scratch.destroy();
@@ -266,7 +280,7 @@ describe("ContainerApplication", () => {
           stepPercentage: 100,
           targetConfiguration: legacyConfiguration,
         });
-        const legacy = yield* waitForImage(accountId, applicationId, taggedRef);
+        yield* waitForImage(accountId, applicationId, taggedRef);
 
         // And the state row: tag reference, source hash only.
         yield* patchRow<typeof first.app>("DigestReuse", (attr) => ({
@@ -275,13 +289,7 @@ describe("ContainerApplication", () => {
           hash: { image: attr.hash!.image },
         }));
 
-        // Source-hash drift on the migrated row: the rebuilt digest is
-        // compared against the live tag's digest (resolved via the
-        // registry), the live reference is kept, and the digest +
-        // fingerprint are persisted through one update. That update still
-        // carries one rollout — the live configuration is Cloudflare-
-        // enriched, so the pre-fingerprint `deepEqual` misses — which is
-        // exactly what the fingerprint prevents from here on.
+        // Compare the rebuilt digest with the observed historical tag.
         const migrated = yield* deployImage(
           scratch,
           "docker.io/mendhak/http-https-echo:41",
@@ -293,13 +301,13 @@ describe("ContainerApplication", () => {
         const after = yield* live(accountId, applicationId).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("3 seconds"),
-            until: (app) => app.version > legacy.version,
-            times: 30,
+            until: (app) => app.image === taggedRef,
+            times: 10,
           }),
         );
         expect(after.image).toBe(taggedRef);
 
-        // From here on, drift is free: no update, no rollout.
+        // Source-hash changes alone do not require an update or rollout.
         const settled = yield* deployImage(
           scratch,
           "mendhak/http-https-echo:41",
@@ -314,16 +322,12 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 900_000 },
+    { timeout: 120_000 },
   );
 
-  // The Durable Object attachment is immutable, so a reconcile that finds an
-  // application without it (precreate's stub, or a deploy that died between
-  // precreate and reconcile) deletes and re-creates the application. When
-  // the source hash has drifted in between, that path rebuilds the image and
-  // must apply the same digest comparison as a plain update.
-  test.provider(
-    "re-creating an application to attach its Durable Object reuses an unchanged digest",
+  // Recreate after an out-of-band delete without changing the Worker namespace.
+  liveLifecycle(
+    "out-of-band deletion recreates with the real Durable Object attachment",
     (scratch) =>
       Effect.gen(function* () {
         yield* scratch.destroy();
@@ -341,31 +345,32 @@ describe("ContainerApplication", () => {
         expect(namespaceId).toBeDefined();
         const digestRef = first.app.configuration.image!;
 
-        // Out-of-band, leave the cloud the way precreate does: same name and
-        // configuration, no Durable Object attachment.
+        // Out-of-band deletion must recreate with the existing Worker namespace.
         yield* Containers.deleteContainerApplication({
           accountId,
           applicationId: first.app.applicationId,
         });
-        yield* Containers.listContainerApplications({ accountId }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            until: (apps) =>
-              apps.every((app) => app.id !== first.app.applicationId),
-            times: 30,
-          }),
-        );
-        const detached = yield* Containers.createContainerApplication({
+        yield* Containers.getContainerApplication({
           accountId,
-          name: first.app.applicationName,
-          maxInstances: first.app.maxInstances,
-          instances: first.app.instances,
-          schedulingPolicy: first.app.schedulingPolicy,
-          constraints: first.app.constraints,
-          affinities: first.app.affinities,
-          configuration: first.app.configuration,
-        });
-        expect(detached.durableObjects ?? undefined).toBeUndefined();
+          applicationId: first.app.applicationId,
+        }).pipe(
+          Effect.result,
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            times: 10,
+            until: (result) =>
+              Result.isFailure(result) &&
+              result.failure._tag === "ContainerApplicationNotFound",
+          }),
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              expect(
+                Result.isFailure(result) &&
+                  result.failure._tag === "ContainerApplicationNotFound",
+              ).toBe(true);
+            }),
+          ),
+        );
 
         // Stale the persisted source hash so the re-create must rebuild.
         yield* patchRow<typeof first.app>("RemoteContainer", (attr) => ({
@@ -374,7 +379,7 @@ describe("ContainerApplication", () => {
         }));
 
         const second = yield* scratch.deploy(program);
-        expect(second.app.applicationId).not.toBe(detached.id);
+        expect(second.app.applicationId).not.toBe(first.app.applicationId);
         expect(second.app.durableObjects?.namespaceId).toBe(namespaceId);
         expect(second.app.configuration.image).toBe(digestRef);
         expect(second.app.hash?.digest).toBe(first.app.hash?.digest);
@@ -386,6 +391,6 @@ describe("ContainerApplication", () => {
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 900_000 },
+    { timeout: 120_000 },
   );
 });

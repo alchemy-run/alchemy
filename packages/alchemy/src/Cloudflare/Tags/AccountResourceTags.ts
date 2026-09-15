@@ -156,9 +156,7 @@ export const AccountResourceTagsProvider = () =>
   Provider.succeed(AccountResourceTags, {
     stables: ["accountId", "resourceType", "resourceId", "workerId"],
 
-    // Account-wide enumeration: `GET /accounts/{id}/tags/resources` returns
-    // every tagged resource in the account, so the tag set of each is directly
-    // hydratable into the `read` Attributes shape.
+    // The account index includes zone resources, which use a separate provider.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* resourceTagging.listResourceTaggings
@@ -167,17 +165,16 @@ export const AccountResourceTagsProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) =>
             Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map(
-                (item): AccountResourceTagsAttributes => ({
+              (page.result ?? [])
+                .filter((item) => !("zoneId" in item))
+                .map((item): AccountResourceTagsAttributes => ({
                   accountId,
                   resourceType: item.type,
                   resourceId: item.id,
-                  workerId:
-                    "workerId" in item ? (item.workerId as string) : undefined,
+                  workerId: "workerId" in item ? item.workerId : undefined,
                   tags: narrowTags(item.tags),
                   etag: item.etag,
-                }),
-              ),
+                })),
             ),
           ),
         );

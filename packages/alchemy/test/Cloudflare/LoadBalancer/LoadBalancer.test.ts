@@ -4,12 +4,85 @@ import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
-import { expect } from "alchemy-test";
+import { LoadBalancerProvider } from "@/Cloudflare/LoadBalancer/LoadBalancer";
+import { noopSession } from "@/Report";
+import {
+  Credentials,
+  apiTokenCredentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { expect, it } from "alchemy-test";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+it.live(
+  "migration: load balancer pool maps serialize readonly string arrays",
+  () =>
+    Effect.gen(function* () {
+      const pools = Object.freeze(["primary-pool", "fallback-pool"]);
+      const client = HttpClient.make((request) =>
+        Effect.sync(() => {
+          expect(request.method).toBe("POST");
+          if (request.body._tag !== "Uint8Array")
+            throw new Error("Expected JSON body");
+          const body = JSON.parse(new TextDecoder().decode(request.body.body));
+          expect(body.default_pools).toEqual(pools);
+          expect(body.region_pools).toEqual({ WEU: pools });
+          expect(body.country_pools).toEqual({ US: pools });
+          expect(body.pop_pools).toEqual({ LHR: pools });
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ success: true, result: { id: "lb-id", ...body } }),
+          );
+        }),
+      );
+      const created = yield* Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Cloudflare.LoadBalancer.LoadBalancer,
+        );
+        return yield* provider.reconcile({
+          id: "Lb",
+          fqn: "Lb",
+          instanceId: "migration",
+          olds: undefined,
+          output: undefined,
+          session: { ...noopSession, note: () => Effect.void },
+          bindings: [],
+          news: {
+            zoneId: "zone-id",
+            name: "lb.example.com",
+            defaultPools: pools,
+            fallbackPool: "fallback-pool",
+            regionPools: { WEU: pools },
+            countryPools: { US: pools },
+            popPools: { LHR: pools },
+          },
+        });
+      }).pipe(
+        Effect.provide(LoadBalancerProvider()),
+        Effect.provideService(
+          CloudflareEnvironment,
+          Effect.succeed({
+            type: "apiToken",
+            apiToken: Redacted.make("test-token"),
+            accountId: "account-id",
+            source: { type: "env" },
+          }),
+        ),
+        Effect.provideService(HttpClient.HttpClient, client),
+        Effect.provideService(
+          Credentials,
+          Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+        ),
+      );
+      expect(created.defaultPools).toEqual(pools);
+    }),
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -44,7 +117,7 @@ const resolveZoneId = Effect.gen(function* () {
 
 // Freshly minted scoped tokens propagate eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.spaced("1 second");
 
 const getLoadBalancer = (zoneId: string, loadBalancerId: string) =>
   loadBalancers.getLoadBalancer({ zoneId, loadBalancerId }).pipe(
@@ -66,7 +139,7 @@ const expectGone = (zoneId: string, loadBalancerId: string) =>
     Effect.retry({
       while: (e) => e._tag === "LoadBalancerNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("1 second"),
         Schedule.recurs(10),
       ]),
     }),
@@ -124,6 +197,7 @@ test.provider.skipIf(!lbEnabled)(
             name: NAME_LIFECYCLE,
             defaultPools: [pool.poolId],
             fallbackPool: pool.poolId,
+            regionPools: { WEU: [pool.poolId] },
             proxied: false,
             ttl: 30,
           });
@@ -141,6 +215,7 @@ test.provider.skipIf(!lbEnabled)(
       const live = yield* getLoadBalancer(zoneId, initial.lb.loadBalancerId);
       expect(live.name).toEqual(NAME_LIFECYCLE);
       expect(live.defaultPools).toEqual([initial.pool.poolId]);
+      expect(live.regionPools).toEqual({ WEU: [initial.pool.poolId] });
 
       // Mutable props (steering, affinity, proxied) update in place — same
       // loadBalancerId. Keep the pool deployed across every step so the
@@ -156,6 +231,7 @@ test.provider.skipIf(!lbEnabled)(
             name: NAME_LIFECYCLE,
             defaultPools: [pool.poolId],
             fallbackPool: pool.poolId,
+            regionPools: { WEU: [pool.poolId] },
             proxied: true,
             steeringPolicy: "random",
             sessionAffinity: "cookie",
@@ -235,6 +311,7 @@ test.provider.skipIf(!lbEnabled)(
             name: NAME_LIFECYCLE,
             defaultPools: [pool.poolId],
             fallbackPool: pool.poolId,
+            regionPools: { WEU: [pool.poolId] },
             proxied: false,
             ttl: 30,
           });

@@ -1,13 +1,105 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
 import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/cloudflare/organizations";
-import { expect } from "alchemy-test";
+import { OrganizationProvider } from "@/Cloudflare/Organization/Organization";
+import {
+  Credentials,
+  apiTokenCredentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { expect, it } from "alchemy-test";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+it.live(
+  "migration: organization tenant flags preserve the public flags shape",
+  () =>
+    Effect.gen(function* () {
+      const flags = {
+        account_creation: "allowed",
+        account_deletion: "denied",
+        account_migration: "allowed",
+        account_mobility: "denied",
+        sub_org_creation: "allowed",
+        account_creation_applies_tenant_defaults: "allowed",
+        enterprise_capability: "allowed",
+        member_management: "allowed",
+      };
+      const client = HttpClient.make((request) =>
+        Effect.sync(() =>
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              success: true,
+              errors: [],
+              messages: [],
+              result: [
+                { tenant_flags: flags, managed_by: "parent" },
+                {},
+                { tenant_flags: null, managed_by: null },
+              ].map((meta, index) => ({
+                id: `org-${index}`,
+                name: `organization-${index}`,
+                create_time: "2026-01-01T00:00:00Z",
+                meta,
+                parent: null,
+                profile: null,
+              })),
+              result_info: {
+                page: 1,
+                per_page: 20,
+                total_pages: 1,
+                count: 3,
+                total_count: 3,
+              },
+            }),
+          ),
+        ),
+      );
+      const organizations = yield* Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Cloudflare.Organization.Organization,
+        );
+        return yield* provider.list();
+      }).pipe(
+        Effect.provide(OrganizationProvider()),
+        Effect.provideService(Stack, {
+          name: "migration-organization",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+        Effect.provideService(HttpClient.HttpClient, client),
+        Effect.provideService(
+          Credentials,
+          Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+        ),
+      );
+      expect(organizations[0]?.flags).toEqual({
+        accountCreation: "allowed",
+        accountDeletion: "denied",
+        accountMigration: "allowed",
+        accountMobility: "denied",
+        subOrgCreation: "allowed",
+      });
+      expect(organizations[0]?.managedBy).toBe("parent");
+      for (const organization of organizations.slice(1)) {
+        expect(organization.flags).toBeUndefined();
+        expect(organization.managedBy).toBeUndefined();
+        expect(organization.parent).toBeUndefined();
+        expect(organization.profile).toBeUndefined();
+      }
+    }),
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -147,7 +239,7 @@ const expectGone = (organizationId: string) =>
     Effect.asSome,
     Effect.catchTag("OrganizationNotFound", () => Effect.succeedNone),
     Effect.repeat({
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("1 second"),
       until: (org) => org._tag === "None",
       times: 8,
     }),

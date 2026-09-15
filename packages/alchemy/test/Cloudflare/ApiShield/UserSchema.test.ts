@@ -1,19 +1,153 @@
-import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
-import { expect } from "alchemy-test";
+import { UserSchemaProvider } from "@/Cloudflare/ApiShield/UserSchema";
+import { noopSession } from "@/Report";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import {
+  Credentials,
+  apiTokenCredentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { expect, it } from "alchemy-test";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+it.live(
+  "migration: user schema multipart booleans and PATCH retain their wire types",
+  () =>
+    Effect.gen(function* () {
+      const source = yield* fixture("openapi-v1.json");
+      for (const enabled of [false, true]) {
+        const writes: string[] = [];
+        let validationEnabled = enabled;
+        const client = HttpClient.make((request) =>
+          Effect.gen(function* () {
+            if (request.method === "POST") {
+              expect(request.body._tag).toBe("FormData");
+              if (request.body._tag !== "FormData")
+                return yield* Effect.die("Expected multipart form data");
+              const form = request.body.formData;
+              expect(form.getAll("validation_enabled")).toEqual([
+                String(enabled),
+              ]);
+              expect(form.has("validationEnabled")).toBe(false);
+              expect(form.has("validation_enabled2")).toBe(false);
+              const file = form.get("file");
+              expect(file).toBeInstanceOf(File);
+              if (!(file instanceof File))
+                return yield* Effect.die("Expected uploaded file");
+              const uploaded = yield* Effect.sync(() =>
+                HttpClientResponse.fromWeb(request, new Response(file)),
+              );
+              expect(yield* uploaded.text).toBe(source);
+              writes.push("POST");
+            } else if (request.method === "PATCH") {
+              expect(request.body._tag).toBe("Uint8Array");
+              if (request.body._tag !== "Uint8Array")
+                return yield* Effect.die("Expected JSON body");
+              const bytes = request.body.body;
+              const body = yield* Effect.sync(() =>
+                JSON.parse(new TextDecoder().decode(bytes)),
+              );
+              expect(body).toEqual({ validation_enabled: true });
+              validationEnabled = true;
+              writes.push("PATCH");
+            }
+            return yield* Effect.sync(() => {
+              const schema = {
+                schema_id: "schema-id",
+                name: "migration-schema",
+                kind: "openapi_v3",
+                source,
+                validation_enabled: validationEnabled,
+                created_at: "2026-01-01T00:00:00Z",
+              };
+              return HttpClientResponse.fromWeb(
+                request,
+                Response.json({
+                  success: true,
+                  errors: [],
+                  messages: [],
+                  result: request.method === "POST" ? { schema } : schema,
+                }),
+              );
+            });
+          }),
+        );
+        yield* Effect.gen(function* () {
+          const provider = yield* Provider.findProvider(
+            Cloudflare.ApiShield.UserSchema,
+          );
+          const context = {
+            id: "Schema",
+            fqn: "Schema",
+            instanceId: "migration",
+            session: { ...noopSession, note: () => Effect.void },
+            bindings: [],
+          };
+          const news = {
+            zoneId: "zone-id",
+            name: "migration-schema",
+            schema: source,
+            validationEnabled: enabled,
+          };
+          const created = yield* provider.reconcile({
+            ...context,
+            news,
+            olds: undefined,
+            output: undefined,
+          });
+          expect(created.validationEnabled).toBe(enabled);
+          const updated = yield* provider.reconcile({
+            ...context,
+            news: { ...news, validationEnabled: true },
+            olds: undefined,
+            output: created,
+          });
+          expect(updated.schemaId).toBe(created.schemaId);
+          expect(updated.validationEnabled).toBe(true);
+          expect(writes).toEqual(enabled ? ["POST"] : ["POST", "PATCH"]);
+        }).pipe(
+          Effect.provide(UserSchemaProvider()),
+          Effect.provideService(Stack, {
+            name: "migration-userschema",
+            stage: "test",
+            resources: {},
+            bindings: {},
+            actions: {},
+          }),
+          Effect.provideService(Stage, "test"),
+          Effect.provideService(
+            CloudflareEnvironment,
+            Effect.succeed({
+              type: "apiToken",
+              apiToken: Redacted.make("test-token"),
+              accountId: "account-id",
+              source: { type: "env" },
+            }),
+          ),
+          Effect.provideService(HttpClient.HttpClient, client),
+          Effect.provideService(
+            Credentials,
+            Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+          ),
+        );
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -51,7 +185,7 @@ const fixture = (file: string) =>
 // The scoped API token the test harness mints propagates eventually-
 // consistently — a fresh token intermittently 403s. Ride out the blips on
 // the test's own out-of-band calls by retrying the typed `Forbidden` error.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.spaced("1 second");
 
 // Read a schema out-of-band; `undefined` when gone.
 const getSchema = (zoneId: string, schemaId: string) =>
@@ -67,26 +201,6 @@ const getSchema = (zoneId: string, schemaId: string) =>
     }),
   );
 
-// Purge schemas left over from interrupted runs so each test starts clean.
-const purgeSchemasNamed = (zoneId: string, name: string) =>
-  apiGateway.listUserSchemas.items({ zoneId, omitSource: true }).pipe(
-    Stream.runCollect,
-    Effect.flatMap((chunk) =>
-      Effect.forEach(
-        Array.from(chunk).filter((schema) => schema.name === name),
-        (schema) =>
-          apiGateway
-            .deleteUserSchema({ zoneId, schemaId: schema.schemaId })
-            .pipe(Effect.catchTag("SchemaNotFound", () => Effect.void)),
-      ),
-    ),
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenRetrySchedule,
-      times: 8,
-    }),
-  );
-
 test.provider(
   "create, enable validation in place, destroy a user schema",
   (stack) =>
@@ -95,7 +209,6 @@ test.provider(
       const source = yield* fixture("openapi-v1.json");
 
       yield* stack.destroy();
-      yield* purgeSchemasNamed(zoneId, NAME_DEFAULT);
 
       const schema = yield* stack.deploy(
         Effect.gen(function* () {
@@ -103,7 +216,7 @@ test.provider(
             zoneId,
             name: NAME_DEFAULT,
             schema: source,
-          }).pipe(adopt(true));
+          });
         }),
       );
 
@@ -126,7 +239,7 @@ test.provider(
             name: NAME_DEFAULT,
             schema: source,
             validationEnabled: true,
-          }).pipe(adopt(true));
+          });
         }),
       );
       expect(enabled.schemaId).toEqual(schema.schemaId);
@@ -152,7 +265,6 @@ test.provider(
       const sourceV2 = yield* fixture("openapi-v2.json");
 
       yield* stack.destroy();
-      yield* purgeSchemasNamed(zoneId, NAME_REPLACE);
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
@@ -160,7 +272,7 @@ test.provider(
             zoneId,
             name: NAME_REPLACE,
             schema: sourceV1,
-          }).pipe(adopt(true));
+          });
         }),
       );
       expect(initial.source).toEqual(sourceV1);
@@ -171,7 +283,7 @@ test.provider(
             zoneId,
             name: NAME_REPLACE,
             schema: sourceV2,
-          }).pipe(adopt(true));
+          });
         }),
       );
 
@@ -205,7 +317,6 @@ test.provider(
       const source = yield* fixture("openapi-v1.json");
 
       yield* stack.destroy();
-      yield* purgeSchemasNamed(zoneId, NAME_LIST);
 
       const schema = yield* stack.deploy(
         Effect.gen(function* () {
@@ -213,7 +324,7 @@ test.provider(
             zoneId,
             name: NAME_LIST,
             schema: source,
-          }).pipe(adopt(true));
+          });
         }),
       );
 

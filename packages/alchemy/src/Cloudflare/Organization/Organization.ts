@@ -105,7 +105,8 @@ export interface Attributes {
    */
   managedBy: string | undefined;
   /**
-   * Feature flags controlled by the organization's entitlements.
+   * Feature flags controlled by the organization's entitlements, mapped
+   * from Cloudflare's tenant metadata. Absent or null flags are undefined.
    */
   flags: Flags | undefined;
   /**
@@ -377,8 +378,17 @@ const toAttributes = (
   organizationId: org.id,
   name: org.name,
   createTime: org.createTime,
-  managedBy: org.meta.managedBy ?? undefined,
-  flags: org.meta.flags ?? undefined,
+  managedBy: org.meta?.managedBy ?? undefined,
+  flags:
+    org.meta?.tenantFlags == null
+      ? undefined
+      : {
+          accountCreation: org.meta.tenantFlags.accountCreation,
+          accountDeletion: org.meta.tenantFlags.accountDeletion,
+          accountMigration: org.meta.tenantFlags.accountMigration,
+          accountMobility: org.meta.tenantFlags.accountMobility,
+          subOrgCreation: org.meta.tenantFlags.subOrgCreation,
+        },
   parent: org.parent ?? undefined,
   profile: org.profile ?? undefined,
 });

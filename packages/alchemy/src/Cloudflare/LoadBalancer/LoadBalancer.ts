@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -384,18 +383,18 @@ const findByName = (zoneId: string, name: string) =>
   );
 
 const resolvePools = (
-  pools: Record<string, ReadonlyArray<Input<string>>> | undefined,
-): Record<string, unknown> | undefined =>
+  pools: Record<string, ReadonlyArray<string>> | undefined,
+): Record<string, string[]> | undefined =>
   pools === undefined
     ? undefined
     : Object.fromEntries(
-        Object.entries(pools).map(([k, v]) => [k, v as string[]]),
+        Object.entries(pools).map(([k, v]) => [k, Array.from(v)]),
       );
 
 const buildBody = (news: Props) => ({
   name: news.name,
-  defaultPools: news.defaultPools as string[],
-  fallbackPool: news.fallbackPool as string,
+  defaultPools: Array.from(news.defaultPools),
+  fallbackPool: news.fallbackPool,
   description: news.description,
   proxied: news.proxied,
   ttl: news.proxied === true ? undefined : news.ttl,

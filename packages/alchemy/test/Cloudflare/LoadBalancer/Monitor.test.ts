@@ -3,12 +3,100 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
-import { expect } from "alchemy-test";
+import { MonitorProvider } from "@/Cloudflare/LoadBalancer/Monitor";
+import { noopSession } from "@/Report";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import {
+  Credentials,
+  apiTokenCredentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { expect, it } from "alchemy-test";
+import * as Redacted from "effect/Redacted";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+it.live("migration: monitor headers serialize readonly string arrays", () =>
+  Effect.gen(function* () {
+    const hosts = Object.freeze(["health.example.com"]);
+    const methods: string[] = [];
+    const client = HttpClient.make((request) =>
+      Effect.sync(() => {
+        methods.push(request.method);
+        if (request.method === "GET") {
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ success: true, result: [] }),
+          );
+        }
+        if (request.body._tag !== "Uint8Array")
+          throw new Error("Expected JSON body");
+        const body = JSON.parse(new TextDecoder().decode(request.body.body));
+        expect(body.header).toEqual({
+          Host: hosts,
+          "X-Health": ["ready", "live"],
+        });
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json({
+            success: true,
+            result: { id: "monitor-id", ...body },
+          }),
+        );
+      }),
+    );
+    yield* Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LoadBalancer.Monitor,
+      );
+      const created = yield* provider.reconcile({
+        id: "Monitor",
+        fqn: "Monitor",
+        instanceId: "migration",
+        olds: undefined,
+        output: undefined,
+        session: { ...noopSession, note: () => Effect.void },
+        bindings: [],
+        news: {
+          description: "migration-monitor",
+          type: "https",
+          header: { Host: hosts, "X-Health": ["ready", "live"] },
+        },
+      });
+      expect(created.monitorId).toBe("monitor-id");
+      expect(methods).toEqual(["POST"]);
+    }).pipe(
+      Effect.provide(MonitorProvider()),
+      Effect.provideService(Stack, {
+        name: "migration-monitor",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+      Effect.provideService(
+        CloudflareEnvironment,
+        Effect.succeed({
+          type: "apiToken",
+          apiToken: Redacted.make("test-token"),
+          accountId: "account-id",
+          source: { type: "env" },
+        }),
+      ),
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.provideService(
+        Credentials,
+        Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+      ),
+    );
+  }),
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -28,7 +116,7 @@ const NAME_LIFECYCLE = "alchemy-lb-monitor-lifecycle";
 
 // Freshly minted scoped tokens propagate eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.spaced("1 second");
 
 const getMonitor = (accountId: string, monitorId: string) =>
   loadBalancers.getMonitor({ accountId, monitorId }).pipe(
@@ -48,7 +136,7 @@ const expectGone = (accountId: string, monitorId: string) =>
     Effect.retry({
       while: (e) => e._tag === "MonitorNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("1 second"),
         Schedule.recurs(10),
       ]),
     }),

@@ -217,6 +217,14 @@ test.provider("list enumerates tagged zone-scoped resources", (stack) =>
     expect(found?.tags).toEqual({ env: "test", team: "alchemy" });
     expect(found?.etag).toBeTruthy();
 
+    const accountProvider = yield* Provider.findProvider(
+      Cloudflare.Tags.AccountResourceTags,
+    );
+    const accountRows = yield* accountProvider.list();
+    expect(
+      accountRows.some((row) => row.resourceId === deployed.record.recordId),
+    ).toBe(false);
+
     yield* stack.destroy();
   }).pipe(logLevel),
 );

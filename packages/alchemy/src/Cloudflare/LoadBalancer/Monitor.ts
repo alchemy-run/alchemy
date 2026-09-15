@@ -349,9 +349,9 @@ const buildBody = (news: MonitorProps, description: string) => ({
   header:
     news.header === undefined
       ? undefined
-      : (Object.fromEntries(
+      : Object.fromEntries(
           Object.entries(news.header).map(([k, v]) => [k, Array.from(v)]),
-        ) as Record<string, unknown>),
+        ),
   probeZone: news.probeZone,
 });
 

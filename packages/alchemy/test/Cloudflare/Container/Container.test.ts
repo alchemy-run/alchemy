@@ -13,20 +13,8 @@ import InferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import RemoteStack from "./fixtures/remote/stack.ts";
 
-describe.concurrent.each([
-  {
-    dev: true,
-    stage: "test-local",
-    // Must cover the full readiness budget (readinessRetries × 3s ≈ 3 min)
-    // when a saturated machine keeps the local container answering 500s.
-    timeout: 300_000,
-  },
-  {
-    dev: false,
-    stage: "test-live",
-    timeout: 300_000,
-  },
-])("Container (dev: $dev)", ({ dev, stage, timeout }) => {
+const containerTests = ({ dev, stage }: { dev: boolean; stage: string }) => {
+  const timeout = 120_000;
   // We need to create a new test context for each test case because the
   // local runner stops running after the root scope is closed, which happens
   // in an afterAll hook registered by `Test.make`.
@@ -43,9 +31,7 @@ describe.concurrent.each([
     process.env.DEBUG ? "Debug" : "Info",
   );
 
-  // Container image build + push + worker/DO deploy comfortably exceeds the
-  // default 120s hook budget, so give every deploy/destroy plenty of room.
-  const HOOK_TIMEOUT = 600_000;
+  const HOOK_TIMEOUT = 120_000;
 
   /**
    * Effect-native container (`main`): the entrypoint Effect is bundled into a
@@ -145,7 +131,9 @@ describe.concurrent.each([
    */
   describe("external container (context/dockerfile)", () => {
     const { test, beforeAll, afterAll, deploy, destroy } = make();
-    const stack = beforeAll(deploy(ExternalStack), { timeout: HOOK_TIMEOUT });
+    const stack = beforeAll(deploy(ExternalStack), {
+      timeout: HOOK_TIMEOUT,
+    });
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ExternalStack), {
       timeout: HOOK_TIMEOUT,
     });
@@ -260,7 +248,9 @@ describe.concurrent.each([
         const { url } = yield* stack;
 
         const body = yield* fetchReady(new URL("/binding", url), "kind");
-        expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
+        expect(JSON.parse(body)).toEqual({
+          kind: "durable_object_namespace",
+        });
       }).pipe(logLevel),
       { timeout },
     );
@@ -301,7 +291,9 @@ describe.concurrent.each([
         const { url } = yield* stack;
 
         const body = yield* fetchReady(new URL("/binding", url), "kind");
-        expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
+        expect(JSON.parse(body)).toEqual({
+          kind: "durable_object_namespace",
+        });
       }).pipe(logLevel),
       { timeout },
     );
@@ -317,7 +309,15 @@ describe.concurrent.each([
       { timeout },
     );
   });
-});
+};
+
+describe.concurrent("Container (dev: true)", () =>
+  containerTests({ dev: true, stage: "test-local" }));
+// ContainerCreateShapeUnsupported: VALIDATE_INPUT rejects class_name and flat image fields.
+describe.skipIf(process.env.CLOUDFLARE_TEST_CONTAINERS !== "1")(
+  "Container (dev: false)",
+  () => containerTests({ dev: false, stage: "test-live" }),
+);
 
 // Note on image choice for the non-Effect (`image`/`dockerfile`) variants:
 // stock nginx images crash-loop inside Cloudflare's container sandbox because
@@ -336,11 +336,8 @@ const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
   Schedule.spaced("3 seconds"),
 ]);
-// ~3 min of 3s-spaced polls: a saturated full-suite run (many concurrent
-// docker builds/pushes on this machine) can keep a dev container answering
-// 500 well past the ~90s that 30 retries buys. Failing attempts return
-// fast, so the extra budget only matters on the slow path.
-const readinessRetries = 60;
+// Keep the readiness backoff below 30 seconds.
+const readinessRetries = 10;
 
 // While a freshly pre-created worker propagates, Cloudflare's edge serves
 // Alchemy's pre-create stub (200 with this body); any poll that sees it retries.

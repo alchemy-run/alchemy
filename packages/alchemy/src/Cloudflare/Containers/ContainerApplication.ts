@@ -19,37 +19,33 @@ export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
 export namespace ContainerApplication {
   export type InstanceType = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+    Containers.ContainerConfiguration["instanceType"]
   >;
   export type SchedulingPolicy = NonNullable<
     Containers.CreateContainerApplicationRequest["schedulingPolicy"]
   >;
   export type Observability = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+    Containers.ContainerConfiguration["observability"]
   >;
   export type Secret = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+    Containers.ContainerConfiguration["secrets"]
   >[number];
-  export type Disk = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["disk"]
-  >;
+  export type Disk = NonNullable<Containers.ContainerConfiguration["disk"]>;
   export type EnvironmentVariable = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+    Containers.ContainerConfiguration["environmentVariables"]
   >[number];
   export type Label = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+    Containers.ContainerConfiguration["labels"]
   >[number];
   export type Network = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["network"]
+    Containers.ContainerConfiguration["network"]
   >;
-  export type Dns = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["dns"]
-  >;
+  export type Dns = NonNullable<Containers.ContainerConfiguration["dns"]>;
   export type Port = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+    Containers.ContainerConfiguration["ports"]
   >[number];
   export type Check = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+    Containers.ContainerConfiguration["checks"]
   >[number];
   export type Constraints = {
     tier?: number;
@@ -57,8 +53,7 @@ export namespace ContainerApplication {
   export type Affinities = {
     colocation?: "datacenter";
   };
-  export type Configuration =
-    Containers.CreateContainerApplicationRequest["configuration"];
+  export type Configuration = Containers.ContainerConfiguration;
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -102,7 +97,8 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   maxInstances?: number;
   /**
    * Scheduling policy used by Cloudflare's containers control plane.
-   * @default "default"
+   * Durable Object-backed applications require `"durable_object"`.
+   * @default "durable_object"
    */
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
   /**
@@ -706,7 +702,10 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     durableObjects:
       | {
+          /** ID of the hosting Durable Object namespace. */
           namespaceId: string;
+          /** Exported class name; absent in legacy persisted state. */
+          className?: string;
         }
       | undefined;
     /**
@@ -733,7 +732,10 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Durable Object namespace attached to the container application.
      */
     durableObjects?: {
+      /** ID of the hosting Durable Object namespace. */
       namespaceId: string;
+      /** Exported class name of the hosting Durable Object. */
+      className: string;
     };
     /**
      * Environment variables injected into the container runtime via the binding.

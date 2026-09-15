@@ -340,6 +340,7 @@ const bindContainerClass = Effect.fn(function* (
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {
+      className,
       namespaceId: resource.durableObjectNamespaces.pipe(
         Output.map((namespaces) => namespaces?.[className]),
       ),

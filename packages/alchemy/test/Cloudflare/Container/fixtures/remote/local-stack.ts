@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
 import LocalRemoteContainerWorker from "./local-worker.ts";
+import { LocalRemoteContainer } from "./local-object.ts";
 
 /**
  * Same worker/DO/container arrangement as `stack.ts`, but under a distinct
@@ -16,6 +17,7 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const worker = yield* LocalRemoteContainerWorker;
-    return { url: worker.url.as<string>() };
+    const app = yield* LocalRemoteContainer.Application;
+    return { url: worker.url.as<string>(), applicationId: app.applicationId };
   }),
 );

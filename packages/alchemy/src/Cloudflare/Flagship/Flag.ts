@@ -43,9 +43,10 @@ export type FlagCondition =
        */
       operator: FlagConditionOperator;
       /**
-       * Value to compare against.
+       * String, number, boolean, object, or array to compare against.
+       * Top-level null and undefined are not supported.
        */
-      value: unknown;
+      value: string | number | boolean | Record<string, unknown> | unknown[];
     }
   | {
       /**
@@ -143,8 +144,9 @@ export type FlagProps = {
    */
   description?: string;
   /**
-   * Value type of the flag's variations. Inferred from the variation values
-   * on write, so it can usually be omitted.
+   * Compatibility field retained for existing callers. Cloudflare ignores
+   * this value and infers the type from the variations on write.
+   * @deprecated Omit this field; Cloudflare infers the variation type.
    */
   type?: FlagType;
 };
@@ -530,7 +532,7 @@ const normalizeConditions = (conditions: readonly unknown[]): FlagCondition[] =>
       const flat = condition as {
         attribute: string;
         operator: string;
-        value: unknown;
+        value: string | number | boolean | Record<string, unknown> | unknown[];
       };
       return [
         {

@@ -2,14 +2,106 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
 import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/cloudflare/iam";
-import { expect } from "alchemy-test";
+import { ResourceGroupProvider } from "@/Cloudflare/Iam/ResourceGroup";
+import {
+  Credentials,
+  apiTokenCredentials,
+} from "@distilled.cloud/cloudflare/Credentials";
+import { expect, it } from "alchemy-test";
+import * as Redacted from "effect/Redacted";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+it.live("migration: IAM GET and LIST preserve concrete object scopes", () =>
+  Effect.gen(function* () {
+    const scope = {
+      key: "com.cloudflare.api.account.account-id",
+      objects: [
+        { key: "*" },
+        { key: "com.cloudflare.api.account.zone.zone-id" },
+      ],
+    };
+    const group = { id: "group-id", name: "migration-group", scope };
+    const client = HttpClient.make((request) =>
+      Effect.sync(() =>
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({
+            success: true,
+            errors: [],
+            messages: [],
+            result: request.url.endsWith("/group-id")
+              ? group
+              : [
+                  group,
+                  {
+                    ...group,
+                    id: "system-id",
+                    name: "com.cloudflare.api.account.all",
+                  },
+                ],
+            result_info: {
+              page: 1,
+              per_page: 20,
+              total_pages: 1,
+              total_count: 2,
+              count: 2,
+            },
+          }),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        Cloudflare.Iam.ResourceGroup,
+      );
+      const groups = yield* provider.list();
+      expect(groups).toHaveLength(1);
+      expect(groups[0]?.scope).toEqual(scope);
+      const observed = yield* provider.read!({
+        id: "Group",
+        fqn: "Group",
+        instanceId: "migration",
+        olds: { name: group.name, scope },
+        output: groups[0],
+      });
+      expect(observed).toEqual(groups[0]);
+    }).pipe(
+      Effect.provide(ResourceGroupProvider()),
+      Effect.provideService(Stack, {
+        name: "migration-resourcegroup",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+      Effect.provideService(
+        CloudflareEnvironment,
+        Effect.succeed({
+          type: "apiToken",
+          apiToken: Redacted.make("test-token"),
+          accountId: "account-id",
+          source: { type: "env" },
+        }),
+      ),
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.provideService(
+        Credentials,
+        Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+      ),
+    );
+  }),
+);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -30,7 +122,7 @@ const getResourceGroup = (accountId: string, resourceGroupId: string) =>
   iam.getResourceGroup({ accountId, resourceGroupId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("1 second"),
       times: 8,
     }),
   );
@@ -42,7 +134,7 @@ const expectGone = (accountId: string, resourceGroupId: string) =>
     Effect.asSome,
     Effect.catchTag("ResourceGroupNotFound", () => Effect.succeedNone),
     Effect.repeat({
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("1 second"),
       until: (g) => g._tag === "None",
       times: 8,
     }),

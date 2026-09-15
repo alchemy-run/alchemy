@@ -241,7 +241,7 @@ export const ResourceGroupProvider = () =>
 type ObservedResourceGroup = {
   id: string;
   name?: string | null;
-  scope: iam.ResourceGroupsListResultItemScopeList;
+  scope: iam.ListResourceGroupsResponse["result"][number]["scope"];
 };
 
 /**
@@ -284,32 +284,17 @@ const createGroupName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-/** Resolve `Input<string>` scope fields to concrete strings (post-Plan). */
 const resolveScope = (scope: ResourceGroupScopeInput): ResourceGroupScope => ({
-  key: scope.key as string,
-  objects: scope.objects.map((o) => ({ key: o.key as string })),
+  key: scope.key,
+  objects: scope.objects.map((o) => ({ key: o.key })),
 });
 
-/**
- * Decode the `unknown`-typed observed scope into our structured shape.
- * Cloudflare always returns `{ key, objects: [{ key }] }` for a persisted
- * resource group.
- */
-const parseScope = (scope: unknown): ResourceGroupScope => {
-  const key =
-    Predicate.hasProperty(scope, "key") && typeof scope.key === "string"
-      ? scope.key
-      : "";
-  const objects =
-    Predicate.hasProperty(scope, "objects") && Array.isArray(scope.objects)
-      ? scope.objects.flatMap((o: unknown) =>
-          Predicate.hasProperty(o, "key") && typeof o.key === "string"
-            ? [{ key: o.key }]
-            : [],
-        )
-      : [];
-  return { key, objects };
-};
+const parseScope = (
+  scope: ObservedResourceGroup["scope"],
+): ResourceGroupScope => ({
+  key: scope.key,
+  objects: scope.objects.map((object) => ({ key: object.key })),
+});
 
 const sameScope = (a: ResourceGroupScope, b: ResourceGroupScope) =>
   a.key === b.key &&
