@@ -1,0 +1,21 @@
+---
+title: Cache with Memorystore
+description: Bind a Redis instance to a Function over Direct VPC. Instance create takes minutes.
+---
+
+Memorystore speaks RESP through `alchemy/Redis`. The HTTP binding
+packs `REDIS_URL` as an Output (resolved at reconcile, not bind time)
+and grants `roles/redis.editor`.
+
+```typescript
+const cache = yield* GCP.Redis.Instance("Cache", { memorySizeGb: 1 });
+const redis = yield* GCP.Redis.ReadWriteRedis(cache);
+yield* redis.set("k", "v");
+```
+
+Provide `GCP.Redis.ReadWriteRedisHttp`. Private-IP instances need
+Direct VPC egress on the Cloud Run service (`template.vpcAccess`).
+
+Creating an instance takes several minutes. Live tests gate this path
+on `GCP_TEST_REDIS=1`. Destroy waits out `CREATING`, then retries
+`Conflict` until the instance is gone.

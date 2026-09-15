@@ -1,0 +1,29 @@
+---
+title: Serve an API on Cloud Run
+description: Effect-native GCP.Function with fetch, IAM, and a workers-style URL.
+---
+
+`GCP.Function` is `GCP.Run.Service`. Pass `main` and an Effect
+implementation that returns `fetch`. Alchemy bundles it, builds a
+container, and deploys Cloud Run.
+
+```typescript
+export default class Api extends GCP.Function<Api>()(
+  "Api",
+  { main: import.meta.url, location: "us-central1" },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }),
+) {}
+```
+
+Bindings grant least-privilege roles on the per-host service account
+and pack env into the revision. Jobs use the same platform with a
+`run` entry (`GCP.Run.Job`) that exits when the effect completes.
+
+Zip-source gen2 functions stay on `GCP.CloudFunctions.Function` and
+do not take `main`.

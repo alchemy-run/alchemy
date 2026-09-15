@@ -1,0 +1,26 @@
+---
+title: "Part 4: Destroy"
+description: Tear down the Function, topic, bucket, and minted service account.
+sidebar:
+  order: 4
+---
+
+Everything in the Stack is owned by Alchemy labels. Destroy it:
+
+```sh
+bun alchemy destroy --profile testing
+```
+
+The Function is deleted, then the minted `alch-*` runtime service
+account, then the topic and the bucket (`forceDestroy` empties
+objects first).
+
+If a container image build failed after the service account was
+minted, Alchemy deletes that `alch-*` account on the failed
+greenfield reconcile so it does not leak.
+
+## Where to go next
+
+- [Serve an API on Cloud Run](/gcp/guides/cloud-run-api)
+- [Publish and subscribe](/gcp/guides/pubsub)
+- [Cache with Memorystore](/gcp/guides/memorystore)

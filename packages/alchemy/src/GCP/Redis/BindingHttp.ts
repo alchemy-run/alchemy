@@ -1,0 +1,43 @@
+import { makeNamedHttpBinding, type GcpHttpOp } from "../HttpBinding.ts";
+import type { AclPolicy } from "./AclPolicy.ts";
+import type { Instance } from "./Instance.ts";
+
+/**
+ * Shared HTTP scaffolding for Memorystore Redis ACL policy bindings.
+ * NOT exported from index.ts.
+ */
+export const makeRedisHttpBinding = <
+  I extends { name?: string },
+  A,
+  E,
+>(options: {
+  tag: string;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
+}) =>
+  makeNamedHttpBinding<AclPolicy, I, A, E>({
+    tag: options.tag,
+    operation: options.operation,
+    role: "roles/redis.viewer",
+    resourceName: (policy) => policy.name,
+  });
+
+/**
+ * Shared HTTP scaffolding for Memorystore Redis instance bindings.
+ * NOT exported from index.ts.
+ */
+export const makeRedisInstanceHttpBinding = <
+  I extends { name?: string },
+  A,
+  E,
+>(options: {
+  tag: string;
+  role?: string;
+  operation: GcpHttpOp<I, A, E>;
+}) =>
+  makeNamedHttpBinding<Instance, I, A, E>({
+    tag: options.tag,
+    operation: options.operation,
+    role: "roles/redis.viewer",
+    resourceName: (instance) => instance.name,
+  });

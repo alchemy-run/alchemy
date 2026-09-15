@@ -24,6 +24,7 @@ function providersSidebarEntry() {
     collapsed: false,
     items: [
       { label: "AWS", link: "/aws" },
+      { label: "GCP", link: "/gcp" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
@@ -782,6 +783,35 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("AWS"),
+          ],
+        },
+        {
+          label: "GCP",
+          items: [
+            { label: "Overview", link: "/gcp" },
+            { label: "Setup", link: "/gcp/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "gcp/tutorial" } }],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Serve an API on Cloud Run",
+                  link: "/gcp/guides/cloud-run-api",
+                },
+                {
+                  label: "Publish and subscribe",
+                  link: "/gcp/guides/pubsub",
+                },
+                {
+                  label: "Cache with Memorystore",
+                  link: "/gcp/guides/memorystore",
+                },
+              ],
+            },
+            providerResourcesEntry("GCP"),
           ],
         },
         {
