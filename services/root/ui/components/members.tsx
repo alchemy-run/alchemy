@@ -89,6 +89,12 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
             detail: "runs this channel",
           },
           {
+            name: "engineer",
+            kind: "agent",
+            online: true,
+            detail: "the worker — spawned per task (e-…)",
+          },
+          {
             name: "reviewer",
             kind: "agent",
             online: true,
@@ -96,25 +102,15 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
             detail: "the quality gate",
           },
         ]
-      : channel === "product"
-        ? [
-            {
-              name: "product-manager",
-              kind: "agent",
-              online: true,
-              session: "ProductManager:root::product-manager",
-              detail: "runs this channel",
-            },
-          ]
-        : [
-            {
-              name: "head",
-              kind: "agent",
-              online: true,
-              session: "Head:root",
-              detail: "runs this channel",
-            },
-          ];
+      : [
+          {
+            name: "head",
+            kind: "agent",
+            online: true,
+            session: "Head:root",
+            detail: "runs this channel",
+          },
+        ];
 
   // engineers surface while the ledger has them on work — done work
   // ages them out of the list, exactly like leaving the room

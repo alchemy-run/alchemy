@@ -7,7 +7,6 @@ import { Engineer } from "../engineering/Engineer.ts";
 import { EngineeringManager } from "../engineering/Manager.ts";
 import { Reviewer } from "../engineering/Reviewer.ts";
 import { Head } from "../Head.ts";
-import { ProductManager } from "../product/Manager.ts";
 import { catalog, DEFAULT_MODEL } from "../platform/Model.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
@@ -26,7 +25,6 @@ export const Models = Effect.gen(function* () {
   const head = yield* Head;
   const engineer = yield* Engineer;
   const manager = yield* EngineeringManager;
-  const product = yield* ProductManager;
   const reviewer = yield* Reviewer;
 
   const listModels = HttpRouter.add(
@@ -75,10 +73,6 @@ export const Models = Effect.gen(function* () {
       const model = yield* manager.at(key).model();
       return { model: model ?? null, default: DEFAULT_MODEL };
     }
-    if (term === ProductManager["~alchemy/Name"]) {
-      const model = yield* product.at(key).model();
-      return { model: model ?? null, default: DEFAULT_MODEL };
-    }
     if (term === Reviewer["~alchemy/Name"]) {
       const model = yield* reviewer.at(key).model();
       return { model: model ?? null, default: DEFAULT_MODEL };
@@ -122,8 +116,6 @@ export const Models = Effect.gen(function* () {
         yield* engineer.at(key).setModel(chosen.model);
       } else if (term === EngineeringManager["~alchemy/Name"]) {
         yield* manager.at(key).setModel(chosen.model);
-      } else if (term === ProductManager["~alchemy/Name"]) {
-        yield* product.at(key).setModel(chosen.model);
       } else if (term === Reviewer["~alchemy/Name"]) {
         yield* reviewer.at(key).setModel(chosen.model);
       } else {

@@ -57,7 +57,6 @@ interface Channel {
 /** The code-declared channels, until /api/channels answers. */
 const FALLBACK: ReadonlyArray<Channel> = [
   { name: "root", chat: "Head:root" },
-  { name: "product", chat: "ProductManager:root::product-manager" },
   {
     name: "engineering",
     chat: "EngineeringManager:root::engineering-manager",

@@ -5,7 +5,6 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { MANAGER_ADDRESS } from "../engineering/Triage.ts";
 import { inWorker } from "../platform/Database.ts";
-import { PRODUCT_ADDRESS } from "../product/Group.ts";
 import { ROOT } from "../Root.ts";
 
 /**
@@ -27,10 +26,6 @@ export const ChannelsApi = Effect.gen(function* () {
 
   const channels = [
     { name: "root", chat: `Head:${ROOT}` },
-    {
-      name: "product",
-      chat: `${PRODUCT_ADDRESS.term}:${PRODUCT_ADDRESS.key}`,
-    },
     {
       name: "engineering",
       chat: `${MANAGER_ADDRESS.term}:${MANAGER_ADDRESS.key}`,

@@ -2,7 +2,6 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Colleagues, TeammateUnknown } from "../chat/Ask.ts";
-import { ProductChart } from "../product/Group.ts";
 import { lineage, ROOT } from "../Root.ts";
 import { Engineer } from "./Engineer.ts";
 import { EngineeringManager } from "./Manager.ts";
@@ -50,10 +49,10 @@ export const EngineeringChart = Engineering.make`
 // partially-evaluated module order trips the TDZ at boot
 export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
   Layer.sync(Colleagues, () => {
-    // the charts' STATIC refs — the members as declared, no Layer
+    // the chart's STATIC refs — the members as declared, no Layer
     // dependency (Colleagues is wired into the members themselves;
-    // depending on the built groups would cycle)
-    const members = [...EngineeringChart.refs, ...ProductChart.refs]
+    // depending on the built group would cycle)
+    const members = EngineeringChart.refs
       .filter((ref): ref is typeof EngineeringManager => AI.isAgent(ref))
       .map((ref) => {
         const name = ref["~alchemy/Name"];
