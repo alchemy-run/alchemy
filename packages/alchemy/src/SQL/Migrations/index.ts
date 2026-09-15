@@ -7,9 +7,11 @@ export {
 } from "./Convert.ts";
 export { detectLayout, type MigrationLayout } from "./Detect.ts";
 export {
+  describeRewrittenHistory,
   DrizzleV0LayoutError,
   MigrationError,
   MigrationHistoryConflictError,
+  RewrittenMigrationHistoryError,
   type MigrationApplyError,
   type MigrationDialect,
   type MigrationRecord,
@@ -27,13 +29,16 @@ export {
 } from "./Records.ts";
 export {
   applyMigrations,
+  classifyMigrationHistory,
   diffMigrations,
   migrationsAttrs,
   migrationsInputOf,
+  rewrittenMigrationHistory,
   runMigrations,
   normalizeMigrationsInput,
   resolveMigrations,
   stampedOf,
+  type MigrationHistoryChange,
   type MigrationRun,
   type MigrationsInput,
   type NormalizedMigrationsInput,

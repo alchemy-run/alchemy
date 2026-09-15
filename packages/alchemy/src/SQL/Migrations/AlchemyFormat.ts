@@ -6,8 +6,10 @@ import {
   toTimestampString,
 } from "./Convert.ts";
 import {
+  describeRewrittenHistory,
   MigrationError,
-  MigrationHistoryConflictError,
+  RewrittenMigrationHistoryError,
+  type MigrationApplyError,
   type MigrationDialect,
   type MigrationRecord,
   type SqlExecutor,
@@ -195,20 +197,44 @@ const ensureTable = (options: {
     }
   });
 
-const appliedNames = (executor: SqlExecutor, table: string) =>
+const aliasesOf = (name: string): readonly string[] => [
+  name,
+  `${name}/migration.sql`,
+  name.replace(/\/migration\.sql$/, ""),
+];
+
+const appliedHistory = (executor: SqlExecutor, table: string) =>
   executor
-    .query(`SELECT name FROM ${quoteIdentifier(table, executor.dialect)};`)
+    .query(
+      `SELECT name, hash FROM ${quoteIdentifier(table, executor.dialect)};`,
+    )
     .pipe(
-      Effect.map(
-        (rows) =>
-          new Set(
-            rows
-              .map((row) => row.name)
-              .filter((name) => name !== null && name !== undefined)
-              .map(String),
-          ),
-      ),
+      Effect.map((rows) => {
+        const byName = new Map<string, string | undefined>();
+        for (const row of rows) {
+          if (row.name === null || row.name === undefined) continue;
+          byName.set(
+            String(row.name),
+            row.hash === null || row.hash === undefined
+              ? undefined
+              : String(row.hash),
+          );
+        }
+        return byName;
+      }),
     );
+
+const lookupApplied = (
+  byName: Map<string, string | undefined>,
+  name: string,
+): { name: string; hash: string | undefined } | undefined => {
+  for (const alias of aliasesOf(name)) {
+    if (byName.has(alias)) {
+      return { name: alias, hash: byName.get(alias) };
+    }
+  }
+  return undefined;
+};
 
 /**
  * Apply pending migrations with Alchemy's bookkeeping. Idempotent: each
@@ -219,25 +245,48 @@ const appliedNames = (executor: SqlExecutor, table: string) =>
  * Applied-detection is name-keyed with layout aliasing: pre-registry
  * Alchemy recorded drizzle-layout migrations under `<dir>/migration.sql`
  * while current records key them by `<dir>`, so both keys are honored.
+ * An already-applied name whose local hash changed, or a recorded name
+ * with no local file, is a hard {@link RewrittenMigrationHistoryError}
+ * rather than a silent skip that would persist the new hashes.
  */
 export const applyAlchemyFormat = (options: {
   executor: SqlExecutor;
   table: string;
   records: ReadonlyArray<MigrationRecord>;
-}): Effect.Effect<void, MigrationError | MigrationHistoryConflictError> =>
+}): Effect.Effect<void, MigrationApplyError> =>
   Effect.gen(function* () {
     const { executor, table, records } = options;
     if (records.length === 0) return;
     yield* ensureTable({ executor, table, records });
-    const applied = yield* appliedNames(executor, table);
+    const applied = yield* appliedHistory(executor, table);
+    const localNames = new Set(
+      records.flatMap((record) => aliasesOf(record.name)),
+    );
+    const changed: string[] = [];
+    const removed: string[] = [];
+    for (const name of applied.keys()) {
+      if (!localNames.has(name)) removed.push(name);
+    }
     for (const record of records) {
-      if (
-        applied.has(record.name) ||
-        applied.has(`${record.name}/migration.sql`) ||
-        applied.has(record.name.replace(/\/migration\.sql$/, ""))
-      ) {
-        continue;
+      const row = lookupApplied(applied, record.name);
+      if (row?.hash && row.hash !== record.hash) {
+        changed.push(record.name);
       }
+    }
+    if (changed.length > 0 || removed.length > 0) {
+      changed.sort();
+      removed.sort();
+      return yield* new RewrittenMigrationHistoryError({
+        changed,
+        removed,
+        message:
+          `Applied migration history in "${table}" does not match the local files ` +
+          `(${describeRewrittenHistory({ changed, removed })}). ` +
+          "Add a new forward migration instead of editing or deleting already-applied files.",
+      });
+    }
+    for (const record of records) {
+      if (lookupApplied(applied, record.name)) continue;
       yield* executor.batch([
         ...record.statements,
         insertSql(table, executor.dialect, record),

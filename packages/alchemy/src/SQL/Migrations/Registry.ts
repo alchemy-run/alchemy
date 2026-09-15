@@ -8,7 +8,7 @@ import { detectLayout } from "./Detect.ts";
 import {
   MigrationError,
   type DrizzleV0LayoutError,
-  type MigrationHistoryConflictError,
+  type MigrationApplyError,
   type SqlExecutor,
 } from "./Format.ts";
 import { readDrizzleDirRecords, readFlatRecords } from "./Records.ts";
@@ -106,7 +106,7 @@ export const applyMigrations = (options: {
   executor: SqlExecutor;
 }): Effect.Effect<
   void,
-  MigrationError | MigrationHistoryConflictError | DrizzleV0LayoutError,
+  MigrationApplyError | DrizzleV0LayoutError,
   FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function* () {
@@ -156,7 +156,7 @@ export const runMigrations = <E, R>(options: {
       executor: SqlExecutor,
     ) => Effect.Effect<
       void,
-      MigrationError | MigrationHistoryConflictError | DrizzleV0LayoutError,
+      MigrationApplyError | DrizzleV0LayoutError,
       FileSystem.FileSystem | Path.Path
     >,
   ) => Effect.Effect<void, E, R>;
@@ -177,9 +177,85 @@ export const runMigrations = <E, R>(options: {
   });
 
 /**
+ * Prior migration files whose contents changed or that disappeared from
+ * the directory, relative to the hashes persisted on the last deploy.
+ * Additive files (new names) are not rewritten history.
+ */
+export const rewrittenMigrationHistory = (
+  previous: Record<string, string> | undefined,
+  next: Record<string, string>,
+): { changed: string[]; removed: string[] } | undefined => {
+  if (previous === undefined) return undefined;
+  const changed: string[] = [];
+  const removed: string[] = [];
+  for (const name of Object.keys(previous)) {
+    const hash = next[name];
+    if (hash === undefined) removed.push(name);
+    else if (hash !== previous[name]) changed.push(name);
+  }
+  changed.sort();
+  removed.sort();
+  if (changed.length === 0 && removed.length === 0) return undefined;
+  return { changed, removed };
+};
+
+export type MigrationHistoryChange =
+  | { readonly kind: "none" }
+  | { readonly kind: "pending" }
+  | {
+      readonly kind: "rewritten";
+      readonly changed: ReadonlyArray<string>;
+      readonly removed: ReadonlyArray<string>;
+    };
+
+/**
+ * Classify the migration half of a provider `diff`:
+ * - `none` — hashes and bookkeeping table are unchanged
+ * - `pending` — new files and/or a table rename; apply in place
+ * - `rewritten` — an already-applied file was edited or removed
+ */
+export const classifyMigrationHistory = (options: {
+  news: { migrations?: MigrationsInput };
+  output:
+    | {
+        migrationsTable: string | undefined;
+        migrationsHashes: Record<string, string>;
+      }
+    | undefined;
+}): Effect.Effect<
+  MigrationHistoryChange,
+  MigrationError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const input = migrationsInputOf(options.news);
+    if (!input) return { kind: "none" } as const;
+    const newHashes = yield* hashMigrationsDir(input.dir);
+    const rewritten = rewrittenMigrationHistory(
+      options.output?.migrationsHashes,
+      newHashes,
+    );
+    if (rewritten) {
+      return { kind: "rewritten", ...rewritten } as const;
+    }
+    if (!recordsEqual(newHashes, options.output?.migrationsHashes ?? {})) {
+      return { kind: "pending" } as const;
+    }
+    const resolved = resolveMigrations({
+      input,
+      stamped: stampedOf(options.output),
+    });
+    return resolved.table !==
+      (options.output?.migrationsTable ?? resolved.table)
+      ? ({ kind: "pending" } as const)
+      : ({ kind: "none" } as const);
+  });
+
+/**
  * The shared migration half of a provider `diff`: true when pending file
- * changes or a bookkeeping-table move require an update. Callers decide the
- * action shape (`{ action: "update" }`, with or without stables).
+ * changes, rewritten history, or a bookkeeping-table move require an
+ * action. Callers that can replace (PlanetScale development branches)
+ * should consult {@link classifyMigrationHistory} instead of this boolean.
  */
 export const diffMigrations = (options: {
   news: { migrations?: MigrationsInput };
@@ -190,21 +266,9 @@ export const diffMigrations = (options: {
       }
     | undefined;
 }): Effect.Effect<boolean, MigrationError, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function* () {
-    const input = migrationsInputOf(options.news);
-    if (!input) return false;
-    const newHashes = yield* hashMigrationsDir(input.dir);
-    if (!recordsEqual(newHashes, options.output?.migrationsHashes ?? {})) {
-      return true;
-    }
-    const resolved = resolveMigrations({
-      input,
-      stamped: stampedOf(options.output),
-    });
-    return (
-      resolved.table !== (options.output?.migrationsTable ?? resolved.table)
-    );
-  });
+  classifyMigrationHistory(options).pipe(
+    Effect.map((change) => change.kind !== "none"),
+  );
 
 /**
  * The migration attributes every SQL database resource persists, threaded
