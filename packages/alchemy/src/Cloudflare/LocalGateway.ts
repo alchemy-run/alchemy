@@ -9,8 +9,13 @@
  * instance hosts the binding, and Node drives it through proxied clients.
  *
  * NOT exported from `index.ts` — provider/capability-internal scaffolding.
+ *
+ * The runtime core (`@alchemy.run/cloudflare-runtime/core`) is imported
+ * lazily here and in the gateways: it loads the `workerd` package, whose
+ * top-level `require.resolve` breaks a dev server that evaluates a Worker's
+ * module graph, and the resource modules that reach these gateways are
+ * part of every Worker's graph.
  */
-import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -27,6 +32,9 @@ import { isLocalId } from "./LocalRuntime.ts";
  */
 export const localGatewayRuntime = Layer.unwrap(
   Effect.gen(function* () {
+    const { layerRuntime } = yield* Effect.promise(
+      () => import("@alchemy.run/cloudflare-runtime/core"),
+    );
     const getEnv = yield* CloudflareEnvironment;
     const { dotAlchemy } = yield* AlchemyContext;
     const path = yield* Path.Path;

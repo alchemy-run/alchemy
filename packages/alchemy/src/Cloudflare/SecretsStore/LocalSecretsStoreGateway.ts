@@ -17,8 +17,6 @@
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
 import type * as runtime from "@cloudflare/workers-types";
-import { SecretsStore } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName } from "../LocalGateway.ts";
@@ -42,6 +40,13 @@ export const withLocalSecretsStore = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
+      // Lazy: the platform proxy boots workerd (see LocalGateway.ts).
+      const [{ open }, { SecretsStore }] = yield* Effect.promise(() =>
+        Promise.all([
+          import("@alchemy.run/cloudflare-runtime/core/platform-proxy"),
+          import("@alchemy.run/cloudflare-runtime/core/bindings"),
+        ]),
+      );
       const proxy = yield* open({
         name: gatewayName("alchemy-secrets-store-gateway", storeId),
         bindings: [SecretsStore.admin({ binding: "STORE", storeId })],
