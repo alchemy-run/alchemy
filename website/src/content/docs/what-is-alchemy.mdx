@@ -102,11 +102,6 @@ Stack with a Bucket, a KV Namespace, and a Worker bound to both:
 deploy only touches what changed — the `state` option above picks
 where it's stored.
 
-:::note
-[Stacks](/infrastructure-as-code/stack) covers stages, outputs, and
-state.
-:::
-
 A **Resource** is a cloud entity in a Stack managed by Alchemy: a
 bucket, a database, a queue, a Worker, a DNS record. Yield it in the
 Stack to add it to the plan:
@@ -129,11 +124,6 @@ yield* Cloudflare.Worker("Api", {
   env: { BUCKET_NAME: bucket.bucketName },
 });
 ```
-
-:::note
-[Resources](/infrastructure-as-code/resource) covers props, outputs,
-and references between Resources.
-:::
 
 A **Provider** teaches Alchemy how to read, diff, create, update, and
 delete one resource type. Each cloud ships its providers as an Effect
@@ -222,11 +212,6 @@ returns runs per request. A Worker returns `fetch`, a Durable Object
 returns its RPC methods, a Workflow returns its run function, and
 every Runtime in Alchemy is a variation on that one shape.
 
-:::note
-[Runtime](/infrastructure-as-effects/runtime) covers the shape, the
-`fetch` and RPC interface, and the three ways to declare one.
-:::
-
 A **Binding** connects a Resource to the Runtime that uses it, like
 `yield* Cloudflare.R2.ReadWriteBucket(Uploads)` above. It hands back
 a typed client and generates whatever that client needs to work. On
@@ -242,11 +227,6 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 
 There is no `env.Uploads` to reach for and no hand-written policy. The
 binding is the SDK.
-
-:::note
-[Bindings](/infrastructure-as-effects/binding) follows one binding
-through the permissions, configuration, and client it generates.
-:::
 
 Every Binding is a contract paired with a **Layer** that fulfills it.
 The handler is written against the contract. The Layer decides how:
@@ -279,11 +259,6 @@ DynamoDB is one line:
 -}).pipe(Effect.provide(JobServiceKV));     // a KV Namespace, created and bound
 +}).pipe(Effect.provide(JobServiceDynamo)); // now a DynamoDB Table instead
 ```
-
-:::note
-[Layers](/infrastructure-as-effects/layers) builds one from scratch
-and shows the swap across clouds.
-:::
 
 The Infrastructure as Effects section goes deeper from here:
 [Event Sources](/infrastructure-as-effects/event-sources) and
