@@ -343,6 +343,7 @@ const bindContainerClass = Effect.fn(function* (
       namespaceId: resource.durableObjectNamespaces.pipe(
         Output.map((namespaces) => namespaces?.[className]),
       ),
+      className,
     },
   });
 });

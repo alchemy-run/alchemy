@@ -714,11 +714,7 @@ export const LiveContainerProvider = () =>
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         name: string;
         configuration: ContainerApplication.Configuration;
-        durableObjects:
-          | {
-              namespaceId: string;
-            }
-          | undefined;
+        durableObjects: ContainerApplication.DurableObjects | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -789,7 +785,7 @@ export const LiveContainerProvider = () =>
           name,
           ...scalingDefaults(news),
           affinities: news.affinities,
-          configuration,
+          ...toCreateFields(configuration),
           durableObjects,
         }).pipe(
           Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
@@ -861,7 +857,7 @@ export const LiveContainerProvider = () =>
         // The DO attachment to (re)create with if the "existing" application
         // turns out to be gone. Threaded through so the update→create fallback
         // below preserves the binding.
-        durableObjects: { namespaceId: string } | undefined;
+        durableObjects: ContainerApplication.DurableObjects | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -960,7 +956,7 @@ export const LiveContainerProvider = () =>
                 name: existing.applicationName,
                 ...scaling,
                 affinities: news.affinities,
-                configuration,
+                ...toCreateFields(configuration),
                 durableObjects,
               });
             }),
@@ -1535,6 +1531,22 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
     }),
   );
 
+/**
+ * The create endpoint takes the image, instance type, and environment
+ * variables flat at the top level (no `configuration` wrapper), unlike
+ * update and rollout which take the full {@link ContainerApplication.Configuration}.
+ */
+const toCreateFields = (
+  configuration: ContainerApplication.Configuration,
+): Pick<
+  Containers.CreateContainerApplicationRequest,
+  "image" | "instanceType" | "environmentVariables"
+> => ({
+  image: configuration.image,
+  instanceType: configuration.instanceType ?? undefined,
+  environmentVariables: configuration.environmentVariables ?? undefined,
+});
+
 const toAttributes = (
   application:
     | Containers.CreateContainerApplicationResponse
@@ -1558,7 +1570,7 @@ const toAttributes = (
     application.configuration as ContainerApplication.Configuration,
   ),
   durableObjects: normalizeNulls(application.durableObjects) as
-    | { namespaceId: string }
+    | ContainerApplication.DurableObjects
     | undefined,
   createdAt: application.createdAt,
   version: application.version,

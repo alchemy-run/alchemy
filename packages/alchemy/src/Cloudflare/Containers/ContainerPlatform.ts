@@ -153,14 +153,16 @@ export const ContainerPlatform: Platform<
           >
         : containerEff;
 
+      const className = namespace.name;
+
       yield* container.bind`${namespace}`({
         durableObjects: {
           namespaceId: namespace.namespaceId,
+          className,
         },
       });
 
       const worker = yield* Worker;
-      const className = namespace.name;
 
       yield* worker.bind`${container.LogicalId}`({
         containers: [

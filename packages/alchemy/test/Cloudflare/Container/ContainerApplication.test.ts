@@ -363,7 +363,10 @@ describe("ContainerApplication", () => {
           schedulingPolicy: first.app.schedulingPolicy,
           constraints: first.app.constraints,
           affinities: first.app.affinities,
-          configuration: first.app.configuration,
+          image: first.app.configuration.image,
+          instanceType: first.app.configuration.instanceType ?? undefined,
+          environmentVariables:
+            first.app.configuration.environmentVariables ?? undefined,
         });
         expect(detached.durableObjects ?? undefined).toBeUndefined();
 
