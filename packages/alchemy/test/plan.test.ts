@@ -2,6 +2,7 @@ import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
+import { InstanceId } from "@/InstanceId.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
@@ -3138,6 +3139,9 @@ describe("engine-level adoption", () => {
     effect: Effect.Effect<A, any, any>,
     opts: {
       adopt?: boolean;
+      read?: NonNullable<
+        Provider.ProviderService<TestResource, InstanceId>["read"]
+      >;
       readHook?: (
         id: string,
       ) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
@@ -3145,6 +3149,14 @@ describe("engine-level adoption", () => {
   ): Effect.Effect<Plan.Plan<A>, any, State> =>
     Effect.gen(function* () {
       const { name, stage } = yield* resolveStackId;
+      const readLayer = opts.read
+        ? Provider.succeed(TestResource, {
+            ...(yield* TestResource.Provider.pipe(
+              Effect.provide(TestLayers()),
+            )),
+            read: opts.read,
+          })
+        : Layer.empty;
       const hooksLayer = opts.readHook
         ? Layer.succeed(TestResourceHooks, { read: opts.readHook })
         : Layer.empty;
@@ -3160,6 +3172,7 @@ describe("engine-level adoption", () => {
         } as any) as any,
         Effect.provideService(Stage, stage),
         Effect.flatMap((stackSpec: any) => Plan.make(stackSpec)),
+        Effect.provide(readLayer),
         Effect.provide(TestLayers()),
         Effect.provide(hooksLayer),
         Effect.provide(adoptLayer),
@@ -3279,6 +3292,52 @@ describe("engine-level adoption", () => {
         expect(completed).toMatchObject({ status: "updated" });
         expect((completed as any)?.adopting).toBeUndefined();
       }),
+  );
+
+  // Regression: https://github.com/reve-ai/kommunikasie/commit/f2e7320ff261833092b84d8aa25e3563710661e8
+  test(
+    "only interrupted creation reads receive recovery intent and the persisted instance",
+    Effect.gen(function* () {
+      yield* seed({ Recovering: creatingWithoutAttrs });
+      const reads: {
+        id: string;
+        instanceId: string;
+        contextInstanceId: string;
+        recovery?: string;
+      }[] = [];
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Cold", { string: "hello" });
+          yield* TestResource("Recovering", { string: "hello" });
+        }),
+        {
+          read: Effect.fn(function* (input) {
+            reads.push({
+              id: input.id,
+              instanceId: input.instanceId,
+              contextInstanceId: yield* InstanceId,
+              recovery: input.recovery,
+            });
+            return input.id === "Recovering" ? ownedAttrs : undefined;
+          }),
+        },
+      );
+      expect(reads).toContainEqual({
+        id: "Recovering",
+        instanceId,
+        contextInstanceId: instanceId,
+        recovery: "interrupted-create",
+      });
+      const cold = reads.find((read) => read.id === "Cold");
+      expect(cold).toBeDefined();
+      expect(cold?.recovery).toBeUndefined();
+      expect(cold?.contextInstanceId).toBe(cold?.instanceId);
+      expect(cold?.instanceId).not.toBe(instanceId);
+      expect(plan.resources.Recovering).toMatchObject({
+        action: "create",
+        state: { instanceId, attr: ownedAttrs },
+      });
+    }),
   );
 
   test(

@@ -1366,7 +1366,7 @@ export const LiveContainerProvider = () =>
             Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
           );
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, recovery }) {
           const readByName = (name: string) =>
             Effect.gen(function* () {
               yield* Effect.logInfo(
@@ -1420,10 +1420,20 @@ export const LiveContainerProvider = () =>
           const name = yield* createApplicationName(id, olds?.name);
           attrs = yield* readByName(name);
           if (!attrs) return undefined;
-          // Cloudflare container applications carry no ownership signal that
-          // we can read back from the API, so a name match is not proof of
-          // ownership. Brand it `Unowned` so the engine surfaces
-          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
+          if (recovery === "interrupted-create" && olds?.name === undefined) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // Generated names include the persisted instance's random suffix.
+            // Recover that exact generation in its account; configuration can
+            // have drifted and remains subject to the planner's normal diff.
+            if (
+              attrs.accountId === accountId &&
+              attrs.applicationName === name
+            ) {
+              return attrs;
+            }
+          }
+          // Explicit names and ordinary discovery carry no ownership proof.
+          // Keep them Unowned even if their configuration matches the request.
           return Unowned(attrs);
         }),
         list: () =>
