@@ -195,12 +195,16 @@ from scratch.
 
 ## Three ways to declare a Runtime
 
+#### Inline
+
 The inline form above is enough when nothing else needs to reference
 the Worker by name:
 
 ```typescript
 export default Cloudflare.Worker("Api", { main: import.meta.url }, effect);
 ```
+
+#### Class
 
 Wrap it in a class and the type becomes nominal. Hovers, errors, and
 Stack outputs say `Api` instead of an anonymous shape:
@@ -212,6 +216,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
   effect,
 ) {}
 ```
+
+#### Tag and Layer
 
 The third form splits identity from implementation. The class declares
 only a **Tag**. `.make(props, effect)` produces the implementation
