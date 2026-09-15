@@ -20,6 +20,7 @@ import {
 } from "./BillingPortalConfiguration.ts";
 import { Coupon, CouponProvider } from "./Coupon.ts";
 import { CreateAccountHttp } from "./CreateAccountHttp.ts";
+import { CreateAccountLinkHttp } from "./CreateAccountLinkHttp.ts";
 import { CreateAppsSecretHttp } from "./CreateAppsSecretHttp.ts";
 import { CreateCreditGrantHttp } from "./CreateCreditGrantHttp.ts";
 import { CreateCustomerHttp } from "./CreateCustomerHttp.ts";
@@ -243,6 +244,7 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         CreateAccountHttp,
+        CreateAccountLinkHttp,
         CreateAppsSecretHttp,
         CreateCreditGrantHttp,
         CreateCustomerHttp,

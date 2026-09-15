@@ -1,84 +1,118 @@
 ---
 title: Connect
-description: Onboard merchants and manage their payout details with connected accounts.
+description: Onboard merchants, send them through hosted onboarding, and record their account ids.
 ---
 
 Stripe Connect is for platforms and marketplaces — apps that onboard
 other businesses, take payments on their behalf, and route payouts to
-those businesses' bank accounts. Use it when each of your merchants
-needs its own Stripe identity rather than sharing yours.
+those businesses. Use it when each merchant needs its own Stripe
+identity instead of sharing yours.
 
-Connect is modeled in three layers:
+A working end-to-end example lives in `examples/stripe-connect`. It
+onboards a merchant and records the connected-account id in a D1
+database. This guide walks through its Stripe parts.
 
-- `Account` — the connected merchant's Stripe account.
-- `AccountPerson` — a person on that account (director, executive,
-  owner, or representative).
-- `AccountExternalAccount` — the bank account or debit card that
-  receives payouts.
+## Create the account at runtime
 
-## Account
+Merchants arrive one at a time, so you create their accounts from a
+request handler, not as a fixed Stack resource. `CreateAccount` is the
+runtime binding:
 
 ```typescript
-const merchant = yield* Stripe.Account("Merchant", {
+const createAccount = yield* Stripe.CreateAccount();
+
+// inside a Worker route
+const account = yield* createAccount({
   type: "express",
   country: "US",
-  capabilities: {
-    card_payments: { requested: true },
-    transfers: { requested: true },
-  },
+  email: "merchant@example.com",
 });
 ```
 
 `type` selects the onboarding flow (`standard`, `express`, or
-`custom`). `capabilities` requests the payments the account can take —
-requesting one does not activate it; Stripe activates each capability
-once the account's requirements are met.
+`custom`).
 
-## People
+## Send them through onboarding
+
+A new Express account cannot take payments until the merchant
+completes hosted onboarding. `CreateAccountLink` returns the URL to
+hand them:
 
 ```typescript
-const owner = yield* Stripe.AccountPerson("Owner", {
+const createAccountLink = yield* Stripe.CreateAccountLink();
+
+const link = yield* createAccountLink({
+  account: account.id,
+  type: "account_onboarding",
+  return_url: "https://your-app.example.com/onboarded",
+});
+// redirect the merchant to link.url
+```
+
+`return_url` is where Stripe sends the merchant after onboarding
+completes.
+
+## Record the account id
+
+Persist the account id so later requests know which merchant they are
+serving. The example keeps them in D1:
+
+```typescript
+const db = yield* Cloudflare.D1.QueryDatabase(Database);
+
+yield* db
+  .prepare("INSERT INTO connected_accounts (id, email) VALUES (?, ?)")
+  .bind(account.id, body.email)
+  .run();
+```
+
+Provide the bindings on the Worker Effect:
+
+```typescript
+}).pipe(
+  Effect.provide([
+    Cloudflare.D1.QueryDatabaseBinding,
+    Stripe.CreateAccountHttp,
+    Stripe.CreateAccountLinkHttp,
+  ]),
+)
+```
+
+## People and external accounts
+
+Accounts you already know can be modeled declaratively as Stack
+resources. `AccountPerson` is a director, executive, owner, or
+representative; `AccountExternalAccount` is the bank account or card
+that receives payouts.
+
+```typescript
+const person = yield* Stripe.AccountPerson("Owner", {
   account: merchant.id,
   firstName: "Jane",
   lastName: "Diaz",
-  email: "jane@example.com",
   relationship: { representative: true, title: "CEO" },
 });
-```
 
-Name, email, phone, relationship, and metadata update in place.
-
-## External accounts
-
-```typescript
 const payoutBank = yield* Stripe.AccountExternalAccount("PayoutBank", {
   account: merchant.id,
   externalAccount: "btok_…", // single-use bank-account token
-  accountHolderName: "Jane Diaz",
-  defaultForCurrency: true,
 });
 ```
 
-`externalAccount` is a single-use Stripe token (`btok_…` or `tok_…`)
-representing the bank account or debit card.
+Retrieve bindings take both the parent account and the nested id.
 
-Retrieve bindings take both the parent account and the nested id — see
-[Sell from a Worker](/stripe/guides/sell-from-a-worker).
-
-## Onboarding
+## Onboarding required
 
 Connect is a platform feature: the Stripe account that owns these
 resources must first complete [Connect onboarding](https://dashboard.stripe.com/connect)
 in the Dashboard. Without it, Stripe rejects creating connected
-accounts.
-
-Issuing cards and cardholders (`IssuingCard`, `IssuingCardholder`,
-`IssuingPersonalizationDesign`) are a separate Stripe feature and
-likewise require [Issuing onboarding](https://dashboard.stripe.com/issuing/overview)
-before the API accepts them.
+accounts. Issuing cards and cardholders similarly require
+[Issuing onboarding](https://dashboard.stripe.com/issuing/overview).
 
 ## Reference
 
 [Account](/providers/stripe/account) ·
 [AccountPerson](/providers/stripe/accountperson) ·
-[AccountExternalAccount](/providers/stripe/accountexternalaccount)
+[AccountExternalAccount](/providers/stripe/accountexternalaccount) ·
+[CreateAccount](/providers/stripe/createaccount) ·
+[CreateAccountLink](/providers/stripe/createaccountlink)
