@@ -587,6 +587,15 @@ const logExportDelta = (
   };
 };
 
+const sameMembers = (
+  desired: readonly string[],
+  observed: readonly (string | undefined)[],
+): boolean => {
+  const want = new Set(desired);
+  const have = new Set(observed);
+  return want.size === have.size && [...want].every((value) => have.has(value));
+};
+
 export const DBInstanceProvider = () =>
   Provider.effect(
     DBInstance,
@@ -873,7 +882,13 @@ export const DBInstanceProvider = () =>
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
             setIf("NetworkType", news.networkType, observed.NetworkType);
-            setIf("DBParameterGroupName", news.dbParameterGroupName, undefined);
+            setIf(
+              "DBParameterGroupName",
+              news.dbParameterGroupName,
+              observed.DBParameterGroups?.length === 1
+                ? observed.DBParameterGroups[0]?.DBParameterGroupName
+                : undefined,
+            );
             setIf("PubliclyAccessible", news.publiclyAccessible, observed.PubliclyAccessible); // prettier-ignore
             setIf("PromotionTier", news.promotionTier, observed.PromotionTier);
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
@@ -883,7 +898,13 @@ export const DBInstanceProvider = () =>
             // instances.
             if (
               news.vpcSecurityGroupIds !== undefined &&
-              news.dbClusterIdentifier === undefined
+              news.dbClusterIdentifier === undefined &&
+              !sameMembers(
+                news.vpcSecurityGroupIds,
+                (observed.VpcSecurityGroups ?? []).map(
+                  (group) => group.VpcSecurityGroupId,
+                ),
+              )
             ) {
               core.VpcSecurityGroupIds = news.vpcSecurityGroupIds;
               coreDirty = true;
