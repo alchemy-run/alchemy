@@ -247,7 +247,7 @@ export const Reply = ({
         onClick={onFold}
         aria-label="collapse this branch"
         title="collapse"
-        className="group/trunk absolute -top-2 z-10 flex size-4 cursor-pointer items-center justify-center -translate-x-1/2"
+        className="group/trunk absolute top-2 z-10 flex size-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
         style={{ left: "-20px" }}
       >
         <CircleMinus className="size-3.5 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
@@ -283,14 +283,15 @@ const Folded = ({
       onClick={onOpen}
       className="flex min-w-0 cursor-pointer items-center gap-2 rounded py-0.5 text-left hover:bg-accent/60"
     >
-      <CirclePlus className="size-3.5 shrink-0 text-muted-foreground" />
+      {/* the ⊕ takes the AVATAR's position — a collapsed comment
+          shows a circle where its face would be */}
+      <span className="flex size-6 shrink-0 items-center justify-center">
+        <CirclePlus className="size-[18px] text-muted-foreground" />
+      </span>
       {node.asker !== speaker ? (
-        <>
-          <Avatar name={node.asker} kind="agent" size={24} />
-          <span className="font-mono text-[12px] font-semibold">
-            {node.asker}
-          </span>
-        </>
+        <span className="font-mono text-[12px] font-semibold">
+          {node.asker}
+        </span>
       ) : (
         <Mention name={node.target} />
       )}
@@ -500,8 +501,15 @@ const AnsweringRow = ({
 /** One mentioned agent's REPLY: its comment (folding, spinner while
  *  running), the asks IT made as nested replies, its answer closing
  *  the comment. */
-const TargetReply = ({ id }: { id: string }) => {
-  const [folded, setFolded] = useState(false);
+const TargetReply = ({
+  id,
+  folded,
+  onFold,
+}: {
+  id: string;
+  folded: boolean;
+  onFold: () => void;
+}) => {
   const tree = useAskTree(id);
   if (tree === undefined) {
     return (
@@ -509,9 +517,7 @@ const TargetReply = ({ id }: { id: string }) => {
     );
   }
   if (folded) {
-    return (
-      <Folded node={tree} speaker={tree.asker} onOpen={() => setFolded(false)} />
-    );
+    return <Folded node={tree} speaker={tree.asker} onOpen={onFold} />;
   }
   const subs = tree.children;
   const tail =
@@ -528,7 +534,7 @@ const TargetReply = ({ id }: { id: string }) => {
   return (
     <CommentShell
       author={tree.target}
-      onFold={() => setFolded(true)}
+      onFold={onFold}
       aside={
         tree.status === "running" ? (
           <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
@@ -543,7 +549,7 @@ const TargetReply = ({ id }: { id: string }) => {
             <Reply
               key={child.id}
               last={false}
-              {...(index === 0 ? { onFold: () => setFolded(true) } : {})}
+              {...(index === 0 ? { onFold } : {})}
             >
               <AskComment
                 node={child}
@@ -576,6 +582,13 @@ export const MentionAskView = ({
   /** The round was cut before the answers landed. */
   stopped?: boolean;
 }) => {
+  const [folded, setFolded] = useState<ReadonlyArray<string>>([]);
+  const toggle = (agent: string) =>
+    setFolded((current) =>
+      current.includes(agent)
+        ? current.filter((name) => name !== agent)
+        : [...current, agent],
+    );
   const items =
     entries ??
     mentionsOf(text).map((agent) => ({ agent, ask: undefined as
@@ -593,9 +606,21 @@ export const MentionAskView = ({
         // trunk — reddit's parent-to-child indent, exactly one step
         <div className="relative flex min-w-0 flex-col">
           {items.map((item, index) => (
-            <Reply key={item.agent} last={index === items.length - 1}>
+            <Reply
+              key={item.agent}
+              last={index === items.length - 1}
+              // the arc that LEADS to a reply carries its ⊖; a
+              // collapsed one shows the ⊕ row instead
+              {...(item.ask !== undefined && !folded.includes(item.agent)
+                ? { onFold: () => toggle(item.agent) }
+                : {})}
+            >
               {item.ask !== undefined ? (
-                <TargetReply id={item.ask} />
+                <TargetReply
+                  id={item.ask}
+                  folded={folded.includes(item.agent)}
+                  onFold={() => toggle(item.agent)}
+                />
               ) : (
                 <AnsweringRow
                   agent={item.agent}
