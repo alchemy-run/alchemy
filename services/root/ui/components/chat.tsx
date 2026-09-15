@@ -1828,6 +1828,10 @@ const ChatTranscript = ({
                               // height-squeezed `overflow-hidden` card
                               // collapses into an empty border pill
                               "*:shrink-0",
+                              // the tree's connectors are drawn OUTSIDE
+                              // this box (elbows reach back to the
+                              // author's avatar) — clipping erases them
+                              "overflow-visible",
                               // discord rows are FLAT and LEFT — no
                               // right-aligned bubble for the human
                               "w-full max-w-full group-[.is-user]:ml-0 group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
