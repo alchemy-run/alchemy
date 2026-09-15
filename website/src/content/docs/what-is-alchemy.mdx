@@ -227,10 +227,11 @@ every Runtime in Alchemy is a variation on that one shape.
 `fetch` and RPC interface, and the three ways to declare one.
 :::
 
-`yield* Cloudflare.R2.ReadWriteBucket(Uploads)` is a **Binding**. It
-hands back a typed client and generates whatever that client needs to
-work. On Cloudflare that is a native Worker binding. On AWS it is an
-IAM statement scoped to one resource, plus the resource's name in the
+A **Binding** connects a Resource to the Runtime that uses it, like
+`yield* Cloudflare.R2.ReadWriteBucket(Uploads)` above. It hands back
+a typed client and generates whatever that client needs to work. On
+Cloudflare that is a native Worker binding. On AWS it is an IAM
+statement scoped to one resource, plus the resource's name in the
 Function's environment:
 
 ```typescript
