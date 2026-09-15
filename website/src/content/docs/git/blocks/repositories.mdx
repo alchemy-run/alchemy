@@ -1,6 +1,6 @@
 ---
 title: Repository
-description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, wrap it to hook pushes and ref updates, or implement its shape over another store.
+description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, compose operations through Git.Engine, or implement its shape over another store.
 ---
 
 The examples use `Authentication` from
@@ -114,52 +114,26 @@ Provide `AppRoutesLive` to `HttpApiBuilder.layer(AppApi)`, then merge that route
 and repository clients are resolved when the group builds; the handler
 runs once per request behind the route middleware.
 
-## Wrap it
+## Compose application operations
 
-`Git.RepoStore` is a service, so a Layer can provide a decorated one.
-Every push commits through `commitPush` and every REST ref write
-through `updateRef`, so wrapping those two is a hook on every ref
-move:
+Use `Git.Engine` to work with repository data from your own handler:
 
 ```typescript
-// src/hooks.ts
-const afterPush = (repoId: string, result: Git.CommitPushResult) =>
-  Effect.log(`push to ${repoId}`, result.results.map((r) => r.ref));
-
-export const ReposWithHooks = Layer.effect(
-  Git.RepoStore,
-  Effect.map(Git.RepoStore, (repos) => ({
-    getByName: (repoId) => {
-      const stub = repos.getByName(repoId);
-      return new Proxy(stub, {
-        get: (target, key, receiver) =>
-          key === "commitPush"
-            ? (input: Git.CommitPushInput) =>
-                target.commitPush(input).pipe(
-                  Effect.tap((result) => afterPush(repoId, result)),
-                )
-            : Reflect.get(target, key, receiver),
-      });
-    },
-  })),
-).pipe(Layer.provide(Git.ReposDurableObject));
+const git = yield* Git.Engine;
+const repo = yield* git.repositories.get({ owner: "alice", repo: "demo" });
+const prepared = yield* git.prepareRefRemoval(repo, { ref: "refs/heads/feature" });
+yield* checkRefChanges(repo, prepared.updates);
+yield* prepared.commit;
+yield* Effect.log("branch removed");
 ```
 
-```diff lang="typescript"
-const GitLive = Git.ApiLive.pipe(
-  Layer.provide(Git.ApiHandlersLive),
-  Layer.provide(Authentication.layer),
--  Layer.provide(Git.ReposDurableObject),
-+  Layer.provide(ReposWithHooks),
-```
+Run this inside `Effect.scoped`. `checkRefChanges` is your application function;
+it can use your request user and database. The prepared operation pins the ref
+value and can commit only once before the scope closes. Use the same policy from
+push and merge handlers. [Engine operations](/git/blocks/engine) describes the APIs.
 
-The wrapper runs in the Worker, where the routes call the object.
-`commitPush` carries the ref commands and what they resolved to;
-`updateRef` and `mergePull` are the other two ways a ref moves. A
-Queue producer or a Workflow trigger goes in `afterPush` the same way.
-To refuse a ref update before it happens, with a reason git reports,
-[Git.Hooks](/git/blocks/auth#hooks) is the pre-receive hook and needs
-no wrapping.
+`RepoStore` remains the lower storage contract for implementing another backend.
+Its raw RPC methods are infrastructure primitives, not an authorization boundary.
 
 ## Implement your own
 

@@ -1,14 +1,18 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { Session, Unauthorized } from "./auth.ts";
-/** The application's own API. Git routes are composed beside it in git.ts. */
+/** The application owns the API, including Git's groups and its middleware. */
+import * as Git from "alchemy/Git";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import { Authentication } from "./middleware.ts";
 import { AppRoutes } from "./routes.ts";
 
-export class AppApi extends HttpApi.make("app").add(AppRoutes) {}
+export class AppApi extends HttpApi.make("app")
+  .addHttpApi(Git.Api)
+  .add(AppRoutes)
+  .middleware(Authentication) {}
 
-const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
+export const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
   h.handle("me", () =>
     Effect.gen(function* () {
       const { user } = yield* Session;
@@ -16,8 +20,4 @@ const MeLive = HttpApiBuilder.group(AppApi, "app", (h) =>
       return user;
     }),
   ),
-);
-
-export const AppApiLive = HttpApiBuilder.layer(AppApi).pipe(
-  Layer.provide(MeLive),
 );

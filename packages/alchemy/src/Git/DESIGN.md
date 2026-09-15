@@ -688,15 +688,23 @@ The application owns authentication and the HTTP server. Its
 chooses. Schema composition (`addHttpApi`) is independent of route registration.
 There is no Git server wrapper and no application API argument.
 
-The request middleware decides who may call routes; it cannot inspect ref
-updates before the push is parsed. That is git's own
-pre-receive hook, and **`Git.Hooks`** is that hook as an optional
-service: `preReceive({ repo, updates })` runs in the Worker, inside the
-request (so whatever the middleware put in context is readable with
-`Effect.serviceOption`), and returns the refs to refuse with a reason.
-It runs before `git push` moves anything, before the REST ref writes,
-and before a merge; the wire reports the reason per ref, REST answers a
-typed 403 (`HookRejected`).
+The application can instead build its own API from the exported groups and
+native `HttpApiMiddleware`. Every group must be built against that actual API.
+Raw handlers still receive middleware-provided services.
+
+`Git.Engine` provides transport-independent repository operations. The HTTP
+adapter `ReceivePack.decode` reads bounded commands and retains the streaming
+body. The handler authorizes the proposed refs, calls `preparePush`, optionally
+reads staged objects to validate content, then calls `commitPush`. These are
+scoped, single-use operations. Scope exit aborts uncommitted staging; cleanup
+checks durable commit state before deleting spilled bytes. Git report-status
+encoding lives in the HTTP adapter. There is no policy callback service.
+
+Application policy functions use ordinary typed effects, including the request
+user and database services. REST ref updates/removals use `prepareRefUpdate` /
+`prepareRefRemoval`; merges use `prepareMerge`, pinning both inspected tips.
+Applications call the same policies on every exposed write path, including
+GitHub merges. `PushDenied` is encoded as a Git rejection or a typed JSON 403.
 
 The push pipeline's internal hash route is not part of `Git.Api`: it is
 `Git.InternalApi`, registered by `Git.InternalApiLive` beside public routes and
@@ -765,7 +773,7 @@ Every cut, its consequence, and the seam that makes it additive (seams marked **
 | `deepen-since` / `deepen-not` / `deepen-relative` (`git fetch --deepen`) | Rare flags fail (absolute `--depth <n>` deepening works) | ▲ `commits.commit_time` already stored; add walk predicates. |
 | Multi-round minimal negotiation | Slightly fat incremental fetches (boundary snapshot redundancy) | ▲ Real common-ancestor negotiation over `commits`/`commit_parents` + `gen` — all data present. |
 | `packfile-uris` | — | Natural once compacted packs exist: presigned R2 URLs for whole packs. |
-| push-cert, push-options, hooks | Not advertised ⇒ clients don't send them | Advertise + parse; typed hook pipeline (pre-receive/update/post-receive) as an Effect service around `ReceivePack`. |
+| push-cert, push-options | Not advertised ⇒ clients don't send them | Add protocol parsing and expose decoded data to application handlers. |
 | Force-push / branch protection | Any write token can force-push | Policy table consulted inside the existing CAS `transactionSync` — pure addition. |
 | Object-level GC | Unreachable objects persist (storage is the cheap resource) | Reachability sweep in the GC alarm; fork-aware deletion needs the refcount ledger below. |
 | Shared-pack refcount ledger | Fork-retention rule is coarse (`fork_count > 0` retains the whole prefix forever) | Registry-maintained per-key refcounts on fork/delete → precise shared-object GC. |

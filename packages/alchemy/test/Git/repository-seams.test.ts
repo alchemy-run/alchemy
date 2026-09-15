@@ -1,6 +1,6 @@
 /**
  * The Repository block's seams, as the docs show them: a route of your
- * own over `Git.GitRepo`, and a decorated namespace that hooks pushes.
+ * own over `Git.GitRepo`, and a decorated namespace that logs commits.
  * Compile-checked against the real types; run against a fake stub.
  */
 import * as Git from "@/Git/index.ts";
@@ -66,7 +66,7 @@ const afterPush = (repoId: string, result: Git.CommitPushResult) =>
     seen.push({ repoId, refs: result.results.map((r) => r.ref) });
   });
 
-export const ReposWithHooks = Layer.effect(
+export const ReposWithLogging = Layer.effect(
   Git.RepoStore,
   Effect.map(Git.RepoStore, (repos) => ({
     getByName: (repoId) => {
@@ -85,7 +85,7 @@ export const ReposWithHooks = Layer.effect(
 );
 
 describe("Repository seams", () => {
-  it.effect("a decorated namespace hooks every commitPush", () =>
+  it.effect("a decorated namespace observes every commitPush", () =>
     Effect.gen(function* () {
       const fakeStub = {
         commitPush: () =>
@@ -100,7 +100,7 @@ describe("Repository seams", () => {
       });
 
       const repos = yield* Git.RepoStore.pipe(
-        Effect.provide(ReposWithHooks.pipe(Layer.provide(FakeRepos))),
+        Effect.provide(ReposWithLogging.pipe(Layer.provide(FakeRepos))),
       );
       const stub = repos.getByName("01ARZ3NDEKTSV4RRFFQ69G5FAV");
       const result = yield* stub.commitPush({} as Git.CommitPushInput);

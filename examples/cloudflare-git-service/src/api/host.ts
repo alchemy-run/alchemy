@@ -24,11 +24,13 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
     const auth = yield* Auth;
     const fetch = yield* HttpRouter.toHttpEffect(HttpLive);
     return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        if (request.url.startsWith("/api/auth")) return yield* auth.fetch;
-        return yield* fetch;
-      }),
+      fetch: Effect.scoped(
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          if (request.url.startsWith("/api/auth")) return yield* auth.fetch;
+          return yield* fetch;
+        }),
+      ),
     };
   }).pipe(Effect.provide(CloudflareD1(AuthDb))),
 ) {}

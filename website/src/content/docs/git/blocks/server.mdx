@@ -3,30 +3,74 @@ title: HTTP routes
 description: Compose Git route layers beside your application's Effect HTTP API, with your middleware and server.
 ---
 
-`Git.ApiLive` is an ordinary route layer. Your application owns its `HttpApi`,
-its route implementations, and its server. Git receives none of those.
+Your application owns its `HttpApi`, middleware, groups, and server. Git supplies
+schemas, default handler functions, and operations you can call from your own
+implementations.
 
 ## Add Git to your application
 
+Build groups against the API that actually serves them:
+
 ```typescript
 import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { Authentication, CurrentUser } from "./authentication.ts";
+import { AppRoutes } from "./app-routes.ts";
+import { receivePack } from "./receive-pack.ts";
 
-const AppApiLive = HttpApiBuilder.layer(AppApi).pipe(
-  Layer.provide(MeLive),
+class AppApi extends HttpApi.make("app")
+  .add(Git.Repos)
+  .add(Git.Protocol)
+  .add(AppRoutes)
+  .middleware(Authentication) {}
+
+const MeLive = HttpApiBuilder.group(AppApi, "app", h =>
+  h.handle("me", () => CurrentUser),
 );
-
-const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+const ReposLive = HttpApiBuilder.group(AppApi, "repos", h =>
+  Effect.map(Git.Handlers, defaults => h.handleAll(defaults.repos)),
+);
+const ProtocolLive = HttpApiBuilder.group(AppApi, "protocol", h =>
+  Effect.map(Git.Handlers, defaults => h
+    .handleRaw("infoRefs", defaults.protocol.infoRefs)
+    .handleRaw("uploadPack", defaults.protocol.uploadPack)
+    .handleRaw("receivePack", receivePack)),
+);
+const PublicRoutes = HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(Layer.mergeAll(ReposLive, ProtocolLive, MeLive)),
   Layer.provide(Authentication.layer),
 );
 ```
 
-`AppApi` and `MeLive` belong to the application. `MeLive` is the native
-`HttpApiBuilder.group(AppApi, "app", ...)` implementation for its own group.
-`Git.ApiLive` registers the six public Git groups without manual registration.
-`Authentication` is your `HttpRouter.middleware` descriptor; its layer applies
-to both sets of public routes.
+Here `Authentication` is native `HttpApiMiddleware` providing the application's
+user service. All three groups use this same `AppApi`. Capture infrastructure services
+while constructing groups, and read the request user inside each handler.
+
+`receivePack` is your application's implementation. It decodes the request,
+authorizes changes, prepares the push, validates content, and commits through
+`Git.Engine`. See [Engine operations](/git/blocks/engine) and the [complete
+example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-git-service/src/api).
+
+Use `addHttpApi(Git.Api)` if you want all six Git groups, then implement each group
+against `AppApi`. `Git.Handlers` supplies default functions for every group.
+The engine does not receive your API or application layers.
+
+## Use the default API
+
+For an unchanged Git API, the supplied layers keep the assembly short:
+
+```typescript
+const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+  Layer.provide(RouterAuthentication.layer),
+);
+```
+
+`RouterAuthentication` here is native `HttpRouter.middleware`, as used by the
+tutorial. It applies to both route layers. `Git.ApiLive` registers defaults
+against `Git.Api`; adding middleware to a different API does not modify them.
 
 ## Define an application endpoint
 
@@ -61,7 +105,7 @@ class CombinedApi extends AppApi.addHttpApi(Git.Api) {}
 ```
 
 Schema composition does not register routes or apply middleware to already-built
-route layers. Use the router-layer composition above to serve them.
+route layers. Build the groups against `CombinedApi` to use its middleware and paths.
 
 ## Build the HTTP server
 
@@ -84,7 +128,8 @@ return { fetch };
 
 `Http.Platform` provides the platform services needed on a Worker or Lambda.
 The application chooses CORS and any other middleware with Effect's HTTP APIs.
-`Git.ApiHandlersLive` builds the shared storage clients, resolve cache, and handlers.
+`Git.ApiHandlersLive` provides `Git.Engine`, the shared operations/cache, and
+default HTTP adapters. `Git.EngineLive` supplies operations without HTTP handlers.
 
 ## Replace a Git handler
 

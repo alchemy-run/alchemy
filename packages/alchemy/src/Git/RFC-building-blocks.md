@@ -17,9 +17,14 @@ const Routes = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
 const fetch = yield* HttpRouter.toHttpEffect(Routes);
 ```
 
-For overrides, merge a native group after `Git.GroupsLive` and provide the result
-to `HttpApiBuilder.layer(Git.Api)`. See [DESIGN.md §8](./DESIGN.md#8-auth-model-nothing-inside-the-engine)
-and the [HTTP routes documentation](https://alchemy.run/git/blocks/server).
+Applications can also build every group against their own `AppApi`, including
+native `HttpApiMiddleware` that provides a typed user. Raw protocol handlers use
+`alchemy/Git/Http` to decode streaming requests and encode Git responses, and
+`Git.Engine` for repository operations. `preparePush` stages and validates objects;
+application effects authorize refs and inspect content; `commitPush` advances refs.
+Ref writes and merges have scoped preparation methods too. No policy callback
+service is installed. See [DESIGN.md §8](./DESIGN.md#8-auth-model-nothing-inside-the-engine)
+and [Engine operations](https://alchemy.run/git/blocks/engine).
 
 ## Historical proposal
 

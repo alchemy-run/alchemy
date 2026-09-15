@@ -30,7 +30,7 @@ import {
   RepoNotFound,
   RepoPath,
   ValidationError,
-  HookRejected,
+  PushDenied,
 } from "./Schema.ts";
 
 /** `(owner, repo, number)` path segments for single-PR endpoints. */
@@ -139,7 +139,7 @@ export const MergePull = HttpApiEndpoint.post(
     }),
     success: MergeResult,
     error: [
-      HookRejected,
+      PushDenied,
       RepoNotFound,
       PullNotFound,
       PullStateConflict,

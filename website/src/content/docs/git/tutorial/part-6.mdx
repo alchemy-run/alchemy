@@ -1,6 +1,6 @@
 ---
 title: "Part 6: Protect a branch"
-description: Add a pre-receive hook that prevents deleting main, then verify accepted and rejected ref updates.
+description: Authorize parsed Git mutations in ordinary HTTP handlers, using the request's user before committing changes.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
@@ -8,60 +8,157 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 The middleware decides who may push. Now add a rule about what an authorized
 push may do: it may update `main`, but it may not delete it.
 
-A Git push's ref changes are inside the protocol request. `Git.Hooks.preReceive`
-runs after those changes have been parsed and before any refs move, so it can
-inspect the proposed updates.
+Your handler decodes the Git commands, calls an application policy, then prepares
+and commits the push. It runs in the same request as the middleware from Part 4,
+so `Session` is available. Git's binary body does not require a separate middleware
+system.
 
 ## Define the branch rule
 
-Create `src/hooks.ts`:
+Create `src/branch-policy.ts`:
 
 ```typescript
-// src/hooks.ts
+// src/branch-policy.ts
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { Session } from "./session.ts";
 
-export const ProtectedMain = Layer.succeed(Git.Hooks, {
-  preReceive: ({ updates }) =>
-    Effect.succeed(
-      updates
-        .filter((update) =>
-          update.ref === "refs/heads/main" && /^0+$/.test(update.newOid),
-        )
-        .map((update) => ({
-          ref: update.ref,
-          reason: "main cannot be deleted",
-        })),
-    ),
-});
+export const checkRefChanges = (repo: Git.RepoMetaData, updates: ReadonlyArray<Git.RefUpdate>) =>
+  Effect.gen(function* () {
+    const { user } = yield* Session;
+    for (const update of updates) {
+      if (user === null || user.id !== repo.owner) {
+        return yield* new Git.PushDenied({ ref: update.ref, reason: "only the owner may change refs" });
+      }
+      if (update.ref === "refs/heads/main" && /^0+$/.test(update.newOid)) {
+        return yield* new Git.PushDenied({ ref: update.ref, reason: "main cannot be deleted" });
+      }
+    }
+  });
 ```
 
-A deletion uses an all-zero `newOid`. The hook returns a reason for each rejected
-ref; an empty array accepts the push. This rule allows creating and updating
-`main`, and it allows deleting other branches.
+A deletion uses an all-zero `newOid`. This ordinary function can live in its own
+module. More policies are more Effect-returning functions; call them in sequence.
+A function may require a database service and query it with `user.id`, just like
+any other application effect.
 
-## Supply the hook to Git's handlers
+## Implement the push endpoint
 
-Import it:
+Create `src/protocol.ts`:
 
-```diff lang="typescript"
+```typescript
+// src/protocol.ts
+import * as Git from "alchemy/Git";
+import * as GitHttp from "alchemy/Git/Http";
+import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { checkRefChanges } from "./branch-policy.ts";
+
+export const ProtocolLive = HttpApiBuilder.group(Git.Api, "protocol", (h) => Effect.gen(function* () {
+  const git = yield* Git.Engine;
+  const defaults = yield* Git.Handlers;
+  return h
+    .handleRaw("infoRefs", defaults.protocol.infoRefs)
+    .handleRaw("uploadPack", defaults.protocol.uploadPack)
+    .handleRaw("receivePack", ({ params, request }) => Effect.scoped(Effect.gen(function* () {
+      const repo = yield* git.repositories.get(params).pipe(Effect.catchTag("StoreError", Effect.die));
+      const push = yield* GitHttp.ReceivePack.decode(request);
+      if (push._tag === "Probe") return GitHttp.ReceivePack.probeResponse();
+      return yield* Effect.gen(function* () {
+        yield* checkRefChanges(repo, push.updates);
+        const prepared = yield* git.preparePush(repo, push.input);
+        // Additional application validation can read prepared.readObject(oid) here.
+        return GitHttp.ReceivePack.response(push, yield* git.commitPush(prepared));
+      }).pipe(Effect.catchTag("PushDenied", error => Effect.succeed(GitHttp.ReceivePack.reject(push, error.reason))));
+    })).pipe(
+      Effect.catchTag("StoreError", error => Effect.succeed(GitHttp.ReceivePack.failure(error.reason))),
+      Effect.catchTag(["WireProtocolError", "PackIngestError"], error => Effect.succeed(GitHttp.ReceivePack.failure(error.reason))),
+    ));
+}));
+
+```
+
+`decode` reads a bounded command header and leaves the pack streaming.
+`preparePush` stages and validates objects without moving refs. `commitPush`
+changes refs using Git's expected-old-OID checks and atomic capability. Leaving
+the scope without committing cleans up staging. A policy failure becomes Git's
+report-status, so `git push` prints your rejection reason.
+
+For content validation, call `prepared.readObject(oid)` between prepare and commit.
+It reads this push's incoming objects and existing live objects, with a 1 MiB
+per-object limit by default. [Engine operations](/git/blocks/engine) covers this boundary.
+
+## Apply the same rule to REST writes
+
+The host also exposes a REST endpoint for deleting refs. Protect it with the
+same function so it cannot bypass the push policy. Create `src/ref-writes.ts`:
+
+```typescript
+// src/ref-writes.ts
+import * as Git from "alchemy/Git";
+import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { checkRefChanges } from "./branch-policy.ts";
+
+export const RefsLive = HttpApiBuilder.group(Git.Api, "refs", (h) => Effect.gen(function* () {
+  const git = yield* Git.Engine;
+  const defaults = yield* Git.Handlers;
+  return h.handleAll({ ...defaults.refs,
+    update: ({ params, query, payload }) => Effect.scoped(Effect.gen(function* () {
+      if (/^0+$/.test(payload.newOid)) return yield* new Git.PushDenied({ ref: query.name, reason: "use the DELETE endpoint to remove a ref" });
+      const repo = yield* git.repositories.get(params);
+      const prepared = yield* git.prepareRefUpdate(repo, { ref: query.name, ...payload });
+      yield* checkRefChanges(repo, prepared.updates);
+      const result = yield* prepared.commit;
+      if (result === undefined) return yield* new Git.PushDenied({ ref: query.name, reason: "use the DELETE endpoint to remove a ref" });
+      return new Git.Ref({ name: result.name, oid: result.oid as Git.Oid });
+    })).pipe(Effect.catchTag("StoreError", Effect.die)),
+    remove: ({ params, query, payload }) => Effect.scoped(Effect.gen(function* () {
+      const repo = yield* git.repositories.get(params);
+      const prepared = yield* git.prepareRefRemoval(repo, { ref: query.name, ...payload });
+      yield* checkRefChanges(repo, prepared.updates);
+      yield* prepared.commit;
+    })).pipe(Effect.catchTag("StoreError", Effect.die)),
+  });
+}));
+```
+
+The prepared ref operation pins the state you inspected. If another request moves
+the ref before commit, the commit fails with `RefConflict`.
+
+This tutorial's new rule prevents deletion. Merges cannot delete a branch. For
+policies that restrict other ref changes, also authorize REST and GitHub merges;
+`prepareMerge` captures both branch tips, and the [application example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-git-service/src/api/ref-writes.ts)
+shares its policy across those paths.
+
+## Register your implementations
+
+Add these imports to `src/git.ts`:
+
+```typescript
+// src/git.ts (additional imports)
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { ProtocolLive } from "./protocol.ts";
+import { RefsLive } from "./ref-writes.ts";
+```
+
+Replace `PublicRoutes` with:
+
+```typescript
 // src/git.ts
-import { AppApiLive } from "./api.ts";
-+import { ProtectedMain } from "./hooks.ts";
+const GitRoutes = HttpApiBuilder.layer(Git.Api).pipe(
+  Layer.provide(Layer.mergeAll(Git.GroupsLive, ProtocolLive, RefsLive)),
+);
+
+const PublicRoutes = Layer.mergeAll(AppApiLive, GitRoutes).pipe(
+  Layer.provide(Authentication.layer),
+);
 ```
 
-Provide the hook after the handler layer that consumes it:
-
-```diff lang="typescript"
-// src/git.ts
-  Layer.provide(Git.ApiHandlersLive),
-+  Layer.provide(ProtectedMain),
-  Layer.provide(Git.ReposDurableObject),
-```
-
-The hook is optional. Providing this layer activates your rule for ref writes,
-including Git pushes and the REST API.
+These groups use the existing `Git.Api` contract, so the remaining default groups
+can be reused. Your existing `HttpLive` storage layers stay the same. If you add
+API middleware or change a prefix on a different `AppApi`, build every affected
+group against that actual API instead; see [HTTP routes](/git/blocks/server).
 
 ## Deploy the rule
 
@@ -116,7 +213,7 @@ git -c credential.helper= -C work ls-remote origin refs/heads/main
 ```
 
 It should print the current commit ID and `refs/heads/main`. Authentication
-accepted the caller; the hook rejected the proposed change.
+accepted the caller; the application handler rejected the proposed change.
 
 ## Remove the tutorial deployment
 
@@ -148,7 +245,7 @@ credentials, added your own API, and enforced a ref rule. Each behavior can now
 change independently.
 
 - [HTTP routes](/git/blocks/server) covers custom Git handlers and API schemas.
-- [Authentication and hooks](/git/blocks/auth) describes the two policy boundaries.
+- [Authentication and authorization](/git/blocks/auth) describes the two policy boundaries.
 - [Recipes](/git/recipes) covers other storage and hashing implementations.
 - The [complete application example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-git-service)
   adds a browser UI and serves it on the Git host's origin.

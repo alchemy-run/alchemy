@@ -9,9 +9,8 @@
  * - {@link Handlers} and {@link ApiHandlersLive}: shared handler implementations.
  *   {@link ApiLive} registers public routes; merge it beside application routes.
  *   {@link GroupsLive} exposes native group implementations for overrides.
- * - {@link Hooks}, git's pre-receive hook as a service. There is no auth
- *   in the engine: the middleware applied to the route layers decides
- *   who gets in.
+ * - {@link Engine}: transport-independent operations, with scoped prepare/commit
+ *   for application authorization and validation. HTTP codecs live in `alchemy/Git/Http`.
  * - The deployable pieces: {@link ApiLive} + {@link InternalApiLive}, the
  *   {@link GitRepo} / {@link Registry} Durable Objects, and the storage and
  *   hasher blocks.
@@ -23,14 +22,19 @@
  */
 export * from "./Api.ts";
 export { GitApi as Api } from "./Api.ts";
-export {
-  Hooks,
-  HooksNone,
-  type HooksShape,
-  type RefRejection,
-  type RefUpdate,
-} from "./Hooks.ts";
+export { Engine, EngineLive } from "./Engine.ts";
+export type { PushInput, PreparedPush, RefUpdate } from "./Push.ts";
+export * as Http from "./Http.ts";
+export * as Push from "./PushInput.ts";
 export * from "./Server.ts";
+export {
+  parseCommit,
+  parseTree,
+  ZERO_OID,
+  ObjectType,
+} from "./Protocol/ObjectCodec.ts";
+export { StoreError } from "./Protocol/Store.ts";
+export { WireProtocolError, PackIngestError } from "./RepoObject.ts";
 export {
   BlobStore,
   BlobStoreR2,

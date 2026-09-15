@@ -52,7 +52,6 @@ Changing a line changes the decision and nothing else:
 const GitLive = Git.ApiLive.pipe(
   Layer.provide(Git.ApiHandlersLive),
   Layer.provide(Authentication.layer),
-+  Layer.provide(ProtectedMain),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
   Layer.provide(Git.HasherInline),
@@ -61,14 +60,13 @@ const GitLive = Git.ApiLive.pipe(
 );
 ```
 
-Bytes now live in S3 and `main` only moves for its owner. A missing
-line is a type error.
+Bytes now live in S3. Application authorization stays in your HTTP handlers.
 
 The engine holds no users, no credentials, and no policy. Who may call
 a route is the middleware applied to its route layer, so the same host
 runs behind a shared secret, behind Better Auth, or behind any other
-authentication, and which refs may move is git's pre-receive hook as a
-service. Endpoints use Effect's `HttpApiEndpoint`; implementations use
+authentication. Your handler decodes the push, authorizes its proposed changes,
+then calls `Git.Engine.preparePush` and `commitPush`. Endpoints use Effect's `HttpApiEndpoint`; implementations use
 `HttpApiBuilder.group` and `handleAll`. Add your own groups or replace a
 handler in a Git group before registering it.
 [git.alchemy.run](https://git.alchemy.run) runs this file. The alchemy
@@ -91,8 +89,8 @@ part ends with a deployment and a check you can run:
    individual API keys.
 5. [Add your application's API](/git/tutorial/part-5) — serve `/me` beside Git
    with the same authenticated user.
-6. [Protect a branch](/git/tutorial/part-6) — reject deletion of `main` with a
-   pre-receive hook.
+6. [Protect a branch](/git/tutorial/part-6) — reject deletion of `main` with an
+   application policy.
 
 ## Use it
 

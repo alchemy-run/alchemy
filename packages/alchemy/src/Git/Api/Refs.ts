@@ -18,7 +18,7 @@ import {
   RefNotFound,
   RepoNotFound,
   RepoPath,
-  HookRejected,
+  PushDenied,
 } from "./Schema.ts";
 
 /** Lists refs, optionally filtered by prefix (e.g. `refs/heads/`). */
@@ -65,7 +65,7 @@ export const UpdateRef = HttpApiEndpoint.put(
     }),
     success: Ref,
     error: [
-      HookRejected,
+      PushDenied,
       RepoNotFound,
       RefConflict,
       ObjectNotFound,
@@ -86,7 +86,7 @@ export const RemoveRef = HttpApiEndpoint.delete(
       expectedOid: Schema.optional(Oid),
     }),
     success: HttpApiSchema.NoContent,
-    error: [HookRejected, RepoNotFound, RefNotFound, RefConflict, ReadOnlyRepo],
+    error: [PushDenied, RepoNotFound, RefNotFound, RefConflict, ReadOnlyRepo],
   },
 );
 

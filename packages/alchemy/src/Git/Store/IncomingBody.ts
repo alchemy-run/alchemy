@@ -29,9 +29,9 @@ export const SPILL_PART_BYTES = 8 * 1024 * 1024;
 
 /**
  * Feeds a request body into the streaming source and ends it when the
- * body ends. A native reader loop (no per-chunk Effect hop) with a
- * non-parking append: the pump retains the whole body, so backpressure
- * would only slow the receive. Resolves with the total; a read failure
+ * body ends. The reader respects feeder backpressure while application
+ * authorization or validation is running, and cancellation cancels the
+ * underlying body reader. Resolves with the total; a read failure
  * fails the feeder so every waiting reader wakes with the error.
  */
 export const feedBody = (
@@ -39,15 +39,24 @@ export const feedBody = (
   feeder: StreamingFeeder,
 ): Effect.Effect<{ readonly total: number }, StoreError> =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       let total = 0;
       if (body !== null) {
         const reader = body.getReader();
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          total += value.length;
-          if (!feeder.pushSync(value)) break;
+        const cancel = () => {
+          void reader.cancel().catch(() => {});
+        };
+        signal.addEventListener("abort", cancel, { once: true });
+        try {
+          while (!signal.aborted) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            total += value.length;
+            await Effect.runPromise(feeder.push(value), { signal });
+          }
+        } finally {
+          signal.removeEventListener("abort", cancel);
+          reader.releaseLock();
         }
       }
       feeder.end();

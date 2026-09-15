@@ -1195,7 +1195,8 @@ export default defineConfig({
               label: "Building blocks",
               items: [
                 { label: "Overview", link: "/git/blocks" },
-                { label: "Server", link: "/git/blocks/server" },
+                { label: "HTTP routes", link: "/git/blocks/server" },
+                { label: "Engine operations", link: "/git/blocks/engine" },
                 { label: "Repository", link: "/git/blocks/repositories" },
                 { label: "Registry", link: "/git/blocks/registry" },
                 { label: "Blob Store", link: "/git/blocks/blob-store" },
