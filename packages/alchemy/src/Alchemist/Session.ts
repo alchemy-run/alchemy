@@ -29,6 +29,7 @@ import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
 import { RailwayAuth } from "../Railway/AuthProvider.ts";
+import { StripeAuth } from "../Stripe/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { Progress } from "./Progress.ts";
@@ -366,6 +367,7 @@ const builtinAuth = Layer.mergeAll(
   PlanetscaleAuth,
   PrismaAuth,
   RailwayAuth,
+  StripeAuth,
 );
 
 const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(

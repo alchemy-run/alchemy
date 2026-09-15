@@ -1,0 +1,80 @@
+---
+title: "Part 4: Webhooks"
+description: Handle customer.created on the Worker with consumeEvents.
+sidebar:
+  order: 4
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+
+In [Part 3](/stripe/tutorial/part-3) `POST /customers` creates a
+Stripe Customer. Handle `customer.created` on the same Worker.
+`consumeEvents` provisions the webhook endpoint pointing at the
+Worker and binds its signing secret — there is no separate endpoint
+declaration.
+
+## Subscribe with consumeEvents
+
+Inside the Worker, pass event **classes**:
+
+```diff lang="typescript"
+// src/api.ts
+  const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+  const createCustomer = yield* Stripe.CreateCustomer();
++  yield* Stripe.consumeEvents(
++    "Events",
++    { events: [Stripe.CustomerCreated] },
++    Effect.fn(function* (event) {
++      yield* Effect.log(event.type);
++    }),
++  );
+  return {
+```
+
+The handler runs once per delivery. `event` is a `CustomerCreated`.
+
+## Provide ConsumeEventsLive
+
+```diff lang="typescript"
+// src/api.ts
+  }).pipe(
+    Effect.provide([
+      Stripe.RetrieveProductHttp,
+      Stripe.CreateCustomerHttp,
++      Stripe.ConsumeEventsLive,
+    ]),
+  ),
+) {}
+```
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+<Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
+
+[g]+[/g] [b]Events[/b] [d](Stripe.WebhookEndpoint)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Events[/b] [d](Stripe.WebhookEndpoint)[/d] [g]created[/g]
+`} />
+
+Create a customer through `/customers` and the handler logs
+`customer.created`.
+
+## Recap
+
+The Worker retrieves the Product, creates Customers, and handles
+Stripe events.
+
+- [Catalog](/stripe/guides/catalog)
+- [Sell from a Worker](/stripe/guides/sell-from-a-worker)
+- [Handle webhook events](/stripe/guides/webhooks)
+- [Connect](/stripe/guides/connect)
+
+`alchemy destroy` tears the test catalog down with the stack.
+Prices with history are deactivated; products that still have prices
+are archived.

@@ -1,0 +1,99 @@
+---
+title: Catalog
+description: Product, Price, Coupon, PromotionCode, and PaymentLink as one checkout catalog.
+---
+
+A sellable catalog is a `Product`, one or more `Price`s, optional
+`Coupon` / `PromotionCode`, and a `PaymentLink` that points at a
+price. All of them are Stack resources — the Worker in
+[Sell from a Worker](/stripe/guides/sell-from-a-worker) reads them back over HTTP.
+
+Everything below runs inside your Stack's `Effect.gen` — see
+[Setup](/stripe/setup) for credentials.
+
+## Product
+
+```typescript
+const product = yield* Stripe.Product("Pro", {
+  name: "Pro",
+  description: "Billed monthly",
+});
+```
+
+Name, description, `active`, images, and metadata update in place.
+Deleting a product is only possible when it has no prices; Alchemy
+archives (`active: false`) when Stripe rejects the delete because
+prices remain.
+
+## Price
+
+```typescript
+const price = yield* Stripe.Price("ProMonthly", {
+  product,
+  currency: "usd",
+  unitAmount: 2000,
+  recurring: { interval: "month" },
+});
+```
+
+`product`, `currency`, `unitAmount`, and `recurring` are create-only
+— changing them replaces the price. Stripe cannot delete a price that
+has been used; destroy deactivates it (`active: false`) instead.
+
+Omit `recurring` for a one-time price.
+
+## Coupon
+
+```typescript
+const coupon = yield* Stripe.Coupon("Launch20", {
+  percentOff: 20,
+  duration: "once",
+  name: "Launch 20%",
+});
+```
+
+`percentOff` or `amountOff` + `currency`, plus `duration`
+(`once` / `forever` / `repeating`). Create-only fields replace the
+coupon.
+
+## Promotion code
+
+```typescript
+const promo = yield* Stripe.PromotionCode("LAUNCH", {
+  coupon: coupon.id,
+  code: "LAUNCH",
+});
+```
+
+A `PromotionCode` is the customer-facing string that applies a
+coupon. The coupon must exist first — `coupon.id` is an output of
+the coupon resource.
+
+## Payment link
+
+```typescript
+const checkout = yield* Stripe.PaymentLink("Checkout", {
+  lineItems: [{ price: price.id, quantity: 1 }],
+  allowPromotionCodes: true,
+});
+```
+
+`checkout.url` is the hosted Stripe Checkout page. Line items
+reference price ids; `allowPromotionCodes: true` lets the coupon's
+promotion code work at checkout.
+
+## Destroy
+
+`alchemy destroy` deletes coupons, payment links, and unused
+products. Prices with history are deactivated. Products that still
+have prices are archived. That is Stripe's rule, not an Alchemy
+quirk — the catalog stays out of the live Dashboard without leaving
+orphans Alchemy thinks it deleted.
+
+## Reference
+
+[Product](/providers/stripe/product) ·
+[Price](/providers/stripe/price) ·
+[Coupon](/providers/stripe/coupon) ·
+[PromotionCode](/providers/stripe/promotioncode) ·
+[PaymentLink](/providers/stripe/paymentlink)
