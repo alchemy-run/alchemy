@@ -261,7 +261,7 @@ test.provider.skipIf(!!process.env.FAST)(
                 Schedule.exponential("500 millis"),
                 Schedule.spaced("3 seconds"),
               ]),
-              Schedule.recurs(30),
+              Schedule.recurs(10),
             ]),
           }),
           Effect.orDie,
@@ -281,9 +281,9 @@ test.provider.skipIf(!!process.env.FAST)(
         Effect.flatMap((res) => res.json),
         Effect.map((body) => (body as { bodies?: string[] })?.bodies ?? []),
         Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
+          schedule: Schedule.spaced("4 seconds"),
           until: (bodies) => bodies.includes("dedicated"),
-          times: 45,
+          times: 10,
         }),
         Effect.orDie,
       );
@@ -291,5 +291,5 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 120_000 },
 );
