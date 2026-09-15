@@ -143,25 +143,21 @@ it.live(
 );
 
 it.live(
-  "migration: TLS enumeration maps bare arrays and skips typed entitlement errors",
+  "migration: TLS enumeration maps bare arrays and empty collections",
   () =>
     Effect.gen(function* () {
       const paths: string[] = [];
       const client = HttpClient.make((request) =>
         Effect.sync(() => {
           paths.push(request.url);
-          const response = (
-            result: unknown,
-            status = 200,
-            errors: { code: number; message: string }[] = [],
-          ) =>
+          const response = (result: unknown) =>
             HttpClientResponse.fromWeb(
               request,
               Response.json(
                 {
-                  success: status === 200,
+                  success: true,
                   result,
-                  errors,
+                  errors: [],
                   messages: [],
                   result_info: {
                     page: 1,
@@ -171,7 +167,7 @@ it.live(
                     total_count: 1,
                   },
                 },
-                { status },
+                { status: 200 },
               ),
             );
           if (new URL(request.url).pathname.endsWith("/zones"))
@@ -198,14 +194,7 @@ it.live(
               { hostname: "tls.example.com", value: ["AES128-GCM-SHA256"] },
               { hostname: null },
             ]);
-          if (new URL(request.url).pathname.endsWith("/min_tls_version"))
-            return response(null, 403, [
-              {
-                code: 1450,
-                message: "Advanced Certificate Manager is required",
-              },
-            ]);
-          return response(null, 403, [{ code: 0, message: "Forbidden" }]);
+          return response([]);
         }),
       );
       yield* Effect.gen(function* () {
@@ -273,39 +262,26 @@ const resolveZoneId = Effect.gen(function* () {
 const forbiddenRetrySchedule = Schedule.spaced("1 second");
 
 const findSetting = (zoneId: string, settingId: string, hostname: string) =>
-  hostnames.listSettingsTls({ zoneId, settingId }).pipe(
-    Effect.map((settings) =>
-      settings.find((entry) => entry.hostname === hostname),
-    ),
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenRetrySchedule,
-      times: 8,
-    }),
-  );
+  hostnames
+    .listSettingsTls({ zoneId, settingId })
+    .pipe(
+      Effect.map((settings) =>
+        settings.find((entry) => entry.hostname === hostname),
+      ),
+    );
 
 test.provider(
-  "lists overrides and surfaces the typed AdvancedCertificateManagerRequired error on unentitled zones",
+  "LIST succeeds without ACM while PUT returns AdvancedCertificateManagerRequired",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
       yield* stack.destroy();
 
-      // LIST may also be entitlement-gated on an unentitled zone.
-      const list = yield* hostnames
-        .listSettingsTls({ zoneId, settingId: "min_tls_version" })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-          Effect.catchTag("AdvancedCertificateManagerRequired", (error) => {
-            expect(error.code).toBe(1450);
-            return Effect.succeed([]);
-          }),
-        );
+      const list = yield* hostnames.listSettingsTls({
+        zoneId,
+        settingId: "min_tls_version",
+      });
       expect(Array.isArray(list)).toBe(true);
 
       // The standard testing zone lacks the ACM entitlement — a write must

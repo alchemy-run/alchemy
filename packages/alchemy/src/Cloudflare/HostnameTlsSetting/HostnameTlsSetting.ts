@@ -181,30 +181,24 @@ export const HostnameTlsSettingProvider = () =>
           Effect.forEach(
             settingIds,
             (settingId) =>
-              hostnames.listSettingsTls({ zoneId: zone.id, settingId }).pipe(
-                Effect.map((settings) =>
-                  settings.flatMap((entry) =>
-                    entry.hostname == null
-                      ? []
-                      : [
-                          toAttributes(
-                            zone.id,
-                            settingId,
-                            entry.hostname,
-                            entry,
-                          ),
-                        ],
+              hostnames
+                .listSettingsTls({ zoneId: zone.id, settingId })
+                .pipe(
+                  Effect.map((settings) =>
+                    settings.flatMap((entry) =>
+                      entry.hostname == null
+                        ? []
+                        : [
+                            toAttributes(
+                              zone.id,
+                              settingId,
+                              entry.hostname,
+                              entry,
+                            ),
+                          ],
+                    ),
                   ),
                 ),
-                // Zones without Advanced Certificate Manager / Cloudflare
-                // for SaaS reject the route, and a scoped token may lack
-                // access to a zone — skip those rather than fail the whole
-                // enumeration.
-                Effect.catchTag(
-                  ["AdvancedCertificateManagerRequired", "Forbidden"],
-                  () => Effect.succeed([] as Attributes[]),
-                ),
-              ),
             { concurrency: "unbounded" },
           ).pipe(Effect.map((perSetting) => perSetting.flat())),
         { concurrency: 10 },
