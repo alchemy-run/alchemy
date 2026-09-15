@@ -189,28 +189,48 @@ export const CommentShell = ({
       {aside}
     </div>
     <div className={cn("relative", STEP)}>
-      {/* the TRUNK — reddit's fold handle under the avatar, the ⊖
-          visible at its head */}
+      {/* reddit's fold handle: the ⊖ floats on the trunk a breath
+          below the avatar; the LINE itself is drawn by the content
+          (Trunk segments and Reply elbows), so it always terminates
+          at the last reply — the button only needs to be clickable */}
       {onFold !== undefined && (
         <button
           type="button"
           onClick={onFold}
           aria-label="collapse this branch"
           title="collapse"
-          className="group/trunk absolute inset-y-0 -left-7 w-4 cursor-pointer"
+          className="group/trunk absolute inset-y-0 -left-7 z-10 w-4 cursor-pointer"
         >
-          <CircleMinus className="absolute left-px top-0 z-10 size-3.5 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
-          <span className="absolute bottom-0 left-[7px] top-4 w-px bg-border group-hover/trunk:w-[3px] group-hover/trunk:bg-primary/50" />
+          <CircleMinus className="absolute left-1/2 top-1.5 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
         </button>
       )}
-      <div className="flex min-w-0 flex-col gap-1 pt-0.5">{children}</div>
+      <div className="flex min-w-0 flex-col gap-0.5 pt-0.5">{children}</div>
     </div>
   </div>
 );
 
-/** A reply hanging off its parent's trunk by a rounded ELBOW. The
- *  LAST reply's elbow ends the trunk (an opaque cover erases the
- *  line below it, exactly how reddit terminates a branch). */
+/** A stretch of the parent's TRUNK alongside non-reply content (a
+ *  comment's own body when replies follow it) — the line segments
+ *  compose per item, so the trunk always ends exactly at the last
+ *  reply's elbow, never with paint-over hacks. */
+export const Trunk = ({ children }: { children: ReactNode }) => (
+  <div className="relative">
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute inset-y-0 w-px bg-border",
+        TRUNK_LEFT,
+      )}
+    />
+    {children}
+  </div>
+);
+
+/** A reply hanging off its parent's trunk by a rounded ELBOW — the
+ *  curve spans the whole step, landing exactly on the child's
+ *  avatar (avatar → avatar, no gaps). A non-last reply continues
+ *  the trunk through its full height; the LAST one draws only its
+ *  elbow, which is how the trunk ends. */
 export const Reply = ({
   last,
   children,
@@ -222,20 +242,20 @@ export const Reply = ({
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none absolute top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border",
+        "pointer-events-none absolute top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border",
         TRUNK_LEFT,
       )}
     />
-    {last && (
+    {!last && (
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute bottom-0 top-0 z-10 w-[3px] bg-background",
+          "pointer-events-none absolute inset-y-0 w-px bg-border",
           TRUNK_LEFT,
         )}
       />
     )}
-    <div className="pt-1.5">{children}</div>
+    <div className="pt-2">{children}</div>
   </div>
 );
 
@@ -364,9 +384,17 @@ export const AskComment = ({
         </>
       }
     >
-      <div className="text-muted-foreground">
-        <Clamped text={node.question} lines={2} />
-      </div>
+      {replies.length > 0 ? (
+        <Trunk>
+          <div className="text-muted-foreground">
+            <Clamped text={node.question} lines={2} />
+          </div>
+        </Trunk>
+      ) : (
+        <div className="text-muted-foreground">
+          <Clamped text={node.question} lines={2} />
+        </div>
+      )}
       {replies.map((reply, index) => (
         <Reply key={index} last={index === replies.length - 1}>
           {reply}
@@ -545,14 +573,7 @@ export const MentionAskView = ({
       </div>
       {items.length > 0 && (
         <div className={cn("relative", STEP)}>
-          <div
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-y-0 w-px bg-border",
-              TRUNK_LEFT,
-            )}
-          />
-          <div className="flex min-w-0 flex-col gap-1 pt-1">
+          <div className="flex min-w-0 flex-col gap-0.5">
             {items.map((item, index) => (
               <Reply key={item.agent} last={index === items.length - 1}>
                 {item.ask !== undefined ? (

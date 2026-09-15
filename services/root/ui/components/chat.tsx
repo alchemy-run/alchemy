@@ -1688,9 +1688,11 @@ const ChatTranscript = ({
                       <div className={cn(threaded && "relative ml-8")}>
                         {threaded && (
                           <>
+                            {/* the elbow spans the whole step —
+                                landing ON the reply's avatar */}
                             <div
                               aria-hidden
-                              className="pointer-events-none absolute -left-5 top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border"
+                              className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border"
                             />
                             {threadContinues && (
                               <div
@@ -1764,15 +1766,15 @@ const ChatTranscript = ({
                                     : "collapse this thread"
                                 }
                                 title={foldedHere ? "expand" : "collapse"}
-                                className="group/trunk relative mt-1 w-4 flex-1 cursor-pointer"
+                                className="group/trunk relative w-4 flex-1 cursor-pointer"
                               >
                                 {!foldedHere && (
-                                  <CircleMinus className="absolute left-1/2 top-0 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+                                  <CircleMinus className="absolute left-1/2 top-1.5 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
                                 )}
                                 <span
                                   className={cn(
-                                    "absolute bottom-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover/trunk:w-[3px] group-hover/trunk:bg-primary/50",
-                                    foldedHere ? "top-1" : "top-4",
+                                    "absolute bottom-0 left-1/2 w-px -translate-x-1/2 bg-border",
+                                    foldedHere ? "top-1" : "top-[9px]",
                                   )}
                                 />
                               </button>
@@ -1960,7 +1962,7 @@ const ChatTranscript = ({
                         <div className="relative ml-8">
                           <div
                             aria-hidden
-                            className="pointer-events-none absolute -left-5 top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border"
+                            className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border"
                           />
                           <button
                             type="button"
@@ -2016,7 +2018,7 @@ const ChatTranscript = ({
             >
               <div
                 aria-hidden
-                className="pointer-events-none absolute -left-5 top-0 h-[14px] w-[16px] rounded-bl-[10px] border-b border-l border-border"
+                className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-border"
               />
               <div className="flex min-w-0 items-center gap-2 py-0.5">
                 <Avatar
