@@ -8,6 +8,7 @@ import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
+import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 
@@ -22,8 +23,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, Repository, Secret, Variable,
- * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
+ * GitHub providers (Comment, Environment, Repository, Secret, TeamAccess,
+ * Variable, Webhook) plus the GitHub AuthProvider that the alchemy CLI
+ * discovers.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -45,6 +47,7 @@ export const providers = (options?: ProvidersOptions) =>
       Environment,
       Repository,
       Secret,
+      TeamAccess,
       Variable,
       Webhook,
     ]),
@@ -55,6 +58,7 @@ export const providers = (options?: ProvidersOptions) =>
         EnvironmentProvider(),
         RepositoryProvider(),
         SecretProvider(),
+        TeamAccessProvider(),
         VariableProvider(),
         WebhookProvider(),
       ),

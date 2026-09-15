@@ -8,6 +8,7 @@ export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
 export * from "./Secret.ts";
 export * from "./Secrets.ts";
+export * from "./TeamAccess.ts";
 export * from "./Variable.ts";
 export * from "./Variables.ts";
 export * from "./Webhook.ts";
