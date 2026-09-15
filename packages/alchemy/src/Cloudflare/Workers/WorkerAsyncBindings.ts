@@ -63,6 +63,7 @@ import type { WorkerAccessApplication } from "./WorkerAccess.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
+import type { WorkerLookup } from "./WorkerLookup.ts";
 
 export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
@@ -626,20 +627,28 @@ const toBinding = (
   } else if (Output.isOutput(binding)) {
     return Output.map(
       binding,
-      (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
-        // A `VpcService.lookup(...)` data source resolves to the service's
-        // attributes branded with the resource `Type`; classify it like the
-        // managed resource instead of a plain json env value.
+      (
+        value: Json | Redacted.Redacted<Json> | VpcServiceLookup | WorkerLookup,
+      ) =>
+        // A `lookup(...)` data source resolves to the target's attributes
+        // branded with the resource `Type`; classify it like the managed
+        // resource instead of a plain json env value.
         isVpcService(value)
           ? {
               type: "vpc_service" as const,
               name: bindingName,
               serviceId: (value as VpcServiceLookup).serviceId,
             }
-          : toValueBinding(
-              bindingName,
-              value as Json | Redacted.Redacted<Json>,
-            ),
+          : isWorker(value)
+            ? {
+                type: "service" as const,
+                name: bindingName,
+                service: (value as WorkerLookup).workerName,
+              }
+            : toValueBinding(
+                bindingName,
+                value as Json | Redacted.Redacted<Json>,
+              ),
     );
   } else {
     return {

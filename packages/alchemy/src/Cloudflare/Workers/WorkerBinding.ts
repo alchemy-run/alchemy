@@ -42,6 +42,7 @@ import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
+import type { WorkerLookup } from "./WorkerLookup.ts";
 
 type DistilledWorkerBinding = Exclude<
   workers.PutScriptRequest["metadata"]["bindings"],
@@ -197,6 +198,7 @@ export type WorkerBindingResource =
   | Secret
   | Worker
   | WorkerEntrypointBinding
+  | WorkerLookup
   | WorkerLoader
   | VersionMetadataBinding
   // The Worker's own URL (`Worker.URL`).

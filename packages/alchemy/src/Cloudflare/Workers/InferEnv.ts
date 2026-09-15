@@ -44,6 +44,7 @@ import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { Worker } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
+import type { WorkerLookup } from "./WorkerLookup.ts";
 
 export type InferEnv<W> =
   W extends Effect.Effect<infer A, infer _E, infer _R>
@@ -143,15 +144,17 @@ export type GetBindingType<T> =
                                                                   | VpcService
                                                                   | VpcServiceLookup
                                                               ? Fetcher
-                                                              : T extends
-                                                                    | PipelinesNs.Stream
-                                                                    | PipelinesNs.LegacyPipeline
-                                                                ? Pipeline
-                                                                : T extends Redacted<any>
-                                                                  ? // redacteds are always stored as secret_text, so are always string
-                                                                    // we JSON.stringify when not a Redacted<string>
-                                                                    string
-                                                                  : T;
+                                                              : T extends WorkerLookup
+                                                                ? Service
+                                                                : T extends
+                                                                      | PipelinesNs.Stream
+                                                                      | PipelinesNs.LegacyPipeline
+                                                                  ? Pipeline
+                                                                  : T extends Redacted<any>
+                                                                    ? // redacteds are always stored as secret_text, so are always string
+                                                                      // we JSON.stringify when not a Redacted<string>
+                                                                      string
+                                                                    : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
