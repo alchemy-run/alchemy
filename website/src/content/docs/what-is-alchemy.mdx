@@ -192,10 +192,12 @@ dependency graph, which most IaC tools reject. See
 ## Infrastructure as Effects
 
 Infrastructure as Effects adds two new concepts to Infrastructure as
-Code: **Runtimes** and **Bindings**. A Runtime is a Resource that
-carries the code it runs: a Worker, Lambda Function, Container, or
-Server. That code is always written the same way, as an **Effectful
-Constructor**. Bind what you need, then return what you expose:
+Code: Runtimes and Bindings.
+
+A **Runtime** is a Resource that carries the code it runs: a Worker,
+Lambda Function, Container, or Server. That code is always written
+the same way, as an **Effectful Constructor**. Bind what you need,
+then return what you expose:
 
 ```typescript
 Effect.gen(function* () {
