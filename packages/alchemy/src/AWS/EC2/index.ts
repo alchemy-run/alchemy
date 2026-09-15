@@ -1,5 +1,6 @@
 export * from "./AuthorizeSecurityGroupIngress.ts";
 export * from "./AuthorizeSecurityGroupIngressHttp.ts";
+export * from "./DefaultSecurityGroup.ts";
 export * from "./CreateSnapshot.ts";
 export * from "./CreateSnapshotHttp.ts";
 export * from "./DescribeInstance.ts";
