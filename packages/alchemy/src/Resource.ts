@@ -125,6 +125,8 @@ export interface ResourceLike<
    * Properties of the Resource.
    */
   Props: Props;
+  /** Outputs used only for dependency ordering, never provider input. */
+  Dependencies?: readonly Output.Output[];
   /**
    * Removal Policy of the Resource.
    */

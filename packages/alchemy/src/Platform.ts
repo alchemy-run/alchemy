@@ -654,6 +654,7 @@ export const Platform = <
                   ? yield* runtimeContext.exports
                   : undefined,
               };
+              instance.Dependencies = runtimeContext.dependencies;
 
               return Object.assign(instance, {
                 RuntimeContext: runtimeContext,
