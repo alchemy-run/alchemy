@@ -660,7 +660,7 @@ export const LiveContainerProvider = () =>
       });
 
       // Applications with identical image inputs can share one immutable
-      // registry reference. Keep publication state within this provider run.
+      // registry reference. Keep publication state within this provider instance.
       const publications = new Map<string, ReturnType<typeof publishImage>>();
       const buildAndPushImage = Effect.fn("buildAndPushImage")(function* (
         id: string,
@@ -678,6 +678,10 @@ export const LiveContainerProvider = () =>
           publicationPlatform,
           build.kind,
           imageHash,
+          // The source hash follows gitignore, not Docker's context rules.
+          build.kind === "external" && !isInlineDockerfile(props.dockerfile)
+            ? [build.context, build.dockerfile]
+            : undefined,
         ]);
         const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
           publishImage(id, props, build, imageRef, session).pipe(

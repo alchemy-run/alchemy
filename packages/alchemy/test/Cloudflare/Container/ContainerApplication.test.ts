@@ -25,6 +25,16 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { applications } from "./fixtures/identity/applications.ts";
+import {
+  publicationApplications,
+  recoveryApplications,
+  historyApplications,
+} from "./fixtures/publication/applications.ts";
+import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import { buildHistory, withBuilder } from "./fixtures/buildx.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({
@@ -102,6 +112,337 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
+  test.provider(
+    "compares each legacy application's previous digest independently",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const initial = yield* stack.deploy(historyApplications());
+        expect(initial.first.hash?.digest).not.toBe(
+          initial.second.hash?.digest,
+        );
+        const state = yield* yield* State;
+        const ids = ["HistoryFirst", "HistorySecond"];
+        const updated = yield* Effect.acquireUseRelease(
+          Effect.forEach(ids, (id) =>
+            state.get({ stack: stack.name, stage: stack.stage, fqn: id }),
+          ),
+          () =>
+            Effect.gen(function* () {
+              for (const id of ids) {
+                yield* patchRow<typeof initial.first>(id, (attr) => ({
+                  ...attr,
+                  hash: { image: attr.hash!.image },
+                }));
+              }
+              const updated = yield* stack.deploy(historyApplications(true));
+              assert(updated.target);
+              expect(updated.target.configuration.image).not.toBe(
+                initial.first.configuration.image,
+              );
+              expect(updated.target.hash?.digest).toBe(
+                initial.first.hash?.digest,
+              );
+              expect(updated.first.applicationId).toBe(
+                initial.first.applicationId,
+              );
+              expect(updated.first.configuration.image).toBe(
+                initial.first.configuration.image,
+              );
+              expect(updated.second.applicationId).toBe(
+                initial.second.applicationId,
+              );
+              expect(updated.second.configuration.image).toBe(
+                updated.target.configuration.image,
+              );
+              expect(updated.second.hash?.digest).toBe(
+                initial.first.hash?.digest,
+              );
+              const desiredImage = updated.target.configuration.image;
+              const observed = yield* live(
+                updated.second.accountId,
+                updated.second.applicationId,
+              ).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  until: (app) => app.image === desiredImage,
+                  times: 8,
+                }),
+              );
+              expect(observed.image).toBe(updated.target.configuration.image);
+              return updated;
+            }),
+          (rows) =>
+            Effect.forEach(rows, (row, i) => {
+              assert(row);
+              return state.set({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: ids[i],
+                value: row,
+              });
+            }).pipe(Effect.orDie),
+        );
+        yield* stack.destroy();
+        for (const app of [updated.first, updated.second, updated.target]) {
+          assert(app);
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  for (const failure of ["failed", "interrupted"] as const) {
+    test.provider(
+      `retries ${failure === "failed" ? "a failed" : "an interrupted"} publication in the same provider`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const provider = yield* Provider.findProvider(ContainerPlatform);
+          const program = (includeSecond = false) =>
+            Effect.gen(function* () {
+              expect(yield* Provider.findProvider(ContainerPlatform)).toBe(
+                provider,
+              );
+              return yield* recoveryApplications(
+                failure === "interrupted" ? 10 : 0,
+                includeSecond,
+              );
+            });
+          if (failure === "failed") {
+            const failed = yield* Effect.acquireUseRelease(
+              Effect.sync(() => {
+                const previous = process.env.BUILDX_BUILDER;
+                process.env.BUILDX_BUILDER = "alchemy-publication-missing";
+                return previous;
+              }),
+              () => stack.deploy(program()).pipe(Effect.exit),
+              (previous) =>
+                Effect.sync(() => {
+                  if (previous === undefined) delete process.env.BUILDX_BUILDER;
+                  else process.env.BUILDX_BUILDER = previous;
+                }),
+            );
+            assert(Exit.isFailure(failed));
+            expect(Cause.pretty(failed.cause)).toContain(
+              "alchemy-publication-missing",
+            );
+          } else {
+            yield* Effect.acquireUseRelease(
+              stack.deploy(program()).pipe(Effect.forkChild),
+              (fiber) =>
+                Effect.gen(function* () {
+                  const history = yield* buildHistory.pipe(
+                    Effect.repeat({
+                      schedule: Schedule.spaced("1 second"),
+                      until: (builds) =>
+                        builds.some((build) => build.status === "Running"),
+                      times: 10,
+                    }),
+                  );
+                  const running = history.find(
+                    (build) => build.status === "Running",
+                  );
+                  assert(running);
+                  yield* Fiber.interrupt(fiber);
+                  const interrupted = yield* Fiber.await(fiber);
+                  assert(Exit.isFailure(interrupted));
+                  expect(Cause.hasInterrupts(interrupted.cause)).toBe(true);
+                  const stopped = yield* buildHistory.pipe(
+                    Effect.repeat({
+                      schedule: Schedule.spaced("1 second"),
+                      until: (builds) =>
+                        builds.some(
+                          (build) =>
+                            build.ref === running.ref &&
+                            build.status !== "Running",
+                        ),
+                      times: 8,
+                    }),
+                  );
+                  const stoppedBuild = stopped.find(
+                    (build) => build.ref === running.ref,
+                  );
+                  assert(stoppedBuild);
+                  expect(stoppedBuild.status).not.toBe("Running");
+                }),
+              (fiber) => Fiber.interrupt(fiber),
+            );
+          }
+          const recovered = yield* stack.deploy(program());
+          const expectedBuilds = failure === "failed" ? 1 : 2;
+          const recoveredBuilds = yield* buildHistory;
+          expect(recoveredBuilds).toHaveLength(expectedBuilds);
+          expect(
+            recoveredBuilds.filter((build) => build.status === "Completed"),
+          ).toHaveLength(1);
+          const shared = yield* stack.deploy(program(true));
+          assert(shared.second);
+          expect(shared.first.applicationId).toBe(
+            recovered.first.applicationId,
+          );
+          expect(shared.second.applicationId).not.toBe(
+            shared.first.applicationId,
+          );
+          expect(shared.second.configuration.image).toBe(
+            shared.first.configuration.image,
+          );
+          expect(yield* buildHistory).toHaveLength(expectedBuilds);
+          for (const app of [shared.first, shared.second]) {
+            const observed = yield* Containers.getContainerApplication({
+              accountId: app.accountId,
+              applicationId: app.applicationId,
+            });
+            expect(observed.configuration.image).toBe(
+              shared.first.configuration.image,
+            );
+          }
+          yield* stack.destroy();
+          for (const app of [shared.first, shared.second]) {
+            const deleted = yield* Containers.getContainerApplication({
+              accountId: app.accountId,
+              applicationId: app.applicationId,
+            }).pipe(
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (app) => app === undefined,
+                times: 8,
+              }),
+            );
+            expect(deleted).toBeUndefined();
+          }
+        }).pipe(withBuilder(`alchemy-publication-${failure}`), logLevel),
+      { timeout: 120_000, exclusive: true },
+    );
+  }
+
+  test.provider(
+    "shares publication without mixing contexts or application settings",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-publication-",
+        });
+        const contexts = {
+          shared: path.join(root, "shared"),
+          other: path.join(root, "other"),
+          changed: path.join(root, "changed"),
+        };
+        for (const [kind, context] of Object.entries(contexts)) {
+          yield* fs.makeDirectory(context);
+          yield* fs.writeFileString(
+            path.join(context, ".gitignore"),
+            "payload.txt\n",
+          );
+          yield* fs.writeFileString(path.join(context, "payload.txt"), kind);
+          yield* fs.writeFileString(path.join(context, "input.txt"), "first");
+          yield* fs.writeFileString(
+            path.join(context, "Dockerfile"),
+            [
+              "FROM alpine:3.19",
+              "COPY payload.txt input.txt /",
+              'CMD ["sleep", "3600"]',
+              ...(kind === "changed" ? ["LABEL variant=changed"] : []),
+            ].join("\n"),
+          );
+        }
+        const program = publicationApplications(contexts);
+        const first = yield* stack.deploy(program);
+        const history = yield* buildHistory;
+        expect(history).toHaveLength(3);
+        expect(history.every((build) => build.status === "Completed")).toBe(
+          true,
+        );
+        expect(first.first.hash?.image).toBe(first.other.hash?.image);
+        expect(first.first.configuration.image).toBe(
+          first.second.configuration.image,
+        );
+        expect(first.first.configuration.image).not.toBe(
+          first.other.configuration.image,
+        );
+        expect(first.first.hash?.image).not.toBe(first.changed.hash?.image);
+        expect(first.first.applicationId).not.toBe(first.second.applicationId);
+        for (const [slot, app] of [
+          ["first", first.first],
+          ["second", first.second],
+        ] as const) {
+          const observed = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          });
+          expect(observed.configuration.image).toBe(
+            first.first.configuration.image,
+          );
+          expect(observed.configuration.environmentVariables).toContainEqual({
+            name: "SLOT",
+            value: slot,
+          });
+          expect(observed.maxInstances).toBe(slot === "first" ? 2 : 3);
+        }
+        const unchanged = yield* stack.deploy(program);
+        expect(unchanged.first.configuration.image).toBe(
+          first.first.configuration.image,
+        );
+        expect(yield* buildHistory).toHaveLength(3);
+
+        yield* fs.writeFileString(
+          path.join(contexts.shared, "input.txt"),
+          "second",
+        );
+        const updated = yield* stack.deploy(program);
+        expect(yield* buildHistory).toHaveLength(4);
+        expect(updated.first.applicationId).toBe(first.first.applicationId);
+        expect(updated.second.applicationId).toBe(first.second.applicationId);
+        expect(updated.first.configuration.image).toBe(
+          updated.second.configuration.image,
+        );
+        expect(updated.first.hash?.digest).not.toBe(first.first.hash?.digest);
+        expect(updated.other.configuration.image).toBe(
+          first.other.configuration.image,
+        );
+        expect(updated.changed.configuration.image).toBe(
+          first.changed.configuration.image,
+        );
+        yield* stack.destroy();
+        for (const app of Object.values(updated)) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(withBuilder("alchemy-publication-cache"), logLevel),
+    { timeout: 120_000, exclusive: true },
+  );
+
   for (const fixture of [
     {
       name: "Dockerfile",
@@ -151,42 +492,6 @@ describe("ContainerApplication", () => {
             );
           const configBefore = yield* readConfig;
           const builder = `alchemy-registry-export-${fixture.name.toLowerCase()}`;
-          yield* Effect.acquireRelease(
-            docker.run([
-              "buildx",
-              "create",
-              "--name",
-              builder,
-              "--driver",
-              "docker-container",
-            ]),
-            () =>
-              docker
-                .run(["buildx", "rm", "--force", builder])
-                .pipe(Effect.orDie),
-          );
-          yield* Effect.acquireRelease(
-            Effect.sync(() => {
-              const previous = {
-                builder: process.env.BUILDX_BUILDER,
-                attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
-              };
-              process.env.BUILDX_BUILDER = builder;
-              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = "false";
-              return previous;
-            }),
-            (previous) =>
-              Effect.sync(() => {
-                if (previous.builder === undefined)
-                  delete process.env.BUILDX_BUILDER;
-                else process.env.BUILDX_BUILDER = previous.builder;
-                if (previous.attestations === undefined)
-                  delete process.env.BUILDX_NO_DEFAULT_ATTESTATIONS;
-                else
-                  process.env.BUILDX_NO_DEFAULT_ATTESTATIONS =
-                    previous.attestations;
-              }),
-          );
           const selected = yield* docker.run(["buildx", "inspect"]);
           expect(selected.stdout).toMatch(/Driver:\s+docker-container/);
           expect(selected.stdout).toContain(builder);
@@ -304,7 +609,10 @@ describe("ContainerApplication", () => {
             }),
           );
           expect(deleted).toBeUndefined();
-        }).pipe(logLevel, Effect.scoped),
+        }).pipe(
+          withBuilder(`alchemy-registry-export-${fixture.name.toLowerCase()}`),
+          logLevel,
+        ),
       { timeout: 120_000, exclusive: true },
     );
   }
