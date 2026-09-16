@@ -39,7 +39,6 @@ import {
 } from "./PrivateNetwork.ts";
 import { ReadRedisHttp } from "./ReadRedisHttp.ts";
 import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
-import { RailwayRetryPolicy } from "./RetryPolicy.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
@@ -161,7 +160,6 @@ export const providers = () =>
         ExecHttp,
       ),
     ),
-    Layer.provide(RailwayRetryPolicy),
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),

@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
+import * as Output from "@/Output";
 import * as Test from "./VpcTest.ts";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
@@ -264,22 +265,18 @@ describe("EC2 runtime bindings", () => {
     "consumeInstanceStateEvents created the EventBridge rule",
     (_stack) =>
       Effect.gen(function* () {
-        // The rule's physical name embeds the fixture's logical id
-        // (`BindingsInstance-InstanceState`); find it on the default bus with
-        // bounded manual pagination.
-        let rule: eventbridge.Rule | undefined;
-        let nextToken: string | undefined;
-        for (let page = 0; page < 10 && !rule; page++) {
-          const result = yield* eventbridge.listRules({
-            NextToken: nextToken,
-          });
-          rule = (result.Rules ?? []).find((candidate) =>
-            candidate.Name?.includes("InstanceState"),
-          );
-          nextToken = result.NextToken;
-          if (!nextToken) break;
-        }
-        expect(rule).toBeDefined();
+        const ref = yield* AWS.EventBridge.Rule.ref(
+          "BindingsInstance-InstanceState",
+          {
+            stack: sharedStack.name,
+            stage: sharedStack.stage,
+          },
+        );
+        const { Name, EventBusName } = yield* Effect.all({
+          Name: Output.evaluate(ref.ruleName, {}),
+          EventBusName: Output.evaluate(ref.eventBusName, {}),
+        }).pipe(Effect.provide(sharedStack.state));
+        const rule = yield* eventbridge.describeRule({ Name, EventBusName });
         expect(rule?.EventPattern).toContain("aws.ec2");
         expect(rule?.EventPattern).toContain(
           "EC2 Instance State-change Notification",

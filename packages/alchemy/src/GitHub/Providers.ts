@@ -6,8 +6,14 @@ import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
+import { Label, LabelProvider } from "./Label.ts";
+import { Milestone, MilestoneProvider } from "./Milestone.ts";
+import { Issue, IssueProvider } from "./Issue.ts";
+import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
+import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
+import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 
@@ -22,8 +28,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export interface ProvidersOptions extends GitHubAuthOptions {}
 
 /**
- * GitHub providers (Comment, Environment, Repository, Secret, Variable,
- * Webhook) plus the GitHub AuthProvider that the alchemy CLI discovers.
+ * GitHub resource providers and the GitHub AuthProvider discovered by the CLI.
  *
  * Pass `baseUrl` to pin every GitHub resource to a GitHub Enterprise host
  * without relying on the auth provider's configuration:
@@ -43,8 +48,14 @@ export const providers = (options?: ProvidersOptions) =>
     Provider.collection([
       Comment,
       Environment,
+      Label,
+      Milestone,
+      Issue,
+      PullRequest,
+      Release,
       Repository,
       Secret,
+      TeamAccess,
       Variable,
       Webhook,
     ]),
@@ -53,8 +64,14 @@ export const providers = (options?: ProvidersOptions) =>
       Layer.mergeAll(
         CommentProvider(),
         EnvironmentProvider(),
+        LabelProvider(),
+        MilestoneProvider(),
+        IssueProvider(),
+        PullRequestProvider(),
+        ReleaseProvider(),
         RepositoryProvider(),
         SecretProvider(),
+        TeamAccessProvider(),
         VariableProvider(),
         WebhookProvider(),
       ),
