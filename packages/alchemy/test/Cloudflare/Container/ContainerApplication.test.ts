@@ -1,4 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
+import { Unowned } from "@/AdoptPolicy.ts";
+import { InstanceId } from "@/InstanceId.ts";
 import * as Drift from "@/Drift.ts";
 import { Docker, DockerLive } from "@/Docker/Docker.ts";
 import * as Layer from "effect/Layer";
@@ -112,6 +114,269 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
+  test.provider(
+    "recovers an interrupted generated create and reconciles observed drift",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const state = yield* yield* State;
+        const key = {
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "CachedIdentity",
+        };
+        const row = yield* state.get(key);
+        assert(row?.status === "created" || row?.status === "updated");
+        const provider = yield* Provider.findProvider(ContainerPlatform);
+        assert(provider.read);
+        const discovered = yield* provider
+          .read({
+            id: row.logicalId,
+            fqn: row.fqn,
+            instanceId: row.instanceId,
+            olds: row.props,
+            output: undefined,
+          })
+          .pipe(Effect.provideService(InstanceId, row.instanceId));
+        expect(discovered?.applicationId).toBe(first.owned.applicationId);
+        expect(Unowned.is(discovered)).toBe(true);
+
+        yield* Containers.updateContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+          maxInstances: 4,
+        });
+        const observed = yield* Containers.getContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+        });
+        expect(observed.maxInstances).toBe(4);
+        const interrupted = {
+          ...row,
+          status: "creating" as const,
+          attr: undefined,
+        };
+        yield* Effect.gen(function* () {
+          yield* state.set({ ...key, value: interrupted });
+          const plan = yield* stack.plan(applications());
+          expect(plan.resources.CachedIdentity).toMatchObject({
+            action: "create",
+            state: {
+              instanceId: row.instanceId,
+              attr: {
+                applicationId: first.owned.applicationId,
+                applicationName: first.owned.applicationName,
+                accountId: first.owned.accountId,
+                maxInstances: 4,
+              },
+            },
+          });
+          expect(plan.resources.OtherIdentity.action).toBe("noop");
+          expect(yield* state.get(key)).toEqual(interrupted);
+
+          const renamed = yield* stack.plan(
+            applications(
+              2,
+              `renamed-${first.owned.applicationName.slice(-24)}`,
+            ),
+          );
+          expect(renamed.resources.CachedIdentity.action).toBe("replace");
+          expect(yield* state.get(key)).toEqual(interrupted);
+          expect(
+            yield* Containers.getContainerApplication({
+              accountId: first.owned.accountId,
+              applicationId: first.owned.applicationId,
+            }),
+          ).toEqual(observed);
+
+          yield* state.set({
+            ...key,
+            value: { ...interrupted, providerMode: "local" },
+          });
+          const switched = yield* stack.plan(applications());
+          expect(switched.resources.CachedIdentity.action).toBe("replace");
+          expect(switched.resources.CachedIdentity.state?.attr).toBeUndefined();
+          yield* state.set({
+            ...key,
+            value: {
+              ...interrupted,
+              instanceId: "00000000000000000000000000000000",
+            },
+          });
+          const unrelated = yield* stack.plan(applications());
+          expect(unrelated.resources.CachedIdentity.action).toBe("create");
+          expect(
+            unrelated.resources.CachedIdentity.state?.attr,
+          ).toBeUndefined();
+
+          yield* state.set({ ...key, value: interrupted });
+          const recovered = yield* stack.deploy(applications(5));
+          expect(recovered.owned.applicationId).toBe(first.owned.applicationId);
+          expect(recovered.other.applicationId).toBe(first.other.applicationId);
+          expect(yield* state.get(key)).toMatchObject({
+            status: "created",
+            instanceId: row.instanceId,
+            attr: { applicationId: first.owned.applicationId, maxInstances: 5 },
+          });
+          const live = yield* Containers.getContainerApplication({
+            accountId: first.owned.accountId,
+            applicationId: first.owned.applicationId,
+          });
+          expect(live.maxInstances).toBe(5);
+        }).pipe(
+          Effect.ensuring(state.set({ ...key, value: row }).pipe(Effect.orDie)),
+        );
+        yield* stack.destroy();
+        for (const app of [first.owned, first.other]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "keeps explicit names unowned during interrupted creation and ordinary discovery",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = applications(
+          2,
+          "alchemy-container-interrupted-explicit",
+        );
+        const first = yield* stack.deploy(program);
+        const state = yield* yield* State;
+        const key = {
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "CachedIdentity",
+        };
+        const row = yield* state.get(key);
+        assert(row?.status === "created" || row?.status === "updated");
+        const observed = yield* Containers.getContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+        });
+        yield* Effect.gen(function* () {
+          const interrupted = {
+            ...row,
+            status: "creating" as const,
+            attr: undefined,
+          };
+          yield* state.set({ ...key, value: interrupted });
+          const recovery = yield* stack
+            .plan(program)
+            .pipe(
+              Effect.catchTag("OwnedBySomeoneElse", () =>
+                Effect.succeed("unowned"),
+              ),
+            );
+          expect(recovery).toBe("unowned");
+          expect(yield* state.get(key)).toEqual(interrupted);
+          yield* state.delete(key);
+          const discovery = yield* stack
+            .plan(program)
+            .pipe(
+              Effect.catchTag("OwnedBySomeoneElse", () =>
+                Effect.succeed("unowned"),
+              ),
+            );
+          expect(discovery).toBe("unowned");
+          expect(yield* state.get(key)).toBeUndefined();
+          expect(
+            yield* Containers.getContainerApplication({
+              accountId: first.owned.accountId,
+              applicationId: first.owned.applicationId,
+            }),
+          ).toEqual(observed);
+        }).pipe(
+          Effect.ensuring(state.set({ ...key, value: row }).pipe(Effect.orDie)),
+        );
+        yield* stack.destroy();
+        for (const app of [first.owned, first.other]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "destroys an interrupted generated create without resuming it",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const state = yield* yield* State;
+        const key = {
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "CachedIdentity",
+        };
+        const row = yield* state.get(key);
+        assert(row?.status === "created" || row?.status === "updated");
+        yield* Effect.gen(function* () {
+          yield* state.set({
+            ...key,
+            value: { ...row, status: "creating", attr: undefined },
+          });
+          yield* stack.destroy();
+          for (const app of [first.owned, first.other]) {
+            const deleted = yield* Containers.getContainerApplication({
+              accountId: app.accountId,
+              applicationId: app.applicationId,
+            }).pipe(
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (app) => app === undefined,
+                times: 8,
+              }),
+            );
+            expect(deleted).toBeUndefined();
+          }
+          expect(yield* state.get(key)).toBeUndefined();
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              const restored = yield* yield* State;
+              yield* restored.set({ ...key, value: row });
+              expect(yield* restored.get(key)).toEqual(row);
+            }).pipe(Effect.provide(Layer.fresh(stack.state)), Effect.orDie),
+          ),
+        );
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
   test.provider(
     "compares each legacy application's previous digest independently",
     (stack) =>

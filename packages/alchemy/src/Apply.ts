@@ -2196,6 +2196,11 @@ const collectGarbage = Effect.fn(function* (
                     fqn,
                     instanceId,
                     olds: props as never,
+                    recovery:
+                      (isDeleteNode(node) ? node.state : node.old).status ===
+                      "creating"
+                        ? "interrupted-create"
+                        : undefined,
                     output: undefined,
                   })
                   .pipe(

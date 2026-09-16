@@ -265,9 +265,9 @@ export interface ProviderService<
     instanceId: string;
     olds: Props<Res>;
     /**
-     * The engine is resuming a persisted create with no attributes, using
-     * the same instance ID and provider mode. This is recovery intent, not
-     * proof of ownership: providers must still verify the physical identity.
+     * The engine is resuming or cleaning up a persisted create with no
+     * attributes, using the same instance ID and provider mode. This is
+     * recovery intent, not ownership proof: providers must verify the identity.
      */
     recovery?: "interrupted-create";
     // what is the ARN?
