@@ -33,9 +33,6 @@ catalogs:
     '@astrojs/underscore-redirects':
       specifier: 1.0.3
       version: 1.0.3
-    '@aws-sdk/credential-providers':
-      specifier: ^3.0.0
-      version: 3.1095.0
     '@aws-sdk/types':
       specifier: ^3.974.3
       version: 3.974.3
@@ -4945,9 +4942,6 @@ importers:
       '@alchemy.run/sigil':
         specifier: 'catalog:'
         version: 0.0.0-alpha.11(@types/react@19.3.0)(react-devtools-core@7.0.1)
-      '@aws-sdk/credential-providers':
-        specifier: 'catalog:'
-        version: 3.1095.0
       '@distilled.cloud/acme':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/acme

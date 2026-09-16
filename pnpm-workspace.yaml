@@ -35,7 +35,6 @@ catalog:
   "@astrojs/underscore-redirects": "1.0.3"
   "@aws-crypto/crc32": "^5.2.0"
   "@aws-crypto/util": "^5.2.0"
-  "@aws-sdk/credential-providers": "^3.0.0"
   "@aws-sdk/types": "^3.974.3"
   "@aws/durable-execution-sdk-js": "^2.1.0"
   "@cloudflare/containers": "^0.3.7"
