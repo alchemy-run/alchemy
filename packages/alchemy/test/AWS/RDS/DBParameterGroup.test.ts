@@ -231,7 +231,7 @@ test.provider(
       expect(yield* userParameters(name)).toEqual(overrides);
       const refreshed = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(refreshed.resources.ObservedParameters1589).toMatchObject({
         action: "unchanged",
@@ -303,7 +303,7 @@ test.provider(
       ).toBe("engine-default");
       const initial = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(initial.resources.DefaultParameters1589).toMatchObject({
         action: "unchanged",
@@ -333,7 +333,7 @@ test.provider(
       );
       const drift = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(drift.resources.DefaultParameters1589?.attr.parameters).toEqual({
         log_autovacuum_min_duration: driftedValue,
@@ -356,7 +356,7 @@ test.provider(
       );
       const reset = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(reset.resources.DefaultParameters1589?.attr.parameters).toEqual({
         ...desired,
