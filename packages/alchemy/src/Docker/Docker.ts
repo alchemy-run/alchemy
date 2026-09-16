@@ -59,6 +59,8 @@ export class Docker extends Context.Service<
         "memory-swap": string | undefined;
         "security-opt": Array<string> | undefined;
         "read-only": boolean | undefined;
+        /** `--user`: `uid[:gid]` or a name. Unset keeps the image user. */
+        user?: string | undefined;
         label?: Record<string, string>;
         /** Network joined at create time. Unset means the default bridge. */
         network?: string;
@@ -385,6 +387,7 @@ export declare namespace Docker {
     Created: string;
     Config: {
       Image: string;
+      User?: string;
       Cmd: string[] | null;
       Env: string[] | null;
       Labels: Record<string, string> | null;

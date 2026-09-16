@@ -210,6 +210,29 @@ describe("Docker.Container", { concurrent: false }, () => {
   );
 
   test.provider(
+    "applies the user and keeps the container when it is unchanged",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const deploy = () =>
+          stack.deploy(
+            Docker.Container("user-container", {
+              image: "nginx:alpine",
+              user: "1234:1234",
+              start: false,
+            }),
+          );
+        const first = yield* deploy();
+        const info = yield* docker.container.inspect(first.name);
+        expect(info.Config.User).toBe("1234:1234");
+        // The image user is not a drift when the prop is unset, and the
+        // set prop matches what the engine reports.
+        const second = yield* deploy();
+        expect(second.id).toBe(first.id);
+      }),
+  );
+
+  test.provider(
     "updates network aliases without replacing the container",
     (stack) =>
       Effect.gen(function* () {

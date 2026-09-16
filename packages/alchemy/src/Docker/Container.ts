@@ -96,6 +96,11 @@ export interface ContainerProps {
    * @default false
    */
   readOnly?: boolean;
+  /**
+   * The user the process runs as, `uid[:gid]` or a name. Unset keeps the
+   * image user.
+   */
+  user?: string;
 }
 
 export declare namespace Container {
@@ -625,6 +630,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       "memory-swap": news.memorySwap,
       "security-opt": news.noNewPrivileges ? ["no-new-privileges"] : undefined,
       "read-only": news.readOnly ?? false,
+      user: news.user,
       ...(news.healthcheck
         ? {
             "health-cmd": Array.isArray(news.healthcheck.cmd)
@@ -684,6 +690,8 @@ const findObservedDrift = (
       "readOnly",
       live.HostConfig.ReadonlyRootfs === (args["read-only"] ?? false),
     ],
+    // Unset keeps the image user, which the observed container reports.
+    ["user", args.user === undefined || live.Config.User === args.user],
     [
       "noNewPrivileges",
       setEquals(live.HostConfig.SecurityOpt ?? [], args["security-opt"]),
