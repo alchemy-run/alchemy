@@ -9,6 +9,10 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
 import { HttpServerResponse } from "effect/unstable/http";
+import {
+  dispatchAlarmCallbacks,
+  initializeAlarmCallbacks,
+} from "./AlarmCallback.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
 import type {
   DurableObjectExport,
@@ -75,7 +79,13 @@ export const makeDurableObjectBridge =
               return constructor.pipe(
                 Effect.provide(doContext),
                 Effect.flatMap((instance) =>
-                  instance.pipe(Effect.provide(doContext)),
+                  Effect.suspend(() => {
+                    const seal = initializeAlarmCallbacks(this.#state);
+                    return instance.pipe(
+                      Effect.provide(doContext),
+                      Effect.ensuring(Effect.sync(seal)),
+                    );
+                  }),
                 ),
                 Effect.map((instance) => ({
                   instance,
@@ -189,7 +199,14 @@ export const makeDurableObjectBridge =
       }
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
-        return this.#execute((instance) => instance.alarm!(alarmInfo));
+        return this.#execute((instance) =>
+          dispatchAlarmCallbacks(
+            this.#state,
+            instance.alarm !== undefined,
+          ).pipe(
+            Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void),
+          ),
+        );
       }
 
       async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {

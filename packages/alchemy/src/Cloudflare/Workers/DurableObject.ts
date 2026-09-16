@@ -830,6 +830,48 @@ export class DurableObjectScope extends Context.Service<
  * });
  * ```
  *
+ * ### Transactional Alarm Callbacks
+ * Register callbacks in the inner, per-instance Effect. Scheduling participates
+ * in the current storage transaction, and Alchemy acknowledges each job only
+ * after its handler succeeds. No explicit `alarm` handler is needed.
+ *
+ * **Example:** Save state and schedule a typed callback atomically
+ * ```typescript
+ * const state = yield* Cloudflare.DurableObjectState;
+ * return Effect.gen(function* () {
+ *   const onArchive = yield* Cloudflare.makeAlarmCallback(
+ *     "archive",
+ *     Effect.fn(function* (payload: { key: string; body: string }) {
+ *       yield* archive.put(payload.key, payload.body);
+ *     }),
+ *   );
+ *   return {
+ *     save: Effect.fn(function* (id: string, body: string) {
+ *       yield* state.storage.transaction(
+ *         Effect.gen(function* () {
+ *           yield* state.storage.put(id, body);
+ *           yield* onArchive.schedule(id, {
+ *             after: "30 seconds",
+ *             payload: { key: id, body },
+ *           });
+ *         }),
+ *       );
+ *     }),
+ *   };
+ * });
+ * ```
+ *
+ * Callbacks receive JSON-serializable payloads and deliver at least once, so
+ * external writes must be idempotent. A recovery wake is persisted before each
+ * attempt; configure its delay with the third argument, `{ retry: { delay:
+ * "1 minute" } }`. Scheduling the same callback name and ID replaces the pending
+ * job; `onArchive.cancel(id)` cancels it.
+ *
+ * The scheduler migrates its original unversioned SQLite schema to version 1
+ * atomically, preserving existing events. Old events still use the explicit
+ * `alarm` handler below; their rows have no callback name to infer. Both APIs
+ * coordinate the same native alarm. Unknown newer schema versions fail closed.
+ *
  * ### Scheduled Alarms
  * Each Durable Object can have a single alarm timestamp. Alchemy
  * layers a small SQLite-backed scheduler on top via

@@ -1,4 +1,12 @@
 export * from "./AccountSetting.ts";
+export {
+  makeAlarmCallback,
+  AlarmCallbackError,
+  type AlarmCallback,
+  type AlarmCallbackOptions,
+  type AlarmScheduleOptions,
+} from "./AlarmCallback.ts";
+export { UnsupportedAlarmSchemaVersion } from "./DurableObjectAlarmStorage.ts";
 export * from "./AI.ts";
 export * from "./AIBinding.ts";
 export * from "./Assets.ts";
