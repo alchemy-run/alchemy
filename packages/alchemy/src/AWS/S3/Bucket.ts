@@ -47,7 +47,7 @@ export interface BucketEncryption {
    * (server-side encryption with customer-provided keys).
    * Omitted or `[]` blocks no encryption types and permits SSE-C, sending
    * AWS's `NONE` value. Set to `["SSE-C"]` to block customer-provided keys.
-   * Removing this property clears previously configured restrictions.
+   * Removing this property resets the blocklist to its default.
    * @default []
    */
   blockedEncryptionTypes?: "SSE-C"[];
@@ -347,8 +347,19 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * ### Managing SSE-C Restrictions
- * **Example:** Block writes encrypted with customer-provided keys
+ * ### Default Bucket Encryption
+ * **Example:** Use the default encryption settings
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {});
+ * ```
+ *
+ * The default is AES256 encryption with S3-managed keys, bucket keys disabled,
+ * and no encryption types blocked. Requests may explicitly supply their own
+ * encryption keys (SSE-C); permitting SSE-C does not change the default
+ * encryption used by requests without those keys.
+ *
+ * ### Blocking Customer-Provided Encryption Keys
+ * **Example:** Reject new SSE-C writes
  * ```typescript
  * const bucket = yield* S3.Bucket("my-bucket", {
  *   encryption: {
@@ -358,12 +369,26 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * Omitted `blockedEncryptionTypes` is equivalent to `[]`: no encryption types
- * are blocked, so SSE-C writes are permitted. Removing the property clears any
- * previous block. Omitting `encryption` also restores AES256 with no KMS key
- * and bucket keys disabled. Redeploying unchanged inputs repairs external drift.
+ * `blockedEncryptionTypes` lists encryption types to reject. This blocks new
+ * writes using customer-provided keys while retaining AES256 default encryption.
+ * Existing encrypted objects are unchanged.
  *
- * **Example:** Allow SSE-C writes
+ * ### Resetting Encryption Restrictions
+ * **Example:** Remove the block to restore the default
+ * ```diff
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ * -    blockedEncryptionTypes: ["SSE-C"],
+ *   },
+ * });
+ * ```
+ *
+ * Redeploy the same logical resource after removing the property. Alchemy
+ * resets the blocklist to its default, `[]`, so SSE-C writes are permitted.
+ * It updates AWS rather than preserving the previously configured block.
+ *
+ * **Example:** Set the default blocklist explicitly
  * ```typescript
  * const bucket = yield* S3.Bucket("my-bucket", {
  *   encryption: {
@@ -373,8 +398,26 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * An empty array removes the restriction by sending AWS's `NONE` value.
- * This affects new object writes; existing encrypted objects are unchanged.
+ * `[]` and omission have the same desired state: no encryption types blocked.
+ * The provider sends AWS's `NONE` value when it needs to reset a restriction.
+ * Redeploying unchanged code also repairs externally modified restrictions.
+ *
+ * ### Resetting All Encryption Settings
+ * **Example:** Remove the entire encryption configuration
+ * ```diff
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ * -  encryption: {
+ * -    sseAlgorithm: "aws:kms",
+ * -    kmsMasterKeyId: "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012",
+ * -    bucketKeyEnabled: true,
+ * -    blockedEncryptionTypes: ["SSE-C"],
+ * -  },
+ * });
+ * ```
+ *
+ * Omitting `encryption` resets every setting to the defaults: AES256, no custom
+ * KMS key, bucket keys disabled, and an empty blocklist. Previously configured
+ * KMS encryption is also reset; existing objects are not re-encrypted.
  *
  * ### Runtime Operations
  * Bind S3 operations in the init phase and use them in runtime
