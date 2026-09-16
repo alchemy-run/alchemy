@@ -178,9 +178,13 @@ describe.concurrent.each([
     });
 
     test(
-      "pulls and re-pushes the remote image and serves it over its TCP port",
+      "preserves memoryMib and serves the remote image over its TCP port",
       Effect.gen(function* () {
-        const { url } = yield* stack;
+        const { url, app } = yield* stack;
+
+        expect(app.configuration.memoryMib).toBe(4096);
+        expect(app.configuration.instanceType).toBeUndefined();
+        expect(app.applicationId.startsWith("dev:")).toBe(dev);
 
         const hello = yield* fetchReady(new URL("/hello", url), "method");
         expect(hello).toContain("method");
