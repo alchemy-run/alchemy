@@ -234,7 +234,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 // in-place modify (allocatedStorage up, backup retention, perf insights) and
 // re-reads to assert no replacement occurred (same ARN, same identifier).
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: small gp3 storage increase preserves baseline performance (PR 1594)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -258,7 +258,6 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
             allocatedStorage: 20,
@@ -277,11 +276,21 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(created.storageType).toBe("gp3");
       expect(created.backupRetentionPeriod).toBe(1);
 
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+      });
+      const baseline = (yield* describe).DBInstances?.[0];
+      expect(baseline?.AllocatedStorage).toBe(20);
+      expect(baseline?.StorageType).toBe("gp3");
+      expect(baseline?.Iops).toBe(3000);
+      expect(baseline?.StorageThroughput).toBe(125);
+
+      // Small PostgreSQL gp3 allocations must not explicitly provision IOPS.
+      // Keep this small-allocation growth as a regression, not an expected failure.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
             allocatedStorage: 25,
@@ -300,8 +309,30 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // In-place modify — identity is preserved (no replacement).
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(updated.backupRetentionPeriod).toBe(3);
+      expect(updated.allocatedStorage).toBe(25);
+      const observed = (yield* describe).DBInstances?.[0];
+      expect(observed?.AllocatedStorage).toBe(25);
+      expect(observed?.StorageType).toBe("gp3");
+      expect(observed?.Iops).toBe(baseline?.Iops);
+      expect(observed?.StorageThroughput).toBe(baseline?.StorageThroughput);
+      expect(observed?.BackupRetentionPeriod).toBe(3);
+      expect(observed?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
+      expect(observed?.PendingModifiedValues?.Iops).toBeUndefined();
+      expect(
+        observed?.PendingModifiedValues?.StorageThroughput,
+      ).toBeUndefined();
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
     }),
   { timeout: 2_400_000 },
 );
