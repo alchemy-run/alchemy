@@ -8,6 +8,7 @@ import { Transcript } from "./chat/Transcript.ts";
 import { ChannelsApi } from "./chat/ChannelsApi.ts";
 import { TasksApi } from "./engineering/TasksApi.ts";
 import { StatusApi } from "./github/StatusApi.ts";
+import { OrgApi } from "./OrgApi.ts";
 import { DecideApi } from "./proposals/DecideApi.ts";
 import { ExecApi } from "./sandbox/ExecApi.ts";
 
@@ -35,5 +36,6 @@ export const Api = Effect.gen(function* () {
     yield* DecideApi,
     yield* ExecApi,
     yield* StatusApi,
+    yield* OrgApi,
   );
 });

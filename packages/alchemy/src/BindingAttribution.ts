@@ -41,3 +41,51 @@ export const attributed =
     Effect.flatMap(Attribution, (path) =>
       Effect.provideService(effect, Attribution, [...path, ...frames]),
     );
+
+/**
+ * One recorded binding-capability acquisition: which `Binding.Service`
+ * was resolved, against which resource(s), under which org path. The
+ * permission edge of the org graph, captured where the acquisition
+ * actually runs — the plan-phase Layer build AND the isolate's boot
+ * build (`host.bind` is plan-only, but the acquisition itself runs in
+ * both), so a deployed Worker can serve its own permission table.
+ */
+export interface Acquisition {
+  /** The `Binding.Service`'s key (e.g. `alchemy/GitHub/GetIssue`). */
+  readonly binding: string;
+  /** The target resources' identities (`Type(logicalId)`). */
+  readonly targets: ReadonlyArray<string>;
+  /** The ambient org path at acquisition ([Agent, Skill?, Tool]). */
+  readonly path: ReadonlyArray<AttributionFrame>;
+}
+
+/**
+ * An OPTIONAL registry of {@link Acquisition}s. When provided (an org
+ * host serving its own graph — `Layer.sync(AcquisitionRegistry, …)`),
+ * every `Binding.Service` call records into it; absent, recording is
+ * a no-op. Rows de-dupe on (binding, targets, path).
+ */
+export class AcquisitionRegistry extends Context.Service<
+  AcquisitionRegistry,
+  {
+    readonly record: (row: Acquisition) => void;
+    readonly list: () => ReadonlyArray<Acquisition>;
+  }
+>()("alchemy/Binding/AcquisitionRegistry") {}
+
+/** An in-memory {@link AcquisitionRegistry} implementation. */
+export const makeAcquisitionRegistry = (): {
+  record: (row: Acquisition) => void;
+  list: () => ReadonlyArray<Acquisition>;
+} => {
+  const rows = new Map<string, Acquisition>();
+  return {
+    record: (row) => {
+      const key = `${row.binding}|${row.targets.join(",")}|${row.path
+        .map((frame) => `${frame.kind}:${frame.name}`)
+        .join("/")}`;
+      if (!rows.has(key)) rows.set(key, row);
+    },
+    list: () => [...rows.values()],
+  };
+};

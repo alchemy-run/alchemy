@@ -278,7 +278,7 @@ export const messageText = (message: Message<unknown>): string =>
  * its string value.
  */
 export const renderRef = (ref: unknown): string => {
-  if (isToolImpl(ref)) {
+  if (isToolImpl(ref) || isToolDef(ref)) {
     return `\`${ref.tool["~alchemy/Name"]}\``;
   }
   if (isTool(ref) || isThing(ref) || isEvent(ref) || isSkill(ref)) {
@@ -294,6 +294,14 @@ export const renderRef = (ref: unknown): string => {
   }
   if (isSource(ref)) {
     return renderSource(ref);
+  }
+  if (isFragment(ref)) {
+    return render(ref.template, ref.refs);
+  }
+  // an Effect splice (`AI.fragment`) computes prose at render time —
+  // a static document stands in a placeholder for it
+  if (Effect.isEffect(ref)) {
+    return "…";
   }
   return String(ref);
 };

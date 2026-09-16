@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI";
+import * as Binding from "alchemy/Binding";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
@@ -38,6 +39,13 @@ import { VerificationGeneral } from "./process/Verification.ts";
 import { ProposalsLive } from "./proposals/ProposalsDO.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
+
+/** ONE acquisition registry per isolate — the agents' Layer builds
+ *  record every `Binding.Service` acquisition into it (attributed),
+ *  and `GET /api/org` serves the permission table from it. */
+const OrgRegistry = Layer.sync(Binding.AcquisitionRegistry, () =>
+  Binding.makeAcquisitionRegistry(),
+);
 
 /** The artifact store on the session's workspaces. */
 const Store = ArtifactsSandbox;
@@ -210,6 +218,7 @@ const Company = Layer.mergeAll(
   Layer.provideMerge(CallsLive),
   Layer.provideMerge(PostsLive),
   Layer.provideMerge(CheckoutsRouter),
+  Layer.provideMerge(OrgRegistry),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   Layer.provide(Cloudflare.D1.QueryDatabaseBinding),
