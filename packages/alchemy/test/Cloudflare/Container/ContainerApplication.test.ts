@@ -1344,14 +1344,36 @@ describe("ContainerApplication", () => {
           accountId,
           applicationId: first.app.applicationId,
         });
-        yield* Containers.listContainerApplications({ accountId }).pipe(
+        const deleted = yield* Effect.gen(function* () {
+          const app = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId: first.app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          const apps = yield* Containers.listContainerApplications({
+            accountId,
+          });
+          const absentFromList = apps.every(
+            (app) => app.id !== first.app.applicationId,
+          );
+          if (app !== undefined && absentFromList) {
+            yield* Effect.logInfo(
+              "Deleted container is absent from list but still readable by ID",
+              { applicationId: first.app.applicationId },
+            );
+          }
+          return app === undefined && absentFromList;
+        }).pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            until: (apps) =>
-              apps.every((app) => app.id !== first.app.applicationId),
-            times: 30,
+            schedule: Schedule.spaced("2 seconds"),
+            until: (deleted) => deleted,
+            times: 8,
           }),
         );
+        expect(deleted).toBe(true);
         const detached = yield* Containers.createContainerApplication({
           accountId,
           name: first.app.applicationName,
@@ -1362,7 +1384,20 @@ describe("ContainerApplication", () => {
           affinities: first.app.affinities,
           configuration: first.app.configuration,
         });
+        expect(detached.id).not.toBe(first.app.applicationId);
         expect(detached.durableObjects ?? undefined).toBeUndefined();
+        const observed = yield* Containers.getContainerApplication({
+          accountId,
+          applicationId: detached.id,
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "ContainerApplicationNotFound",
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(observed.name).toBe(first.app.applicationName);
+        expect(observed.durableObjects ?? undefined).toBeUndefined();
 
         // Stale the persisted source hash so the re-create must rebuild.
         yield* patchRow<typeof first.app>("RemoteContainer", (attr) => ({
@@ -1371,6 +1406,12 @@ describe("ContainerApplication", () => {
         }));
 
         const second = yield* scratch.deploy(program);
+        yield* Effect.logInfo("Container reattachment identities", {
+          original: first.app.applicationId,
+          detached: detached.id,
+          recovered: second.app.applicationId,
+        });
+        expect(second.app.applicationId).not.toBe(first.app.applicationId);
         expect(second.app.applicationId).not.toBe(detached.id);
         expect(second.app.durableObjects?.namespaceId).toBe(namespaceId);
         expect(second.app.configuration.image).toBe(digestRef);
