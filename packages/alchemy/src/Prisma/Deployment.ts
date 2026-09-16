@@ -17,8 +17,8 @@ import {
   type GetServiceDeploymentsResponse,
   getServiceDeployments,
   createServiceDeployment,
-} from "@distilled.cloud/prisma-postgres/management";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   destroyDeployment,
   waitForDeploymentStatus,

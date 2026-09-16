@@ -5,8 +5,8 @@ import {
   type GetDatabaseResponse,
   getDatabase,
   createConnectionRotate,
-} from "@distilled.cloud/prisma-postgres/management";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import { extractConnectionSecrets } from "../Client.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { PrismaSecretConnection } from "../Types.ts";
