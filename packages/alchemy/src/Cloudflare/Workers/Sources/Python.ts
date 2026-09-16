@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import path from "pathe";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
@@ -280,9 +280,10 @@ const globFiles = (
 ) =>
   Effect.tryPromise({
     try: () =>
-      fg.glob(patterns, {
+      glob(patterns, {
         cwd: options.cwd,
         onlyFiles: true,
+        expandDirectories: false,
         dot: options.dot ?? false,
         ignore: options.ignore,
       }),
