@@ -185,18 +185,53 @@ test.provider("parameters are written, updated and reset", (stack) =>
 );
 
 test.provider(
-  "PR1589 observes unmanaged overrides and settled modify/reset outputs",
+  "PR1589 adoption resets undeclared overrides to the same defaults as creation",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const program = (
-        parameters?: Record<string, string>,
-        revision = "initial",
-      ) =>
+      const name = "alchemy-test-pr1589-adopt-parameters";
+      yield* rds.createDBParameterGroup({
+        DBParameterGroupName: name,
+        DBParameterGroupFamily: "postgres16",
+        Description: "Desired-state adoption regression",
+      });
+      yield* modifyParameters(name, [
+        {
+          ParameterName: "work_mem",
+          ParameterValue: "8192",
+          ApplyMethod: "immediate",
+        },
+      ]);
+      yield* waitForParameters(
+        name,
+        (parameters) => parameters.get("work_mem")?.ParameterValue === "8192",
+      );
+      const program = DBParameterGroup("AdoptedParameters1589", {
+        dbParameterGroupName: name,
+        family: "postgres16",
+        description: "Desired-state adoption regression",
+      });
+      const adopted = yield* stack.deploy(program);
+      expect(adopted.parameters).toEqual({});
+      expect(yield* userParameters(name)).toEqual({});
+      expect(
+        (yield* stack.plan(program)).resources.AdoptedParameters1589?.action,
+      ).toBe("noop");
+      yield* stack.destroy();
+      yield* assertGroupGone(name);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "PR1589 resets omitted overrides and observes settled modify/reset outputs",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = (parameters?: Record<string, string>) =>
         DBParameterGroup("ObservedParameters1589", {
           family: "postgres16",
           parameters,
-          tags: { revision },
         });
       const created = yield* stack.deploy(program());
       const name = created.dbParameterGroupName;
@@ -225,17 +260,20 @@ test.provider(
       const overrides = { work_mem: "8192", max_connections: "200" };
       expect(yield* userParameters(name)).toEqual(overrides);
 
-      // A tag change forces reconcile without relying on live planning (#1590).
-      const observed = yield* stack.deploy(program(undefined, "observe"));
-      expect(observed.parameters).toEqual(overrides);
-      expect(yield* userParameters(name)).toEqual(overrides);
+      const plan = yield* stack.plan(program());
+      expect(plan.resources.ObservedParameters1589?.action).toBe("update");
+      const observed = yield* stack.deploy(program());
+      expect(observed.parameters).toEqual({});
+      expect(yield* userParameters(name)).toEqual({});
+      const settled = yield* stack.plan(program());
+      expect(settled.resources.ObservedParameters1589?.action).toBe("noop");
       const refreshed = yield* Drift.detect({
         name: stack.name,
         stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(refreshed.resources.ObservedParameters1589).toMatchObject({
         action: "unchanged",
-        attr: { parameters: overrides },
+        attr: { parameters: {} },
       });
 
       const changed = yield* stack.deploy(
@@ -258,7 +296,7 @@ test.provider(
         defaults.get("max_connections")?.ParameterValue,
       );
 
-      const cleared = yield* stack.deploy(program({}));
+      const cleared = yield* stack.deploy(program());
       expect(cleared.parameters).toEqual({});
       expect(yield* userParameters(name)).toEqual({});
       expect(
