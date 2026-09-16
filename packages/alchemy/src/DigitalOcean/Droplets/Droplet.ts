@@ -406,6 +406,26 @@ const imageDrifted = (
   return droplet.imageSlug !== image;
 };
 
+/** State written before the provider recorded features has no list. The features then cannot be checked. */
+const driftedFeatures = (
+  news: DropletProps,
+  droplet: DropletAttributes,
+): string[] => {
+  const features = droplet.features as string[] | undefined;
+  if (features === undefined) return [];
+  const drifted: string[] = [];
+  if (features.includes("backups") !== (news.backups ?? false)) {
+    drifted.push("backups");
+  }
+  if (features.includes("ipv6") !== (news.ipv6 ?? false)) {
+    drifted.push("ipv6");
+  }
+  if (features.includes("monitoring") !== (news.monitoring ?? false)) {
+    drifted.push("monitoring");
+  }
+  return drifted;
+};
+
 /**
  * Create-time props whose change replaces the droplet, compared against
  * the observed droplet.
@@ -420,16 +440,7 @@ export const driftedReplacingProps = (
   if (droplet.region !== news.region) drifted.push("region");
   if (droplet.sizeSlug !== news.size) drifted.push("size");
   if (imageDrifted(news.image, droplet)) drifted.push("image");
-  const features = droplet.features;
-  if (features.includes("backups") !== (news.backups ?? false)) {
-    drifted.push("backups");
-  }
-  if (features.includes("ipv6") !== (news.ipv6 ?? false)) {
-    drifted.push("ipv6");
-  }
-  if (features.includes("monitoring") !== (news.monitoring ?? false)) {
-    drifted.push("monitoring");
-  }
+  drifted.push(...driftedFeatures(news, droplet));
   if (news.vpcUuid !== undefined && droplet.vpcUuid !== news.vpcUuid) {
     drifted.push("vpcUuid");
   }

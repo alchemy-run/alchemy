@@ -255,6 +255,12 @@ describe("driftedReplacingProps", () => {
       expected: [],
     },
     {
+      name: "features unknown on state written by an older provider",
+      news: { ...PROPS, backups: true, monitoring: true },
+      droplet: observed({ features: undefined as unknown as string[] }),
+      expected: [],
+    },
+    {
       name: "vpc only checked when desired",
       news: PROPS,
       droplet: observed({ vpcUuid: "vpc-1" }),
