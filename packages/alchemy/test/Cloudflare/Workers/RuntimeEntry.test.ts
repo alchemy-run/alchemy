@@ -1,6 +1,14 @@
 import { virtualEntryPlugin } from "@/Bundle/Bundle";
 import * as Cloudflare from "@/Cloudflare";
 import * as Bridge from "@/Cloudflare/Bridge";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { CloudflareEnvironment as RuntimeCloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironmentService";
+import * as WorkerRuntime from "@/Cloudflare/Workers/WorkerRuntime";
+import * as WorkflowRuntime from "@/Cloudflare/Workflows/WorkflowRuntime";
+import { Stack } from "@/Stack";
+import { StackContext } from "@/StackContext";
+import * as Telemetry from "@/Telemetry";
+import * as TelemetryRuntime from "@/TelemetryRuntime";
 import { makeEffectVirtualEntry } from "@/Cloudflare/Workers/Sources/Rolldown";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -12,7 +20,18 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import RuntimeEntryWorker from "./fixtures/runtime-entry/worker.ts";
 
 const plannerSources = [
+  "src/Auth/",
   "src/Bundle/",
+  "src/Local/",
+  "src/Resource.ts",
+  "src/Stack.ts",
+  "src/Telemetry.ts",
+  "src/Cloudflare/CloudflareEnvironment.ts",
+  "src/Cloudflare/D1/LocalD1Gateway.ts",
+  "src/Cloudflare/Local",
+  "src/Cloudflare/SecretsStore/LocalSecretsStoreGateway.ts",
+  "src/Cloudflare/Workers/Worker.ts",
+  "src/Cloudflare/Workflows/Workflow.ts",
   "src/Cloudflare/Containers/ContainerBundle.ts",
   "src/Cloudflare/Website/Vite.ts",
   "src/Cloudflare/Workers/LocalWorkerProvider.ts",
@@ -52,7 +71,12 @@ const bundleWorkerEntry = Effect.fn(function* (
       rolldown({
         input: path.join(packageRoot, entry),
         cwd: packageRoot,
-        external: ["lightningcss", "fsevents"],
+        external: [
+          "lightningcss",
+          "fsevents",
+          // Isolate dependencies added by the generator from the application's imports.
+          ...(generated ? [path.join(packageRoot, entry)] : []),
+        ],
         plugins: [
           cloudflare({
             compatibilityDate: "2025-04-01",
@@ -71,7 +95,10 @@ const bundleWorkerEntry = Effect.fn(function* (
             moduleParsed(info) {
               graph.set(info.id, {
                 isEntry: info.isEntry,
-                importedIds: info.importedIds,
+                importedIds: [
+                  ...info.importedIds,
+                  ...info.dynamicallyImportedIds,
+                ],
               });
             },
           },
@@ -91,19 +118,22 @@ const bundleWorkerEntry = Effect.fn(function* (
             .map((chunk) => [chunk.fileName, chunk] as const),
         );
         const entryChunk = [...chunks.values()].find((chunk) => chunk.isEntry)!;
-        // Follow only static imports: dynamic chunks are not evaluated at import time.
-        const staticChunks = new Set<string>();
+        // Dynamic imports must not conceal deployment dependencies either.
+        const reachableChunks = new Set<string>();
         const chunkQueue = [entryChunk.fileName];
         for (
           let f = chunkQueue.shift();
           f !== undefined;
           f = chunkQueue.shift()
         ) {
-          if (staticChunks.has(f) || !chunks.has(f)) continue;
-          staticChunks.add(f);
-          chunkQueue.push(...chunks.get(f)!.imports);
+          if (reachableChunks.has(f) || !chunks.has(f)) continue;
+          reachableChunks.add(f);
+          chunkQueue.push(
+            ...chunks.get(f)!.imports,
+            ...chunks.get(f)!.dynamicImports,
+          );
         }
-        const code = [...staticChunks]
+        const code = [...reachableChunks]
           .map((f) => chunks.get(f)!.code)
           .join("\n");
         const modules = new Set<string>();
@@ -150,7 +180,7 @@ layer(NodeServices.layer)(
         }),
     );
 
-    it.effect("keeps planner tooling out of a Worker's module graph", () =>
+    it.effect("keeps planner tooling out of /Bridge's dependency graph", () =>
       Effect.gen(function* () {
         const { code, sources, packages } = yield* bundleWorkerEntry(
           "src/Cloudflare/Bridge.ts",
@@ -163,20 +193,22 @@ layer(NodeServices.layer)(
       }),
     );
 
-    it.effect("keeps planner tooling out of the generated Worker entry", () =>
-      Effect.gen(function* () {
-        const { code, sources, packages, exports } = yield* bundleWorkerEntry(
-          "test/Cloudflare/Workers/fixtures/runtime-entry/worker.ts",
-          true,
-        );
-        expect(exports).toContain("default");
-        expect(sources).toContain("src/Cloudflare/Bridge.ts");
-        expect(sources.filter(isPlannerSource)).toEqual([]);
-        expect(toolchainPackages.filter((name) => packages.has(name))).toEqual(
-          [],
-        );
-        expect(code).not.toContain("require.resolve");
-      }),
+    it.effect(
+      "keeps planner tooling out of imports added by the generated wrapper",
+      () =>
+        Effect.gen(function* () {
+          const { code, sources, packages, exports } = yield* bundleWorkerEntry(
+            "test/Cloudflare/Workers/fixtures/runtime-entry/worker.ts",
+            true,
+          );
+          expect(exports).toContain("default");
+          expect(sources).toContain("src/Cloudflare/Bridge.ts");
+          expect(sources.filter(isPlannerSource)).toEqual([]);
+          expect(
+            toolchainPackages.filter((name) => packages.has(name)),
+          ).toEqual([]);
+          expect(code).not.toContain("require.resolve");
+        }),
     );
 
     it.effect("the alchemy/Cloudflare namespace does pull that tooling", () =>
@@ -187,6 +219,42 @@ layer(NodeServices.layer)(
         expect(sources).toContain("src/Cloudflare/Workers/Sources/Rolldown.ts");
         expect(packages.has("workerd")).toBe(true);
         expect(code).toContain("require.resolve");
+      }),
+    );
+
+    it.effect("detects local tooling behind a dynamic import", () =>
+      Effect.gen(function* () {
+        const { code, sources, packages } = yield* bundleWorkerEntry(
+          "test/Cloudflare/Workers/fixtures/runtime-entry/dynamic-tooling.ts",
+        );
+        expect(sources.filter(isPlannerSource)).toContain(
+          "src/Cloudflare/LocalRuntime.ts",
+        );
+        expect(packages.has("workerd")).toBe(true);
+        expect(code).toContain("require.resolve");
+      }),
+    );
+
+    it.effect("preserves the public runtime service identities", () =>
+      Effect.sync(() => {
+        expect(Cloudflare.WorkerEnvironment).toBe(
+          WorkerRuntime.WorkerEnvironment,
+        );
+        expect(Cloudflare.WorkerExecutionContext).toBe(
+          WorkerRuntime.WorkerExecutionContext,
+        );
+        expect(Cloudflare.Workflows.WorkflowEvent).toBe(
+          WorkflowRuntime.WorkflowEvent,
+        );
+        expect(Cloudflare.Workflows.WorkflowStep).toBe(
+          WorkflowRuntime.WorkflowStep,
+        );
+        expect(Cloudflare.Workflows.WorkflowStepContext).toBe(
+          WorkflowRuntime.WorkflowStepContext,
+        );
+        expect(CloudflareEnvironment).toBe(RuntimeCloudflareEnvironment);
+        expect(Stack.key).toBe(StackContext.key);
+        expect(Telemetry.Telemetry).toBe(TelemetryRuntime.Telemetry);
       }),
     );
 
@@ -206,7 +274,7 @@ for (const dev of [false, true]) {
   describe(`runtime entry (${dev ? "local" : "live"})`, () => {
     const { test } = Test.make({ providers: Cloudflare.providers(), dev });
 
-    test.provider("generated Worker entry serves requests", (stack) =>
+    test.provider("application importing Worker.ts serves requests", (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
         const worker = yield* stack.deploy(RuntimeEntryWorker);

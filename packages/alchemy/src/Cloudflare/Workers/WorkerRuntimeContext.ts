@@ -18,7 +18,7 @@ import {
   WorkerTypeId,
   deferredExecutionContext,
   type WorkerEvent,
-} from "./Worker.ts";
+} from "./WorkerRuntime.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {

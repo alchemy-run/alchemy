@@ -1,3 +1,4 @@
+import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -80,15 +81,6 @@ export const localStorageDirectory = Effect.gen(function* () {
 const makeLocalRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
-      // Loaded lazily: the local runtime drives a workerd child process, and
-      // the `workerd` package resolves its binary with a top-level
-      // `require.resolve`. Every resource module reaches this file for its
-      // local-id helpers, so a static import would put workerd into every
-      // Worker's module graph, where a dev server that evaluates the graph
-      // (rather than tree-shaking it) fails on that call.
-      const { layerRuntime } = yield* Effect.promise(
-        () => import("@alchemy.run/cloudflare-runtime/core"),
-      );
       const getEnv = yield* CloudflareEnvironment;
       return Layer.merge(
         LocalRuntimeStateLive,
