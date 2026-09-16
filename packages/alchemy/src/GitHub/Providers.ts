@@ -16,6 +16,7 @@ import { Issue, IssueProvider } from "./Issue.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
+import { Ruleset, RulesetProvider } from "./Ruleset.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -59,6 +60,7 @@ export const providers = (options?: ProvidersOptions) =>
       PullRequest,
       Release,
       Repository,
+      Ruleset,
       Secret,
       TeamAccess,
       Variable,
@@ -76,6 +78,7 @@ export const providers = (options?: ProvidersOptions) =>
         PullRequestProvider(),
         ReleaseProvider(),
         RepositoryProvider(),
+        RulesetProvider(),
         SecretProvider(),
         TeamAccessProvider(),
         VariableProvider(),

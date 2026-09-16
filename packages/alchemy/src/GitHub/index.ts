@@ -10,6 +10,7 @@ export * from "./PullRequest.ts";
 export * from "./Release.ts";
 export * from "./Repository.ts";
 export * from "./RepositoryEventSource.ts";
+export * from "./Ruleset.ts";
 export * from "./Secret.ts";
 export * from "./Secrets.ts";
 export * from "./TeamAccess.ts";
